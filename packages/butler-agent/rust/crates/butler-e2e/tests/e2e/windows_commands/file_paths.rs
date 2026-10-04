@@ -62,6 +62,7 @@ pub(super) async fn approve(
     s: &butler_e2e::e2e::scenario::Scenario,
     id: &str,
     case: &Case,
+    script: &provider::Script,
 ) -> Result<(), HarnessError> {
     let turn =
         s.gw.wait_turn(
@@ -76,6 +77,14 @@ pub(super) async fn approve(
         "waiting_for_form",
         "Exact file operation must request approval"
     );
+    assert!(
+        script.result.lock().unwrap().is_none(),
+        "No file result before approval"
+    );
+    if case.tool == "write_file" {
+        let path = s.sandbox.data.join(case.args["path"].as_str().unwrap());
+        assert!(!path.exists(), "No write before approval");
+    }
     let cards = s.gw.approval_requests("general").await?;
     let card = cards
         .iter()
@@ -110,7 +119,7 @@ pub(super) async fn approve(
                 "/authority-requests/{}/allow?session_id=general",
                 card["request_ref"].as_str().unwrap()
             ),
-            json!({"scope":"once"}),
+            json!({"scope":if case.tool == "write_file" { "conversation" } else { "once" }}),
         )
         .await?;
     assert_eq!(reply.status, 202);
@@ -237,7 +246,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         let accepted = s.gw.say("general", provider::PROMPT).await?;
         let id = accepted_turn_id(&accepted)?;
         if access == Access::AskFirst {
-            approve(&s, &id, case).await?;
+            approve(&s, &id, case, &script).await?;
         }
         let turn =
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))
@@ -263,7 +272,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             let accepted = s.gw.say("general", provider::PROMPT).await?;
             let id = accepted_turn_id(&accepted)?;
             if access == Access::AskFirst {
-                approve(&s, &id, &continued).await?;
+                approve(&s, &id, &continued, &script).await?;
             }
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))
                 .await?;
@@ -292,7 +301,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
 async fn absolute_file_tools_outside_data_workspace_in_both_access_modes()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::FullAccess, Access::AskFirst] {
         run(access).await?;
     }
     Ok(())

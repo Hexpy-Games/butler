@@ -191,8 +191,8 @@ impl Category {
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::ReviewedEffect => "reviewed_effect",
-            Self::FileObservation => "file_observation",
+            // Preserve the deployed CHECK; capability identifies the observation subtype.
+            Self::ReviewedEffect | Self::FileObservation => "reviewed_effect",
             Self::Command => "command",
         }
     }

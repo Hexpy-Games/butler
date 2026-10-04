@@ -64,7 +64,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         let accepted = s.gw.say("general", "다운로드 폴더 정리해줘").await?;
         let id = accepted_turn_id(&accepted)?;
         if access == Access::AskFirst {
-            super::file_paths::approve(&s, &id, &case).await?;
+            super::file_paths::approve(&s, &id, &case, &script).await?;
         }
         let turn =
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))

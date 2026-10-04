@@ -98,7 +98,7 @@ async fn gate(
             action_key: occurrence.into(),
             authority_generation: 1,
             capability: call.name.clone(),
-            target: format!("file-observation:{occurrence}"),
+            target: format!("file-observation:{}", call.name),
             normalized_input: args.clone(),
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),

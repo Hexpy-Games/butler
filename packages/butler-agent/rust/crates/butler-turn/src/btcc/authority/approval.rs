@@ -75,8 +75,8 @@ pub enum ApprovalActionKind {
 pub struct ApprovalTarget {
     pub kind: ApprovalTargetKind,
     /// A folder label (`garden`, `garden/app`), a path inside the
-    /// workspace, `server/tool` for a connector, or the operation's own
-    /// target name. Never an absolute path.
+    /// workspace, an exact absolute path, `server/tool` for a connector,
+    /// or the operation's own target name.
     pub path: String,
 }
 
@@ -85,7 +85,7 @@ pub struct ApprovalTarget {
 pub enum ApprovalTargetKind {
     Folder,
     File,
-    /// A target outside the workspace; path contains only its file name.
+    /// A target outside the workspace; path retains the exact requested path.
     Outside,
     Connector,
     Schedule,

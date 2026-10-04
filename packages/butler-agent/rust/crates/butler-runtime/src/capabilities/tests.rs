@@ -164,7 +164,7 @@ async fn source_edge_reads_preserve_physical_bytes_and_stale_cursor() {
 }
 
 #[tokio::test]
-async fn guided_absolute_path_is_rejected_and_utf8_cursor_respects_character_boundaries() {
+async fn guided_absolute_path_is_read_and_utf8_cursor_respects_character_boundaries() {
     let fixture = Fixture::new();
     fixture.write("e\u{301}.txt", "A😀B".as_bytes());
     let absolute = fixture.root.join("e\u{301}.txt");
@@ -187,13 +187,8 @@ async fn guided_absolute_path_is_rejected_and_utf8_cursor_respects_character_bou
             )
             .await
             .unwrap();
-        if relative_only {
-            assert_eq!(rust["files"][0]["ok"], false);
-            assert_eq!(rust["files"][0]["path"], ".");
-        } else {
-            assert_eq!(rust["files"][0]["ok"], true);
-            assert_eq!(rust["files"][0]["content"], "A");
-        }
+        assert_eq!(rust["files"][0]["ok"], true);
+        assert_eq!(rust["files"][0]["content"], "A");
     }
     let unicode =
         json!({ "arguments": { "requests": [{ "path": "e\u{301}.txt", "max_bytes": 1 }] } });
