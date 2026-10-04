@@ -488,5 +488,7 @@ async fn skill_read_index_keeps_latest_appends_and_replaced_content() -> Result<
     std::fs::write(&path, format!("{escaped}\n"))?;
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.data()["skills_used"], json!(["escaped"]));
+    storage_concurrency_support::verify_skill_record_boundaries(&s, &path, &event("boundary"))
+        .await?;
     s.finish().await
 }
