@@ -122,6 +122,15 @@ async fn views(
         let db_turn = turn.clone();
         let committed = tokio::task::spawn_blocking(move || {
             use rusqlite::{Connection, OptionalExtension};
+            if !measure_latency {
+                // Readers must not keep the native projection watcher busy
+                // ahead of a final receipt. Preserve the original deadline.
+                let data = db_path.parent().unwrap().parent().unwrap();
+                let db = Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+                let chat: String = db.query_row("SELECT chat_id FROM turns WHERE id=?1", [&db_turn], |row| row.get(0)).unwrap();
+                let transcript = data.join(format!("transcripts/butler_app-{chat}.jsonl"));
+                if transcript.exists() { assert!(!std::fs::read(transcript).unwrap().is_empty()); }
+            }
             let db = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
             db.query_row("SELECT text FROM messages WHERE turn_id=?1 AND role='assistant' ORDER BY rowid DESC LIMIT 1", [&db_turn], |row| row.get::<_, String>(0)).optional().unwrap()
         }).await.unwrap();

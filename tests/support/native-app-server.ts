@@ -59,6 +59,8 @@ export type NativeAppServerHandle = {
   connectUrl(): Promise<string>;
   /** Gives a browser context (or a page's context) a gateway browser session. */
   signIn(target: CookieJar | { context(): CookieJar }): Promise<void>;
+  /** Diagnose an unexpected shutdown without exposing the local auth token. */
+  assertRunning(): void;
   stop(): Promise<void>;
 };
 
@@ -398,6 +400,12 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   };
 
   return {
+    assertRunning() {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        const tail = token ? output.slice(-4000).replaceAll(token, "[redacted]") : output.slice(-4000);
+        throw new Error(`Native gateway exited: code=${child.exitCode}, signal=${child.signalCode}\n${tail}`);
+      }
+    },
     url,
     port,
     butlerData,

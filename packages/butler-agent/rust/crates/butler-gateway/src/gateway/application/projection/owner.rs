@@ -82,6 +82,11 @@ impl ProjectionOwner {
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 if let Ok(event) = event {
+                    // Reading a transcript or terminal fence must not enqueue
+                    // another projection. Inotify also reports open/read-close.
+                    if matches!(event.kind, notify::EventKind::Access(_)) {
+                        return;
+                    }
                     for path in event.paths {
                         if path.parent() == Some(transcript_root.as_path()) {
                             if path.extension().is_some_and(|value| value == "jsonl")
