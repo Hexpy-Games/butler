@@ -116,7 +116,7 @@ fn assert_path_and_example_bounds() {
         assert_eq!(actual["risk"], "high");
         assert_eq!(
             actual["targets"][1],
-            json!({"kind": "outside", "path": "hosts"})
+            json!({"kind": "outside", "path": path})
         );
         assert!(!actual.to_string().contains("/etc/"));
         let command = summary("run_command", "x", &json!({"command": "ls", "cwd": path}));

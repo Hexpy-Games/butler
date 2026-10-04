@@ -125,9 +125,17 @@ fn pending_record(
         source_call_id: input
             .operation_occurrence_id
             .filter(|value| !value.is_empty()),
-        source_work_id: required(&input.source_work_id, "source Work")?,
+        source_work_id: if category == Category::FileObservation {
+            input.source_work_id
+        } else {
+            required(&input.source_work_id, "source Work")?
+        },
         workspace_path: required(&input.workspace_path, "workspace")?,
-        plan_revision_id: required(&input.plan_revision_id, "Plan revision")?,
+        plan_revision_id: if category == Category::FileObservation {
+            input.plan_revision_id
+        } else {
+            required(&input.plan_revision_id, "Plan revision")?
+        },
         action_key: required(&input.action_key, "action")?,
         authority_generation: generation,
         capability: required(&input.capability, "capability")?,
@@ -158,15 +166,23 @@ fn pending_record(
 }
 
 /// What an authority request approves: one reviewed effect or one command.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Category {
     ReviewedEffect,
+    FileObservation,
     Command,
 }
 
 impl Category {
     fn of(input: &AuthorityAdmissionInput) -> Self {
-        if input.category.as_deref() == Some("reviewed_effect") {
+        if input.category.as_deref() == Some("file_observation")
+            && matches!(
+                input.capability.as_str(),
+                "list_files" | "read_file" | "grep_files"
+            )
+        {
+            Self::FileObservation
+        } else if input.category.as_deref() == Some("reviewed_effect") {
             Self::ReviewedEffect
         } else {
             Self::Command
@@ -176,6 +192,7 @@ impl Category {
     fn as_str(self) -> &'static str {
         match self {
             Self::ReviewedEffect => "reviewed_effect",
+            Self::FileObservation => "file_observation",
             Self::Command => "command",
         }
     }
@@ -183,6 +200,7 @@ impl Category {
     fn default_reason(self) -> &'static str {
         match self {
             Self::ReviewedEffect => "Apply one reviewed effect",
+            Self::FileObservation => "Read files",
             Self::Command => "Run one reviewed command",
         }
     }
@@ -190,7 +208,7 @@ impl Category {
     /// The reviewed capability, or the command's first executable.
     fn executable(self, input: &AuthorityAdmissionInput) -> AuthorityResult<String> {
         Ok(match self {
-            Self::ReviewedEffect => {
+            Self::ReviewedEffect | Self::FileObservation => {
                 identity::slice_utf16(identity::required(&input.capability, "capability")?, 96)
             }
             Self::Command => first_executable(

@@ -45,9 +45,12 @@ pub(super) fn identity(
     {
         object.insert("operationOccurrenceId".into(), json!(occurrence));
     }
-    if input.category.as_deref() == Some("reviewed_effect") {
+    if matches!(
+        input.category.as_deref(),
+        Some("reviewed_effect" | "file_observation")
+    ) {
         object.insert("version".into(), json!(2));
-        object.insert("category".into(), json!("reviewed_effect"));
+        object.insert("category".into(), json!(input.category));
         object.insert(
             "operationOccurrenceId".into(),
             json!(required(

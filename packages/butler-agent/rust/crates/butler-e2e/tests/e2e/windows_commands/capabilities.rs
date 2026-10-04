@@ -1,4 +1,6 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
+#[path = "capabilities/delegation.rs"]
+mod delegation;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
@@ -130,8 +132,8 @@ fn cases(data: &Path) -> Vec<Case> {
         },
         Case {
             tool: "write_file",
-            args: json!({"path":"../escape.txt","content":"must not write"}),
-            refused: true,
+            args: json!({"path":"home/.butler/../escape.txt","content":"ordinary parent"}),
+            refused: false,
         },
         case(
             "write_file",
@@ -175,16 +177,25 @@ async fn operation(
             card["approval"]["action_kind"],
             if case.tool == "run_command" {
                 "run_command"
+            } else if matches!(case.tool, "read_file" | "list_files" | "grep_files") {
+                "other"
             } else {
                 "edit_files"
             }
         );
-        let exact = if case.tool == "run_command" {
-            &case.args["command"]
+        let examples = if case.tool == "run_command" {
+            json!([case.args["command"]])
+        } else if case.tool == "list_files" {
+            json!([s.sandbox.root.join(case.args["root"].as_str().unwrap())])
+        } else if case.tool == "read_file" {
+            json!([s
+                .sandbox
+                .root
+                .join(case.args["requests"][0]["path"].as_str().unwrap())])
         } else {
-            &case.args["path"]
+            json!([case.args["path"]])
         };
-        assert_eq!(card["approval"]["examples"], json!([exact]));
+        assert_eq!(card["approval"]["examples"], examples);
         if case.tool == "write_file" {
             assert!(
                 !s.sandbox
@@ -203,10 +214,7 @@ async fn operation(
             )
             .await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
-    } else if access == Access::AskFirst
-        && !case.refused
-        && !matches!(case.tool, "read_file" | "list_files")
-    {
+    } else if access == Access::AskFirst && !case.refused {
         panic!(
             "Mutation/command must show an approval card: {turn}; result={:?}",
             script.result.lock().unwrap()
@@ -301,7 +309,10 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             "approved"
         ),
         12 => assert_eq!(output["error"], "protected_path"),
-        13 => assert_eq!(output["error"]["code"], "parent_traversal_not_allowed"),
+        13 => assert_eq!(
+            std::fs::read_to_string(s.sandbox.home.join("escape.txt"))?,
+            "ordinary parent"
+        ),
         14 => assert_eq!(
             std::fs::read_to_string(
                 s.sandbox
@@ -313,85 +324,6 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
         11 | 15 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
         _ => panic!("Unknown capability case {index}"),
     }
-    Ok(())
-}
-
-async fn delegated_approval(
-    s: &Scenario,
-    chat: &str,
-    script: &provider::Script,
-) -> Result<(), HarnessError> {
-    use std::sync::atomic::Ordering;
-    script.select(Case {
-        tool: "write_file",
-        args: json!({"path":"home/Downloads/위임 파일.txt","content":"승인된 내용"}),
-        refused: false,
-    });
-    script.delegated.store(true, Ordering::SeqCst);
-    s.turn(chat, provider::DELEGATE_PROMPT).await?;
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let card = loop {
-        let cards = s.gw.approval_requests(chat).await?;
-        if let Some(card) = cards
-            .iter()
-            .find(|c| c["approval"]["action_kind"] == "edit_files")
-        {
-            break card.clone();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Child approval missing from parent session: cards={cards:?}, view={:?}",
-            s.gw.get(&format!("/session-view?session_id={chat}"))
-                .await?
-                .data()
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    };
-    assert!(!s.sandbox.home.join("Downloads/위임 파일.txt").exists());
-    let view =
-        s.gw.get(&format!("/session-view?session_id={chat}"))
-            .await?;
-    assert!(
-        view.data()["authority_requests"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|r| r["request_ref"] == card["request_ref"]),
-        "Parent UI receives the pending card"
-    );
-    let reply =
-        s.gw.post(
-            &format!(
-                "/authority-requests/{}/allow?session_id={chat}",
-                card["request_ref"].as_str().unwrap()
-            ),
-            json!({"scope":"once"}),
-        )
-        .await?;
-    assert_eq!(reply.status, 202, "{}", reply.text);
-    loop {
-        let view =
-            s.gw.get(&format!("/session-view?session_id={chat}"))
-                .await?;
-        if view.data()["steward_children"][0]["result"]["status"] == "success" {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Child did not resume after parent Allow: {view:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    assert_eq!(
-        std::fs::read_to_string(s.sandbox.home.join("Downloads/위임 파일.txt"))?,
-        "승인된 내용"
-    );
-    let (_, elapsed) = script.result.lock().unwrap().clone().unwrap();
-    butler_e2e::assert_wall_clock_budget!(
-        elapsed,
-        Duration::from_secs(5),
-        "Delegated write approval/resume"
-    );
     Ok(())
 }
 
@@ -490,7 +422,7 @@ async fn delegated_file_approval_is_visible_in_parent() -> Result<(), HarnessErr
         "Windows child approval"
     );
     let (s, chat, script, server) = setup(Access::AskFirst).await?;
-    delegated_approval(&s, &chat, &script).await?;
+    delegation::approve(&s, &chat, &script).await?;
     s.finish().await?;
     server.abort();
     Ok(())

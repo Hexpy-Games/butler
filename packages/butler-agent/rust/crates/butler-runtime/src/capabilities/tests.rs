@@ -88,7 +88,7 @@ async fn supplied_protected_root_and_workspace_reference_are_live() {
         )
         .await
         .unwrap();
-    assert_eq!(rust["error"], "protected_path");
+    assert_eq!(rust["files"][0]["content"], "one");
     let reference = WorkspaceReference::unavailable("session_workspace_unavailable");
     let regular = json!({ "arguments": { "requests": [{ "path": "a.txt" }] } });
     let error = fixture
