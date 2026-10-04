@@ -99,6 +99,7 @@ async fn replay(
         .env("APPDATA", roaming.display().to_string())
         // Match the installed App, which does not inherit a console module path.
         .env("PSModulePath", "")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
@@ -144,7 +145,18 @@ async fn replay(
     // A later closeout/briefing request need not replay command output. Check
     // the request that actually carries it; verify() retains all content checks.
     assert!(received.to_string().contains("DownloadsPath"));
-    let elapsed = script.elapsed.lock().unwrap().unwrap() + read_elapsed;
+    let command_elapsed = script.elapsed.lock().unwrap().unwrap();
+    eprintln!(
+        "PROFILE-TIMING model_tool_roundtrip_ms={:.3} full_output_read_ms={:.3}",
+        command_elapsed.as_secs_f64() * 1000.,
+        read_elapsed.as_secs_f64() * 1000.
+    );
+    for line in s.agent.logs().lines().filter(|line| {
+        line.contains("command_phase_timing") || line.contains("command_process_timing")
+    }) {
+        eprintln!("{line}");
+    }
+    let elapsed = command_elapsed + read_elapsed;
     butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), "Downloads observation");
     eprintln!(
         "PROFILE-OBSERVATION command: {:.1}ms",

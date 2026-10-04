@@ -9,6 +9,7 @@ mod output;
 mod path_guard;
 mod registered_artifacts;
 mod structured_stdout;
+mod timing;
 mod validation;
 
 use std::collections::HashMap;

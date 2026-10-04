@@ -37,8 +37,18 @@ pub(super) async fn dispatch(
     shutdown: CancellationToken,
     completion: oneshot::Sender<StructuredCommandOutput>,
 ) {
+    let timing = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        == Some(std::ffi::OsStr::new("1")))
+    .then(std::time::Instant::now);
+    let legacy = input.legacy.is_some();
     let mut completion = Some(completion);
     let output = execute(host, input, shutdown, &mut completion).await;
+    if let Some(started) = timing {
+        eprintln!(
+            "command_process_timing legacy={legacy} elapsed_us={}",
+            started.elapsed().as_micros()
+        );
+    }
     if let Some(sender) = completion {
         let _ = sender.send(output);
     }
