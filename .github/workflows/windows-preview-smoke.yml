@@ -378,13 +378,13 @@ jobs:
       - name: Require every hosted verification harness
         run: |
           $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'windows_commands','project_workspace','queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+            'windows_commands','projection_settlement','project_workspace','queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
           $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
             ForEach-Object { Get-Content $_.FullName })
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
-          "Verified all 14 compiled harnesses: $($actual -join ',')"
+          "Verified all 15 compiled harnesses: $($actual -join ',')"
       - name: Remove completion check directories
         if: always()
         run: |
