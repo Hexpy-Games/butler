@@ -62,7 +62,7 @@ async fn run(
     repeat: usize,
     profile: &str,
     downloads: &Path,
-) -> Result<(), HarnessError> {
+) -> Result<bool, HarnessError> {
     let provider = live::gate("DOWNLOADS-LIVE")?.expect("live credentials required");
     assert_eq!(provider.choice.model, "openai/gpt-6-luna");
     let before = snapshot(downloads)?;
@@ -104,6 +104,7 @@ async fn run(
     let started = Instant::now();
     let id = accepted_turn_id(&s.gw.say("general", "다운로드 폴더 정리해줘").await?)?;
     let deadline = started + Duration::from_secs(300);
+    let mut timed_out = false;
     loop {
         if access == Access::AskFirst {
             approvals(&s).await?;
@@ -122,14 +123,24 @@ async fn run(
         {
             break;
         }
-        if let Some(turn) = s.gw.turn("general", &id).await? {
-            assert!(
-                !matches!(turn_state(&turn), "failed" | "cancelled"),
-                "Live chat ended before verified real-folder counts and move confirmation; tools={:?}",
-                timings(&s.sandbox.data)?
-            );
+        let cards = s.gw.approval_requests("general").await?;
+        let question = cards.iter().any(|c| !c["questions"].is_null());
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let children_pending = view.data()["steward_children"]
+            .as_array()
+            .is_some_and(|children| children.iter().any(|c| c["terminal"] != true));
+        let turns = s.gw.turns("general").await?;
+        let settled = !turns.is_empty()
+            && turns
+                .iter()
+                .all(|t| butler_e2e::e2e::gateway::TERMINAL.contains(&turn_state(t)));
+        if question || (settled && !children_pending && cards.is_empty()) {
+            break;
         }
-        assert!(Instant::now() < deadline, "Live chat timed out");
+        if Instant::now() >= deadline {
+            timed_out = true;
+            break;
+        }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
     let messages = s.gw.messages("general").await?;
@@ -139,9 +150,17 @@ async fn run(
         .map(|r| r["safe_tool_name"].as_str().unwrap_or("?"))
         .collect();
     let answer = proposal(&s).await?;
-    assert!(
-        answer.contains(&files.to_string()) && answer.contains(&folders.to_string()),
-        "Actual file and directory totals required"
+    let actual_totals =
+        answer.contains(&files.to_string()) && answer.contains(&folders.to_string());
+    let actual_types = reported_types(&answer, &extensions);
+    let move_confirmation =
+        answer.contains("승인") || answer.contains("확인") || answer.contains("진행할까요");
+    let observed = timings(&s.sandbox.data)?
+        .iter()
+        .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:"));
+    let complete = actual_totals && actual_types && move_confirmation && observed && !timed_out;
+    eprintln!(
+        "DOWNLOADS-LIVE acceptance: totals={actual_totals}; types={actual_types}; confirmation={move_confirmation}; observed={observed}; timed_out={timed_out}"
     );
     eprintln!(
         "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; files={files}; folders={folders}; types={extensions:?}; tools={tools:?}",
@@ -152,25 +171,12 @@ async fn run(
         snapshot(downloads)? == before,
         "Downloads entries/metadata changed"
     );
-    assert!(
-        timings(&s.sandbox.data)?
-            .iter()
-            .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:")),
-        "Real observation required"
-    );
-    assert!(
-        reported_types(&answer, &extensions),
-        "Each actual extension count must be reported"
-    );
-    assert!(
-        answer.contains("승인") || answer.contains("확인") || answer.contains("진행할까요"),
-        "Concrete plan must await move confirmation"
-    );
     eprintln!(
         "DOWNLOADS-LIVE tool timings: {:?}",
         timings(&s.sandbox.data)?
     );
-    s.finish().await
+    s.finish().await?;
+    Ok(complete)
 }
 
 #[tokio::test]
@@ -183,11 +189,16 @@ async fn owner_downloads_six_real_chats() -> Result<(), HarnessError> {
         std::env::var("BUTLER_E2E_DOWNLOADS_REAL_PATH")
             .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?,
     );
+    let mut completed = 0;
     for access in [Access::AskFirst, Access::FullAccess] {
         for repeat in 1..=3 {
-            run(access, repeat, &profile, &downloads).await?;
+            completed += usize::from(run(access, repeat, &profile, &downloads).await?);
         }
     }
+    assert_eq!(
+        completed, 6,
+        "Report incomplete live acceptance without tuning the product to this scenario"
+    );
     Ok(())
 }
 
