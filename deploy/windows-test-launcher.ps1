@@ -26,7 +26,8 @@ try {
     $env:BUTLER_APP_SERVER_PORT = $port.ToString()
     $agent = Start-Process "$PSScriptRoot/butler-agent.exe" -ArgumentList @(
         '--installation-root', ('"' + $PSScriptRoot + '"'),
-        '--resource-root', ('"' + $PSScriptRoot + '\resources"'), 'service','run') `
+        '--resource-root', ('"' + $PSScriptRoot + '\resources"'), 'service','run',
+        '--data', ('"' + $env:BUTLER_DATA + '"')) `
         -NoNewWindow -PassThru -RedirectStandardOutput "$root/agent.log" -RedirectStandardError "$root/agent-error.log"
     $ready = $false
     for ($attempt = 0; $attempt -lt 120 -and !$ready; $attempt++) {
@@ -38,17 +39,31 @@ try {
         if (!$ready) { Start-Sleep -Milliseconds 500 }
     }
     if (!$ready) { throw 'Test agent did not start listening' }
+    $ready = $false
+    for ($attempt = 0; $attempt -lt 120 -and !$ready; $attempt++) {
+        $agent.Refresh(); if ($agent.HasExited) { throw 'Test agent exited before publishing its instance' }
+        $record = Join-Path $env:BUTLER_DATA 'state/butler-agent-native-service.json'
+        if (Test-Path $record) {
+            $instance = Get-Content $record -Raw | ConvertFrom-Json
+            $ready = $instance.pid -eq $agent.Id -and $instance.state -eq 'ready'
+        }
+        if (!$ready) { Start-Sleep -Milliseconds 500 }
+    }
+    if (!$ready) { throw 'Test agent did not publish its ready instance' }
     $raw = & "$PSScriptRoot/butler.cmd" open --data $env:BUTLER_DATA --no-browser --json
-    if ($LASTEXITCODE -ne 0) { throw 'Could not obtain a connection code from the test agent' }
+    $code = $LASTEXITCODE
     $link = $raw | ConvertFrom-Json
+    if ($code -ne 0 -or !$link.ok) { throw "Test agent connection failed: $($link.error.code)" }
     $url = [uri]$link.data.url
     if (!$link.ok -or $url.Host -ne '127.0.0.1' -or $url.Port -ne $port -or $url.AbsolutePath -ne '/connect') {
         throw 'Connection link does not belong to the test agent'
     }
     if ($Smoke) {
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -SessionVariable browser
+        $origin = $url.GetLeftPart([System.UriPartial]::Authority)
+        $headers = @{ Origin=$origin; Referer="$origin/"; Accept='text/html' }
+        $response = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -SessionVariable browser
         if ($response.StatusCode -ne 200) { throw 'Browser connection failed' }
-        $sessions = Invoke-WebRequest -Uri ("http://127.0.0.1:$port/sessions") -WebSession $browser -UseBasicParsing
+        $sessions = Invoke-WebRequest -Uri ("$origin/sessions") -Headers $headers -WebSession $browser -UseBasicParsing
         if ($sessions.StatusCode -ne 200) { throw 'Connected browser is not authenticated' }
         Write-Output "Launcher proof: correct port $port; browser cookie authenticated"
     } else {
