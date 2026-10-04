@@ -7,6 +7,28 @@ use crate::btcc::{BtccCode, StorageCode};
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
+    /// The user-facing session that owns decisions for this delegation chain.
+    /// Resolve durable relations, never model-supplied parent identifiers.
+    pub async fn authority_owner(&self, session_id: &str) -> Result<String, BtccError> {
+        let mut owner = session_id.to_owned();
+        let mut visited = std::collections::HashSet::new();
+        while visited.insert(owner.clone()) {
+            let Some(relation) = self
+                .repository
+                .by_child(owner.clone())
+                .await
+                .map_err(BtccError::from)?
+            else {
+                return Ok(owner);
+            };
+            owner = relation.parent_session_id;
+        }
+        Err(BtccError::relayed(
+            "subsession_relation_cycle",
+            "Delegation relations contain a cycle.",
+        ))
+    }
+
     /// Prompt lines describing the parent's worker tasks.
     pub async fn worker_prompt_lines(
         &self,

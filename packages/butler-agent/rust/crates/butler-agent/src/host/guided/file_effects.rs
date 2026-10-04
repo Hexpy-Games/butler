@@ -48,7 +48,7 @@ impl GuidedFileEffects {
         journal: &dyn EffectJournal,
     ) -> Result<PreparedGuidedFileEffect, BtccError> {
         match name {
-            "write_file" => self.prepare_write(args),
+            "write_file" => self.prepare_write(args).await,
             "edit_file" => edit::prepare(self, args, work, occurrence, journal).await,
             _ => Err(BtccError::relayed(
                 "guided_file_effect_unbound",
@@ -57,10 +57,18 @@ impl GuidedFileEffects {
         }
     }
 
-    pub(crate) fn prepare_write(
+    pub(crate) async fn prepare_write(
         &self,
         args: &Value,
     ) -> Result<PreparedGuidedFileEffect, BtccError> {
+        if let Some(path) = args.get("path").and_then(Value::as_str)
+            && let Err(error) = butler_turn::workspace::guard_effect_file(&self.scope, path).await
+            && error.code() == "protected_path"
+        {
+            // Refuse protected data before asking for approval. Other boundary
+            // failures retain the file adapter's durable effect outcome.
+            return Err(BtccError::relayed(error.code(), error.message()));
+        }
         let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEffectAdapter::new(
             self.scope.clone(),
             self.registered_write.clone(),

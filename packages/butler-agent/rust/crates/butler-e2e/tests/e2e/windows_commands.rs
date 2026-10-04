@@ -6,8 +6,16 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "windows_commands/capabilities.rs"]
+mod capabilities;
+#[path = "windows_commands/capability_stub.rs"]
+mod capability_stub;
 #[path = "windows_commands/observation.rs"]
 mod observation;
+#[path = "windows_commands/observation_stub.rs"]
+mod observation_stub;
+#[path = "windows_commands/profile_observation.rs"]
+mod profile_observation;
 #[path = "windows_commands/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{

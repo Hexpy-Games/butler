@@ -3,11 +3,14 @@ use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 pub(super) struct Script {
     pub requests: Mutex<Vec<Value>>,
     pub command: String,
+    pub elapsed: Mutex<Option<Duration>>,
+    started: Mutex<Option<Instant>>,
     retry_observation: bool,
 }
 
@@ -39,6 +42,10 @@ async fn reply(
     let step = requests.len();
     requests.push(body.clone());
     drop(requests);
+    if step == 4 + usize::from(script.retry_observation) {
+        let started = script.started.lock().unwrap().unwrap();
+        *script.elapsed.lock().unwrap() = Some(started.elapsed());
+    }
     let item = if script.retry_observation && step == 0 {
         call(
             "preflight",
@@ -50,7 +57,7 @@ async fn reply(
             0 => call(
                 "start",
                 "start_work",
-                &json!({"objective": super::super::stub::PROMPT}),
+                &json!({"objective": super::stub::PROMPT}),
             ),
             1 => call(
                 "plan",
@@ -66,12 +73,15 @@ async fn reply(
                 &json!({"subject":"plan","verdict":"accept",
             "summary":"Read-only inspection; no moves","action_updates":[{"action_key":"inspect","status":"active"}]}),
             ),
-            3 => call(
-                "observe",
-                "run_command",
-                &json!({"command":script.command,
+            3 => {
+                *script.started.lock().unwrap() = Some(Instant::now());
+                call(
+                    "observe",
+                    "run_command",
+                    &json!({"command":script.command,
             "summary":"다운로드 목록 확인","state_effect":"read_only","output_mode":"full","timeout_ms":30000}),
-            ),
+                )
+            }
             4 => {
                 let work = outputs(&body)
                     .into_iter()
@@ -90,7 +100,7 @@ async fn reply(
                     .into_iter()
                     .find(|v| v["command"] == script.command);
                 let text = if result.as_ref().is_some_and(|v| v["exit_code"] == 0) {
-                    super::super::stub::ANSWER
+                    super::stub::ANSWER
                 } else {
                     "보호 경로 접근을 거부했습니다."
                 };
@@ -99,7 +109,7 @@ async fn reply(
             }
         }
     };
-    let wire = super::super::stub::response(&item).body();
+    let wire = super::stub::response(&item).body();
     ([("content-type", "text/event-stream")], wire).into_response()
 }
 

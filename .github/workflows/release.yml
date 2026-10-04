@@ -131,6 +131,14 @@ jobs:
           name: agent-windows-x64
           path: dist/release/agent/*
           if-no-files-found: error
+      - name: Verify basic Windows capabilities before release
+        shell: pwsh
+        working-directory: packages/butler-agent/rust
+        run: |
+          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
+          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
+          $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
+          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
       - name: Check owner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
         shell: pwsh

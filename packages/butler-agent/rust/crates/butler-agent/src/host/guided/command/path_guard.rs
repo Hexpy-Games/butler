@@ -43,20 +43,16 @@ impl GuidedCommand {
 }
 
 fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<Value> {
-    let denied = || {
+    let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Butler data and credentials are protected.",
+        "protected_path":target,
         "next":[{"action":"Use the admitted Butler tools for runtime data; inspect ordinary user files only."}]})
     };
-    for raw in command
-        .split(|c: char| {
-            c.is_whitespace() || ['\"', '\'', ';', '|', '(', ')', ',', '='].contains(&c)
-        })
-        .filter(|token| !token.is_empty())
-    {
+    for raw in butler_platform::command_sandbox::path_tokens(command) {
         let token = butler_platform::command_sandbox::normalize_path_token(raw);
         let lower = token.to_ascii_lowercase();
         if looks_sensitive(&token) || lower.split('/').any(|p| p == ".butler") {
-            return Some(denied());
+            return Some(denied(raw));
         }
         let path = if [
             "$butler_data",
@@ -67,7 +63,7 @@ fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
         .iter()
         .any(|prefix| lower == *prefix || lower.starts_with(&format!("{prefix}/")))
         {
-            return Some(denied());
+            return Some(denied(raw));
         } else if let Some(home) = home {
             [
                 "$home/",
@@ -94,7 +90,7 @@ fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
                 || token.contains('/') && !token.contains(':')
                 || path.exists());
         if file_argument && within(&path, data) {
-            return Some(denied());
+            return Some(denied(raw));
         }
     }
     None

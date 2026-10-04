@@ -93,6 +93,23 @@ impl BoundGuidedTurn for BoundTurn<'_> {
     }
 }
 
+impl GuidedTurnFactoryAdapter {
+    async fn tool_surface(
+        &self,
+        phase: &mut butler_turn::btcc::GuidedPhaseSelection,
+    ) -> Result<Vec<butler_turn::btcc::ModelRoundTool>, BtccError> {
+        if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
+            && phase.provider_tools.iter().any(|tool| {
+                tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
+            })
+        {
+            let profiles = self.subsessions.enabled_worker_profiles().await?;
+            surface::with_worker_profile_choices(phase, &profiles)?;
+        }
+        surface::available(phase, self.preparation.catalog.snapshot())
+    }
+}
+
 impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
     fn bind_pre_model<'a>(
         &'a self,
@@ -107,21 +124,13 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 initial_work,
                 work_scope,
                 authority_decision,
+                authority_owner,
                 operation_results,
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
-                && phase.provider_tools.iter().any(|tool| {
-                    tool.get("name").and_then(serde_json::Value::as_str)
-                        == Some("delegate_to_worker")
-                })
-            {
-                let profiles = self.subsessions.enabled_worker_profiles().await?;
-                surface::with_worker_profile_choices(&mut phase, &profiles)?;
-            }
             let workspace_path = resolved_workspace(&workspace, &mut phase)?;
-            let surface = surface::available(&mut phase, self.preparation.catalog.snapshot())?;
+            let surface = self.tool_surface(&mut phase).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let (work, work_tools) =
@@ -209,7 +218,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         != butler_turn::btcc::AccessMode::ReadOnly
                         && policy.tracking_mode == "ledger"
                         && policy.project_id.is_some(),
-                    owner_session_id: start.turn.session_id.clone(),
+                    owner_session_id: authority_owner,
                     source_session_id: start.turn.session_id.clone(),
                     model_ref: format!("{}/{}", semantic.model.provider, semantic.model.model),
                     reasoning_effort: serde_json::to_value(&semantic.model.reasoning_effort)

@@ -345,6 +345,15 @@ pub(super) fn guarded_directory(
     let Some(requested) = cwd.filter(|value| !value.is_empty()) else {
         return Ok(root.to_path_buf());
     };
+    // Approval normalizes the implicit CWD to ".". Keeping the admitted
+    // directory is not a read of its protected contents; screen the command's
+    // actual path arguments separately, exactly as for an absolute root CWD.
+    if std::path::Path::new(requested)
+        .components()
+        .all(|part| part == std::path::Component::CurDir)
+    {
+        return Ok(root.to_path_buf());
+    }
     if std::path::Path::new(requested).is_absolute()
         && lexical_absolute(std::path::Path::new(requested)).map_err(CommandError::io)?
             == lexical_absolute(root).map_err(CommandError::io)?

@@ -14,6 +14,10 @@ $cases = [ordered]@{
     'minimal-runtime-baseline' = $mark + "Write-Output '안녕하세요'"
     'minimal-runtime-core-import' = $mark + $imports + "Write-Output '안녕하세요'"
     'complete-runtime-baseline' = $mark + "Write-Output '안녕하세요'"
+    'complete-runtime-without-module-path' = $mark + "Write-Output '안녕하세요'"
+    'complete-runtime-without-module-path-downloads' = $mark + 'Get-ChildItem -LiteralPath "$env:USERPROFILE\Downloads" | Sort-Object Name | Select-Object -ExpandProperty Name'
+    'complete-runtime-without-module-path-core-import-downloads' = $mark + $imports + 'Import-Module -Name "$PSHOME\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1"; Get-ChildItem -LiteralPath "$env:USERPROFILE\Downloads" | Sort-Object Name | Select-Object -ExpandProperty Name'
+    'complete-runtime-managed-module-path-downloads' = $mark + 'Get-ChildItem -LiteralPath "$env:USERPROFILE\Downloads" | Sort-Object Name | Select-Object -ExpandProperty Name'
     'cold-baseline' = $mark + "Write-Output '안녕하세요'"
     'direct-core-import' = $mark + $imports + "Write-Output '안녕하세요'"
     'console-only' = $mark + "[Console]::WriteLine('안녕하세요')"
@@ -24,6 +28,9 @@ try {
     foreach ($entry in $cases.GetEnumerator()) {
         $profile = Join-Path $root $entry.Key
         New-Item -ItemType Directory -Force "$profile/home","$profile/local","$profile/roaming","$profile/tmp","$profile/data" | Out-Null
+        New-Item -ItemType Directory "$profile/home/Downloads" | Out-Null
+        Set-Content -LiteralPath "$profile/home/Downloads/보고서.txt" -Value 'document'
+        Set-Content -LiteralPath "$profile/home/Downloads/사진.png" -Value 'image'
         $info = [Diagnostics.ProcessStartInfo]::new()
         $info.FileName = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
         $info.UseShellExecute = $false
@@ -39,6 +46,9 @@ try {
         if ($entry.Key.StartsWith('minimal-runtime')) {
             $keys = @('ComSpec','PATH','PATHEXT','SystemDrive','SystemRoot','windir')
         }
+        if ($entry.Key.StartsWith('complete-runtime-without-module-path')) {
+            $keys = @($common | Where-Object { $_ -ne 'PSModulePath' })
+        }
         foreach ($key in $keys) {
             $value = [Environment]::GetEnvironmentVariable($key)
             if ($null -ne $value) { $info.Environment[$key] = $value }
@@ -52,6 +62,9 @@ try {
         $info.Environment['BUTLER_DATA'] = "$profile/data"
         $info.Environment['PYTHONIOENCODING'] = 'utf-8'
         $info.Environment['PYTHONUTF8'] = '1'
+        if ($entry.Key -eq 'complete-runtime-managed-module-path-downloads') {
+            $info.Environment['PSModulePath'] = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules;$env:ProgramFiles\WindowsPowerShell\Modules;$profile\home\Documents\WindowsPowerShell\Modules"
+        }
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($prefix + $entry.Value))
         foreach ($argument in @('-NoLogo','-NoProfile','-NonInteractive','-OutputFormat','Text','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded)) {
             $info.ArgumentList.Add($argument)

@@ -490,3 +490,29 @@ No unchanged retry or relaxed assertion/budget. Reported on
 | Linux ARM64 complete install/reinstall | success | 5 | 40 |
 | Windows released install/recovery/published update | success | 4 | 397 |
 | macOS published Settings update | failure | 163 | 192 |
+
+## Parallel fixture follow-up qualified and landed (#494)
+
+The release captain continued the unfinished follow-up in standalone PR #494,
+qualified head `e2a81455fb00329c35f0470f04f54c5082e79222`, and merged it alone
+at `bcba8d03ca67f9a721fccbfc1b132c1ac24fefad` on 2026-10-03 23:58:57 UTC.
+[Rust run 37161715091](https://github.com/Hexpy-Games/butler/actions/runs/37161715091)
+and [Windows run 37161714785](https://github.com/Hexpy-Games/butler/actions/runs/37161714785)
+passed every selected check; unchanged path conditions still select the other
+checks when their sources change. No test, assertion, budget or runner setting
+was removed or relaxed.
+
+| Dependency/queue-inclusive path | Original baseline | Qualified #489 | Follow-up #494 |
+| --- | ---: | ---: | ---: |
+| Linux Rust complete path | 24m38s | 13m34s | 15m22s |
+| macOS App complete path | 39m48s | 42m26s | 31m02s |
+| Windows complete preview verification | 23m31s | 14m53s | 20m11s |
+| Full Rust gate | unobserved | 42m39s | 31m11s |
+
+The macOS native build took 12m01s, its independent real .90/.91 fixture
+build 15m43s, and complete packaging/update smoke 11m54s. Parallelizing them
+shortened the qualified gate by 11m28s. Linux and Windows varied upward from
+#489's warm run, while remaining below their original baselines. These real
+observations do not promise identical cache and scheduling conditions later.
+No [self-hosted, Linux] runner is registered; Linux stays hosted. Release and
+published preview.8 → preview.9 verification remain gated separately by #493.

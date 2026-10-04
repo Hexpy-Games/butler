@@ -12,6 +12,14 @@ pub(super) fn working_directory(path: &std::path::Path) -> std::io::Result<std::
     Ok(path.to_path_buf())
 }
 
+pub(super) fn member_access_dot(_ch: char, _previous: Option<char>, _quoted: bool) -> bool {
+    false
+}
+
+pub(super) fn path_script(command: &str) -> &str {
+    command
+}
+
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     command.args(&invocation.arguments);
 }

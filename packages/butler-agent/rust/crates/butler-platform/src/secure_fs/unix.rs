@@ -39,6 +39,11 @@ pub(super) fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
         None
     }
 }
+
+pub(super) fn current_metadata(path: &Path) -> io::Result<Metadata> {
+    fs::symlink_metadata(path)
+}
+
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true).mode(PRIVATE_DIRECTORY);

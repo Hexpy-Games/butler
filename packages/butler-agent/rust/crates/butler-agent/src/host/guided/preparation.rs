@@ -40,12 +40,44 @@ pub(crate) struct PreparedNativeGuidedTurn {
     pub initial_work: GuidedWork,
     pub work_scope: WorkTurnScope,
     pub authority_decision: Option<AuthorityDecision>,
+    pub authority_owner: String,
     pub operation_results: Option<Arc<dyn OperationResultRuntime>>,
     pub budget: Option<Arc<dyn TurnContinuationBudgetPort>>,
     pub source_revision: GuidedSourceRevision,
 }
 
 impl GuidedPreparation {
+    async fn accepted_plan(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        project_id: Option<&str>,
+        workspace: &WorkspaceReference,
+    ) -> Result<Option<ProjectLedgerPlan>, BtccError> {
+        let plan_id = turn
+            .context
+            .get("planId")
+            .and_then(serde_json::Value::as_str)
+            .filter(|v| !v.is_empty());
+        let plan =
+            if let (Some(id), Some(project)) = (plan_id, project_id.filter(|v| !v.is_empty())) {
+                let path = workspace.get().map_err(|e| contract(e.code()))?;
+                self.accepted_plans
+                    .read_accepted(
+                        path.to_string_lossy().into_owned(),
+                        project.to_owned(),
+                        id.to_owned(),
+                    )
+                    .await
+                    .map_err(ledger_error)?
+            } else {
+                None
+            };
+        if plan_id.is_some() && plan.is_none() {
+            return Err(contract("accepted_project_plan_unavailable"));
+        }
+        Ok(plan)
+    }
+
     pub(crate) async fn prepare(
         &self,
         start: &GuidedTurnStart<'_>,
@@ -98,30 +130,9 @@ impl GuidedPreparation {
             .await
             .map_err(BtccError::from)?;
         let workspace = recovered.workspace_reference;
-        let plan_id = turn
-            .context
-            .get("planId")
-            .and_then(serde_json::Value::as_str)
-            .filter(|v| !v.is_empty());
-        let accepted_plan = if let (Some(plan_id), Some(project)) =
-            (plan_id, project_id.filter(|v| !v.is_empty()))
-        {
-            let path = workspace.get().map_err(|e| contract(e.code()))?;
-            self.accepted_plans
-                .read_accepted(
-                    path.to_string_lossy().into_owned(),
-                    project.to_owned(),
-                    plan_id.to_owned(),
-                )
-                .await
-                .map_err(ledger_error)?
-        } else {
-            None
-        };
-        if plan_id.is_some() && accepted_plan.is_none() {
-            return Err(contract("accepted_project_plan_unavailable"));
-        }
+        let accepted_plan = self.accepted_plan(turn, project_id, &workspace).await?;
         let work_scope = work_scope_for_turn(turn, &policy.tracking_mode);
+        let authority_owner = self.subsessions.authority_owner(&turn.session_id).await?;
         let path = workspace.get().map_err(|e| contract(e.code()))?;
         let initial_work = load_guided_turn_work(
             &self.work,
@@ -129,7 +140,7 @@ impl GuidedPreparation {
             turn,
             &policy.tracking_mode,
             &path.to_string_lossy(),
-            Some(&turn.session_id),
+            Some(&authority_owner),
         )
         .await
         .map_err(preparation_error)?;
@@ -152,7 +163,7 @@ impl GuidedPreparation {
                 .map(|c| c.work.work_id.clone()),
         })?;
         let authority_decision =
-            guided_authority_loop_decision(Some(&self.authority), turn, &turn.session_id)
+            guided_authority_loop_decision(Some(&self.authority), turn, &authority_owner)
                 .await
                 .map_err(preparation_error)?
                 .map(|decision| match decision {
@@ -171,6 +182,7 @@ impl GuidedPreparation {
             initial_work,
             work_scope,
             authority_decision,
+            authority_owner,
             operation_results,
             budget,
             source_revision,

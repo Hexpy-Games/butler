@@ -102,12 +102,12 @@ impl GuardResult {
             result.insert(
                 "message".into(),
                 json!(
-                    "Project Ledger source records must be mutated through Project Ledger commands."
+                    "Butler data and credential paths must be accessed through their dedicated tools."
                 ),
             );
             result.insert(
                 "next".into(),
-                json!([{ "command": "project-ledger record update --id <id> --from FILE|-" }]),
+                json!([{ "action": "Use the admitted Butler tools for protected data; choose ordinary user files for file tools." }]),
             );
         }
         Value::Object(result)
@@ -183,17 +183,17 @@ fn admit_contained(
         absolute,
     } = resolved;
     out.absolute = Some(absolute.clone());
+    if protected_path(root_real, absolute, protected_roots) {
+        out.reason = Some("protected_path");
+        out.protected = true;
+        return false;
+    }
     let Some(relative) = inside_relative(root_real, absolute) else {
         out.reason = Some("path_escape");
         return false;
     };
     if looks_sensitive(&relative.to_string_lossy()) {
         out.reason = Some("sensitive_path_blocked");
-        return false;
-    }
-    if protected_path(root_real, absolute, protected_roots) {
-        out.reason = Some("protected_path");
-        out.protected = true;
         return false;
     }
     true
@@ -383,16 +383,28 @@ pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> b
     if let Ok(data) = std::env::var("BUTLER_DATA")
         && !butler_core::public_text::trim_js_whitespace(&data).is_empty()
     {
-        roots.push(PathBuf::from(data).join("project-ledger/projects"));
+        let data = PathBuf::from(data);
+        roots.push(data.join("project-ledger/projects"));
+        protect_external_data(root, &data, &mut roots);
     }
     if let Some(home) = butler_platform::user_dirs::home_dir() {
-        roots.push(home.join(".butler/project-ledger/projects"));
+        let data = home.join(".butler");
+        roots.push(data.join("project-ledger/projects"));
+        protect_external_data(root, &data, &mut roots);
     }
     roots.extend_from_slice(extra);
     roots.into_iter().any(|candidate| {
         butler_platform::secure_fs::path_is_within(&target, &realpath_or_nearest(&candidate))
     })
 }
+fn protect_external_data(root: &Path, data: &Path, roots: &mut Vec<PathBuf>) {
+    // Preserve dedicated file-tool access to an admitted legacy workspace.
+    // A different workspace cannot use file tools to enter Butler's data tree.
+    if !butler_platform::secure_fs::path_is_within(root, &realpath_or_nearest(data)) {
+        roots.push(data.to_path_buf());
+    }
+}
+
 pub(crate) fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     let mut suffix = Vec::new();
