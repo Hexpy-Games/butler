@@ -378,7 +378,11 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     try {
       if (token) {
         const response = await fetch(`${url}health`, { headers: { authorization: `Bearer ${token}` } });
-        if (response.ok) break;
+        if (response.ok) {
+          const readiness = await fetch(`${url}runtime-readiness`, { headers: { authorization: `Bearer ${token}` } });
+          const reply = await readiness.json() as { data?: { authenticated_gateway_ready?: boolean; btcc_executor_ready?: boolean } };
+          if (readiness.ok && reply.data?.authenticated_gateway_ready && reply.data.btcc_executor_ready) break;
+        }
       }
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {

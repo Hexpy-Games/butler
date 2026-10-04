@@ -175,11 +175,7 @@ impl AppServer {
                 identity_clock.clone(),
             )),
             monitoring: Arc::new(AppMonitoring::for_runtime(runtime, data_root)),
-            context_read: Arc::new(AppContextRead::new(
-                data_root.to_path_buf(),
-                runtime.context_budget.clone(),
-                runtime.context_compactions.clone(),
-            )),
+            context_read: Arc::new(AppContextRead::for_runtime(runtime, data_root).await?),
             identity_clock,
             approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
             queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),

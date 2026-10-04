@@ -31,6 +31,7 @@ pub use install::{
     LauncherPaths, LauncherState, LauncherSync, RESOURCES, Switched, sha256_file, sha256_tree,
     version_dir_name,
 };
+pub use log_tail::LogTail;
 pub use mcp_tasks::{
     cleanup_plan, read_mcp_task, read_mcp_task_counts, read_mcp_task_list, read_mcp_task_projects,
 };

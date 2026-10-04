@@ -198,6 +198,17 @@ fn encode(value: impl serde::Serialize) -> Result<Value, GatewayApplicationError
 }
 
 fn error(source: std::io::Error) -> GatewayApplicationError {
+    let reason = match source.to_string().as_str() {
+        "Inventory changed" => "inventory_changed",
+        "Memory is in use" => "writer_busy",
+        "Operation ID conflicts" => "operation_id_conflict",
+        "Active v2 generation is required" => "generation_required",
+        _ => "io_failure",
+    };
+    butler_core::diagnostic!(
+        "[memory-management] operation_unavailable reason={reason} kind={:?}",
+        source.kind()
+    );
     public_error(
         409,
         "memory_operation_unavailable",

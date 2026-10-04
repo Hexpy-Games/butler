@@ -59,17 +59,24 @@ fn signature(path: &Path) -> Option<(u64, SystemTime)> {
 }
 
 fn seed_imported_message(data: &Path) {
-    let canonical = sqlite::open(data.join("runtime/conversation-store.sqlite")).unwrap();
+    let path = data.join("runtime/conversation-store.sqlite");
+    let canonical = sqlite::open(&path).unwrap();
+    // Interleave unrelated writable WAL handles with the external writer. Their
+    // close notifications must not consume the final committed source wakeup.
+    let reader = sqlite::open(&path).unwrap();
+    canonical.execute_batch("BEGIN IMMEDIATE").unwrap();
     let now = "2026-09-29T00:00:00.000Z";
     canonical.execute("INSERT INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('idle-recovery-session','app',?1,?1,'active',4)", [now]).unwrap();
     canonical.execute("INSERT INTO conversation_messages(id,session_id,seq,role,status,visibility,provenance,created_at,origin_kind) VALUES('idle-recovery-message','idle-recovery-session',1,'user','complete','user','imported',?1,'user_input')", [now]).unwrap();
     canonical.execute("INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) VALUES('idle-recovery-part','idle-recovery-message',0,'text','{\"text\":\"Remember this recovery fact\"}','complete')", []).unwrap();
+    drop(reader);
     canonical
         .execute(
             "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
             [],
         )
         .unwrap();
+    canonical.execute_batch("COMMIT").unwrap();
 }
 
 fn hide_registered_message(graph: &Path) {
@@ -118,7 +125,9 @@ async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
 #[tokio::test]
 async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("MEM-IDLE-RECOVERY")?.fixture(Fixture::Empty);
+    let setup = Setup::new("MEM-IDLE-RECOVERY")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -161,6 +170,7 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     while recovery_observations(&graph) == 0 && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
+    print_sync_trace(&s.sandbox.logs);
     assert_eq!(
         recovery_observations(&graph),
         1,
@@ -308,7 +318,9 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn mem_idle_catches_changed_source_without_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("MEM-IDLE-CHANGE")?.fixture(Fixture::Empty);
+    let setup = Setup::new("MEM-IDLE-CHANGE")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let s = setup.start().await?;
     // Let the service's initial empty-source poll settle before changing it.
@@ -320,6 +332,9 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
     let changed_at = tokio::time::Instant::now();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(75);
     while catchup_message_cursor(&graph).as_deref() != Some("idle-recovery-message") {
+        if tokio::time::Instant::now() >= deadline {
+            print_sync_trace(&s.sandbox.logs);
+        }
         assert!(
             tokio::time::Instant::now() < deadline,
             "changed source was not caught up"
@@ -327,9 +342,20 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     assert_eq!(recovery_observations(&graph), 1);
+    print_sync_trace(&s.sandbox.logs);
     eprintln!(
         "MEM-IDLE-CHANGE catchup_ms={}",
         changed_at.elapsed().as_millis()
     );
     s.finish().await
+}
+
+fn print_sync_trace(logs: &Path) {
+    for number in 1..=3 {
+        if let Ok(log) = std::fs::read_to_string(logs.join(format!("agent-{number}.log"))) {
+            for line in log.lines().filter(|line| line.contains("-trace]")) {
+                eprintln!("agent-{number}: {line}");
+            }
+        }
+    }
 }

@@ -199,10 +199,9 @@ fn list_rules(
             });
         }
     }
+    pending_snapshot(pending, &mut result)?;
     let pending: Option<super::transaction::Intent> = read_json(&rules_root.join("pending.json"))?;
-    if let Some(pending) = pending {
-        result.retain(|row| row.handle != pending.entry.handle);
-    }
+    pending_snapshot(pending, &mut result)?;
     let mut result = super::journal::overlay(rules_root, result)?;
     result.retain(|row| {
         project.is_none_or(|p| row.project_id.is_none() || row.project_id.as_deref() == p)
@@ -212,6 +211,34 @@ fn list_rules(
                 .is_none_or(|id| session.is_none_or(|current| current == id))
     });
     Ok(result)
+}
+
+/// A durable intent owns complete text through the receipt/manifest handoff.
+/// A completed capture no longer overlays it, but must not hide its active row.
+fn pending_snapshot(
+    pending: Option<super::transaction::Intent>,
+    rows: &mut Vec<RememberedRule>,
+) -> CognitionResult<()> {
+    let Some(pending) = pending else {
+        return Ok(());
+    };
+    let entry = pending.entry;
+    rows.retain(|row| row.handle != entry.handle);
+    if entry.state == "active" {
+        if sha256(pending.text.as_bytes()) != entry.content_hash {
+            return Err(failure("rule_pending_content_mismatch"));
+        }
+        rows.push(RememberedRule {
+            handle: entry.handle,
+            text: pending.text,
+            project_id: entry.project_id,
+            revision: entry.revision,
+            duration: entry.duration,
+            expires_at: entry.expires_at,
+            scope_session_id: entry.scope_session_id,
+        });
+    }
+    Ok(())
 }
 
 pub(super) fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> CognitionResult<Option<T>> {

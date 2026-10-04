@@ -19,7 +19,7 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     // These mappings belong only to this read-only validation connection.
     // Avoid copying checked pages through the pager on a full owner-scale scan;
     // closing it releases the mappings before serving requests or measuring idle.
-    db.pragma_update(None, "mmap_size", 2_147_418_112_i64)
+    db.pragma_update(None, "mmap_size", 8_589_934_592_i64)
         .map_err(StorageError::sqlite)?;
     let expected = manifest_id();
     let (receipt_id, receipt_raw) = marker_row(

@@ -12,6 +12,7 @@ mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
 mod cli_surface;
+mod context_telemetry;
 mod credential_store;
 mod credentials;
 mod default_model;

@@ -24,6 +24,10 @@ where
         inspect,
         barrier,
         run: Box::new(move |connection, admission| {
+            let admitted = Instant::now();
+            if !inspect {
+                metrics.write_phase("queue", started.elapsed());
+            }
             let result = admission.and_then(|()| {
                 if inspect {
                     operation(connection)
@@ -31,9 +35,14 @@ where
                     apply(connection, operation)
                 }
             });
+            if !inspect {
+                metrics.write_phase("sql", admitted.elapsed());
+            }
+            let ready = Instant::now();
             let complete: Completion = Box::new(move |commit| {
                 let result = result.and_then(|value| commit.map(|()| value));
                 if !inspect {
+                    metrics.write_phase("commit_wait", ready.elapsed());
                     metrics.operation(started.elapsed());
                 }
                 if result.as_ref().is_err_and(AppStorageError::is_busy) {

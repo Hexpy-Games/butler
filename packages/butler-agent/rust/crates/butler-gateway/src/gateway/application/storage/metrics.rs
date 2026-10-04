@@ -13,6 +13,7 @@ pub(in crate::gateway::application) struct Metrics {
     pub(in crate::gateway::application) commits: AtomicU64,
     operations: Mutex<Vec<u64>>,
     view_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
+    write_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
     busy: AtomicU64,
 }
 pub(in crate::gateway::application) struct ViewMeasurement {
@@ -53,6 +54,15 @@ impl Metrics {
                 .push(u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX));
         }
     }
+    pub(super) fn write_phase(&self, name: &'static str, elapsed: Duration) {
+        if enabled() {
+            self.write_phases
+                .lock()
+                .entry(name)
+                .or_default()
+                .push(u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX));
+        }
+    }
     pub(super) fn busy(&self) {
         self.busy.fetch_add(1, Ordering::Relaxed);
     }
@@ -84,7 +94,7 @@ impl Metrics {
                 histogram[index] += 1;
             }
         }
-        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"view_phase_us":*self.view_phases.lock(),"histogram_upper_us":bounds,"histogram_counts":histogram});
+        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"view_phase_us":*self.view_phases.lock(),"write_phase_us":*self.write_phases.lock(),"histogram_upper_us":bounds,"histogram_counts":histogram});
         std::fs::write(database.with_extension("metrics.json"), value.to_string()).map_err(
             |error| {
                 AppStorageError::new(

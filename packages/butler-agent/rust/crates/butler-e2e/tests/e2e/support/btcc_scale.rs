@@ -41,6 +41,20 @@ pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
 
 pub(super) fn assert_complete(data: &Path) -> Result<(), HarnessError> {
     let db = Connection::open(path(data))?;
+    let mapping_cap: i64 = db.query_row(
+        "SELECT sqlite_compileoption_used('MAX_MMAP_SIZE=8589934592LL')",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        mapping_cap, 1,
+        "owner-scale validation mapping must not be clamped to 2 GiB"
+    );
+    let runtime_mapping: i64 = db.pragma_query_value(None, "mmap_size", |row| row.get(0))?;
+    assert_eq!(
+        runtime_mapping, 0,
+        "normal connections retain the bounded pager"
+    );
     for (table, key) in [
         ("btcc_turns", "turn_id"),
         ("btcc_subsession_outbox", "outbox_id"),

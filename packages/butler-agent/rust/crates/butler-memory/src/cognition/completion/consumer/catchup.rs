@@ -66,8 +66,10 @@ fn claim_slot(input: &Input, schedule: Schedule) -> bool {
 
 async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport> {
     if input.shutdown.is_cancelled() || !claim_slot(input, schedule) {
+        trace("slot_skipped");
         return Ok(CatchupReport::default());
     }
+    trace("slot_claimed");
     let owned = input.clone();
     let handle = match super::blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
@@ -94,6 +96,7 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     else {
         return Ok(CatchupReport::default());
     };
+    trace(&format!("loaded unchanged={unchanged} work={}", work.len()));
     if unchanged {
         return Ok(unchanged_report(pass.state));
     }
@@ -483,4 +486,10 @@ async fn save_state(
 
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
+}
+
+fn trace(message: &str) {
+    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!("[memory-catchup-trace] {message}");
+    }
 }

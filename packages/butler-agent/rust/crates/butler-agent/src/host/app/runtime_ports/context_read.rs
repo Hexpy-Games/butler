@@ -23,7 +23,7 @@ use butler_turn::btcc::ContextCompactionRepository;
 use parking_lot::Mutex;
 
 const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;
-use butler_core::json_lines::visit_json_lines;
+mod telemetry;
 
 pub(crate) struct AppContextRead {
     data_root: PathBuf,
@@ -31,20 +31,49 @@ pub(crate) struct AppContextRead {
     compactions: ContextCompactionRepository,
     /// Session usage folded incrementally from the prompt-usage log.
     usage: Arc<Mutex<SessionUsageIndex>>,
+    telemetry: Arc<Mutex<telemetry::Index>>,
 }
 
 impl AppContextRead {
-    pub(crate) fn new(
+    pub(crate) async fn for_runtime(
+        runtime: &crate::host::runtime::AgentRuntime,
+        data_root: &Path,
+    ) -> Result<Self, butler_turn::btcc::BtccError> {
+        Self::open(
+            data_root.to_path_buf(),
+            runtime.context_budget.clone(),
+            runtime.context_compactions.clone(),
+        )
+        .await
+    }
+    async fn open(
         data_root: PathBuf,
         budget: Arc<ContextBudgetOwner>,
         compactions: ContextCompactionRepository,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, butler_turn::btcc::BtccError> {
+        let root = data_root.clone();
+        let catalog = budget.catalog().clone();
+        let (telemetry, usage) = tokio::task::spawn_blocking(move || {
+            let telemetry = telemetry::Index::open(&root);
+            let mut usage = SessionUsageIndex::default();
+            usage.read(&root, "", &|model| catalog.pricing(model));
+            (telemetry, usage)
+        })
+        .await
+        .map_err(|error| {
+            butler_turn::btcc::BtccError::relayed(
+                "app_context_index_open_failed",
+                "Context telemetry initialization failed",
+            )
+            .with_source(error)
+        })?;
+        Ok(Self {
             data_root,
             budget,
             compactions,
-            usage: Arc::default(),
-        }
+            usage: Arc::new(Mutex::new(usage)),
+            telemetry: Arc::new(Mutex::new(telemetry)),
+        })
     }
 }
 
@@ -54,6 +83,7 @@ impl AppContextReadPort for AppContextRead {
         let budget = self.budget.clone();
         let compactions = self.compactions.clone();
         let usage = self.usage.clone();
+        let telemetry_index = self.telemetry.clone();
         Box::pin(async move {
             let snapshot = budget
                 .snapshot()
@@ -84,7 +114,10 @@ impl AppContextReadPort for AppContextRead {
             let configured = configured_auth_mode(&query.model_ref, &snapshot.models, &catalog);
             let (telemetry, session) = tokio::task::spawn_blocking(move || {
                 let session = session_usage(&usage, &root, &telemetry_query, &catalog, configured);
-                (read_usage(&root, &telemetry_query), session)
+                (
+                    telemetry_index.lock().read(&root, &telemetry_query),
+                    session,
+                )
             })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
@@ -169,110 +202,6 @@ struct Telemetry {
     compaction_summary: Option<String>,
 }
 
-fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
-    let scope = format!("btcc-guided:{}", query.runtime_session_id);
-    let mut exact: Option<(i64, u64)> = None;
-    let mut legacy: Option<(i64, u64)> = None;
-    visit_json_lines(&root.join("metrics/prompt-cache-usage.jsonl"), |value| {
-        let ts = value.get("ts").and_then(Value::as_i64).unwrap_or(-1);
-        let Some(prompt) = positive_tokens(value.get("promptTokens")) else {
-            return;
-        };
-        if value.get("scope").and_then(Value::as_str) != Some(&scope) {
-            return;
-        }
-        if query
-            .turn_id
-            .as_deref()
-            .is_some_and(|turn| value.get("turnId").and_then(Value::as_str) == Some(turn))
-        {
-            if exact.is_none_or(|current| ts >= current.0) {
-                exact = Some((ts, prompt));
-            }
-        } else if value.get("turnId").is_none()
-            && query
-                .latest_turn_started_at_ms
-                .is_some_and(|start| ts >= start)
-            && legacy.is_none_or(|current| ts >= current.0)
-        {
-            legacy = Some((ts, prompt));
-        }
-    });
-    let mut monitor: Option<(i64, u64)> = None;
-    visit_json_lines(&root.join("metrics/context-monitor.jsonl"), |value| {
-        let ts = value.get("ts").and_then(Value::as_i64).unwrap_or(-1);
-        if value.get("kind").and_then(Value::as_str) != Some("runtime_turn")
-            || value.get("sessionId").and_then(Value::as_str) != Some(&query.runtime_session_id)
-            || query
-                .latest_turn_started_at_ms
-                .is_some_and(|start| ts < start)
-            || value
-                .get("model")
-                .and_then(Value::as_str)
-                .is_some_and(|model| model != query.model_ref)
-        {
-            return;
-        }
-        if let Some(chars) = value.get("totalPromptChars").and_then(Value::as_u64) {
-            let tokens = chars.div_ceil(4);
-            if tokens > 0 && monitor.is_none_or(|current| ts >= current.0) {
-                monitor = Some((ts, tokens));
-            }
-        }
-    });
-    let usage = exact
-        .map(|(_, tokens)| AppContextUsage {
-            prompt_tokens: tokens,
-            source: "provider_prompt_usage".into(),
-        })
-        .or_else(|| match (legacy, monitor) {
-            (Some(left), Some(right)) if right.0 > left.0 => Some(AppContextUsage {
-                prompt_tokens: right.1,
-                source: "context_monitor".into(),
-            }),
-            (Some(left), _) => Some(AppContextUsage {
-                prompt_tokens: left.1,
-                source: "provider_prompt_usage".into(),
-            }),
-            (None, Some(right)) => Some(AppContextUsage {
-                prompt_tokens: right.1,
-                source: "context_monitor".into(),
-            }),
-            _ => None,
-        });
-    let safe = query
-        .runtime_session_id
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    let mut compaction_summary = None;
-    visit_json_lines(
-        &root
-            .join("context/compactions")
-            .join(format!("{safe}.jsonl")),
-        |value| {
-            if value.get("schema").and_then(Value::as_str) == Some("butler.context.compaction.v1")
-                && value.get("status").and_then(Value::as_str) == Some("ok")
-            {
-                compaction_summary = value
-                    .get("summary")
-                    .and_then(Value::as_str)
-                    .map(bounded_summary);
-            }
-        },
-    );
-    Telemetry {
-        usage,
-        compaction_summary,
-    }
-}
-
 fn positive_tokens(value: Option<&Value>) -> Option<u64> {
     let value = value?.as_f64()?;
     (value.is_finite() && value > 0.0).then_some(butler_core::json::saturating_u64(value.round()))
@@ -286,6 +215,7 @@ fn bounded_summary(value: &str) -> String {
 mod tests {
     use super::*;
 
+    // test-category: pure-logic
     #[test]
     fn exact_turn_provider_usage_wins_over_newer_legacy_and_monitor_rows() {
         use std::io::Write;
@@ -318,7 +248,7 @@ mod tests {
             root.join("metrics/context-monitor.jsonl"),
             "{\"kind\":\"runtime_turn\",\"ts\":400,\"sessionId\":\"runtime-a\",\"model\":\"openai/test\",\"totalPromptChars\":8000}\n",
         ).unwrap();
-        let telemetry = read_usage(
+        let telemetry = telemetry::Index::open(&root).read(
             &root,
             &AppContextReadQuery {
                 runtime_session_id: "runtime-a".into(),

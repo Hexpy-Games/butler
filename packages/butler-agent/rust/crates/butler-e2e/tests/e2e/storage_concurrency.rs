@@ -193,19 +193,21 @@ fn storage_metrics(
             view_samples.len() >= SESSIONS,
             "did not sample during streaming"
         );
-        if let Some(phases) = metrics["view_phase_us"].as_object() {
-            for (phase, values) in phases {
-                let mut samples = values
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| v.as_u64().unwrap())
-                    .collect::<Vec<_>>();
-                eprintln!(
-                    "STORAGE VIEW phase={phase} count={} p95_us={}",
-                    samples.len(),
-                    p95(&mut samples)
-                );
+        for (kind, field) in [("VIEW", "view_phase_us"), ("WRITE", "write_phase_us")] {
+            if let Some(phases) = metrics[field].as_object() {
+                for (phase, values) in phases {
+                    let mut samples = values
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_u64().unwrap())
+                        .collect::<Vec<_>>();
+                    eprintln!(
+                        "STORAGE {kind} phase={phase} count={} p95_us={}",
+                        samples.len(),
+                        p95(&mut samples)
+                    );
+                }
             }
         }
         let mut operations = metrics["operation_us"]

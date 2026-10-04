@@ -3,6 +3,8 @@ use rusqlite::{Connection, params};
 
 // 13,312 registrations in the project, plus unrelated owner-scale message history.
 fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
+    let started = std::time::Instant::now();
+    eprintln!("ARTIFACT-FIXTURE phase=seed_begin");
     let mut db =
         butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
             .unwrap();
@@ -11,6 +13,10 @@ fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
         tx.execute("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES(?1,'Other','chat',NULL,'now','now')",[format!("scale-chat-{i}")]).unwrap();
     }
     seed_history(&tx);
+    eprintln!(
+        "ARTIFACT-FIXTURE phase=history_complete rows=300000 elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let mut ids = Vec::new();
     for i in 0..13_312 {
         let id = format!("file-scale-{i:05}");
@@ -51,6 +57,10 @@ fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
             .unwrap();
     }
     tx.commit().unwrap();
+    eprintln!(
+        "ARTIFACT-FIXTURE phase=seed_committed registrations=13312 elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let plan: Vec<String> = db.prepare("EXPLAIN QUERY PLAN SELECT m.id FROM chats c JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 AND m.role='assistant'").unwrap()
         .query_map([project], |r| r.get(3)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
     assert!(
@@ -64,6 +74,7 @@ fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
 }
 
 fn seed_history(db: &Connection) {
+    let started = std::time::Instant::now();
     let text = "x".repeat(4096);
     let mut statement = db.prepare("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES(?1,?2,'assistant',?3,'delivered','now','now')").unwrap();
     for i in 0..300_000 {
@@ -74,6 +85,13 @@ fn seed_history(db: &Connection) {
                 text
             ])
             .unwrap();
+        if (i + 1) % 50000 == 0 {
+            eprintln!(
+                "ARTIFACT-FIXTURE phase=history rows={} elapsed_ms={}",
+                i + 1,
+                started.elapsed().as_millis()
+            );
+        }
     }
 }
 
@@ -84,10 +102,13 @@ async fn many_matches_page_completely_at_owner_scale() -> Result<(), HarnessErro
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;
+    eprintln!("ARTIFACT-FIXTURE phase=agent_ready");
     let p = project(&s, "Large project").await?;
     let a = chat(&s, &p).await?;
     let expected = seed(&s, &p, &a);
+    eprintln!("ARTIFACT-FIXTURE phase=before_reader");
     let b = chat(&s, &p).await?;
+    eprintln!("ARTIFACT-FIXTURE phase=reader_ready");
     let mut actual = Vec::new();
     for (index, prompt) in ["Page1", "Page2", "Page3"].iter().enumerate() {
         let page = lookup(&s, &b, prompt).await?;

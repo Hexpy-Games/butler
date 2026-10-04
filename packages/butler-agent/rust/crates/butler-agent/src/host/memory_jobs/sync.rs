@@ -21,6 +21,7 @@ use butler_memory::cognition::{active_memory_descriptor_exists, resolve_active_g
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::{ModelConfigurationClock, ModelProvider};
 use butler_turn::btcc::BtccError;
+mod source_probe;
 
 use crate::host::SystemIdentity;
 
@@ -150,13 +151,14 @@ async fn poll(
             return;
         }
         let delay = poll_delay(&consumer, &data_root, &paths, &shutdown, &mut idle_polls).await;
+        trace(&format!("park delay={delay:?}"));
         tokio::select! {
             () = shutdown.cancelled() => return,
             changed = changes.changed() => {
                 idle_polls = 0;
                 match changed {
-                    Ok(true) => consumer.source_changed(),
-                    Ok(false) => {},
+                    Ok(true) => { trace("source_changed"); consumer.source_changed(); },
+                    Ok(false) => { trace("root_changed"); },
                     Err(_) => {
                         let Some(observer) = recover_observer(&data_root, &paths, &shutdown).await else { return };
                         changes = observer;
@@ -186,9 +188,11 @@ async fn observe_changes(
         "{}-wal",
         canonical.file_name().unwrap_or_default().to_string_lossy()
     ));
-    butler_gateway::gateway::FileChangeWatch::observe(
+    let mut probe = source_probe::SourceProbe::new(canonical.clone());
+    butler_gateway::gateway::FileChangeWatch::observe_with_close_probe(
         paths.memory_root(data_root),
         vec![canonical, wal],
+        move || probe.changed(),
     )
     .await
     .map_err(|source| {
@@ -244,6 +248,13 @@ async fn poll_delay(
         Ok(true) => consumer.poll_once().await,
         Err(error) => Err(error),
     };
+    let outcome = match &result {
+        Ok(MemorySyncPoll::Processed) => "processed",
+        Ok(MemorySyncPoll::Idle) => "idle",
+        Ok(MemorySyncPoll::Deferred) => "deferred",
+        Err(error) => error.code(),
+    };
+    trace(outcome);
     match result {
         Ok(MemorySyncPoll::Processed) => {
             *idle_polls = 0;
@@ -293,5 +304,11 @@ async fn recover_observer(
         if let Ok(observer) = observe_changes(data_root, paths).await {
             return Some(observer);
         }
+    }
+}
+
+fn trace(message: &str) {
+    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!("[memory-sync-trace] {message}");
     }
 }

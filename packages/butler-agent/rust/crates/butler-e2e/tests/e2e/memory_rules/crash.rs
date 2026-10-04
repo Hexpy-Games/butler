@@ -50,6 +50,16 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             .await;
             let boundary = support::read_json(&state.join("rule-crash-reached.json")).unwrap();
             assert_eq!(boundary["stage"], stage);
+            let instructions = s.gw.get("/memory/instructions").await?;
+            assert_eq!(instructions.status, 200, "{}", instructions.text);
+            let rows = instructions.data()["instructions"].as_array().unwrap();
+            if tool_name == "update_explicit_memory" {
+                assert_eq!(rows.len(), 1, "stage={stage}: {}", instructions.text);
+                assert_eq!(rows[0]["handle"], original["handle"]);
+                assert_eq!(rows[0]["text"], "The user's bike lock code is 6401.");
+            } else {
+                assert!(rows.is_empty(), "stage={stage}: {}", instructions.text);
+            }
             let queued =
                 s.gw.post(
                     "/session-queue",

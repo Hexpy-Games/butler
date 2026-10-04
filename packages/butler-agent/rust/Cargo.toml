@@ -112,6 +112,11 @@ debug = false
 # Installing an Agent archive hashes and inflates a few hundred megabytes; at
 # opt-level 0 that takes minutes in the install scenarios. These leaf crates
 # are small, so optimizing them costs little.
+# Owner-scale E2Es exercise the actual bundled SQLite engine. Optimize its
+# page/FTS loops while retaining Rust debug assertions and all runtime checks.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 2
+
 [profile.dev.package.sha2]
 opt-level = 3
 [profile.dev.package.flate2]
