@@ -1,0 +1,149 @@
+name: Recover a missing macOS preview App
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published preview whose macOS App is missing
+        required: true
+        type: string
+      baseline-tag:
+        description: Published macOS baseline for the real update smoke
+        type: string
+        default: v0.1.0-preview.8
+permissions:
+  contents: write
+jobs:
+  recover:
+    name: Package the immutable preview with repaired signing tools
+    runs-on: macos-15
+    environment: deploy
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          path: recovery-source
+      - uses: ./.github/actions/bun-setup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate the published target and unchanged product source
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/isolated.py python3 - <<'PY'
+          import json, os, re, subprocess
+          target = os.environ['TARGET_TAG']
+          current = os.environ['GITHUB_REF_NAME']
+          pattern = r'v0\.1\.0-preview\.(\d+)'
+          assert re.fullmatch(pattern, target) and re.fullmatch(pattern, current)
+          assert int(re.fullmatch(pattern, target)[1]) < int(re.fullmatch(pattern, current)[1])
+          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/releases/tags/{target}']))
+          assert not release['draft'] and release['prerelease']
+          assert not any(a['name'].startswith('butler-app-') and 'darwin-arm64' in a['name'] for a in release['assets']), 'Refuse to replace an existing macOS App'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={target[1:]}\n')
+          PY
+          cp deploy/macos/sign-and-notarize.sh recovery-source/deploy/macos/sign-and-notarize.sh
+          test "$(git -C recovery-source diff --name-only)" = deploy/macos/sign-and-notarize.sh
+          echo "BUTLER_MEMORY_IMPLEMENTATION_COMMIT=$(git -C recovery-source rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "BUTLER_NATIVE_AGENT_PAYLOAD=$RUNNER_TEMP/recovered-native-payload" >> "$GITHUB_ENV"
+      - name: Download and verify the exact published Agent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/recovered-agent"
+          gh release download "$TARGET_TAG" --dir "$RUNNER_TEMP/recovered-agent" --pattern 'butler-agent-*-darwin-arm64.tar.gz' --pattern 'butler-*-SHA256SUMS'
+          cd "$RUNNER_TEMP/recovered-agent"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/verify-released-agent.py"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 - <<'PY'
+          from pathlib import Path
+          import os, tarfile
+          archive, = Path.cwd().glob('butler-agent-*-darwin-arm64.tar.gz')
+          destination = Path.cwd() / 'unpacked'
+          with tarfile.open(archive) as contents:
+              contents.extractall(destination, filter='data')
+          binary = destination / 'butler-agent'
+          assert binary.is_file() and os.access(binary, os.X_OK)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'BUTLER_NATIVE_AGENT_EXECUTABLE={binary}\n')
+          PY
+      - name: Build the target renderer and native payload
+        working-directory: recovery-source
+        env:
+          GITHUB_REF_NAME: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+          python3 .github/scripts/isolated.py npm --prefix packages/butler-app/client/ui run build
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
+      - name: Create the job-private signing credentials
+        working-directory: recovery-source
+        env:
+          GITHUB_REF_NAME: ${{ inputs.tag }}
+          BUTLER_SIGN_REQUIRED: '1'
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: deploy/macos/sign-and-notarize.sh setup
+      - name: Gate, package and smoke the immutable target App
+        working-directory: recovery-source
+        env:
+          GITHUB_REF_NAME: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release/baseline
+          gh release download "$BASELINE_TAG" --pattern app-release-manifest.json --dir dist/release/baseline
+          export BUTLER_APP_PREVIOUS_RELEASE_MANIFEST="$PWD/dist/release/baseline/app-release-manifest.json"
+          python3 .github/scripts/isolated.py bun run release:app:gate -- --platform=darwin-arm64
+          python3 .github/scripts/isolated.py bun run release:app:package -- --platform=darwin-arm64 --out dist/release/app --artifact-base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          python3 .github/scripts/isolated.py bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
+      - name: Publish recovered App and preserve every existing platform
+        working-directory: recovery-source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          published="$RUNNER_TEMP/recovery-existing"
+          gh release download "$TARGET_TAG" --dir "$published"
+          merged="$RUNNER_TEMP/recovery-merged"
+          mkdir -p "$merged"
+          python3 .github/scripts/isolated.py python3 deploy/app/merge-update-manifest.py --mac-manifest dist/release/app/app-update-manifest.json --windows-dir "$published" --version "${TARGET_TAG#v}" --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TARGET_TAG" --output "$merged/app-update-manifest.json"
+          python3 .github/scripts/isolated.py python3 - "$merged/app-update-manifest.json" <<'PY'
+          import json, sys
+          document = json.load(open(sys.argv[1]))
+          assert {a['platform'] for a in document['artifacts']} == {'darwin-arm64', 'linux-x64', 'linux-arm64', 'windows-x64'}
+          assert len(document['artifacts']) == 4
+          PY
+          gh release upload "$TARGET_TAG" --clobber dist/release/app/butler-app-*-darwin-arm64.{dmg,dmg.sha256,zip,zip.sha256} dist/release/app/app-release-manifest.json "$merged/app-update-manifest.json"
+      - name: Delete job-owned credentials and payloads
+        if: always()
+        working-directory: recovery-source
+        run: |
+          deploy/macos/sign-and-notarize.sh cleanup
+          rm -rf "$RUNNER_TEMP/recovered-agent" "$RUNNER_TEMP/recovered-native-payload" "$RUNNER_TEMP/recovery-existing" "$RUNNER_TEMP/recovery-merged"
+  checksums:
+    needs: recover
+    uses: ./.github/workflows/release-checksums.yml
+    with:
+      tag: ${{ inputs.tag }}
+  verify:
+    needs: [recover, checksums]
+    uses: ./.github/workflows/macos-app-package.yml
+    with:
+      candidate-version: ${{ needs.recover.outputs.version }}
+      baseline-tag: ${{ inputs.baseline-tag }}
+      published-candidate: true

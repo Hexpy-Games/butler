@@ -149,3 +149,16 @@ package-neutral orchestration.
 - `SPEC-BUTLER-DEDICATED-CLIENT-APP-EXPERIENCE` - Butler Dedicated Client App Experience
 - `SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM` - Butler Dedicated Client Design System
 - `SPEC-RELEASE-PACKAGING` - Release Packaging
+
+Release recovery keeps credential tools in the job-private `BUTLER_SIGN_HOME` that
+created their temporary keychain; Butler package/gate/smoke commands retain fresh
+HOME and data directories. The release records a paired old/current Developer ID
+probe before claiming that profile binding caused a repair (#498).
+
+If a published preview lacks its macOS App, dispatch `macos-release-recovery.yml`
+from a later qualified preview tag with the target and baseline tags. It uses the
+target's immutable product source and checksum-verified published Agent, changes
+only the signing tool, refuses to replace an existing macOS App, preserves all
+existing platform entries, regenerates checksums, and runs the real published
+baseline-to-target update smoke. It cannot run from a branch or stable tag.
+The npm tarball and SHA-256 are release assets; packing never publishes to npm.
