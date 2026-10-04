@@ -48,7 +48,8 @@ async fn supervisor_death_and_sigterm_reap_native_initializing_workers() -> Resu
         eprintln!(
             "supervisor killed={killed}: shutdown={stopped_after:?}, zero agent/worker survivors; complete queue recovered"
         );
-        assert_eq!(s.agent.cli_async(&["stop", "--json"]).await?.code, Some(0));
+        let stopped = s.agent.cli_async(&["stop", "--json"]).await?;
+        assert_eq!(stopped.code, Some(0), "{stopped:?}");
         s.finish().await?;
     }
     Ok(())

@@ -103,6 +103,11 @@ pub(crate) async fn run(
         // Keep its intent resumable until the shared projection also commits.
         result.phase = failed_phase(&result, &token).into();
         result.sequence += 1;
+        butler_core::diagnostic!(
+            "[memory-reset] operation_id={} phase={} error={error}",
+            result.operation_id,
+            result.phase
+        );
         let binding = (root, paths, result);
         tokio::task::spawn_blocking(move || {
             save_leased(&binding.0, &binding.1, &coordinator, &binding.2)
