@@ -3,8 +3,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
 
-/// Whether a requested path must be workspace-relative (delegated
-/// subsessions) or may also be absolute inside the workspace.
+/// Whether a caller explicitly requires workspace-relative paths or resolves
+/// paths using the OS account permissions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathForm {
     RelativeOnly,
@@ -112,7 +112,7 @@ struct Resolved {
 }
 
 /// Starts a guard result and lexically resolves the request. Empty requests,
-/// absolute requests in relative-only mode and relative `..` traversal are
+/// absolute requests and relative `..` traversal in relative-only mode are
 /// rejected without touching the filesystem beyond the root.
 fn resolve_request(
     root: &Path,
@@ -139,7 +139,7 @@ fn resolve_request(
     }
     let root_real = root_lex.canonical()?;
     out.root = root_real.clone();
-    if !requested_path.is_absolute() && has_parent_segment(requested) {
+    if path_form == PathForm::RelativeOnly && has_parent_segment(requested) {
         out.reason = Some("parent_traversal_not_allowed");
         return Ok((out, None));
     }
@@ -167,12 +167,16 @@ fn admit_contained(
     out: &mut GuardResult,
     resolved: &Resolved,
     protected_roots: &[PathBuf],
+    path_form: PathForm,
 ) -> bool {
     let Resolved {
         root_real,
         absolute,
     } = resolved;
     out.absolute = Some(absolute.clone());
+    if path_form == PathForm::RelativeOrAbsolute {
+        return true;
+    }
     if protected_path(root_real, absolute, protected_roots) {
         out.reason = Some("protected_path");
         out.protected = true;
@@ -197,7 +201,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
     let Some(resolved) = resolved else {
         return Ok(out);
     };
-    if !admit_contained(&mut out, &resolved, input.protected_roots) {
+    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
         return Ok(out);
     }
     let Resolved {
@@ -209,7 +213,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         return Ok(out);
     };
     out.real = Some(real.clone());
-    if inside_relative(&root_real, &real).is_none() {
+    if input.path_form == PathForm::RelativeOnly && inside_relative(&root_real, &real).is_none() {
         out.reason = Some("symlink_escape");
         return Ok(out);
     }
@@ -253,12 +257,16 @@ pub(crate) fn resolve_workspace_mutation_guard(
     let Some(resolved) = resolved else {
         return Ok(out);
     };
-    let installation = Installation::resolve(input.installation_root)?;
+    let installation = Installation::resolve(
+        input
+            .installation_root
+            .filter(|_| input.path_form == PathForm::RelativeOnly),
+    )?;
     if installation.contains(&resolved.absolute) {
         out.reason = Some("program_directory_read_only");
         return Ok(out);
     }
-    if !admit_contained(&mut out, &resolved, input.protected_roots) {
+    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
         return Ok(out);
     }
     let Resolved {
@@ -268,14 +276,22 @@ pub(crate) fn resolve_workspace_mutation_guard(
     match absolute.canonical() {
         Ok(real) => {
             out.real = Some(real.clone());
-            out.reason = existing_target_rejection(&root_real, &absolute, &real, &installation)?;
+            out.reason = existing_target_rejection(
+                &root_real,
+                &absolute,
+                &real,
+                &installation,
+                input.path_form,
+            )?;
         }
         Err(_) if input.leaf == Leaf::MayBeMissing => {
             let parent = absolute.parent().unwrap_or(&root_real);
             let parent_real = realpath_or_nearest(parent);
             if installation.contains(&parent_real) {
                 out.reason = Some("program_directory_read_only");
-            } else if inside_relative(&root_real, &parent_real).is_none() {
+            } else if input.path_form == PathForm::RelativeOnly
+                && inside_relative(&root_real, &parent_real).is_none()
+            {
                 out.reason = Some("parent_escape");
             } else {
                 match absolute.file_name() {
@@ -296,11 +312,12 @@ fn existing_target_rejection(
     absolute: &Path,
     real: &Path,
     installation: &Installation,
+    path_form: PathForm,
 ) -> std::io::Result<Option<&'static str>> {
     if installation.contains(real) {
         return Ok(Some("program_directory_read_only"));
     }
-    if inside_relative(root_real, real).is_none() {
+    if path_form == PathForm::RelativeOnly && inside_relative(root_real, real).is_none() {
         return Ok(Some("symlink_escape"));
     }
     let meta = std::fs::symlink_metadata(absolute)?;
@@ -328,10 +345,7 @@ pub fn safe_workspace_path(path: &str) -> Option<&str> {
 }
 
 pub(crate) fn safe_cursor_path(path: &str) -> bool {
-    !path.is_empty()
-        && !path.starts_with(['/', '\\', '~'])
-        && !has_parent_segment(path)
-        && !has_drive_prefix(path)
+    !path.is_empty() && !path.starts_with('~') && !has_parent_segment(path)
 }
 
 fn has_drive_prefix(value: &str) -> bool {

@@ -9,7 +9,7 @@ pub(super) fn new(path: Option<String>, error: &'static str) -> MutationFailure 
         ),
         "not_found" => (
             "The target file was not found.",
-            "Check the workspace-relative path and retry.",
+            "Check the absolute or workspace-relative path and retry.",
         ),
         "file_exists" => (
             "The target file already exists and overwrite is false.",
@@ -71,7 +71,7 @@ pub(super) fn new(path: Option<String>, error: &'static str) -> MutationFailure 
 pub(super) fn guard(guard: GuardResult) -> MutationFailure {
     let mut failure = new(guard.safe_path(), guard.reason.unwrap_or("path_rejected"));
     failure.message = "The requested workspace path was rejected.".into();
-    failure.recovery_hint = "Retry with a regular workspace-relative file path.".into();
+    failure.recovery_hint = "Retry with a regular absolute or workspace-relative file path.".into();
     failure.guard = Some(Box::new(guard));
     failure
 }

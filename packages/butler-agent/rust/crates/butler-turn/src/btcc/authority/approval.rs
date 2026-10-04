@@ -75,8 +75,8 @@ pub enum ApprovalActionKind {
 pub struct ApprovalTarget {
     pub kind: ApprovalTargetKind,
     /// A folder label (`garden`, `garden/app`), a path inside the
-    /// workspace, `server/tool` for a connector, or the operation's own
-    /// target name. Never an absolute path.
+    /// workspace, an exact absolute path, `server/tool` for a connector,
+    /// or the operation's own target name.
     pub path: String,
 }
 
@@ -85,7 +85,7 @@ pub struct ApprovalTarget {
 pub enum ApprovalTargetKind {
     Folder,
     File,
-    /// A target outside the workspace; path contains only its file name.
+    /// A target outside the workspace; path retains the exact requested path.
     Outside,
     Connector,
     Schedule,
@@ -148,6 +148,9 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
 fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApproval {
     let (kind, target, risk) = match tool {
         Some(ToolName::WriteFile | ToolName::EditFile) => return file_edits(facts),
+        Some(ToolName::ReadFile | ToolName::ListFiles | ToolName::GrepFiles) => {
+            return file_reads(facts);
+        }
         Some(ToolName::DeleteAutomation) => (
             ApprovalActionKind::ManageSchedule,
             ApprovalTargetKind::Schedule,
@@ -203,7 +206,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                     } else {
                         ApprovalTargetKind::Outside
                     },
-                    path: relative.unwrap_or_else(|| file_name(Path::new(path))),
+                    path: relative.unwrap_or_else(|| path.to_owned()),
                 });
             }
         }
@@ -231,6 +234,37 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         } else {
             ApprovalRisk::Medium
         },
+    }
+}
+
+/// Exact observation paths are shown before reading, including paths outside the workspace.
+fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
+    let paths: Vec<String> = if let Some(requests) = facts.input["requests"].as_array() {
+        requests
+            .iter()
+            .filter_map(|r| r["path"].as_str().map(str::to_owned))
+            .collect()
+    } else {
+        vec![facts.input["root"].as_str().unwrap_or(".").to_owned()]
+    };
+    AuthorityApproval {
+        action_kind: ApprovalActionKind::Other,
+        targets: paths
+            .iter()
+            .map(|path| ApprovalTarget {
+                kind: if facts.capability == "read_file" {
+                    ApprovalTargetKind::File
+                } else {
+                    ApprovalTargetKind::Folder
+                },
+                path: path.clone(),
+            })
+            .collect(),
+        count: saturating_count(paths.len()),
+        examples_truncated: vec![false; paths.len()],
+        examples: paths,
+        risk: ApprovalRisk::Low,
+        command_access: None,
     }
 }
 
@@ -345,7 +379,8 @@ fn workspace_label(workspace: &str) -> String {
 /// that is absolute outside the workspace, or climbs out of it, returns None.
 fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     let path = Path::new(path);
-    let relative = if path.is_absolute() {
+    // Persisted approval paths may use a rooted spelling without this host's drive prefix.
+    let relative = if path.has_root() {
         match path.strip_prefix(workspace) {
             Ok(inner) => inner,
             Err(_) => return None,

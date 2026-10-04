@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) const PROMPT: &str = "Windows 기본 파일 작업을 실행해줘";
+pub(super) const PROMPT: &str = "다운로드 폴더 정리해줘";
 pub(super) const DELEGATE_PROMPT: &str = "Steward에게 파일 작성을 위임해줘";
 
 #[derive(Clone)]
@@ -87,7 +87,16 @@ async fn reply(
         let mut s = counter.lock().unwrap();
         let step = *s;
         *s += 1;
-        step
+        if !delegated
+            && matches!(
+                script.case.lock().unwrap().tool,
+                "list_files" | "read_file" | "grep_files"
+            )
+        {
+            step + 3
+        } else {
+            step
+        }
     };
     if delegated && !child {
         let item = parent(step);
@@ -122,6 +131,9 @@ async fn reply(
         3 => {
             *script.sent.lock().unwrap() = Some(Instant::now());
             call("operation", case.tool, &case.args)
+        }
+        4 if matches!(case.tool, "list_files" | "read_file" | "grep_files") => {
+            message("파일 확인 완료")
         }
         4 => {
             let work = outputs

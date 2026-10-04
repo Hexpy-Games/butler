@@ -48,8 +48,10 @@ pub(super) fn decide(
             },
         ));
     }
-    if current.capability != "ask_user"
-        && !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)?
+    if !matches!(
+        current.capability.as_str(),
+        "ask_user" | "read_file" | "list_files" | "grep_files"
+    ) && !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)?
     {
         return Err(AuthorityError::policy("authority_request_not_found"));
     }

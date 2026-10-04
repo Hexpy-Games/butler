@@ -79,7 +79,7 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
     );
     let command = matches!(capability, "run_command" | "run_command_remote_observation");
     let scope = if file_edit {
-        json!({"kind":"workspace_file_edit"})
+        json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
     } else if command {
         let mut scope = serde_json::Map::new();
         scope.insert("kind".into(), json!("command"));
@@ -104,17 +104,13 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
             collation
         )?)[..32]
     );
-    let basename = std::path::Path::new(workspace)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("");
     Ok(ConversationPermission {
         grant_ref,
         owner_session_id: owner.to_owned(),
         workspace_path: workspace.to_owned(),
         scope_key,
         title: if file_edit {
-            "작업 폴더의 파일 편집".into()
+            "동일한 파일 작업".into()
         } else {
             title
                 .filter(|value| !value.is_empty())
@@ -126,7 +122,7 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
                 .into()
         },
         description: if file_edit {
-            format!("{basename} 안의 파일 쓰기·수정")
+            "허용한 경로·입력에만 적용".into()
         } else if command {
             format!(
                 "{} · 허용한 명령·작업 위치에만 적용",
