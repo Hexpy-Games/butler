@@ -17,6 +17,16 @@ pub(super) async fn admit(
     let Some(generation) = generation else {
         return Ok(false);
     };
+    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-sync-trace] vector warm={} batch={} text_advanced={text_advanced}",
+            input
+                .embedding
+                .as_ref()
+                .is_some_and(|owner| owner.is_warm()),
+            input.vector_batch.load(Ordering::Acquire),
+        );
+    }
     if input.daily_batch
         || input.target.is_some()
         || input.vector_batch.load(Ordering::Acquire)

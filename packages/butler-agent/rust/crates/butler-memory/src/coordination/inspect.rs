@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use super::coordinator::CoordinatorInner;
 use super::error::CoordinationResult;
 use super::fence::{
-    classify_unbound_fence, coordinator_path, is_busy, open_readwrite, read_known_coordinator,
+    classify_unbound_fence, coordinator_path, is_busy, open_readwrite,
+    read_known_coordinator_for_acquire,
 };
 use super::types::{ConsolidationLockInspection, ConsolidationLockState, LockInfo};
 
@@ -29,7 +30,9 @@ impl CoordinatorInner {
         if !path.exists() {
             return self.inspect_uninitialized(lock_path, path);
         }
-        let known = match read_known_coordinator(lock_path) {
+        // Inspection already probes the writable SQLite gate below. Recover its hot
+        // rollback journal first, before a read-only metadata query can refuse it.
+        let known = match read_known_coordinator_for_acquire(lock_path) {
             Ok(Some(known)) => known,
             Ok(None) => return Ok(Blocked::Unavailable.inspection(path, None)),
             Err(error) => return Ok(Blocked::from_busy(error.is_busy()).inspection(path, None)),

@@ -101,7 +101,8 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     let setup = Setup::new("WIRING-MORE-CORRECTION")?
         .fixture(Fixture::Empty)
         .stub_cassette(cassette)
-        .placeholder("NONCE", "5317");
+        .placeholder("NONCE", "5317")
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
     assert!(!setup.sandbox.data.join("cognition").exists());
     assert!(butler_e2e::e2e::fixtures::embedding_assets(
         &setup.sandbox.data
