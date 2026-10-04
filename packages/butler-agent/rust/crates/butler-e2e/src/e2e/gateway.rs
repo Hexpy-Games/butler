@@ -308,7 +308,8 @@ impl Gateway {
         let result = row["tool_result_id"].as_str().unwrap_or_default();
         let mut text = String::new();
         let mut offset = 0u64;
-        for _ in 0..64 {
+        let mut total_bytes = None;
+        loop {
             let reply = self
                 .get(&format!(
                     "/turns/{turn_id}/operations/{call}/output?result_id={result}&offset={offset}"
@@ -316,17 +317,29 @@ impl Gateway {
                 .await?;
             expect_status(&reply, 200, "GET operation output")?;
             let data = reply.data();
-            let chunk = data["text"]
+            let chunk = data["content"]
                 .as_str()
-                .or_else(|| data["output"].as_str())
-                .or_else(|| data["content"].as_str())
-                .map_or_else(|| data.to_string(), str::to_owned);
-            text.push_str(&chunk);
-            match data["next_offset"].as_u64() {
-                Some(next) if next > offset && data["has_more"] != false => offset = next,
-                _ => break,
+                .ok_or_else(|| harness_error("Operation output content is missing"))?;
+            let end = data["byte_end"]
+                .as_u64()
+                .ok_or_else(|| harness_error("Operation output byte end is missing"))?;
+            let total = data["byte_length"]
+                .as_u64()
+                .ok_or_else(|| harness_error("Operation output byte length is missing"))?;
+            if data["byte_start"].as_u64() != Some(offset)
+                || end.checked_sub(offset) != Some(chunk.len() as u64)
+                || total_bytes.is_some_and(|prior| prior != total)
+                || end > total
+            {
+                return Err(harness_error("Operation output page bounds changed"));
             }
+            text.push_str(chunk);
+            match data["complete"].as_bool() {
+                Some(true) if end == total => return Ok(text),
+                Some(false) if end > offset && end < total => offset = end,
+                _ => return Err(harness_error("Operation output cursor did not advance")),
+            }
+            total_bytes = Some(total);
         }
-        Ok(text)
     }
 }

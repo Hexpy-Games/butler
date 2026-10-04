@@ -1,15 +1,15 @@
-//! Opt-in, read-only owner Downloads proof. Diagnostics expose counts only.
+//! Opt-in complete file-tool listing proof. Diagnostics expose counts only.
 use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
-    gateway::turn_state,
-    scenario::{Access, Setup, accepted_turn_id},
+    gateway::{tool_rows, turn_state},
+    scenario::{Access, Scenario, Setup, accepted_turn_id},
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 type Snapshot = BTreeMap<PathBuf, (bool, u64, std::time::SystemTime)>;
@@ -38,6 +38,19 @@ fn verify_order(before: &Snapshot, listed: &[String]) {
         listed == expected,
         "Complete listing preserves UTF-16 order"
     );
+}
+
+async fn complete_output(s: &Scenario, turn_id: &str) -> Result<Value, HarnessError> {
+    let messages = s.gw.messages("general").await?;
+    let rows = tool_rows(&messages, turn_id);
+    let row = rows
+        .iter()
+        .find(|row| row["safe_tool_name"] == "list_files")
+        .expect("listing operation is visible");
+    // Large results have a bounded model preview; verify the full public output.
+    let text = s.gw.operation_output(turn_id, row).await?;
+    let result: Value = serde_json::from_str(&text)?;
+    Ok(result)
 }
 
 async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
@@ -84,12 +97,15 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))
                 .await?;
         assert_eq!(turn_state(&turn), "delivered");
-        let (result, elapsed) = script
+        let (_, elapsed) = script
             .result
             .lock()
             .unwrap()
             .clone()
-            .expect("model receives file tool output");
+            .expect("model receives file tool result");
+        let read_started = Instant::now();
+        let result = complete_output(&s, &id).await?;
+        let elapsed = elapsed + read_started.elapsed();
         assert!(
             result["ok"] == true,
             "list_files failed; error={}",
