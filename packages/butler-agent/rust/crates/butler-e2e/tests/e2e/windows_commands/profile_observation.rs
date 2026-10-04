@@ -157,6 +157,14 @@ async fn replay(
         eprintln!("{line}");
     }
     let elapsed = command_elapsed + read_elapsed;
+    if let Some(stderr) = full.get("stderr").and_then(Value::as_str) {
+        for line in stderr
+            .lines()
+            .filter(|line| line.starts_with("command_shell_phase "))
+        {
+            eprintln!("{line}");
+        }
+    }
     butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), "Downloads observation");
     eprintln!(
         "PROFILE-OBSERVATION command: {:.1}ms",

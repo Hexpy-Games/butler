@@ -40,12 +40,17 @@ pub(super) async fn dispatch(
     let timing = (std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
         == Some(std::ffi::OsStr::new("1")))
     .then(std::time::Instant::now);
+    let start_utc_us = timing.map_or(0, |_| {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_micros())
+    });
     let legacy = input.legacy.is_some();
     let mut completion = Some(completion);
     let output = execute(host, input, shutdown, &mut completion).await;
     if let Some(started) = timing {
         eprintln!(
-            "command_process_timing legacy={legacy} elapsed_us={}",
+            "command_process_timing legacy={legacy} start_utc_us={start_utc_us} elapsed_us={}",
             started.elapsed().as_micros()
         );
     }
