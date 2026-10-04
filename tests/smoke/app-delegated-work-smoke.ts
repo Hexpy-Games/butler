@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { installNotificationReplay } from "../support/notification-replay.ts";
 import { installWorkReplay } from "../support/delegated-work-replay.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { HARNESS_SS03_OBSERVER_VIEW, HARNESS_SS03_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
@@ -17,6 +18,7 @@ const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs()
 const context = await browser.newContext();
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const navigation = await server.api<NavigationView>("/navigation");
+navigation.chats = [{ id: "general", kind: "chat", title: "General", last_activity_at: new Date().toISOString(), pinned: false, archived: false }];
 const parent = await server.api<SessionView>("/session-view?session_id=general");
 const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
 child.relation.parent_session_id = "general";
@@ -51,6 +53,7 @@ function views(): { parent: SessionView; observer: SessionView } {
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
     const page = await context.newPage();
+    page.on("pageerror", error => console.error("pageerror", error.message));
     await page.setViewportSize({ width, height: 800 });
     phase = "running";
     stopRequested = false;
@@ -60,32 +63,34 @@ try {
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
-    await page.addInitScript(() => {
-      const calls: unknown[] = [];
-      Object.assign(window, { __notifications: calls, butlerApp: { platform: "win32",
-        showDesktopNotification: async (input: unknown) => { calls.push(input); return { shown: true }; } } });
-    });
-    await page.route("**/authority-requests?**", route => route.fulfill({ json: { data: { requests: [], permissions: [...grants, grants[0]] } } }));
-    await page.route("**/navigation", route => route.fulfill({ json: { data: { ...navigation,
-      chats: navigation.chats.map(s => ({ ...s, active_turn_state: "delivered", running_delegated_work: phase === "running", attention_required: awaiting })) } } }));
+    await installNotificationReplay(page, server.url);
+    await page.route("**/authority-requests?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], permissions: [...grants, grants[0]] } } }));
+    await page.route("**/navigation", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...navigation,
+      chats: navigation.chats.map(s => ({ ...s, active_turn_state: "delivered", running_delegated_work: phase === "running", attention_required: awaiting && s.id === "general" })) } } }));
     await page.route("**/session-view?**", route => {
       requests++;
       const id = new URL(route.request().url()).searchParams.get("session_id");
-      return route.fulfill({ json: { data: id === observer.session_id ? views().observer : views().parent } });
+      return route.fulfill({ json: { protocol_version: "butler.app.v1", data: id === observer.session_id ? views().observer : views().parent } });
     });
     await page.route("**/steward-relations/*/cancel", route => {
       stopRequested = true;
-      return route.fulfill({ status: 202, json: { data: { status: "cancelling" } } });
+      return route.fulfill({ status: 202, json: { protocol_version: "butler.app.v1", data: { status: "cancelling" } } });
     });
     const row = page.locator('[data-test-class="app-sidebar"] [data-test-class="tree-row"]').first();
     const spinner = row.locator('[data-slot="spinner"]');
     const pill = page.locator('[data-test-class="steward-progress-capsule"]');
     const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
     const capture = async (state: string) => {
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForFunction(() => document.getAnimations().every(animation =>
+        animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
       if (output) await page.screenshot({ path: `${output}/${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}-${state}.png` });
     };
     await page.goto(server.url);
-    await pill.waitFor();
+    try { await pill.waitFor(); } catch (error) {
+      console.error(JSON.stringify({ width, theme, requests, body: await page.locator("body").innerText() }));
+      await capture("failure"); throw error;
+    }
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
     if (!baseline) {
       await spinner.waitFor();
@@ -108,7 +113,10 @@ try {
     await page.evaluate(() => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
       id: 91, type: "question.answered", payload: { session_id: "general" },
     }));
-    if (!baseline) await spinner.waitFor();
+    if (!baseline) {
+      await spinner.waitFor();
+      await page.getByText(`General · ${appCopy.space.attention}`, { exact: true }).waitFor({ state: "detached" });
+    }
     await page.reload(); // A fresh App boot projects the still-running durable child.
     await pill.waitFor();
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
@@ -116,6 +124,7 @@ try {
     // Sidebar overlays the composer on mobile: close it after observing the row.
     if (width < 640) await page.getByRole("button", { name: appCopy.titlebar.hideLeftPanel, exact: true }).last().click();
     const access = page.locator('[data-test-class="access-button"]');
+    await page.getByRole("textbox").first().focus();
     await access.click();
     await capture("grants-collapsed");
     if (!baseline) {
@@ -125,9 +134,11 @@ try {
       const text = await page.locator('[data-test-class="granted-permissions"]').innerText();
       assert(!/run_command|read_file|internal/.test(text), text);
       assert(text.includes("node --check report-0.html") && text.includes("C:/workspace/report-1.html"));
-      const scroll = page.locator('[data-test-class="granted-permissions-scroll"]');
-      assert(await scroll.evaluate(el => el.scrollHeight > el.clientHeight), "DS scroll bounds the grant list");
       await capture("grants-expanded");
+      await page.getByText("node --check report-0.html", { exact: true }).hover();
+      await page.getByRole("tooltip").filter({ hasText: "node --check report-0.html" }).waitFor();
+      const scroll = page.locator('[data-test-class="granted-permissions-scroll"]');
+      assert(await scroll.evaluate(el => el.clientHeight >= 100 && el.clientHeight <= 180 && el.scrollHeight > el.clientHeight), "DS scroll bounds the grant list");
     }
     await page.keyboard.press("Escape");
     await pill.click();

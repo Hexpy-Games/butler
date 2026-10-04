@@ -25,7 +25,7 @@ export function GrantedPermissions({ permissions, sessionId }: {
             descriptionPlacement="block" description={<Stack gap="xs">
               <Tooltip wrap label={target}><Typo.Caption truncate>{target}</Typo.Caption></Tooltip>
               {item.cwd ? <Tooltip wrap label={item.cwd}><Typo.Caption truncate>{item.cwd}</Typo.Caption></Tooltip> : null}
-              <Typo.Caption tone="secondary">{item.capability === "run_command" ? appCopy.interfaceDetails.grantCommandScope : appCopy.interfaceDetails.grantTargetScope}</Typo.Caption>
+              <Typo.Caption tone="secondary" wrap="normal">{item.capability === "run_command" ? appCopy.interfaceDetails.grantCommandScope : appCopy.interfaceDetails.grantTargetScope}</Typo.Caption>
             </Stack>}
             onClick={async () => {
               setRevoking(item.grant_ref); setFailed(false);

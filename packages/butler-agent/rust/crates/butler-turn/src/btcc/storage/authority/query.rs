@@ -296,14 +296,16 @@ pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityR
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
     let mut statement = db
         .prepare_cached(
-            "SELECT DISTINCT a.owner_session_id FROM json_each(?1) p \
+            "SELECT a.owner_session_id FROM json_each(?1) p \
          JOIN btcc_authority_requests a ON a.owner_session_id=p.value \
          JOIN btcc_turns t ON t.turn_id=a.source_turn_id \
-         WHERE a.close_reason IS NULL \
-         AND ((a.decision='pending' AND t.semantic_state='admitted' AND t.suspension_reason='authority_pending') \
-         OR (a.capability='ask_user' AND a.decision='modified' \
+         WHERE a.close_reason IS NULL AND a.decision='pending' \
+         AND t.semantic_state='admitted' AND t.suspension_reason='authority_pending' \
+         UNION SELECT a.owner_session_id FROM json_each(?1) p \
+         JOIN btcc_authority_requests a INDEXED BY idx_btcc_questions_deferred ON a.owner_session_id=p.value \
+         WHERE a.capability='ask_user' AND a.decision='modified' AND a.close_reason IS NULL \
          AND a.outcome_receipt_json IS NULL \
-         AND json_extract(a.private_alternative_input,'$.status')='deferred'))",
+         AND json_extract(CASE WHEN a.capability='ask_user' THEN a.private_alternative_input END,'$.status')='deferred'",
         )
         .map_err(sql)?;
     statement

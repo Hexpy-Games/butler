@@ -327,6 +327,8 @@ async fn revoke_conversation_grant(s: &Scenario) -> Result<(), HarnessError> {
         1,
         "unexpected conversation grants: {permissions}"
     );
+    assert_eq!(grants[0]["capability"], "write_file");
+    assert_eq!(grants[0]["target"], "approved.txt");
     let grant = grants[0]["grant_ref"]
         .as_str()
         .or_else(|| grants[0]["ref"].as_str())

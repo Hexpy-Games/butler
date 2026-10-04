@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { api } from "../../packages/butler-app/client/ui/src/app/api";
 import { snapshotForAppUiState } from "../../packages/butler-app/client/ui/src/app/appUiStateCache";
 import { createNativeAppServer } from "../support/native-app-server";
@@ -12,12 +13,14 @@ const dir = mkdtempSync(join(tmpdir(), "butler-ask-user-ui-"));
 const server = await createNativeAppServer({ butlerData: join(dir, "data"), uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: "en" } } });
 const session = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Question smoke" }) });
 const sessionId = session.session.id;
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const context = await browser.newContext();
 const questions = { questions: [{ id: "format", eyebrow: "Output", title: "Which format?", kind: "single", allow_custom: true,
   options: [{ id: "brief", label: "Brief", recommended: true }, { id: "full", label: "Full" }] }] };
 try {
   for (const width of [320, 375, 390, 430, 768, 1280]) {
-    const page = await browser.newPage({ viewport: { width, height: 800 } });
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height: 800 });
     await server.signIn(page);
     await page.addInitScript(snapshot => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify(snapshot)), snapshotForAppUiState({ active_session_id: sessionId, left_open: false }));
     let approval = true;

@@ -106,15 +106,7 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
     );
     Ok(ConversationPermission {
         capability: capability.into(),
-        target: if command {
-            input
-                .get("command")
-                .and_then(Value::as_str)
-                .unwrap_or(target)
-        } else {
-            target
-        }
-        .into(),
+        target: permission_target(facts, command),
         cwd: command.then(|| {
             input
                 .get("cwd")
@@ -153,5 +145,34 @@ fn permission_description(file_edit: bool, command: bool, executable: Option<&st
         )
     } else {
         "허용한 대상·입력에만 적용".into()
+    }
+}
+
+fn permission_target(facts: PermissionFacts<'_>, command: bool) -> String {
+    let keys: &[&str] = if command {
+        &["command"]
+    } else {
+        &["path", "directory"]
+    };
+    for key in keys {
+        if let Some(value) = facts.input.get(key).and_then(Value::as_str) {
+            return value.into();
+        }
+    }
+    for key in ["requests", "edits"] {
+        if let Some(items) = facts.input.get(key).and_then(Value::as_array) {
+            let paths = items
+                .iter()
+                .filter_map(|item| item.get("path").and_then(Value::as_str))
+                .collect::<Vec<_>>();
+            if !paths.is_empty() {
+                return paths.join("\n");
+            }
+        }
+    }
+    if facts.target.starts_with("observation:") {
+        facts.workspace.into()
+    } else {
+        facts.target.into()
     }
 }

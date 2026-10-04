@@ -244,7 +244,7 @@ async fn ask_user_deferred_restores_and_later_answer_enters_existing_queue()
         {
             assert_eq!(view.data()["pending_questions"], json!([]));
             assert_eq!(view.data()["question_answers"][0]["response"], answer());
-            assert_attention(s, false).await?;
+            assert_attention(&s, false).await?;
             break;
         }
         assert!(
