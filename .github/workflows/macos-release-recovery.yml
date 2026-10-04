@@ -12,6 +12,7 @@ on:
         default: v0.1.0-preview.8
 permissions:
   contents: write
+  actions: read
 jobs:
   recover:
     name: Package the immutable preview with repaired signing tools
