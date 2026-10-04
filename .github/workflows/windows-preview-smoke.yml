@@ -263,12 +263,20 @@ jobs:
           $env:BUTLER_APP_SERVER_PORT = '0'
           $env:BUTLER_SECRET_STORE = 'file'
           ./deploy/windows-startup-smoke.ps1 -Launcher "$env:LOCALAPPDATA/Butler/bin/butler.exe"
+      - name: Preserve failed hosted harness fixtures
+        if: failure()
+        run: |
+          $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
+          if (Test-Path $failures) {
+            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-stub-logs
-          path: ${{ runner.temp }}/windows-verify/logs/*.log
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
       - name: Keep installed harness completion evidence
         if: always()
         uses: actions/upload-artifact@v4
