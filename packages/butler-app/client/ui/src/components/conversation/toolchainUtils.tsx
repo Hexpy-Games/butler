@@ -18,6 +18,10 @@ const WORK_BOOKKEEPING_TOOL_NAMES = new Set([
   "record_work_checkpoint",
   "record_work_review",
   "record_work_disposition",
+  "plan_review",
+  "completion_review",
+  "work_tool",
+  "tool_work",
 ]);
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
@@ -37,7 +41,8 @@ export function workActivityToolsFromRows(
 ): WorkActivityToolItem[] {
   return rows
     .filter((row) => !(
-      row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name)
+      ["work", "work_block", "plan", "checkpoint", "disposition"].includes(row.kind?.toLowerCase() ?? "") ||
+      (row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name))
     ))
     .map((row, rowIndex) => ({
     id: `${row.id}:${rowIndex}`,
@@ -104,7 +109,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 
 export function toolchainGroupLabel(row: ProgressRow): string {
   if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
-  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.work;
+  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
     if (row.safe_tool_name === "web_search") return appCopy.interfaceStatus.search;
     if (
@@ -119,7 +124,7 @@ export function toolchainGroupLabel(row: ProgressRow): string {
       return appCopy.interfaceStatus.edit;
     }
     if (row.safe_tool_name === "run_command") return appCopy.interfaceStatus.command;
-    return appCopy.interfaceStatus.work;
+    return appCopy.guided.tools.fallback;
   }
   const toolName = row.safe_tool_name?.trim();
   if (
@@ -132,7 +137,7 @@ export function toolchainGroupLabel(row: ProgressRow): string {
   if (row.kind === "ran_command") return appCopy.interfaceStatus.command;
   if (row.kind === "read") return appCopy.interfaceStatus.read;
   if (row.kind === "edited") return appCopy.interfaceStatus.edit;
-  if (row.kind === "dispatch") return appCopy.interfaceStatus.work;
+  if (row.kind === "dispatch") return appCopy.guided.tools.fallback;
   if (toolName) return appCopy.guided.tools[toolName] ?? appCopy.guided.tools.fallback;
   return appCopy.interfaceStatus.review;
 }

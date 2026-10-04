@@ -11,8 +11,10 @@ export function SessionObserverTimeline({
   activeTurn,
   latestTurn,
   children,
+  delegatedGoal,
 }: {
   messages: MessageRecord[];
+  delegatedGoal?: string;
   activityHistory?: SessionView["activity_history"];
   activeTurn?: SessionView["active_turn"];
   latestTurn?: SessionView["latest_turn"];
@@ -56,6 +58,7 @@ export function SessionObserverTimeline({
     else entries.push({ kind: "activity", id: `active:${activeTurn.id}`, activities: [], active: activeTurn });
   }
 
+  const firstActivityId = entries.find((entry) => entry.kind === "activity")?.id;
   return (
     <>
       {entries.map((entry) => (
@@ -66,7 +69,7 @@ export function SessionObserverTimeline({
           >
             {entry.kind === "message"
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
-              : <SessionObserverActivityGroup activities={entry.activities} active={entry.active}
+              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active}
                   state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
           </MessageRow>
         </Fragment>
