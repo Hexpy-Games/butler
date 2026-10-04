@@ -28,7 +28,7 @@ pub enum EffectFileError {
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// The mutation guard rejected the target; `reason` is the guard's wire code.
-    #[error("write_file target is outside the admitted workspace boundary.")]
+    #[error("write_file target does not identify an accessible regular file.")]
     OutsideBoundary { reason: &'static str },
     /// The existing file to edit could not be observed.
     #[error("The existing workspace file could not be observed for editing.")]

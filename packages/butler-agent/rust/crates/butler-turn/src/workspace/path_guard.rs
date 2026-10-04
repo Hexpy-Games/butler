@@ -3,8 +3,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
 
-/// Whether a requested path must be workspace-relative (delegated
-/// subsessions) or resolves paths using the OS account permissions.
+/// Whether a caller explicitly requires workspace-relative paths or resolves
+/// paths using the OS account permissions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathForm {
     RelativeOnly,
@@ -112,7 +112,7 @@ struct Resolved {
 }
 
 /// Starts a guard result and lexically resolves the request. Empty requests,
-/// absolute requests in relative-only mode and relative `..` traversal are
+/// absolute requests and relative `..` traversal in relative-only mode are
 /// rejected without touching the filesystem beyond the root.
 fn resolve_request(
     root: &Path,

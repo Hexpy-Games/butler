@@ -55,6 +55,10 @@ fn cases(home: &Path, installation: &Path) -> Vec<Case> {
             "write_file",
             json!({"path":installation.join("resources/ordinary.txt"),"content":"OS accessible installation"}),
         ),
+        case(
+            "grep_files",
+            json!({"root":home.join("Documents"),"pattern":"문서","literal":true}),
+        ),
     ]
 }
 
@@ -104,7 +108,7 @@ pub(super) async fn approve(
                 .map(|r| r["path"].clone())
                 .collect::<Vec<_>>()
         )
-    } else if case.tool == "list_files" {
+    } else if matches!(case.tool, "list_files" | "grep_files") {
         json!([case.args["root"]])
     } else {
         json!([case.args["path"].as_str().unwrap().replace('\\', "/")])
@@ -183,6 +187,11 @@ fn verify(
             "OS accessible installation"
         ),
         10 => {
+            assert_eq!(output["matches"].as_array().unwrap().len(), 1);
+            assert_eq!(output["truncated"], false);
+            assert!(Path::new(output["matches"][0]["path"].as_str().unwrap()).is_absolute());
+        }
+        11 => {
             assert!(!home.join("Downloads/보고서.txt").exists());
             assert_eq!(
                 std::fs::read_to_string(home.join("Downloads/moved.txt"))?,
@@ -237,7 +246,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     let mut items = cases(&home, &installation);
     if !butler_platform::command_sandbox::POSIX_SHELL {
         items.push(Case { tool:"run_command", refused:false, args:json!({
-            "command":format!("Move-Item -LiteralPath '{}' -Destination '{}'",
+            "command":format!("powershell.exe -NoProfile -NonInteractive -Command \"Move-Item -LiteralPath '{}' -Destination '{}'\"",
                 home.join("Downloads/보고서.txt").display(),home.join("Downloads/moved.txt").display()),
             "state_effect":"mutation","summary":"파일 이동","output_mode":"full"}) });
     }

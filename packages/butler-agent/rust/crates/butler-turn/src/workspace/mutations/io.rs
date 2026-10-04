@@ -133,8 +133,7 @@ pub(super) fn ensure_parent(prepared: &Prepared, root: &Path) -> Result<(), Muta
     else {
         let mut failed = failure::new(Some(prepared.before.path.public.clone()), "io_error");
         failed.message = "The mutation parent escaped the workspace during preflight.".into();
-        failed.recovery_hint =
-            "Retry after restoring a regular workspace-relative parent directory.".into();
+        failed.recovery_hint = "Retry after restoring a regular parent directory.".into();
         return Err(failed);
     };
     fs::create_dir_all(parent)
@@ -143,8 +142,7 @@ pub(super) fn ensure_parent(prepared: &Prepared, root: &Path) -> Result<(), Muta
     if !inside_existing_parent(root, parent) {
         let mut failed = failure::new(Some(prepared.before.path.public.clone()), "io_error");
         failed.message = "The mutation parent escaped the workspace during creation.".into();
-        failed.recovery_hint =
-            "Retry after restoring a regular workspace-relative parent directory.".into();
+        failed.recovery_hint = "Retry after restoring a regular parent directory.".into();
         return Err(failed);
     }
     Ok(())

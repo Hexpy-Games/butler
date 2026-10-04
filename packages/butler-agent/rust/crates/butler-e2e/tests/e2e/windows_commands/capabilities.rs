@@ -193,7 +193,11 @@ async fn operation(
                 .root
                 .join(case.args["requests"][0]["path"].as_str().unwrap())])
         } else {
-            json!([case.args["path"]])
+            json!([if case.args["path"] == "home/.butler/../escape.txt" {
+                "home/escape.txt"
+            } else {
+                case.args["path"].as_str().unwrap()
+            }])
         };
         assert_eq!(card["approval"]["examples"], examples);
         if case.tool == "write_file" {
