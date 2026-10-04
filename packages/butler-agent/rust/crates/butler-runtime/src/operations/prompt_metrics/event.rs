@@ -10,7 +10,7 @@ use butler_turn::btcc::ModelRoundError;
 pub(super) fn line(
     input: &PromptUsageMetricInput<'_>,
     timestamp: i64,
-    prompt_tokens: f64,
+    prompt_tokens: Option<f64>,
     budget: Option<&PromptUsageBudgetState>,
 ) -> Result<String, ModelRoundError> {
     let attribution = input.usage_attribution;
@@ -22,7 +22,7 @@ pub(super) fn line(
         phase: attribution.and_then(|value| value.phase),
         round_index: attribution.and_then(|value| value.round_index),
         reasoning_effort: attribution.and_then(|value| value.reasoning_effort),
-        prompt_tokens: prompt_tokens.max(0.0),
+        prompt_tokens: prompt_tokens.map(|value| value.max(0.0)),
         cached_tokens: input.cached_tokens.max(0.0),
         cache_write_tokens: input.cache_write_tokens.flatten().map(|value| {
             // JS Math.max preserves NaN; JSON.stringify then emits null.
@@ -38,6 +38,7 @@ pub(super) fn line(
             .cache_write_1h_tokens
             .filter(|value| value.is_finite()),
         auth_mode: input.auth_mode,
+        prefix_diagnostics: input.prefix_diagnostics,
         prompt_cache_key: input.prompt_cache_key,
         prompt_cache_retention: input
             .prompt_cache_retention
@@ -70,7 +71,7 @@ struct Event<'a> {
     round_index: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'a ReasoningEffort>,
-    prompt_tokens: f64,
+    prompt_tokens: Option<f64>,
     cached_tokens: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     cache_write_tokens: Option<f64>,
@@ -81,6 +82,8 @@ struct Event<'a> {
     cache_write_1h_tokens: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_mode: Option<UsageAuthMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prefix_diagnostics: Option<&'a serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_cache_key: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

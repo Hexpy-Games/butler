@@ -11,7 +11,6 @@ mod compatible;
 
 pub(super) struct PromptWire {
     pub body: Value,
-    pub cache_key: Option<String>,
     pub cache_retention: Option<PromptCacheRetention>,
 }
 
@@ -25,7 +24,7 @@ pub(super) fn body(
         .copied()
         .or(config.prompt_reasoning_effort);
     let prompt = super::attachments::prompt(request)?;
-    let (body, cache_key, cache_retention) = match carrier {
+    let (body, _, cache_retention) = match carrier {
         Carrier::Responses if config.metadata.provider_id == "openai" => responses(
             request,
             config,
@@ -55,7 +54,6 @@ pub(super) fn body(
     };
     Ok(PromptWire {
         body,
-        cache_key,
         cache_retention,
     })
 }

@@ -3,6 +3,7 @@
 mod continuation;
 mod contracts;
 mod local_stream;
+mod prefix_diagnostics;
 mod prompt;
 mod redact;
 mod result;

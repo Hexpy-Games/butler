@@ -19,6 +19,13 @@ type RoundFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a>,
 >;
 
+struct PreparedResponse {
+    carrier: serialize::Carrier,
+    continuation: Option<super::continuation::LegacyProjection>,
+    identity: Option<serde_json::Value>,
+    prefix: serde_json::Value,
+}
+
 pub struct ModelProvider {
     pub(super) client: Client,
     pub(super) config: Arc<dyn ProviderRequestConfigPort>,
@@ -26,6 +33,7 @@ pub struct ModelProvider {
     pub(super) catalog: Arc<ModelCatalog>,
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
+    pub(super) prefix_history: super::prefix_diagnostics::History,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
@@ -47,6 +55,7 @@ impl ModelProvider {
             catalog,
             clock,
             prompt_metrics,
+            prefix_history: super::prefix_diagnostics::History::default(),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
             quota: None,
@@ -90,6 +99,7 @@ impl ModelProvider {
         })?;
         let provider_cache_identity =
             serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
+        let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
         let serialized = Bytes::from(serialized);
         let codex_output = matches!(
             config.auth.mode(),
@@ -120,6 +130,7 @@ impl ModelProvider {
             },
         )?;
         drop(body);
+        let prefix = self.prefix_history.observe(request.cache_scope, prefix);
         let serialized_bytes = serialized.len();
         let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
@@ -158,11 +169,13 @@ impl ModelProvider {
             Err(ModelRoundError::Provider(error))
                 if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
             {
+                super::round_usage::record(self, &request, None, &config, &prefix)?;
                 return self
                     .run_without_streaming(request, config.endpoint.clone())
                     .await;
             }
             Err(ModelRoundError::Provider(mut error)) => {
+                super::round_usage::record(self, &request, None, &config, &prefix)?;
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
                 {
@@ -173,22 +186,49 @@ impl ModelProvider {
                 self.observations.failure(&error);
                 return Err(ModelRoundError::Provider(error));
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                super::round_usage::record(self, &request, None, &config, &prefix)?;
+                return Err(error);
+            }
         };
+        self.complete(
+            &request,
+            &config,
+            response,
+            PreparedResponse {
+                carrier,
+                continuation,
+                identity: provider_cache_identity,
+                prefix,
+            },
+        )
+    }
+
+    fn complete(
+        &self,
+        request: &ModelRoundRequest<'_>,
+        config: &super::ProviderRequestConfig,
+        response: serde_json::Value,
+        mut prepared: PreparedResponse,
+    ) -> Result<ModelRoundResult, ModelRoundError> {
         let round_index = request
             .usage_attribution
             .and_then(|value| value.round_index)
             .unwrap_or(0);
+        prepared.prefix["providerReportedCachedTokens"] =
+            super::prefix_diagnostics::cached_tokens(&response);
+        prepared.prefix["providerCachedTokensFieldPresent"] =
+            super::prefix_diagnostics::cached_tokens_present(&response);
         let mut result = result::decode(
             response,
             &config.metadata.provider_id,
             &config.metadata.model_ref,
-            carrier,
+            prepared.carrier,
             round_index,
-            &request,
-            continuation,
+            request,
+            prepared.continuation,
         );
-        if let Some(identity) = provider_cache_identity {
+        if let Some(identity) = prepared.identity {
             let continuation = result
                 .continuation
                 .get_or_insert_with(|| serde_json::json!({"provider":"openai"}));
@@ -204,9 +244,13 @@ impl ModelProvider {
         {
             observer.identity(identity);
         }
-        if let Some(usage) = &result.usage {
-            super::round_usage::record(self, &request, usage, &config)?;
-        }
+        super::round_usage::record(
+            self,
+            request,
+            result.usage.as_ref(),
+            config,
+            &prepared.prefix,
+        )?;
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);
         Ok(result)

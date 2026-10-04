@@ -60,6 +60,9 @@ async fn tool_02_write_edit_and_read_only() -> Result<(), HarnessError> {
     );
 
     let ro_prompt = format!("Create ro.txt in your workspace containing exactly `gamma {marker}`.");
+    let requests = s.provider()?.requests();
+    super::token_metrics::report(&s, &requests, "write/edit replay")?;
+    super::token_cache::verify_write_edit(&s, &requests, &rows, &turn_id, &marker).await?;
     let turn_id = send(&s, &ro_prompt, "read_only").await?;
     let turn =
         s.gw.wait_terminal(

@@ -239,6 +239,10 @@ pub(super) async fn record_unexecuted(
     let call_id = occurrence.call_id.clone();
     remember_provider(owner, &occurrence, &call_id);
     owner
+        .activity
+        .observe_tool(&owner.binding.turn_id, call, &call_id, invocation.progress)
+        .await?;
+    owner
         .journal
         .start(ToolJournalStart {
             turn_id: owner.binding.turn_id.clone(),

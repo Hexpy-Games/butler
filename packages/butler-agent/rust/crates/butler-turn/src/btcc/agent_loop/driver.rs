@@ -36,6 +36,7 @@ use super::tool_batch::{self, PreparedCall};
 
 mod answer;
 mod batch;
+mod final_report;
 use answer::*;
 use batch::*;
 
@@ -168,6 +169,11 @@ async fn run_iteration(
             }
         }
     };
+    if let Some(step) =
+        final_report::reject_tools(input, state, prepared, &reply, iteration).await?
+    {
+        return Ok(step);
+    }
     if let Some(step) = reject_text_tool_calls(input, state, prepared, &reply, iteration).await? {
         return Ok(step);
     }
