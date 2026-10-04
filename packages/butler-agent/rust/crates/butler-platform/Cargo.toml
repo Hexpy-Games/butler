@@ -37,6 +37,7 @@ iana-time-zone.workspace = true
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
+winsafe.workspace = true
 same-file = "1.0.6"
 atomicwrites.workspace = true
 filedescriptor = "0.8.3"
