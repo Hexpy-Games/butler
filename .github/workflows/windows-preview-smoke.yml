@@ -194,12 +194,13 @@ jobs:
           # Only the Agent's observation HOME/USERPROFILE is real. Its data,
           # CODEX_HOME, XDG dirs, local/roaming profiles and fixtures stay temporary.
           $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
+          $env:BUTLER_E2E_PERF = '1'
           try {
             cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
               windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
               -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE }
+          } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
       - name: Native service recovery and full shutdown queue
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
@@ -442,6 +443,8 @@ jobs:
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
+        env:
+          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
         run: ./deploy/windows-owner-cleanup.ps1
 
   diagnose-hosted:
