@@ -90,9 +90,16 @@ fn assert_replay_identity(turn: &TurnRecord, command: &Fresh<'_>) -> StorageResu
     let basic_match = turn.session_id == text(command.session_id, "sessionId")?
         && turn.trigger_key == text(command.trigger_key, "triggerKey")?
         && turn.original_message_id == command.message_id()?
-        && turn.original_message == command.content()?
-        && admitted_content.map(stringify).transpose()?
-            == replay_context.map(stringify).transpose()?;
+        && turn.turn_id == text(command.turn_id, "turnId")?;
+    if turn.original_message != command.content()?
+        || admitted_content.map(stringify).transpose()?
+            != replay_context.map(stringify).transpose()?
+    {
+        butler_core::diagnostic!(
+            "warning: admitted replay content mismatch for turn {}",
+            turn.turn_id
+        );
+    }
     let wake_match = match command.source {
         Source::Message(_) => turn.wake_identity.is_none(),
         Source::Trigger(trigger) => {

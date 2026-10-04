@@ -18,10 +18,9 @@ pub(super) fn guided_final(
         &payload_body(turn, &result, &content, &content_sha256)?,
     )?;
     let outbox_id = digest(&format!(
-        "btcc-canonical-delivery.v1\0{}\0{}\0{}",
+        "btcc-canonical-delivery.v2\0{}\0{}",
         turn.turn_id,
-        turn.revision + 1,
-        reference.sha256
+        turn.revision + 1
     ));
     let payload = FinalPayload {
         reference: reference.clone(),
@@ -75,7 +74,7 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
 }
 
 /// The digested payload body. Its key order and omissions determine the
-/// payload reference and outbox id, so they are part of the stored format.
+/// payload reference, so they are part of the stored format.
 fn payload_body(
     turn: &TurnRecord,
     result: &super::contracts::AgentLoopResult,

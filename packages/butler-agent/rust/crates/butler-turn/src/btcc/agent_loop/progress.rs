@@ -66,7 +66,20 @@ pub(super) async fn operation(
     let encoded = output.map(butler_core::json::JsonDocument::as_str);
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
-        let id = super::super::identity::digest(&format!("btcc-guided-tool-result.v1\0{sha256}"));
+        let pending = output
+            .is_some_and(|output| output.field("authority_pending").ok().flatten() == Some("true"));
+        let phase = if pending {
+            "authority_pending"
+        } else {
+            "terminal"
+        };
+        let request_ref = output
+            .filter(|_| pending)
+            .and_then(|output| output.field("request_ref").ok().flatten())
+            .unwrap_or_default();
+        let id = super::super::identity::digest(&format!(
+            "btcc-guided-tool-result.v2\0{call_id}\0{phase}\0{request_ref}"
+        ));
         payload.insert("resultId".into(), Value::String(id.clone()));
         payload.insert("resultByteLength".into(), Value::from(body.len()));
         (id, sha256)

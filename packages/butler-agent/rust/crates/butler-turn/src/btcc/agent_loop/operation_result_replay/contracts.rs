@@ -139,7 +139,7 @@ pub enum StoredResultKind {
     Work,
 }
 
-/// The digest (and Work revision) that pins a referenced result.
+/// Diagnostic digest and authoritative Work revision of a referenced result.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OperationResultIntegrity {
     pub sha256: String,

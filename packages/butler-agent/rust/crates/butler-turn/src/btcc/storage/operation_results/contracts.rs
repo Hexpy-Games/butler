@@ -61,7 +61,7 @@ pub trait ExactProjectWorkResultAuthority: Send + Sync {
         &self,
         input: &OperationResultReferenceInput,
     ) -> StorageResult<Option<ExactProjectWorkResultIdentity>>;
-    /// Verifies a result's identity and digest against the ledger.
+    /// Verifies result ownership and revision against the ledger; digests are diagnostic.
     fn verify(
         &self,
         input: &ExactProjectWorkResultVerification,

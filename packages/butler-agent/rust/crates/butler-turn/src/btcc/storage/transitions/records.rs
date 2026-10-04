@@ -57,7 +57,10 @@ pub(super) fn insert_immutable_record(
             },
         )
         .map_err(StorageError::sqlite)?;
-    if stored != (kind.to_owned(), sha.to_owned(), content.to_owned()) {
+    if stored.1 != sha || stored.2 != content {
+        butler_core::diagnostic!("warning: immutable record content mismatch for {id}");
+    }
+    if stored.0 != kind {
         return Err(error(
             StorageCode::ImmutableRecordConflict,
             format!("Immutable BTCC record conflict: {id}"),

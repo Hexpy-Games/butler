@@ -6,7 +6,7 @@ pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
         .get("content")
         .and_then(Value::as_str)
         .is_none_or(str::is_empty)
-        || payload.get("content") != result.get("summary")
+        || payload.get("turnId") != result.get("child_turn_id")
         || result["status"] == "cancelled"
     {
         return;
