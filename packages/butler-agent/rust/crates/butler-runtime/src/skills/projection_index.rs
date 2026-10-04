@@ -5,11 +5,11 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 #[derive(Default)]
-pub(super) struct Index(HashMap<PathBuf, Entry>);
+pub(super) struct Index(HashMap<PathBuf, Arc<Mutex<Option<Entry>>>>);
 struct Entry {
     turn: Option<String>,
     size: u64,
@@ -36,13 +36,22 @@ pub(super) fn read(
         .collect();
     let path = root.join("transcripts").join(format!("{safe}.jsonl"));
     let mut file = File::open(&path).ok()?;
+    // The directory lock selects a slot only. Unrelated transcripts may read
+    // concurrently; same-file reads still share one identity and append cursor.
+    let slot = index
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .0
+        .entry(path.clone())
+        .or_default()
+        .clone();
+    let mut entry = slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let metadata = file.metadata().ok()?;
     let current = identity(&metadata);
     let size = metadata.len();
-    let mut index = index
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let prior = index.0.get(&path);
+    let prior = entry.as_ref();
     let reusable = prior.is_some_and(|entry| {
         entry.turn.as_deref() == turn
             && current.id == entry.identity.id
@@ -67,17 +76,14 @@ pub(super) fn read(
     // JSON value that has not yet acquired its newline.
     let offset = last_boundary(&mut file, size)?;
     let saved_anchor = anchor(&mut file, offset)?;
-    index.0.insert(
-        path,
-        Entry {
-            turn: turn.map(str::to_owned),
-            size,
-            offset,
-            identity: current,
-            anchor: saved_anchor,
-            names: names.clone(),
-        },
-    );
+    *entry = Some(Entry {
+        turn: turn.map(str::to_owned),
+        size,
+        offset,
+        identity: current,
+        anchor: saved_anchor,
+        names: names.clone(),
+    });
     names
 }
 

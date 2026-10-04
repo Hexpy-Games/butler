@@ -24,6 +24,7 @@ impl AppApplication {
         if is_child_session(&session_id) {
             return self.child_session_view(session_id, page).await;
         }
+        let _measurement = self.storage.measure_view("total");
         self.refresh_baseline_projection(session_id.clone()).await?;
         let snapshot::Snapshot {
             mut session,
@@ -50,6 +51,7 @@ impl AppApplication {
                 active.map(|turn| turn.id.as_str())
             ),
         )?;
+        let _assembly = self.storage.measure_view("assemble");
         let messages = message_page.view;
         let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
         let latest_message = messages.messages.last();

@@ -7,6 +7,7 @@ mod runtime_event;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
+mod transaction;
 pub(in crate::gateway::application::projection) use stream_message::fail_unanswered;
 mod values;
 
@@ -98,7 +99,7 @@ pub(super) fn apply(
         return Ok(not_handled());
     }
     let claim_id = token(metadata.get("appQueueClaimId"));
-    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    let tx = transaction::Transaction::begin(db).map_err(AppStorageError::sqlite)?;
     if staging::projected(&tx, action_id)? {
         return skip(tx, action_id, cursor, now);
     }
@@ -361,7 +362,7 @@ fn project_runtime_fault(
 /// only turn such a send, when its payload differs (a claim it gained), into
 /// an identity conflict that fails every later projection of the chat.
 fn skip(
-    tx: rusqlite::Savepoint<'_>,
+    tx: transaction::Transaction<'_>,
     action: &str,
     cursor: &checkpoint::Checkpoint,
     now: &str,
