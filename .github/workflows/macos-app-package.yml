@@ -53,6 +53,8 @@ jobs:
       BUTLER_SIGN_IDENTITY: "-"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate the published-update mode
         env:
@@ -141,6 +143,10 @@ jobs:
           BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
           "$isolate" bun tests/smoke/app-update-choice-smoke.ts
           "$isolate" bun tests/smoke/app-update-work-stream.ts
+          "$isolate" bun tests/smoke/quick-fixes-smoke.ts
+          "$isolate" bun tests/smoke/quick-fixes-compare.ts
+          "$isolate" bun build tests/smoke/settings-release-compare.ts --target node --packages external --outdir .tmp/node-smokes
+          "$isolate" node .tmp/node-smokes/settings-release-compare.js
 
       - name: Preserve new-chat visual evidence
         if: ${{ always() && !inputs.published-candidate }}
@@ -150,6 +156,9 @@ jobs:
           path: |
             .tmp/newchat-regression/
             .tmp/update-choice-smoke/
+            .tmp/quick-fixes/
+            .tmp/quick-fixes-comparison/
+            .tmp/settings-release-comparison/
           if-no-files-found: error
 
       - name: Package and smoke the native App release

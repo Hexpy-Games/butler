@@ -10,6 +10,13 @@ try {
     if ($after -cne $before) {
         throw "Owner protocol registration changed: before=$before after=$after"
     }
+    if ($env:OWNER_DELETE_TASK_CACHES -eq '1') {
+        # Final captain-only dispatch: preserve shared release/ORT caches.
+        foreach ($name in @('captain-p9', 'captain-p10', 'captain-p9-finish')) {
+            $path = Join-Path 'C:\Users\yeonw\work\target' $name
+            if (Test-Path $path) { Remove-Item $path -Recurse -Force }
+        }
+    }
 } finally {
     Remove-Item $env:OWNER_JOB_ROOT -Recurse -Force
 }

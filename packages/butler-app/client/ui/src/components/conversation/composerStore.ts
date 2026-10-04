@@ -1,10 +1,9 @@
 import type {
   FormEvent,
-  KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import { create } from "zustand";
-import type { KeyboardEventLike } from "./hooks/composerEventTypes";
+import type { ComposerKeyEvent, KeyboardEventLike } from "./hooks/composerEventTypes";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
 import type { ComposerStore } from "./composerStoreContract";
 import { messageContentText } from "@/app/messageContent";
@@ -15,7 +14,7 @@ const noopAsync = async () => {};
 const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
   event.preventDefault();
 };
-const noopKeyDown = (_event: ReactKeyboardEvent<HTMLElement>) => {};
+const noopKeyDown = (_event: ComposerKeyEvent) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
   workspaceMode: "local",

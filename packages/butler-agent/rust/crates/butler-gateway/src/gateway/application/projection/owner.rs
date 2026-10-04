@@ -78,9 +78,13 @@ impl ProjectionOwner {
         let pending = Arc::new(Mutex::new(Pending::default()));
         let observed = pending.clone();
         let callback = sender.clone();
+        let observe_filesystem = notifications::observe_filesystem();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if let Ok(event) = event {
+                if let Ok(event) = event
+                    && observe_filesystem
+                    && !matches!(event.kind, notify::EventKind::Access(_))
+                {
                     for path in event.paths {
                         if path.parent() == Some(transcript_root.as_path()) {
                             if path.extension().is_some_and(|value| value == "jsonl")
@@ -133,6 +137,12 @@ impl ProjectionOwner {
                 notifications::transcript(&owner.pending, &owner.sender, file.to_owned());
             }
         })
+    }
+
+    pub(in crate::gateway::application) fn settlement_listener(
+        &self,
+    ) -> crate::gateway::InboundSettlementListener {
+        notifications::settlement_listener(&self.inner)
     }
 
     #[cfg(test)]

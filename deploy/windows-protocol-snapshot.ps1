@@ -2,7 +2,7 @@ param([Parameter(Mandatory)][string]$Output)
 $ErrorActionPreference = 'Stop'
 # Query as required, then hash a registry export: this compares all value types
 # and subkeys without depending on console encoding or Out-String formatting.
-& reg query 'HKCU\Software\Classes\butler' /s 2>&1 | Out-Null
+& cmd.exe /d /c 'reg query HKCU\Software\Classes\butler /s 2>NUL' | Out-Null
 $code = $LASTEXITCODE
 $export = "$Output.reg"
 try {

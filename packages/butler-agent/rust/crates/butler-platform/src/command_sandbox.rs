@@ -11,6 +11,8 @@ pub use environment::tool_environment;
 mod operators;
 mod output;
 pub use output::CommandOutputDecoder;
+mod path_candidates;
+pub use path_candidates::path_tokens;
 
 use std::collections::HashMap;
 use std::path::Path;
