@@ -96,7 +96,7 @@ class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
         jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
-                'macos-package', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
+                'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
         results = {job: {'result': 'success'} for job in jobs}
@@ -122,39 +122,53 @@ class CargoCache(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / 'src').mkdir()
+            (root / 'watched').mkdir()
+            (root / 'watched/a.txt').write_text('one')
             (root / 'Cargo.toml').write_text('[package]\nname="freshness-proof"\nversion="0.1.0"\nedition="2024"\n')
-            (root / 'src/main.rs').write_text('mod value; fn main() { println!("{}:{}:{}", value::text(), include_str!("../extra.txt"), env!("STAMP")); }')
+            (root / 'src/main.rs').write_text('mod value; fn main() { println!("{}:{}:{}:{}", value::text(), include_str!("../extra.txt"), env!("STAMP"), env!("CONTENTS")); }')
             (root / 'src/value.rs').write_text('pub fn text() -> &\'static str { "original" }')
             (root / 'extra.txt').write_text('one')
-            (root / 'build.rs').write_text('fn main() { println!("cargo:rerun-if-env-changed=CI_SOURCE_STAMP"); println!("cargo:rustc-env=STAMP={}", std::env::var("CI_SOURCE_STAMP").unwrap()); }')
+            (root / 'build.rs').write_text('fn main() { println!("cargo:rerun-if-env-changed=CI_SOURCE_STAMP"); println!("cargo:rerun-if-changed=watched"); println!("cargo:rustc-env=STAMP={}", std::env::var("CI_SOURCE_STAMP").unwrap()); let mut entries: Vec<_> = std::fs::read_dir("watched").unwrap().map(|entry| { let entry = entry.unwrap(); format!("{}={}", entry.file_name().to_str().unwrap(), std::fs::read_to_string(entry.path()).unwrap()) }).collect(); entries.sort(); println!("cargo:rustc-env=CONTENTS={}", entries.join("|")); }')
             env = dict(os.environ, CARGO_TARGET_DIR=str(root / 'target'), CARGO_BUILD_JOBS='8',
                        CI_SOURCE_STAMP='first', RUSTC_WRAPPER='', CARGO_TERM_COLOR='never')
             def run(*args):
                 return subprocess.run(args, cwd=root, env=env, text=True, capture_output=True, check=True)
             run('git', 'init', '-q')
             run('cargo', 'generate-lockfile', '--offline')
-            run('git', 'add', 'Cargo.toml', 'Cargo.lock', 'src', 'extra.txt', 'build.rs')
+            run('git', 'add', 'Cargo.toml', 'Cargo.lock', 'src', 'extra.txt', 'build.rs', 'watched')
             # Source and tar timestamps are whole seconds; no sleeps/retries.
             for name in cargo_cache.source_times.tracked(root):
                 os.utime(root / name, (1_700_000_000, 1_700_000_000))
+            os.utime(root / 'watched', (1_700_000_000, 1_700_000_000))
             run('cargo', 'build', '--offline', '--locked', '-j', '8')
             entries = cargo_cache.source_times.capture(root)
             for entry in entries:
                 os.utime(root / entry['path'], None)  # A fresh checkout.
+            os.utime(root / 'watched', None)
             cargo_cache.source_times.restore(root, entries)
             fresh = run('cargo', 'build', '--offline', '--locked', '-j', '8', '-v')
             self.assertNotIn('Compiling freshness-proof', fresh.stderr)
             self.assertIn('Fresh freshness-proof', fresh.stderr)
-            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'original:one:first')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'original:one:first:a.txt=one')
+            # Untracked additions and tracked deletions invalidate the whole
+            # directory proof. Every entry and complete value must be present.
+            (root / 'watched/b.txt').write_text('two')
+            cargo_cache.source_times.restore(root, entries)
+            run('cargo', 'build', '--offline', '--locked', '-j', '8')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'original:one:first:a.txt=one|b.txt=two')
+            (root / 'watched/a.txt').unlink()
+            cargo_cache.source_times.restore(root, entries)
+            run('cargo', 'build', '--offline', '--locked', '-j', '8')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'original:one:first:b.txt=two')
             (root / 'src/value.rs').write_text('pub fn text() -> &\'static str { "changed" }')
             (root / 'extra.txt').write_text('two')
             cargo_cache.source_times.restore(root, entries)
             run('cargo', 'build', '--offline', '--locked', '-j', '8')
-            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:first')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:first:b.txt=two')
             env['CI_SOURCE_STAMP'] = 'second'
             cargo_cache.source_times.restore(root, entries)
             run('cargo', 'build', '--offline', '--locked', '-j', '8')
-            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:second')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:second:b.txt=two')
             for path in ['../escape', '/absolute', '.git/index']:
                 with self.assertRaisesRegex(ValueError, 'source path'):
                     cargo_cache.source_times.restore(root, [dict(path=path, sha256='', mtime_ns=0)])

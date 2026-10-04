@@ -1,30 +1,19 @@
 # CI speed round 4
 
-Measured on 2026-10-03 before changing the workflows. Round 3 (`eb50ecb1d`)
-was merged into current main (`124e4dadf`), preserving newer E2Es and native
-verification. No product implementation was changed.
+Measured on 2026-10-03 before changing the workflows. Round 3 (`eb50ecb1d`) was merged into current main (`124e4dadf`), preserving newer E2Es and native verification. No product implementation was changed.
 
-Before the corrected measurement push, main advanced to `1bf694a91` (preview.8).
-It was merged with all new E2Es, packaged UI/visual checks and their path
-selectors preserved. The historical tables remain the observations collected
-before this task; this newer input is identified separately in the run report.
+Before the corrected measurement push, main advanced to `1bf694a91` (preview.8). It was merged with all new E2Es, packaged UI/visual checks and their path selectors preserved. The historical tables remain the observations collected before this task; this newer input is identified separately in the run report.
+
+PR #489 completed every selected check at `88a462e09` and was merged externally
+by `byeolbit` on 2026-10-03 at 17:17:03 UTC. This task did not mark it ready,
+merge the PR or tag a release. The branch contains a tested local follow-up for
+complete directory freshness and parallel real update fixtures. Its hosted
+qualification is unfinished: the closed PR cannot measure its new head, and
+the user permits only one draft PR. A replacement requires a scope decision.
 
 ## Method and baseline
 
-The last five completed PR runs of each workflow were collected with
-`gh run list --event pull_request`, followed by `gh run view --json jobs,...`.
-For Butler Release, the last five completed tag-push runs were selected;
-diagnostic dispatches were excluded. The Actions jobs API supplements the step
-start/end timestamps absent from `gh run view`. The tables retain failures and
-cancellations; medians of successful workflow wall times exclude both.
-Queue time is job `started_at - created_at`; dependency waits are excluded from
-queue time but included in workflow wall time. Workflow wall is final job
-completion minus run creation. No controlled cache-cold versus cache-warm claim
-is made. Composite actions expose one aggregate timestamp; their build/setup/
-smoke work is explicitly labelled **Mixed**, rather than inventing substep times.
-Windows post-release has only four historical runs. Legacy E2E PR runs precede
-its migration into Rust quality; they are historical coverage, not a like-for-like
-speed baseline. Windows installer/released-smoke dispatches are shown separately.
+The last five completed PR runs of each workflow were collected with `gh run list --event pull_request`, followed by `gh run view --json jobs,...`. For Butler Release, the last five completed tag-push runs were selected; diagnostic dispatches were excluded. The Actions jobs API supplements the step start/end timestamps absent from `gh run view`. The tables retain failures and cancellations; medians of successful workflow wall times exclude both. Queue time is job `started_at - created_at`; dependency waits are excluded from queue time but included in workflow wall time. Workflow wall is final job completion minus run creation. No controlled cache-cold versus cache-warm claim is made. Composite actions expose one aggregate timestamp; their build/setup/ smoke work is explicitly labelled **Mixed**, rather than inventing substep times. Windows post-release had only four historical runs at baseline collection. Legacy E2E PR runs precede its migration into Rust quality; they are historical coverage, not a like-for-like speed baseline. Windows installer/released-smoke dispatches are shown separately.
 
 | Workflow | Last five completed run IDs (newest first) | Successful median wall (s) |
 | --- | --- | ---: |
@@ -70,6 +59,8 @@ Runner contention can dominate Windows even with warm compilation.
   a small optimized E2E-only archive supplies three serial perf shards.
   macOS also builds real .90/.91 update fixtures once and passes them through
   the existing smoke input, retaining embedded-version/signature/update proofs.
+  Their producer starts alongside the production Agent; only the App update
+  job waits for both. Perf/install no longer wait for unrelated fixture builds.
   PERF-IDLE has its own runner and retains the full five-minute observation.
   Test assertions, overflow checks, all budget helpers, existing ignored cases,
   watchdogs and zero retries are preserved. Producer-side invariants prove the
@@ -122,6 +113,11 @@ Runner contention can dominate Windows even with warm compilation.
   record SHA256 and producer timestamps for every tracked input. Restoring a
   timestamp requires identical complete contents and a safe tracked path;
   changed files remain fresh and Cargo still checks revision/version inputs.
+  Watched directories additionally require matching complete membership and
+  every descendant's contents; unknown files or links never qualify. A real
+  Cargo reproduction exposed redundant rebuilds from directory checkout
+  timestamps. The fixture proves freshness without compilation, and proves
+  that untracked additions and tracked deletions produce complete new output.
   This avoids checkout mtimes invalidating unchanged workspace libraries.
   Cargo's [freshness documentation](https://doc.rust-lang.org/stable/nightly-rustc/cargo/core/compiler/fingerprint/enum.LocalFingerprint.html)
   describes the mtime check. A real Cargo fixture proves that changed Rust,
@@ -146,28 +142,15 @@ cache can make the first run slower; hosted queue and yw-pc contention remain.
 
 | Workflow/check group | Observed successful median | Expected warm round 4 | After measurement |
 | --- | ---: | ---: | --- |
-| Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | pending draft PR |
-| Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | shared build 8–18m + longest consumer 5–12m | pending draft PR |
-| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 13m27s, run 37131116001; all checks passed (42.8% lower observed wall) |
+| Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | 13m34s at first fully green head 88a462e09 (44.9% lower observed wall) |
+| Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | parallel shared/fixture builds 8–18m + longest consumer 5–12m | 42m26s at first fully green head; 6.6% slower App coverage; parallel-fixture correction pending |
+| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 14m53s at first fully green head (36.7% lower observed wall) |
 | Butler Release | 65m46s; latest 67m32s | 20–35m with warm native caches; 35–65m cold | no tag authorized; not measured after |
-| Published verification | separate platform dispatches | max(platform duration), rather than their sum | existing tags only; not dispatched by this task |
+| Published verification | separate platform dispatches | max(platform duration), rather than their sum | parallel run 37141083658: 6m49s, failed macOS; Windows/Linux passed |
 
 ## Local validation
 
-Rust 1.91 fmt, all-target `clippy -D warnings` on butler-e2e/source-check, source
-rules and all **16 existing source-check tests** pass. The compiled consolidated
-E2E inventory after the preview.8 merge contains **312 tests, 14 existing ignored**. Ordinary shards contain
-**48/49/50/48/49/48** listed cases, install selections **1/1/14**, and performance
-**12/17/19 plus one complete idle observation**. Ordinary/performance overlap is
-intentional and preserves the former ordinary and enforced-budget runs. The
-union covers all **298 runnable E2Es**; every budget selection remains included.
-Eight CI invariant tests validate exact artifact identity/digest, reject failed/
-foreign runs, reject failed/cancelled/skipped selected gate jobs, and prove
-compiled coverage. Actionlint and frozen Bun install/full check pass with Bun
-1.3.11. An initial shell used the host default Rust 1.98; its new Clippy lints
-failed in unchanged code. Running the repo's pinned 1.91 corrected that toolchain
-mismatch. Native execution, complete E2E results and new workflow durations will
-be reported from the single draft PR; no unchanged failed CI run will be retried.
+Rust 1.91 fmt, all-target `clippy -D warnings` on butler-e2e/source-check, source rules and all **16 existing source-check tests** pass. The compiled consolidated E2E inventory after the preview.8 merge contains **312 tests, 14 existing ignored**. Ordinary shards contain **48/49/50/48/49/48** listed cases, install selections **1/1/14**, and performance **12/17/19 plus one complete idle observation**. Ordinary/performance overlap is intentional and preserves the former ordinary and enforced-budget runs. The union covers all **298 runnable E2Es**; every budget selection remains included. Eight CI invariant tests validate exact artifact identity/digest, reject failed/ foreign runs, reject failed/cancelled/skipped selected gate jobs, and prove compiled coverage. Actionlint and frozen Bun install/full check pass with Bun 1.3.11. An initial shell used the host default Rust 1.98; its new Clippy lints failed in unchanged code. Running the repo's pinned 1.91 corrected that toolchain mismatch. Native execution, complete E2E results and new workflow durations will be reported from the single draft PR; no unchanged failed CI run will be retried. The first fully green head is recorded in the run report, including the macOS regression, complete per-job phases and the next critical-path correction.
 
 All nine existing memory E2Es also ran locally against the complete archive
 trial's PR-built debug Agent: **9 passed in 144.989 s**. The daily fixture now

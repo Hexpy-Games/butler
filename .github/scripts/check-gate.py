@@ -15,7 +15,7 @@ selected = {
     'source': rust, 'linux-clippy': rust, 'linux-archive': rust or linux_package or install,
     'linux-tests': rust, 'linux-perf-archive': rust, 'linux-perf': rust, 'linux-native': rust or linux_package or install,
     'macos-archive': rust or package or install, 'macos-native': rust or package or install,
-    'macos-tests': rust, 'macos-perf-archive': rust, 'macos-perf': rust, 'macos-package': package,
+    'macos-tests': rust, 'macos-perf-archive': rust, 'macos-perf': rust, 'macos-package': package, 'macos-updates': package,
     'install-x64': install, 'install-arm64': install, 'install-macos': install, 'install-merge': install,
     'linux-arm64-archive': arm_tests or linux_package or install,
     'linux-arm64-native': arm_tests or linux_package or install,

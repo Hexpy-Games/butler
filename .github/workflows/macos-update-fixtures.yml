@@ -1,0 +1,47 @@
+name: Shared real macOS update fixtures
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    name: Build both real macOS update-fixture versions
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: sccache
+      BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: static-ort
+          cache-key: macos-update-fixtures
+          cache-workspace-crates: 'true'
+          artifact-cache-platform: darwin-arm64
+          publish-runtime-cache: 'false'
+      - name: Build the two real macOS update-fixture versions once
+        run: |
+          set -euo pipefail
+          for version in 0.1.0-preview.90 0.1.0-preview.91; do
+            export GITHUB_REF_NAME="v$version"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            out="$RUNNER_TEMP/update-agent-builds/$version"
+            mkdir -p "$out"
+            cp target/release/butler-agent "$out/butler-agent"
+            actual="$(python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" "$out/butler-agent" --version)"
+            [[ "$actual" == "butler $version ("* ]]
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-update-agent-builds
+          path: ${{ runner.temp }}/update-agent-builds/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error

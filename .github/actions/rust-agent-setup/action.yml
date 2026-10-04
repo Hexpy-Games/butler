@@ -7,6 +7,9 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  publish-runtime-cache:
+    description: Preserve the SDK once per workflow; other producers still verify the complete restored SDK.
+    default: 'true'
   artifact-cache-platform:
     description: Optional native producer platform for artifact cache fallback.
     default: ""
@@ -139,7 +142,7 @@ runs:
         key: ${{ steps.ort-cache.outputs.cache-primary-key }}
 
     - name: Preserve the complete pinned static runtime outside cache eviction
-      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true'
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && inputs.publish-runtime-cache == 'true'
       id: runtime-artifact
       shell: bash
       env:
@@ -147,7 +150,7 @@ runs:
         FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
       run: python3 "$GITHUB_WORKSPACE/.github/scripts/static-runtime-artifact.py" record "$PLATFORM" "$FINGERPRINT"
     - uses: actions/upload-artifact@v4
-      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true'
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && inputs.publish-runtime-cache == 'true'
       with:
         name: ${{ steps.runtime-artifact.outputs.name }}
         path: ${{ runner.temp }}/static-runtime-artifact/*

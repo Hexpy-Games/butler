@@ -335,3 +335,158 @@ even when PR head metadata differs, incompatible-manifest rejection without
 payload transfer, and rejection of a matching corrupt payload. Actual binary
 digest and executable-version checks remain mandatory. No release is tagged
 or dispatched here; release-after measurements remain unobserved.
+
+## First complete green qualification (`88a462e09eee`)
+
+Every selected check passed on this head. The three prior ordinary macOS
+failures passed in the full unchanged-deadline shards; all packaged preview.6
+comparison/onboarding/update-choice/workstream, Settings update, layout,
+renderer, distro install/reinstall, workspace, Clippy and performance checks
+completed. Windows completed all 12 original harnesses and its final gate.
+
+| Workflow | Run | Result | Wall |
+| --- | --- | --- | ---: |
+| Rust quality | [37137100315](https://github.com/Hexpy-Games/butler/actions/runs/37137100315) | success | 2559 |
+| Unsigned Windows preview smoke | [37137100037](https://github.com/Hexpy-Games/butler/actions/runs/37137100037) | success | 893 |
+| Post-merge CI | [37137100028](https://github.com/Hexpy-Games/butler/actions/runs/37137100028) | success | 461 |
+
+Linux Rust coverage completed **814 s (13m34s)** after run creation, versus
+1478 s (24m38s) historical median, **44.9% lower observed wall**. Windows took
+**893 s (14m53s)** versus 1411 s (23m31s), **36.7% lower**. The complete shared
+Rust gate took **2559 s (42m39s)**. macOS App coverage took **2546 s (42m26s)**,
+**6.6% longer** than its historical 2388 s median. These are observational
+comparisons: newer main adds checks and runner contention differs.
+
+The macOS production build took 439 s; the real .90/.91 fixture builds took
+594 s, in sequence. The producer's total was 1348 s (22m28s). App packaging
+then queued **446 s (7m26s)** before **701 s (11m41s)** of complete checks.
+A macOS ordinary shard queued 741 s. The optimized E2E build reused all 5668
+unchanged tracked inputs and compiled in 0.43 s; native/debug logs still
+recompiled gateway because its watched wallpaper directory's checkout mtime
+was new. A real Cargo reproduction reports `Dirty ... the file watched has
+changed` despite matching every file. The corrected proof also covers complete
+directory membership and all descendant contents. It retains rebuilds for
+untracked additions, tracked deletions, changed source/data and environment
+inputs; all eight invariants pass in 1.739 s on Python 3.12.
+
+The next graph starts the two real update-fixture builds alongside production
+Agent builds. Only App update verification needs both producers; native
+perf/install no longer wait for the fixtures. Each of the three real versions
+is still built exactly once on the same checkout. Both producers verify the
+complete SDK; only one uploads its shared runtime snapshot. The added producer
+is required by the final gate. This change and directory proof are not yet a
+measured improvement; the next changed-source run will qualify them.
+
+Linux session-view p95: **9.561 ms**. Idle RSS: **96,149,504 / 96,161,792 /
+96,206,848 B**, read-character delta **55,157 B** each, physical reads **0 B**.
+macOS p95: **4.374 ms**. All three idle windows had RSS **73,007,104 B**,
+footprint **37,488,256 B**, physical reads **0 B**. Complete correctness/latest
+state assertions and all original budgets passed. This does not erase the
+previous WSL 106,393,600 B observation on existing issue #450.
+
+### Green qualification job phases
+
+Seconds; queue excludes dependency waits. Mixed steps retain their aggregate
+metadata time. No work or missing substep time is hidden.
+
+| Job | Result | Queue | Setup/cache | Build | Test | Upload | Mixed | Other | Wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| changes | success | 3 | 3 | 0 | 0 | 0 | 0 | 4 | 7 |
+| Format and source rules | success | 3 | 12 | 0 | 56 | 0 | 0 | 2 | 70 |
+| Clippy (Linux x64) | success | 3 | 29 | 0 | 375 | 0 | 0 | 11 | 415 |
+| linux-perf-archive / Build perf harness (linux-x64) | success | 3 | 39 | 10 | 0 | 3 | 0 | 11 | 63 |
+| linux-arm64-native / Build native Agent (linux-arm64) | success | 5 | 65 | 247 | 1 | 8 | 0 | 14 | 335 |
+| macos-native / Build native Agent (darwin-arm64) | success | 10 | 251 | 1005 | 3 | 37 | 0 | 52 | 1348 |
+| linux-archive / Build archives (linux-x64) | success | 3 | 78 | 83 | 20 | 27 | 0 | 25 | 233 |
+| site / Check and build the site | success | 3 | 12 | 8 | 10 | 0 | 0 | 3 | 33 |
+| linux-native / Build native Agent (linux-x64) | success | 4 | 93 | 278 | 1 | 17 | 0 | 21 | 410 |
+| macos-perf-archive / Build perf harness (darwin-arm64) | success | 7 | 35 | 17 | 0 | 3 | 0 | 21 | 76 |
+| macos-archive / Build archives (darwin-arm64) | success | 12 | 280 | 171 | 112 | 45 | 0 | 6 | 614 |
+| linux-arm64-archive / Build archives (linux-arm64) | success | 6 | 100 | 151 | 144 | 22 | 0 | 18 | 435 |
+| ds / build | success | 4 | 16 | 6 | 45 | 0 | 0 | 34 | 101 |
+| ui / Fast Bun unit suite | success | 91 | 28 | 0 | 36 | 0 | 0 | 10 | 74 |
+| linux-tests / workspace | success | 4 | 59 | 24 | 0 | 0 | 0 | 8 | 91 |
+| linux-tests / E2E (linux-x64 2) | success | 3 | 34 | 0 | 0 | 0 | 211 | 3 | 248 |
+| linux-tests / E2E (linux-x64 4) | success | 3 | 14 | 0 | 0 | 0 | 172 | 3 | 189 |
+| linux-tests / E2E (linux-x64 3) | success | 14 | 26 | 0 | 0 | 0 | 155 | 6 | 187 |
+| linux-tests / E2E (linux-x64 install) | success | 3 | 14 | 0 | 0 | 0 | 158 | 4 | 176 |
+| linux-tests / E2E (linux-x64 1) | success | 80 | 14 | 0 | 0 | 0 | 221 | 3 | 238 |
+| linux-tests / E2E (linux-x64 ins-14) | success | 3 | 28 | 0 | 0 | 0 | 150 | 5 | 183 |
+| linux-tests / E2E (linux-x64 6) | success | 3 | 11 | 0 | 0 | 0 | 240 | 3 | 254 |
+| linux-tests / E2E (linux-x64 5) | success | 98 | 33 | 0 | 0 | 0 | 180 | 6 | 219 |
+| linux-tests / E2E (linux-x64 ins-02) | success | 35 | 13 | 0 | 0 | 0 | 155 | 4 | 172 |
+| install-arm64 / Lint scripts and dry-run the npm package | success | 2 | 3 | 0 | 1 | 3 | 0 | 3 | 10 |
+| linux-package-arm64 / Package (linux-arm64) | success | 16 | 28 | 79 | 0 | 5 | 0 | 7 | 119 |
+| install-arm64 / Install smoke (linux-arm64) | success | 30 | 4 | 0 | 33 | 1 | 43 | 8 | 89 |
+| linux-perf / Performance (linux-x64 2) | success | 5 | 8 | 0 | 0 | 0 | 89 | 4 | 101 |
+| linux-perf / Performance (linux-x64 idle) | success | 9 | 24 | 0 | 0 | 0 | 319 | 7 | 350 |
+| linux-perf / Performance (linux-x64 1) | success | 15 | 13 | 0 | 0 | 0 | 105 | 5 | 123 |
+| linux-perf / Performance (linux-x64 3) | success | 9 | 15 | 0 | 0 | 0 | 104 | 4 | 123 |
+| linux-package-x64 / Package (linux-x64) | success | 2 | 31 | 115 | 0 | 13 | 0 | 10 | 169 |
+| install-x64 / Lint scripts and dry-run the npm package | success | 24 | 4 | 0 | 1 | 2 | 0 | 3 | 10 |
+| install-x64 / Install smoke (linux-x64) | success | 3 | 5 | 0 | 23 | 1 | 57 | 3 | 89 |
+| linux-package-arm64 / Install smoke (ubuntu:24.04, linux-arm64 deb) | success | 4 | 8 | 0 | 0 | 0 | 0 | 40 | 48 |
+| linux-package-x64 / Install smoke (ubuntu:24.04, linux-x64 deb) | success | 3 | 10 | 0 | 0 | 0 | 0 | 30 | 40 |
+| linux-package-x64 / Install smoke (archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04, linux-x64 pacman) | success | 3 | 9 | 0 | 0 | 0 | 0 | 31 | 40 |
+| linux-package-x64 / Install smoke (debian:trixie, linux-x64 deb) | success | 3 | 9 | 0 | 0 | 0 | 0 | 30 | 39 |
+| macos-tests / workspace | success | 540 | 17 | 31 | 0 | 0 | 0 | 5 | 53 |
+| macos-tests / E2E (darwin-arm64 6) | success | 58 | 15 | 0 | 0 | 0 | 189 | 6 | 210 |
+| macos-tests / E2E (darwin-arm64 ins-14) | success | 7 | 34 | 0 | 0 | 0 | 6 | 5 | 45 |
+| macos-tests / E2E (darwin-arm64 2) | success | 6 | 13 | 0 | 0 | 0 | 216 | 9 | 238 |
+| macos-tests / E2E (darwin-arm64 5) | success | 278 | 34 | 0 | 0 | 0 | 219 | 9 | 262 |
+| macos-tests / E2E (darwin-arm64 1) | success | 741 | 36 | 0 | 0 | 0 | 232 | 8 | 276 |
+| macos-tests / E2E (darwin-arm64 4) | success | 254 | 30 | 0 | 0 | 0 | 244 | 7 | 281 |
+| macos-tests / E2E (darwin-arm64 3) | success | 549 | 36 | 0 | 0 | 0 | 216 | 7 | 259 |
+| macos-tests / E2E (darwin-arm64 install) | success | 741 | 37 | 0 | 0 | 0 | 151 | 9 | 197 |
+| macos-tests / E2E (darwin-arm64 ins-02) | success | 599 | 11 | 0 | 0 | 0 | 117 | 5 | 133 |
+| macos-perf / Performance (darwin-arm64 idle) | success | 85 | 24 | 0 | 0 | 0 | 375 | 5 | 404 |
+| macos-perf / Performance (darwin-arm64 2) | success | 214 | 18 | 0 | 0 | 0 | 121 | 8 | 147 |
+| macos-perf / Performance (darwin-arm64 1) | success | 368 | 12 | 0 | 0 | 0 | 128 | 7 | 147 |
+| macos-perf / Performance (darwin-arm64 3) | success | 292 | 19 | 0 | 0 | 0 | 123 | 5 | 147 |
+| macos-package / Package and smoke unsigned darwin-arm64 App | success | 446 | 29 | 121 | 533 | 0 | 0 | 18 | 701 |
+| install-macos / Lint scripts and dry-run the npm package | success | 5 | 6 | 0 | 2 | 4 | 0 | 3 | 15 |
+| install-macos / Install smoke (darwin-arm64) | success | 476 | 7 | 0 | 72 | 1 | 66 | 24 | 170 |
+| install-merge / Merge per-platform manifests | success | 2 | 9 | 0 | 0 | 0 | 0 | 2 | 11 |
+| gate | success | 4 | 4 | 0 | 0 | 0 | 0 | 4 | 8 |
+| Platform contracts and debug stub chat | success | 3 | 11 | 26 | 155 | 14 | 0 | 7 | 213 |
+| Build unsigned Windows preview | success | 219 | 11 | 0 | 0 | 9 | 163 | 8 | 191 |
+| Hosted Windows E2E (data) | success | 3 | 14 | 1 | 0 | 0 | 0 | 52 | 67 |
+| Hosted Windows E2E (remote) | success | 3 | 13 | 3 | 0 | 0 | 0 | 182 | 198 |
+| Hosted Windows E2E (recovery) | success | 3 | 12 | 0 | 0 | 0 | 0 | 122 | 134 |
+| Installed unsigned Windows preview | success | 47 | 233 | 1 | 29 | 1 | 0 | 162 | 426 |
+| Complete Windows preview verification | success | 3 | 1 | 0 | 2 | 0 | 0 | 3 | 6 |
+| platform-paths | success | 2 | 3 | 0 | 1 | 0 | 0 | 2 | 6 |
+| Windows compile check (x86_64-pc-windows-msvc) | success | 2 | 38 | 0 | 373 | 0 | 0 | 38 | 449 |
+
+## External merge and unfinished follow-up
+
+After this complete green qualification, `byeolbit` marked PR #489 ready and
+merged it at `88a462e09` (2026-10-03 17:17:03 UTC). This task did neither. The
+active branch includes the follow-up and the new main merge. Local checks pass,
+but its hosted qualification and additional wall measurement remain undone.
+The only authorized PR is now closed; a replacement needs the user's decision.
+No release workflow was dispatched and no tag was created. Release-after timing
+is unobserved; 20–35 m warm remains an estimate. Published verification is below.
+
+## First parallel published verification (failed)
+
+[Run 37141083658](https://github.com/Hexpy-Games/butler/actions/runs/37141083658)
+verified existing published .7→.8 assets at branch head `fc9a9bd8aab1`.
+It took **409 s (6m49s)**, but macOS failed. This is not a successful speed
+measurement. Windows's installer/legacy recovery and actual published
+manifest/nupkg update and both Linux complete archive/install/reinstall checks
+passed. macOS passed baseline DMG checksum, signature, 14 framework links,
+10,822,192-byte ICU, read-only role aliases and exact App/Agent health, then
+failed the unchanged 30 s update-button readiness assertion at
+`tests/smoke/packaged-app-update.ts:205`. Logs lack final update/HTTP state;
+its cause is unproven. The source does not contain PR #490's verifier changes.
+No unchanged retry or relaxed assertion/budget. Reported on
+[existing #439](https://github.com/Hexpy-Games/butler/issues/439#issuecomment-5971853653).
+
+| Job | Result | Queue (s) | Wall (s) |
+| --- | --- | ---: | ---: |
+| validate | success | 2 | 3 |
+| Linux x64 complete install/reinstall | success | 3 | 32 |
+| Linux ARM64 complete install/reinstall | success | 5 | 40 |
+| Windows released install/recovery/published update | success | 4 | 397 |
+| macOS published Settings update | failure | 163 | 192 |

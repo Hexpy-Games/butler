@@ -2,9 +2,6 @@ name: Shared production Agent
 on:
   workflow_call:
     inputs:
-      update-versions:
-        type: boolean
-        default: false
       runner:
         type: string
         default: ubuntu-24.04
@@ -73,26 +70,6 @@ jobs:
           name: agent-provenance-${{ inputs.platform }}
           path: ${{ runner.temp }}/agent-payload/provenance.json
           retention-days: 14
-          if-no-files-found: error
-      - name: Build the two real macOS update-fixture versions once
-        if: inputs.update-versions && inputs.platform == 'darwin-arm64'
-        run: |
-          for version in 0.1.0-preview.90 0.1.0-preview.91; do
-            export GITHUB_REF_NAME="v$version"
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features static-ort
-            out="$RUNNER_TEMP/update-agent-builds/$version"
-            mkdir -p "$out"
-            cp target/release/butler-agent "$out/butler-agent"
-            actual="$(python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" "$out/butler-agent" --version)"
-            [[ "$actual" == "butler $version ("* ]]
-          done
-      - uses: actions/upload-artifact@v4
-        if: inputs.update-versions && inputs.platform == 'darwin-arm64'
-        with:
-          name: macos-update-agent-builds
-          path: ${{ runner.temp }}/update-agent-builds/*
-          retention-days: 1
-          compression-level: 0
           if-no-files-found: error
       - name: Preserve successful Cargo outputs outside the shared cache quota
         id: cargo-cache
