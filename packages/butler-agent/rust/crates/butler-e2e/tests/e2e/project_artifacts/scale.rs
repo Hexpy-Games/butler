@@ -2,12 +2,11 @@ use super::*;
 use rusqlite::{Connection, params};
 
 // 13,312 registrations in the project, plus unrelated owner-scale message history.
-fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
+fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     let started = std::time::Instant::now();
     eprintln!("ARTIFACT-FIXTURE phase=seed_begin");
     let mut db =
-        butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
-            .unwrap();
+        butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
     let tx = db.transaction().unwrap();
     for i in 0..600 {
         tx.execute("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES(?1,'Other','chat',NULL,'now','now')",[format!("scale-chat-{i}")]).unwrap();
@@ -18,25 +17,28 @@ fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
         started.elapsed().as_millis()
     );
     let mut ids = Vec::new();
-    for i in 0..13_312 {
-        let id = format!("file-scale-{i:05}");
-        let message = format!("artifact-message-{i}");
-        let title = if i == 0 {
-            "needle".into()
-        } else if i < 257 {
-            format!("needle-{i:03}")
-        } else {
-            format!("other-{i}")
-        };
-        tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES(?1,?2,'origin-turn','assistant','','delivered','now','now')", params![message,chat]).unwrap();
-        tx.execute("INSERT INTO message_files(id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) VALUES(?1,'text','text/plain',?2,8,'revision',?1,'now')",params![id,title]).unwrap();
-        tx.execute(
-            "INSERT INTO message_attachments(message_id,file_id,position) VALUES(?1,?2,0)",
-            params![message, id],
-        )
-        .unwrap();
-        if i < 257 {
-            ids.push(id);
+    {
+        let mut messages = tx.prepare("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES(?1,?2,'origin-turn','assistant','','delivered','now','now')").unwrap();
+        let mut files = tx.prepare("INSERT INTO message_files(id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) VALUES(?1,'text','text/plain',?2,8,'revision',?1,'now')").unwrap();
+        let mut attachments = tx
+            .prepare("INSERT INTO message_attachments(message_id,file_id,position) VALUES(?1,?2,0)")
+            .unwrap();
+        for i in 0..13_312 {
+            let id = format!("file-scale-{i:05}");
+            let message = format!("artifact-message-{i}");
+            let title = if i == 0 {
+                "needle".into()
+            } else if i < 257 {
+                format!("needle-{i:03}")
+            } else {
+                format!("other-{i}")
+            };
+            messages.execute(params![message, chat]).unwrap();
+            files.execute(params![id, title]).unwrap();
+            attachments.execute(params![message, id]).unwrap();
+            if i < 257 {
+                ids.push(id);
+            }
         }
     }
     // Reattachment must not inflate counts, and its latest delivered origin wins.
@@ -76,23 +78,24 @@ fn seed(s: &Scenario, project: &str, chat: &str) -> Vec<String> {
 fn seed_history(db: &Connection) {
     let started = std::time::Instant::now();
     let text = "x".repeat(4096);
-    let mut statement = db.prepare("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES(?1,?2,'assistant',?3,'delivered','now','now')").unwrap();
-    for i in 0..300_000 {
-        statement
-            .execute(params![
-                format!("history-{i}"),
-                format!("scale-chat-{}", i % 600),
-                text
-            ])
-            .unwrap();
-        if (i + 1) % 50000 == 0 {
-            eprintln!(
-                "ARTIFACT-FIXTURE phase=history rows={} elapsed_ms={}",
-                i + 1,
-                started.elapsed().as_millis()
-            );
-        }
+    for start in (0..300_000).step_by(50_000) {
+        // Generate the identical complete history inside SQLite, avoiding
+        // 300,000 FFI/binding/string-allocation round trips on the test worker.
+        db.execute("WITH RECURSIVE n(i) AS (SELECT ?1 UNION ALL SELECT i+1 FROM n WHERE i+1<?2)
+          INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at)
+          SELECT 'history-'||i,'scale-chat-'||(i%600),'assistant',?3,'delivered','now','now' FROM n",
+          params![start, start + 50_000, text]).unwrap();
+        eprintln!(
+            "ARTIFACT-FIXTURE phase=history rows={} elapsed_ms={}",
+            start + 50_000,
+            started.elapsed().as_millis()
+        );
     }
+    let complete: bool = db.query_row("SELECT COUNT(*)=300000 AND COUNT(DISTINCT chat_id)=600 AND MIN(length(text)=4096 AND text=?1 AND chat_id='scale-chat-'||(CAST(substr(id,9) AS INTEGER)%600) AND role='assistant' AND status='delivered') FROM messages WHERE id LIKE 'history-%'", [&text], |row| row.get(0)).unwrap();
+    assert!(
+        complete,
+        "owner-scale history must retain every complete row"
+    );
 }
 
 #[tokio::test]
@@ -105,7 +108,12 @@ async fn many_matches_page_completely_at_owner_scale() -> Result<(), HarnessErro
     eprintln!("ARTIFACT-FIXTURE phase=agent_ready");
     let p = project(&s, "Large project").await?;
     let a = chat(&s, &p).await?;
-    let expected = seed(&s, &p, &a);
+    let data = s.sandbox.data.clone();
+    let seed_project = p.clone();
+    let seed_chat = a.clone();
+    let expected = tokio::task::spawn_blocking(move || seed(&data, &seed_project, &seed_chat))
+        .await
+        .unwrap();
     eprintln!("ARTIFACT-FIXTURE phase=before_reader");
     let b = chat(&s, &p).await?;
     eprintln!("ARTIFACT-FIXTURE phase=reader_ready");

@@ -64,8 +64,13 @@ fn settled(data: &Path, turn: &str) -> bool {
             |row| row.get(0),
         )
         .unwrap();
+    // Semantic/cache receipts precede the separate multilingual FTS drain.
+    // Include its committed pending work and migration cursor in quiescence;
+    // the unchanged idle window must cover no delayed background writes.
+    let fts_complete: bool = db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending) AND NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_trigger_version' AND value='2')", [], |row| row.get(0)).unwrap();
     complete == 1
         && deferred
+        && fts_complete
         && active == 0
         && pending <= 1_024
         // Graph/cache commits precede the writer lease's final COMMIT/close.

@@ -60,6 +60,9 @@ async fn chat_reset_preserves_profile_instructions_and_chats_then_remembers_futu
         .turn("general", "I prefer concise answers.")
         .await?;
     assert_eq!(turn["state"], "delivered");
+    // This fixture needs completed memory at its reset boundary; restarting
+    // during extraction would deliberately publish a failed semantic window.
+    super::memory_fixture::settle(&scenario.sandbox.data).await?;
     support::cycle(&mut scenario).await?;
     let old_graph = graph(&scenario.sandbox.data);
     assert!(
@@ -82,6 +85,7 @@ async fn chat_reset_preserves_profile_instructions_and_chats_then_remembers_futu
     seed_typed_projection(&old_graph);
     let typed_before = typed_projection(&old_graph);
     let aliases_before = typed_aliases(&old_graph);
+    super::memory_fixture::settle(&scenario.sandbox.data).await?;
     let inventory = scenario
         .gw
         .post("/memory/inventory/check", json!({}))
@@ -421,4 +425,9 @@ INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type) VALUES('typed-
 INSERT INTO edge_evidence VALUES('typed-edge','typed-source','literal','fixture');
 COMMIT;
 ").unwrap();
+    drop(db);
+    // Direct fixture SQL bypasses the source owner's committed work signal.
+    // Publish a distinct durable change after COMMIT/close so the real FTS
+    // consumer cannot miss it by observing an earlier uncommitted WAL write.
+    std::fs::write(path.with_file_name("typed-fixture-committed"), b"committed").unwrap();
 }

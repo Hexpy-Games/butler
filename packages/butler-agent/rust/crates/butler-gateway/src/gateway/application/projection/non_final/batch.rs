@@ -1,16 +1,24 @@
 //! Reuse projection facts only within one delta-only SQL operation.
 use crate::gateway::{
     MessageRecord,
-    application::storage::{AppStorageError, CachedSql},
+    application::{
+        queue,
+        storage::{AppStorageError, CachedSql},
+    },
 };
 use rusqlite::{Connection, params};
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 #[derive(Default)]
 struct Facts {
     messages: HashMap<String, MessageRecord>,
     sequences: HashMap<(String, String), u64>,
     streams: HashMap<String, String>,
+    fences: HashSet<(String, String, String)>,
+    chats: HashMap<String, String>,
 }
 thread_local! { static FACTS: RefCell<Option<Facts>> = const { RefCell::new(None) }; }
 struct Reset(Option<Facts>);
@@ -23,10 +31,78 @@ pub(in crate::gateway::application::projection) fn run<T>(
     db: &mut Connection,
     operation: impl FnOnce(&mut Connection) -> Result<T, AppStorageError>,
 ) -> Result<T, AppStorageError> {
+    debug_assert!(
+        !db.is_autocommit(),
+        "delta facts require one reserved write transaction"
+    );
     let _reset = Reset(FACTS.with(|facts| facts.replace(Some(Facts::default()))));
     let value = operation(db)?;
     persist_messages(db)?;
+    persist_chats(db)?;
     Ok(value)
+}
+
+// Delta-only batches cannot settle or replace a queued claim. The first fence
+// holds the same SQLite write reservation through every delta and publication.
+pub(super) fn fence(
+    db: &Connection,
+    chat: &str,
+    turn: &str,
+    claim: &str,
+) -> Result<bool, AppStorageError> {
+    let key = (chat.to_owned(), turn.to_owned(), claim.to_owned());
+    if FACTS.with(|facts| {
+        facts
+            .borrow()
+            .as_ref()
+            .is_some_and(|facts| facts.fences.contains(&key))
+    }) {
+        return Ok(true);
+    }
+    let fenced = queue::fence(db, chat, turn, claim)?;
+    if fenced {
+        FACTS.with(|facts| {
+            if let Some(facts) = facts.borrow_mut().as_mut() {
+                facts.fences.insert(key);
+            }
+        });
+    }
+    Ok(fenced)
+}
+
+pub(super) fn update_chat(db: &Connection, chat: &str, now: &str) -> Result<(), AppStorageError> {
+    let buffered = FACTS.with(|facts| {
+        if let Some(facts) = facts.borrow_mut().as_mut() {
+            facts.chats.insert(chat.to_owned(), now.to_owned());
+            true
+        } else {
+            false
+        }
+    });
+    if !buffered {
+        db.execute_cached(
+            "UPDATE chats SET updated_at=?1 WHERE id=?2",
+            params![now, chat],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
+}
+
+fn persist_chats(db: &Connection) -> Result<(), AppStorageError> {
+    FACTS.with(|facts| {
+        let facts = facts.borrow();
+        if let Some(facts) = facts.as_ref() {
+            for (chat, now) in &facts.chats {
+                db.execute_cached(
+                    "UPDATE chats SET updated_at=?1 WHERE id=?2",
+                    params![now, chat],
+                )
+                .map_err(AppStorageError::sqlite)?;
+            }
+        }
+        Ok(())
+    })
 }
 
 // Intermediate message updates are published in full; only the last row state

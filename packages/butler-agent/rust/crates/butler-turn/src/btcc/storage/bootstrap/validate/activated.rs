@@ -21,6 +21,7 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     // closing it releases the mappings before serving requests or measuring idle.
     db.pragma_update(None, "mmap_size", 8_589_934_592_i64)
         .map_err(StorageError::sqlite)?;
+    trace_mapping(&db, started)?;
     let expected = manifest_id();
     let (receipt_id, receipt_raw) = marker_row(
         &db,
@@ -59,6 +60,24 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }
     Ok(expected)
+}
+
+fn trace_mapping(db: &Connection, started: std::time::Instant) -> StorageResult<()> {
+    let mapped: i64 = db
+        .pragma_query_value(None, "mmap_size", |row| row.get(0))
+        .map_err(StorageError::sqlite)?;
+    let cap: bool = db
+        .query_row(
+            "SELECT sqlite_compileoption_used('MAX_MMAP_SIZE=8589934592LL')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(StorageError::sqlite)?;
+    trace(
+        &format!("validation_mapping bytes={mapped} cap_8g={cap}"),
+        started,
+    );
+    Ok(())
 }
 
 /// Read-only diagnostics for isolated startup qualification; never logs row data.

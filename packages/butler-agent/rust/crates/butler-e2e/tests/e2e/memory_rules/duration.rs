@@ -315,6 +315,7 @@ async fn project_reset_includes_temporary_instructions_and_keeps_other_scopes()
     assert_eq!(rows(&s).await?.len(), 3);
     let view = s.gw.get(&format!("/memory/projects/{project}")).await?;
     assert_eq!(view.data()["instructions"], 2);
+    super::super::memory_fixture::settle(&s.sandbox.data).await?;
     daily(&mut s).await?;
     let before = rows(&s).await?;
     reset(&s, "/memory/reset/profile").await?;
@@ -377,6 +378,7 @@ async fn instruction_capture_never_waits_for_an_active_owner_transaction()
 
 async fn reset(s: &Scenario, route: &str) -> Result<(), HarnessError> {
     eprintln!("INSTRUCTION-RESET route={route} started");
+    super::super::memory_fixture::settle(&s.sandbox.data).await?;
     let summary = s.gw.post("/memory/inventory/check", json!({})).await?;
     assert_eq!(summary.status, 200, "{}", summary.text);
     let id = uuid::Uuid::new_v4().to_string();

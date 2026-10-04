@@ -117,7 +117,7 @@ pub(super) fn apply(
     }
     if claim_status == QueuedTurnClaimStatus::Current {
         let fenced = match claim_id.as_deref() {
-            Some(claim) => queue::fence(&tx, chat_id, &turn_id, claim)?,
+            Some(claim) => batch::fence(&tx, chat_id, &turn_id, claim)?,
             None => false,
         };
         if !fenced {
@@ -233,11 +233,7 @@ pub(super) fn apply(
         )?;
     }
     finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-    tx.execute_cached(
-        "UPDATE chats SET updated_at=?1 WHERE id=?2",
-        params![now, chat_id],
-    )
-    .map_err(AppStorageError::sqlite)?;
+    batch::update_chat(&tx, chat_id, now)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
     Ok(ProjectionOutcome {
         handled: true,
