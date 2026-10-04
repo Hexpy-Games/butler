@@ -1,0 +1,58 @@
+name: Isolated macOS data qualification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native:
+    uses: ./.github/workflows/native-agent.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      ort-mode: static-ort
+  harness:
+    uses: ./.github/workflows/rust-perf-archive.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+  qualify:
+    needs: [native, harness]
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [streaming, owner]
+    env:
+      BUTLER_E2E_BTCC_VALIDATION_PROBE: ${{ matrix.case == 'owner' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: perf-rust-darwin-arm64
+          path: ${{ runner.temp }}/rust-archive
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-payload-darwin-arm64
+          path: ${{ runner.temp }}/production-agent
+      - name: Select the complete streaming gate
+        if: matrix.case == 'streaming'
+        run: echo 'test(storage_concurrency::perf_storage_concurrency_eight_streams_keep_exact_content_with_bounded_persistence_and_reads)' > "$RUNNER_TEMP/rust-archive/selected.txt"
+      - uses: ./.github/actions/e2e-stub
+        with:
+          archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
+          agent-binary: ${{ runner.temp }}/production-agent/butler-agent
+          enforce-budgets: 'true'
+          exclude-perf: 'false'
+          filter-file: ${{ matrix.case == 'streaming' && format('{0}/rust-archive/selected.txt', runner.temp) || '' }}
+          idle-only: ${{ matrix.case == 'owner' && 'true' || 'false' }}
+          run-perf-idle: ${{ matrix.case == 'owner' && 'true' || 'false' }}
+          run-systemd: 'false'
+          test-threads: '1'
+          success-output: final
+      - if: always()
+        uses: ./.github/actions/assert-home-untouched

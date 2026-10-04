@@ -9,6 +9,8 @@
 use super::app_storage_scale::seed as app;
 #[path = "support/btcc_scale.rs"]
 mod btcc;
+#[path = "support/btcc_validation_probe.rs"]
+mod btcc_validation_probe;
 use super::memory_fixture;
 #[path = "support/transcript_scale.rs"]
 mod transcripts;
@@ -48,6 +50,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     seed_extra_app(&s.sandbox.data)?;
     btcc::seed(&s.sandbox.data)?;
     let transcripts = transcripts::seed(&s.sandbox.data)?;
+    btcc_validation_probe::run(&s.sandbox.data)?;
     let start = Instant::now();
     s.gw = s.agent.start_again().await?;
     eprintln!("PERF-DATA seeded_owner_start={:?}", start.elapsed());
