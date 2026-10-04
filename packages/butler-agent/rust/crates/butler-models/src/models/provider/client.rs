@@ -1,3 +1,5 @@
+mod admission;
+
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -33,7 +35,7 @@ pub struct ModelProvider {
     pub(super) catalog: Arc<ModelCatalog>,
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
-    pub(super) prefix_history: super::prefix_diagnostics::History,
+    pub(super) prefix_history: Arc<super::prefix_diagnostics::History>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
@@ -55,7 +57,7 @@ impl ModelProvider {
             catalog,
             clock,
             prompt_metrics,
-            prefix_history: super::prefix_diagnostics::History::default(),
+            prefix_history: Arc::new(super::prefix_diagnostics::History::default()),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
             quota: None,
@@ -101,36 +103,25 @@ impl ModelProvider {
             serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
         let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
         let serialized = Bytes::from(serialized);
-        let codex_output = matches!(
-            config.auth.mode(),
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        )
-        .then_some(request.max_output_tokens)
-        .flatten();
-        let physical_admission = request_admission::PreparedRequestAdmission::new(
-            &request_admission::PrepareAdmissionInput {
-                catalog: &self.catalog,
-                config: self.config.as_ref(),
-                provider: &config.metadata.provider_id,
-                model_ref: &config.metadata.model_ref,
-                butler_data: None,
-                requested_output_tokens: serialize::requested_output_tokens(
-                    &body,
-                    carrier,
-                    codex_output,
-                ),
-                context_window_tokens: (config.metadata.provider_id == "local")
-                    .then_some(config.metadata.context_window_tokens)
-                    .flatten(),
-                max_output_tokens: (config.metadata.provider_id == "local")
-                    .then_some(config.metadata.max_output_tokens)
-                    .flatten(),
-                body: &body,
-                serialized: serialized.clone(),
-            },
-        )?;
+        let physical_admission =
+            self.admission(&request, &config, &body, serialized.clone(), carrier)?;
         drop(body);
-        let prefix = self.prefix_history.observe(request.cache_scope, prefix);
+        let trace = super::request_trace::RequestTrace::new(
+            self,
+            prefix,
+            request.cache_scope,
+            request.usage_attribution.map(|a| a.phase.as_str()),
+            request
+                .usage_attribution
+                .and_then(|a| a.round_index)
+                .map(f64::from),
+            request
+                .usage_attribution
+                .and_then(|a| a.session_kind.as_deref())
+                .unwrap_or("parent"),
+            request.butler_data,
+        )
+        .await?;
         let serialized_bytes = serialized.len();
         let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
@@ -159,23 +150,29 @@ impl ModelProvider {
                 transport::GuardStart::BeforeAdmission
             },
             request_observer: &observe_request,
+            trace: &trace,
             clock: self.clock.as_ref(),
             quota: self.quota.as_deref(),
         })
         .await
         .inspect_err(|error| watch.discard_after(error));
+        let prefix = trace.latest();
         let response = match response {
             Ok(value) => value,
             Err(ModelRoundError::Provider(error))
                 if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
             {
-                super::round_usage::record(self, &request, None, &config, &prefix)?;
+                if let Some(prefix) = &prefix {
+                    super::round_usage::record(self, &request, None, &config, prefix)?;
+                }
                 return self
                     .run_without_streaming(request, config.endpoint.clone())
                     .await;
             }
             Err(ModelRoundError::Provider(mut error)) => {
-                super::round_usage::record(self, &request, None, &config, &prefix)?;
+                if let Some(prefix) = &prefix {
+                    super::round_usage::record(self, &request, None, &config, prefix)?;
+                }
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
                 {
@@ -187,7 +184,9 @@ impl ModelProvider {
                 return Err(ModelRoundError::Provider(error));
             }
             Err(error) => {
-                super::round_usage::record(self, &request, None, &config, &prefix)?;
+                if let Some(prefix) = &prefix {
+                    super::round_usage::record(self, &request, None, &config, prefix)?;
+                }
                 return Err(error);
             }
         };
@@ -199,7 +198,7 @@ impl ModelProvider {
                 carrier,
                 continuation,
                 identity: provider_cache_identity,
-                prefix,
+                prefix: prefix.unwrap_or(serde_json::Value::Null),
             },
         )
     }
@@ -215,10 +214,7 @@ impl ModelProvider {
             .usage_attribution
             .and_then(|value| value.round_index)
             .unwrap_or(0);
-        prepared.prefix["providerReportedCachedTokens"] =
-            super::prefix_diagnostics::cached_tokens(&response);
-        prepared.prefix["providerCachedTokensFieldPresent"] =
-            super::prefix_diagnostics::cached_tokens_present(&response);
+        super::prefix_diagnostics::reported_usage(&mut prepared.prefix, &response);
         let mut result = result::decode(
             response,
             &config.metadata.provider_id,

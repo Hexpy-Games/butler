@@ -8,12 +8,12 @@ src/models/configuration/provider.rs	ModelConfiguration::resolve_request	111
 src/models/configuration/provider/endpoint.rs	resolve	96
 src/models/diagnostics.rs	http	86
 src/models/provider/client.rs	<ModelProvider as ModelRoundPort>::context_sizing	86
-src/models/provider/client.rs	ModelProvider::run	125
-src/models/provider/prompt.rs	run	133
+src/models/provider/client.rs	ModelProvider::run	122
+src/models/provider/prompt.rs	run	119
 src/models/provider/prompt/serialize.rs	responses	112
 src/models/provider/prompt/serialize/compatible.rs	chat	95
 src/models/provider/serialize.rs	responses	120
 src/models/provider/serialize/stable.rs	identity	140
 src/models/request_admission.rs	PreparedRequestAdmission::admit_with_snapshot	142
-src/models/transport.rs	execute	121
+src/models/transport.rs	execute	119
 src/models/visual_admission.rs	admit_visual_image_request	104

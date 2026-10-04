@@ -22,6 +22,15 @@ impl PromptUsageMetrics {
 }
 
 impl PromptUsageMetricSink for PromptUsageMetrics {
+    fn append_request_diagnostic(
+        &self,
+        diagnostic: &serde_json::Value,
+        data: Option<&str>,
+    ) -> Result<(), ModelRoundError> {
+        let data_root = data.map(Path::new).unwrap_or(&self.data_root);
+        write_diagnostic(data_root, diagnostic, self.clock.now_epoch_millis())
+    }
+
     fn append(&self, input: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
         if input.prompt_tokens.is_none() && input.prefix_diagnostics.is_none() {
             return Ok(());
@@ -50,18 +59,47 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
         let budget = snapshot
             .as_ref()
             .or_else(|| attribution.and_then(|value| value.budget_state));
-        let mut line = event::line(&input, timestamp, input.prompt_tokens, budget)?;
-        line.push('\n');
         let data_root = input.butler_data.map(Path::new).unwrap_or(&self.data_root);
         let directory = data_root.join("metrics");
         create_dir_all(&directory).map_err(io_failure)?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(directory.join("prompt-cache-usage.jsonl"))
-            .map_err(io_failure)?;
-        file.write_all(line.as_bytes()).map_err(io_failure)
+        if let Some(prefix) = input.prefix_diagnostics.filter(|value| !value.is_null()) {
+            write_diagnostic(data_root, prefix, timestamp)?;
+        }
+        let mut line = event::line(&input, timestamp, input.prompt_tokens, budget)?;
+        line.push('\n');
+        append_line(&directory.join("prompt-cache-usage.jsonl"), &line)
     }
+}
+
+fn write_diagnostic(
+    data_root: &Path,
+    prefix: &serde_json::Value,
+    timestamp: i64,
+) -> Result<(), ModelRoundError> {
+    let directory = data_root.join("metrics");
+    create_dir_all(&directory).map_err(io_failure)?;
+    let mut diagnostic = prefix.clone();
+    diagnostic["ts"] = timestamp.into();
+    let mut encoded = butler_core::json::stringify(&diagnostic).map_err(|error| {
+        ModelRoundError::InvocationFailure {
+            code: Some("request_diagnostic_encoding_failed".into()),
+            message: error.to_string(),
+        }
+    })?;
+    encoded.push('\n');
+    append_line(
+        &directory.join("request-prefix-diagnostics.jsonl"),
+        &encoded,
+    )
+}
+
+fn append_line(path: &Path, line: &str) -> Result<(), ModelRoundError> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(io_failure)?;
+    file.write_all(line.as_bytes()).map_err(io_failure)
 }
 
 #[expect(

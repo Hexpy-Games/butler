@@ -167,4 +167,10 @@ pub enum UsageAuthMode {
 
 pub trait PromptUsageMetricSink: Send + Sync {
     fn append(&self, input: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError>;
+    /// Durable start of a physical request, separate from billable usage.
+    fn append_request_diagnostic(
+        &self,
+        diagnostic: &Value,
+        data: Option<&str>,
+    ) -> Result<(), ModelRoundError>;
 }

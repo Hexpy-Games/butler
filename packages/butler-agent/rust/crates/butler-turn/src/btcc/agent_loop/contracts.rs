@@ -279,6 +279,9 @@ pub struct ModelRoundRequest<'a> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageAttribution {
+    /// Runtime-owned request classification; absent in older durable rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_kind: Option<String>,
     pub turn_id: String,
     pub phase: String,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -9,6 +9,7 @@ async fn round_attribution_uses_source_offset_and_final_report_preserves_tool_ch
         result("settled", vec![], 1),
     ]);
     *fixture.usage_attribution.lock().unwrap() = Some(UsageAttribution {
+        session_kind: Some("parent".into()),
         turn_id: "turn-1".into(),
         phase: "ordinary".into(),
         reasoning_effort: None,

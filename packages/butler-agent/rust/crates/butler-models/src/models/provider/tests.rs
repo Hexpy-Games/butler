@@ -98,6 +98,14 @@ impl ProviderObservationSink for Observations {
 struct Metrics;
 
 impl crate::models::PromptUsageMetricSink for Metrics {
+    fn append_request_diagnostic(
+        &self,
+        _: &serde_json::Value,
+        _: Option<&str>,
+    ) -> Result<(), ModelRoundError> {
+        Ok(())
+    }
+
     fn append(&self, _: crate::models::PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
         Ok(())
     }

@@ -73,6 +73,13 @@ impl ProviderClock for Clock {
 }
 pub(super) struct Metrics;
 impl PromptUsageMetricSink for Metrics {
+    fn append_request_diagnostic(
+        &self,
+        _: &serde_json::Value,
+        _: Option<&str>,
+    ) -> Result<(), butler_turn::btcc::ModelRoundError> {
+        Ok(())
+    }
     fn append(&self, input: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
         println!(
             "{}",

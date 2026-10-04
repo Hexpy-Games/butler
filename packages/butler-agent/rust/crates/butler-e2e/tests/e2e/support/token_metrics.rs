@@ -24,11 +24,34 @@ pub(crate) fn report(
         })
         .collect();
     assert_eq!(rows.len(), requests.len());
+    let starts: Vec<Value> = std::fs::read_to_string(
+        s.sandbox
+            .data
+            .join("metrics/request-prefix-diagnostics.jsonl"),
+    )?
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<_, _>>()?;
+    let starts: Vec<_> = starts
+        .iter()
+        .filter(|row| row["requestStarted"] == true && row["sessionKind"] == "parent")
+        .collect();
+    assert_eq!(starts.len(), requests.len());
     let mut previous: Option<Vec<u8>> = None;
+    let mut previous_tokens: Option<Vec<u32>> = None;
     let mut tokens = Vec::new();
     let mut stability = Vec::new();
-    for (body, row) in requests.iter().zip(&rows) {
+    for ((body, row), start) in requests.iter().zip(&rows).zip(&starts) {
         let diagnostic = &row["prefixDiagnostics"];
+        assert_eq!(start["requestId"], diagnostic["requestId"]);
+        assert_eq!(diagnostic["sessionKind"], "parent");
+        assert!(
+            diagnostic["sessionSha256"]
+                .as_str()
+                .is_some_and(|value| value.len() == 64)
+        );
+        assert!(diagnostic["phase"].is_string());
+        assert!(diagnostic["round"].is_number());
         let mut prefix = Vec::new();
         let components = diagnostic["components"].as_array().unwrap();
         for item in components {
@@ -69,11 +92,22 @@ pub(crate) fn report(
             assert_eq!(diagnostic["lcpBytes"], lcp);
             stability.push(100.0 * lcp as f64 / previous.len() as f64);
         }
-        tokens.push(
-            tokenizer
-                .encode_ordinary(std::str::from_utf8(&prefix).unwrap())
-                .len(),
-        );
+        let current_tokens = tokenizer.encode_ordinary(std::str::from_utf8(&prefix).unwrap());
+        assert_eq!(diagnostic["prefixTokens"], current_tokens.len());
+        if let Some(previous) = &previous_tokens {
+            let lcp = previous
+                .iter()
+                .zip(&current_tokens)
+                .take_while(|(a, b)| a == b)
+                .count();
+            assert_eq!(diagnostic["lcpTokens"], lcp);
+            assert_eq!(
+                diagnostic["lcpTokenPercent"],
+                100.0 * lcp as f64 / previous.len().max(1) as f64
+            );
+        }
+        tokens.push(current_tokens.len());
+        previous_tokens = Some(current_tokens);
         previous = Some(prefix);
     }
     eprintln!(

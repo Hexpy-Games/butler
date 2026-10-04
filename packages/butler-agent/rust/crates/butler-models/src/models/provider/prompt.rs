@@ -57,40 +57,25 @@ async fn run(
     })?;
     let serialized = Bytes::from(serialized);
     let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
-    let physical = crate::models::request_admission::PreparedRequestAdmission::new(
-        &crate::models::request_admission::PrepareAdmissionInput {
-            catalog: &provider.catalog,
-            config: provider.config.as_ref(),
-            provider: &config.metadata.provider_id,
-            model_ref: &config.metadata.model_ref,
-            butler_data: None,
-            requested_output_tokens: super::serialize::requested_output_tokens(
-                &body,
-                carrier,
-                matches!(
-                    config.auth.mode(),
-                    super::ProviderAuthMode::CodexOauth
-                        | super::ProviderAuthMode::CodexSubscription
-                )
-                .then(|| {
-                    request
-                        .usage_attribution
-                        .and_then(|value| value.requested_output_tokens)
-                })
-                .flatten(),
-            ),
-            context_window_tokens: (config.metadata.provider_id == "local")
-                .then_some(config.metadata.context_window_tokens)
-                .flatten(),
-            max_output_tokens: (config.metadata.provider_id == "local")
-                .then_some(config.metadata.max_output_tokens)
-                .flatten(),
-            body: &body,
-            serialized: serialized.clone(),
-        },
+    let physical = admission(
+        provider,
+        &request,
+        &config,
+        &body,
+        serialized.clone(),
+        carrier,
     )?;
     drop(body);
-    let prefix = provider.prefix_history.observe(request.cache_scope, prefix);
+    let trace = super::request_trace::RequestTrace::new(
+        provider,
+        prefix,
+        request.cache_scope,
+        request.usage_attribution.and_then(|a| a.phase),
+        request.usage_attribution.and_then(|a| a.round_index),
+        "background",
+        request.butler_data,
+    )
+    .await?;
     let request_bytes = serialized.len();
     let observe = || {
         provider
@@ -129,6 +114,7 @@ async fn run(
             crate::models::transport::GuardStart::BeforeAdmission
         },
         request_observer: &observe,
+        trace: &trace,
         clock: provider.clock.as_ref(),
         quota: provider.quota.as_deref(),
     })
@@ -136,9 +122,9 @@ async fn run(
     let observation = UsageObservation {
         carrier,
         cache_retention,
-        prefix,
+        prefix: trace.latest().unwrap_or(serde_json::Value::Null),
     };
-    if response.is_err() {
+    if response.is_err() && !observation.prefix.is_null() {
         observe_usage(provider, &request, &config, &observation, None)?;
     }
     let response = match response {
@@ -156,6 +142,48 @@ async fn run(
     complete(provider, &request, &config, observation, &response)
 }
 
+fn admission<'a>(
+    provider: &'a ModelProvider,
+    request: &ProviderPromptRequest<'_>,
+    config: &'a super::ProviderRequestConfig,
+    body: &serde_json::Value,
+    serialized: Bytes,
+    carrier: Carrier,
+) -> Result<crate::models::request_admission::PreparedRequestAdmission<'a>, ModelRoundError> {
+    crate::models::request_admission::PreparedRequestAdmission::new(
+        &crate::models::request_admission::PrepareAdmissionInput {
+            catalog: &provider.catalog,
+            config: provider.config.as_ref(),
+            provider: &config.metadata.provider_id,
+            model_ref: &config.metadata.model_ref,
+            butler_data: None,
+            requested_output_tokens: super::serialize::requested_output_tokens(
+                body,
+                carrier,
+                matches!(
+                    config.auth.mode(),
+                    super::ProviderAuthMode::CodexOauth
+                        | super::ProviderAuthMode::CodexSubscription
+                )
+                .then(|| {
+                    request
+                        .usage_attribution
+                        .and_then(|value| value.requested_output_tokens)
+                })
+                .flatten(),
+            ),
+            context_window_tokens: (config.metadata.provider_id == "local")
+                .then_some(config.metadata.context_window_tokens)
+                .flatten(),
+            max_output_tokens: (config.metadata.provider_id == "local")
+                .then_some(config.metadata.max_output_tokens)
+                .flatten(),
+            body,
+            serialized,
+        },
+    )
+}
+
 fn complete(
     provider: &ModelProvider,
     request: &ProviderPromptRequest<'_>,
@@ -170,10 +198,7 @@ fn complete(
         config.metadata.model_ref.as_str()
     };
     let decoded = result::decode(response, reported_model, carrier);
-    observation.prefix["providerReportedCachedTokens"] =
-        super::prefix_diagnostics::cached_tokens(response);
-    observation.prefix["providerCachedTokensFieldPresent"] =
-        super::prefix_diagnostics::cached_tokens_present(response);
+    super::prefix_diagnostics::reported_usage(&mut observation.prefix, response);
     observe_usage(provider, request, config, &observation, Some(&decoded))?;
     let (_, _, api) = super::client::carrier(config);
     let text = decoded.text.ok_or_else(|| {

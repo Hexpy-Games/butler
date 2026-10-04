@@ -10,6 +10,15 @@ pub(super) struct TokenizerOwner {
 }
 
 impl TokenizerOwner {
+    pub(super) fn encode_ordinary(&self, text: &str) -> Result<Vec<u32>, ModelCatalogError> {
+        let encoding = self
+            .encoding
+            .get_or_init(|| o200k_base().map_err(|error| Arc::from(error.into_boxed_dyn_error())))
+            .as_ref()
+            .map_err(|error| ModelCatalogError::Tokenizer(Arc::clone(error)))?;
+        Ok(encoding.encode_ordinary(text))
+    }
+
     pub(super) fn count_ordinary(&self, text: &str) -> Result<usize, ModelCatalogError> {
         let encoding = self
             .encoding
