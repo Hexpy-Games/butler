@@ -16,10 +16,12 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     trace("activated_begin", started);
     let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(StorageError::sqlite)?;
-    // These mappings belong only to this read-only validation connection.
-    // Avoid copying checked pages through the pager on a full owner-scale scan;
-    // closing it releases the mappings before serving requests or measuring idle.
-    db.pragma_update(None, "mmap_size", 8_589_934_592_i64)
+    // Full validation revisits overflow pages. A bounded startup-only cache
+    // avoids rereading them without retaining gigabytes of mapped pages. The
+    // complete quick/FK/reference checks still run; closing releases this cache.
+    db.pragma_update(None, "cache_size", -65_536_i64)
+        .map_err(StorageError::sqlite)?;
+    db.pragma_update(None, "mmap_size", 0_i64)
         .map_err(StorageError::sqlite)?;
     trace_mapping(&db, started)?;
     let expected = manifest_id();
