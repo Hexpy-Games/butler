@@ -6,7 +6,7 @@
     "deploy/licenses/inputs.mjs": "364e3fb4d76a9942421d75d873bbced06c0a749e64dcd833d8aa356b44f795a2",
     "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
     "packages/butler-agent/rust/Cargo.lock": "ae2d47c86c002045e902f9530114fc76e850e08526e2b483bf78b10e3f5ab7c2",
-    "packages/butler-agent/rust/Cargo.toml": "8dc62d6a227d7378919448ef179830b211e672a52df9de57fbab953023f2b627",
+    "packages/butler-agent/rust/Cargo.toml": "0f0c7598383066b074a72c369748e711e26b857dbed558496adcad11cebb02f6",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",

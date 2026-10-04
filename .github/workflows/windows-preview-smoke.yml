@@ -91,7 +91,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-e2e --tests -- -D warnings
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-agent -p butler-e2e --tests -- -D warnings
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -192,6 +192,35 @@ jobs:
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e project_workspace:: -- --test-threads=8 --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Read-only real-profile Downloads command
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          # Only the Agent's observation HOME/USERPROFILE is real. Its data,
+          # CODEX_HOME, XDG dirs, local/roaming profiles and fixtures stay temporary.
+          $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
+          $env:BUTLER_E2E_PERF = '1'
+          try {
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
+              windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
+              -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
+      - name: Native service recovery and full shutdown queue
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics')) {
+            $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e "$test`::" `
+              -- --test-threads=8 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/$test.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Export compiled verification harnesses
         run: |
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
@@ -345,12 +374,20 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
           retention-days: 1
+      - name: Preserve hosted failure fixtures
+        if: failure()
+        run: |
+          $fixtures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e'
+          if (Test-Path $fixtures) {
+            Copy-Item $fixtures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Keep diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-${{ matrix.shard }}-logs
-          path: ${{ runner.temp }}/windows-verify/logs/*.log
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
       - name: Remove temporary verification profiles
         if: always()
         run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
@@ -414,6 +451,8 @@ jobs:
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
+        env:
+          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
         run: ./deploy/windows-owner-cleanup.ps1
 
   diagnose-hosted:
