@@ -6,10 +6,11 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { WorkActivityBlock } from "../WorkActivityBlock";
 import { MessageRow } from "./MessageRow";
+import { MessageTurnGroup } from "./MessageTurnGroup";
 import { AssistantFooterSample, MESSAGE_FOOTER_LABELS } from "./MessageRow.showcaseParts";
 
 export function ActivityTurn({ count = 1, ...context }: ShowcaseRenderContext & { running?: boolean; count?: number }) {
-  return <Stack gap="lg">{Array.from({ length: count }, (_, index) => <ActivityTurnRow key={index} {...context} />)}</Stack>;
+  return <MessageTurnGroup>{Array.from({ length: count }, (_, index) => <ActivityTurnRow key={index} {...context} />)}</MessageTurnGroup>;
 }
 
 function ActivityTurnRow({ locale, running = false }: ShowcaseRenderContext & { running?: boolean }) {

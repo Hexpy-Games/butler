@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import type { MessageRecord, SessionView } from "@/app/types.ts";
-import { MessageRow } from "@/butler-ds";
+import { MessageRow, MessageTurnGroup } from "@/butler-ds";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { SessionObserverActivityGroup, type ObserverPhaseActivity } from "./SessionObserverActivityGroup.tsx";
@@ -60,7 +60,7 @@ export function SessionObserverTimeline({
 
   const firstActivityId = entries.find((entry) => entry.kind === "activity")?.id;
   return (
-    <>
+    <MessageTurnGroup>
       {entries.map((entry) => (
         <Fragment key={entry.id}>
           <MessageRow
@@ -75,7 +75,7 @@ export function SessionObserverTimeline({
         </Fragment>
       ))}
       {children}
-    </>
+    </MessageTurnGroup>
   );
 }
 
