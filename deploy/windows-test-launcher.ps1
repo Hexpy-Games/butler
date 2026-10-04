@@ -27,7 +27,7 @@ try {
     $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
     $env:BUTLER_APP_SERVER_PORT = $port.ToString()
     if ($StubChat) {
-        $stub = Start-Process python -ArgumentList @(('"' + $PackageRoot + '/stub.py"'), '--root', ('"' + $root + '"')) `
+        $stub = Start-Process python -ArgumentList @(('"' + $PackageRoot + '/stub.py"'), '--root', ('"' + $root + '"'), '--retry-first') `
             -NoNewWindow -PassThru -RedirectStandardOutput "$root/stub.log" -RedirectStandardError "$root/stub-error.log"
         for ($attempt = 0; $attempt -lt 120 -and !(Test-Path "$root/stub-port.txt"); $attempt++) {
             $stub.Refresh(); if ($stub.HasExited) { throw 'Stub provider failed to start' }
@@ -83,7 +83,7 @@ try {
         if ($StubChat) { & ([scriptblock]::Create([IO.File]::ReadAllText("$PackageRoot/stub-chat.ps1"))) -Origin $origin -Browser $browser }
     } else {
         if (!$NoBrowser) { Start-Process $url.AbsoluteUri }
-        Write-Host "Test agent PID: $($agent.Id). Port: $port"
+        Write-Host "Test agent PID: $($agent.Id). Port: $port. Data: $root/data"
         Read-Host 'Finish testing, then press Enter to stop and delete this test profile' | Out-Null
     }
 } finally {

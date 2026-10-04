@@ -26,7 +26,6 @@ pub(crate) struct RequestTrace {
     phase: String,
     round: Option<f64>,
     kind: String,
-    epoch: i64,
     latest: Mutex<Option<Value>>,
 }
 
@@ -49,7 +48,6 @@ impl RequestTrace {
             phase: phase.unwrap_or("background").into(),
             round,
             kind: kind.into(),
-            epoch: provider.clock.now_epoch_millis(),
             latest: Mutex::new(None),
         })
     }
@@ -63,7 +61,7 @@ impl RequestTrace {
         let phase = self.phase.clone();
         let kind = self.kind.clone();
         let sequence = REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let request_id = format!("{}-{sequence}", self.epoch);
+        let request_id = uuid::Uuid::new_v4().simple().to_string();
         let round = self.round.unwrap_or(sequence as f64);
         let metadata = tokio::task::spawn_blocking(move || {
             let mut metadata = history.observe(scope.as_deref(), prepared);

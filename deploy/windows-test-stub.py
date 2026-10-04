@@ -9,6 +9,8 @@ ANSWER = 'Traceable Windows ready.'
 
 
 class Provider(BaseHTTPRequestHandler):
+    retry_first = False
+    chat_requests = 0
     def log_message(self, *_):
         pass
 
@@ -17,6 +19,16 @@ class Provider(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if body.get('text', {}).get('format', {}).get('name') != 'memory_meaning_v4':
+            Provider.chat_requests += 1
+            if Provider.retry_first and Provider.chat_requests == 1:
+                payload = json.dumps(dict(error=dict(code='rate_limit_exceeded', message='Synthetic retry'))).encode()
+                self.send_response(429)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
         text = ANSWER
         if body.get('text', {}).get('format', {}).get('name') == 'memory_meaning_v4':
             text = json.dumps(dict(status='processed', entities=[], items=[], attributes=[]))
@@ -41,7 +53,10 @@ class Provider(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True, type=Path)
-    root = parser.parse_args().root
+    parser.add_argument('--retry-first', action='store_true')
+    args = parser.parse_args()
+    root = args.root
+    Provider.retry_first = args.retry_first
     data = root / 'data'
     now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     fixtures = {
