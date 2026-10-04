@@ -137,6 +137,13 @@ def crate_evidence(package):
         files = [(f"{base}/src/license/en.txt", fetch(f"{base}/src/license/en.txt")),
                  ("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml").read_text()),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if not files and package["name"] == "windows-permissions" and package["version"] == "0.2.4" and license_id == "MIT":
+        # The published package and pinned upstream both declare MIT but omit
+        # its text and copyright notice. Preserve that declaration verbatim;
+        # provide the standard text without inventing a copyright attribution.
+        source = "https://crates.io/crates/windows-permissions/0.2.4"
+        files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text()),
+                 ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     return package, license_id, source, files
 
 

@@ -11,12 +11,11 @@ use std::os::windows::fs::OpenOptionsExt;
 pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
     None
 }
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
+mod acl;
 
 pub(super) const OWNER_ONLY: bool = false;
 pub(super) const PERMISSION_MODES: bool = false;
@@ -72,41 +71,12 @@ pub(super) fn protect_folder(path: &Path) -> Option<io::Result<()>> {
     Some(grant(path, true))
 }
 
-/// Replace the DACL rather than adding grants: unrelated explicit ACEs must
-/// disappear too. SID-based inspection avoids localized icacls display text.
-fn acl(path: &Path, operation: &str) -> io::Result<String> {
-    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-    let powershell = PathBuf::from(root).join("System32/WindowsPowerShell/v1.0");
-    let output = Command::new(powershell.join("powershell.exe"))
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
-        .arg(include_str!("windows/acl.ps1"))
-        .env("BUTLER_ACL_PATH", fs::canonicalize(path)?)
-        .env("BUTLER_ACL_OPERATION", operation)
-        // A pwsh parent exports modules incompatible with Windows PowerShell.
-        // Only load this host's trusted, built-in ACL cmdlets.
-        .env("PSModulePath", powershell.join("Modules"))
-        .creation_flags(0x0800_0000)
-        .output()?;
-    if !output.status.success() {
-        // The script only inspects ACL metadata, never file contents or tokens.
-        return Err(io::Error::other(format!(
-            "Windows private ACL operation failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
 fn grant(path: &Path, _folder: bool) -> io::Result<()> {
-    acl(path, "protect").map(|_| ())
+    acl::protect(path)
 }
 
 pub(super) fn is_private(path: &Path) -> Option<bool> {
-    match acl(path, "inspect").ok()?.as_str() {
-        "True" => Some(true),
-        "False" => Some(false),
-        _ => None,
-    }
+    acl::inspect(path).ok()
 }
 
 pub(super) fn owner_only_dirs(_builder: &mut DirBuilder) -> Option<&mut DirBuilder> {

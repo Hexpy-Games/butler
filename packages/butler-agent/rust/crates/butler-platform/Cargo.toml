@@ -43,6 +43,7 @@ win32job.workspace = true
 same-file = "1.0.6"
 atomicwrites.workspace = true
 filedescriptor = "0.8.3"
+windows-permissions = "=0.2.4"
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).
