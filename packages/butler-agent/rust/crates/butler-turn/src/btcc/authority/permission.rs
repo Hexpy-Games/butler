@@ -105,6 +105,23 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
         )?)[..32]
     );
     Ok(ConversationPermission {
+        capability: capability.into(),
+        target: if command {
+            input
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or(target)
+        } else {
+            target
+        }
+        .into(),
+        cwd: command.then(|| {
+            input
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or(workspace)
+                .to_owned()
+        }),
         grant_ref,
         owner_session_id: owner.to_owned(),
         workspace_path: workspace.to_owned(),
@@ -121,16 +138,20 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
                 })
                 .into()
         },
-        description: if file_edit {
-            "허용한 경로·입력에만 적용".into()
-        } else if command {
-            format!(
-                "{} · 허용한 명령·작업 위치에만 적용",
-                executable.unwrap_or("명령")
-            )
-        } else {
-            "허용한 대상·입력에만 적용".into()
-        },
+        description: permission_description(file_edit, command, executable),
         created_at: String::new(),
     })
+}
+
+fn permission_description(file_edit: bool, command: bool, executable: Option<&str>) -> String {
+    if file_edit {
+        "허용한 경로·입력에만 적용".into()
+    } else if command {
+        format!(
+            "{} · 허용한 명령·작업 위치에만 적용",
+            executable.unwrap_or("명령")
+        )
+    } else {
+        "허용한 대상·입력에만 적용".into()
+    }
 }

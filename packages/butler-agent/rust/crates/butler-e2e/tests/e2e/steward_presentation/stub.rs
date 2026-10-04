@@ -142,6 +142,11 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
                 "action_updates":[],"remaining_actions":["compare"],"next_condition":"Continue comparing approaches","followups":[]}),
         ),
         6 => call(
+            "write-report",
+            "write_file",
+            &json!({"path":"report.html","content":"<!doctype html>\n<title>Approach B</title>\n"}),
+        ),
+        7 => call(
             "close",
             "record_work_disposition",
             &json!({"work_id":work_id(body),"disposition":"completed","summary":"Approach B verified","action_updates":[{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),

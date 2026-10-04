@@ -65,6 +65,15 @@ struct BoundTurn<'a> {
 }
 
 impl GuidedTurnFactoryAdapter {
+    fn journal(&self, turn_id: &str, activity: Arc<GuidedActivity>) -> Arc<GuidedJournal> {
+        Arc::new(GuidedJournal::new(
+            turn_id.to_owned(),
+            self.preparation.journal.clone(),
+            activity,
+            self.subsessions.repository(),
+        ))
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -265,11 +274,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);
-            let journal = Arc::new(GuidedJournal::new(
-                start.turn.turn_id.clone(),
-                self.preparation.journal.clone(),
-                activity.clone(),
-            ));
+            let journal = self.journal(&start.turn.turn_id, activity.clone());
             let text = Arc::new(GuidedTextState {
                 skill_catalog: self
                     .skill_catalog(phase.execution_policy.project_id.clone())

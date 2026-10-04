@@ -444,6 +444,7 @@ export const koKrCopy: AppCopy = {
     emptyLane: label => `${label} 항목이 없습니다.`,
     contextMetric: (kind, value) => ({ full: `${value}% 사용`, used: `${value} 사용`, budget: `${value} 한도`, available: `압축 전 ${value} 사용 가능`, compact: `${value}에서 자동 압축` })[kind],
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
+    grantedItems: count => `허용한 항목 ${count}개`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
@@ -496,6 +497,8 @@ export const koKrCopy: AppCopy = {
     projectSkills: "프로젝트 스킬",
     noSkills: "등록된 스킬이 없습니다.",
     activeWork: "진행 중인 작업",
+    grantCommandScope: "이 대화 · 동일한 명령·작업 위치",
+    grantTargetScope: "이 대화 · 동일한 대상·입력",
     allowedConversation: "이 대화에서 허용 중",
     revokeFailed: "허용을 해제하지 못했습니다. 다시 시도해 주세요.",
     currentWork: "현재 작업",

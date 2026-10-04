@@ -169,6 +169,9 @@ pub struct AppAuthorityDecisionInput {
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
+    fn attention_sessions(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn session_requests(
         &self,
         owner_session_id: String,

@@ -21,9 +21,13 @@ const fixture = process.env.BUTLER_SMOKE_ACTIVITY_CAPTURE
     ...["work", "plan", "checkpoint", "disposition"].map(kind => ({
       id: kind, kind, state: "delivered", semantic_block_id: block,
       safe_tool_name: "work_tool", safe_label: "도구 사용", bridge_phase: "btcc_operation" })),
-    ...["run_command", "read_file"].map(name => ({ id: name, kind: "used_tool",
-      state: "delivered", semantic_block_id: block, safe_tool_name: name,
-      safe_input_label: "보고서.txt", safe_label: "도구 사용", bridge_phase: "btcc_operation" })),
+    ...["run_command", "read_file"].flatMap(name => ["running", "delivered"].map(state => ({
+      id: `${name}-${state}`, tool_call_id: name, kind: "used_tool", state,
+      semantic_block_id: block, safe_tool_name: name,
+      safe_input_label: name === "run_command" ? "node --check index.html" : "index.html",
+      ...(state === "delivered" ? { tool_result_id: `${name}-result`, tool_result_byte_length: 40 } : {}),
+      safe_label: "도구 사용", bridge_phase: "btcc_operation",
+    }))),
   ] } } };
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const file = Bun.file(join(root, new URL(request.url).pathname));
@@ -48,13 +52,17 @@ try {
       }
       const activity = surface === "modal"
         ? page.locator('[data-test-class="steward-observer-dialog"]') : conversation;
+      const group = activity.locator('[data-test-class~="turn-work-tool-group"] > button');
+      if (await group.count()) await group.click();
       if (stage === "after") {
         const text = await activity.innerText();
         assert(!/\bWork\b|work_tool|이번 수행은|내부 위임 지시/u.test(text), "internal bookkeeping and brief stay hidden");
         if (!process.env.BUTLER_SMOKE_ACTIVITY_CAPTURE) {
           assert(text.includes(goal));
           assert(text.includes("1 명령, 1 조회"));
-          assert.equal(await activity.locator('[data-truncate="true"]').count(), 1);
+          assert.equal(await activity.locator('[data-test-class="turn-work-tool-detail-row"]').count(), 2, "one row per call");
+          assert(text.includes("node --check index.html"), "the command is visible");
+          assert(text.includes("index.html"), "the file path is visible");
         }
       }
       await page.evaluate(() => document.fonts.ready);

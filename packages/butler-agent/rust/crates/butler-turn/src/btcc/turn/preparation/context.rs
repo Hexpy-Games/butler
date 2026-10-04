@@ -74,6 +74,7 @@ pub(super) async fn snapshot(
         execution_policy(binding, subsession, controls)?,
     );
     insert_request_refs(&mut context, binding, request);
+    insert_result_ref(&mut context, controls)?;
     if !request.message.attachments.is_empty() {
         context.insert(
             "attachments".into(),
@@ -434,4 +435,19 @@ fn strings(values: Vec<String>) -> Value {
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
     BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
+}
+
+fn insert_result_ref(
+    context: &mut Map<String, Value>,
+    controls: Option<&VerifiedExecutionControls>,
+) -> Result<(), BtccError> {
+    if let Some(result) = controls.and_then(|value| value.subsession_result.as_ref()) {
+        context.insert(
+            "subsessionResult".into(),
+            serde_json::to_value(result).map_err(|error| {
+                BtccError::relayed("subsession_result_invalid", error.to_string())
+            })?,
+        );
+    }
+    Ok(())
 }

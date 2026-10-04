@@ -12,6 +12,7 @@ use butler_turn::btcc::{BtccError, JournalCloseout, ToolJournalRepository};
 pub(super) async fn collect(
     journal: &Arc<ToolJournalRepository>,
     turn_id: &str,
+    workspace: &str,
 ) -> Result<JournalCloseout, BtccError> {
     let mut artifacts = artifacts::ArtifactCollector::default();
     let mut changed = changed::ChangedCollector::default();
@@ -44,9 +45,10 @@ pub(super) async fn collect(
             break;
         }
     }
+    let changed_files = changed.finish();
     Ok(JournalCloseout {
-        artifacts: artifacts.finish(),
-        changed_files: changed.finish(),
+        artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
+        changed_files,
     })
 }
 
@@ -80,4 +82,37 @@ fn safe_path(value: &str, artifact: bool) -> Option<String> {
             .utf8_lossy()
             .into_owned()
     })
+}
+
+/// Child results precede local edits; the latest file record wins by path.
+pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> JournalCloseout {
+    let mut merged = JournalCloseout {
+        artifacts: Vec::new(),
+        changed_files: Vec::new(),
+    };
+    child.changed_files.extend(own.changed_files);
+    child.artifacts.extend(own.artifacts);
+    for file in child.changed_files {
+        if let Some(previous) = merged
+            .changed_files
+            .iter_mut()
+            .find(|item| item.path == file.path)
+        {
+            *previous = file;
+        } else {
+            merged.changed_files.push(file);
+        }
+    }
+    for artifact in child.artifacts {
+        if let Some(previous) = merged
+            .artifacts
+            .iter_mut()
+            .find(|item| item.safe_path_label == artifact.safe_path_label)
+        {
+            *previous = artifact;
+        } else {
+            merged.artifacts.push(artifact);
+        }
+    }
+    merged
 }

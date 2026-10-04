@@ -48,7 +48,7 @@ async fn completed_command_artifact_projects_from_reopened_real_journal() {
         reopened.clone(),
         Arc::new(|| "now".into()),
     ));
-    let closeout = collect(&journal, "turn").await.unwrap();
+    let closeout = collect(&journal, "turn", "").await.unwrap();
     assert_eq!(closeout.artifacts.len(), 1);
     assert_eq!(
         closeout.artifacts[0].id,

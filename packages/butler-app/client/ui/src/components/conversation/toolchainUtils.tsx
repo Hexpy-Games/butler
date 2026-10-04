@@ -87,6 +87,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
   if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
+    if (row.safe_input_label) return toolchainLabel(row);
     const label = interfaceProgressLabel(row);
     return label && label !== row.safe_tool_name ? label : toolchainLabel(row);
   }

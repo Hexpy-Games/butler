@@ -1,5 +1,5 @@
 import { appCopy } from "../copy.ts";
-import { projectSharedWorkBlocks } from "../../../../../../butler-progress-projection/src/index.ts";
+import { projectSharedWorkBlocks, mergeToolRows } from "../../../../../../butler-progress-projection/src/index.ts";
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
 import { compactLegacyDisplayTitle } from "./compact-display-title.ts";
@@ -41,7 +41,7 @@ export function projectTurnActivity(
   rows: ProgressRow[],
   turnId?: string,
 ): TurnActivityProjection {
-  const visibleRows = orderedProgressRows(visibleProgressRows(rows));
+  const visibleRows = mergeToolRows(orderedProgressRows(visibleProgressRows(rows)));
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);

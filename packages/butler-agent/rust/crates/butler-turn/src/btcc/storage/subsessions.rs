@@ -2,6 +2,7 @@
 
 mod activity;
 mod decode;
+mod files;
 mod records;
 
 pub use records::*;

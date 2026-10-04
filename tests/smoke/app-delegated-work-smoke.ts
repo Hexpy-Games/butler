@@ -29,6 +29,10 @@ parent.status = "delivered";
 parent.steward_children = [child];
 let phase: "running" | "delivered" | "cancelled" | "failed" = "running";
 let stopRequested = false;
+let awaiting = false;
+const grants = Array.from({ length: 20 }, (_, i) => ({ grant_ref: `grant-${i}`, capability: i % 2 ? "read_file" : "run_command",
+  target: i % 2 ? `C:/workspace/report-${i}.html` : `node --check report-${i}.html`, cwd: "C:/workspace",
+  title: "internal", description: "internal", created_at: new Date().toISOString() }));
 let requests = 0;
 const timings: number[] = [];
 
@@ -50,12 +54,20 @@ try {
     await page.setViewportSize({ width, height: 800 });
     phase = "running";
     stopRequested = false;
+    awaiting = false;
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: theme,
+      desktop_notifications: { enabled: true, assistant_messages: false, task_completions: false },
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
     await server.signIn(page);
     await installWorkReplay(page);
+    await page.addInitScript(() => {
+      const calls: unknown[] = [];
+      Object.assign(window, { __notifications: calls, butlerApp: { platform: "win32",
+        showDesktopNotification: async (input: unknown) => { calls.push(input); return { shown: true }; } } });
+    });
+    await page.route("**/authority-requests?**", route => route.fulfill({ json: { data: { requests: [], permissions: [...grants, grants[0]] } } }));
     await page.route("**/navigation", route => route.fulfill({ json: { data: { ...navigation,
-      chats: navigation.chats.map(s => ({ ...s, active_turn_state: "delivered", running_delegated_work: phase === "running" })) } } }));
+      chats: navigation.chats.map(s => ({ ...s, active_turn_state: "delivered", running_delegated_work: phase === "running", attention_required: awaiting })) } } }));
     await page.route("**/session-view?**", route => {
       requests++;
       const id = new URL(route.request().url()).searchParams.get("session_id");
@@ -81,12 +93,43 @@ try {
       assert(animation.includes("spinner-rotate"), "the existing DS working animation is active");
     }
     await capture("running");
+    awaiting = true;
+    await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
+      id: 90, type: "subsession.changed", created_at: new Date().toISOString(),
+      payload: { session_id: "general", child_session_id: childId },
+    }), child.session_id);
+    if (!baseline) {
+      await page.waitForFunction(() => (window as unknown as { __notifications: unknown[] }).__notifications.length === 1);
+      assert.equal(await spinner.count(), 0, "attention replaces running animation");
+      await row.getByLabel(appCopy.space.attention, { exact: true }).waitFor();
+    }
+    await capture("sidebar-attention");
+    awaiting = false;
+    await page.evaluate(() => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
+      id: 91, type: "question.answered", payload: { session_id: "general" },
+    }));
+    if (!baseline) await spinner.waitFor();
     await page.reload(); // A fresh App boot projects the still-running durable child.
     await pill.waitFor();
     if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
     if (!baseline) await spinner.waitFor();
     // Sidebar overlays the composer on mobile: close it after observing the row.
     if (width < 640) await page.getByRole("button", { name: appCopy.titlebar.hideLeftPanel, exact: true }).last().click();
+    const access = page.locator('[data-test-class="access-button"]');
+    await access.click();
+    await capture("grants-collapsed");
+    if (!baseline) {
+      assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
+      await page.getByRole("button", { name: appCopy.interfaceTemplates.grantedItems(20), exact: true }).click();
+      assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 20, "identical grants deduplicate");
+      const text = await page.locator('[data-test-class="granted-permissions"]').innerText();
+      assert(!/run_command|read_file|internal/.test(text), text);
+      assert(text.includes("node --check report-0.html") && text.includes("C:/workspace/report-1.html"));
+      const scroll = page.locator('[data-test-class="granted-permissions-scroll"]');
+      assert(await scroll.evaluate(el => el.scrollHeight > el.clientHeight), "DS scroll bounds the grant list");
+      await capture("grants-expanded");
+    }
+    await page.keyboard.press("Escape");
     await pill.click();
     await dialog.getByRole("button", { name: "Stop", exact: true }).waitFor();
     await capture("modal-running");

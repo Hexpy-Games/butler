@@ -384,6 +384,7 @@ export interface AppCopy {
     pendingApprovals: (count: number) => string;
     approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
+    grantedItems: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
     reportPreparing: (title: string) => string;
@@ -427,6 +428,8 @@ export interface AppCopy {
     noSkills: string;
     activeWork: string;
     allowedConversation: string;
+    grantCommandScope: string;
+    grantTargetScope: string;
     revokeFailed: string;
     currentWork: string;
     turnActivities: string;

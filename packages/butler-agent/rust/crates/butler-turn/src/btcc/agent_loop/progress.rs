@@ -48,11 +48,12 @@ pub(super) async fn model_waiting(
 
 pub(super) async fn operation(
     progress: &dyn AgentLoopProgress,
-    call_id: &str,
-    tool_name: &str,
+    call: &super::contracts::ModelRoundToolCall,
     status: Status,
     output: Option<&butler_core::json::JsonDocument>,
 ) {
+    let call_id = &call.id;
+    let tool_name = &call.name;
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
     let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
@@ -63,6 +64,9 @@ pub(super) async fn operation(
         "semanticBlockId": format!("tool-{call_id}"),
         "operationStatus": status.as_str(),
     });
+    if let Some(target) = operation_target(call) {
+        payload.insert("inputLabel".into(), Value::String(target));
+    }
     let encoded = output.map(butler_core::json::JsonDocument::as_str);
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
@@ -151,4 +155,30 @@ impl Status {
             Self::Cancelled => "cancelled",
         }
     }
+}
+
+fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<String> {
+    let keys: &[&str] = match call.name.as_str() {
+        "run_command" => &["command"],
+        "write_file" | "edit_file" | "read_file" => &["path"],
+        "list_files" | "grep_files" => &["path", "directory"],
+        _ => return None,
+    };
+    keys.iter()
+        .find_map(|key| call.arguments.get(*key).and_then(Value::as_str))
+        .map(str::to_owned)
+        .or_else(|| {
+            call.arguments
+                .get("requests")
+                .and_then(Value::as_array)
+                .map(|requests| {
+                    requests
+                        .iter()
+                        .filter_map(|request| request.get("path").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| (call.name == "list_files").then(|| ".".into()))
 }

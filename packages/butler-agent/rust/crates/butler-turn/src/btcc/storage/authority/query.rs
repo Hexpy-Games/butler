@@ -135,6 +135,9 @@ pub(super) fn list_permissions(
     statement
         .query_map([owner], |row| {
             Ok(ConversationPermission {
+                capability: String::new(),
+                target: String::new(),
+                cwd: None,
                 grant_ref: row.get(0)?,
                 owner_session_id: row.get(1)?,
                 workspace_path: row.get(2)?,
@@ -273,4 +276,39 @@ pub(super) fn question_history(
     let mut seen = std::collections::HashSet::new();
     records.retain(|r| seen.insert(r.request_ref.clone()));
     Ok(records)
+}
+
+pub(super) fn permission_records(
+    db: &Connection,
+    owner: &str,
+) -> AuthorityResult<Vec<AuthorityRecord>> {
+    many(
+        db,
+        &format!(
+            "{ROW} WHERE owner_session_id=?1 AND decision='allowed' AND allow_scope='conversation' ORDER BY created_at"
+        ),
+        &[&owner],
+    )
+}
+
+pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
+    let owners = serde_json::to_string(owners)
+        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let mut statement = db
+        .prepare_cached(
+            "SELECT DISTINCT a.owner_session_id FROM json_each(?1) p \
+         JOIN btcc_authority_requests a ON a.owner_session_id=p.value \
+         JOIN btcc_turns t ON t.turn_id=a.source_turn_id \
+         WHERE a.close_reason IS NULL \
+         AND ((a.decision='pending' AND t.semantic_state='admitted' AND t.suspension_reason='authority_pending') \
+         OR (a.capability='ask_user' AND a.decision='modified' \
+         AND a.outcome_receipt_json IS NULL \
+         AND json_extract(a.private_alternative_input,'$.status')='deferred'))",
+        )
+        .map_err(sql)?;
+    statement
+        .query_map([owners], |row| row.get(0))
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)
 }

@@ -1,18 +1,15 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
 import {
-  OptionMenu,
-  OptionMenuItem,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Typo,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerControlButton } from "./ComposerControlButton";
+import { GrantedPermissions } from "./GrantedPermissions";
 import { AccessModeOptions } from "./AccessModeOptions";
 import {
   accessLabel,
@@ -22,8 +19,6 @@ import {
 
 export function AccessModeMenu() {
   useAppLocale();
-  const [revoking, setRevoking] = useState<string>();
-  const [revokeFailed, setRevokeFailed] = useState(false);
   const accessMode = useComposerStore((store) => store.accessMode);
   const accessMenuOpen = useComposerStore((store) => store.accessMenuOpen);
   const setAccessMenuOpen = useComposerStore(
@@ -35,8 +30,8 @@ export function AccessModeMenu() {
   const settings = useButlerStore((store) => store.settings);
   const sessionId = useButlerStore((store) => store.activeChatId);
   const projection = useButlerStore((store) => store.authorityApprovals);
-  const permissions = projection?.sessionId === sessionId ? projection.permissions ?? [] : [];
-  const revoke = useButlerStore((store) => store.revokeConversationPermission);
+  const permissions = [...new Map((projection?.sessionId === sessionId ? projection.permissions ?? [] : [])
+    .map(item => [item.grant_ref, item])).values()];
 
   return (
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
@@ -68,21 +63,7 @@ export function AccessModeMenu() {
             setAccessMenuOpen(false);
           }}
         />
-        {permissions.length ? <OptionMenu title={appCopy.interfaceDetails.allowedConversation}>
-          {permissions.map((permission) => <OptionMenuItem
-            key={permission.grant_ref}
-            label={appCopy.interfaceTemplates.revoke(permission.title)}
-            description={permission.description}
-            descriptionPlacement="block"
-            disabled={revoking !== undefined}
-            onClick={async () => {
-              setRevoking(permission.grant_ref); setRevokeFailed(false);
-              const applied = await revoke(permission.grant_ref, sessionId);
-              setRevoking(undefined); setRevokeFailed(!applied);
-            }}
-          />)}
-        </OptionMenu> : null}
-        {revokeFailed ? <Typo.Caption role="alert">{appCopy.interfaceDetails.revokeFailed}</Typo.Caption> : null}
+        <GrantedPermissions permissions={permissions} sessionId={sessionId} />
       </PopoverContent>
     </Popover>
   );

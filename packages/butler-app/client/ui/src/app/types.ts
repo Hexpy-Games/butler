@@ -774,6 +774,7 @@ export interface SessionSummary {
   last_activity_at: string;
   active_turn_state?: string;
   running_delegated_work?: boolean;
+  attention_required?: boolean;
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
@@ -1815,6 +1816,7 @@ export interface ApprovalTarget {
 
 export interface ConversationPermissionView {
   grant_ref: string; title: string; description: string;
+  capability?: string; target?: string; cwd?: string;
 }
 
 /** Server-backed projection bound to the session id it was fetched for. */

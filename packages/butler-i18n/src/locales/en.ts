@@ -444,6 +444,7 @@ export const enUsCopy: AppCopy = {
     emptyLane: label => `No ${label.toLowerCase()} items`,
     contextMetric: (kind, value) => ({ full: `${value}% full`, used: `${value} used`, budget: `${value} budget`, available: `${value} available before compaction pressure`, compact: `auto compact at ${value}` })[kind],
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
+    grantedItems: count => `${count} allowed items`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "Read only" : "Change"}?`,
@@ -497,6 +498,8 @@ export const enUsCopy: AppCopy = {
     projectSkills: "Project skills",
     noSkills: "No skills registered.",
     activeWork: "Active work",
+    grantCommandScope: "This conversation · same command and working folder",
+    grantTargetScope: "This conversation · same target and input",
     allowedConversation: "Allowed in this conversation",
     revokeFailed: "Could not revoke permission. Try again.",
     currentWork: "Current work",

@@ -74,14 +74,7 @@ pub(super) async fn execute<'a>(
     invocation: GuidedInvocation<'a>,
     prepared: &'a PreparedCall<'a>,
 ) -> Result<ToolResult, BtccError> {
-    operation(
-        invocation.progress,
-        &prepared.call.id,
-        &prepared.call.name,
-        Status::Started,
-        None,
-    )
-    .await;
+    operation(invocation.progress, &prepared.call, Status::Started, None).await;
     if let Some(error) = &prepared.validation {
         let result = ToolResult {
             tool_call_id: prepared.call.id.clone(),
@@ -90,14 +83,7 @@ pub(super) async fn execute<'a>(
             error: Some(error.clone()),
             output: None,
         };
-        operation(
-            invocation.progress,
-            &prepared.call.id,
-            &prepared.call.name,
-            Status::Failed,
-            None,
-        )
-        .await;
+        operation(invocation.progress, &prepared.call, Status::Failed, None).await;
         return Ok(result);
     }
     let result = match policy
@@ -121,8 +107,7 @@ pub(super) async fn execute<'a>(
         Err(ToolExecutionError::Integrity(error)) => {
             operation(
                 invocation.progress,
-                &prepared.call.id,
-                &prepared.call.name,
+                &prepared.call,
                 if invocation.cancellation.is_cancelled() {
                     Status::Cancelled
                 } else {
@@ -136,8 +121,7 @@ pub(super) async fn execute<'a>(
     };
     operation(
         invocation.progress,
-        &prepared.call.id,
-        &prepared.call.name,
+        &prepared.call,
         if result.ok {
             Status::Completed
         } else {
