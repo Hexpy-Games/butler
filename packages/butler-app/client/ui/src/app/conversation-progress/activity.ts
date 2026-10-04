@@ -45,14 +45,15 @@ export function projectTurnActivity(
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);
+  const workBlocks = projectWorkBlocks(activityRows);
   const projectedActivities = phaseActivities.length > 0
     ? phaseActivities
-    : fallbackOrdinaryActivity(activityRows, turnId);
+    : workBlocks.length > 0 ? [] : fallbackOrdinaryActivity(activityRows, turnId);
   return {
     visibleRows,
     readModels,
     decisions: readModels.filter(isDecisionReadModel),
-    workBlocks: projectWorkBlocks(activityRows),
+    workBlocks,
     phaseActivities: projectedActivities,
     publicActivity: latestPublicActivity(activityRows, projectedActivities.length > 0),
     semanticState: currentSemanticState(activityRows, projectedActivities),

@@ -17,6 +17,7 @@ pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 #[derive(Default)]
 pub(super) struct Script {
     pub open_disposition: AtomicBool,
+    pub blocked_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
     pub relation: Mutex<String>,
     pub workspace: Mutex<String>,
@@ -127,6 +128,12 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             "read-b",
             "read_file",
             &json!({"requests":[{"path":path("b.txt") }]}),
+        ),
+        6 if script.blocked_disposition.load(Ordering::SeqCst) => call(
+            "close-blocked",
+            "record_work_disposition",
+            &json!({"work_id":work_id(body),"disposition":"blocked","summary":"Research delivered; follow-up remains",
+                "action_updates":[],"remaining_actions":["compare"],"next_condition":"Owner follow-up","followups":[]}),
         ),
         6 if script.open_disposition.load(Ordering::SeqCst) => call(
             "close-open",

@@ -79,6 +79,14 @@ try {
     }
     & "$PSScriptRoot/protocol-snapshot.ps1" -Output "$root/after.json"
     $after = Get-Content "$root/after.json" -Raw
+    $logs = Join-Path (Split-Path $PSScriptRoot -Parent) ('logs/' + (Get-Date -Format 'yyyyMMddTHHmmssfff'))
+    New-Item -ItemType Directory -Force $logs | Out-Null
+    Get-ChildItem -LiteralPath $root -File | Copy-Item -Destination $logs
+    foreach ($path in @('data/metrics','data/app/runtime/logs','data/agent-runtime/logs')) {
+        $source = Join-Path $root $path
+        if (Test-Path $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $logs ($path -replace '/', '-')) -Recurse }
+    }
+    Write-Output "Test logs saved: $logs"
     foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key]) }
     python -c "import shutil,sys,os,stat;shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1],onexc=lambda f,p,e:(os.chmod(p,stat.S_IWRITE),f(p)))" $root
     if ($LASTEXITCODE -ne 0) { throw 'Test profile cleanup failed' }

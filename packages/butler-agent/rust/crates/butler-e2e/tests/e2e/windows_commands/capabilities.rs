@@ -1,6 +1,8 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
 #[path = "capabilities/delegation.rs"]
 mod delegation;
+#[path = "capabilities/current_work.rs"]
+mod current_work;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
@@ -457,35 +459,6 @@ async fn real_profile_like_basic_capabilities_in_both_access_modes() -> Result<(
     for access in [Access::AskFirst, Access::FullAccess] {
         run(access).await?;
     }
-    Ok(())
-}
-
-#[tokio::test]
-async fn sequential_file_capabilities_close_the_current_work() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, chat, script, server) = setup(Access::FullAccess).await?;
-    for index in 0..8 {
-        let name = format!("report-{index}.txt");
-        let content = format!("complete current report {index}");
-        std::fs::write(s.sandbox.home.join("Downloads").join(&name), &content)?;
-        let case = Case {
-            tool: "read_file",
-            args: json!({"requests":[{"path":name}]}),
-            refused: false,
-        };
-        let (output, _) = operation(&s, &chat, &script, &case, Access::FullAccess).await?;
-        assert_eq!(output["files"][0]["content"], content);
-        assert_eq!(output["files_read"], 1);
-        assert_eq!(output["truncated"], false);
-        let disposition = script.disposition.lock().unwrap().clone().unwrap();
-        assert_eq!(
-            disposition["ok"], true,
-            "current Work disposition: {disposition}"
-        );
-        assert_eq!(disposition["work"]["status"], "completed");
-    }
-    s.finish().await?;
-    server.abort();
     Ok(())
 }
 

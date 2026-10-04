@@ -1,0 +1,26 @@
+//! Result outcome comes from the delivered payload, independently of Work.
+use serde_json::Value;
+
+pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
+    if payload
+        .get("content")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+        || payload.get("content") != result.get("summary")
+        || result["status"] == "cancelled"
+    {
+        return;
+    }
+    let status = if payload
+        .get("runtimeFailure")
+        .is_some_and(|value| !value.is_null())
+    {
+        "failed"
+    } else {
+        "success"
+    };
+    result["status"] = status.into();
+    if let Some(work) = payload.get("workStatus") {
+        result["work_status"] = work.clone();
+    }
+}

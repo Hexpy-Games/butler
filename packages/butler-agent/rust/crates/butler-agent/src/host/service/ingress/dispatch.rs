@@ -14,7 +14,7 @@ use super::{
 };
 use crate::host::service::restart_handoff::RestartHandoff;
 use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
-use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind, WorkStatus};
+use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
 struct Executed {
@@ -399,26 +399,18 @@ async fn complete_subsession_child(
                 super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
-    let (content, work_status, runtime_failed) = match &outcome.result {
-        TurnOutcomeKind::Delivered(value) => (
-            value.content.as_str(),
-            value.work_status,
-            value.runtime_failure.is_some(),
-        ),
-        TurnOutcomeKind::AlreadyDelivered(value) => (
-            value.content.as_str(),
-            value.work_status,
-            value.runtime_failure.is_some(),
-        ),
+    let (content, runtime_failed) = match &outcome.result {
+        TurnOutcomeKind::Delivered(value) => {
+            (value.content.as_str(), value.runtime_failure.is_some())
+        }
+        TurnOutcomeKind::AlreadyDelivered(value) => {
+            (value.content.as_str(), value.runtime_failure.is_some())
+        }
         _ => return Ok(()),
     };
-    // A settled Turn always owes its parent a result. Open Work is retained
-    // for recovery, but a limit/failure report must not leave delegation active.
-    let status = match (runtime_failed, work_status) {
-        (false, Some(WorkStatus::Completed)) => "success",
-        (false, Some(WorkStatus::Blocked)) => "blocked",
-        _ => "failed",
-    };
+    // Result delivery and Work disposition are independent. Keep unfinished
+    // Work intact; only an actual runtime failure makes a delivered result fail.
+    let status = if runtime_failed { "failed" } else { "success" };
     subsessions
         .complete_child(session_id, turn_id, status, content.to_owned())
         .await

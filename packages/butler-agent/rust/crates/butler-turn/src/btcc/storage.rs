@@ -25,6 +25,7 @@ mod repository;
 mod runtime_owner;
 mod schema;
 mod stop;
+mod subsession_result;
 mod subsessions;
 mod tool_journal;
 mod transitions;

@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
+import { checkCapturedActivity } from "./activity-capture-support";
 import { smokeBrowserArgs } from "../support/smoke-browser";
 
 const uiRoot = resolve("packages/butler-app/client/ui/dist");
@@ -107,5 +108,6 @@ try {
   await normalTurn.getByRole("button", { name: /활동 · 완료/ }).waitFor();
   assert.equal(await normalTurn.locator('[data-test-class="assistant-footer"]').count(), 1);
   assert.equal(await normalTurn.locator('[data-test-class~="turn-activity-panel"]').count(), 0);
+  await checkCapturedActivity(page, `http://127.0.0.1:${server.port}`, output);
   console.log(JSON.stringify({ ok: true, screenshots: 32, measurements, checks: ["stream-order", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
 } finally { await browser.close(); server.stop(true); }

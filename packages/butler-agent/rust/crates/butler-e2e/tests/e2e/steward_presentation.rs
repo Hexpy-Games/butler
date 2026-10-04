@@ -73,6 +73,51 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     Ok(())
 }
 
+#[tokio::test]
+async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<(), HarnessError> {
+    use std::sync::atomic::Ordering;
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    script.blocked_disposition.store(true, Ordering::SeqCst);
+    script.release.notify_one();
+    let setup = setup("STEWARD-DELIVERED-BLOCKED-WORK", &url).await?;
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(setup.sandbox.data.join(name), name)?;
+    }
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    let child = wait_result(&s).await?;
+    assert_eq!(child["result"]["status"], "success", "{child}");
+    assert_eq!(child["result"]["work_status"], "blocked", "{child}");
+    assert_eq!(child["status"], "delivered", "{child}");
+    assert_eq!(child["approved_plan_completed"], 1);
+    let own =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            child["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    assert_eq!(own.data()["status"], "delivered");
+    assert_eq!(own.data()["latest_turn"]["delivery_state"], "delivered");
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let status: String = db
+        .query_row(
+            "SELECT status FROM btcc_guided_works WHERE session_id=?1",
+            [child["session_id"].as_str().unwrap()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        status, "blocked",
+        "Work must retain its unfinished disposition"
+    );
+    drop(db);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 pub(super) async fn unfinished_disposition_delivers_failure() -> Result<(), HarnessError> {
     use std::sync::atomic::Ordering;
     let (url, script, server) = stub::start().await?;

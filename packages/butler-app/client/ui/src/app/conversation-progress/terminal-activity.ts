@@ -74,7 +74,7 @@ export function isVisibleToolActivity(
   const toolName = row.safe_tool_name?.trim();
   if (isInternalProgressRow(row) || row.kind === "todo" || row.kind === "message")
     return false;
-  if (label && label === block && !row.safe_input_label) return false;
+  if (label && label === block && !row.tool_call_id && !row.safe_input_label) return false;
   if (
     toolName && toolName === block && !row.tool_call_id &&
     !row.safe_input_label && !row.safe_detail_rows?.length

@@ -9,6 +9,7 @@ struct Block {
 }
 
 pub(super) fn project(rows: &[Value]) -> Vec<Value> {
+    let phases = phase_ids(rows);
     let mut blocks = Vec::<Block>::new();
     let mut current = None::<String>;
     for value in ordered(rows) {
@@ -16,46 +17,7 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
             continue;
         };
         if string(row, "kind") == Some("work_block") {
-            let Some(id) = truthy_owned(row, "work_block_id") else {
-                continue;
-            };
-            let phase = truthy(row, "work_block_phase");
-            if let Some(index) = blocks
-                .iter()
-                .position(|block| string(&block.value, "id") == Some(&id))
-            {
-                if blocks[index].closed {
-                    continue;
-                }
-                if phase == Some("updated") {
-                    merge_state(&mut blocks[index].value, row);
-                } else if phase == Some("completed") {
-                    merge_state(&mut blocks[index].value, row);
-                    blocks[index].closed = true;
-                    if current.as_deref() == Some(&id) {
-                        current = None;
-                    }
-                } else if phase.is_none() {
-                    merge_state(&mut blocks[index].value, row);
-                }
-                continue;
-            }
-            if phase != Some("started") && phase.is_some() {
-                continue;
-            }
-            if let Some(open) = current.take()
-                && let Some(block) = blocks
-                    .iter_mut()
-                    .find(|block| string(&block.value, "id") == Some(&open))
-            {
-                block.closed = true;
-            }
-            blocks.push(Block {
-                value: block_value(row, &id, false),
-                rows: Vec::new(),
-                closed: false,
-            });
-            current = Some(id);
+            append_marker(row, &mut blocks, &mut current);
             continue;
         }
         let legacy = string(row, "kind") == Some("message")
@@ -70,7 +32,10 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
             current = Some(id);
             continue;
         }
-        if string(row, "bridge_phase") == Some("btcc_operation") || !tool_activity(row) {
+        if !tool_activity(row)
+            || string(row, "bridge_phase") == Some("btcc_operation")
+                && truthy(row, "semantic_block_id").is_some_and(|id| phases.contains(id))
+        {
             continue;
         }
         let id = owned(row, "work_block_id").unwrap_or_else(|| {
@@ -107,6 +72,62 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
             block.value.insert("rows".into(), Value::Array(block.rows));
             Some(Value::Object(block.value))
         })
+        .collect()
+}
+
+fn append_marker(row: &Map<String, Value>, blocks: &mut Vec<Block>, current: &mut Option<String>) {
+    let Some(id) = truthy_owned(row, "work_block_id") else {
+        return;
+    };
+    let phase = truthy(row, "work_block_phase");
+    if let Some(index) = blocks
+        .iter()
+        .position(|block| string(&block.value, "id") == Some(&id))
+    {
+        if blocks[index].closed {
+            return;
+        }
+        if phase == Some("updated") {
+            merge_state(&mut blocks[index].value, row);
+        } else if phase == Some("completed") {
+            merge_state(&mut blocks[index].value, row);
+            blocks[index].closed = true;
+            if current.as_deref() == Some(&id) {
+                *current = None;
+            }
+        } else if phase.is_none() {
+            merge_state(&mut blocks[index].value, row);
+        }
+        return;
+    }
+    if phase != Some("started") && phase.is_some() {
+        return;
+    }
+    if let Some(open) = current.take()
+        && let Some(block) = blocks
+            .iter_mut()
+            .find(|block| string(&block.value, "id") == Some(&open))
+    {
+        block.closed = true;
+    }
+    blocks.push(Block {
+        value: block_value(row, &id, false),
+        rows: Vec::new(),
+        closed: false,
+    });
+    *current = Some(id);
+}
+
+fn phase_ids(rows: &[Value]) -> std::collections::HashSet<&str> {
+    rows.iter()
+        .filter_map(Value::as_object)
+        .filter(|row| {
+            string(row, "kind") == Some("message")
+                && string(row, "work_decision_source") == Some("model-authored")
+                && truthy(row, "work_decision_summary").is_some()
+                && truthy(row, "work_block_id").is_none()
+        })
+        .filter_map(|row| truthy(row, "semantic_block_id"))
         .collect()
 }
 

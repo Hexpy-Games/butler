@@ -10,7 +10,7 @@ const previousLocale = getAppLocale();
 beforeAll(() => setAppCopyLanguage("ko-KR"));
 afterAll(() => setAppCopyLanguage(previousLocale));
 
-test("unbound ordinary operations project to one stable 작업 중 activity", () => {
+test("unbound ordinary operations retain stable tool blocks without duplicate phase activity", () => {
   const rows: ProgressRow[] = [
     operationRow({
       id: "operation-1",
@@ -41,20 +41,12 @@ test("unbound ordinary operations project to one stable 작업 중 activity", ()
   const first = projectTurnActivity(rows, "turn-unbound");
   const replay = projectTurnActivity([...rows, ...rows], "turn-unbound");
 
-  expect(first.phaseActivities).toHaveLength(1);
-  expect(first.phaseActivities[0]?.title).toBe("작업 중");
-  expect(first.phaseActivities[0]?.phase).toBeUndefined();
-  expect(first.workBlocks).toHaveLength(0);
-  expect(first.phaseActivities[0]?.id).toBe("turn-unbound-ordinary");
-  expect(first.phaseActivities[0]?.operations.map((row) => row.id)).toEqual([
-    "operation-1",
-    "operation-2",
-  ]);
-  expect(replay.phaseActivities[0]?.id).toBe(first.phaseActivities[0]?.id);
-  expect(replay.phaseActivities[0]?.operations.map((row) => row.id)).toEqual([
-    "operation-1",
-    "operation-2",
-  ]);
+  expect(first.phaseActivities).toHaveLength(0);
+  expect(first.workBlocks).toHaveLength(2);
+  expect(first.workBlocks.flatMap((block) => block.rows.map((row) => row.tool_call_id)))
+    .toEqual(["tool-1", "tool-2"]);
+  expect(replay.workBlocks).toEqual(first.workBlocks);
+
 });
 
 test("an anchored model-authored activity is not replaced by the fallback", () => {

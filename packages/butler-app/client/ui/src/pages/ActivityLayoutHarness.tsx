@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, ConversationShell, Dialog, DialogContent, DialogTitle, Stack } from "@/butler-ds";
+import { completedWorkBlocks } from "@/app/conversation-progress/terminal-activity";
 import { MessageList } from "@/components/conversation/MessageList";
 import { SessionObserverTimeline } from "@/components/layout/SessionObserverTimeline";
 import { ComposerAuthorityDecisionSurface } from "@/components/conversation/ComposerAuthorityDecisionSurface";
@@ -11,9 +12,9 @@ import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses";
 import { appShellTheme } from "@/app/utils";
 import { EMPTY_SETTINGS } from "@/app/constants";
 import { HARNESS_MESSAGES, HARNESS_SS03_OBSERVER_VIEW } from "@/app/fixtures";
-import type { MessageRecord, ProgressRow } from "@/app/types";
+import type { MessageRecord, ProgressRow, SessionView } from "@/app/types";
 
-const rows: ProgressRow[] = [{
+const defaultRows: ProgressRow[] = [{
   id: "activity-layout-read", kind: "message", state: "delivered",
   semantic_block_id: "activity-layout-step", work_decision_source: "model-authored",
   work_decision_summary: "활동 화면 확인", safe_label: "활동 화면 확인",
@@ -42,6 +43,8 @@ const answer = "확인한 활동을 답변과 함께 표시합니다.\n\n".repea
 /** Deterministic stub stream through the product's virtual list and observer renderer. */
 export function ActivityLayoutHarness() {
   useAppLocale();
+  const fixture = (window as Window & { butlerActivityFixture?: SessionView }).butlerActivityFixture;
+  const rows = fixture?.latest_turn?.progress?.safe_progress_rows ?? defaultRows;
   const params = new URLSearchParams(window.location.search);
   const [running, setRunning] = useState(params.get("state") !== "completed");
   const [length, setLength] = useState(16);
@@ -68,7 +71,7 @@ export function ActivityLayoutHarness() {
     id: `activity-layout-${index}`, chat_id: "activity-layout", turn_id: `activity-layout-${index}`,
     status: running ? "streaming" : "delivered", text: count > 1 ? "확인한 활동을 답변과 함께 표시합니다.\n\n".repeat(2) : running ? answer.slice(0, length) : answer,
     created_at: "2026-10-03T00:00:02.000Z", updated_at: "2026-10-03T00:00:09.000Z",
-    turn_activity_rows: rows, work_blocks: undefined, artifacts: [], attachments: [],
+    turn_activity_rows: rows, work_blocks: fixture ? completedWorkBlocks({ state: "delivered", safe_progress_rows: rows }) : undefined, artifacts: [], attachments: [],
   }));
   if (count === 1) messages.unshift({ ...messages[0]!, id: "previous-answer", turn_id: "previous-turn",
     status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined });
