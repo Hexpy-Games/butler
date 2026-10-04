@@ -35,6 +35,7 @@ pub(super) fn coalesce(data: &Path) -> Result<(), HarnessError> {
 }
 
 pub(super) async fn upgrade(s: &mut Scenario) -> Result<(), HarnessError> {
+    settled_sources(&s.sandbox.data).await?;
     s.agent.terminate().await?;
     let before = support::active_rules(&s.sandbox.data);
     let db = butler_platform::sqlite::open(support::graph(&s.sandbox.data))?;
@@ -50,6 +51,38 @@ pub(super) async fn upgrade(s: &mut Scenario) -> Result<(), HarnessError> {
     eprintln!(
         "FTS-PENDING outer_upsert_coalesced=true legacy_trigger_upgraded=true complete_rules_preserved={}",
         before.len()
+    );
+    Ok(())
+}
+
+/// A schema-upgrade restart follows completed extraction. Cancelling a live
+/// provider has its own required terminal-failure contract; do not invoke it
+/// accidentally while asserting that every window here remains error-free.
+async fn settled_sources(data: &Path) -> Result<(), HarnessError> {
+    let canonical = butler_platform::sqlite::open_with_flags(
+        data.join("runtime/conversation-store.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let turns = canonical
+        .prepare("SELECT turn_id FROM conversation_turn_outcomes ORDER BY turn_id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        turns.len(),
+        2,
+        "both instruction-capture turns must be durable"
+    );
+    drop(canonical);
+    support::until(|| {
+        let db = butler_platform::sqlite::open_with_flags(support::graph(data), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let errors: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows WHERE error_code IS NOT NULL", [], |row| row.get(0)).unwrap();
+        assert_eq!(errors, 0, "migration setup must keep all extraction error-free");
+        let complete = turns.iter().all(|turn| db.query_row("SELECT EXISTS(SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision WHERE c.source_key=?1 AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete')", [format!("conversation_turn:{turn}")], |row| row.get::<_, bool>(0)).unwrap());
+        complete && db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_projection_windows WHERE state IN ('pending','running','planned'))", [], |row| row.get::<_, bool>(0)).unwrap()
+    }).await;
+    eprintln!(
+        "FTS-MIGRATION complete_canonical_sources={} active_extractors=0",
+        turns.len()
     );
     Ok(())
 }
