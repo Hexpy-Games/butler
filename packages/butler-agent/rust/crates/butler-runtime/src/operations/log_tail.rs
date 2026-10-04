@@ -37,7 +37,19 @@ impl LogTail {
         reset: impl FnOnce(&mut S),
         line: impl FnMut(&mut S, &[u8]),
     ) {
-        self.advance_rows(path, state, reset, line, false);
+        self.advance_rows(path, state, reset, line, (false, false));
+    }
+
+    /// Shares complete and trailing raw rows with multiple projections. Complete
+    /// rows retain their newline; each projection can apply its own size policy.
+    pub fn advance_with_trailing<S>(
+        &mut self,
+        path: &Path,
+        state: &mut S,
+        reset: impl FnOnce(&mut S),
+        line: impl FnMut(&mut S, &[u8]),
+    ) {
+        self.advance_rows(path, state, reset, line, (true, false));
     }
 
     /// Visits valid JSON rows, including a complete trailing value without a newline.
@@ -61,7 +73,7 @@ impl LogTail {
                     visit(state, &value);
                 }
             },
-            true,
+            (true, true),
         );
     }
 
@@ -71,8 +83,9 @@ impl LogTail {
         state: &mut S,
         reset: impl FnOnce(&mut S),
         mut line: impl FnMut(&mut S, &[u8]),
-        trailing: bool,
+        mode: (bool, bool),
     ) {
+        let (trailing, bounded) = mode;
         let Ok(mut file) = File::open(path) else {
             let replaced = self.offset > 0 || !self.head.is_empty();
             *self = Self::default();
@@ -134,7 +147,14 @@ impl LogTail {
         // after its metadata was observed.
         let capacity = length.saturating_sub(self.offset).clamp(1, 256 * 1024) as usize;
         let mut reader = BufReader::with_capacity(capacity, file);
-        read_rows(&mut reader, &mut self.offset, state, &mut line, trailing);
+        read_rows(
+            &mut reader,
+            &mut self.offset,
+            state,
+            &mut line,
+            trailing,
+            bounded,
+        );
     }
 }
 
@@ -144,6 +164,7 @@ fn read_rows<S>(
     state: &mut S,
     line: &mut impl FnMut(&mut S, &[u8]),
     trailing: bool,
+    bounded: bool,
 ) {
     let mut buffer = Vec::new();
     let mut row_bytes = 0_u64;
@@ -162,7 +183,7 @@ fn read_rows<S>(
         let ended = chunk[end - 1] == b'\n';
         row_bytes += end as u64;
         if !oversized {
-            if trailing
+            if bounded
                 && buffer.len().saturating_add(end) > butler_core::json_lines::MAX_JSON_LINE_BYTES
             {
                 oversized = true;

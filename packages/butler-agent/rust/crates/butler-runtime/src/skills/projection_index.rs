@@ -67,14 +67,17 @@ pub(super) fn read(
         return entry.names.clone();
     }
     let cutoff = prior.filter(|_| reusable).map_or(0, |entry| entry.offset);
-    let names = super::projection::latest_names_since(&path, turn, cutoff).or_else(|| {
+    // The reverse scan already encounters the latest complete line boundary.
+    // Reuse its descriptor and boundary rather than reopening and reading the
+    // transcript a second time. Partial trailing records are still revisited.
+    let (names, offset) = super::projection::latest_names_since(&mut file, size, turn, cutoff)?;
+    let names = names.or_else(|| {
         prior
             .filter(|_| reusable)
             .and_then(|entry| entry.names.clone())
     });
     // A partial last record must be revisited on append, including a complete
     // JSON value that has not yet acquired its newline.
-    let offset = last_boundary(&mut file, size)?;
     let saved_anchor = anchor(&mut file, offset)?;
     *entry = Some(Entry {
         turn: turn.map(str::to_owned),
@@ -93,19 +96,4 @@ fn anchor(file: &mut File, end: u64) -> Option<Vec<u8>> {
     let mut bytes = vec![0; usize::try_from(end - start).ok()?];
     file.read_exact(&mut bytes).ok()?;
     Some(bytes)
-}
-fn last_boundary(file: &mut File, size: u64) -> Option<u64> {
-    let mut end = size;
-    let mut bytes = vec![0; 32 * 1024];
-    while end > 0 {
-        let start = end.saturating_sub(bytes.len() as u64);
-        let count = usize::try_from(end - start).ok()?;
-        file.seek(SeekFrom::Start(start)).ok()?;
-        file.read_exact(&mut bytes[..count]).ok()?;
-        if let Some(index) = bytes[..count].iter().rposition(|byte| *byte == b'\n') {
-            return Some(start + index as u64 + 1);
-        }
-        end = start;
-    }
-    Some(0)
 }

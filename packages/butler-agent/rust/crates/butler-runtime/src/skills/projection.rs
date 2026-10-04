@@ -3,7 +3,6 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{Read, Seek, SeekFrom},
-    path::Path,
     sync::OnceLock,
 };
 
@@ -16,15 +15,17 @@ use butler_core::public_text::trim_js_whitespace;
 const MAX_SKILL_NAMES: usize = 48;
 
 pub(super) fn latest_names_since(
-    path: &Path,
+    file: &mut File,
+    length: u64,
     turn: Option<&str>,
     cutoff: u64,
-) -> Option<Vec<String>> {
-    let mut file = File::open(path).ok()?;
-    let mut remaining = file.metadata().ok()?.len();
+) -> Option<(Option<Vec<String>>, u64)> {
+    let mut remaining = length;
+    let mut boundary = cutoff;
     let mut fragments = Fragments::default();
     let mut ended_with_newline = false;
-    let mut chunk = vec![0_u8; 32 * 1024];
+    let capacity = length.saturating_sub(cutoff).clamp(1, 32 * 1024) as usize;
+    let mut chunk = vec![0_u8; capacity];
     while remaining > cutoff {
         let count =
             usize::try_from((remaining - cutoff).min(chunk.len() as u64)).unwrap_or(usize::MAX);
@@ -33,9 +34,10 @@ pub(super) fn latest_names_since(
         file.read_exact(&mut chunk[..count]).ok()?;
         let mut end = count;
         while let Some(newline) = memchr::memrchr(b'\n', &chunk[..end]) {
+            boundary = boundary.max(remaining + newline as u64 + 1);
             let limit = MAX_JSON_LINE_BYTES - usize::from(ended_with_newline);
             if let Some(names) = fragments.names(&chunk[newline + 1..end], limit, turn) {
-                return Some(names);
+                return Some((Some(names), boundary));
             }
             fragments = Fragments::default();
             ended_with_newline = true;
@@ -46,11 +48,12 @@ pub(super) fn latest_names_since(
             MAX_JSON_LINE_BYTES - usize::from(ended_with_newline),
         );
     }
-    fragments.names(
+    let names = fragments.names(
         &[],
         MAX_JSON_LINE_BYTES - usize::from(ended_with_newline),
         turn,
-    )
+    );
+    Some((names, boundary))
 }
 
 #[derive(Default)]

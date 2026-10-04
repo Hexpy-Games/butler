@@ -13,6 +13,7 @@ struct Tokens {
 }
 #[derive(Default)]
 pub(super) struct Index {
+    #[cfg(test)]
     prompt_tail: LogTail,
     monitor_tail: LogTail,
     prompts: HashMap<Key, Tokens>,
@@ -21,6 +22,7 @@ pub(super) struct Index {
     ordinal: u64,
 }
 impl Index {
+    #[cfg(test)]
     pub(super) fn refresh(&mut self, root: &Path) {
         let mut prompt = std::mem::take(&mut self.prompt_tail);
         prompt.advance_json(
@@ -30,6 +32,10 @@ impl Index {
             Self::fold_prompt,
         );
         self.prompt_tail = prompt;
+        self.refresh_monitor(root);
+    }
+
+    fn refresh_monitor(&mut self, root: &Path) {
         let mut monitor = std::mem::take(&mut self.monitor_tail);
         monitor.advance_json(
             &root.join("metrics/context-monitor.jsonl"),
@@ -41,7 +47,9 @@ impl Index {
     }
     pub(super) fn open(root: &Path) -> Self {
         let mut index = Self::default();
-        index.refresh(root);
+        // The usage owner supplies prompt rows from the same descriptor and
+        // cursor at initialization and on every subsequent fresh read.
+        index.refresh_monitor(root);
         if let Ok(files) = std::fs::read_dir(root.join("context/compactions")) {
             for entry in files.flatten() {
                 if entry
@@ -56,8 +64,35 @@ impl Index {
         }
         index
     }
+    #[cfg(test)]
     pub(super) fn read(&mut self, root: &Path, query: &AppContextReadQuery) -> Telemetry {
         self.refresh(root);
+        self.current(root, query)
+    }
+
+    pub(super) fn reset_prompt(&mut self) {
+        self.prompts.clear();
+    }
+
+    pub(super) fn fold_prompt_row(&mut self, row: &[u8]) {
+        let row = row.strip_suffix(b"\n").unwrap_or(row);
+        if row.len() <= butler_core::json_lines::MAX_JSON_LINE_BYTES
+            && let Ok(value) = serde_json::from_slice(row)
+        {
+            self.fold_prompt(&value);
+        }
+    }
+
+    pub(super) fn read_shared_prompt(
+        &mut self,
+        root: &Path,
+        query: &AppContextReadQuery,
+    ) -> Telemetry {
+        self.refresh_monitor(root);
+        self.current(root, query)
+    }
+
+    fn current(&mut self, root: &Path, query: &AppContextReadQuery) -> Telemetry {
         let scope = format!("btcc-guided:{}", query.runtime_session_id);
         let exact = query
             .turn_id

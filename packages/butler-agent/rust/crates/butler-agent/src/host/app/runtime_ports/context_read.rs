@@ -54,9 +54,18 @@ impl AppContextRead {
         let root = data_root.clone();
         let catalog = budget.catalog().clone();
         let (telemetry, usage) = tokio::task::spawn_blocking(move || {
-            let telemetry = telemetry::Index::open(&root);
+            let mut telemetry = telemetry::Index::open(&root);
             let mut usage = SessionUsageIndex::default();
-            usage.read(&root, "", &|model| catalog.pricing(model));
+            usage.read_with_rows(
+                &root,
+                "",
+                &|model| catalog.pricing(model),
+                &mut telemetry,
+                (
+                    telemetry::Index::reset_prompt,
+                    telemetry::Index::fold_prompt_row,
+                ),
+            );
             (telemetry, usage)
         })
         .await
@@ -163,10 +172,19 @@ async fn read_telemetry(
 ) -> Result<(Telemetry, SessionUsage), GatewayApplicationError> {
     tokio::task::spawn_blocking(move || {
         let pricing = |model: &str| catalog.pricing(model);
-        let session = usage
-            .lock()
-            .read(&root, &query.runtime_session_id, &pricing);
-        (telemetry.lock().read(&root, &query), session)
+        let mut usage = usage.lock();
+        let mut telemetry = telemetry.lock();
+        let session = usage.read_with_rows(
+            &root,
+            &query.runtime_session_id,
+            &pricing,
+            &mut *telemetry,
+            (
+                telemetry::Index::reset_prompt,
+                telemetry::Index::fold_prompt_row,
+            ),
+        );
+        (telemetry.read_shared_prompt(&root, &query), session)
     })
     .await
     .map_err(GatewayApplicationError::internal_from)
