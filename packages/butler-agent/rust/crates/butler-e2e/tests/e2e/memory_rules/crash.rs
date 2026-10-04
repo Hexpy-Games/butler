@@ -4,6 +4,7 @@ use butler_e2e::e2e::{
     HarnessError,
     scenario::{Fixture, Setup, accepted_turn_id},
 };
+use futures_util::{StreamExt, TryStreamExt};
 use serde_json::json;
 use std::time::Duration;
 
@@ -11,9 +12,11 @@ use std::time::Duration;
 async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for stage in [
+    let stages = [
         "intent", "archive", "source", "graph", "index", "notice", "receipt",
-    ] {
+    ];
+    let completed = futures_util::stream::iter(stages)
+        .map(|stage| async move {
         // The two scenarios have independent homes, providers, agents and databases.
         // Run both within the same overall test deadline; preserve all 14 cases.
         let case = |tool_name: &'static str| async move {
@@ -205,7 +208,14 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             case("update_explicit_memory"),
             case("forget_explicit_memory")
         )?;
-    }
+        Ok::<(), HarnessError>(())
+        })
+        // Four independent Agents bound native resource use while overlapping
+        // service start/recovery waits. All seven stages and both tools remain.
+        .buffer_unordered(2)
+        .try_collect::<Vec<_>>()
+        .await?;
+    assert_eq!(completed.len(), stages.len());
     Ok(())
 }
 
