@@ -11,4 +11,9 @@ impl ProjectionOwner {
             }
         })
     }
+    pub(in crate::gateway::application) fn settlement_listener(
+        &self,
+    ) -> crate::gateway::InboundSettlementListener {
+        notifications::settlement_listener(&self.inner)
+    }
 }

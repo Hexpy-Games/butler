@@ -139,12 +139,6 @@ impl ProjectionOwner {
             .map_err(GatewayApplicationError::internal_from)
     }
 
-    pub(in crate::gateway::application) fn settlement_listener(
-        &self,
-    ) -> crate::gateway::InboundSettlementListener {
-        notifications::settlement_listener(&self.inner)
-    }
-
     #[cfg(test)]
     pub(in crate::gateway::application) async fn pause_for_burst(&self) -> oneshot::Sender<()> {
         lock(&self.inner.watcher).take();
