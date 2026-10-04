@@ -93,6 +93,17 @@ async fn reasoning_only_response_and_todo_updates_continue() -> Result<(), Harne
                 .iter()
                 .any(|m| m["role"] == "assistant" && m["text"] == "The total is 42.")
         );
+        if matches!(mode, stub::Mode::Todo) {
+            let records =
+                std::fs::read_dir(s.sandbox.data.join("todos"))?.collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(records.len(), 1, "TODO must be an ordinary record file");
+            let todo: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(records[0].path())?)?;
+            assert!(todo["list_id"].as_str().unwrap().ends_with(":main"));
+            assert_eq!(todo["items"].as_array().unwrap().len(), 1);
+            assert_eq!(todo["items"][0]["content"], "Calculate total");
+            assert_eq!(todo["items"][0]["status"], "completed");
+        }
         s.finish().await?;
         server.abort();
     }

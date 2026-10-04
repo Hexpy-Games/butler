@@ -172,6 +172,31 @@ pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     dunce::canonicalize(path)
 }
 
+pub(super) fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    let stem = key.split('.').next().unwrap_or(key).to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+            })
+        });
+    if !device
+        && !key.starts_with('~')
+        && !key.ends_with(['.', ' '])
+        && !key
+            .chars()
+            .any(|c| c.is_control() || "<>:\"/\\|?*".contains(c))
+    {
+        return std::borrow::Cow::Borrowed(key);
+    }
+    let mut encoded = String::from("~");
+    for byte in key.as_bytes() {
+        use std::fmt::Write;
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    std::borrow::Cow::Owned(encoded)
+}
+
 pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     let from = move_path(from)?;
     let to = move_path(to)?;

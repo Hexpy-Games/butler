@@ -50,8 +50,8 @@ impl Store {
             (None, None) => list_id(requested, &scope.turn_id)?,
         };
         safe_id(&id, 80)?;
-        let record = read_object(&self.root.join("todos").join(format!("{id}.json")))?
-            .unwrap_or_else(|| {
+        let record =
+            read_object(&self.root.join("todos").join(record_name(&id)))?.unwrap_or_else(|| {
                 json!({"version":1,"list_id":id,"title":null,
                 "created_at":"1970-01-01T00:00:00.000Z",
                 "updated_at":"1970-01-01T00:00:00.000Z","items":[]})

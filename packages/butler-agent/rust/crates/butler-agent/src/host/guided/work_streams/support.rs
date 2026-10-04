@@ -405,6 +405,9 @@ pub(super) fn array(source: Option<&Value>, key: &str) -> Value {
         .cloned()
         .unwrap_or_else(|| json!([]))
 }
+pub(super) fn record_name(id: &str) -> String {
+    format!("{}.json", butler_platform::secure_fs::record_key(id))
+}
 pub(super) fn read_object(path: &Path) -> Result<Option<Value>, BtccError> {
     match fs::read(path) {
         Ok(bytes) => Ok(serde_json::from_slice::<Value>(&bytes).ok()),
