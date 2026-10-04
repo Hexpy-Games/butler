@@ -24,7 +24,7 @@ if (!$Path) {
     if (!$Path) {
         $saved = Join-Path (Split-Path $PackageRoot -Parent) 'logs'
         $folders = Get-ChildItem -LiteralPath $saved -Directory -ErrorAction SilentlyContinue |
-            Sort-Object Name -Descending
+            Sort-Object CreationTimeUtc -Descending
         foreach ($folder in $folders) {
             if (@(Find-Diagnostics $folder.FullName).Count) { $Path = $folder.FullName; break }
         }
