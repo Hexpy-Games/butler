@@ -212,6 +212,7 @@ impl AppApplication {
         &self,
         session: &mut AppSessionSummary,
     ) -> Result<(), GatewayApplicationError> {
+        let _measurement = self.storage.measure_view("skills");
         session.skills_used = self
             .dependencies
             .skills

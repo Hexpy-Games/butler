@@ -12,13 +12,44 @@ use std::{
 pub(in crate::gateway::application) struct Metrics {
     pub(in crate::gateway::application) commits: AtomicU64,
     operations: Mutex<Vec<u64>>,
+    view_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
     busy: AtomicU64,
 }
+pub(in crate::gateway::application) struct ViewMeasurement {
+    metrics: std::sync::Arc<Metrics>,
+    name: &'static str,
+    start: std::time::Instant,
+}
+impl Drop for ViewMeasurement {
+    fn drop(&mut self) {
+        self.metrics.view_phase(self.name, self.start.elapsed());
+    }
+}
+pub(super) fn view_measurement(
+    metrics: std::sync::Arc<Metrics>,
+    name: &'static str,
+) -> Option<ViewMeasurement> {
+    enabled().then(|| ViewMeasurement {
+        metrics,
+        name,
+        start: std::time::Instant::now(),
+    })
+}
+
 impl Metrics {
     pub(super) fn operation(&self, elapsed: Duration) {
         if enabled() {
             self.operations
                 .lock()
+                .push(u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX));
+        }
+    }
+    pub(super) fn view_phase(&self, name: &'static str, elapsed: Duration) {
+        if enabled() {
+            self.view_phases
+                .lock()
+                .entry(name)
+                .or_default()
                 .push(u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX));
         }
     }
@@ -53,7 +84,7 @@ impl Metrics {
                 histogram[index] += 1;
             }
         }
-        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"histogram_upper_us":bounds,"histogram_counts":histogram});
+        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"view_phase_us":*self.view_phases.lock(),"histogram_upper_us":bounds,"histogram_counts":histogram});
         std::fs::write(database.with_extension("metrics.json"), value.to_string()).map_err(
             |error| {
                 AppStorageError::new(

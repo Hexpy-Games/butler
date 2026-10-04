@@ -208,6 +208,12 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let before_graph = signature(&graph);
     let before_wal = signature(&PathBuf::from(format!("{}-wal", graph.display())));
     let before_lock = signature(&lock);
+    // An unrelated filesystem miss must not turn an empty child list into an OS error.
+    let absent = s.sandbox.root.join("absent-for-child-count");
+    assert_eq!(
+        std::fs::metadata(absent).unwrap_err().kind(),
+        std::io::ErrorKind::NotFound
+    );
     let memory_workers_before = butler_platform::process_names::child_count(
         s.agent.pid().unwrap(),
         butler_platform::process_names::Role::Memory,

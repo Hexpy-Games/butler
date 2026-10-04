@@ -57,6 +57,9 @@ struct LaneState {
 }
 
 impl AppStorage {
+    pub(super) fn measure_view(&self, name: &'static str) -> Option<metrics::ViewMeasurement> {
+        metrics::view_measurement(self.inner.metrics.clone(), name)
+    }
     pub(super) async fn open(
         path: PathBuf,
         butler_data: Option<PathBuf>,

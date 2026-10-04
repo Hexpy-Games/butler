@@ -7,7 +7,7 @@ use std::io;
 /// # Errors
 /// Returns process-query errors, including an unavailable parent process.
 pub fn child_count(parent: u32, role: Role) -> io::Result<usize> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
         let parent = Pid::from_u32(parent);
@@ -33,7 +33,7 @@ pub fn child_count(parent: u32, role: Role) -> io::Result<usize> {
             })
             .count())
     }
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
         let mut count = 0;
         for pid in children(parent)? {
@@ -71,10 +71,4 @@ fn children(parent: u32) -> io::Result<std::collections::HashSet<u32>> {
         }
     }
     Ok(children)
-}
-#[cfg(target_os = "macos")]
-fn children(parent: u32) -> io::Result<Vec<u32>> {
-    libproc::processes::pids_by_type(libproc::processes::ProcFilter::ByParentProcess {
-        ppid: parent,
-    })
 }

@@ -8,6 +8,7 @@ pub(super) async fn read(
     messages: &[MessageRecord],
     active: Option<&str>,
 ) -> Result<(Value, Value, Value), GatewayApplicationError> {
+    let _measurement = app.storage.measure_view("questions");
     let mut turns: Vec<String> = messages.iter().filter_map(|m| m.turn_id.clone()).collect();
     turns.extend(active.map(str::to_owned));
     turns.extend(

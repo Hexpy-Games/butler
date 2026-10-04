@@ -38,6 +38,7 @@ impl AppApplication {
         session: super::AppSessionSummary,
         records: records::Records,
     ) -> Result<ContextDetails, GatewayApplicationError> {
+        let _measurement = self.storage.measure_view("context");
         let latest_turn = &records.latest_turn;
         let controls = &records.controls;
         let latest_started = latest_turn.as_ref().and_then(|turn| {

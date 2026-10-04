@@ -14,7 +14,9 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
     for stage in [
         "intent", "archive", "source", "graph", "index", "notice", "receipt",
     ] {
-        for tool_name in ["update_explicit_memory", "forget_explicit_memory"] {
+        // The two scenarios have independent homes, providers, agents and databases.
+        // Run both within the same overall test deadline; preserve all 14 cases.
+        let case = |tool_name: &'static str| async move {
             let setup = Setup::new(&format!("RULES-CRASH-{stage}-{tool_name}"))?
                 .fixture(Fixture::Empty)
                 .stub_cassette(forget::stub()?)
@@ -165,7 +167,12 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 "RULES-CRASH stage={stage} tool={tool_name} applied_once=true active_and_followup_delivered=true admission_while_leased=true"
             );
             s.finish().await?;
-        }
+            Ok::<(), HarnessError>(())
+        };
+        tokio::try_join!(
+            case("update_explicit_memory"),
+            case("forget_explicit_memory")
+        )?;
     }
     Ok(())
 }

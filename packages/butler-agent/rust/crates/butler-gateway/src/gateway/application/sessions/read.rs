@@ -4,6 +4,7 @@ use serde_json::Value;
 use super::{AppStorageError, contracts::*, json_error};
 use crate::gateway::application::message_visibility::owner_visible;
 use crate::gateway::application::storage::AppStorageCode;
+use crate::gateway::application::storage::CachedSql;
 use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct WorkspaceProject {
@@ -49,16 +50,19 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
     owner_visible!(),
     r"
    ORDER BY m.rowid DESC LIMIT 1) AS last_message_preview,
- (SELECT t.state FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS active_turn_state,
- (SELECT t.safe_status_label FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_label,
- (SELECT t.safe_status_label_parameters_json FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_label_parameters_json,
- (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
- (SELECT t.safe_error_code FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS active_turn_safe_error_code,
- (SELECT t.id FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS latest_turn_id,
+ t.state AS active_turn_state,
+ t.safe_status_label,
+ t.safe_status_label_parameters_json,
+ t.safe_status_content_json,
+ t.safe_error_code AS active_turn_safe_error_code,
+ t.id AS latest_turn_id,
  c.pinned,c.archived,
  (SELECT COUNT(*) FROM app_automations a WHERE a.target_session_id=c.id AND a.state!='deleted'),
  (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name
 FROM chats c
+LEFT JOIN turns t ON t.rowid=(
+ SELECT latest.rowid FROM turns latest WHERE latest.chat_id=c.id ORDER BY latest.rowid DESC LIMIT 1
+)
 "
 );
 
@@ -110,14 +114,14 @@ pub(in crate::gateway::application) fn session(
 ) -> Result<AppSessionSummary, AppStorageError> {
     let sql = format!("{SESSION_SELECT} WHERE c.id=?1");
     let row = db
-        .query_row(&sql, [id], session_row)
+        .query_row_cached(&sql, [id], session_row)
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| {
             AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found.")
         })?;
     let mut summary = project(row)?;
-    let seed: Option<String> = db.query_row(
+    let seed: Option<String> = db.query_row_cached(
         "SELECT seed_json FROM app_session_branches WHERE target_session_id=?1 AND state='ready'",
         [id], |row| row.get(0),
     ).optional().map_err(AppStorageError::sqlite)?;

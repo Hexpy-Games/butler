@@ -376,6 +376,7 @@ async fn instruction_capture_never_waits_for_an_active_owner_transaction()
 }
 
 async fn reset(s: &Scenario, route: &str) -> Result<(), HarnessError> {
+    eprintln!("INSTRUCTION-RESET route={route} started");
     let summary = s.gw.post("/memory/inventory/check", json!({})).await?;
     assert_eq!(summary.status, 200, "{}", summary.text);
     let id = uuid::Uuid::new_v4().to_string();
@@ -397,7 +398,8 @@ async fn reset(s: &Scenario, route: &str) -> Result<(), HarnessError> {
         }
     })
     .await
-    .unwrap()?;
+    .expect("accepted instruction reset did not complete within its original 90s deadline")?;
+    eprintln!("INSTRUCTION-RESET route={route} complete");
     Ok(())
 }
 

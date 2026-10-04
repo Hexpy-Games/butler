@@ -1,6 +1,7 @@
 //! Future-only conversation reset by staging the shared graph's surviving projection.
 mod cache;
 mod retirement;
+mod settlement;
 mod survivors;
 mod vectors;
 use super::{MemoryGenerationHandle, ProjectionMode, resolve_active_generation, swap};
@@ -113,13 +114,29 @@ pub(crate) async fn run(
     result.phase = "complete".into();
     result.sequence += 1;
     result.removal_pending = true;
+    settlement::test_gate(&root, &token).await?;
     let binding = (root.clone(), paths.clone(), result.clone());
-    let writer = coordinator.clone();
-    tokio::task::spawn_blocking(move || save_leased(&binding.0, &binding.1, &writer, &binding.2))
-        .await
-        .map_err(io::Error::other)??;
+    save_completion(binding, coordinator.clone(), token.clone()).await?;
     retirement::retire(root, paths, coordinator, result.clone(), token);
     Ok(result)
+}
+
+// The cutover releases its lease before the durable completion receipt. A
+// source consumer may acquire it in between; settlement waits under the existing
+// coordinator budget rather than abandoning the accepted reset as preparing.
+async fn save_completion(
+    binding: (PathBuf, CognitionPathEnvironment, ResetResult),
+    coordinator: Arc<CognitionWriteCoordinator>,
+    token: CancellationToken,
+) -> io::Result<()> {
+    let lease = acquire(&binding.0, &binding.1, &coordinator, &token).await?;
+    tokio::task::spawn_blocking(move || {
+        let saved = check(&token).and_then(|()| save(&binding.0, &binding.1, &binding.2));
+        lease.release(saved.is_ok()).map_err(io::Error::other)?;
+        saved
+    })
+    .await
+    .map_err(io::Error::other)?
 }
 
 fn failed_phase(result: &ResetResult, token: &CancellationToken) -> &'static str {

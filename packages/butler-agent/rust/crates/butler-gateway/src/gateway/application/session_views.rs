@@ -319,6 +319,7 @@ impl AppApplication {
     /// The session's steward and worker children; empty (with a diagnostic)
     /// when they cannot be read, so the rest of the view still renders.
     async fn parent_subsessions(&self, session_id: &str) -> Value {
+        let _measurement = self.storage.measure_view("children");
         let projection = self
             .dependencies
             .subsessions
@@ -360,6 +361,7 @@ impl AppApplication {
         &self,
         session: &super::AppSessionSummary,
     ) -> Result<Value, GatewayApplicationError> {
+        let _measurement = self.storage.measure_view("branch");
         let project_workspace_path = self
             .project_workspace_path(session.project_id.clone())
             .await?;
@@ -379,6 +381,7 @@ impl AppApplication {
         session: &super::AppSessionSummary,
         current_turn_id: Option<String>,
     ) -> Result<Value, GatewayApplicationError> {
+        let _measurement = self.storage.measure_view("work_streams");
         self.dependencies
             .work_streams
             .list_active(AppWorkStreamQuery {

@@ -22,6 +22,7 @@ pub(super) async fn read(
     id: String,
     page: AppSessionViewPage,
 ) -> Result<Snapshot, GatewayApplicationError> {
+    let _measurement = app.storage.measure_view("snapshot");
     let facts = app.dependencies.settings_facts.snapshot()?;
     let subscribers = app.subscribers.clone();
     let now = app.dependencies.identity_clock.now_iso();

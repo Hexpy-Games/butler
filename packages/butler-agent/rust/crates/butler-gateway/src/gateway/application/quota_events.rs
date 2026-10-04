@@ -69,7 +69,9 @@ async fn poll_while_connected(application: AppApplication, cancel: CancellationT
                 () = application.subscribers.listeners_changed() => {},
             }
         }
-        let mut ticks = tokio::time::interval(POLL_TICK);
+        // Connecting a listener must not add a zero-time poll before response headers.
+        let mut ticks =
+            tokio::time::interval_at(tokio::time::Instant::now() + POLL_TICK, POLL_TICK);
         ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
         while application.subscribers.listener_count() != 0 {
             tokio::select! {
