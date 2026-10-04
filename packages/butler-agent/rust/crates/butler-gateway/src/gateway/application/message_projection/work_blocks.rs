@@ -27,7 +27,7 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
             let Some(id) = truthy_owned(row, "work_block_id") else {
                 continue;
             };
-            let index = ensure_block(&mut blocks, row, &id, true);
+            let index = ensure_block(&mut blocks, &mut current, row, &id, true);
             add_row(&mut blocks[index], row);
             current = Some(id);
             continue;
@@ -55,7 +55,8 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
         {
             continue;
         }
-        let index = existing.unwrap_or_else(|| ensure_block(&mut blocks, row, &id, false));
+        let index =
+            existing.unwrap_or_else(|| ensure_block(&mut blocks, &mut current, row, &id, false));
         if blocks[index].closed || current.as_deref().is_some_and(|value| value != id) {
             continue;
         }
@@ -149,13 +150,27 @@ fn order(value: &Value) -> f64 {
         .or_else(|| number(row, "safe_order"))
         .unwrap_or(f64::INFINITY)
 }
-fn ensure_block(blocks: &mut Vec<Block>, row: &Map<String, Value>, id: &str, carry: bool) -> usize {
+fn ensure_block(
+    blocks: &mut Vec<Block>,
+    current: &mut Option<String>,
+    row: &Map<String, Value>,
+    id: &str,
+    carry: bool,
+) -> usize {
     if let Some(index) = blocks
         .iter()
         .position(|block| string(&block.value, "id") == Some(id))
     {
         return index;
     }
+    if let Some(open) = current.take()
+        && let Some(block) = blocks
+            .iter_mut()
+            .find(|block| string(&block.value, "id") == Some(&open))
+    {
+        block.closed = true;
+    }
+    *current = Some(id.to_owned());
     blocks.push(Block {
         value: block_value(row, id, carry),
         rows: Vec::new(),
