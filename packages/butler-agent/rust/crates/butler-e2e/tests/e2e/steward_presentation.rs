@@ -73,6 +73,61 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     Ok(())
 }
 
+pub(super) async fn unfinished_disposition_delivers_failure() -> Result<(), HarnessError> {
+    use std::sync::atomic::Ordering;
+    let (url, script, server) = stub::start().await?;
+    script.open_disposition.store(true, Ordering::SeqCst);
+    script.release.notify_one();
+    let setup = setup("STEWARD-OPEN-DISPOSITION", &url).await?;
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(setup.sandbox.data.join(name), name)?;
+    }
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let child = loop {
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let child = &view.data()["steward_children"][0];
+        if child["result"].is_object() {
+            break child.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Open disposition lost its parent result: {view:?}\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(child["result"]["status"], "failed", "{child}");
+    assert!(
+        child["result"]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("could not complete")
+    );
+    assert_eq!(
+        child["approved_plan_completed"], 1,
+        "Unfinished actions remain unfinished"
+    );
+    loop {
+        let messages = s.gw.messages("general").await?;
+        if messages.iter().any(|message| {
+            message["text"] == "Delegated work could not complete; progress remains saved."
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Failed child result never reached the parent: {messages:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 async fn wait_held_tool(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(20);
     let marker = s.sandbox.data.join("e2e-held-tool");

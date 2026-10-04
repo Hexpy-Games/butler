@@ -399,21 +399,25 @@ async fn complete_subsession_child(
                 super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
-    let (content, work_status) = match &outcome.result {
-        TurnOutcomeKind::Delivered(value) => (value.content.as_str(), value.work_status),
-        TurnOutcomeKind::AlreadyDelivered(value) => (value.content.as_str(), value.work_status),
+    let (content, work_status, runtime_failed) = match &outcome.result {
+        TurnOutcomeKind::Delivered(value) => (
+            value.content.as_str(),
+            value.work_status,
+            value.runtime_failure.is_some(),
+        ),
+        TurnOutcomeKind::AlreadyDelivered(value) => (
+            value.content.as_str(),
+            value.work_status,
+            value.runtime_failure.is_some(),
+        ),
         _ => return Ok(()),
     };
-    let status = match work_status {
-        Some(WorkStatus::Completed) => "success",
-        Some(WorkStatus::Blocked) => "blocked",
-        Some(WorkStatus::Abandoned) => "failed",
-        _ => {
-            return Err(super::IngressError::new(
-                "subsession_work_incomplete",
-                "Subsession Work is not terminal",
-            ));
-        }
+    // A settled Turn always owes its parent a result. Open Work is retained
+    // for recovery, but a limit/failure report must not leave delegation active.
+    let status = match (runtime_failed, work_status) {
+        (false, Some(WorkStatus::Completed)) => "success",
+        (false, Some(WorkStatus::Blocked)) => "blocked",
+        _ => "failed",
     };
     subsessions
         .complete_child(session_id, turn_id, status, content.to_owned())

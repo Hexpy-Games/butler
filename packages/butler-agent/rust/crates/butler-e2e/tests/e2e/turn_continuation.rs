@@ -72,6 +72,7 @@ async fn checkpoint_open_disposition_and_progress_continue_until_work_is_done()
     );
     s.finish().await?;
     server.abort();
+    super::steward_presentation::unfinished_disposition_delivers_failure().await?;
     Ok(())
 }
 #[tokio::test]

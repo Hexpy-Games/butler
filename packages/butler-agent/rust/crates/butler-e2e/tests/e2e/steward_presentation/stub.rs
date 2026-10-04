@@ -4,7 +4,10 @@ use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
 use std::{
     fmt::Write,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tokio::sync::Notify;
 
@@ -13,6 +16,7 @@ pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 
 #[derive(Default)]
 pub(super) struct Script {
+    pub open_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
     pub relation: Mutex<String>,
     pub workspace: Mutex<String>,
@@ -73,6 +77,10 @@ async fn reply(
         } else {
             message("Direction delivered.")
         }
+    } else if key.user_request.contains("Delegated result")
+        && script.open_disposition.load(Ordering::SeqCst)
+    {
+        message("Delegated work could not complete; progress remains saved.")
     } else if key.user_request.contains("Delegated result") {
         message("Approach B verified.")
     } else {
@@ -119,6 +127,12 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             "read-b",
             "read_file",
             &json!({"requests":[{"path":path("b.txt") }]}),
+        ),
+        6 if script.open_disposition.load(Ordering::SeqCst) => call(
+            "close-open",
+            "record_work_disposition",
+            &json!({"work_id":work_id(body),"disposition":"open","summary":"Comparison remains unfinished",
+                "action_updates":[],"remaining_actions":["compare"],"next_condition":"Continue comparing approaches","followups":[]}),
         ),
         6 => call(
             "close",
