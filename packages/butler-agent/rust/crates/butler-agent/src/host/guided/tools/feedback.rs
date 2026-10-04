@@ -107,10 +107,13 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
         }
         _ => error.message(),
     };
-    JsonDocument::from_value(&json!({"ok":false,"error":{
+    let mut value = json!({"ok":false,"error":{
         "code":error.code(),"message":message,"recoverable":true
-    }}))
-    .map_err(|source| {
+    }});
+    if error.code().starts_with("effect_") {
+        value["error"]["next_action"] = repair(error.code()).into();
+    }
+    JsonDocument::from_value(&value).map_err(|source| {
         ToolExecutionError::Integrity(
             BtccError::relayed(
                 "guided_tool_result_json",
@@ -119,4 +122,19 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             .with_source(source),
         )
     })
+}
+
+/// Model-owned contract repair must happen before retrying in this same turn.
+pub(super) fn repair(code: &str) -> &'static str {
+    match code {
+        "effect_work_required" => {
+            "Call start_work, then replace_work_plan with the intended effect action, then record_work_review(subject=plan, verdict=accept), and retry this tool in the same turn. Runtime handles approval."
+        }
+        "effect_action_not_found" | "effect_action_ambiguous" | "effect_request_invalid" => {
+            "Call replace_work_plan: declare exactly one action.effect matching required_effect.capability and required_effect.target (or correct the invalid effect input), then record_work_review(subject=plan, verdict=accept) for the new revision and retry this tool in the same turn. Preserve completed actions. Runtime handles approval."
+        }
+        _ => {
+            "Call replace_work_plan with this tool's effect action, then record_work_review(subject=plan, verdict=accept) for the current revision and retry this tool in the same turn. Preserve completed actions. Runtime handles approval."
+        }
+    }
 }

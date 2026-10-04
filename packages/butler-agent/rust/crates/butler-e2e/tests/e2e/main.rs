@@ -16,6 +16,7 @@ mod cli_surface;
 mod credential_store;
 mod credentials;
 mod default_model;
+mod downloads_live;
 mod durable_configuration;
 mod durable_files;
 mod embed_download;

@@ -45,12 +45,12 @@ pub(super) async fn execute(
     encoded(&result.map_err(ToolExecutionError::Integrity)?)
 }
 
-enum Gate {
+pub(in crate::host::guided::tools) enum Gate {
     Pending(Value),
     Allowed(Option<String>),
 }
 
-async fn gate(
+pub(in crate::host::guided::tools) async fn gate(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     occurrence: &str,
@@ -98,11 +98,18 @@ async fn gate(
             action_key: occurrence.into(),
             authority_generation: 1,
             capability: call.name.clone(),
-            target: format!("file-observation:{}", call.name),
+            target: format!("observation:{}", call.name),
             normalized_input: args.clone(),
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
-            category: Some("file_observation".into()),
+            category: Some(
+                if call.name == "run_command" {
+                    "command_observation"
+                } else {
+                    "file_observation"
+                }
+                .into(),
+            ),
             public_action_title: Some(call.name.clone()),
         })
         .await

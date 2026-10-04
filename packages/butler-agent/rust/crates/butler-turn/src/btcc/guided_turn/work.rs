@@ -127,7 +127,8 @@ pub async fn load_guided_turn_work(
         ));
     }
     // Questions and file observations resume the exact tool occurrence without a Work.
-    let stored = stored.filter(|execution| requires_work(&execution.capability));
+    let stored = stored
+        .filter(|e| !crate::btcc::authority::is_observation(&e.capability, &e.normalized_input));
     if let Some(execution) = stored.as_ref() {
         if execution.source_session_id != scope.session_id
             || execution.source_turn_id != scope.turn_id
@@ -165,11 +166,4 @@ pub async fn load_guided_turn_work(
         ));
     }
     Ok(initial)
-}
-
-fn requires_work(capability: &str) -> bool {
-    !matches!(
-        capability,
-        "ask_user" | "read_file" | "list_files" | "grep_files"
-    )
 }

@@ -65,7 +65,7 @@ async fn replay(
             "$path=Join-Path $env:USERPROFILE 'Downloads';",
         )
     };
-    let (url, script, server) = provider::start(&command, false).await?;
+    let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.root.join("local");
     let roaming = setup.sandbox.root.join("roaming");
     std::fs::create_dir_all(&local)?;
@@ -220,7 +220,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
     );
     let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
     let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskFirst);
-    let (url, script, server) = provider::start(command, false).await?;
+    let (url, script, server) = provider::start(command).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)
         .env("BUTLER_CODEX_BASE_URL", url)

@@ -48,13 +48,7 @@ pub(super) fn decide(
             },
         ));
     }
-    if !matches!(
-        current.capability.as_str(),
-        "ask_user" | "read_file" | "list_files" | "grep_files"
-    ) && !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)?
-    {
-        return Err(AuthorityError::policy("authority_request_not_found"));
-    }
+    ensure_work(repository, &current)?;
     let permission = if action == AuthorityAction::Allow
         && input.allow_scope.as_deref() == Some("conversation")
     {
@@ -156,4 +150,19 @@ fn alternative_input(
     } else {
         Ok(None)
     }
+}
+
+fn ensure_work(
+    repository: &mut dyn AuthorityRepository,
+    current: &AuthorityRecord,
+) -> AuthorityResult<()> {
+    let observation = serde_json::from_str(&current.normalized_input_json)
+        .ok()
+        .is_some_and(|v| super::is_observation(&current.capability, &v));
+    if !observation
+        && !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)?
+    {
+        return Err(AuthorityError::policy("authority_request_not_found"));
+    }
+    Ok(())
 }

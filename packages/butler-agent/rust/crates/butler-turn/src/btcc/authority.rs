@@ -22,3 +22,15 @@ pub(crate) use contracts::{
 mod question_validation;
 #[cfg(test)]
 mod tests;
+
+/// Observations do not need a declared persistent Plan effect.
+pub(crate) fn is_observation(capability: &str, input: &serde_json::Value) -> bool {
+    matches!(
+        capability,
+        "ask_user" | "read_file" | "list_files" | "grep_files"
+    ) || (capability == "run_command"
+        && matches!(
+            input.get("state_effect").and_then(serde_json::Value::as_str),
+            Some("read_only" | "validation")
+        ))
+}

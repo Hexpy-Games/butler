@@ -44,7 +44,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
     );
     let refused = protected == Some("credentials");
     let (url, script, server) =
-        provider::start(&command, access == Access::AskFirst && !refused).await?;
+        provider::start(&command).await?;
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
     std::fs::create_dir_all(&local)?;
@@ -70,24 +70,13 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let requests = script.requests.lock().unwrap().clone();
-    if access == Access::AskFirst && !refused {
-        let feedback = provider::outputs(&requests[1])
-            .into_iter()
-            .find(|v| v["error"].is_object())
-            .expect("recoverable policy feedback");
-        assert_eq!(
-            feedback["error"]["code"], "effect_work_required",
-            "{feedback}"
-        );
-        assert_eq!(feedback["error"]["recoverable"], true);
-        assert!(
-            feedback["error"]["next_action"]
-                .as_str()
-                .unwrap()
-                .contains("Runtime handles approval")
-        );
-        eprintln!("OBSERVATION preflight feedback: {}", feedback["error"]);
-    }
+    assert!(
+        !requests
+            .iter()
+            .flat_map(provider::outputs)
+            .any(|v| v["error"].is_object()),
+        "read-only observation never requires Work/Plan effect repair"
+    );
     let output = requests
         .iter()
         .rev()

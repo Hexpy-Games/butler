@@ -1,6 +1,6 @@
 //! Invoke the concrete domain owner; the caller owns occurrence and result journaling.
 
-mod file_observation;
+pub(super) mod file_observation;
 mod mcp;
 mod project;
 mod publication;

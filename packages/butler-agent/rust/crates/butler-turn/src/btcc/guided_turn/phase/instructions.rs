@@ -55,5 +55,6 @@ pub(super) fn prefix(
             .join("; ");
         value = value.replace("__GUIDED_MUTATION_SCOPE__", &scope);
     }
+    value.push_str("\nRead-only observations never need a declared persistent Plan effect. If a tool returns recoverable effect-contract feedback, follow next_action and required_effect to amend and review the Plan, then retry in this same turn; do not abandon the task or ask the user to repair runtime policy.\nFor a broad request to organize an existing personal folder, first inspect its top-level entries read-only, report total files and folders and complete counts by type (including hidden entries), and propose concrete destination folders. Ask for confirmation of that specific move plan before moving, renaming or deleting files, even in full access. An explicitly approved move plan may proceed.\n");
     Ok(value)
 }

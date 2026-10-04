@@ -170,7 +170,7 @@ pub(super) fn list_decided(db: &Connection) -> AuthorityResult<Vec<AuthorityReco
             "{ROW} WHERE decision IN ('allowed','denied','modified') \
         AND ((source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
-        AND (capability IN ('ask_user','read_file','list_files','grep_files') OR EXISTS (SELECT 1 FROM btcc_guided_works work \
+        AND (capability IN ('ask_user','read_file','list_files','grep_files') OR (capability = 'run_command' AND source_work_id = '' AND json_extract(normalized_input_json, '$.state_effect') IN ('read_only','validation')) OR EXISTS (SELECT 1 FROM btcc_guided_works work \
         WHERE work.work_id=btcc_authority_requests.source_work_id \
         AND work.session_id=btcc_authority_requests.source_session_id \
         AND work.status IN ('open','blocked')))) OR (capability='ask_user' AND outcome='pending' AND outcome_receipt_json IS NOT NULL)) AND close_reason IS NULL ORDER BY updated_at ASC"
