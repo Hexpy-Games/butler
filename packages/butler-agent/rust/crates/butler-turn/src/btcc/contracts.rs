@@ -286,11 +286,12 @@ pub struct AcceptedWorkResult {
     pub status: AcceptedWorkStatus,
 }
 
-/// Why a delivered turn is still executing elsewhere.
+/// An explicit execution outcome carried by a delivered result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionOutcome {
     WaitingForWorker,
+    Failed,
 }
 
 /// The model a turn asked for, the one that answered, and what the provider reported.

@@ -128,10 +128,7 @@ pub(super) async fn finish_limit(
         state.tool_results.len(),
     );
     let mut result = finish(input, state, Ending::Answer(&content)).await?;
-    result.runtime_failure = Some(crate::btcc::RuntimeFailure {
-        code: "turn_continuation_limit_reached".into(),
-        retryable: false,
-    });
+    result.terminal_outcome = Some(crate::btcc::TerminalOutcome::Failed);
     Ok(result)
 }
 

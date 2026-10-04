@@ -399,18 +399,22 @@ async fn complete_subsession_child(
                 super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
-    let (content, runtime_failed) = match &outcome.result {
-        TurnOutcomeKind::Delivered(value) => {
-            (value.content.as_str(), value.runtime_failure.is_some())
-        }
-        TurnOutcomeKind::AlreadyDelivered(value) => {
-            (value.content.as_str(), value.runtime_failure.is_some())
-        }
+    let (content, failed) = match &outcome.result {
+        TurnOutcomeKind::Delivered(value) => (
+            value.content.as_str(),
+            value.runtime_failure.is_some()
+                || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+        ),
+        TurnOutcomeKind::AlreadyDelivered(value) => (
+            value.content.as_str(),
+            value.runtime_failure.is_some()
+                || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+        ),
         _ => return Ok(()),
     };
     // Result delivery and Work disposition are independent. Keep unfinished
-    // Work intact; only an actual runtime failure makes a delivered result fail.
-    let status = if runtime_failed { "failed" } else { "success" };
+    // Work intact; only an explicit failure makes a delivered result fail.
+    let status = if failed { "failed" } else { "success" };
     subsessions
         .complete_child(session_id, turn_id, status, content.to_owned())
         .await

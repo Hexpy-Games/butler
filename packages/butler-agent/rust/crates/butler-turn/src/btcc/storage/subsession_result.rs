@@ -14,6 +14,7 @@ pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
     let status = if payload
         .get("runtimeFailure")
         .is_some_and(|value| !value.is_null())
+        || payload["executionOutcome"] == "failed"
     {
         "failed"
     } else {
