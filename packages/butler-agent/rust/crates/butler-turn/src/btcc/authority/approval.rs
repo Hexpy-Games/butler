@@ -379,7 +379,8 @@ fn workspace_label(workspace: &str) -> String {
 /// that is absolute outside the workspace, or climbs out of it, returns None.
 fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     let path = Path::new(path);
-    let relative = if path.is_absolute() {
+    // Persisted approval paths may use a rooted spelling without this host's drive prefix.
+    let relative = if path.has_root() {
         match path.strip_prefix(workspace) {
             Ok(inner) => inner,
             Err(_) => return None,

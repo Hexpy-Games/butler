@@ -80,7 +80,7 @@ try {
     & "$PSScriptRoot/protocol-snapshot.ps1" -Output "$root/after.json"
     $after = Get-Content "$root/after.json" -Raw
     foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key]) }
-    python -c "import shutil,sys;shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1])" $root
+    python -c "import shutil,sys,os,stat;shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1],onexc=lambda f,p,e:(os.chmod(p,stat.S_IWRITE),f(p)))" $root
     if ($LASTEXITCODE -ne 0) { throw 'Test profile cleanup failed' }
     if ($before -cne $after) { throw 'Owner protocol registration changed' }
     Write-Output 'Test agent stopped; isolated profile removed; protocol registration unchanged'
