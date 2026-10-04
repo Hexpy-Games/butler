@@ -94,8 +94,11 @@ async fn q_02_cancel_pauses_the_queue_until_the_next_input() -> Result<(), Harne
     assert_eq!(view["queued_messages"].as_array().map(Vec::len), Some(1));
     assert_eq!(s.gw.turns("general").await?.len(), 1, "queue continued");
 
-    send(&s, "/messages", RESUMED).await?;
     let deadline = Instant::now() + Duration::from_secs(120);
+    // This message is accepted behind PAUSED, so the helper must follow its
+    // exact queued client identity rather than assume an immediate turn ID.
+    let (resumed_id, resumed) = s.turn("general", RESUMED).await?;
+    assert_eq!(turn_state(&resumed), "delivered", "{resumed}");
     loop {
         let turns = s.gw.turns("general").await?;
         let settled = turns
@@ -108,6 +111,9 @@ async fn q_02_cancel_pauses_the_queue_until_the_next_input() -> Result<(), Harne
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
     let messages = s.gw.messages("general").await?;
+    assert!(messages.iter().any(|message| {
+        message["role"] == "user" && message["text"] == RESUMED && message["turn_id"] == resumed_id
+    }));
     let texts = |role: &str| -> Vec<String> {
         messages
             .iter()

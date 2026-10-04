@@ -116,9 +116,9 @@ pub(crate) fn graph(data: &Path) -> std::path::PathBuf {
 }
 
 pub(crate) async fn projection(data: &Path, rule: &Value) {
-    use rusqlite::{Connection, OpenFlags};
+    use rusqlite::OpenFlags;
     until(|| {
-        let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let db = butler_platform::sqlite::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         let windows: Vec<(String, Option<String>)> = db.prepare("SELECT state,error_code FROM memory_projection_windows").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
         assert!(!windows.iter().any(|(_, error)| error.is_some()), "projection failed: {windows:?}");
         db.query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE c.source_key=?1 AND c.current_revision=?2 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", rusqlite::params![format!("explicit_record:{}",rule["record_id"].as_str().unwrap()),rule["revision"].as_str().unwrap()], |row| row.get::<_, i64>(0)).unwrap() > 0
@@ -221,9 +221,9 @@ pub(crate) async fn new_chat(s: &Scenario, title: &str) -> Result<String, Harnes
 }
 
 pub(crate) async fn vectors(data: &Path) {
-    use rusqlite::{Connection, OpenFlags};
+    use rusqlite::OpenFlags;
     until(|| {
-        let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let db = butler_platform::sqlite::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         db.query_row("SELECT EXISTS(SELECT 1 FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE c.status='active' AND u.state='complete') AND NOT EXISTS(SELECT 1 FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE c.status='active' AND u.state IN ('pending','running','failed'))", [], |row| row.get::<_, bool>(0)).unwrap()
     }).await;
 }
@@ -264,9 +264,9 @@ pub(crate) fn instruction_section(request: &Value) -> String {
 
 /// Wait for the post-restart public turn's complete vector receipt, not elapsed time.
 pub(crate) async fn conversation_vectors(data: &Path, turn: &str) {
-    use rusqlite::{Connection, OpenFlags};
+    use rusqlite::OpenFlags;
     until(|| {
-        let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let db = butler_platform::sqlite::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         db.query_row("SELECT EXISTS(SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision WHERE c.source_key=?1 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.episode_vectors_state,'$.state')='complete' AND json_extract(j.episode_vectors_state,'$.completed_units')=json_extract(j.episode_vectors_state,'$.total_units') AND json_extract(j.episode_vectors_state,'$.total_units')>0)", [format!("conversation_turn:{turn}")], |row| row.get::<_, bool>(0)).unwrap()
     }).await;
 }
@@ -291,8 +291,10 @@ pub(crate) fn historical(cassette: &mut Cassette) {
 
 /// Complete identities of retained graph records; lifecycle must change sources only.
 pub(crate) fn retained_graph_rows(data: &Path) -> Vec<Vec<String>> {
-    use rusqlite::{Connection, OpenFlags};
-    let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    use rusqlite::OpenFlags;
+    let db =
+        butler_platform::sqlite::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
     [
         "SELECT id FROM memory_nodes ORDER BY id",
         "SELECT node_id||':'||source_id FROM memory_evidence ORDER BY node_id,source_id",

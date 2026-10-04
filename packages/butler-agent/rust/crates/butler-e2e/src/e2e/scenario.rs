@@ -459,18 +459,9 @@ impl Scenario {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
-
-    /// Sends `text` to `chat` and waits for a terminal state.
-    pub async fn turn(&self, chat: &str, text: &str) -> Result<(String, Value), HarnessError> {
-        let accepted = self.gw.say(chat, text).await?;
-        let turn_id = accepted_turn_id(&accepted)?;
-        let turn = self
-            .gw
-            .wait_terminal(chat, &turn_id, Duration::from_secs(turn_timeout()))
-            .await?;
-        Ok((turn_id, turn))
-    }
 }
+
+mod acceptance;
 
 /// The settings that select `choice` (model and reasoning effort).
 fn model_settings(choice: &ModelChoice) -> Value {
