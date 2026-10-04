@@ -3,11 +3,11 @@ if (!$CsvPath) { $CsvPath = Join-Path $PackageRoot 'diag.csv' }
 $ErrorActionPreference = 'Stop'
 function Find-Diagnostics([string]$Root) {
     if (!$Root) { return }
-    $direct = foreach ($relative in @('request-prefix-diagnostics.jsonl', 'metrics/request-prefix-diagnostics.jsonl',
+    $direct = @(foreach ($relative in @('request-prefix-diagnostics.jsonl', 'metrics/request-prefix-diagnostics.jsonl',
         'data-metrics/request-prefix-diagnostics.jsonl')) {
         Get-Item -LiteralPath (Join-Path $Root $relative) -ErrorAction SilentlyContinue
-    }
-    if (@($direct).Count) { return $direct }
+    })
+    if ($direct.Count) { return $direct }
     Get-ChildItem -LiteralPath $Root -Filter request-prefix-diagnostics.jsonl -File -Recurse -ErrorAction SilentlyContinue
 }
 if (!$Path) {
