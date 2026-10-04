@@ -427,7 +427,7 @@ pub(super) fn write_atomic(path: &Path, value: &Value) -> Result<(), BtccError> 
         .map_err(|source| error("work_stream_record_invalid").with_source(source))?;
     bytes.push(b'\n');
     fs::write(&temp, bytes).map_err(io_error)?;
-    fs::rename(temp, path).map_err(io_error)
+    butler_platform::secure_fs::rename(&temp, path).map_err(io_error)
 }
 pub(super) fn error(code: &'static str) -> BtccError {
     failure(code, code)
