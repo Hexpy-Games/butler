@@ -1,3 +1,4 @@
+import { lifecycleCopy } from "../lifecycle.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
@@ -239,6 +240,7 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
+  lifecycle: lifecycleCopy.en,
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",

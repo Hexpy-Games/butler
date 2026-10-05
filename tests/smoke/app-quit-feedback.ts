@@ -39,11 +39,11 @@ async function launch() {
     }
   });
   application = app;
-  await app.firstWindow();
+  await app.firstWindow({ timeout: 30_000 });
   await waitFor(async () => {
     try { return (await fixture.api("/runtime-readiness")).btcc_executor_ready === true; } catch { return false; }
   }, "Agent not ready", 30_000);
-  await waitFor(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((window) => window.isVisible() && !window.webContents.getURL().startsWith("data:"))), "main window not visible", 30_000);
+  await waitFor(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((window) => window.isVisible() && !window.webContents.getURL().includes("/lifecycle/lifecycle.html"))), "main window not visible", 30_000);
   return app;
 }
 
@@ -57,27 +57,27 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
   let slowStatus = "";
   const released = lock ? new Promise<void>((done, fail) => setTimeout(() => {
     void app.evaluate(async ({ BrowserWindow }) => {
-      const surface = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().startsWith("data:"));
-      return surface ? await surface.webContents.executeJavaScript("document.querySelector('[role=status]').textContent") as string : "";
+      const surface = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().includes("/lifecycle/lifecycle.html"));
+      return surface ? await surface.webContents.executeJavaScript("document.querySelector('[data-slot=caption]').textContent") as string : "";
     }).then((status) => { slowStatus = status; }, fail).finally(() => {
       lock.exec("ROLLBACK"); lock.close(); done();
     });
-  }, 7000)) : Promise.resolve();
-  const timing = await app.evaluate(({ BrowserWindow }) => {
+  }, 15_500)) : Promise.resolve();
+  const timing = await app.evaluate(({ BrowserWindow, app }) => {
     const start = performance.now();
     const main = BrowserWindow.getAllWindows().find((win) => win.isVisible())!;
-    const feedback = BrowserWindow.getAllWindows().find((win) => win !== main && win.getTitle().includes("Butler"));
     return new Promise<{ hidden_ms: number; feedback_ms: number; status: string }>((done) => {
       let hidden = -1;
-      main.once("hide", () => { hidden = performance.now() - start; });
-      feedback?.once("show", () => {
-        const feedbackShown = performance.now() - start;
-        void feedback.webContents.executeJavaScript("document.querySelector('[role=status]').textContent").then((status: string) => {
-          done({ hidden_ms: hidden, feedback_ms: feedbackShown, status });
+      let shown = -1;
+      let status = "";
+      const complete = () => { if (hidden >= 0 && shown >= 0 && status) done({ hidden_ms: hidden, feedback_ms: shown, status }); };
+      main.once("hide", () => { hidden = performance.now() - start; complete(); });
+      app.once("browser-window-created", (_event, feedback) => {
+        feedback.once("show", () => {
+          shown = performance.now() - start;
+          void feedback.webContents.executeJavaScript("document.querySelector('[role=status]').textContent").then((text: string) => { status = text; complete(); });
         });
       });
-      if (!feedback) main.once("closed", () => done({ hidden_ms: performance.now() - start, feedback_ms: -1, status: "baseline" }));
-      // Exercise the real IPC Quit entry after installing visibility observers.
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");
     });
   });
@@ -92,7 +92,7 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
     assert.equal(fixture.lastExit().graceful, true);
     assert.equal(fixture.lastExit().port_released, true);
     assert.equal(fixture.lastExit().process_tree_dead, true);
-    if (holdStorage) assert(/예상보다 오래|longer than expected/u.test(slowStatus), slowStatus);
+    if (holdStorage) assert(/평소보다 오래|longer than usual/u.test(slowStatus), slowStatus);
   }
   console.log(JSON.stringify({ scenario: baseline ? "before" : "after", blocked: holdStorage, quit_to_exit_ms: total, ...timing }));
   console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));

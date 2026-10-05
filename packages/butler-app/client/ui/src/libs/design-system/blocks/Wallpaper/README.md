@@ -224,3 +224,5 @@ in the container (settings, project preferences, agent tools).
 ## Tags
 
 wallpaper, background, shader, webgl, theme, new-chat, dashboard
+
+`renderWallpaperStill` is public. Lifecycle sizes can specify compositionWidth, pixelRatio, contentRect, dayPhase and imageLoader; ordinary picker stills keep their existing defaults.

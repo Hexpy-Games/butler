@@ -35,3 +35,5 @@ import { Box, Stack } from "@/butler-ds";
 
 ## Tags
 layout, surface, padding, border, radius
+
+Use `surface="raised-opaque" elevation="card" border="hairline" radius="panel" padding="lg"` for the setup solid card.

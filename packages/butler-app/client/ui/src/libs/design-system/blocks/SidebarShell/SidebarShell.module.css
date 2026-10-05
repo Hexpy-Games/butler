@@ -67,7 +67,7 @@
 }
 
 @media (width <= 640px) {
-  .shell {
+  .shell:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     width: 100%;
     flex-basis: 100%;
     padding: var(--safe-area-top)
@@ -245,11 +245,11 @@
 }
 
 @media (width <= 640px) {
-  .brand {
+  .brand:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     --typo-app-title-size: var(--font-size-6);
   }
 
-  .trafficSpace {
+  .trafficSpace:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     width: 0;
   }
 }

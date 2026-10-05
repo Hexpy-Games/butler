@@ -1,1 +1,2 @@
-export function lifecycleWindowHtml(title: string, status: string): string;
+export function lifecycleDist(): string;
+export function createLifecycleWindow(options: Record<string, unknown>): { window: unknown; update(state: Record<string, unknown>): void; destroy(): void };

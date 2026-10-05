@@ -1,54 +1,48 @@
 import { createLifecycleWindow } from "./lifecycle-window.mjs";
-import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
+import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
+import { startupTiming, startupTimings } from "./startup-window.mjs";
 
-// Same budget as the service's stop grace. Exceeding it changes copy only.
-export const QUIT_BUDGET_MS = 6000;
-
-export function createQuitFeedback(BrowserWindow, language = "en") {
-  const copy = getDesktopCopy(language);
-  const surface = createLifecycleWindow({ BrowserWindow, title: copy.quitting, status: copy.quitSaving });
-  let started = null;
-  let timer = null;
-  let exceeded = false;
-  let step = copy.quitSaving;
+export const QUIT_BUDGET_MS = 15_000;
+export function createQuitFeedback(BrowserWindow, language = "en", diagnostics = () => ({})) {
+  let surface;
+  let started;
+  let timer;
+  let hideTimer;
   const pending = new Map();
-  const publish = () => surface.status(exceeded ? `${copy.quitSlow} ${step}` : step);
+  let state = { kind: "quit", stage: "saving", state: "working", forceQuit: false };
   return {
     begin(mainWindow) {
-      if (started !== null) return;
-      started = performance.now();
-      mainWindow?.hide();
-      trace("main_hidden", started);
-      surface.show();
-      timer = setTimeout(() => { exceeded = true; publish(); trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
+      if (started !== undefined) return;
+      started = performance.now(); startupTiming("quit_start");
+      const hideMain = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); trace("main_hidden", started); };
+      surface = createLifecycleWindow({ BrowserWindow, kind: "quit", locale: language,
+        bounds: mainWindow?.getBounds(), timing: startupTiming,
+        onPainted() { clearTimeout(hideTimer); trace("window_shown", started); startupTiming("quit_shown"); hideMain(); },
+        onAction(action) { if (action === "log") return openLifecycleLog(state, startupTimings(), diagnostics()); },
+      });
+      hideTimer = setTimeout(hideMain, 300);
+      timer = setTimeout(() => { state.state = "timeout"; surface.update(state); trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
     },
     phase(phase, edge = "event") {
-      if (started === null) return;
+      if (!surface) return;
       if (edge === "begin") pending.set(phase, (pending.get(phase) ?? 0) + 1);
       if (edge === "end") {
         const count = (pending.get(phase) ?? 1) - 1;
         if (count) pending.set(phase, count); else pending.delete(phase);
       }
       const active = [...pending.keys()];
-      if (active.includes("turn_drain") || active.includes("app_projection_join")) step = copy.quitSaving;
-      else if (active.some((item) => item.includes("stor") || item === "transcript_close")) step = copy.quitStorage;
-      else if (active.some((item) => item.includes("embedding"))) step = copy.quitEmbedding;
-      else if (active.includes("runtime_close")) step = copy.quitServices;
-      else if (active.some((item) => item.startsWith("app_") || item === "control_close")) step = copy.quitConnections;
-      else if (phase === "port_release") step = copy.quitFinishing;
-      publish();
+      if (active.includes("turn_drain") || active.includes("app_projection_join")) state.stage = "saving";
+      else if (active.some((item) => item.includes("stor") || item === "transcript_close")) state.stage = "storage";
+      else if (active.some((item) => item.includes("embedding"))) state.stage = "search";
+      else if (active.includes("runtime_close")) state.stage = "services";
+      else if (active.some((item) => item.startsWith("app_") || item === "control_close")) state.stage = "connections";
+      else if (phase === "port_release") state.stage = "finishing";
+      surface.update(state);
     },
-    failed() {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      exceeded = false;
-      step = copy.quitFailed;
-      publish();
-    },
-    destroy() { if (timer) clearTimeout(timer); surface.destroy(); },
+    failed() { clearTimeout(timer); state.state = "failed"; surface?.update(state); },
+    destroy() { clearTimeout(timer); clearTimeout(hideTimer); surface?.destroy(); startupTiming("quit_end"); },
   };
 }
-
 function trace(phase, started) {
   console.error(`[desktop-quit] elapsed_ms=${(performance.now() - started).toFixed(3)} phase=${phase}`);
 }

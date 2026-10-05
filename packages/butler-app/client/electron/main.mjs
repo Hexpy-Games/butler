@@ -1,3 +1,4 @@
+import { installLifecycleStillBridge } from "./lifecycle-still.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import {
   app,
@@ -261,6 +262,7 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
+installLifecycleStillBridge(() => mainWindow);
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
@@ -572,6 +574,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
+  if (startupPending()) { failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -2172,12 +2175,12 @@ async function createWindow() {
     event.preventDefault();
     openExternalUrl(url);
   });
-  startupStage("renderer");
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
   startupTiming("renderer_loaded");
+  startupStage("data");
   if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
-    startupStage("migration");
+    startupStage("upgrade");
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {
       scheduleTrayMenuRefresh();
@@ -2191,7 +2194,7 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
-  startupStage("renderer");
+  startupStage("data");
   await firstDataPaint;
   if (!completeStartup(win, !suppressInitialWindowForLogin)) return win;
   recordAppStartupProgress("window_ready", { windowReady: true });
@@ -2675,7 +2678,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ logs: exportStartupDiagnostics });
+      configureStartupActions({ retry: () => bundledAgentSupervisor.stop({ wait: true, reason: "startup_retry" }), diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -2720,9 +2723,8 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   // Visible feedback precedes any I/O. The Agent owns shutdown interruption
   // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
-  mainWindow?.hide();
   if (app.isReady() && !isMenuBarHelperProcess) {
-    quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage);
+    quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage, () => bundledAgentSupervisor.diagnostics());
     quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
@@ -2993,8 +2995,8 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") startupStage("agent");
-  if (stage === "agent_ready") startupStage("renderer");
+  if (stage === "agent_starting") startupStage("service");
+  if (stage === "agent_ready") startupStage("screen");
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
@@ -3107,11 +3109,4 @@ function openExternalUrl(value) {
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
   void shell.openExternal(url.toString());
   return true;
-}
-
-async function exportStartupDiagnostics(timings) {
-  const result = await dialog.showSaveDialog({ defaultPath: "butler-startup-diagnostics.json" });
-  if (result.canceled || !result.filePath) return;
-  const diagnostics = await firstRunSetupBridge.diagnostics();
-  await writeFile(result.filePath, JSON.stringify({ ...diagnostics, runtime: readFirstRunRuntimeDiagnostics(), timings }, null, 2), { mode: 0o600 });
 }

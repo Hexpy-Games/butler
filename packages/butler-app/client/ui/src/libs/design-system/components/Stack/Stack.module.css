@@ -140,25 +140,46 @@
 
 /* Phone-width gap (compactGap). */
 @media (width <= 640px) {
-  .stack[data-compact-gap="none"] {
+  .stack[data-compact-gap="none"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-none);
   }
-  .stack[data-compact-gap="xs"] {
+  .stack[data-compact-gap="xs"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-xs);
   }
-  .stack[data-compact-gap="sm"] {
+  .stack[data-compact-gap="sm"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-sm);
   }
-  .stack[data-compact-gap="md"] {
+  .stack[data-compact-gap="md"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-md);
   }
-  .stack[data-compact-gap="lg"] {
+  .stack[data-compact-gap="lg"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-lg);
   }
-  .stack[data-compact-gap="xl"] {
+  .stack[data-compact-gap="xl"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-xl);
   }
-  .stack[data-compact-gap="2xl"] {
+  .stack[data-compact-gap="2xl"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     gap: var(--space-2xl);
   }
 }

@@ -1,76 +1,113 @@
 #!/usr/bin/env node
-// Run outside the sandbox against a built executable; never the installed owner app.
+// Direct launches in disposable profiles. No installed owner app or shell registration.
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { once } from "node:events";
 
-const executable = process.argv[2];
-if (!executable) throw new Error("Usage: node measure-startup.mjs /path/to/built/Butler.app/Contents/MacOS/Butler");
+const args = process.argv.slice(2);
+const executable = args[0];
+if (!executable) throw new Error("Usage: measure-startup.mjs <built executable> [--runs 5] [--json file] [--electron-root directory]");
+const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
+const runs = Number(option("--runs", "5"));
+if (!Number.isInteger(runs) || runs < 1) throw new Error("--runs must be a positive integer");
 const root = mkdtempSync(join(tmpdir(), "butler-startup-timings-"));
-for (const directory of ["home", "data", "profile"]) mkdirSync(join(root, directory));
-
+const samples = [];
 async function freePort() {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
+  const server = createServer(); server.listen(0, "127.0.0.1"); await once(server, "listening");
   const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
+  await new Promise((done) => server.close(done)); return port;
 }
-
-async function measure(label) {
+function profile(label) {
+  const directory = join(root, label);
+  for (const name of ["home", "data", "profile", "appdata", "local", "temp"]) mkdirSync(join(directory, name), { recursive: true });
+  return { HOME: join(directory, "home"), USERPROFILE: join(directory, "home"),
+    APPDATA: join(directory, "appdata"), LOCALAPPDATA: join(directory, "local"), TEMP: join(directory, "temp"), TMP: join(directory, "temp"),
+    BUTLER_DATA: join(directory, "data"), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(directory, "profile"),
+    BUTLER_APP_SERVER_DB: join(directory, "data/app-server/butler-client.sqlite") };
+}
+function launchArgs(extra = []) {
+  const entry = option("--electron-root");
+  return [...(process.env.BUTLER_SMOKE_BROWSER_ARGS ? JSON.parse(process.env.BUTLER_SMOKE_BROWSER_ARGS) : []),
+    ...(entry ? [resolve(entry)] : basename(executable).toLowerCase() === "update.exe" ? ["--processStart", "Butler.exe"] : []), ...extra];
+}
+async function measure(mode, run, env) {
   const port = await freePort();
   const requested = Date.now();
-  const child = spawn(resolve(executable), [], { stdio: ["ignore", "pipe", "pipe"], env: {
-    ...process.env, HOME: join(root, "home"), BUTLER_DATA: join(root, "data"),
-    BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
-    BUTLER_APP_SERVER_DB: join(root, "data/app-server/butler-client.sqlite"),
-    BUTLER_APP_SERVER_PORT: String(port), BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`,
-    BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
-  } });
+  const environment = { ...process.env, ...env, BUTLER_APP_SERVER_PORT: String(port),
+    BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`, BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
+    BUTLER_SECRET_STORE: "file", BUTLER_PLATFORM_SYSTEM_SECRETS: "0" };
+  const child = spawn(resolve(executable), launchArgs(), { shell: false, stdio: ["ignore", "pipe", "pipe"], env: environment });
   const events = [];
-  let lineBuffer = "";
+  let pending = "";
   let stopping = false;
+  let forcedStop = false;
   let hardStop;
+  let signal;
   const stop = () => {
     if (stopping) return;
     stopping = true;
-    child.kill("SIGTERM");
-    hardStop = setTimeout(() => child.kill("SIGKILL"), 15_000);
+    signal = spawn(resolve(executable), launchArgs(["--butler-quit-main-ui"]), { shell: false, stdio: "ignore", env: environment });
+    signal.on("error", () => {});
+    hardStop = setTimeout(() => {
+      forcedStop = true;
+      if (process.platform === "win32") {
+        const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", shell: false });
+        killer.on("error", () => {});
+      } else child.kill("SIGKILL");
+    }, 15_000);
   };
-  // Existing startup budget plus graceful shutdown; only this child is signalled.
   const deadline = setTimeout(stop, 150_000);
-  const onInterrupt = () => stop();
-  process.once("SIGINT", onInterrupt);
-  child.stderr.resume(); // Do not print raw logs: they can contain private paths.
+  process.once("SIGINT", stop);
+  child.stderr.resume();
   child.stdout.on("data", (chunk) => {
-    lineBuffer += chunk.toString();
-    const lines = lineBuffer.split("\n");
-    lineBuffer = lines.pop();
+    const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
     for (const line of lines) {
       try {
         const event = JSON.parse(line).startup;
-        if (!event) continue;
-        events.push(event);
-        if (["window_ready", "failed"].includes(event.stage)) stop();
-      } catch { /* Ignore non-timing stdout. */ }
+        if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
+      } catch { /* No general app logs in timing evidence. */ }
     }
   });
   try { await once(child, "exit"); }
-  finally { clearTimeout(deadline); clearTimeout(hardStop); process.removeListener("SIGINT", onInterrupt); }
-  console.log(`\n${label}: fresh process${label === "cold-profile" ? ", fresh profile" : ", reused profile"}`);
-  console.table(events.map((event) => ({ event: event.stage, process_ms: event.elapsed_ms,
-    launch_request_ms: event.timestamp_ms === null ? null : Number((event.timestamp_ms - requested).toFixed(3)), timestamp_ms: event.timestamp_ms })));
-  if (!events.some((event) => event.stage === "window_ready")) throw new Error(`${label}: main window did not become ready`);
-  const ready = events.find((event) => event.stage === "app_ready");
-  if (ready?.elapsed_ms > 1000) console.log("Electron pre-ready exceeds 1 s: evaluate the native pre-splash proposal in STARTUP.md.");
+  finally { clearTimeout(deadline); clearTimeout(hardStop); process.removeListener("SIGINT", stop); }
+  if (signal && signal.exitCode === null && signal.signalCode === null) await once(signal, "exit");
+  const elapsed = (name) => events.find((event) => event.stage === name)?.elapsed_ms;
+  if (!events.some((event) => event.stage === "window_ready")) throw new Error(`${mode}/${run}: main window did not become ready`);
+  if (forcedStop) throw new Error(`${mode}/${run}: forced_stop`);
+  const metrics = Object.fromEntries(events.filter((event) => event.elapsed_ms !== null).map((event) => [event.stage, event.elapsed_ms]));
+  metrics.splash_after_ready = elapsed("splash_painted") - elapsed("app_ready");
+  for (const stage of ["prepare", "service", "screen", "upgrade", "data"]) {
+    const start = elapsed(`stage_${stage}_start`), end = elapsed(`stage_${stage}_end`);
+    if (start !== undefined && end !== undefined) metrics[`interval_${stage}`] = end - start;
+  }
+  samples.push({ mode, run, launchKind: basename(executable).toLowerCase() === "update.exe" ? "squirrel-update" : /app-[^/\\]+[/\\]/.test(executable) ? "squirrel-direct" : "direct-or-stub", forcedStop, metrics,
+    events: events.map((event) => ({ ...event, launch_request_ms: event.timestamp_ms - requested })) });
+  console.log(JSON.stringify({ mode, run, splash_after_ready: metrics.splash_after_ready }));
 }
-
+function report() {
+  const rows = [];
+  for (const mode of ["cold", "warm"]) {
+    const selected = samples.filter((sample) => sample.mode === mode);
+    const names = new Set(selected.flatMap((sample) => Object.keys(sample.metrics)));
+    for (const event of names) {
+      const values = selected.map((sample) => sample.metrics[event]).filter(Number.isFinite).sort((a, b) => a - b);
+      const median = values.length % 2 ? values[Math.floor(values.length / 2)] : (values[values.length / 2 - 1] + values[values.length / 2]) / 2;
+      rows.push({ mode, event, samples: values.length, median_ms: Number(median.toFixed(3)), p95_ms: Number(values[Math.ceil(values.length * 0.95) - 1].toFixed(3)) });
+    }
+  }
+  console.table(rows);
+  const output = option("--json");
+  if (output) writeFileSync(resolve(output), JSON.stringify({ runs, samples, summary: rows }, null, 2));
+  if (rows.some((row) => row.event === "splash_after_ready" && row.p95_ms > 300)) throw new Error("splash_painted − app_ready exceeds 300 ms");
+  if (rows.some((row) => row.event === "app_ready" && row.median_ms > 1000)) console.log("Electron pre-ready p50 exceeds 1 s; evaluate native pre-splash.");
+}
 try {
-  await measure("cold-profile");
-  await measure("warm-profile");
-  console.log("Direct executable launch. OS disk-cache coldness and Gatekeeper/Finder verification are NOT measured or bypassed.");
+  for (let run = 1; run <= runs; run++) await measure("cold", run, profile(`cold-${run}`));
+  const warm = profile(`cold-${runs}`);
+  for (let run = 1; run <= runs; run++) await measure("warm", run, warm);
+  report();
+  console.log("Direct launch; Gatekeeper/Finder and cold OS disk cache are not measured.");
 } finally { rmSync(root, { recursive: true, force: true }); }

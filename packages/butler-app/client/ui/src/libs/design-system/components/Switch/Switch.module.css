@@ -58,7 +58,19 @@
   }
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .switch:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    position: relative;
+  }
+
+  .switch:not([data-viewport="desktop"], [data-viewport="desktop"] *)::after {
+    position: absolute;
+    inset: calc((var(--control-hit-target) - 100%) / -2);
+    content: "";
+  }
+}
+
+@media (pointer: coarse) {
   .switch {
     position: relative;
   }

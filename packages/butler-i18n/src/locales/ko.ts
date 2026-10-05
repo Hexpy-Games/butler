@@ -1,3 +1,4 @@
+import { lifecycleCopy } from "../lifecycle.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
 /** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
@@ -239,6 +240,7 @@ function koreanProjectFallbackSuggestions(
 }
 
 export const koKrCopy: AppCopy = {
+  lifecycle: lifecycleCopy.ko,
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",

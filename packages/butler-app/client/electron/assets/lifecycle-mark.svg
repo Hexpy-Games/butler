@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" stroke="currentColor" aria-hidden="true" focusable="false" viewBox="0 0 1200 1200">
-      <path
-        d="M600 600 L300 464 A329.43 329.43 0 0 0 300 736 Z M600 600 L900 464 A329.43 329.43 0 0 1 900 736 Z"
-        stroke-linejoin="round"
-        stroke-width="68"
-      />
-      <circle cx="600" cy="600" fill="none" r="435" stroke-width="74" />
-    </svg>

@@ -525,6 +525,8 @@
   --icon-size-lg: 20px;
   --icon-size-xl: 24px;
   --icon-size-2xl: 32px;
+  --icon-size-3xl: 48px;
+  --z-content: 1;
   --sidebar-row-height: 30px;
   --sidebar-action-size: 24px;
   --sidebar-icon-column: 18px;
@@ -1228,4 +1230,70 @@ input[type="radio"]:not(:disabled),
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Narrow desktop windows keep the desktop ramp; never apply to the main window. */
+[data-viewport="desktop"] {
+  --titlebar-height: 48px;
+  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--safe-area-top));
+  --control-hit-target: 0px;
+  --menu-group-label-size: var(--typo-section-title-size);
+  --adaptive-page-gutter: var(--space-xl);
+  --adaptive-composer-inset: 44px;
+  --adaptive-composer-radius: 30px;
+  --adaptive-drawer-width: min(88vw, 320px);
+  --chrome-floating-toggle-size: var(--control-height-md);
+  --chrome-floating-toggle-icon-size: var(--icon-size-md);
+  --chrome-floating-toggle-top: calc(
+    var(--safe-area-top) +
+      ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
+  );
+  --chrome-toggle-inset: var(--sidebar-padding-inline);
+  --chrome-floating-toggle-left: calc(
+    var(--traffic-controls-width) + var(--chrome-toggle-inset)
+  );
+  --sidebar-titlebar-leading: calc(
+    var(--chrome-floating-toggle-left) - var(--sidebar-padding-inline) +
+      var(--chrome-floating-toggle-size) + var(--space-sm)
+  );
+  --titlebar-collapsed-left-padding: calc(
+    var(--chrome-floating-toggle-left) + var(--chrome-floating-toggle-size) +
+      var(--space-md)
+  );
+  --typo-h1-size: 32px;
+  --typo-h2-size: 24px;
+  --typo-h3-size: 20px;
+  --typo-h4-size: 18px;
+  --typo-h5-size: 16px;
+  --typo-h6-size: 14px;
+  --typo-body-size: 14px;
+  --typo-caption-size: 12px;
+  --typo-label-size: 13px;
+  --typo-code-size: 13px;
+  --typo-code-font: var(--typo-code-weight) var(--typo-code-size) /
+    var(--typo-code-line-height) var(--font-family-code);
+  --typo-app-title-size: 15px;
+  --typo-panel-title-size: 15px;
+  --typo-dashboard-title-size: 24px;
+  --typo-new-chat-title-size-sm: 34px;
+  --typo-section-title-size: 13px;
+  --typo-panel-section-title-size: 15px;
+  --typo-metric-value-size: 18px;
+  --font-code: var(--font-size-2)/var(--line-height-body)
+    var(--font-family-code);
+  --font-size-1: var(--typo-caption-size);
+  --font-size-2: var(--typo-label-size);
+  --font-size-3: var(--typo-body-size);
+  --font-size-4: var(--typo-app-title-size);
+  --font-size-5: var(--typo-h4-size);
+  --font-size-6: var(--typo-h2-size);
+  --sidebar-row-height: 30px;
+  --sidebar-action-size: 24px;
+  --sidebar-row-gap: 10px;
+}
+
+@media (pointer: coarse) {
+  [data-viewport="desktop"] {
+    --control-hit-target: var(--touch-target);
+  }
 }

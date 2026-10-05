@@ -148,15 +148,6 @@
   max-width: 420px;
 }
 
-.content[data-surface="solid"] {
-  box-sizing: border-box;
-  padding: var(--space-lg);
-  border: var(--border-hairline) solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-raised-opaque);
-  box-shadow: var(--shadow-card);
-}
-
 .screen[data-variant="focus"] .content[data-width="wide"] {
   max-width: 520px;
 }

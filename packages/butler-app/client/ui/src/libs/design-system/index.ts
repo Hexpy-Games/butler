@@ -150,3 +150,7 @@ export * from "./blocks/StatusCapsule";
 
 export * from "./blocks/ComposerQuestionPanel";
 export * from "./blocks/QuestionAnswerCard";
+
+export { desktopViewportScope } from "./lib/desktopViewport";
+
+export { WallpaperStage } from "./blocks/WallpaperStage";

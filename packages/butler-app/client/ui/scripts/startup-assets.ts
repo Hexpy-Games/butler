@@ -1,18 +1,20 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { lifecycleOutput, checkLifecycleAssets } from "./lifecycle-window-build";
+import { stillDirectory, lifecycleStillFiles, checkLifecycleStills } from "./generate-lifecycle-stills";
 
-/** Same static surface ships in the app and the standalone DS viewer. */
-export function startupAssets(root: string): Plugin {
-  const shell = resolve(root, "../electron");
-  const posters = resolve(root, "src/libs/design-system/blocks/WallpaperPicker/posters");
-  return { name: "butler-static-startup", apply: "build", generateBundle() {
-    for (const name of ["startup.html", "startup.css", "startup.js"]) {
-      this.emitFile({ type: "asset", fileName: name === "startup.html" ? name : `startup/${name}`, source: readFileSync(resolve(shell, "startup", name)) });
-    }
-    this.emitFile({ type: "asset", fileName: "startup/mark.png", source: readFileSync(resolve(shell, "assets/butler-mark-flat-white.png")) });
-    for (const name of readdirSync(posters).filter((name) => name.endsWith(".png") || name === "keys.json")) {
-      this.emitFile({ type: "asset", fileName: `startup/posters/${name}`, source: readFileSync(resolve(posters, name)) });
-    }
-  } };
+/** The app and DS site ship the same captured DS surface. */
+export function startupAssets(_root: string): Plugin {
+  return { name: "butler-lifecycle-assets", apply: "build",
+    buildStart() { checkLifecycleAssets(); checkLifecycleStills(); },
+    generateBundle() {
+      for (const name of ["lifecycle.html", "mark.js", "state.js", "copy.json", "manifest.json"]) {
+        this.emitFile({ type: "asset", fileName: `lifecycle/${name}`, source: readFileSync(resolve(lifecycleOutput, name)) });
+      }
+      for (const name of lifecycleStillFiles()) {
+        this.emitFile({ type: "asset", fileName: `lifecycle/stills/${name}`, source: readFileSync(resolve(stillDirectory, name)) });
+      }
+    },
+  };
 }

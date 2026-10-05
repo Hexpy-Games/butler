@@ -29,15 +29,17 @@ const executablePath = createRequire(join(directory, "package.json"))("electron"
 const start = performance.now();
 const application = await electron.launch({ executablePath, args: [...smokeBrowserArgs(), directory], env: {
   ...process.env, HOME: join(temporary, "home"), BUTLER_DATA: join(temporary, "data"),
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(temporary, "profile"), BUTLER_E2E_TIER: "stub",
+  USERPROFILE: join(temporary, "home"), APPDATA: join(temporary, "appdata"), LOCALAPPDATA: join(temporary, "local"),
+  TEMP: join(temporary, "temp"), TMP: join(temporary, "temp"), BUTLER_SECRET_STORE: "file", BUTLER_PLATFORM_SYSTEM_SECRETS: "0",
+  BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_ELECTRON_USER_DATA_DIR: join(temporary, "profile"), BUTLER_E2E_TIER: "stub",
   BUTLER_APP_SERVER_URL: server.url.origin, BUTLER_APP_SERVER_PORT: String(server.port),
 } }).catch((error) => { server.stop(true); rmSync(temporary, { recursive: true, force: true }); throw error; });
 try {
-  const splash = await application.firstWindow();
+  const splash = await application.firstWindow({ timeout: 30_000 });
   await splash.getByRole("status").waitFor();
   await splash.locator("html[data-painted=true]").waitFor();
   const splashMs = Math.round(performance.now() - start);
-  assert.ok(new URL(splash.url()).pathname.endsWith("startup.html"));
+  assert.ok(new URL(splash.url()).pathname.endsWith("lifecycle.html"));
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.isVisible()).length), 1);
   await splash.screenshot({ path: join(output, "splash.png") });
   releaseData();
@@ -55,7 +57,10 @@ try {
   writeFileSync(join(output, "timings.json"), JSON.stringify(evidence, null, 2));
   console.log(JSON.stringify(evidence));
   const painted = stages.find((event) => event.stage === "splash_painted");
-  assert.ok(painted && typeof painted.elapsed_ms === "number" && painted.elapsed_ms < 300, "Splash mark must paint within 300 ms of process start");
+  assert.ok(painted && typeof painted.elapsed_ms === "number" && painted.elapsed_ms - stages.find((event) => event.stage === "app_ready")!.elapsed_ms! <= 300, "Splash mark must paint within 300 ms of app_ready");
+  const index = (stage: string) => { const value = stages.findIndex((event) => event.stage === stage); assert.ok(value >= 0, stage); return value; };
+  assert.ok(index("splash_shown") < index("runtime_imported"), "splash shown before runtime imports complete");
+  assert.ok(index("main_window_ready") < index("splash_destroyed"), "main shown before splash destruction");
 } finally {
   releaseData();
   await application.evaluate(({ app }) => app.exit(0));

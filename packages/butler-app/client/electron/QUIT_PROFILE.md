@@ -5,7 +5,7 @@ window synchronously, shows a preloaded 380×132 static lifecycle window, and
 closes the App-owned Agent's stdin lease. There is no app bundle or preload in
 the lifecycle window. Its mark is generated from the Site DS idle mark; its
 tokens are a dependency-closed projection of the UI DS tokens. Verify provenance
-with `node scripts/sync-lifecycle-assets.mjs --check`.
+with `bun run ../ui/scripts/lifecycle-window-build.ts --check`.
 
 The previous normal-Quit path kept the main window visible while fetching
 navigation, worker activity, and every chat's queue for confirmation, followed

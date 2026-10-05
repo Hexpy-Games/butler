@@ -1,71 +1,64 @@
-/** Browser smoke of the shipped splash surface and interactive DS owner preview. */
+/** Interactive shipped lifecycle page: stage updates, reduced motion and actions. */
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { smokeBrowserArgs } from "../support/smoke-browser";
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 
-const root = resolve("packages/butler-app/client/ui");
-const output = resolve(".tmp/startup-evidence");
-mkdirSync(output, { recursive: true });
-const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
-  const url = new URL(request.url);
-  const site = url.pathname.startsWith("/viewer/");
-  const path = site ? url.pathname.slice(8) || "index.html" : url.pathname.slice(1) || "startup.html";
-  return new Response(Bun.file(join(root, site ? "dist-ds-site" : "dist", path)));
-} });
-const browser = await chromium.launch({ channel: "chromium", headless: true, args: smokeBrowserArgs() });
+const directory = resolve("packages/butler-app/client/ui/lifecycle-assets");
+const copy = JSON.parse(readFileSync(join(directory, "copy.json"), "utf8"));
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 try {
-  const page = await browser.newPage({ viewport: { width: 340, height: 280 } });
-  await page.addInitScript(() => {
-    const target = window as any;
-    target.actions = [];
-    target.butlerStartup = {
-      painted: () => undefined,
-      state: async () => ({ stage: "starting", failed: false, language: "ko" }),
-      action: async (action: string) => { target.actions.push(action); },
-      subscribe: (callback: (value: unknown) => void) => { target.changeStage = callback; return () => undefined; },
-    };
-  });
-  for (const colorScheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme });
-    await page.goto(server.url.href);
-    await page.getByRole("status").filter({ hasText: "버틀러를 준비합니다" }).waitFor();
-    for (const [stage, label] of [["agent", "에이전트를 시작합니다"], ["migration", "이전 버전을 정리합니다"], ["renderer", "화면을 준비합니다"]]) {
-      await page.evaluate((stage) => (window as any).changeStage({ stage, failed: false }), stage);
-      await page.getByRole("status").filter({ hasText: label }).waitFor();
+  const page = await browser.newPage({ viewport: { width: 360, height: 264 } });
+  await page.addInitScript((copy) => {
+    Object.assign(window, { actions: [], butlerLifecycle: {
+      state: async () => ({ kind: "startup", stage: "prepare", theme: new URLSearchParams(location.search).get("theme"), locale: "ko", copy }),
+      onState() {}, painted() {}, action: (action: string) => (window as any).actions.push(action),
+    } });
+  }, copy);
+  for (const theme of ["light", "dark"]) {
+    await page.goto(`${pathToFileURL(join(directory, "lifecycle.html"))}?theme=${theme}`);
+    await page.locator("html[data-painted=true]").waitFor();
+    for (const stage of ["prepare", "service", "screen", "upgrade", "data"]) {
+      await page.evaluate((stage) => (window as any).lifecycleState({ stage }), stage);
+      assert.equal(await page.locator('[data-slot="line"]').textContent(), copy.ko.startup.stage[stage]);
     }
-    await page.screenshot({ path: join(output, `${colorScheme}.png`) });
-    await page.emulateMedia({ colorScheme, reducedMotion: "no-preference" });
-    await page.evaluate(() => (window as any).changeStage({ stage: "renderer", failed: false, reducedMotion: true }));
-    await page.waitForFunction(() => getComputedStyle(document.querySelector("#mark")!).animationName === "none");
-    await page.evaluate(() => (window as any).changeStage({ stage: "renderer", failed: false, reducedMotion: false }));
-    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-    await page.waitForFunction(() => getComputedStyle(document.querySelector("#mark")!).animationName === "none");
-    await page.evaluate(() => (window as any).changeStage({ stage: "agent", failed: true }));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.evaluate(() => (window as any).lifecycleState({ reducedMotion: true }));
+    assert.equal(await page.locator('[data-slot="mark"]').getAttribute("data-breathe"), "on");
+    await page.evaluate(() => (window as any).lifecycleState({ state: "error", failedStage: "service" }));
     await page.getByRole("alert").waitFor();
-    await page.getByRole("button", { name: "다시 시도" }).click();
-    await page.getByRole("button", { name: "로그 보기" }).click();
-    assert.deepEqual(await page.evaluate(() => (window as any).actions), ["retry", "logs"]);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: join(output, `${colorScheme}-error.png`) });
+    assert.equal(await page.locator('[data-slot="primary"]').evaluate((button) => document.activeElement === button), true);
+    await page.getByRole("button", { name: copy.ko.action.retry }).click();
+    await page.getByRole("button", { name: copy.ko.action.openLog }).click();
+    assert.deepEqual(await page.evaluate(() => (window as any).actions), ["retry", "log"]);
+    assert.equal(await page.locator('[data-slot="mark"]').getAttribute("data-breathe"), "");
   }
-  await page.setViewportSize({ width: 1200, height: 900 });
-  await page.goto(new URL("viewer/?page=patterns/startup&theme=dark&locale=ko&motion=reduced", server.url).href);
-  await page.locator("[data-ds-pattern=startup]").waitFor();
-  await page.getByRole("button", { name: "시작하지 못했습니다." }).click();
-  const preview = page.frameLocator('iframe[title="시작 화면"]');
-  await preview.getByRole("button", { name: "로그 보기" }).click();
-  await page.getByRole("status").filter({ hasText: "진단 로그를 내보냈습니다." }).waitFor();
-  await preview.getByRole("button", { name: "다시 시도" }).click();
-  await preview.getByRole("status").filter({ hasText: "버틀러를 준비합니다" }).waitFor();
-  const options = await page.getByRole("combobox", { name: "배경", exact: true }).locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
-  assert.equal(options.length, 11, "every built-in wallpaper plus none");
-  for (const value of options) {
-    await page.getByRole("combobox", { name: "배경", exact: true }).selectOption(value);
-    await preview.locator("html[data-painted=true]").waitFor();
-    assert.ok(await preview.locator("#wallpaper").evaluate((image) => (image as HTMLImageElement).naturalWidth > 0));
-  }
-  await page.screenshot({ path: join(output, "viewer.png") });
-  console.log("PASS startup stages, retry/log actions, light/dark, reduced motion, no overflow, DS preview");
-} finally { await browser.close(); server.stop(true); }
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+    const path = new URL(request.url).pathname.slice(1) || "index.html";
+    return new Response(Bun.file(join(resolve("packages/butler-app/client/ui/dist-ds-site"), path)));
+  } });
+  try {
+    const previewPage = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    await previewPage.goto(new URL("?page=patterns/startup&theme=dark&locale=ko&motion=reduced", server.url).href);
+    await previewPage.locator("[data-ds-pattern=startup]").waitFor();
+    await previewPage.getByRole("button", { name: "시작하지 못했습니다." }).click();
+    const preview = previewPage.frameLocator('iframe[title="시작 화면"]');
+    await preview.getByRole("button", { name: copy.ko.action.openLog }).click();
+    await previewPage.getByRole("status").filter({ hasText: "진단 로그를 내보냈습니다." }).waitFor();
+    await preview.getByRole("button", { name: copy.ko.action.retry }).click();
+    await preview.getByRole("status").filter({ hasText: copy.ko.startup.stage.prepare }).waitFor();
+    const picker = previewPage.getByRole("combobox", { name: "배경", exact: true });
+    const options = await picker.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+    assert.equal(options.length, 11, "all standalone built-ins plus none");
+    for (const value of options) {
+      await picker.selectOption(value);
+      await preview.locator("html[data-painted=true]").waitFor();
+      if (value === "none") assert.equal(await preview.locator("img").count(), 0);
+      else assert.ok(await preview.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth > 0));
+    }
+  } finally { server.stop(true); }
+  console.log("PASS startup stages, themes, reduced motion, error focus, actions and DS preview");
+
+} finally { await browser.close(); }
