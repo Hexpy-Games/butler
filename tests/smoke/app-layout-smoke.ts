@@ -159,9 +159,6 @@ async function assertModelMenuExitStaysAnchored(page: Page): Promise<void> {
   );
   await page.waitForTimeout(300);
   await closeBlockingOverlays(page);
-  // The outside click folded the composer; expand it again for later steps.
-  const preview = page.locator('[data-slot="composer-compact-preview"]');
-  if (await preview.count()) await preview.first().click();
   await page.locator(testClass("model-button")).waitFor({ state: "visible" });
 }
 
@@ -389,7 +386,7 @@ try {
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
   await page
-    .locator('[data-slot="composer-compact-preview"]')
+    .locator(composerEditor)
     .click();
   await page
     .locator(testClass("worker-composer-panel"))
@@ -512,21 +509,10 @@ try {
     composerGlass.borderColor === "rgba(255, 255, 255, 0.65)",
     `light composer glass should use white translucent hairline: ${composerGlass.borderColor}`,
   );
-  const composerToolbarSurface = await page
-    .locator(testClass("composer-toolbar"))
-    .evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        background: style.backgroundColor,
-        borderTopColor: style.borderTopColor,
-        height: element.getBoundingClientRect().height,
-      };
-    });
-  assert(
-    composerToolbarSurface.background === "rgba(0, 0, 0, 0)" &&
-      composerToolbarSurface.borderTopColor !== "rgba(0, 0, 0, 0)",
-    `composer toolbar should rely on a subtle 1px divider only: ${JSON.stringify(composerToolbarSurface)}`,
-  );
+  assert(await page.locator(testClass("composer-toolbar")).count() === 0, "in-card toolbar removed");
+  const controlsSlot = page.locator(testClass("composer-controls-slot"));
+  assert(await controlsSlot.isVisible(), "external controls are visible");
+  assert(await controlsSlot.evaluate(element => !element.closest("form")), "controls are outside the card");
   const workerSlotSurface = await page
     .locator(testClass("worker-composer-panel"))
     .evaluate((element) => {
@@ -3366,120 +3352,27 @@ try {
     if (grid) grid.style.minWidth = "";
     element.scrollLeft = 0;
   });
-  const desktopComposer = page.locator(testClass("composer-card"));
-  const desktopPreview = desktopComposer.locator(
-    '[data-slot="composer-compact-preview"]',
-  );
-  const desktopTextarea = desktopComposer.locator(composerEditor);
-  await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-  });
-  await page.waitForTimeout(260);
-  const desktopIdleBox = await desktopComposer.boundingBox();
-  const desktopIdleState = await desktopPreview.evaluate((element) => ({
-    display: getComputedStyle(element).display,
-    expanded: element.closest("form")?.dataset.expanded,
-    radius: Number.parseFloat(
-      getComputedStyle(element.closest("form")!).borderTopLeftRadius,
-    ),
-  }));
-  await desktopPreview.click();
-  await page.waitForTimeout(260);
-  const desktopEngagedBox = await desktopComposer.boundingBox();
-  const desktopTextareaBox = await desktopTextarea.boundingBox();
-  await desktopTextarea.fill("Verify stationary send hover");
-  await assertStationaryOnHover(
-    page,
-    testClass("composer-send-button"),
-    "composer send/stop control",
-  );
-  await desktopTextarea.fill("");
-  assert(
-    desktopIdleBox &&
-      desktopIdleBox.height <= 68 &&
-      desktopIdleState.display === "block" &&
-      desktopIdleState.expanded === "false" &&
-      desktopIdleState.radius * 2 >= desktopIdleBox.height - 0.1 &&
-      desktopEngagedBox &&
-      desktopEngagedBox.height >= desktopIdleBox.height + 28 &&
-      desktopTextareaBox &&
-      desktopTextareaBox.height <= 64,
-    `desktop composer should use the same idle and engaged form as mobile: ${JSON.stringify({ desktopEngagedBox, desktopIdleBox, desktopIdleState, desktopTextareaBox })}`,
-  );
-  await desktopTextarea.evaluate((element) => element.blur());
-  await page.waitForTimeout(260);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(240);
-  const compactComposer = page.locator(testClass("composer-card"));
-  const compactPreview = compactComposer.locator(
-    '[data-slot="composer-compact-preview"]',
-  );
-  const compactTextarea = compactComposer.locator(composerEditor);
-  await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-  });
-  await page.waitForTimeout(260);
-  const idleComposerBox = await compactComposer.boundingBox();
-  const idleComposerRadius = await compactComposer.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
-  );
-  await compactPreview.click();
-  await page.waitForTimeout(260);
-  const engagedComposerBox = await compactComposer.boundingBox();
-  const engagedComposerRadius = await compactComposer.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
-  );
-  const engagedTextareaBox = await compactTextarea.boundingBox();
-  await compactTextarea.fill(
-    "A long compact draft that should remain visible as one ellipsized line after focus leaves the composer",
-  );
-  await compactTextarea.evaluate((element) => element.blur());
-  await page.waitForTimeout(260);
-  const collapsedDraftBox = await compactComposer.boundingBox();
-  const collapsedDraftRadius = await compactComposer.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
-  );
-  const collapsedDraftState = await compactPreview.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const send = element.closest("form")?.querySelector<HTMLElement>(
-      '[data-test-class~="composer-send-button"]',
-    );
-    return {
-      expanded: element.closest("form")?.dataset.expanded,
-      overflow: style.overflow,
-      text: element.textContent,
-      textOverflow: style.textOverflow,
-      whiteSpace: style.whiteSpace,
-      sendWidth: send?.getBoundingClientRect().width ?? 0,
-    };
-  });
-  assert(
-    idleComposerBox &&
-      idleComposerBox.height <= 68 &&
-      engagedComposerBox &&
-      engagedComposerBox.height >= idleComposerBox.height + 28 &&
-      engagedTextareaBox &&
-      engagedTextareaBox.height <= 64 &&
-      collapsedDraftBox &&
-      collapsedDraftBox.height <= 68 &&
-      collapsedDraftState.text?.startsWith("A long compact draft") &&
-      collapsedDraftState.overflow === "hidden" &&
-      collapsedDraftState.textOverflow === "ellipsis" &&
-      collapsedDraftState.whiteSpace === "nowrap" &&
-      collapsedDraftState.sendWidth === 0 &&
-      idleComposerRadius * 2 >= idleComposerBox.height - 0.1 &&
-      Math.abs(idleComposerRadius - engagedComposerRadius) <= 0.1 &&
-      Math.abs(collapsedDraftRadius - engagedComposerRadius) <= 0.1,
-    `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftRadius, collapsedDraftState, engagedComposerBox, engagedComposerRadius, engagedTextareaBox, idleComposerBox, idleComposerRadius })}`,
-  );
-  await compactPreview.click();
-  await compactTextarea.fill("");
-  await compactTextarea.evaluate((element) => element.blur());
-  await page.waitForTimeout(260);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await waitForMotionToSettle(page);
+    const card = page.locator(testClass("composer-card"));
+    const editor = card.locator(composerEditor);
+    await editor.fill("");
+    const before = await card.evaluate(element => ({ height: element.getBoundingClientRect().height, radius: getComputedStyle(element).borderRadius }));
+    await editor.focus();
+    await page.locator(testClass("titlebar-title")).click();
+    await editor.evaluate(element => element.blur());
+    const after = await card.evaluate(element => ({ height: element.getBoundingClientRect().height, radius: getComputedStyle(element).borderRadius }));
+    assert(JSON.stringify(before) === JSON.stringify(after), `composer never folds at ${width}: ${JSON.stringify({ before, after })}`);
+    assert(await page.locator(testClass("composer-controls")).isVisible(), "controls stay visible after outside click and blur");
+    assert(await page.locator('[data-slot="composer-compact-preview"]').count() === 0, "fold preview removed");
+    await replaceDraft(editor, "Verify stationary send hover");
+    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    await waitForMotionToSettle(page);
+    await assertStationaryOnHover(page, testClass("composer-send-button"), "composer send/stop control");
+    await editor.fill("");
+    await editor.evaluate(element => element.blur());
+  }
   const narrowNewChatState = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate((element) => {
@@ -4030,7 +3923,7 @@ try {
         "conversation-end-near-composer",
         "composer-liquid-glass-surface",
         "composer-fixed-edge-gradient",
-        "composer-toolbar-subtle-divider",
+        "composer-controls-outside-card",
         "worker-panel-inside-composer-card",
         "worker-panel-identity-fixed",
         "assistant-footer-copy-duration-time",
@@ -4090,13 +3983,11 @@ try {
         "narrow-project-session-tap-navigates",
         "narrow-project-session-long-press-menu",
         "narrow-project-session-long-press-move-cancel",
-        "desktop-composer-idle-one-line",
-        "desktop-composer-focus-expands",
-        "narrow-composer-idle-one-line",
-        "narrow-composer-focus-expands",
-        "narrow-composer-draft-ellipsis",
-        "narrow-composer-idle-send-hidden",
-        "narrow-composer-radius-stable",
+        "desktop-composer-outside-click-stable",
+        "narrow-composer-outside-click-stable",
+        "composer-controls-always-visible",
+        "composer-fold-preview-removed",
+        "composer-radius-stable",
         "composer-send-stop-hover-stationary",
         "narrow-new-chat-radius-zero",
         "narrow-scrim-compositor-stable",

@@ -1,11 +1,13 @@
 import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace } from "../../../../blocks/AdaptiveShell";
-import { ComposerCard, ComposerCardCompactPreview, ComposerCardExpandedBody, ComposerCardTextarea, ComposerCardToolbar } from "../../../../blocks/ComposerCard";
+import { ComposerCard, ComposerCardTextarea, ComposerSendButton, ComposerCardInlineAction } from "../../../../blocks/ComposerCard";
 import { ConversationScroll, ConversationShell, MessageListSurface } from "../../../../blocks/ConversationShell";
 import { MarkdownContent } from "../../../../blocks/MarkdownContent";
 import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "../../../../blocks/MessageRow";
 import { ButlerThinkingMark } from "../../../ButlerThinkingMark";
 import { CopyButton } from "../../../CopyButton";
-import { IconButton } from "../../../IconButton";
+import { PillButton } from "../../../PillButton";
+import { ButtonContainer } from "../../../ButtonContainer";
+import { ScrollArea } from "../../../../blocks/ScrollArea";
 import { FolderPlus, MessageSquarePlus, Plus } from "../../../Icons";
 import { Typo } from "../../../Typo";
 import type { LayersCopy } from "./layersCopy";
@@ -39,12 +41,12 @@ function Turn({ copy }: { copy: LayersCopy }) {
         </MarkdownContent>
         <MessageFooter>
           <CopyButton copiedLabel={copy.copied} label={copy.copy} text={copy.answer} />
-          <IconButton label={copy.branchChat}>
+          <PillButton surface="glass" size="icon-lg" aria-label={copy.branchChat}>
             <MessageSquarePlus size="md" />
-          </IconButton>
-          <IconButton label={copy.branchProject}>
+          </PillButton>
+          <PillButton surface="glass" size="icon-lg" aria-label={copy.branchProject}>
             <FolderPlus size="md" />
-          </IconButton>
+          </PillButton>
           <span>{copy.worked}</span>
           <Typo.Text as="time" numeric="tabular">
             {copy.time}
@@ -78,16 +80,17 @@ export function Page({ copy, compact }: { copy: LayersCopy; compact: boolean }) 
               <Turn copy={copy} />
             </MessageListSurface>
           </ConversationScroll>
-          <ComposerCard expanded={false} floating large>
-            <ComposerCardExpandedBody>
-              <ComposerCardTextarea aria-label={copy.composer} placeholder={copy.composer} rows={1} />
-            </ComposerCardExpandedBody>
-            <ComposerCardToolbar>
-              <IconButton label={copy.more}>
+          <ComposerCard floating large controls={
+      <ScrollArea orientation="x" flush><ButtonContainer size="sm" wrap={false} grow>
+        <PillButton surface="glass" size="icon-lg" aria-label={copy.more}>
                 <Plus size="md" />
-              </IconButton>
-              <ComposerCardCompactPreview>{copy.composer}</ComposerCardCompactPreview>
-            </ComposerCardToolbar>
+              </PillButton>
+      </ButtonContainer></ScrollArea>
+    }>
+      <ComposerCardInlineAction action={<ComposerSendButton aria-label={copy.composer} disabled />}>
+        <ComposerCardTextarea aria-label={copy.composer} placeholder={copy.composer} rows={1} />
+      </ComposerCardInlineAction>
+
           </ComposerCard>
         </ConversationShell>
       </AdaptiveShellWorkspace>

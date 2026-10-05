@@ -30,7 +30,8 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A regular Button pretending to be a pill in the composer.", render: () => <Button shape="pill" variant="outline" text="Add context" /> },
     },
   ],
-  content: ["One to three words; long capsule text truncates (task · activity · progress)."],
+  content: [
+    "For icon-only glass controls, use size=\"icon-lg\" and an aria-label: 34px circles on desktop and 44px on touch.", "One to three words; long capsule text truncates (task · activity · progress)."],
   accessibility: ["Give an aria-label that includes the truncated parts when the label is a composite."],
   tokens: ["--radius-pill", "--tinted-glass-bg", "--control-height-sm"],
 };

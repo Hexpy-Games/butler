@@ -5,7 +5,6 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { useButlerStore } from "@/app/store.ts";
-import { useComposerStore } from "@/components/conversation/composerStore.ts";
 
 let root: Root | undefined;
 let dom: JSDOM | undefined;
@@ -22,14 +21,12 @@ const initialButlerState = {
   summary: useButlerStore.getState().summary,
   turnProgress: useButlerStore.getState().turnProgress,
 };
-const initialComposerEngaged = useComposerStore.getState().engaged;
 
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
   await new Promise((resolve) => setTimeout(resolve, 0));
   root = undefined;
   useButlerStore.setState(initialButlerState);
-  useComposerStore.setState({ engaged: initialComposerEngaged });
   if (dom) dom.window.close();
   dom = undefined;
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
@@ -66,7 +63,6 @@ test("default VisualHarness render does not install SS-03 state", async () => {
   expect(state.observerSessionId).toBeNull();
   expect(state.sessionViews).toEqual({});
   expect(state.leftOpen).toBe(false);
-  expect(useComposerStore.getState().engaged).toBe(false);
   expect(rendered.document.querySelector('[role="dialog"]')).toBeNull();
   expect(rendered.container.textContent).not.toContain("Review the activity surface");
 });
@@ -83,7 +79,6 @@ test("SS-03 VisualHarness render installs only its keyed observer surface", asyn
     "harness-steward",
   );
   expect(state.leftOpen).toBe(true);
-  expect(useComposerStore.getState().engaged).toBe(true);
   expect(dialog).not.toBeNull();
   expect(dialog?.getAttribute("role")).toBe("dialog");
   expect(rendered.document.body.textContent).toContain("Review the activity surface");

@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { ListChecks, Tag } from "@/butler-ds";
+import { ListChecks, PillButton, Stack, X } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 
 export function ComposerPlanModeBadge() {
@@ -10,13 +10,15 @@ export function ComposerPlanModeBadge() {
 
   if (!planMode) return null;
   return (
-    <Tag
+    <PillButton surface="glass" size="lg"
       data-test-class="composer-plan-mode-badge"
       icon={<ListChecks aria-hidden="true" size="xs" />}
-      onRemove={() => setPlanMode(false)}
-      removeLabel={`${appCopy.composer.plan} ${appCopy.common.cancel}`}
+      onClick={() => setPlanMode(false)}
+      aria-label={`${appCopy.composer.plan} ${appCopy.common.cancel}`}
     >
-      {appCopy.composer.plan}
-    </Tag>
+      <Stack as="span" align="row" cross="center" gap="xs">
+        {appCopy.composer.plan}<X aria-hidden="true" size="xs" />
+      </Stack>
+    </PillButton>
   );
 }

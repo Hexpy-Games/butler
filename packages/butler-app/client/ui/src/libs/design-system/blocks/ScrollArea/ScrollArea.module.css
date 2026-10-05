@@ -103,3 +103,22 @@
   background: color-mix(in srgb, var(--line-strong) 70%, transparent);
   background-clip: content-box;
 }
+
+.frame[data-orientation="x"][data-flush="true"] {
+  --scroll-area-scrollbar-offset: 0px;
+  --scroll-area-frame-width: calc(100% + var(--scroll-fade-size) * 2);
+
+  margin-inline: calc(var(--scroll-fade-size) * -1);
+}
+
+.frame[data-flush="true"] > .scroll {
+  scrollbar-width: none;
+}
+
+.frame[data-flush="true"] > .scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.frame[data-flush="true"] .content {
+  padding-block: var(--space-xs);
+}

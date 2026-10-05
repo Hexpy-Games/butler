@@ -548,6 +548,7 @@
   --control-bg: rgba(255, 255, 255, 0.82);
   --control-hover-bg: rgba(255, 255, 255, 0.94);
   --context-bar-bg: rgba(246, 246, 244, 0.82);
+  --composer-controls-inset: 0px;
   --composer-glass-bg: rgba(255, 255, 255, 0.52);
   --composer-glass-control-bg: rgba(246, 247, 249, 0.3);
   --composer-glass-border: rgba(255, 255, 255, 0.65);

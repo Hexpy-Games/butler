@@ -36,7 +36,8 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Regular buttons in the composer toolbar break its rhythm.", render: () => <Button size="sm" variant="outline" text="Ask" /> },
     },
   ],
-  content: ["permissionTone (full, ask, read) colors an access-mode control and its icon.", "Label is the current value (Ask, GPT-5.1); detail adds one qualifier (medium)."],
+  content: [
+    "Use surface=\"glass\" size=\"lg\" for the external composer row. ComposerSelectControl forwards the same props. Touch controls have a 44px visible height even when a popover replaces data-slot.", "permissionTone (full, ask, read) colors an access-mode control and its icon.", "Label is the current value (Ask, GPT-5.1); detail adds one qualifier (medium)."],
   accessibility: ["Give the full value in aria-label when compact hides text; hit targets extend to 44px on touch."],
   tokens: ["--control-height-sm", "--radius-pill", "--composer-glass-control-bg", "--danger"],
 };

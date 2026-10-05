@@ -60,11 +60,6 @@
     inset 0 1px 0 var(--tinted-glass-highlight);
 }
 
-/* Height and opacity reveal come from the DS Collapsible (keepMounted). */
-.expandedBody {
-  min-width: 0;
-}
-
 .adjunct {
   min-width: 0;
   border-bottom: 1px solid var(--composer-glass-divider);
@@ -136,29 +131,6 @@
   flex-shrink: 0;
 }
 
-.compactPreview {
-  display: none;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  padding: 0 var(--space-sm);
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compactPreview[data-empty="true"] {
-  color: var(--placeholder);
-}
-
-.expandedControls {
-  display: contents;
-}
-
 .spacer {
   flex: 1 1 auto;
   min-width: var(--space-sm);
@@ -216,23 +188,6 @@
   background: var(--send-stop-bg);
 }
 
-.card[data-expanded="false"] .adjunct {
-  display: none;
-}
-
-.card[data-expanded="false"] .toolbar {
-  min-height: calc(var(--control-hit-target) + var(--space-sm));
-  border-top-color: transparent;
-}
-
-.card[data-expanded="false"] .compactPreview {
-  display: block;
-}
-
-.card[data-expanded="false"] .expandedControls {
-  display: none;
-}
-
 @container composer (width <= 520px) {
   .toolbar {
     min-height: var(--control-hit-target);
@@ -277,5 +232,38 @@
   .wrap,
   .sendButton {
     transition: none;
+  }
+}
+
+.controls {
+  width: calc(100% - var(--composer-controls-inset) * 2);
+  margin-inline: auto;
+  margin-top: var(--space-xs);
+  margin-bottom: calc(var(--space-xs) * -1);
+  pointer-events: auto;
+}
+
+.inlineAction {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.editorColumn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  height: calc(1.5em + var(--composer-inner-padding-block) * 2);
+  padding-inline: var(--space-2);
+}
+
+@container composer (width <= 520px) {
+  .action {
+    padding-inline: var(--space-xs);
   }
 }

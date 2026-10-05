@@ -1,5 +1,6 @@
 // Real App typing under unrelated SSE/work-status refreshes, on a stub agent.
 // Checks the committed controls, DOM identity, focus, geometry and full submitted draft.
+import { installKeystrokeTiming, readKeystrokeTiming } from "../support/composer-keystroke-timing.ts";
 import { strict as assert } from "node:assert";
 import { resolve } from "node:path";
 import { chromium, firefox, webkit, type Page } from "playwright";
@@ -10,7 +11,7 @@ import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { SessionSummary, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
-type Frame = { same: boolean; focused: boolean; height: number; expanded: string | null };
+type Frame = { same: boolean; focused: boolean; height: number };
 type FrameWindow = Window & { __composerFrames: Frame[]; __composerFrameId: number };
 const server = await createNativeAppServer({
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
@@ -29,7 +30,7 @@ async function beginFrames(page: Page): Promise<void> {
       const current = document.querySelector('[contenteditable="true"]');
       const card = document.querySelector('[data-test-class="composer-card"]')!;
       target.__composerFrames.push({ same: editor === current, focused: document.activeElement === current,
-        height: card.getBoundingClientRect().height, expanded: card.getAttribute("data-expanded") });
+        height: card.getBoundingClientRect().height });
       target.__composerFrameId = requestAnimationFrame(tick);
     };
     tick();
@@ -55,13 +56,13 @@ try {
         if (new URL(request.url()).pathname === "/usage-monitor") usageReads += 1;
       });
       await page.goto(server.url);
-      await page.locator('[data-slot="composer-compact-preview"]').click();
+      await page.locator('[contenteditable="true"]').click();
       const editor = page.locator('[contenteditable="true"]');
       await editor.fill("Seed conversation");
       await page.locator('[data-test-class="composer-card"]').getByRole("button", { name: "Send", exact: true }).click();
       await page.getByText("Complete stub answer.", { exact: true }).waitFor();
       await page.locator('[data-test-class="context-donut-button"]').waitFor({ state: "attached" });
-      await page.locator('[data-slot="composer-compact-preview"]').click();
+      await page.locator('[contenteditable="true"]').click();
       const running = page.getByRole("tab", { name: appCopy.space.running, exact: true });
       if (!(await running.isVisible())) {
         await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
@@ -76,13 +77,17 @@ try {
         animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
       // Drain the sidebar's 1.5s replay reconciliation before measuring input alone.
       await page.waitForTimeout(1800);
+      const initialRenders = await readComposerRenderProbe(page);
+      assert((initialRenders["composer-controls-row"] ?? 0) > 0, "render probe observes the controls row at mount");
       await resetComposerRenderProbe(page);
+      await installKeystrokeTiming(page);
       await editor.pressSequentially(" typing probe", { delay: 100 });
       const typingRenders = await readComposerRenderProbe(page);
+      assert.equal(typingRenders["composer-controls-row"] ?? 0, 0, "nonempty typing does not rerender the controls row");
       assert.equal(typingRenders["composer-shell"] ?? 0, 0, "nonempty typing does not rerender the composer shell");
       assert.deepEqual(Object.keys(typingRenders).filter(key => key.startsWith("outside:")), [],
         "zero extra renders outside the composer per keystroke");
-      console.log(JSON.stringify({ phase: "typing-only", characters: 13, typingRenders }));
+      console.log(JSON.stringify({ phase: "typing-only", characters: 13, commit: await readKeystrokeTiming(page, 13), typingRenders }));
       await assertTypingLayout(page, engine.name());
       await editor.fill("D");
       await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
@@ -109,7 +114,7 @@ try {
       });
       const renders = await readComposerRenderProbe(page);
       assert(frames.length > 10, "sampled frames during input and refetch");
-      assert(frames.every((frame) => frame.same && frame.focused && frame.expanded === "true"));
+      assert(frames.every((frame) => frame.same && frame.focused));
       const heights = frames.map((frame) => frame.height);
       const heightDrift = Math.max(...heights) - Math.min(...heights);
       assert.equal(heightDrift, 0, "single-line typing/refetch must not change composer height");

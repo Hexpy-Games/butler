@@ -2723,9 +2723,9 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("narrow-scrim-compositor-stable");
   expect(smoke).toContain("narrow-sidebar-pushes-workspace");
   expect(smoke).toContain("narrow-sidebar-comfortable-density");
-  expect(smoke).toContain("narrow-composer-idle-one-line");
-  expect(smoke).toContain("narrow-composer-focus-expands");
-  expect(smoke).toContain("narrow-composer-draft-ellipsis");
+  expect(smoke).toContain("narrow-composer-outside-click-stable");
+  expect(smoke).toContain("composer-controls-always-visible");
+  expect(smoke).toContain("composer-fold-preview-removed");
   expect(smoke).toContain("narrow-scrim-interrupted-reversal");
   expect(smoke).toContain("narrow-scrim-repeat-monotonic");
   expect(smoke).toContain("sidebar should collapse to 0px");
@@ -2992,7 +2992,7 @@ test("composer controls use a store boundary instead of toolbar props drilling",
     "packages/butler-app/client/ui/src/components/conversation/Composer.tsx",
   );
   const toolbar = read(
-    "packages/butler-app/client/ui/src/components/conversation/ComposerToolbar.tsx",
+    "packages/butler-app/client/ui/src/components/conversation/ComposerSendAction.tsx",
   );
   const inputSurface = read(
     "packages/butler-app/client/ui/src/components/conversation/ComposerInputSurface.tsx",
@@ -3002,7 +3002,7 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   );
 
   expect(toolbar).toContain("useComposerStore");
-  expect(toolbar).not.toContain("interface ComposerToolbarProps");
+  expect(toolbar).not.toContain("interface ComposerSendActionProps");
   expect(toolbar).not.toContain("fileInputRef:");
   expect(toolbar).not.toContain("setAccessMenuOpen:");
   expect(toolbar).not.toContain("onModelChoice:");
@@ -3013,7 +3013,7 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   expect(toolbar).not.toContain("handlePlanModeChange");
   expect(toolbar).not.toContain("appCopy.composer.plan");
   expect(composer).toContain("<ComposerInputSurface");
-  expect(inputSurface).toContain("<ComposerToolbar />");
+  expect(inputSurface).toContain("action={<ComposerSendAction />}");
   expect(composer).not.toContain("accessMode={");
   expect(composer).not.toContain("setAccessMenuOpen={");
   expect(composer).not.toContain("onModelChoice={");

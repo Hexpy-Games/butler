@@ -86,13 +86,12 @@
 }
 
 /*
- * Touch widths: the pill keeps its visual control height (Button would grow
- * to --control-hit-target); a transparent ::after extends only the hit area.
+ * Touch controls use the visible hit-target height, independent of Radix data-slot.
  */
 @media (width <= 640px), (pointer: coarse) {
-  .control[data-slot="button"][data-compact] {
+  .control[data-compact] {
     position: relative;
-    min-height: var(--control-height-md);
+    min-height: var(--control-hit-target);
     overflow: visible;
   }
 
@@ -110,9 +109,13 @@
     padding-inline: var(--space-sm);
   }
 
-  .control[data-compact="icon"][data-slot="button"] {
+  .control[data-compact="icon"] {
     width: var(--control-height-md);
     padding-inline: 0;
+  }
+
+  .control[data-compact="icon"][data-size="lg"] {
+    width: var(--control-height-lg);
   }
 
   .control[data-compact="icon"] > [data-slot="button-text"],
@@ -123,5 +126,12 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .control[data-compact="icon"] {
+    width: var(--control-hit-target);
+    min-width: var(--control-hit-target);
   }
 }

@@ -25,10 +25,12 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
   const openSettings = useButlerStore((store) => store.openSettings);
   const [pinned, setPinned] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const restorePinnedFocus = useRef(false);
 
   if (!context) return null;
 
   const close = () => {
+    restorePinnedFocus.current = pinned;
     setPinned(false);
     setOpen(false);
   };
@@ -48,7 +50,7 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
   return (
     <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <PopoverTrigger asChild>
-        <ContextDonutButton
+        <ContextDonutButton surface="glass"
           data-test-class="context-donut-button"
           ratio={context.ratio ?? 0}
           onClick={togglePin}
@@ -69,7 +71,10 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
         width="narrow"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          if (pinned) triggerRef.current?.focus();
+          if (restorePinnedFocus.current) {
+            restorePinnedFocus.current = false;
+            triggerRef.current?.focus();
+          }
         }}
       >
         <ContextUsagePopover

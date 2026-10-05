@@ -1,6 +1,6 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { PillButton } from "../../components/PillButton";
+import { PillButton, type PillButtonProps } from "../../components/PillButton";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import type { PermissionTone } from "../../lib/permissionTone";
@@ -10,6 +10,8 @@ import { dsClass } from "../../lib/internal";
 export interface ComposerControlProps
   extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
   icon?: ReactNode;
+  surface?: PillButtonProps["surface"];
+  size?: PillButtonProps["size"];
   label: ReactNode;
   detail?: ReactNode;
   active?: boolean;

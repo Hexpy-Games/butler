@@ -748,6 +748,7 @@ export interface AppCopy {
     projectDeleteConfirm: (projectName: string) => string;
   };
   composer: {
+    controls: string;
     workspace: string;
     workspaceLocal: string;
     workspaceWorktree: string;

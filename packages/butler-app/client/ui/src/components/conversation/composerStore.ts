@@ -34,8 +34,6 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
     set({ text, contentParts });
     return true;
   },
-  engaged: false,
-  setEngaged: (engaged) => set({ engaged }),
   text: "",
   contentParts: undefined,
   insertSessionReference: null,

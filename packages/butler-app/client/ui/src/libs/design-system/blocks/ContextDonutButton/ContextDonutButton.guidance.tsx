@@ -29,7 +29,8 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A full progress bar in the composer toolbar takes the row.", render: () => <ProgressMeter value={42} label="Context" meta="42%" /> },
     },
   ],
-  content: ["The aria-label states the percentage (Context 42% used)."],
+  content: [
+    "Use surface=\"glass\" in the external composer row: the same 18px ring in a 34px desktop or 44px touch circle.", "The aria-label states the percentage (Context 42% used)."],
   accessibility: ["It is a button; the ratio is not conveyed by color alone because the label carries it."],
   tokens: ["--context-chart-1", "--context-track-bg", "--control-height-sm"],
 };

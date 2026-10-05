@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
+import { ComposerControlRow } from "./ComposerControlRow";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
-import { useSpaceDrag } from "@/app/space/drag";
 import { useComposerControls } from "./hooks/useComposerControls";
 import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
@@ -12,7 +12,6 @@ import { useComposerSession, type ComposerDraftScope } from "./hooks/useComposer
 import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
-import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { composerImagePolicy } from "./composerImagePolicy";
 import { runtimeModels } from "@/app/utils.ts";
@@ -27,7 +26,6 @@ interface ComposerProps {
 }
 export function Composer({ large, onReserveChange, scope }: ComposerProps) {
   const session = useComposerSession(scope);
-  const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
   useComposerDraftSession(scope?.draftKey ?? session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
@@ -120,17 +118,12 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
     state,
     textAreaRef,
   });
-  const presentation = useComposerPresentation({
-    activeChatId: session.activeChatId,
-    containerRef: wrapRef,
-    protectedExpanded: referenceDragging || modelMenuOpen || accessMenuOpen || contextPopoverOpen,
-  });
   return (
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
       floating
+      controls={<ComposerControlRow />}
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
@@ -143,9 +136,6 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
       }
       containerRef={wrapRef}
       onPointerDown={handlers.focusDraftFromComposerChrome}
-      onPointerDownCapture={presentation.onPointerDownCapture}
-      onFocusCapture={presentation.onFocusCapture}
-      onBlurCapture={presentation.onBlurCapture}
       onSubmit={decision.onSubmit}
     >
       <ComposerInputSurface

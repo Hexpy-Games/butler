@@ -24,7 +24,7 @@ function WorkspaceSelect({ locale }: ShowcaseRenderContext) {
   const [value, setValue] = useState("local");
   return (
     <Select value={value} onValueChange={setValue}>
-      <ComposerSelectControl aria-label={text.workspaceLabel} icon={value === "local" ? <Monitor size="sm" /> : <GitBranch size="sm" />}>
+      <ComposerSelectControl surface="glass" size="lg" aria-label={text.workspaceLabel} icon={value === "local" ? <Monitor size="sm" /> : <GitBranch size="sm" />}>
         <SelectValue>{value === "local" ? text.local : text.worktree}</SelectValue>
       </ComposerSelectControl>
       <SelectContent position="popper" side="top">
@@ -36,6 +36,14 @@ function WorkspaceSelect({ locale }: ShowcaseRenderContext) {
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Glass controls", widths: ["375", "app"], render: ({ locale }) => (
+    <div className={styles.fixture}>
+      <Stack align="row" gap="sm">
+        <ComposerControl surface="glass" size="lg" compact="icon" icon={<ShieldCheck size="sm" />} label={copy[locale].access} />
+        <ComposerControl surface="glass" size="lg" label={copy[locale].reasoning} detail={copy[locale].medium} />
+      </Stack>
+    </div>
+  ) },
   {
     name: "Controls",
     states: ["default", "active", "compact"],

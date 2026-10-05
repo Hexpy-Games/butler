@@ -45,6 +45,9 @@ function ProgressCapsule({ context, disabled }: { context: ShowcaseRenderContext
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Glass circle", widths: ["375", "app"], render: context => (
+    <PillButton surface="glass" size="icon-lg" aria-label={text(context).attach} title={text(context).attach}><Plus size="md" /></PillButton>
+  ) },
   {
     name: "Plain",
     render: (context) => <PillButton icon={<Plus size="md" />} onClick={() => undefined}>{text(context).attach}</PillButton>,

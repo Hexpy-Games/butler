@@ -3,12 +3,12 @@
 ## What is this component
 
 `ComposerCard` is the Butler chat composer surface. It owns the glass card,
-textarea rhythm, adjunct panel inset, toolbar row, plan toggle alignment, and
+textarea rhythm, adjunct panel inset, inline action, external controls slot, and
 send/stop control.
 
-On compact screens it also owns idle and engaged presentation. Idle keeps one
-line containing attachment, ellipsized draft or placeholder, and send/stop.
-Focus or protected content expands the same form without replacing draft state.
+The composer never folds. Use `ComposerCardInlineAction` for an editor that grows
+beside send/stop, and `controls` for the always-visible glass pill row below it.
+The floating bottom offset applies to the row; containerRef reserves both surfaces.
 
 ## When to use this component
 
@@ -29,8 +29,10 @@ styles. It also keeps every direct composer section on one inner padding rhythm.
 ## How to use this component
 
 Product containers provide draft state, submit handlers, attachment actions,
-and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
-`ComposerPlanToggle`, and `ComposerSendButton`.
+and menu controls. Compose `ComposerCardInlineAction` with `ComposerSendButton` as its
+action; put the editor inside and attachments after it. Pass a horizontal flush
+`ScrollArea` with glass pills to `controls`. `--composer-controls-inset` defaults to
+zero and moves both resting pill edges symmetrically.
 Set `ComposerSendButton busy` for temporary unavailability: it becomes a disabled
 non-submit control with the official DS `Spinner`. Supply a localized accessible
 label and title; keep it visible even in compact mode. Reduced motion stops rotation.
@@ -52,8 +54,8 @@ drag event handling and upload action; the card only provides visual drop
 feedback.
 
 Use the optional `notice` slot for a non-blocking dependency or capability
-notice that must stay visible while the form itself is compact. The slot sits
-outside the collapsible form and participates in the floating composer height.
+notice that must stay visible above the form. The slot sits
+outside the form and participates in the floating composer height.
 
 ## Who can use this component
 
@@ -62,7 +64,7 @@ Agents building Butler conversation or worker input surfaces.
 ## Best practice
 
 Keep file picking, model selection, permissions, and submission logic in the
-container. Pass only the finished controls into the toolbar.
+container. Pass only the finished controls into the controls slot.
 
 ## Wrong use cases
 

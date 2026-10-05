@@ -1,5 +1,7 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Box } from "../../components/Box";
+import { PillButton } from "../../components/PillButton";
+import { ButtonContainer } from "../../components/ButtonContainer";
 import { Tag } from "../../components/Tag";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -30,6 +32,13 @@ function text({ locale }: ShowcaseRenderContext) {
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Horizontal flush pills", widths: ["320", "375"], render: (context) => (
+    <ScrollArea orientation="x" flush>
+      <ButtonContainer size="sm" wrap={false} grow>
+        {text(context).tags.map(tag => <PillButton key={tag} surface="glass" size="lg">{tag}</PillButton>)}
+      </ButtonContainer>
+    </ScrollArea>
+  ) },
   {
     // A bounded transcript (SessionObserverDialog, DeveloperLogRawBlock): vertical fade on both edges.
     name: "Vertical with edge fades",

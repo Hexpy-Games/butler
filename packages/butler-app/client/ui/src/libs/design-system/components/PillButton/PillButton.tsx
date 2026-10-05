@@ -1,12 +1,13 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, ComponentProps } from "react";
 import { Button } from "../Button";
 import styles from "./PillButton.module.css";
 import { dsClass } from "../../lib/internal";
 
 export interface PillButtonProps
  extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
-  children: ReactNode;
+  children?: ReactNode;
+  size?: ComponentProps<typeof Button>["size"];
   icon?: ReactNode;
   stretch?: boolean;
   surface?: "plain" | "glass";

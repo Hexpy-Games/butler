@@ -13,7 +13,7 @@ import type { AppModelSummary, MessageFileRef } from "@/app/types.ts";
 import { ComposerAttachmentMenu } from "./ComposerAttachmentMenu";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { ComposerFileInput } from "./ComposerFileInput";
-import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerSendAction } from "./ComposerSendAction";
 import { composerImagePolicy, type ComposerImagePolicy } from "./composerImagePolicy";
 import { useComposerStore } from "./composerStore";
 import { registerComposerClipboard } from "./editor/clipboard";
@@ -229,7 +229,7 @@ test("switching to a text-only model keeps attached images but blocks send with 
   await act(async () => {
     useButlerStore.setState({ activeChatId: "draft:chat", navigation: EMPTY_NAVIGATION, settings: EMPTY_SETTINGS });
     useComposerStore.setState({ attachments, blockedAttachments: state.blockedAttachments, canSend: false, text: "hi" });
-    root!.render(<><ComposerAttachments /><ComposerToolbar /></>);
+    root!.render(<><ComposerAttachments /><ComposerSendAction /></>);
   });
   const send = container.querySelector('[data-test-class="composer-send-button"]');
   expect(send?.getAttribute("aria-disabled")).toBe("true");
@@ -284,7 +284,7 @@ test("unknown image capability blocks images like text-only, with its own short 
   expect([...composer.blockedAttachments.entries()]).toEqual([["shot", "unknown"]]);
   await act(async () => {
     useComposerStore.setState({ attachments, blockedAttachments: composer.blockedAttachments, canSend: false, text: "hi" });
-    root!.render(<><ComposerAttachments /><ComposerToolbar /></>);
+    root!.render(<><ComposerAttachments /><ComposerSendAction /></>);
   });
   expect(container.querySelector('[data-slot="attachment-name"]')?.getAttribute("aria-label"))
     .toBe("shot.png, Image support unknown for this model");

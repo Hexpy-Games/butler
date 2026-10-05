@@ -31,6 +31,9 @@ export async function installComposerRenderProbe(page: Page): Promise<void> {
       const prior = seen.get(fiber) ?? (fiber.alternate ? seen.get(fiber.alternate) : undefined);
       const changed = !prior || prior.props !== fiber.memoizedProps || prior.state !== fiber.memoizedState;
       const marker = fiber.memoizedProps?.["data-test-class"];
+      if (changed && (fiber.flags & 1) && typeof fiber.type === "function" && fiber.memoizedProps?.dataTestClass === "composer-controls") {
+        target.__composerRenders["composer-controls-row"] = (target.__composerRenders["composer-controls-row"] ?? 0) + 1;
+      }
       if (changed && (fiber.flags & 1) && typeof fiber.type === "function" && fiber.memoizedProps?.onReserveChange) {
         target.__composerRenders["composer-shell"] = (target.__composerRenders["composer-shell"] ?? 0) + 1;
       }

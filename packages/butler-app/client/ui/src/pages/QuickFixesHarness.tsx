@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, Stack, Typo } from "@/butler-ds";
+import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, ComposerCardInlineAction, Stack, Typo } from "@/butler-ds";
+import { ComposerControlRow } from "@/components/conversation/ComposerControlRow";
+import { ComposerSendAction } from "@/components/conversation/ComposerSendAction";
 import { ComposerTextArea } from "@/components/conversation/ComposerTextArea";
 import { useComposerStore } from "@/components/conversation/composerStore";
 import { useComposerKeyboard } from "@/components/conversation/hooks/useComposerKeyboard";
@@ -76,7 +78,7 @@ export function QuickFixesHarness() {
     <AdaptiveShellSidebar open={false} />
     <AdaptiveShellWorkspace><Stack gap="md" data-harness-ready={ready}>
       {mode === "composer" ? <>
-        <ComposerCard><ComposerTextArea /></ComposerCard>
+        <ComposerCard controls={<ComposerControlRow />}><ComposerCardInlineAction action={<ComposerSendAction />}><ComposerTextArea /></ComposerCardInlineAction></ComposerCard>
         <Typo.Body data-submissions={JSON.stringify(sent)}>{sent.at(-1)}</Typo.Body>
       </> : mode === "settings" ? <ModelsSettings /> : <>
         <MessageContent message={message} copied={false} footerMeta={null} />

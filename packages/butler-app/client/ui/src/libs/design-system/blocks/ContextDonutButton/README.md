@@ -26,3 +26,5 @@ Do not use it for detailed analytics. Use ProgressMeter or Chart for inspectable
 
 ## Tags
 composer, context, usage, button, dense
+
+Use surface="glass" in the external composer row: the same 18px ring in a 34px desktop or 44px touch circle.

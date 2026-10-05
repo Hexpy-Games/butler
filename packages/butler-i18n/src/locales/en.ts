@@ -890,6 +890,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       `Permanently remove "${projectName}" from Butler? This will not delete the local folder.`,
   },
   composer: {
+    controls: "Composer controls",
     workspace: "Workspace",
     workspaceLocal: "Local",
     workspaceWorktree: "Worktree",

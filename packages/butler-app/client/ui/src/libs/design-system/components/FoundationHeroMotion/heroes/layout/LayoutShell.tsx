@@ -7,9 +7,11 @@ import {
   AdaptiveShellWorkspace,
 } from "../../../../blocks/AdaptiveShell";
 import { ChromeFloatingToggleLayer } from "../../../../blocks/ChromeFrame";
-import { ComposerCard, ComposerCardCompactPreview, ComposerCardToolbar, ComposerSendButton } from "../../../../blocks/ComposerCard";
+import { ComposerCard, ComposerCardTextarea, ComposerCardInlineAction, ComposerSendButton } from "../../../../blocks/ComposerCard";
 import { ConversationScroll, ConversationShell } from "../../../../blocks/ConversationShell";
-import { IconButton } from "../../../IconButton";
+import { PillButton } from "../../../PillButton";
+import { ButtonContainer } from "../../../ButtonContainer";
+import { ScrollArea } from "../../../../blocks/ScrollArea";
 import {
   PanelLeft, PanelLeftOpen, Plus } from "../../../Icons";
 import { Stack } from "../../../Stack";
@@ -57,12 +59,15 @@ export function AppScreen({ copy, mode, open = mode === "expanded", closedLook =
         <Stack fill gap="none">
           <ConversationShell composerReserve={96}>
             <ConversationScroll scrollRef={scrollRef} scrollable={false}><Turn copy={copy} /></ConversationScroll>
-            <ComposerCard expanded={false} floating onSubmit={(event) => event.preventDefault()}>
-              <ComposerCardToolbar>
-                <IconButton label={copy.more}><Plus size="md" /></IconButton>
-                <ComposerCardCompactPreview>{copy.placeholder}</ComposerCardCompactPreview>
-                <ComposerSendButton aria-label={copy.placeholder} disabled />
-              </ComposerCardToolbar>
+            <ComposerCard floating onSubmit={(event) => event.preventDefault()} controls={
+      <ScrollArea orientation="x" flush><ButtonContainer size="sm" wrap={false} grow>
+        <PillButton surface="glass" size="icon-lg" aria-label={copy.more}><Plus size="md" /></PillButton>
+      </ButtonContainer></ScrollArea>
+    }>
+      <ComposerCardInlineAction action={<ComposerSendButton aria-label={copy.placeholder} disabled />}>
+              <ComposerCardTextarea aria-label={copy.placeholder} placeholder={copy.placeholder} rows={1} />
+      </ComposerCardInlineAction>
+
             </ComposerCard>
           </ConversationShell>
         </Stack>
@@ -70,7 +75,7 @@ export function AppScreen({ copy, mode, open = mode === "expanded", closedLook =
       {drawer ? <AdaptiveShellScrim label={copy.hide} onDismiss={() => undefined} open={open} /> : null}
       <AdaptiveShellChrome>
         <ChromeFloatingToggleLayer>
-          <IconButton label={closedLook ? copy.sidebar : copy.hide}>{closedLook ? <PanelLeft size="md" /> : <PanelLeftOpen size="md" />}</IconButton>
+          <PillButton surface="glass" size="icon-lg" aria-label={closedLook ? copy.sidebar : copy.hide}>{closedLook ? <PanelLeft size="md" /> : <PanelLeftOpen size="md" />}</PillButton>
         </ChromeFloatingToggleLayer>
       </AdaptiveShellChrome>
     </AdaptiveShell>

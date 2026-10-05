@@ -8,7 +8,6 @@ import { ComposerSendButton } from "./ComposerSendButton";
 test("composer dependency notice stays outside the collapsible form", () => {
   const html = renderToStaticMarkup(
     <ComposerCard
-      expanded={false}
       notice={<span data-test-class="dependency-notice">Install Git</span>}
     >
       <span>Composer content</span>

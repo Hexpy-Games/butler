@@ -1,10 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardExpandedBody, ComposerCardPlaceholder, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton } from "../../../../blocks/ComposerCard";
+import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardPlaceholder, ComposerCardInlineAction, ComposerSendButton } from "../../../../blocks/ComposerCard";
 import { MetricCard } from "../../../../blocks/MetricCard";
 import { SettingsField } from "../../../../blocks/SettingsField";
 import { SettingsHeader } from "../../../../blocks/SettingsHeader";
 import { SettingsSection } from "../../../../blocks/SettingsSection";
-import { IconButton } from "../../../IconButton";
+import { Box as Spacer } from "../../../Box";
+import { PillButton } from "../../../PillButton";
+import { ButtonContainer } from "../../../ButtonContainer";
+import { ScrollArea } from "../../../../blocks/ScrollArea";
 import { Plus } from "../../../Icons";
 import { Switch } from "../../../Switch";
 import { Typo } from "../../../Typo";
@@ -58,18 +61,19 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
   const chat = panel("chat", <ChatTurn copy={copy} />);
   const composer = panel("composer", (
         <Box>
-          <ComposerCard>
-            <ComposerCardExpandedBody>
-              <ComposerCardEditor>
+          <ComposerCard controls={
+      <ScrollArea orientation="x" flush><ButtonContainer size="sm" wrap={false} grow>
+        <Part name="more"><PillButton surface="glass" size="icon-lg" aria-label={copy.more}><Plus size="md" /></PillButton></Part>
+              <Spacer grow aria-hidden="true" />
+      </ButtonContainer></ScrollArea>
+    }>
+      <ComposerCardInlineAction action={<Part name="send" sketch><ComposerSendButton aria-label={copy.send} mode="send" /></Part>}>
+        <ComposerCardEditor>
                 <ComposerCardEditable><div /></ComposerCardEditable>
                 <ComposerCardPlaceholder><Line id="placeholder">{copy.placeholder}</Line></ComposerCardPlaceholder>
               </ComposerCardEditor>
-            </ComposerCardExpandedBody>
-            <ComposerCardToolbar>
-              <Part name="more"><IconButton label={copy.more}><Plus size="md" /></IconButton></Part>
-              <ComposerCardToolbarSpacer />
-              <Part name="send" sketch><ComposerSendButton aria-label={copy.send} mode="send" /></Part>
-            </ComposerCardToolbar>
+      </ComposerCardInlineAction>
+
           </ComposerCard>
         </Box>
       ));

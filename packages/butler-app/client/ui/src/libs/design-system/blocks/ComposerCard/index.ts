@@ -1,8 +1,6 @@
 export {
   ComposerCard,
-  ComposerCardCompactPreview,
-  ComposerCardExpandedBody,
-  ComposerCardExpandedControls,
+  ComposerCardInlineAction,
   ComposerCardTextarea,
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,

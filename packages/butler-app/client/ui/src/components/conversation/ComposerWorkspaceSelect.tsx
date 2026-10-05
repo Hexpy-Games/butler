@@ -24,7 +24,7 @@ export function ComposerWorkspaceSelect() {
   return (
     <Select value={mode} disabled={isSending}
       onValueChange={(value) => setMode(value === "worktree" ? "worktree" : "local")}>
-      <ComposerSelectControl aria-label={copy.workspace} data-test-class="composer-workspace-select"
+      <ComposerSelectControl surface="glass" size="lg" aria-label={copy.workspace} data-test-class="composer-workspace-select"
         icon={mode === "worktree" ? <GitBranch size="sm" /> : <Monitor size="sm" />}>
         <SelectValue>{mode === "worktree" ? copy.workspaceWorktree : copy.workspaceLocal}</SelectValue>
       </ComposerSelectControl>

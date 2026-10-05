@@ -1,3 +1,4 @@
+import { useComposerMenuFocus } from "./hooks/useComposerMenuFocus";
 import { useAppLocale } from "@/app/copy.ts";
 import {
   Popover,
@@ -18,6 +19,7 @@ import {
 
 export function AccessModeMenu() {
   useAppLocale();
+  const menuFocus = useComposerMenuFocus();
   const accessMode = useComposerStore((store) => store.accessMode);
   const accessMenuOpen = useComposerStore((store) => store.accessMenuOpen);
   const setAccessMenuOpen = useComposerStore(
@@ -31,7 +33,7 @@ export function AccessModeMenu() {
   return (
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
       <PopoverTrigger asChild>
-        <ComposerControlButton
+        <ComposerControlButton {...menuFocus.trigger} surface="glass" size="lg"
           aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}`}
           compact="icon"
           data-test-class="access-button"
@@ -44,6 +46,7 @@ export function AccessModeMenu() {
         </ComposerControlButton>
       </PopoverTrigger>
       <PopoverContent
+        {...menuFocus.content}
         align="start"
         theme={appShellTheme(settings)}
         data-menu-size="compact"

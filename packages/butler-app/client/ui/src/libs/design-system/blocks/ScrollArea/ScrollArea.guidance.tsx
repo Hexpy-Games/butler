@@ -30,7 +30,8 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Content without a ScrollArea grows the page instead of scrolling.", render: () => <Box padding="none"><Stack gap="sm">{ROWS.map((row) => <Typo.Body key={row}>{row}</Typo.Body>)}</Stack></Box> },
     },
   ],
-  content: ["bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
+  content: [
+    "Use orientation=\"x\" flush for a pill row: resting edges align with the parent, fades sit outside, and block padding preserves focus rings without a scrollbar lane.", "bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
   accessibility: ["Scrollable regions that hold focusable content need no tabIndex; otherwise give them a label and tabIndex=0."],
   tokens: ["--scroll-fade-size", "--scroll-area-max-height-xs", "--scroll-area-min-height-xs"],
 };

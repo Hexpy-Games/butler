@@ -1,5 +1,8 @@
-import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardExpandedBody, ComposerCardPlaceholder, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton } from "../../../../blocks/ComposerCard";
-import { IconButton } from "../../../IconButton";
+import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardPlaceholder, ComposerCardInlineAction, ComposerSendButton } from "../../../../blocks/ComposerCard";
+import { PillButton } from "../../../PillButton";
+import { ButtonContainer } from "../../../ButtonContainer";
+import { ScrollArea } from "../../../../blocks/ScrollArea";
+import { Box } from "../../../Box";
 import { Plus } from "../../../Icons";
 import { type RadiusCopy } from "./radiusCopy";
 import s from "./RadiusHero.module.css";
@@ -8,18 +11,19 @@ import s from "./RadiusHero.module.css";
 export function Composer({ copy }: { copy: RadiusCopy }) {
   return (
     <span className={s.composer}>
-      <ComposerCard>
-        <ComposerCardExpandedBody>
-          <ComposerCardEditor>
+      <ComposerCard controls={
+      <ScrollArea orientation="x" flush><ButtonContainer size="sm" wrap={false} grow>
+        <PillButton surface="glass" size="icon-lg" aria-label={copy.more}><Plus size="md" /></PillButton>
+          <Box grow aria-hidden="true" />
+      </ButtonContainer></ScrollArea>
+    }>
+      <ComposerCardInlineAction action={<ComposerSendButton aria-label={copy.send} mode="send" />}>
+        <ComposerCardEditor>
             <ComposerCardEditable><div /></ComposerCardEditable>
             <ComposerCardPlaceholder>{copy.placeholder}</ComposerCardPlaceholder>
           </ComposerCardEditor>
-        </ComposerCardExpandedBody>
-        <ComposerCardToolbar>
-          <IconButton label={copy.more}><Plus size="md" /></IconButton>
-          <ComposerCardToolbarSpacer />
-          <ComposerSendButton aria-label={copy.send} mode="send" />
-        </ComposerCardToolbar>
+      </ComposerCardInlineAction>
+
       </ComposerCard>
     </span>
   );

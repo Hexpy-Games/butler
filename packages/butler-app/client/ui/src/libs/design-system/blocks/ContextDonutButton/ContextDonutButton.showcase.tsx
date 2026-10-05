@@ -25,6 +25,9 @@ function Sample({ ratio, caption, label, ...props }: { ratio: number; caption: s
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Glass circle", widths: ["375", "app"], render: ({ locale }) => (
+    <ContextDonutButton surface="glass" ratio={0.42} aria-label={copy[locale].label(42)} />
+  ) },
   {
     name: "Usage levels",
     states: ["empty", "partial", "nearly full", "full"],

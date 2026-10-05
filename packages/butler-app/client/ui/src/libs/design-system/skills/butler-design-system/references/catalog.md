@@ -1485,12 +1485,12 @@ The collapsible shell attached above the composer (the adjunct slot) with a one-
 
 `import { ComposerCard } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ComposerCard`
 
-The glass message composer: editor, toolbar, send/stop button, notices and attached adjunct panels.
+The glass message composer: editor, external controls, inline send/stop button, notices and attached adjunct panels.
 
 - Use for: Writing a message to Butler (new chat or follow-up)
 - Not for: A multi-line form field → `Textarea`
 - Not for: A search box → `Input`
-- Tokens: `--composer-glass-bg`, `--composer-glass-filter`, `--radius-composer`, `--send-bg`, `--send-fg`
+- Tokens: `--composer-controls-inset`, `--composer-glass-bg`, `--composer-glass-filter`, `--radius-composer`, `--send-bg`, `--send-fg`
 
 ### ComposerControl
 

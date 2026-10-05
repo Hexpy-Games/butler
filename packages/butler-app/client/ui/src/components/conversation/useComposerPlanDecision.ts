@@ -89,7 +89,6 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   const submitDecision = useButlerStore((state) => state.submitPlanDecision);
   const planMode = useComposerStore((state) => state.planMode);
   const setText = useComposerStore((state) => state.setText);
-  const setEngaged = useComposerStore((state) => state.setEngaged);
   const textAreaRef = useComposerStore((state) => state.textAreaRef);
   const applyServerPlanMode = useComposerStore(
     (state) => state.applyServerPlanMode,
@@ -127,7 +126,6 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
     onAccept: () => void decide("accept"),
     onOpenInstruction: () => {
       setInstructionPlanId(plan.id);
-      setEngaged(true);
       window.requestAnimationFrame(() => focusComposer(textAreaRef?.current));
     },
     onOpenPlan: () => {

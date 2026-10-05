@@ -1,3 +1,4 @@
+import { useComposerMenuFocus } from "./hooks/useComposerMenuFocus";
 import { useAppLocale } from "@/app/copy.ts";
 import { memo, useMemo, useState } from "react";
 import {
@@ -22,6 +23,7 @@ import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
 
 export const ModelMenu = memo(function ModelMenu() {
   useAppLocale();
+  const menuFocus = useComposerMenuFocus();
   const modelMenuOpen = useComposerStore((store) => store.modelMenuOpen);
   const setModelMenuOpen = useComposerStore((store) => store.setModelMenuOpen);
   const activeModel = useComposerStore((store) => store.activeModel);
@@ -92,7 +94,7 @@ export const ModelMenu = memo(function ModelMenu() {
   return (
     <Popover open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
       <PopoverTrigger asChild>
-        <ComposerControlButton
+        <ComposerControlButton {...menuFocus.trigger} surface="glass" size="lg"
           detail={
             <span data-test-class="composer-model-summary">
               {reasoningBudgetSummary(activeModel, reasoning)}
@@ -106,6 +108,7 @@ export const ModelMenu = memo(function ModelMenu() {
         </ComposerControlButton>
       </PopoverTrigger>
       <PopoverContent
+        {...menuFocus.content}
         align="end"
         theme={appShellTheme(settings)}
         data-menu-size="fit"

@@ -49,7 +49,7 @@ try {
       // A mobile navigation selection closes its drawer; show it for this capture.
       if (!(await general.isVisible())) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       if (width === 375) await page.getByRole("button", { name: "사이드바 숨기기", exact: true }).last().click();
-      await page.locator('[data-slot="composer-compact-preview"]').click();
+      await page.locator('[contenteditable="true"]').click();
       const editor = page.locator('[contenteditable="true"]');
       await editor.fill("안녕 "); await editor.press("End");
       const cdp = await page.context().newCDPSession(page);
@@ -67,6 +67,7 @@ try {
       await server.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: "처음 설정을 도와주세요", client_message_id: crypto.randomUUID() }) });
       const panel = page.locator('[data-slot="composer-question-panel"]');
       await panel.waitFor();
+      assert(await page.locator('[data-test-class="composer-controls"]').isVisible(), "controls stay during onboarding question");
       assert.equal(await panel.getByText("어떻게 불러드리면 좋겠습니까?", { exact: true }).count(), 1);
       await panel.getByRole("radio", { name: /직접 입력/u }).click();
       await panel.getByRole("textbox").fill("민수님");

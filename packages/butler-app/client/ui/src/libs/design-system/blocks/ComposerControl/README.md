@@ -34,3 +34,5 @@ Do not use it for destructive or page-level actions. Use `Button` instead.
 
 ## Tags
 composer, toolbar, pill, action
+
+Use surface="glass" size="lg" for the external composer row. ComposerSelectControl forwards the same props. Touch controls have a 44px visible height even when a popover replaces data-slot.

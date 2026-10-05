@@ -31,3 +31,5 @@ horizontal scroller; the fade follows the scrolling axis.
 
 - Do not use it as the primary page layout shell.
 - Keep domain data fetching and list state in product components.
+
+Use orientation="x" flush for a pill row: resting edges align with the parent, fades sit outside, and block padding preserves focus rings without a scrollbar lane.

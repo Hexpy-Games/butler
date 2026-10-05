@@ -1,10 +1,11 @@
+import { useComposerMenuFocus } from "./hooks/useComposerMenuFocus";
 import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import {
-  IconButton,
+  PillButton,
   ImageIcon,
   ListChecks,
   MessageSquarePlus,
@@ -24,6 +25,7 @@ import { composerImagePolicy, imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachmentMenu() {
   useAppLocale();
+  const menuFocus = useComposerMenuFocus();
   const activeChatId = useComposerStore((state) => state.draftSessionId);
   const navigation = useButlerStore((state) => state.navigation);
   const settings = useButlerStore((state) => state.settings);
@@ -43,15 +45,17 @@ export function ComposerAttachmentMenu() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <IconButton
+        <PillButton {...menuFocus.trigger} surface="glass" size="icon-lg"
           data-test-class="attachment-button"
           disabled={uploadingCount > 0}
-          label={appCopy.composer.featureDrawer}
+          aria-label={appCopy.composer.featureDrawer}
+          title={appCopy.composer.featureDrawer}
         >
           <Plus size="md" />
-        </IconButton>
+        </PillButton>
       </PopoverTrigger>
       <PopoverContent
+        {...menuFocus.content}
         align="start"
         theme={theme}
         data-menu-size="content"

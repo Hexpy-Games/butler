@@ -33,8 +33,6 @@ export interface ComposerStore {
     text: string;
     contentParts?: MessageContent;
   }) => boolean;
-  engaged: boolean;
-  setEngaged: (engaged: boolean) => void;
   text: string;
   contentParts?: MessageContent;
   setContentParts: (content: MessageContent) => void;

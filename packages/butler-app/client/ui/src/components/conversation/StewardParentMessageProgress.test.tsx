@@ -15,7 +15,7 @@ import type { MessageRecord, SessionSummaryView } from "@/app/types.ts";
 import { MessageContent } from "./MessageContent";
 import { useMessageList } from "./hooks/useMessageList";
 import { useComposerState } from "./hooks/useComposerState";
-import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerSendAction } from "./ComposerSendAction";
 import { ComposerNotices } from "./ComposerNotices";
 import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
@@ -348,7 +348,7 @@ test("Steward result synthesis capsule reports preparation and offers no Stop", 
     canSend: false,
     isSending: true,
   });
-  const toolbar = renderToStaticMarkup(<ComposerToolbar />);
+  const toolbar = renderToStaticMarkup(<ComposerSendAction />);
   expect(toolbar).not.toContain('aria-label="Stop"');
   expect(toolbar).toContain('aria-label="Send"');
 });
@@ -714,6 +714,6 @@ test("child progress does not add a standalone activity row or child Composer lo
     canSend: true,
     isSending: false,
   });
-  expect(renderToStaticMarkup(<ComposerToolbar />)).toContain('aria-label="Send"');
-  expect(renderToStaticMarkup(<ComposerToolbar />)).not.toContain('aria-label="Stop"');
+  expect(renderToStaticMarkup(<ComposerSendAction />)).toContain('aria-label="Send"');
+  expect(renderToStaticMarkup(<ComposerSendAction />)).not.toContain('aria-label="Stop"');
 });

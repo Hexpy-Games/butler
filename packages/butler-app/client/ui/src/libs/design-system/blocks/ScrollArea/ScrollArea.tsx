@@ -19,6 +19,8 @@ export interface ScrollAreaProps extends DsPrivateStyleProps, WindowDragProps {
   scrollRef?: Ref<HTMLDivElement>;
   /** Scrolling axis; the edge fade follows this axis. */
   orientation?: ScrollEdgeAxis;
+  /** Horizontal pills rest on parent edges; fades extend outside them. */
+  flush?: boolean;
   /** Cap the height; the area scrolls beyond it (`xs` 180px, `sm` 320px). */
   maxHeight?: "xs" | "sm";
   /** Keep at least this height even when the content is short (`xs` 96px, a chart legend). */
@@ -42,6 +44,7 @@ export function ScrollArea({
   contentStyle,
   scrollRef,
   orientation = "y",
+  flush = false,
   maxHeight,
   minHeight,
   bleed,
@@ -53,6 +56,7 @@ export function ScrollArea({
     <div
       className={cn(styles.frame, fill && styles.fill, windowDragClassName(windowDrag), className)}
       data-orientation={orientation}
+      data-flush={orientation === "x" && flush ? "true" : undefined}
       data-max-height={maxHeight}
       data-min-height={minHeight}
       data-bleed={bleed}

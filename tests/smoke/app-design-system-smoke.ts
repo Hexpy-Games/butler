@@ -358,7 +358,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
     return {
       composerHitTargetMet,
       composerKeepsButtonHeight:
-        Boolean(composerRect) && composerRect!.height >= 24 && composerRect!.height <= 34,
+        Boolean(composerRect) && composerRect!.height === (matchMedia("(width <= 640px), (pointer: coarse)").matches ? 44 : 34),
       activityIconTitleAligned:
         Boolean(activityIconRect && activityTitleRect) &&
         Math.abs(centerY(activityIconRect) - centerY(activityTitleRect)) <= 2,

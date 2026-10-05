@@ -1,11 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { RefObject } from "react";
-import { ComposerQuestionPanel, type ComposerQuestionPanelProps, ComposerCardExpandedBody } from "@/butler-ds";
+import { ComposerQuestionPanel, type ComposerQuestionPanelProps, ComposerCardInlineAction } from "@/butler-ds";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { ComposerFileInput } from "./ComposerFileInput";
 import { ComposerTextArea } from "./ComposerTextArea";
-import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerSendAction } from "./ComposerSendAction";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
 import { ComposerPlanInstructionContext } from "./ComposerPlanInstructionContext";
@@ -37,16 +37,15 @@ export function ComposerInputSurface({
   return (
     <>
       {!authorityDecision && question && <ComposerQuestionPanel key={question.key} {...question.panel} />}
-      <ComposerCardExpandedBody>
+      <ComposerCardInlineAction action={<ComposerSendAction />}>
         {authorityDecision ? (
           <ComposerDecisionAttachment title={authorityDecision.title} label={appCopy.interfaceTemplates.pendingApprovals(authorityDecision.pendingCount)} onShowDecision={authorityDecision.onShowDecision} />
         ) : planDecision?.editingInstruction ? (
           <ComposerPlanInstructionContext decision={planDecision} />
         ) : null}
         <ComposerTextArea placeholder={authorityDecision ? undefined : planDecision?.instructionPlaceholder} />
-        <ComposerAttachments />
-      </ComposerCardExpandedBody>
-      <ComposerToolbar />
+      </ComposerCardInlineAction>
+      <ComposerAttachments />
       <ComposerFileInput inputRef={fileInputRef} onFiles={onFiles} />
     </>
   );

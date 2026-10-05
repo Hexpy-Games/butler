@@ -19,7 +19,6 @@ import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
-import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
@@ -224,13 +223,6 @@ export function VisualHarness() {
     harnessNavigation,
     ss03Surface,
   ]);
-  useEffect(() => {
-    if (!ss03Surface) return;
-    const timer = window.setTimeout(() => {
-      useComposerStore.getState().setEngaged(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [ss03Surface]);
   return (
     <AdaptiveShell
       ref={shellRef}

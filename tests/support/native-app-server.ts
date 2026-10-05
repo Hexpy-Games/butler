@@ -30,6 +30,8 @@ export type NativeAppServerOptions = {
   config?: Record<string, unknown>;
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
+  /** Test model label, for realistic long-label layout coverage. */
+  stubModelDisplayName?: string;
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
   /** Deterministic tool response for browser tests of durable forms. */
   stubToolCall?: (request: StubModelRequest) => { name: string; arguments: Record<string, unknown> } | null;
@@ -324,7 +326,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
       user: { name: "Smoke", language: "ko" },
       system: { defaultModel: "local/stub" },
       models: { local: [{
-        model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${stub.port}`,
+        model_id: "stub", display_name: options.stubModelDisplayName ?? "Stub", server_url: `http://127.0.0.1:${stub.port}`,
         context_window_tokens: 128000,
       }] },
       metrics: { enabled: false },

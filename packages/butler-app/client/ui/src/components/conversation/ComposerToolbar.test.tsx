@@ -6,7 +6,8 @@ import { JSDOM } from "jsdom";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useComposerStore } from "./composerStore";
-import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerControlRow } from "./ComposerControlRow";
+import { ComposerSendAction } from "./ComposerSendAction";
 import { useButlerStore } from "@/app/store.ts";
 
 async function renderToolbarHtml(state: Partial<ReturnType<typeof useComposerStore.getState>>) {
@@ -20,7 +21,7 @@ async function renderToolbarHtml(state: Partial<ReturnType<typeof useComposerSto
   try {
     await act(async () => {
       useComposerStore.setState(state);
-      root.render(<ComposerToolbar />);
+      root.render(<><ComposerControlRow /><ComposerSendAction /></>);
     });
     return container.innerHTML;
   } finally {
@@ -32,29 +33,6 @@ async function renderToolbarHtml(state: Partial<ReturnType<typeof useComposerSto
 }
 
 const CONTEXT_FIXTURE = { ratio: 0.25, used_tokens: 250, budget_tokens: 1000 } as never;
-
-test("composer toolbar keeps stable left and right control groups", async () => {
-  const html = await renderToolbarHtml({ planMode: true, context: CONTEXT_FIXTURE });
-
-  const plus = html.indexOf('data-test-class="attachment-button"');
-  const access = html.indexOf('data-test-class="access-button"');
-  const spacer = html.indexOf('data-test-class="composer-toolbar-spacer"');
-  const context = html.indexOf('data-test-class="context-donut-button"');
-  const model = html.indexOf('data-test-class="model-button"');
-  const send = html.indexOf('data-test-class="composer-send-button"');
-
-  expect(plus).toBeGreaterThanOrEqual(0);
-  expect(access).toBeGreaterThanOrEqual(0);
-  expect(spacer).toBeGreaterThanOrEqual(0);
-  expect(context).toBeGreaterThanOrEqual(0);
-  expect(model).toBeGreaterThanOrEqual(0);
-  expect(send).toBeGreaterThanOrEqual(0);
-  expect(plus).toBeLessThan(access);
-  expect(access).toBeLessThan(spacer);
-  expect(spacer).toBeLessThan(context);
-  expect(context).toBeLessThan(model);
-  expect(model).toBeLessThan(send);
-});
 
 test("reconnection overrides send and stop with a disabled busy control, then restores normal state", async () => {
   const before = useComposerStore.getState();
@@ -70,7 +48,7 @@ test("reconnection overrides send and stop with a disabled busy control, then re
       await act(async () => {
         useComposerStore.setState({ activeTurn, canStop: true, canSend: false });
         useButlerStore.setState({ liveConnectionLost: true });
-        root.render(<ComposerToolbar />);
+        root.render(<ComposerSendAction />);
       });
       const html = container.innerHTML;
       expect(html).toContain('aria-busy="true"');
@@ -141,13 +119,13 @@ test("model status error uses the danger tone, an alert icon, and a tooltip hint
   expect(loading.hasAttribute("disabled")).toBe(true);
 });
 
-test("the workspace chip sits in the toolbar after the access control, never floating above the card", async () => {
+test("the workspace chip stays after access in the external control row", async () => {
   const { readFileSync } = await import("node:fs");
   const read = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
-  const toolbar = read("./ComposerToolbar.tsx");
+  const toolbar = read("./ComposerControlRow.tsx");
   const access = toolbar.indexOf("<AccessModeMenu />");
   const workspace = toolbar.indexOf("<ComposerWorkspaceSelect />");
-  const spacer = toolbar.indexOf("<ComposerCardToolbarSpacer />");
+  const spacer = toolbar.indexOf('<Box grow aria-hidden="true" />');
   expect(access).toBeGreaterThan(0);
   expect(workspace).toBeGreaterThan(access);
   expect(workspace).toBeLessThan(spacer);

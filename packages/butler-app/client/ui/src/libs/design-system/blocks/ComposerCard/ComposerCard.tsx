@@ -1,11 +1,9 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
-import { createContext, forwardRef, useContext } from "react";
-import { Collapsible } from "../../components/Collapsible";
+import type { FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
+import { forwardRef } from "react";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
-import { dsClass } from "../../lib/internal";
 
 export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   large?: boolean;
@@ -15,10 +13,8 @@ export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFo
   notice?: ReactNode;
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
-  expanded?: boolean;
+  controls?: ReactNode;
 }
-
-const ComposerExpandedContext = createContext(true);
 
 export function ComposerCard({
   large = false,
@@ -29,7 +25,7 @@ export function ComposerCard({
   children,
   className,
   containerRef,
-  expanded = true,
+  controls,
   ...props
 }: ComposerCardProps) {
   return (
@@ -47,7 +43,6 @@ export function ComposerCard({
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
         data-drop-active={dropActive ? "true" : undefined}
-        data-expanded={expanded}
         data-test-class="composer-card"
         {...props}
       >
@@ -56,8 +51,9 @@ export function ComposerCard({
             {adjunct}
           </div>
         ) : null}
-        <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
+        {children}
       </form>
+      {controls ? <div className={styles.controls} data-test-class="composer-controls-slot">{controls}</div> : null}
     </div>
   );
 }
@@ -83,34 +79,13 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   );
 }
 
-/** Editor region: Collapsible reveal, kept mounted and focusable while folded. */
-export function ComposerCardExpandedBody({ children }: { children: ReactNode }) {
-  const expanded = useContext(ComposerExpandedContext);
+/** Send/stop centers on the editor's last line as the draft grows. */
+export function ComposerCardInlineAction({ children, action }: { children: ReactNode; action: ReactNode }) {
   return (
-    <Collapsible open={expanded} keepMounted="focusable" className={dsClass(styles.expandedBody)} data-slot="composer-expanded-body">
-      {children}
-    </Collapsible>
-  );
-}
-
-export function ComposerCardExpandedControls({ children }: { children: ReactNode }) {
-  return <span className={styles.expandedControls}>{children}</span>;
-}
-
-export function ComposerCardCompactPreview({
-  children,
-  className,
-  ...props
-}: DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>) {
-  return (
-    <button
-      className={cn(styles.compactPreview, className)}
-      data-slot="composer-compact-preview"
-      type="button"
-      {...props}
-    >
-      {children}
-    </button>
+    <div className={styles.inlineAction} data-slot="composer-inline-action">
+      <div className={styles.editorColumn}>{children}</div>
+      <div className={styles.action}>{action}</div>
+    </div>
   );
 }
 

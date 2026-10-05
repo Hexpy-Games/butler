@@ -13,7 +13,7 @@ export function ComposerModelStatusButton(props: {
     const hint = appCopy.composer.modelErrorHint;
     return (
       <Tooltip label={hint}>
-        <ComposerControlButton
+        <ComposerControlButton surface="glass" size="lg"
           aria-disabled="true"
           aria-label={`${label}. ${hint}`}
           data-test-class="model-button"
@@ -26,7 +26,7 @@ export function ComposerModelStatusButton(props: {
     );
   }
   return (
-    <ComposerControlButton disabled data-test-class="model-button">
+    <ComposerControlButton surface="glass" size="lg" disabled data-test-class="model-button">
       <span data-test-class="composer-model-name">{label}</span>
     </ComposerControlButton>
   );

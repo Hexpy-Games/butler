@@ -9,14 +9,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await server.signIn(page);
   await page.goto(server.url);
-  await page.locator('[data-slot="composer-compact-preview"]').click();
+  await page.locator('[contenteditable="true"]').click();
   const editor = page.locator('[contenteditable="true"]');
   const card = page.locator('[data-test-class="composer-card"]');
   const blur = () => page.locator('[data-test-class="mac-window"]').click({ position: { x: 700, y: 100 } });
   const padding = async () => {
-    if (await page.locator('[data-slot="composer-compact-preview"]').isVisible()) {
-      await page.locator('[data-slot="composer-compact-preview"]').click();
-    } else await card.click({ position: { x: 4, y: 4 } });
+    const box = await card.boundingBox();
+    assert(box);
+    await card.click({ position: { x: box.width - 4, y: box.height / 2 } });
     await page.waitForFunction(() => document.activeElement?.getAttribute("contenteditable") === "true");
   };
   await editor.fill("안녕하세요 hello");
@@ -91,7 +91,7 @@ try {
   });
   assert(offset > 0 && offset < 11, "text click places a middle caret");
   await page.keyboard.type("X");
-  assert.equal(await editor.innerText(), `안녕하세요 hello`.slice(0, offset) + "X" + `안녕하세요 hello`.slice(offset));
+  assert.equal(await editor.innerText(), "안녕하세요 hello".slice(0, offset) + "X" + "안녕하세요 hello".slice(offset));
   await editor.press("Home");
   await page.keyboard.press("ControlOrMeta+K");
   await page.getByRole("dialog").waitFor();

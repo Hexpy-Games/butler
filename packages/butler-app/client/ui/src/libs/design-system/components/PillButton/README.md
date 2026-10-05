@@ -40,3 +40,5 @@ Product engineers, design-system maintainers, and agents can use it for compact 
 
 ## Tags
 pill, composer, toolbar, borderless, action
+
+For icon-only glass controls, use size="icon-lg" and an aria-label: 34px circles on desktop and 44px on touch.
