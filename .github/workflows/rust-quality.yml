@@ -433,7 +433,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
             --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
 
       # Groups the errors by crate, file and code so the port can be planned

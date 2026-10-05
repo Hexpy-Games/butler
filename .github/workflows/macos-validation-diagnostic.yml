@@ -1,0 +1,33 @@
+name: macOS full validation diagnostic
+
+# Manual investigation only. The normal Rust quality gate still requires every
+# selected platform/check and the unmodified, probe-free owner startup gate.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native:
+    uses: ./.github/workflows/native-agent.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      ort-mode: static-ort
+
+  archive:
+    uses: ./.github/workflows/rust-perf-archive.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+
+  full-perf:
+    needs: [native, archive]
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      performance-only: true
+      diagnose-owner-validation: true
