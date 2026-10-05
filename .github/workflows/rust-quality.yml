@@ -58,13 +58,8 @@ jobs:
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:

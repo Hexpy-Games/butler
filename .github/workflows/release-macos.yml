@@ -12,8 +12,6 @@ jobs:
     # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
     environment: deploy
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     steps:
       - name: Check out repository
@@ -51,7 +49,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "${GITHUB_REF_NAME#v}"
 
-      - uses: mozilla-actions/sccache-action@v0.0.11
         if: steps.reuse.outputs.reused != 'true'
       - name: Cache the pinned native Rust build
         if: steps.reuse.outputs.reused != 'true'

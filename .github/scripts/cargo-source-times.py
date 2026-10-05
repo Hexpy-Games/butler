@@ -2,7 +2,7 @@
 """Restore freshness only for tracked inputs with identical complete contents.
 
 Cargo's source freshness uses mtimes. A new checkout otherwise invalidates
-unchanged workspace libraries in a restored target directory. Changed inputs
+unchanged workspace libraries in either complete snapshot restore path. Changed inputs
 stay newer than the snapshot; revision/version environment checks still run.
 """
 import hashlib
@@ -68,6 +68,15 @@ def capture(root):
         entries.append(dict(path=name, kind='directory', sha256=digest,
                             mtime_ns=(root / name).stat().st_mtime_ns))
     return entries
+
+
+def build_key(root):
+    """Roll main snapshots on build inputs, never on git HEAD or job/ref names."""
+    scopes = ('packages/butler-agent/rust/', 'packages/butler-agent/resources/',
+              'packages/butler-app/client/electron/', 'packages/butler-app/scripts/release/')
+    inputs = [(entry['path'], entry['sha256']) for entry in capture(root)
+              if entry.get('kind', 'file') == 'file' and entry['path'].startswith(scopes)]
+    return hashlib.sha256(json.dumps(inputs, separators=(',', ':')).encode()).hexdigest()
 
 
 def restore(root, entries):

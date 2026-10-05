@@ -50,6 +50,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: packages/butler-agent/rust
           shared-key: macos-process-identity
       - name: Prove live identity and unreaped exit behavior
