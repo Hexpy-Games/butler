@@ -1,86 +1,93 @@
 /* Proposal page only (ds-site). Composer surfaces stay owned by ComposerCard/TintedGlass;
    this file lays out the preview frames and the decoration layers that a DS slot would own. */
 
-/* body does not scroll (tokens.css); the page is its own scroll container. */
+/* tokens.css locks body scrolling (the app shell scrolls inside); the page is its own fixed
+   scroll container so it scrolls on desktop and on phones. */
 .pageRoot {
-  height: 100%;
+  position: fixed;
+  inset: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-block: var(--space-3xl);
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+  -webkit-overflow-scrolling: touch;
+}
+
+.embedRoot {
+  position: fixed;
+  inset: 0;
   background: var(--conversation-bg);
   color: var(--text-primary);
 }
 
 .frames {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, min(100%, 976px));
+  justify-content: center;
   gap: var(--space-lg);
 }
 
-.frames[data-count="2"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (width <= 1100px) {
-  .frames[data-count="2"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.frames[data-width="375"] {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 375px), max-content)
+  );
+  justify-content: center;
 }
 
 .frame {
   min-width: 0;
-  padding: var(--space-lg);
+  overflow: hidden;
   border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--conversation-bg);
   color: var(--text-primary);
 }
 
-/* The new chat screen, cropped: page wallpaper behind, composer at the bottom. One inset
-   (the adaptive composer gutter, 16px) on every side. */
+/* The new chat screen, cropped to its lower part. Desktop: the app's main pane at a 1280px
+   window (974px wide, +2px frame border) so ConversationShell resolves the same composer width
+   (738px). */
 .screen {
   position: relative;
-  display: grid;
-  align-content: end;
-  min-height: 16rem;
+  width: 100%;
+  height: 18rem;
   margin-inline: auto;
-  padding: var(--space-lg);
-  overflow: hidden;
-  isolation: isolate;
-  border-radius: var(--radius-panel);
 }
 
-.screen[data-width="375"] {
-  max-width: 375px;
+/* 375: a phone-sized iframe, so the composer's width/pointer media queries match a phone. */
+.phone {
+  display: block;
+  width: 375px;
+  max-width: 100%;
+  height: 20rem;
+  border: 0;
 }
 
-/* On a phone the preview bleeds to the viewport edges, so the composer gets exactly the
-   app's width (viewport minus the 16px composer gutter on each side). */
 @media (width <= 600px) {
   .frames {
     margin-inline: calc(-1 * var(--space-lg));
   }
 
   .frame {
-    padding: 0;
     border-width: 0;
     border-radius: 0;
   }
 
-  .screen {
-    border-radius: 0;
+  .screen,
+  .phone {
+    width: 100%;
   }
-}
-
-.composerStage {
-  position: relative;
-  z-index: 1;
-  width: min(100%, var(--conversation-content-width, 760px));
-  margin-inline: auto;
 }
 
 /* ---- Card background (what a ComposerCard `decoration` slot would render) ---- */
 
 .background {
+  --decor-halo-alpha: 72%;
+  --decor-halo-blur: 8px;
+  --decor-halo-feather: 22px;
+  --decor-halo-feather-y: 10px;
+
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -92,53 +99,73 @@
 .art {
   position: absolute;
   inset: 0;
+  transform-origin: 100% 0;
+}
+
+/* Shoreline keeps one scale while the box grows: a fixed-height scene anchored at the bottom. */
+.art[data-scene="shoreline"] {
+  top: auto;
+  height: max(100%, 140px);
   transform-origin: 50% 100%;
 }
 
-/* TintedGlass's own recipe (tint, stronger at the top and bottom edges) at a per-scene alpha
-   that keeps text-primary >= 4.5:1 over the scene in both themes (measured on the page). */
-.scrim {
-  --decor-scrim: 74%;
-  --decor-scrim-edge: 82%;
-
+/* Local scrim (useLocalScrim): frosted halos behind the text block and the two control
+   groups only. TintedGlass's recipe (tint + blur) with feathered edges, nothing else. */
+.halos {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(
-        in srgb,
-        var(--tinted-glass-tint) var(--decor-scrim-edge),
-        transparent
-      )
-      0,
-    color-mix(in srgb, var(--tinted-glass-tint) var(--decor-scrim), transparent)
-      var(--tinted-glass-edge-size),
-    color-mix(in srgb, var(--tinted-glass-tint) var(--decor-scrim), transparent)
-      calc(100% - var(--tinted-glass-edge-size)),
-    color-mix(
-        in srgb,
-        var(--tinted-glass-tint) var(--decor-scrim-edge),
-        transparent
-      )
-      100%
+  contain: strict;
+}
+
+.halo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  border-radius: var(--radius-pill);
+  background: color-mix(
+    in srgb,
+    var(--tinted-glass-tint) var(--decor-halo-alpha),
+    transparent
   );
+  -webkit-backdrop-filter: blur(var(--decor-halo-blur));
+  backdrop-filter: blur(var(--decor-halo-blur));
+  mask-image:
+    linear-gradient(
+      90deg,
+      transparent,
+      var(--neutral-white) var(--decor-halo-feather),
+      var(--neutral-white) calc(100% - var(--decor-halo-feather)),
+      transparent
+    ),
+    linear-gradient(
+      180deg,
+      transparent,
+      var(--neutral-white) var(--decor-halo-feather-y),
+      var(--neutral-white) calc(100% - var(--decor-halo-feather-y)),
+      transparent
+    );
+  mask-composite: intersect;
 }
 
-/* A bright scene needs less white over it; dark text already reads on it. */
-.background[data-composer-decoration="cherry-blossom"] .scrim {
-  --decor-scrim: 30%;
-  --decor-scrim-edge: 50%;
+/* Per scene and theme: the lowest alpha that keeps the measured floors (primary 4.5:1,
+   secondary/placeholder/icons 3:1) over that scene's busiest pixels. */
+.background[data-composer-decoration="shoreline"] {
+  --decor-halo-alpha: 80%;
 }
 
-/* Light text needs the scene pushed down. Measured floors (pulse dip included): text-primary
-   >= 7.5:1 and text-secondary/placeholder >= 3:1 in every scene and theme. */
-:global(.theme-dark) .background .scrim {
-  --decor-scrim: 76%;
-  --decor-scrim-edge: 84%;
+:global(.theme-dark) .background {
+  --decor-halo-alpha: 84%;
+}
+
+:global(.theme-dark) .background[data-composer-decoration="shoreline"] {
+  --decor-halo-alpha: 76%;
 }
 
 /* ---- Edge character: head behind the card, paws in front on the top edge ---- */
 
+/* Portaled into ComposerCard's wrap (a stacking context while floating): the head sits under
+   the form (z -1) so the card hides its lower 8px; the paws sit over the top edge (z 1). */
 .head,
 .paws {
   position: absolute;
@@ -148,11 +175,13 @@
 }
 
 .head {
+  z-index: -1;
   bottom: calc(100% - 8px);
   height: 34px;
 }
 
 .paws {
+  z-index: 1;
   top: -5px;
   height: 10px;
 }

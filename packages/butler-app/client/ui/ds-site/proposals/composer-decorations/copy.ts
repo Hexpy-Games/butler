@@ -1,7 +1,8 @@
 /**
  * Proposed product copy. In the app these live in packages/butler-i18n under
  * `settings.composerDecoration.*` (the key is noted on each line); the composer strings are the
- * existing `composer.*` keys. Mirrored here because the proposal changes no product files.
+ * existing keys the product composer reads (noted per line). Mirrored here because the proposal
+ * changes no product files.
  */
 export const COPY = {
   en: {
@@ -13,14 +14,17 @@ export const COPY = {
     cherryBlossom: "Cherry blossom",
     character: "Character",
     characterDescription: "A small friend on top of the message box.",
-    // existing composer.* keys
+    // composer.placeholder, composer.messageComposer, composer.featureDrawer, composer.send
     placeholder: "Ask Butler anything",
+    messageComposer: "Message composer",
     more: "More options",
-    access: "Ask",
-    plan: "Plan",
-    model: "GPT-5.1",
-    context: "Context 42% used",
     send: "Send",
+    // composer.permission + permissions.askFirst (AccessModeMenu)
+    permission: "Permission",
+    askFirst: "Ask first",
+    // ModelMenu: model display name + reasoning label (reasoningLabel("medium"))
+    model: "GPT-5.1",
+    reasoning: "Medium",
   },
   ko: {
     label: "입력창 배경",
@@ -31,12 +35,13 @@ export const COPY = {
     character: "캐릭터",
     characterDescription: "입력창 위에 작은 친구가 앉습니다.",
     placeholder: "Butler에게 무엇이든 물어보세요",
+    messageComposer: "메시지 입력",
     more: "추가 기능",
-    access: "질문",
-    plan: "계획",
-    model: "GPT-5.1",
-    context: "컨텍스트 42% 사용",
     send: "전송",
+    permission: "권한",
+    askFirst: "먼저 확인",
+    model: "GPT-5.1",
+    reasoning: "중간",
   },
 } as const;
 

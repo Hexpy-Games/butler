@@ -9,10 +9,13 @@ export interface ProposalState {
   motion: "full" | "reduced";
   locale: ProposalLocale;
   wallpaper: PageWallpaper;
+  /** Composer at rest (the one-row pill) or open (focused: editor + toolbar). */
+  composer: "rest" | "open";
 }
 
 export const DEFAULT_PROPOSAL_STATE: ProposalState = {
-  decor: "shoreline", character: true, theme: "both", width: "desktop", motion: "full", locale: "ko", wallpaper: "butler.bloom",
+  decor: "cherry-blossom", character: true, theme: "both", width: "desktop", motion: "full", locale: "ko",
+  wallpaper: "butler.bloom", composer: "rest",
 };
 
 function pick<T extends string>(options: readonly T[], value: string | null, fallback: T): T {
@@ -31,15 +34,20 @@ export function readProposalState(search: string): ProposalState {
     motion: pick(["full", "reduced"] as const, params.get("motion"), d.motion),
     locale: pick(["en", "ko"] as const, params.get("locale"), d.locale),
     wallpaper: pick(PAGE_WALLPAPERS, params.get("wallpaper"), d.wallpaper),
+    composer: pick(["rest", "open"] as const, params.get("composer"), d.composer),
   };
 }
 
-export function writeProposalState(state: ProposalState) {
-  const params = new URLSearchParams(window.location.search);
+export function proposalSearch(state: ProposalState): string {
+  const params = new URLSearchParams({ page: "proposals/composer-decorations" });
   const entries: Array<[string, string]> = [
     ["decor", state.decor], ["character", state.character ? "on" : "off"], ["theme", state.theme], ["width", state.width],
-    ["motion", state.motion], ["locale", state.locale], ["wallpaper", state.wallpaper],
+    ["motion", state.motion], ["locale", state.locale], ["wallpaper", state.wallpaper], ["composer", state.composer],
   ];
   for (const [key, value] of entries) params.set(key, value);
-  window.history.replaceState(null, "", `?${params.toString()}${window.location.hash}`);
+  return params.toString();
+}
+
+export function writeProposalState(state: ProposalState) {
+  window.history.replaceState(null, "", `?${proposalSearch(state)}${window.location.hash}`);
 }

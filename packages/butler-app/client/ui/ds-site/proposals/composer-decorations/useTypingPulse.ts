@@ -21,6 +21,10 @@ export interface PulseMeter {
   input: number[];
   /** Pulse frame cost (ms): the rAF callback that starts the animations. */
   frame: number[];
+  /** Local scrim frame cost (ms): text-line/control measurement + halo placement. */
+  scrim: number[];
+  /** Local scrim frames after open/close or a resize (control groups re-read), not on the typing path. */
+  relayout: number[];
   pulses: number;
 }
 

@@ -51,6 +51,10 @@ export function PreviewKnobs({ state, onChange }: { state: ProposalState; onChan
         <SegmentedControl ariaLabel="Width" size="sm" value={state.width} onValueChange={(width) => onChange({ width: width as ProposalState["width"] })}
           options={[{ value: "desktop", label: "Desktop" }, { value: "375", label: "375" }]} />
       </Knob>
+      <Knob label="Composer">
+        <SegmentedControl ariaLabel="Composer" size="sm" value={state.composer} onValueChange={(composer) => onChange({ composer: composer as ProposalState["composer"] })}
+          options={[{ value: "rest", label: "At rest" }, { value: "open", label: "Open" }]} />
+      </Knob>
       <Knob label="Motion">
         <SegmentedControl ariaLabel="Motion" size="sm" value={state.motion} onValueChange={(motion) => onChange({ motion: motion as ProposalState["motion"] })}
           options={[{ value: "full", label: "Full" }, { value: "reduced", label: "Reduced" }]} />

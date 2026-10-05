@@ -20,8 +20,9 @@ export type DecorationTheme = "none" | "shoreline" | "cherry-blossom";
 export const DECORATION_THEMES: readonly DecorationTheme[] = ["none", "shoreline", "cherry-blossom"];
 
 export const DECORATION_SOURCES: Record<Exclude<DecorationTheme, "none">, WallpaperSource> = {
-  // Shore pulled toward the top so open water and surf lace fill the card instead of sand.
-  shoreline: { kind: "live", module: "butler.shoreline", params: { shorePosition: 1, foamAmount: 0.75 } },
+  // On a 140px scene anchored at the card bottom: the surf line sits ~47px up, so the pill at rest
+  // shows water and arriving waves, the open card shows sand behind the text and surf below.
+  shoreline: { kind: "live", module: "butler.shoreline", params: { shorePosition: 0.1, foamAmount: 0.75 } },
   "cherry-blossom": { kind: "live", module: CHERRY_BLOSSOM_WALLPAPER.manifest.id },
 };
 
