@@ -54,7 +54,9 @@ content proof. Receipt artifacts last 30 days; eviction only costs extra work.
 
 ## Validation and measurement
 
-Local regression checks: `.github/scripts/test-ci-changes.py` and the existing
+Local regression checks: seven tests in `.github/scripts/test-ci-changes.py`,
+including receipt ownership of every selected gate check across all 128 flag
+combinations, and the existing
 `Gate`/`ArtifactTrust` tests from `.github/scripts/test-ci-invariants.py`. All run
 through `.github/scripts/isolated.py`, which disposes HOME/BUTLER_DATA while
 retaining tool caches. Actionlint validates every workflow and local action.

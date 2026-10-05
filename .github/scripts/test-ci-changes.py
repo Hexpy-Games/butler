@@ -3,6 +3,8 @@
 import contextlib
 import importlib.util
 import json
+import itertools
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -89,6 +91,24 @@ class Paths(unittest.TestCase):
 
 
 class Trust(unittest.TestCase):
+    # test-category: security
+    def test_every_selected_gate_check_is_owned_by_a_receipt_group(self):
+        workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
+        # Evaluate the actual gate's selection policy, without its result loop.
+        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs:")[0]
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
+        for values in itertools.product(['false', 'true'], repeat=len(flags)):
+            outputs = dict(zip(flags, values))
+            jobs = {'changes': {'result': 'success', 'outputs': outputs}}
+            with patch.dict(os.environ, RESULTS=json.dumps(jobs), EVENT='pull_request'):
+                scope = {}
+                exec(compile(policy, 'gate-policy', 'exec'), scope)
+            covered = {name for group, names in groups.items() if outputs[group] == 'true'
+                       for name in names}
+            selected = {name for name, enabled in scope['selected'].items() if enabled}
+            self.assertFalse(selected - covered, (outputs, selected - covered))
+
     # test-category: security
     def test_receipts_only_from_same_pr_repo_workflow_and_completed_runs(self):
         run = dict(status='completed', conclusion='success', event='pull_request',
