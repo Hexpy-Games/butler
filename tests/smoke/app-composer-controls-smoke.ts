@@ -34,10 +34,20 @@ async function geometry(page: Page) {
     const rect = (node: Element) => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom }; };
     const row = document.querySelector('[data-test-class="composer-controls"]')!;
     const buttons = [...row.querySelectorAll("button")];
+    const buttonContainer = row.querySelector('[data-slot="button-container"]')!;
+    const spacer = buttonContainer.querySelector('[data-basis="0"]');
     return { card: rect(card), radius: getComputedStyle(card).borderRadius, row: rect(row),
       buttons: buttons.map(button => ({ ...rect(button), marker: button.getAttribute("data-test-class") })),
+      layout: { container: rect(buttonContainer), spacer: spacer ? rect(spacer) : null, clientWidth: row.clientWidth, scrollWidth: row.scrollWidth, gap: getComputedStyle(buttonContainer).gap },
       send: rect(card.querySelector('[data-test-class="composer-send-button"]')!),
       pageOverflow: document.documentElement.scrollWidth - innerWidth };
+  });
+}
+
+async function glassSurfaces(page: Page) {
+  return page.locator(selector("composer-controls")).evaluate(row => {
+    const surface = (marker: string) => getComputedStyle(row.querySelector(`[data-test-class~="${marker}"]`)!).backgroundColor;
+    return { attachment: surface("attachment-button"), context: surface("context-donut-button") };
   });
 }
 
@@ -201,6 +211,20 @@ try {
     const measured = await geometry(page);
     assert.equal(measured.card.height, measured.card.width <= 520 ? 50 : 47);
     assert.equal(measured.pageOverflow, 0);
+    if ([320, 375, 390].includes(width)) {
+      assert.equal(measured.layout.spacer, null, "overflow removes the grow spacer so it cannot add a second gap");
+      const gaps = measured.buttons.slice(1).map((button, index) => button.x - measured.buttons[index]!.right);
+      assert(gaps.length > 0, "composer controls expose adjacent pill gaps");
+      for (const [index, gap] of gaps.entries()) assert(Math.abs(gap - 8) <= 0.5,
+        `pill gap is 8px ±0.5px at ${width}px: ${JSON.stringify({ gap, left: measured.buttons[index], right: measured.buttons[index + 1], layout: measured.layout })}`);
+    }
+    if (theme === "dark") {
+      await page.mouse.move(1, 1);
+      const surfaces = await glassSurfaces(page);
+      assert.equal(surfaces.attachment, surfaces.context,
+        "the plus circle shares the context circle's dark glass surface");
+      assert.notEqual(surfaces.attachment, "rgba(0, 0, 0, 0)", "the plus circle has a visible glass surface");
+    }
     for (const marker of ["attachment-button", "context-donut-button"]) {
       const circle = measured.buttons.find(button => button.marker === marker)!;
       assert.equal(circle.width, width <= 640 ? 44 : 34);
@@ -214,8 +238,9 @@ try {
     await assertDraft(page, measured.card.width);
     if (width === 375) await assertScroll(page);
     if (width === 1280) {
+      assert(measured.layout.spacer && measured.layout.spacer.width > 0, "a fitting row keeps the grow spacer");
       assert(Math.abs(measured.buttons[0]!.x - measured.card.x) < 1);
-      assert(Math.abs(measured.buttons.at(-1)!.right - measured.card.right) < 1);
+      assert(Math.abs(measured.buttons.at(-1)!.right - measured.card.right) <= 0.5);
     }
     await assertMenus(page);
     await page.screenshot({ path: `${output}/${width}-${theme}-project.png` });
