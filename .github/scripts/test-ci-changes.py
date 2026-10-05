@@ -26,6 +26,7 @@ class Paths(unittest.TestCase):
             'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
             'bun.lock': {'ui', 'site', 'ds', 'licenses'},
+            'bun.lockb': {'ui', 'site', 'ds', 'licenses'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
@@ -105,6 +106,20 @@ class Paths(unittest.TestCase):
 
 
 class Trust(unittest.TestCase):
+    # test-category: pure-logic
+    def test_non_pr_events_keep_existing_full_coverage(self):
+        for event_name in ['push', 'merge_group', 'schedule', 'workflow_dispatch']:
+            with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
+                env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REPOSITORY='owner/repo',
+                           GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
+                           GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
+                with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
+                     patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
+                    changes.select({'before': 'base'}, 'rust-quality.yml')
+                output = (Path(temporary) / 'output').read_text()
+                for group in changes.GROUPS:
+                    self.assertIn(group + '=' + ('false' if group == 'package' else 'true'), output)
+
     # test-category: security
     def test_every_selected_gate_check_is_owned_by_a_receipt_group(self):
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()

@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
-SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock', 'bunfig.toml', 'tsconfig*.json',
+SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
              'packages/butler-app/main/*', 'packages/butler-app/scripts/release/*',
@@ -123,7 +123,7 @@ def previous(repository, pr, workflow):
 def select(event, workflow):
     pr = event.get('pull_request', {})
     base = pr.get('base', {}).get('sha') or event.get('merge_group', {}).get('base_sha') or event.get('before')
-    full = os.environ['GITHUB_EVENT_NAME'] in ('schedule', 'workflow_dispatch') or not base or set(base) == {'0'}
+    full = os.environ['GITHUB_EVENT_NAME'] != 'pull_request' or not base or set(base) == {'0'}
     if not full:
         command('git', 'cat-file', '-e', f'{base}^{{commit}}')
     paths = [] if full else changed(base)

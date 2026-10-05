@@ -3,7 +3,7 @@
 Every PR workflow starts with `changes`. It compares the complete checkout with
 `pull_request.base.sha`, using a NUL-delimited Git diff with rename detection
 disabled so both sides of a rename select their owners. Merge groups use their
-base SHA. Schedules and manual checks retain full coverage. No workflow-level PR
+base SHA. Main, merge groups, schedules and manual checks retain full coverage. No workflow-level PR
 path filter can leave a required check missing on documentation changes.
 
 | Inputs | Responsible checks |
@@ -54,7 +54,7 @@ content proof. Receipt artifacts last 30 days; eviction only costs extra work.
 
 ## Validation and measurement
 
-Local regression checks: eight tests in `.github/scripts/test-ci-changes.py`,
+Local regression checks: nine tests in `.github/scripts/test-ci-changes.py`,
 including receipt ownership of every selected gate check across all 128 flag
 combinations, and the existing
 `Gate`/`ArtifactTrust` tests from `.github/scripts/test-ci-invariants.py`. All run
