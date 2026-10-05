@@ -126,6 +126,7 @@
 | A row with hover-revealed actions | `NavRow` |  |
 | A row's overflow menu with icon items | `OverflowActionMenu` | `DropdownMenu` |
 | A running row, step or task whose success replaces the spinner | `LoadingIndicator` |  |
+| A running task in a task graph (activity="running") | `Card` |  |
 | A scrolling region in content | `ScrollArea` | `SidebarShell` |
 | A search box | `Input` | `ComposerCard` |
 | A searchable list with filters | `FilteredSelectPopover` | `Select` |
@@ -849,10 +850,11 @@ A raised container for one item in a grid of items, optionally interactive and s
 
 - Use for: An item in a dashboard grid
 - Use for: A suggestion or briefing entry with its own action
+- Use for: A running task in a task graph (activity="running")
 - Not for: Only padding or a background → `Box`
 - Not for: A document or artifact tile with actions → `DocumentTile`
 - Not for: A row in a list → `ListRow`
-- Tokens: `--surface-raised`, `--radius-panel`, `--shadow-card`, `--selection`, `--focus-ring`
+- Tokens: `--surface-raised`, `--radius-panel`, `--shadow-card`, `--selection`, `--focus-ring`, `--worker-active`, `--pulse-duration`, `--motion-loop-count`
 
 ### Collapsible
 

@@ -8,6 +8,12 @@ export interface CardProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   padding?: "none" | "sm" | "md";
   interactive?: boolean;
   selected?: boolean;
+  /**
+   * Live work state of the item. `running`: a --worker-active border and a
+   * slow pulse ring; reduced motion (OS or data-motion) keeps the ring static.
+   * Selection still wins the border; the ring stays.
+   */
+  activity?: "running";
 }
 
 export function Card({
@@ -16,6 +22,7 @@ export function Card({
   interactive = false,
   padding = "md",
   selected = false,
+  activity,
   onClick,
   onKeyDown,
   ...props
@@ -36,6 +43,7 @@ export function Card({
       data-interactive={interactive ? "true" : undefined}
       data-padding={padding}
       data-selected={selected ? "true" : undefined}
+      data-activity={activity}
       data-slot="card"
       role={actionable ? "button" : undefined}
       tabIndex={actionable ? 0 : undefined}
