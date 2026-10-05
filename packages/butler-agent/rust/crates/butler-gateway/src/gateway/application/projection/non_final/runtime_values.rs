@@ -107,6 +107,8 @@ fn valid_kind(kind: &str) -> bool {
             | "message.final.completed"
             | "turn.observation"
             | "turn.continuation_scheduled"
+            | "turn.continuation.requested"
+            | "turn.continuation.limit_reached"
             | "turn.completed"
             | "turn.failed"
             | "turn.cancelled"

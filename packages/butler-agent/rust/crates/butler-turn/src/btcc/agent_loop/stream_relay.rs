@@ -29,7 +29,7 @@ enum Relayed {
         text: String,
     },
     /// The latest round's text is not the answer.
-    Discard,
+    Discard { rejected: bool },
 }
 
 /// One published event.
@@ -42,6 +42,7 @@ enum Frame {
     },
     Discarded {
         stream_id: String,
+        rejected: bool,
     },
 }
 
@@ -83,7 +84,11 @@ impl ProviderStreamObserver for RelayObserver {
     }
 
     fn round_text_discarded(&self) {
-        let _ = self.sender.send(Relayed::Discard);
+        let _ = self.sender.send(Relayed::Discard { rejected: false });
+    }
+
+    fn round_text_rejected(&self) {
+        let _ = self.sender.send(Relayed::Discard { rejected: true });
     }
 }
 
@@ -179,9 +184,12 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
                     text,
                 });
             }
-            Relayed::Discard => {
+            Relayed::Discard { rejected } => {
                 if let Some(stream_id) = open.take() {
-                    frames.push(Frame::Discarded { stream_id });
+                    frames.push(Frame::Discarded {
+                        stream_id,
+                        rejected,
+                    });
                 }
             }
         }
@@ -204,9 +212,15 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
                 payload.insert("target".into(), "final_candidate".into());
                 "model.stream.text_delta"
             }
-            Frame::Discarded { stream_id } => {
+            Frame::Discarded {
+                stream_id,
+                rejected,
+            } => {
                 payload.insert("streamId".into(), stream_id.into());
                 payload.insert("status".into(), "discarded".into());
+                if rejected {
+                    payload.insert("reason".into(), "answer_rejected".into());
+                }
                 "model.stream.completed"
             }
         };

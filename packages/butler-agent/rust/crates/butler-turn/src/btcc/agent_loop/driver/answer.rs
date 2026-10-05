@@ -27,7 +27,7 @@ pub(super) async fn settle_answer(
     }
     let mut text = reply.text;
     if let Some(synthesized) = synthesize_answer(input, state, prepared, &text).await? {
-        discard_round_text(prepared);
+        reject_round_text(prepared);
         text = synthesized;
     }
     let review = input
@@ -95,7 +95,7 @@ pub(super) async fn continue_answer(
     reason: &str,
 ) -> Result<Step, AgentLoopError> {
     const MAX_AUTOMATIC_CONTINUATIONS: u32 = 3;
-    discard_round_text(prepared);
+    reject_round_text(prepared);
     if state.automatic_continuations >= MAX_AUTOMATIC_CONTINUATIONS {
         return finish_limit(
             input,
@@ -142,4 +142,10 @@ async fn record_continuation(input: &Invocation<'_>, state: &State, kind: &str, 
     .as_object()
     .cloned();
     let _ = input.progress.emit(event).await;
+}
+
+fn reject_round_text(prepared: &PreparedPolicy) {
+    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
+        observer.round_text_rejected();
+    }
 }

@@ -22,7 +22,7 @@ use crate::gateway::application::{
 /// The draft a projected runtime event changes.
 enum StreamEvent<'a> {
     Delta { stream: &'a str, text: &'a str },
-    Discarded { stream: &'a str },
+    Discarded { stream: &'a str, rejected: bool },
 }
 
 fn stream_event<'a>(kind: &str, payload: &'a Map<String, Value>) -> Option<StreamEvent<'a>> {
@@ -40,7 +40,10 @@ fn stream_event<'a>(kind: &str, payload: &'a Map<String, Value>) -> Option<Strea
         "model.stream.completed"
             if payload.get("status").and_then(Value::as_str) == Some("discarded") =>
         {
-            Some(StreamEvent::Discarded { stream })
+            Some(StreamEvent::Discarded {
+                stream,
+                rejected: payload.get("reason").and_then(Value::as_str) == Some("answer_rejected"),
+            })
         }
         _ => None,
     }
@@ -71,7 +74,7 @@ pub(super) fn project(
     };
     match stream_event(kind, payload) {
         Some(StreamEvent::Delta { stream, text }) => append(&target, stream, text),
-        Some(StreamEvent::Discarded { stream }) => discard(&target, stream),
+        Some(StreamEvent::Discarded { stream, rejected }) => discard(&target, stream, rejected),
         None => Ok(()),
     }
 }
@@ -140,7 +143,7 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
 }
 
 /// Marks `stream` as not the answer, when it is the turn's current stream.
-fn discard(target: &StreamTarget<'_>, stream: &str) -> Result<(), AppStorageError> {
+fn discard(target: &StreamTarget<'_>, stream: &str, rejected: bool) -> Result<(), AppStorageError> {
     target
         .db
         .execute_cached(
@@ -149,6 +152,29 @@ fn discard(target: &StreamTarget<'_>, stream: &str) -> Result<(), AppStorageErro
             params![target.now, target.turn, stream],
         )
         .map_err(AppStorageError::sqlite)?;
+    if rejected {
+        clear_rejected(target, stream)?;
+    }
+    Ok(())
+}
+
+fn clear_rejected(target: &StreamTarget<'_>, stream: &str) -> Result<(), AppStorageError> {
+    if draft(target.db, target.turn)?.is_none_or(|(current, _)| current != stream) {
+        return Ok(());
+    }
+    let Some((id, status)) = latest(target.db, target.chat, target.turn)? else {
+        return Ok(());
+    };
+    if status == "streaming" {
+        target
+            .db
+            .execute_cached(
+                "UPDATE messages SET text='',updated_at=?1 WHERE id=?2",
+                params![target.now, id],
+            )
+            .map_err(AppStorageError::sqlite)?;
+        updated(target, &id, false)?;
+    }
     Ok(())
 }
 

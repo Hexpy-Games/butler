@@ -25,6 +25,7 @@ pub(super) struct Script {
     step: Mutex<usize>,
     child_step: Mutex<usize>,
     pub(super) delegated: AtomicBool,
+    pub(super) work: AtomicBool,
     sent: Mutex<Option<Instant>>,
     pub result: Mutex<Option<(Value, Duration)>>,
     pub disposition: Mutex<Option<Value>>,
@@ -52,6 +53,7 @@ pub(super) async fn start(
         step: Mutex::new(0),
         child_step: Mutex::new(1),
         delegated: AtomicBool::new(false),
+        work: AtomicBool::new(false),
         sent: Mutex::new(None),
         result: Mutex::new(None),
         disposition: Mutex::new(None),
@@ -71,6 +73,7 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let delegated = script.delegated.load(Ordering::SeqCst);
+    let work = script.work.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
         "/codex/responses",
         &body,
@@ -93,7 +96,7 @@ async fn reply(
         let mut s = counter.lock().unwrap();
         let step = *s;
         *s += 1;
-        if delegated { step } else { step + 3 }
+        if delegated || work { step } else { step + 3 }
     };
     if delegated && !child {
         let item = parent(step);
@@ -140,7 +143,7 @@ async fn reply(
             *script.sent.lock().unwrap() = Some(Instant::now());
             call("operation", case.tool, &case.args)
         }
-        4 if !delegated => message("파일 확인 완료"),
+        4 if !delegated && !work => message("파일 확인 완료"),
         4 => {
             let work = outputs
                 .iter()

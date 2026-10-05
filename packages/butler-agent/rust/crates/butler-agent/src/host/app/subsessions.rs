@@ -233,7 +233,14 @@ async fn with_child_messages(
             .and_then(|turn| turn.get("retryable"))
             .and_then(serde_json::Value::as_bool)
             == Some(true);
-        let state = if recoverable {
+        let state = if object
+            .get("latest_turn")
+            .and_then(|value| value.get("state"))
+            .and_then(serde_json::Value::as_str)
+            == Some("cancelled")
+        {
+            "cancelled"
+        } else if recoverable {
             "runtime_fault"
         } else {
             turn_state(&turn.status)

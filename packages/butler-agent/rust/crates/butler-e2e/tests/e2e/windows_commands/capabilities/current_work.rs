@@ -5,13 +5,14 @@ use super::{Access, Case, HarnessError, json, operation, setup};
 async fn sequential_file_capabilities_close_the_current_work() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, chat, script, server) = setup(Access::FullAccess).await?;
+    script.work.store(true, std::sync::atomic::Ordering::SeqCst);
     for index in 0..8 {
         let name = format!("report-{index}.txt");
         let content = format!("complete current report {index}");
         std::fs::write(s.sandbox.home.join("Downloads").join(&name), &content)?;
         let case = Case {
             tool: "read_file",
-            args: json!({"requests":[{"path":name}]}),
+            args: json!({"requests":[{"path":format!("home/Downloads/{name}")}]}),
             refused: false,
         };
         let (output, _) = operation(&s, &chat, &script, &case, Access::FullAccess).await?;
