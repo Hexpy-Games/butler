@@ -11,6 +11,7 @@ import {
   WorkActivityBlock,
 } from "@/butler-ds";
 import type { PhaseActivity } from "@/app/conversation-progress";
+import { delegatedRequestGoal } from "./delegatedRequestGoal";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
 import { workActivityToolsFromRows } from "./toolchainUtils";
@@ -20,7 +21,9 @@ export function TurnActivityTimeline({
   currentState,
   live = false,
   turnId,
+  delegatedGoal,
 }: {
+  delegatedGoal?: string;
   activities: Array<PhaseActivity & { turnId?: string }>;
   currentState?: string;
   live?: boolean;
@@ -63,6 +66,7 @@ export function TurnActivityTimeline({
                 <li key={activity.id} data-turn-id={activity.turnId ?? turnId}>
                   <ActivityBlock
                     activity={activity}
+                    delegatedGoal={index === 0 ? delegatedGoal : undefined}
                     connected={index < activities.length - 1}
                     turnId={activity.turnId ?? turnId}
                   />
@@ -71,7 +75,7 @@ export function TurnActivityTimeline({
             </Stack>
           ) : live ? (
             <RollingSwap itemKey={latest.id} motion={live}>
-              <ActivityBlock activity={latest} turnId={latest.turnId ?? turnId} />
+              <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} turnId={latest.turnId ?? turnId} />
             </RollingSwap>
           ) : null}
           {expanded ? (
@@ -96,9 +100,11 @@ export function TurnActivityTimeline({
 function ActivityBlock({
   activity,
   connected = false,
+  delegatedGoal,
   turnId,
 }: {
   activity: PhaseActivity;
+  delegatedGoal?: string;
   connected?: boolean;
   turnId?: string;
 }) {
@@ -106,17 +112,18 @@ function ActivityBlock({
   const meta = activity.createdAt
     ? `${phaseLabel(activity.phase)} · ${formatActivityTime(activity.createdAt)}`
     : phaseLabel(activity.phase);
+  const summary = delegatedRequestGoal(activity, delegatedGoal);
   return (
     <WorkActivityBlock
       density="compact"
       connected={connected}
       data-work-stage={activity.phase}
-      title={activity.title}
+      title={/(?:사용자 요청|User request):/iu.test(activity.title) ? appCopy.guided.tools.start_work : activity.title}
       description={
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
-          {sameActivityText(activity.title, activity.summary) ? null : (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel} {activity.summary}</Typo.Caption>
+          {sameActivityText(activity.title, summary) ? null : (
+            <Typo.Caption as="span" truncate={summary !== activity.summary}>{appCopy.interfaceDetails.contentLabel} {summary}</Typo.Caption>
           )}
           {activity.rationale ? (
             <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel} {activity.rationale}</Typo.Caption>

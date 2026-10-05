@@ -74,6 +74,22 @@ impl SubsessionService {
         Ok(lines)
     }
 
+    /// Visible parent execution presence, excluding interrupted child turns.
+    pub async fn running_parents(&self, parents: Vec<String>) -> Result<Vec<String>, BtccError> {
+        let candidates = self
+            .repository
+            .running_descendants(parents)
+            .await
+            .map_err(BtccError::from)?;
+        let mut running = std::collections::HashSet::new();
+        for (parent, relation) in candidates {
+            if !running.contains(&parent) && !self.child_recoverable(&relation).await? {
+                running.insert(parent);
+            }
+        }
+        Ok(running.into_iter().collect())
+    }
+
     /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
         let relations = self
@@ -142,9 +158,10 @@ impl SubsessionService {
             }
             value
         });
-        let waiting_for_children = self
-            .waiting_for_children(&relation.child_session_id)
-            .await?;
+        let waiting_for_children = result_view.is_none()
+            && self
+                .waiting_for_children(&relation.child_session_id)
+                .await?;
         let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"terminal":result_view.is_some()});
         if let Some((id, _)) = &latest {
             self.plan_counters(id, &mut projection).await?;

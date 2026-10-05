@@ -237,14 +237,7 @@ pub(super) async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    operation(
-        input.progress,
-        &call.id,
-        &call.name,
-        Status::Cancelled,
-        None,
-    )
-    .await;
+    operation(input.progress, call, Status::Cancelled, None).await;
     Ok(result)
 }
 
@@ -289,6 +282,7 @@ pub(super) async fn suspend_for_authority(
         model_round_index: state.model_round_index,
         iteration: batch.iteration,
         empty_response_recovery_used: state.empty_recovery_used,
+        automatic_continuations: state.automatic_continuations,
         tool_results: std::mem::take(&mut state.tool_results),
         presentation,
         batch: AuthorityBatch {

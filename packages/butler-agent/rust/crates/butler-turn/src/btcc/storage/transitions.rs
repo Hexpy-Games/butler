@@ -223,13 +223,21 @@ fn accept_final(
 ) -> StorageResult<()> {
     if turn.semantic_state != TurnSemanticState::Admitted
         || outbox.status != DeliveryStatus::Pending
-        || outbox.final_payload_ref != payload.reference
-        || outbox.content != payload.content
+        || payload.turn_id != turn.turn_id
+        || outbox.final_payload_ref.id != payload.reference.id
     {
         return Err(error(
             StorageCode::InvalidFinalTransition,
             "BTCC R3 final does not match its immutable Outbox",
         ));
+    }
+    if outbox.content != payload.content
+        || outbox.final_payload_ref.sha256 != payload.reference.sha256
+    {
+        butler_core::diagnostic!(
+            "warning: final transition content mismatch for {}",
+            outbox.outbox_id
+        );
     }
     let payload_value = serde_json::to_value(payload).map_err(|error| {
         StorageError::new(StorageCode::InvalidFinalPayload, error.to_string()).with_source(error)

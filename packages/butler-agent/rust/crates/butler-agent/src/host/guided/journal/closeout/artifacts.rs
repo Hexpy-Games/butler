@@ -162,9 +162,43 @@ fn mime_for(path: &str) -> &'static str {
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
         "pdf" => "application/pdf",
+        "html" | "htm" => "text/html",
         "csv" => "text/csv",
         "json" => "application/json",
         "txt" | "md" | "ts" | "tsx" | "js" | "jsx" => "text/plain",
         _ => "application/octet-stream",
     }
+}
+
+/// File-tool outputs are artifacts too; the gateway materializer verifies their
+/// path against the conversation's workspace before exposing an open/download.
+pub(super) fn with_changed_files(
+    mut artifacts: Vec<FinalArtifact>,
+    files: &[butler_turn::btcc::ChangedFileSummary],
+    workspace: &str,
+) -> Vec<FinalArtifact> {
+    for file in files {
+        if artifacts
+            .iter()
+            .any(|item| item.safe_path_label == file.path)
+        {
+            continue;
+        }
+        let Some(path) = safe_path(&file.path, false) else {
+            continue;
+        };
+        artifacts.push(FinalArtifact {
+            id: format!("artifact-{}", butler_turn::btcc::digest_identity(&path)),
+            kind: ArtifactKind::File,
+            title: path.rsplit('/').next().unwrap_or(&path).to_owned(),
+            mime_type: Some(mime_for(&path).into()),
+            safe_path_label: std::path::Path::new(workspace)
+                .join(path)
+                .to_string_lossy()
+                .into_owned(),
+            size_bytes: None,
+            created_at: None,
+        });
+    }
+    artifacts
 }

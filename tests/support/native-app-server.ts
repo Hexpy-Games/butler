@@ -283,13 +283,13 @@ async function startStubModel(
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         id: `stub-${calls.length}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: "stub",
-        choices: [{ index: 0, finish_reason: finishReason, message: { role: "assistant", content: tool ? null : text, ...(toolCalls ? { tool_calls: toolCalls } : {}) } }], usage,
+        choices: [{ index: 0, finish_reason: finishReason, message: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls } : {}) } }], usage,
       }));
       return;
     }
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const base = { id: `stub-${calls.length}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "stub" };
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : { content: text }) } }] })}\n\n`);
+    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
     response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\n`);
     response.end("data: [DONE]\n\n");
   });

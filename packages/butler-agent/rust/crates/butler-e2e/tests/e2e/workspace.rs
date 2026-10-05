@@ -245,10 +245,15 @@ async fn read_results(s: &Scenario, turn_id: &str) -> Result<Vec<Value>, Harness
     Ok(output["files"].as_array().cloned().unwrap_or_default())
 }
 
-fn file<'a>(results: &'a [Value], path: &str) -> &'a Value {
+fn file<'a>(results: &'a [Value], root: &Path, path: &str) -> &'a Value {
+    let expected = root.join(path);
     results
         .iter()
-        .find(|result| result["path"] == path)
+        .find(|result| {
+            result["path"]
+                .as_str()
+                .is_some_and(|path| Path::new(path) == expected)
+        })
         .unwrap_or_else(|| panic!("{path} not read: {results:#?}"))
 }
 
@@ -306,17 +311,17 @@ async fn ws_01_workspace_file_edge_cases() -> Result<(), HarnessError> {
 
     let results = read_results(&s, &turn_id).await?;
     assert_eq!(
-        file(&results, "ws/utf8.txt")["content"],
+        file(&results, &s.sandbox.data, "ws/utf8.txt")["content"],
         files.utf8.as_str()
     );
-    let crlf = file(&results, "ws/crlf.txt")["content"]
+    let crlf = file(&results, &s.sandbox.data, "ws/crlf.txt")["content"]
         .as_str()
         .unwrap_or_default();
     assert!(
         crlf.contains(&format!("code word: {}", files.crlf_code)),
         "{crlf:?}"
     );
-    let large = file(&results, "ws/large.log");
+    let large = file(&results, &s.sandbox.data, "ws/large.log");
     let content = large["content"].as_str().unwrap_or_default();
     assert!(
         content.starts_with(&format!("marker: {}", files.large_code)),
@@ -352,14 +357,14 @@ async fn ws_01_binary_and_oversized_reads_are_reported() -> Result<(), HarnessEr
     let (turn_id, turn) = s.turn("general", WS_01_PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let results = read_results(&s, &turn_id).await?;
-    let binary = file(&results, "ws/binary.bin");
+    let binary = file(&results, &s.sandbox.data, "ws/binary.bin");
     assert_eq!(binary["ok"], false, "{binary}");
     assert_eq!(binary["error"], "binary_file_not_supported", "{binary}");
     assert!(
         binary["content"].is_null(),
         "binary bytes shown as text: {binary}"
     );
-    let large = file(&results, "ws/large.log");
+    let large = file(&results, &s.sandbox.data, "ws/large.log");
     assert_eq!(large["truncated"], true, "{large}");
     let content = large["content"].as_str().unwrap_or_default();
     assert!(content.starts_with(&format!("marker: {}", files.large_code)));

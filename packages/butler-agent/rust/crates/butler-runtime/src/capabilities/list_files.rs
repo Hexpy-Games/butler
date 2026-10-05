@@ -15,9 +15,9 @@ use butler_turn::workspace::{
 pub(super) fn definition() -> Value {
     json!({
         "type":"function", "name":"list_files",
-        "description":"Discover regular files under a guarded workspace directory with deterministic bounded results. Use root and include_globs/exclude_globs to narrow discovery, then read a candidate with read_file.",
+        "description":"Discover regular files under an absolute or workspace-relative directory with deterministic bounded results. Use root and include_globs/exclude_globs to narrow discovery, then read a candidate with read_file.",
         "parameters":{"type":"object","additionalProperties":false,"properties":{
-            "root":{"type":"string","description":"Workspace-relative directory to inspect. Defaults to the active workspace root."},
+            "root":{"type":"string","description":"Absolute or workspace-relative directory to inspect. Defaults to the active workspace root."},
             "include_globs":{"type":"array","items":{"type":"string"},"description":"Optional workspace-relative file globs applied during traversal."},
             "exclude_globs":{"type":"array","items":{"type":"string"},"description":"Optional workspace-relative file or directory globs excluded during traversal."},
             "max_results":{"type":"integer","minimum":1,"maximum":1000},
@@ -112,7 +112,7 @@ pub(super) async fn execute(
             let mut result = json!({
                 "ok":false, "error":error, "guard":rejection.guard,
                 "message":"The discovery root is not an admitted workspace directory.",
-                "recovery_hint":"Choose a contained, non-sensitive workspace directory.",
+                "recovery_hint":"Choose a directory the OS account can access.",
                 "evidence_capability_receipts":evidence::list_limitation(error)
             });
             if let Some(path) = rejection.safe_path {

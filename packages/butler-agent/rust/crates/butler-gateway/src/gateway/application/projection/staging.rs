@@ -47,23 +47,19 @@ pub(super) fn stage(
             "Transport staged outbound identity conflict",
         ));
     }
+    if stored.1.payload != event.payload {
+        butler_core::diagnostic!("warning: staged outbound content mismatch for {action_id}");
+    }
     Ok(())
 }
 
-/// Whether a staged outbound and a newly read one carry the same action. A
-/// runtime that sends an action again (the progress and final it re-delivers
-/// after a restart, a delivery retry) writes a new transcript record: a new
-/// event id and timestamp, and its own delivery bookkeeping in the record's
-/// `metadata`. Only the action itself (kind, session, transport and payload)
-/// must match. Comparing the whole record turned an action re-sent while its
-/// first record was still staged (its delivery was read under a claim the
-/// restarted App had already recovered) into an identity conflict the
-/// projection retried forever, so the chat's turns never settled.
+/// The action id is the durable receipt key; routing identity prevents replay
+/// into another session or transport. Payload differences are diagnostic only.
 pub(super) fn same_action(stored: &TranscriptEvent, event: &TranscriptEvent) -> bool {
     stored.kind == event.kind
         && stored.session_id == event.session_id
         && stored.transport == event.transport
-        && stored.payload == event.payload
+        && claim_id_from_event(stored) == claim_id_from_event(event)
 }
 
 pub(super) fn load(

@@ -1,6 +1,8 @@
 //! Invoke the concrete domain owner; the caller owns occurrence and result journaling.
 
+pub(super) mod file_observation;
 mod mcp;
+mod project;
 mod publication;
 mod steward;
 mod web;
@@ -285,28 +287,13 @@ pub(super) async fn execute(
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
-        let workspace = owner
-            .binding
-            .workspace_reference
-            .as_ref()
-            .map(butler_turn::workspace::WorkspaceReference::get)
-            .transpose()
-            .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "project_workspace_unavailable",
-                    error.code(),
-                ))
-            })?
-            .unwrap_or_else(|| owner.binding.workspace_path.clone());
-        let result = owner.project.execute(&call.name, &call.arguments,
-            crate::host::guided::project_tools::ProjectToolScope {
-                project_id: owner.binding.memory.project_id.clone(),
-                workspace_path: workspace,
-                installation_root: owner.binding.installation_root.clone(),
-            }).await.unwrap_or_else(|error| json!({"ok":false,"error":{
-                "code":"tool_error", "message":format!("{} could not complete: {}", call.name, error.code())
-            }}));
-        return encoded(&result);
+        return project::execute(owner, call).await;
+    }
+    if matches!(
+        call.name.as_str(),
+        "read_file" | "list_files" | "grep_files"
+    ) {
+        return file_observation::execute(owner, call, call_id).await;
     }
     let args = Value::Object(call.arguments.clone());
     if matches!(
@@ -353,8 +340,9 @@ pub(super) async fn execute(
             .read(owner.binding.memory.clone(), args)
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
-        "read_file" | "list_files" | "grep_files" | "list_skills" | "load_skill"
-        | "read_skill_file" => file_capability(owner, call, &args).await,
+        "list_skills" | "load_skill" | "read_skill_file" => {
+            file_capability(owner, call, &args).await
+        }
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",

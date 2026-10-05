@@ -1,9 +1,7 @@
 //! Terminal, operation-output, and worker-result projection mutations.
 
-use base64::Engine;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
 
 use super::{
     ApplyInput, ProjectionIds, ProjectionOutcome, finish, not_handled, object, short_text, text,
@@ -53,7 +51,7 @@ pub(super) fn project_failed(
             .map(|v| short_text(&v, 240))
             .unwrap_or_else(|| "Butler could not complete this turn.".into())
     };
-    let existing: Option<String> = db.query_row("SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
+    let existing: Option<String> = db.query_row("SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     let message_id = existing.as_deref().unwrap_or(&ids.message_id);
     if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![label,code,retryable,now,message_id]) }
     else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,label,now,code,retryable]) }
@@ -154,10 +152,10 @@ pub(super) fn project_suspended(
         }))?,
         now,
     )?;
+    super::stream_message::settle_suspended(db, subscribers, chat, turn, now)?;
     if authority_pending {
         return Ok((false, false));
     }
-    super::stream_message::settle_suspended(db, subscribers, chat, turn, now)?;
     if queue::claim_status(db, chat, turn, claim)? == QueuedTurnClaimStatus::Unlinked {
         return Ok((true, false));
     }
@@ -217,69 +215,34 @@ pub(super) fn operation_output(
 ) -> Result<(), AppStorageError> {
     let request = operation_token(p, "requestId")?;
     let result = operation_token(p, "resultId")?;
-    let digest = operation_digest(p, "resultSha256")?;
-    let content_digest = operation_digest(p, "contentSha256")?;
-    let integers = [
-        "chunkIndex",
-        "chunkCount",
-        "byteStart",
-        "byteEnd",
-        "byteLength",
+    let chunk = crate::gateway::application::operation_output::OperationOutputChunk::from_payload(
+        p, &request, &result,
+    )
+    .ok_or_else(|| {
+        AppStorageError::new(
+            AppStorageCode::OperationOutputChunkInvalid,
+            "Invalid operation output chunk",
+        )
+    })?;
+    let digest = &chunk.result_sha256;
+    let content_digest = &chunk.content_sha256;
+    let content = &chunk.content_base64;
+    let values = [
+        chunk.chunk_index,
+        chunk.chunk_count,
+        chunk.byte_start,
+        chunk.byte_end,
+        chunk.byte_length,
     ];
-    let mut values = [0_i64; 5];
-    for (index, key) in integers.iter().enumerate() {
-        values[index] = p
-            .get(*key)
-            .and_then(Value::as_i64)
-            .filter(|v| *v >= 0)
-            .ok_or_else(|| {
-                AppStorageError::new(
-                    AppStorageCode::OperationOutputChunkInvalid,
-                    format!("{key} invalid"),
-                )
-            })?;
-    }
-    if values[1] < 1 || values[0] >= values[1] || values[2] > values[3] || values[3] > values[4] {
-        return Err(AppStorageError::new(
-            AppStorageCode::OperationOutputChunkInvalid,
-            "operation output chunk range invalid",
-        ));
-    }
-    let content = p
-        .get("contentBase64")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            AppStorageError::new(
-                AppStorageCode::OperationOutputChunkInvalid,
-                "contentBase64 invalid",
-            )
-        })?;
-    if content.len() > 65_536 {
-        return Err(AppStorageError::new(
-            AppStorageCode::OperationOutputChunkInvalid,
-            "contentBase64 invalid",
-        ));
-    }
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(content)
-        .map_err(|source| {
-            AppStorageError::new(
-                AppStorageCode::OperationOutputChunkInvalid,
-                "contentBase64 invalid",
-            )
-            .with_source(source)
-        })?;
-    if i64::try_from(decoded.len()).unwrap_or(i64::MAX) != values[3] - values[2]
-        || format!("{:x}", Sha256::digest(&decoded)) != content_digest
-    {
-        return Err(AppStorageError::new(
-            AppStorageCode::OperationOutputChunkInvalid,
-            "operation output chunk digest mismatch",
-        ));
-    }
     let changed=db.execute("INSERT OR IGNORE INTO app_operation_output_chunks(turn_id,request_id,result_id,result_sha256,chunk_index,chunk_count,byte_start,byte_end,byte_length,content_base64,content_sha256,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",params![turn,request,result,digest,values[0],values[1],values[2],values[3],values[4],content,content_digest,now]).map_err(AppStorageError::sqlite)?;
     if changed == 0 {
-        let same:Option<i64>=db.query_row("SELECT 1 FROM app_operation_output_chunks WHERE turn_id=?1 AND request_id=?2 AND result_id=?3 AND result_sha256=?4 AND chunk_index=?5 AND chunk_count=?6 AND byte_start=?7 AND byte_end=?8 AND byte_length=?9 AND content_base64=?10 AND content_sha256=?11",params![turn,request,result,digest,values[0],values[1],values[2],values[3],values[4],content,content_digest],|r|r.get(0)).optional().map_err(AppStorageError::sqlite)?;
+        let content_matches: bool = db.query_row("SELECT content_base64=?4 AND content_sha256=?5 AND result_sha256=?6 FROM app_operation_output_chunks WHERE turn_id=?1 AND request_id=?2 AND result_id=?3 AND chunk_index=?7", params![turn,request,result,content,content_digest,digest,values[0]], |row| row.get(0)).map_err(AppStorageError::sqlite)?;
+        if !content_matches {
+            butler_core::diagnostic!(
+                "warning: operation output chunk replay content mismatch for {turn}/{request}/{result}"
+            );
+        }
+        let same:Option<i64>=db.query_row("SELECT 1 FROM app_operation_output_chunks WHERE turn_id=?1 AND request_id=?2 AND result_id=?3 AND chunk_index=?4 AND chunk_count=?5 AND byte_start=?6 AND byte_end=?7 AND byte_length=?8",params![turn,request,result,values[0],values[1],values[2],values[3],values[4]],|r|r.get(0)).optional().map_err(AppStorageError::sqlite)?;
         if same.is_none() {
             return Err(AppStorageError::new(
                 AppStorageCode::OperationOutputChunkConflict,
@@ -385,25 +348,6 @@ fn operation_token(payload: &Map<String, Value>, key: &str) -> Result<String, Ap
         .get(key)
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty() && value.len() <= 512)
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            AppStorageError::new(
-                AppStorageCode::OperationOutputChunkInvalid,
-                format!("{key} invalid"),
-            )
-        })
-}
-
-fn operation_digest(payload: &Map<String, Value>, key: &str) -> Result<String, AppStorageError> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| {
-            value.len() == 64
-                && value
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-        })
         .map(str::to_owned)
         .ok_or_else(|| {
             AppStorageError::new(

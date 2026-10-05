@@ -52,6 +52,13 @@ impl ProviderRequestConfigPort for PromptConfig {
 struct PromptMetrics(Arc<Mutex<Vec<&'static str>>>);
 
 impl PromptUsageMetricSink for PromptMetrics {
+    fn append_request_diagnostic(
+        &self,
+        _: &serde_json::Value,
+        _: Option<&str>,
+    ) -> Result<(), butler_turn::btcc::ModelRoundError> {
+        Ok(())
+    }
     fn append(&self, _: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
         self.0.lock().unwrap().push("metric");
         Ok(())

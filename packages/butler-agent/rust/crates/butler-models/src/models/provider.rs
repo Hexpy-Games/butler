@@ -3,8 +3,10 @@
 mod continuation;
 mod contracts;
 mod local_stream;
+mod prefix_diagnostics;
 mod prompt;
 mod redact;
+pub(super) mod request_trace;
 mod result;
 mod round_usage;
 mod route;

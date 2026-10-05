@@ -59,7 +59,14 @@ fn main() {
                     continue;
                 }
                 _ => {
-                    Ok(json!({"content": [{"type": "text", "text": format!("e2e token {nonce}")}]}))
+                    if let Ok(raw) = std::env::var("E2E_MCP_RESULT_JSON") {
+                        serde_json::from_str(&raw)
+                            .map_err(|_| json!({"code":-32000,"message":"invalid fixture JSON"}))
+                    } else {
+                        Ok(
+                            json!({"content": [{"type": "text", "text": format!("e2e token {nonce}")}]}),
+                        )
+                    }
                 }
             },
             "ping" => Ok(json!({})),

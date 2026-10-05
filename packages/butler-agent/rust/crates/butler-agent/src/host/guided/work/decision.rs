@@ -52,7 +52,7 @@ pub(super) fn decide(
         return Ok(ReportDecision::Report(None));
     }
     Ok(ReportDecision::Continue(if requires_terminal_result {
-        "The delegated assignment is still open. Continue the remaining actions in the same Work and workspace using the current Plan and results. An open disposition saves progress; it does not finish this assignment. When the requested work is done, record completed and report. If a real external blocker prevents further work, record blocked with the reason and report. Use the existing wait or approval flow when waiting is necessary."
+        "The request is still open. Continue the remaining actions in the same Work and workspace using the current Plan and results. An open disposition saves progress; it does not finish this request. When the requested work is done, record completed and report. If a real external blocker prevents further work, record blocked with the reason and report. Use the existing wait or approval flow when waiting is necessary."
     } else {
         "Before reporting the final answer, call record_work_disposition for the explicitly bound Work. Choose completed, open, or blocked with a concise summary and valid action/evidence details, then report."
     }))

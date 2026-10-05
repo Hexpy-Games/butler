@@ -5,9 +5,6 @@ on:
       performance-only:
         type: boolean
         default: false
-      diagnose-owner-validation:
-        type: boolean
-        default: false
       runner:
         type: string
         default: ubuntu-24.04
@@ -90,8 +87,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, idle]
-    env:
-      BUTLER_E2E_BTCC_VALIDATION_PROBE: ${{ inputs.diagnose-owner-validation && matrix.shard == 'idle' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2

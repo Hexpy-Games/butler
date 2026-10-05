@@ -4,21 +4,15 @@ use serde_json::Value;
 
 use butler_turn::btcc::{BtccError, PortFuture, WorkerProfile, WorkerProfileReader};
 
-use crate::host::service::configuration::AppServiceConfiguration;
+use crate::host::ActiveAppEndpoint;
 
 pub(crate) struct AppWorkerProfileReader {
-    endpoint: std::sync::Arc<crate::host::ActiveAppEndpoint>,
+    endpoint: std::sync::Arc<ActiveAppEndpoint>,
     client: reqwest::Client,
 }
 
 impl AppWorkerProfileReader {
-    pub(crate) fn new(
-        config: &AppServiceConfiguration,
-        endpoint: std::sync::Arc<crate::host::ActiveAppEndpoint>,
-    ) -> Result<Self, BtccError> {
-        if !matches!(config.host.as_str(), "127.0.0.1" | "localhost" | "::1") {
-            return Err(error("worker_profile_app_endpoint_not_local"));
-        }
+    pub(crate) fn new(endpoint: std::sync::Arc<ActiveAppEndpoint>) -> Result<Self, BtccError> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()

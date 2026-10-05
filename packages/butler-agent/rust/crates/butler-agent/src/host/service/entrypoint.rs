@@ -148,7 +148,6 @@ async fn run_until_stopped(
     let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
     let app_endpoint = Arc::new(ActiveAppEndpoint::new());
     let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
-        &config.app,
         app_endpoint.clone(),
     )?);
     let runtime = Arc::new(

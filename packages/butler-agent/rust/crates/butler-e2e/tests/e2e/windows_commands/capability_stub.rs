@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) const PROMPT: &str = "Windows 기본 파일 작업을 실행해줘";
+pub(super) const PROMPT: &str = "다운로드 폴더 정리해줘";
 pub(super) const DELEGATE_PROMPT: &str = "Steward에게 파일 작성을 위임해줘";
 
 #[derive(Clone)]
@@ -93,7 +93,7 @@ async fn reply(
         let mut s = counter.lock().unwrap();
         let step = *s;
         *s += 1;
-        step
+        if delegated { step } else { step + 3 }
     };
     if delegated && !child {
         let item = parent(step);
@@ -140,6 +140,7 @@ async fn reply(
             *script.sent.lock().unwrap() = Some(Instant::now());
             call("operation", case.tool, &case.args)
         }
+        4 if !delegated => message("파일 확인 완료"),
         4 => {
             let work = outputs
                 .iter()
@@ -162,17 +163,8 @@ async fn reply(
         .into_response()
 }
 
-fn action(case: &Case) -> Value {
-    let mut action = json!({"action_key":"basic","description":"Run the exact test operation"});
-    if matches!(case.tool, "write_file" | "edit_file" | "run_command") {
-        let target = if case.tool == "run_command" {
-            "workspace-command:.".to_owned()
-        } else {
-            format!("workspace:{}", case.args["path"].as_str().unwrap())
-        };
-        action["effect"] = json!({"capability":case.tool,"target":target});
-    }
-    action
+fn action(_case: &Case) -> Value {
+    json!({"action_key":"basic","description":"Run the exact test operation"})
 }
 
 fn call(id: &str, name: &str, args: &Value) -> Value {

@@ -458,14 +458,7 @@ impl PromptPort for GuidedPrompt {
                 },
                 request: RoundRequestOptions {
                     butler_data: Some(state.butler_data.clone()),
-                    usage_attribution: Some(UsageAttribution {
-                        turn_id: turn.turn_id.clone(),
-                        phase: "guided".into(),
-                        reasoning_effort: Some(
-                            invocation.model_execution.selected_reasoning_effort(),
-                        ),
-                        round_index: None,
-                    }),
+                    usage_attribution: Some(request_usage(turn, state, invocation)),
                     cache_scope: Some(format!("btcc-guided:{}", turn.session_id)),
                     stable_provider_cache_prefix: state.phase.stable_provider_cache_prefix.clone(),
                     ..Default::default()
@@ -478,4 +471,25 @@ impl PromptPort for GuidedPrompt {
 
 fn delegated_tools(state: &GuidedTextState) -> Option<String> {
     (state.phase.execution_policy.role.as_str() != "butler").then(|| format!("Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.", state.phase.authorized_names.join(", ")))
+}
+
+fn request_usage(
+    turn: &TurnRecord,
+    state: &GuidedTextState,
+    invocation: GuidedInvocation<'_>,
+) -> UsageAttribution {
+    UsageAttribution {
+        session_kind: Some(
+            if state.phase.execution_policy.role.as_str() == "butler" {
+                "parent"
+            } else {
+                "delegated"
+            }
+            .into(),
+        ),
+        turn_id: turn.turn_id.clone(),
+        phase: state.phase.phase.as_str().into(),
+        reasoning_effort: Some(invocation.model_execution.selected_reasoning_effort()),
+        round_index: None,
+    }
 }

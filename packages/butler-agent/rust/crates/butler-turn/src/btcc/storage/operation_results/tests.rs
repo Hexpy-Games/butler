@@ -229,7 +229,7 @@ async fn session_work_preserves_validation_order_and_exact_range_errors() {
     assert_code(&repository, input, "operation_result_scope_mismatch").await;
     let mut input = range_input("0".repeat(64));
     input.offset = usize::MAX;
-    assert_code(&repository, input, "operation_result_integrity_mismatch").await;
+    assert_code(&repository, input, "operation_result_range_out_of_bounds").await;
     let mut input = range_input(hash);
     input.offset = usize::MAX;
     assert_code(&repository, input, "operation_result_range_out_of_bounds").await;

@@ -19,7 +19,7 @@ pub(crate) fn definition() -> Value {
       "parameters": { "type": "object", "additionalProperties": false, "properties": {
         "requests": { "type": "array", "minItems": 1, "maxItems": 20, "description": "Canonical bounded read requests. Use one item for one file.",
           "items": { "type": "object", "additionalProperties": false, "properties": {
-            "path": { "type": "string", "description": "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted." },
+            "path": { "type": "string", "description": "Absolute file path or a path resolved against the session workspace." },
             "start_line": { "type": "integer", "minimum": 1 },
             "limit_lines": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Total requested line range, including cursor continuations. Later file lines are outside this request." },
             "max_bytes": { "type": "integer", "minimum": 1, "maximum": 1_048_576 }

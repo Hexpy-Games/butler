@@ -140,7 +140,13 @@ async fn session_cookie(s: &Scenario, browser: &reqwest::Client) -> Result<Strin
 #[tokio::test]
 async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SEC-05")?.start().await?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port().to_string();
+    drop(listener);
+    let s = Setup::new("SEC-05")?
+        .env("BUTLER_APP_SERVER_PORT", port)
+        .start()
+        .await?;
     let browser = browser();
     let page = browser
         .get(url(&s.gw, "/"))

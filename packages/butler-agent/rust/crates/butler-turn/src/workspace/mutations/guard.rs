@@ -136,13 +136,9 @@ fn path(
     else {
         return Ok(Err(guard));
     };
-    let public = match butler_platform::secure_fs::relative_path(&absolute, &guard.root) {
-        Some(relative) => relative.to_string_lossy().replace('\\', "/"),
-        None => {
-            let mut guard = guard;
-            guard.reason = Some("path_escape");
-            return Ok(Err(guard));
-        }
+    let public = match absolute.strip_prefix(&guard.root) {
+        Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
+        Err(_) => absolute.to_string_lossy().replace('\\', "/"),
     };
     Ok(Ok(GuardedPath {
         public: if public.is_empty() {

@@ -119,6 +119,7 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;
@@ -383,6 +384,7 @@ export interface AppCopy {
     pendingApprovals: (count: number) => string;
     approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
+    grantedItems: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
     reportPreparing: (title: string) => string;
@@ -426,6 +428,9 @@ export interface AppCopy {
     noSkills: string;
     activeWork: string;
     allowedConversation: string;
+    grantScopeTag: string;
+    grantCommandScope: string;
+    grantTargetScope: string;
     revokeFailed: string;
     currentWork: string;
     turnActivities: string;

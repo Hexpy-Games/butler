@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use butler_gateway::gateway::{TranscriptWriter, normalize_committed_turn_event};
 use butler_turn::btcc::{
     BtccError, CommittedProgressEvent, EventVisibility, PeerKind, StorageProgressPublication,
+    SubsessionService,
 };
 
 const PAGE_SIZE: usize = 32;
@@ -15,6 +16,7 @@ const PAGE_SIZE: usize = 32;
 pub(crate) struct ProgressPublisher {
     repository: StorageProgressPublication,
     writer: Arc<TranscriptWriter>,
+    subsessions: Arc<SubsessionService>,
     /// One pass at a time: a pass appends every event it read before the next
     /// pass reads the store, so the periodic pass and a delivery's flush never
     /// append an event twice or out of source order.
@@ -30,10 +32,12 @@ impl ProgressPublisher {
     pub(crate) fn new(
         repository: StorageProgressPublication,
         writer: Arc<TranscriptWriter>,
+        subsessions: Arc<SubsessionService>,
     ) -> Self {
         Self {
             repository,
             writer,
+            subsessions,
             pass: Mutex::new(()),
         }
     }
@@ -71,6 +75,7 @@ impl ProgressPublisher {
                 }
                 summary.attempted += 1;
                 if self.publish(&event).await.is_ok()
+                    && self.invalidate_child(&event).await.is_ok()
                     && self
                         .repository
                         .mark_published(&event.event_id)
@@ -87,6 +92,17 @@ impl ProgressPublisher {
             }
         }
         Ok(summary)
+    }
+
+    // Child transcripts are read directly from BTCC, rather than projected as
+    // App chats. Publish their canonical-view invalidation after durable progress.
+    async fn invalidate_child(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {
+        if event.event.visibility != Some(EventVisibility::Internal) {
+            self.subsessions
+                .notify_execution_changed(&event.session_id)
+                .await?;
+        }
+        Ok(())
     }
 
     async fn publish(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {

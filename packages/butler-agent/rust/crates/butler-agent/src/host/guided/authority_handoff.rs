@@ -87,6 +87,16 @@ impl AuthorityHandoff {
 }
 
 impl AppAuthorityHandoff for AuthorityHandoff {
+    fn attention_sessions(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .attention_owners(sessions)
+                .await
+                .map_err(authority_error)
+        })
+    }
+
     fn session_requests(
         &self,
         owner_session_id: String,
@@ -136,6 +146,9 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 .map(|item| {
                     json!({
                         "grant_ref":item.grant_ref,
+                        "capability":item.capability,
+                        "target":item.target,
+                        "cwd":item.cwd,
                         "title":item.title,
                         "description":item.description,
                     })

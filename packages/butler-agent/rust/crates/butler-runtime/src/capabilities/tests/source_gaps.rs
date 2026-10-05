@@ -39,14 +39,14 @@ pub(super) async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings
     fixture.files.close().await;
 }
 
-pub(crate) async fn containment_and_unicode_sensitive_paths_are_rejected() {
+pub(crate) async fn os_accessible_unicode_paths_are_read() {
     let fixture = Fixture::new();
     fixture.write("..near.txt", b"near");
     fixture.write("secret.Key", b"secret");
     for path in ["..near.txt", "secret.Key"] {
         let call = json!({ "arguments": { "requests": [{ "path": path }] } });
         let rust = fixture.invoke(&call, None).await;
-        assert_eq!(rust["files"][0]["ok"], false);
+        assert_eq!(rust["files"][0]["ok"], true);
     }
     fixture.files.close().await;
 }

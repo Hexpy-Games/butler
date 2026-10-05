@@ -26,6 +26,9 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>> {
         query::list_permissions(self.db, owner)
     }
+    fn permission_records(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
+        query::permission_records(self.db, owner)
+    }
     fn revoke_permission(
         &mut self,
         owner: &str,
@@ -39,6 +42,9 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         request_ref: &str,
     ) -> AuthorityResult<Option<AuthorityResumeSource>> {
         query::resume_source(self.db, request_ref)
+    }
+    fn attention_owners(&mut self, owners: &[String]) -> AuthorityResult<Vec<String>> {
+        query::attention_owners(self.db, owners)
     }
     fn waiting_source_sessions(&mut self) -> AuthorityResult<Vec<String>> {
         query::waiting_source_sessions(self.db)
@@ -64,9 +70,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     }
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_decided(self.db)
-    }
-    fn source_work_eligible(&mut self, session: &str, work: &str) -> AuthorityResult<bool> {
-        query::source_work_eligible(self.db, session, work)
     }
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>> {
         write::decide(self.db, write)

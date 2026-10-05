@@ -345,7 +345,7 @@ impl ToolPort for GuidedTools {
         &'a self,
         invocation: GuidedInvocation<'a>,
         _: &'a [ModelRoundTool],
-        phase: LoopPhase,
+        _: LoopPhase,
     ) -> PortFuture<'a, ToolSurface> {
         Box::pin(async move {
             self.same_turn(invocation)?;
@@ -362,10 +362,7 @@ impl ToolPort for GuidedTools {
                 ));
             }
             self.resume_pool().await?;
-            let tools = match phase {
-                LoopPhase::Working => self.binding.surface.clone(),
-                LoopPhase::FinalReport => Vec::new(),
-            };
+            let tools = self.binding.surface.clone();
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

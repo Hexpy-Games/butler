@@ -48,8 +48,8 @@ export async function captureQuickFixes(root: string, output: string, revision: 
           await capture("observer");
           const toggle = dialog.locator('[data-test-class="toggle-turn-activity-disclosure"]');
           if (await toggle.count()) {
-            await toggle.click();
-            await dialog.locator('[data-test-class~="turn-work-tool-group"] > button').click();
+            for (const item of await toggle.all()) await item.click();
+            for (const item of await dialog.locator('[data-test-class~="turn-work-tool-group"] > button').all()) await item.click();
             await capture("observer-expanded");
           }
           report.push({ revision, width, theme, state,

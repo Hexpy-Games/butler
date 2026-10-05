@@ -1,3 +1,4 @@
+import { useComposerStore } from "../composerStore";
 import type {
   MutableRefObject,
   RefObject,
@@ -40,6 +41,8 @@ interface UseComposerHandlersProps {
   multilineSendBehavior?: string;
   onSend: (text: string, controls: ComposerControls) => void;
 }
+
+const readComposerText = () => useComposerStore.getState().text;
 
 export function useComposerHandlers(props: UseComposerHandlersProps) {
   const {
@@ -87,6 +90,7 @@ export function useComposerHandlers(props: UseComposerHandlersProps) {
   );
   const submit = useComposerSubmit({
     text,
+    readText: readComposerText,
     setText,
     attachments,
     setAttachments,

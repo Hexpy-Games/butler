@@ -374,6 +374,7 @@ jobs:
           - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
           - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
           - {shard: data, tests: 'cli_surface,migration,durable_configuration,project_workspace,queue_notifications'}
+          - {shard: basics, tests: 'windows_commands'}
     env:
       BUTLER_E2E_TIER: stub
     steps:

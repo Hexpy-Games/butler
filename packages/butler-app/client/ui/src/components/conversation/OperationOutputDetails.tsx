@@ -11,11 +11,13 @@ export function OperationOutputDetails({
   requestId,
   resultId,
   toolName,
+  command,
 }: {
   turnId: string;
   requestId: string;
   resultId: string;
   toolName?: string;
+  command?: string;
 }) {
   useAppLocale();
   const [pages, setPages] = useState<OperationOutputView[]>([]);
@@ -68,8 +70,11 @@ export function OperationOutputDetails({
     latest?.complete === true,
   );
 
+  const execution = output.kind === "command" ? output.command ?? command : command;
   return (
     <Stack gap="xs">
+      {execution ? <Typo.Caption wrap="pre">{appCopy.interfaceStatus.execution}: {execution}</Typo.Caption> : null}
+      {execution ? <Typo.Caption>{appCopy.interfaceStatus.result}:</Typo.Caption> : null}
       {output.kind === "summary" ? (
         <Typo.Caption>{output.content}</Typo.Caption>
       ) : output.kind === "sections" ? (

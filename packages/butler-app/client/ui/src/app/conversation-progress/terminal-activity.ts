@@ -22,10 +22,20 @@ export function freezeConversationActivity(
   turnProgress: Record<string, TurnProgressSnapshot>,
 ): MessageRecord[] {
   let changed = false;
+  const segmentEnds = new Map<string, number>();
   const next = messages.map((message) => {
+    const turnId = message.turn_id;
+    const snapshot = turnId ? turnProgress[turnId] : undefined;
+    const previousEnd = turnId ? segmentEnds.get(turnId) : undefined;
+    const end = message.status === "delivered" ? Date.parse(message.updated_at ?? "") : Infinity;
+    if (turnId && message.role === "assistant" && Number.isFinite(end)) segmentEnds.set(turnId, end);
+    const segment = snapshot ? { ...snapshot, safe_progress_rows: snapshot.safe_progress_rows?.filter(row => {
+      const at = Date.parse(row.created_at ?? "");
+      return !Number.isFinite(at) || ((previousEnd === undefined || at > previousEnd) && (!Number.isFinite(end) || at <= end));
+    }) } : undefined;
     const frozen = freezeMessageActivity(
       message,
-      message.turn_id ? turnProgress[message.turn_id] : undefined,
+      segment,
     );
     if (frozen !== message) changed = true;
     return frozen;
@@ -44,7 +54,9 @@ export function freezeMessageActivity(
     snapshot,
     terminalStateFromMessageStatus(message.status),
   );
-  if (blocks.length === 0) return clean;
+  if (blocks.length === 0) {
+    return snapshot && clean.work_blocks?.length ? { ...clean, work_blocks: [] } : clean;
+  }
   if (clean.work_blocks && workBlocksEqual(clean.work_blocks, blocks)) return clean;
   return { ...clean, work_blocks: blocks };
 }
@@ -74,7 +86,7 @@ export function isVisibleToolActivity(
   const toolName = row.safe_tool_name?.trim();
   if (isInternalProgressRow(row) || row.kind === "todo" || row.kind === "message")
     return false;
-  if (label && label === block && !row.safe_input_label) return false;
+  if (label && label === block && !row.tool_call_id && !row.safe_input_label) return false;
   if (
     toolName && toolName === block && !row.tool_call_id &&
     !row.safe_input_label && !row.safe_detail_rows?.length
@@ -90,7 +102,7 @@ function freezePhaseActivity(
   snapshot: TurnProgressSnapshot | null | undefined,
 ): MessageRecord {
   const rows = (snapshot?.safe_progress_rows ?? []).filter(isRetainedActivityRow);
-  if (rows.length === 0) return message;
+  if (!snapshot) return message;
   if (message.turn_activity_rows && progressRowsEqual(message.turn_activity_rows, rows))
     return message;
   return { ...message, turn_activity_rows: rows };

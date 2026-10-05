@@ -2,6 +2,7 @@
 
 mod activity;
 mod decode;
+mod files;
 mod records;
 
 pub use records::*;
@@ -315,10 +316,19 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<Value>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT result_id,child_turn_id,status,summary,acceptance_evidence_json,created_at FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[relation],|r| {
-            let evidence:String=r.get(4)?;
-            Ok(serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?}))
-        }).optional().map_err(StorageError::sqlite)).await
+        self.storage.execute(move |db| db.query_row(
+            "SELECT r.result_id,r.child_turn_id,r.status,r.summary,r.acceptance_evidence_json,r.created_at,t.final_payload_json \
+             FROM btcc_steward_results r LEFT JOIN btcc_turns t ON t.turn_id=r.child_turn_id \
+             WHERE r.relation_id=?1 ORDER BY r.created_at DESC LIMIT 1", [relation], |r| {
+                let evidence: String = r.get(4)?;
+                let mut result = serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?});
+                let payload = r.get::<_, Option<String>>(6)?
+                    .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+                if let Some(payload) = payload {
+                    super::subsession_result::project_delivery(&mut result, &payload);
+                }
+                Ok(result)
+            }).optional().map_err(StorageError::sqlite)).await
     }
 
     pub(crate) async fn relation_by_work(

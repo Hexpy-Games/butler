@@ -75,6 +75,7 @@ pub(super) async fn snapshot(
     );
     insert_request_refs(&mut context, binding, request);
     insert_rule_snapshot(&mut context, assembly);
+    insert_result_ref(&mut context, controls)?;
     if !request.message.attachments.is_empty() {
         context.insert(
             "attachments".into(),
@@ -445,4 +446,19 @@ fn insert_rule_snapshot(context: &mut Map<String, Value>, assembly: &ContextAsse
     {
         context.insert("rememberedRuleSnapshot".into(), snapshot.clone());
     }
+}
+
+fn insert_result_ref(
+    context: &mut Map<String, Value>,
+    controls: Option<&VerifiedExecutionControls>,
+) -> Result<(), BtccError> {
+    if let Some(result) = controls.and_then(|value| value.subsession_result.as_ref()) {
+        context.insert(
+            "subsessionResult".into(),
+            serde_json::to_value(result).map_err(|error| {
+                BtccError::relayed("subsession_result_invalid", error.to_string())
+            })?,
+        );
+    }
+    Ok(())
 }

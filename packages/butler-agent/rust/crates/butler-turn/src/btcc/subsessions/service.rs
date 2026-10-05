@@ -121,6 +121,7 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    changes: tokio::sync::broadcast::Sender<(String, String)>,
 }
 
 impl SubsessionService {
@@ -140,7 +141,32 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            changes: tokio::sync::broadcast::channel(256).0,
         }
+    }
+
+    /// Change notifications after durable child execution state transitions.
+    pub fn subscribe_changes(&self) -> tokio::sync::broadcast::Receiver<(String, String)> {
+        self.changes.subscribe()
+    }
+
+    /// Signals an execution transition; readers reload the canonical projection.
+    pub async fn notify_execution_changed(&self, session: &str) -> Result<(), BtccError> {
+        if let Some(relation) = self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            let _ = self.changes.send((
+                relation
+                    .packet
+                    .parent_chat_id
+                    .unwrap_or(relation.parent_session_id),
+                session.into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Delegates a reviewed Steward-mode plan to a steward subsession. The

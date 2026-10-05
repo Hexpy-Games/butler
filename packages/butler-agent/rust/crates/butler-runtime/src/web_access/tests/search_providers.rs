@@ -281,6 +281,13 @@ fn model_stack(root: PathBuf) -> (Arc<ModelConfiguration>, Arc<ModelProvider>) {
         fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
     }
     impl PromptUsageMetricSink for Discard {
+        fn append_request_diagnostic(
+            &self,
+            _: &serde_json::Value,
+            _: Option<&str>,
+        ) -> Result<(), butler_turn::btcc::ModelRoundError> {
+            Ok(())
+        }
         fn append(&self, _: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
             Ok(())
         }

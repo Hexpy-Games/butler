@@ -12,11 +12,6 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
-    inputs:
-      diagnose-macos-data:
-        description: Compare complete buffered/mapped validation before the unchanged macOS owner gate
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -321,7 +316,6 @@ jobs:
       runner: macos-15
       platform: darwin-arm64
       performance-only: true
-      diagnose-owner-validation: ${{ inputs.diagnose-macos-data == true }}
 
   macos-tests:
     needs: [changes, macos-archive]

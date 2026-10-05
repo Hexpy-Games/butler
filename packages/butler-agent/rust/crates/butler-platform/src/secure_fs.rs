@@ -306,6 +306,13 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     sys::rename(from, to)
 }
 
+/// A logical record key as a regular filename component. Unix keeps its
+/// existing spelling; Windows encodes names with reserved characters or
+/// device names. The logical key stored inside the record does not change.
+pub fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    sys::record_key(key)
+}
+
 /// `.<name>.<pid>.<sequence>.<nanos>.tmp` next to `path`, unique within this
 /// process and practically unique across processes.
 pub(crate) fn unique_temporary(path: &Path) -> PathBuf {

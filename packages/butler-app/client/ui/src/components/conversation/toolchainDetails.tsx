@@ -11,8 +11,12 @@ export function toolDetails(row: ProgressRow, turnId?: string): ReactElement | s
         resultId={row.tool_result_id}
         toolName={row.safe_tool_name}
         turnId={turnId}
+        command={row.safe_tool_name === "run_command" ? row.safe_input_label : undefined}
       />
     );
+  }
+  if (row.safe_tool_name === "run_command" && row.safe_input_label) {
+    return `${appCopy.interfaceStatus.execution}: ${row.safe_input_label}`;
   }
   return row.safe_detail_rows
     ?.map((detail) => toolchainDetailLabel(detail, row))

@@ -59,6 +59,7 @@ mod session_views;
 mod sessions;
 mod settings;
 mod setup;
+mod subsession_events;
 mod turn_dispatch;
 pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
@@ -337,6 +338,7 @@ impl AppApplication {
             self.dependencies.identity_clock.clone(),
         );
         self.quota_events.start(self.clone_handle());
+        subsession_events::start(self);
         Ok(())
     }
 

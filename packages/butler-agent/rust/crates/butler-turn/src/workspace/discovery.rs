@@ -136,8 +136,9 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
             guard: guard.public_rejection(),
         }));
     };
-    let displayed_root = butler_platform::secure_fs::relative_path(root_path, &guard.root)
-        .unwrap_or_default()
+    let displayed_root = root_path
+        .strip_prefix(&guard.root)
+        .unwrap_or(root_path)
         .to_string_lossy()
         .replace('\\', "/");
     let started = Instant::now();
@@ -282,13 +283,12 @@ impl Walk<'_> {
     /// directories and considers regular files.
     fn visit_entry(&mut self, child: &std::fs::DirEntry, depth: usize) -> std::io::Result<Next> {
         let path = child.path();
-        let Some(relative) = butler_platform::secure_fs::relative_path(&path, self.root) else {
-            return Ok(Next::Continue);
-        };
+        let relative = path.strip_prefix(self.root).unwrap_or(&path);
         let relative = relative.to_string_lossy().replace('\\', "/");
         if relative.is_empty()
-            || looks_sensitive(&relative)
-            || protected_path(self.root, &path, &self.input.protected_roots)
+            || self.input.path_form == super::PathForm::RelativeOnly
+                && (looks_sensitive(&relative)
+                    || protected_path(self.root, &path, &self.input.protected_roots))
         {
             return Ok(Next::Continue);
         }
@@ -296,7 +296,8 @@ impl Walk<'_> {
             return Ok(self.io_error());
         };
         if file_type.is_dir() {
-            if EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())
+            if !Path::new(&self.input.requested_root).is_absolute()
+                && EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())
                 || self.excluded_directory(&relative)
             {
                 return Ok(Next::Continue);

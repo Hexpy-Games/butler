@@ -15,6 +15,7 @@ pub(crate) struct GuidedJournal {
     turn_id: String,
     journal: Arc<ToolJournalRepository>,
     activity: Arc<GuidedActivity>,
+    subsessions: butler_turn::btcc::SqliteSubsessionRepository,
 }
 
 impl GuidedJournal {
@@ -22,11 +23,13 @@ impl GuidedJournal {
         turn_id: String,
         journal: Arc<ToolJournalRepository>,
         activity: Arc<GuidedActivity>,
+        subsessions: butler_turn::btcc::SqliteSubsessionRepository,
     ) -> Self {
         Self {
             turn_id,
             journal,
             activity,
+            subsessions,
         }
     }
 
@@ -117,7 +120,34 @@ impl JournalPort for GuidedJournal {
     fn closeout<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout> {
         Box::pin(async move {
             self.check_turn(invocation)?;
-            closeout::collect(&self.journal, &self.turn_id).await
+            let workspace = invocation
+                .turn
+                .context
+                .pointer("/executionPolicy/workspacePath")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let own = closeout::collect(&self.journal, &self.turn_id, workspace).await?;
+            let result = invocation
+                .turn
+                .context
+                .pointer("/subsessionResult/result_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            let workers = invocation
+                .turn
+                .context
+                .pointer("/executionPolicy/role")
+                .and_then(serde_json::Value::as_str)
+                == Some("steward");
+            if result.is_none() && !workers {
+                return Ok(own);
+            }
+            let child = self
+                .subsessions
+                .delivered_files(invocation.turn.session_id.clone(), result, workers)
+                .await
+                .map_err(BtccError::from)?;
+            Ok(closeout::merge_files(child, own))
         })
     }
 }

@@ -864,7 +864,7 @@ function applySessionView(
     mergedTurnProgress,
     boundedMessages,
   );
-  const messages = boundedMessages.map((message) => {
+  const messages = freezeMessageWorkBlocks(boundedMessages.map((message) => {
     const previous = previousById.get(message.id);
     const retainedMessage = retainFrozenTurnPresentation(previous, message);
     const frozen = freezeMessageWorkBlocksForRecord(
@@ -874,7 +874,7 @@ function applySessionView(
         : undefined,
     );
     return reusePreviousMessageRecord(previousById, frozen);
-  });
+  }), turnProgress);
   const sessionMessageViews = upsertCompleteSessionView(
     state.sessionMessageViews,
     completeSessionView(

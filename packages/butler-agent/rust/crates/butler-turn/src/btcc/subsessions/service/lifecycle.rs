@@ -5,6 +5,11 @@ use super::*;
 impl SubsessionService {
     /// Makes sure a child turn is bound to its relation's root Work.
     pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
+        self.bind_child_work(session, turn).await?;
+        self.notify_execution_changed(session).await
+    }
+
+    async fn bind_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
         let stored = self
             .repository
             .by_child(session.into())
@@ -71,7 +76,7 @@ impl SubsessionService {
         status: &str,
         summary: String,
     ) -> Result<(), BtccError> {
-        self.ensure_child_work(session, turn).await?;
+        self.bind_child_work(session, turn).await?;
         if status == "cancelled" {
             self.work
                 .abandon_bound_work_for_turn(turn.to_owned())
@@ -112,6 +117,7 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
+        self.notify_execution_changed(session).await?;
         self.deliver_worker_results().await
     }
     /// Re-dispatches pending children, directions and worker results after a restart.

@@ -360,10 +360,11 @@ pub struct AgentLoopResult {
     pub model_identity: Option<ModelIdentity>,
 }
 
-/// A terminal outcome without visible content.
+/// An explicit terminal outcome independent of result delivery.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TerminalOutcome {
     NoVisible,
+    Failed,
 }
 
 /// How a turn was executed: directly, assisted by tools, or managed Work.

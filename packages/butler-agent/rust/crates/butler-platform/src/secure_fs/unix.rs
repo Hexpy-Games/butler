@@ -174,6 +174,10 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 
+pub(super) fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    std::borrow::Cow::Borrowed(key)
+}
+
 pub(super) fn exchange_directories(left: &Path, right: &Path) -> Result<(), ExchangeError> {
     let left_metadata = fs::metadata(left).map_err(ExchangeError::Io)?;
     let right_metadata = fs::metadata(right).map_err(ExchangeError::Io)?;

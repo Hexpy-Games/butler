@@ -361,6 +361,7 @@ impl SummaryPort for RoundSummary<'_> {
             let messages = [user_message(request.text)];
             let reasoning = self.invocation.model_execution.selected_reasoning_effort();
             let usage = UsageAttribution {
+                session_kind: Some("parent".into()),
                 turn_id: self.invocation.turn.turn_id.clone(),
                 phase: "guided".into(),
                 reasoning_effort: None,

@@ -52,6 +52,7 @@ pub(super) fn prepare_runtime_payload(
     if visibility == "internal" {
         return Ok(payload);
     }
+    let operation = payload.get("bridgePhase").and_then(Value::as_str) == Some("btcc_operation");
     Ok(payload
         .into_iter()
         .filter(|(key, _)| key != "operatorSummary")
@@ -60,6 +61,11 @@ pub(super) fn prepare_runtime_payload(
                 // Streamed answer text is concatenated: keep its whitespace.
                 Value::String(delta) if kind == "model.stream.text_delta" && key == "textDelta" => {
                     Value::String(butler_core::public_text::sanitize_public_delta(&delta))
+                }
+                Value::String(target)
+                    if key == "inputLabel" && kind.starts_with("tool.") && operation =>
+                {
+                    Value::String(butler_core::public_text::sanitize_public_delta(&target))
                 }
                 value => sanitize_value(&value, &key, kind.starts_with("model.stream.")),
             };

@@ -80,21 +80,19 @@ pub(super) async fn prepare(
     journal: &dyn EffectJournal,
 ) -> Result<PreparedGuidedFileEffect, BtccError> {
     let (mut edits, batch) = decode(args, owner)?;
-    let prior = if let Some(plan) = &work.current_plan {
-        let id = accepted_plan_effect_id(
-            &work.work_id,
-            &plan.plan_revision_id,
-            "edit_file",
-            occurrence,
-        )
+    let id = accepted_plan_effect_id(
+        &work.work_id,
+        work.current_plan
+            .as_ref()
+            .map_or("", |plan| plan.plan_revision_id.as_str()),
+        "edit_file",
+        occurrence,
+    )
+    .map_err(|error| rejected(error.code(), error.message()))?;
+    let prior = journal
+        .find(id)
+        .await
         .map_err(|error| rejected(error.code(), error.message()))?;
-        journal
-            .find(id)
-            .await
-            .map_err(|error| rejected(error.code(), error.message()))?
-    } else {
-        None
-    };
     let mut states = HashMap::<String, State>::new();
     let mut actual_targets = HashMap::<PathBuf, String>::new();
     for edit in &mut edits {

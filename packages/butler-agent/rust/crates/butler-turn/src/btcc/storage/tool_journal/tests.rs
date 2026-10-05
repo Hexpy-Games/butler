@@ -74,6 +74,9 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
     journal.finish(finish()).await.unwrap();
     let mut conflict = finish();
     conflict.result = Some(JsonDocument::from_value(&json!({"ok":false})).unwrap());
+    journal.finish(conflict).await.unwrap();
+    let mut conflict = finish();
+    conflict.status = ToolJournalFinishStatus::Cancelled;
     assert_eq!(
         journal.finish(conflict).await.unwrap_err().message(),
         expected["failures"]["finishConflict"]
@@ -127,6 +130,14 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
         .begin_delivery("turn".into(), "call".into(), "round-2".into())
         .await
         .unwrap();
+    assert_eq!(
+        journal
+            .acknowledge_deliveries("turn".into(), "other-round".into(), "b".repeat(64))
+            .await
+            .unwrap_err()
+            .code(),
+        "operation_result_delivery_acknowledgement_conflict"
+    );
     for _ in 0..2 {
         journal
             .acknowledge_deliveries("turn".into(), "round-2".into(), "a".repeat(64))
@@ -140,13 +151,16 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .unwrap(),
         &expected["steps"][2],
     );
-    assert_eq!(
-        journal
-            .acknowledge_deliveries("turn".into(), "round-2".into(), "b".repeat(64))
+    journal
+        .acknowledge_deliveries("turn".into(), "round-2".into(), "b".repeat(64))
+        .await
+        .unwrap();
+    assert_golden(
+        &journal
+            .find_for_turn("turn".into(), "call".into())
             .await
-            .unwrap_err()
-            .message(),
-        expected["failures"]["differentAck"]
+            .unwrap(),
+        &expected["steps"][2],
     );
     for _ in 0..2 {
         journal
@@ -161,13 +175,16 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .unwrap(),
         &expected["steps"][3],
     );
-    assert_eq!(
-        journal
-            .acknowledge_deliveries("turn".into(), "round-2".into(), "a".repeat(64))
+    journal
+        .acknowledge_deliveries("turn".into(), "round-2".into(), "b".repeat(64))
+        .await
+        .unwrap();
+    assert_golden(
+        &journal
+            .find_for_turn("turn".into(), "call".into())
             .await
-            .unwrap_err()
-            .message(),
-        expected["failures"]["ackAfterPromote"]
+            .unwrap(),
+        &expected["steps"][3],
     );
     for (call, result) in [("absent", None), ("null", Some(Value::Null))] {
         journal.start(start(call)).await.unwrap();
@@ -200,7 +217,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             assert_eq!(actual.read::<Value>().unwrap(), expected);
         }
     }
-    assert_eq!(clock_calls.load(Ordering::SeqCst), 10);
+    assert_eq!(clock_calls.load(Ordering::SeqCst), 11);
     let times =
         storage
             .execute(|db| {
@@ -244,13 +261,19 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
         })
         .await
         .unwrap();
-    assert_eq!(
+    let record = journal
+        .find_for_turn("turn".into(), "call".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.status, "completed");
+    assert_eq!(record.result.unwrap().as_str(), "{}");
+    assert!(
         journal
-            .find_for_turn("turn".into(), "call".into())
+            .find_for_turn("another-turn".into(), "call".into())
             .await
-            .unwrap_err()
-            .code(),
-        "operation_result_body_hash_mismatch"
+            .unwrap()
+            .is_none()
     );
     reopened.close().await.unwrap();
 }

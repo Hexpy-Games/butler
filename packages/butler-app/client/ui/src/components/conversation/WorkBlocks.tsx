@@ -31,7 +31,7 @@ function CollapsedTurnActivityComponent({
   const workCopy = appCopy.conversation.work;
   const latest = blocks.at(-1);
   if (!latest) return null;
-  const headerLabel = appCopy.interfaceTemplates.activityHistory(live, latest.label, blocks.length);
+  const headerLabel = appCopy.interfaceTemplates.activityHistory(live, appCopy.guided.tools[latest.label] ?? latest.label, blocks.length);
   return (
     <section
       data-test-class="turn-activity-collapsed turn-work-collapsed"
@@ -89,7 +89,7 @@ function ActivityBlock({
     <WorkActivityBlock
       data-work-block-id={block.id}
       running={!isTerminalActivityState(block.state)}
-      title={block.label}
+      title={appCopy.guided.tools[block.label] ?? block.label}
       description={<WorkDecisionBody block={block} />}
       tools={workActivityToolsForBlock(block, turnId)}
     />

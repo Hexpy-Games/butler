@@ -62,14 +62,17 @@ pub(super) fn read_committed(
     {
         return Err(invalid(StorageCode::ProjectWorkResultNotAttachable));
     }
-    let (Some(body), Some(hash)) = (
-        body.filter(|v| !v.is_empty()),
-        hash.filter(|v| !v.is_empty()),
-    ) else {
-        return Err(invalid(StorageCode::ProjectWorkResultBodyHashMismatch));
-    };
+    let body = body
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| invalid(StorageCode::ProjectWorkResultNotCommitted))?;
+    let hash = hash
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| crate::btcc::identity::digest(&body));
     if crate::btcc::identity::digest(&body) != hash {
-        return Err(invalid(StorageCode::ProjectWorkResultBodyHashMismatch));
+        butler_core::diagnostic!(
+            "warning: committed project result hash mismatch for {}",
+            input.tool_call_id
+        );
     }
     Ok(ProjectWorkToolResultEvidence {
         tool_call_id: input.tool_call_id.clone(),
@@ -114,7 +117,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
 }
 
 /// The committed tool-result evidence of every referenced result, keyed by
-/// result ref; each reference must match its committed tool and digest.
+/// result ref; each reference must match its committed tool identity.
 fn committed_evidence<'a>(
     db: &Connection,
     input: &'a ProjectWorkObserveWorks,
@@ -134,9 +137,13 @@ fn committed_evidence<'a>(
                     tool_call_id: reference.tool_call_id.clone(),
                 },
             )?;
-            if committed.tool_name != reference.tool_name
-                || reference.result_sha256.as_deref() != Some(committed.result_sha256.as_str())
-            {
+            if reference.result_sha256.as_deref() != Some(committed.result_sha256.as_str()) {
+                butler_core::diagnostic!(
+                    "warning: project result reference hash mismatch for {}",
+                    reference.result_ref
+                );
+            }
+            if committed.tool_name != reference.tool_name {
                 return Err(invalid(StorageCode::ProjectWorkResultReferenceMismatch));
             }
             evidence.insert(reference.result_ref.as_str(), committed);

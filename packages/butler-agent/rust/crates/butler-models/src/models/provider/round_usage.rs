@@ -11,13 +11,18 @@ use crate::models::{PromptUsageAttribution, PromptUsageMetricInput};
 pub(super) fn record(
     provider: &ModelProvider,
     request: &ModelRoundRequest<'_>,
-    usage: &Value,
+    usage: Option<&Value>,
     config: &ProviderRequestConfig,
+    prefix: &Value,
 ) -> Result<(), ModelRoundError> {
     let auth_mode = provider
         .catalog
         .usage_auth_mode(&config.metadata.provider_id, config.auth.mode());
-    let number = |key: &str| usage.get(key).and_then(Value::as_f64);
+    let number = |key: &str| {
+        usage
+            .and_then(|usage| usage.get(key))
+            .and_then(Value::as_f64)
+    };
     let attribution = request
         .usage_attribution
         .map(|value| PromptUsageAttribution {
@@ -32,7 +37,7 @@ pub(super) fn record(
         });
     provider.prompt_metrics.append(PromptUsageMetricInput {
         model: usage
-            .get("model")
+            .and_then(|usage| usage.get("model"))
             .and_then(Value::as_str)
             .unwrap_or(request.model),
         scope: request.cache_scope.unwrap_or("btcc-agent-loop"),
@@ -47,5 +52,6 @@ pub(super) fn record(
         reasoning_tokens: number("reasoningTokens"),
         cache_write_1h_tokens: number("cacheWrite1hTokens"),
         auth_mode: Some(auth_mode),
+        prefix_diagnostics: Some(prefix),
     })
 }

@@ -25,7 +25,7 @@ impl GuidedCommand {
         let home = self.host_environment.get("HOME").map(PathBuf::from);
         let rejected = self.jobs.run(move || {
             let cwd = Commands::guarded_directory(&root, requested.as_deref())?;
-            let denied = sensitive(&command, &cwd, &data, home.as_deref())
+            let denied = sensitive(&command)
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
                 "ok":false,"command":command,"cwd":cwd.to_string_lossy(),"exit_code":1,
@@ -42,74 +42,17 @@ impl GuidedCommand {
     }
 }
 
-fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<Value> {
+fn sensitive(command: &str) -> Option<Value> {
     let denied = |target: &str| {
-        json!({"error":"protected_path", "message":"Butler data and credentials are protected.",
+        json!({"error":"protected_path", "message":"Credential paths are protected.",
         "protected_path":target,
-        "next":[{"action":"Use the admitted Butler tools for runtime data; inspect ordinary user files only."}]})
+        "next":[{"action":"Use credential tools for credentials; inspect ordinary files with normal approval."}]})
     };
     for raw in butler_platform::command_sandbox::path_tokens(command) {
         let token = butler_platform::command_sandbox::normalize_path_token(raw);
-        let lower = token.to_ascii_lowercase();
-        if looks_sensitive(&token) || lower.split('/').any(|p| p == ".butler") {
-            return Some(denied(raw));
-        }
-        let path = if [
-            "$butler_data",
-            "${butler_data}",
-            "$env:butler_data",
-            "%butler_data%",
-        ]
-        .iter()
-        .any(|prefix| lower == *prefix || lower.starts_with(&format!("{prefix}/")))
-        {
-            return Some(denied(raw));
-        } else if let Some(home) = home {
-            [
-                "$home/",
-                "${home}/",
-                "$env:home/",
-                "$env:userprofile/",
-                "%userprofile%/",
-                "~/",
-            ]
-            .iter()
-            .find_map(|prefix| {
-                lower
-                    .strip_prefix(prefix)
-                    .map(|_| home.join(&token[prefix.len()..]))
-            })
-            .unwrap_or_else(|| absolute(&token, cwd))
-        } else {
-            absolute(&token, cwd)
-        };
-        // Ordinary non-project chats use DATA as their default CWD. A
-        // program name or a script variable is not a filesystem target.
-        let file_argument = !butler_platform::command_sandbox::is_registry_path(&token)
-            && (Path::new(&token).is_absolute()
-                || token.contains('/') && !token.contains(':')
-                || path.exists());
-        if file_argument && within(&path, data) {
+        if looks_sensitive(&token) {
             return Some(denied(raw));
         }
     }
     None
-}
-
-fn absolute(token: &str, cwd: &Path) -> PathBuf {
-    let path = Path::new(token);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        cwd.join(path)
-    }
-}
-
-fn within(path: &Path, root: &Path) -> bool {
-    // Resolve existing paths, including symlinks and Windows case aliases.
-    let path =
-        butler_platform::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let root =
-        butler_platform::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    butler_platform::secure_fs::path_is_within(&path, &root)
 }

@@ -19,6 +19,10 @@ Keep expansion state in the caller and pass `open`, `onToggle`, and children.
 Any container that owns expandable row state.
 
 ## Best practice
+Icon, title, metadata and chevron share the first title baseline. Descriptions
+wrap below the title; expanded content uses the same title inset, with or without
+an icon. Plain rows have no horizontal inset.
+
 Pass domain labels as text and keep block children presentational.
 Use `surface="plain"` when the disclosure only controls a timeline or nested
 detail region and must not turn the whole area into an active background block.
@@ -28,3 +32,5 @@ Do not use it for sidebar hierarchy. Use `CollapsibleNavGroup`.
 
 ## Tags
 disclosure, row, activity, details
+
+Long meta wraps within half the row, preserving space for the title at phone widths. Meta is complete; it is never truncated.

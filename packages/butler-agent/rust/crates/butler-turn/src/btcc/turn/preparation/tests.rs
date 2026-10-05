@@ -261,9 +261,12 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
 
     let mut changed_identity = request.clone();
     changed_identity.message.content = "changed".into();
+    let replay = preparation.prepare(changed_identity.clone()).await.unwrap();
+    assert!(!replay.turn.is_fresh);
+    changed_identity.message.id = "another-message".into();
     let error = preparation.prepare(changed_identity).await.err().unwrap();
     assert_eq!(error.code(), "turn_replay_conflict");
-    assert_eq!(identity.admissions.load(AtomicOrdering::Relaxed), 1);
+    assert_eq!(identity.admissions.load(AtomicOrdering::Relaxed), 2);
 
     let stored = repositories.find_turn("turn-1").await.unwrap().unwrap();
     request::assert_replay_identity(&stored, &request).unwrap();
@@ -276,17 +279,12 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         .insert("messageContent".into(), Value::Null);
     let mut absent_content = request.clone();
     absent_content.app_turn_context = Some(json!({"session":{"id":"app-session"}}));
-    assert_eq!(
-        request::assert_replay_identity(&stored_null, &absent_content)
-            .unwrap_err()
-            .code(),
-        "turn_replay_conflict"
-    );
+    request::assert_replay_identity(&stored_null, &absent_content).unwrap();
     absent_content.resume = true;
     request::assert_replay_identity(&stored_null, &absent_content).unwrap();
-    // A resume skips only the content; any other difference still conflicts.
+    // A resume is bound to turn, message and session identities.
     let changes: [fn(&mut TurnRequest); 3] = [
-        |resume| resume.message.content = "changed".into(),
+        |resume| resume.turn_id = "other-turn".into(),
         |resume| resume.message.id = "other-message".into(),
         |resume| resume.session_id = "other-session".into(),
     ];

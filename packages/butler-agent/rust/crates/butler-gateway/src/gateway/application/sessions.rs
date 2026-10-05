@@ -243,6 +243,34 @@ impl AppApplication {
             .read(move |db| read::sessions(db, kind.as_deref(), project_id.as_deref()))
             .await
             .map_err(app_error)?;
+        let running = self
+            .dependencies
+            .subsessions
+            .running_parents(
+                sessions
+                    .iter()
+                    .map(|session| session.session_hint.clone())
+                    .collect(),
+            )
+            .await?
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        let attention = self
+            .dependencies
+            .authority_handoff
+            .attention_sessions(
+                sessions
+                    .iter()
+                    .map(|session| session.session_hint.clone())
+                    .collect(),
+            )
+            .await?
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        for session in &mut sessions {
+            session.attention_required = attention.contains(&session.session_hint);
+            session.running_delegated_work = running.contains(&session.session_hint);
+        }
         let loaded = self
             .dependencies
             .skills

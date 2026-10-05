@@ -16,7 +16,7 @@ try {
   const page = await browser.newPage({ reducedMotion: "reduce" });
   for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
     let asked = false;
-    const server = await createNativeAppServer({ onboardingComplete: false,
+    const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist"), onboardingComplete: false,
       stubToolCall: request => {
         if (asked || !JSON.stringify(request.messages).includes("처음 설정을 도와주세요")) return null;
         asked = true;

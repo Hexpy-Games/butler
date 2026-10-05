@@ -94,7 +94,7 @@ impl GuidedWorkAdapter {
         }
         let bound = self.bound().await?;
         if let decision::ReportDecision::Continue(observation) =
-            decision::decide(bound.as_ref(), &self.scope.turn_id, false)?
+            decision::decide(bound.as_ref(), &self.scope.turn_id, bound.is_some())?
         {
             let Some(bound) = bound.as_ref() else {
                 return Ok(CandidateDisposition::Accepted(None));
@@ -182,7 +182,7 @@ impl WorkPort for GuidedWorkAdapter {
             let bound = self.bound().await?;
             Ok(
                 if matches!(
-                    decision::decide(bound.as_ref(), &self.scope.turn_id, false)?,
+                    decision::decide(bound.as_ref(), &self.scope.turn_id, bound.is_some())?,
                     decision::ReportDecision::Report(_)
                 ) && bound.is_some()
                 {

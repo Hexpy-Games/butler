@@ -236,7 +236,8 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
     // localized sentence.
     assert_eq!(
         request["approval"],
-        json!({"action_kind": "use_connector", "count": 1, "examples": [], "risk": "high",
+        json!({"operation": {"tool": "call_mcp_tool", "access": "change", "targets": ["mcp:e2e/e2e_echo"]},
+               "action_kind": "use_connector", "count": 1, "examples": [], "risk": "high",
                "targets": [{"kind": "connector", "path": "e2e/e2e_echo"}]}),
         "{request}"
     );
