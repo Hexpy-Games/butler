@@ -26,19 +26,24 @@ export interface PageCopy {
   errorScreen: Options<"errorScreen">;
   mcpError: Options<"mcpError">;
   approvals: Options<"approvals">;
-  placement: Options<"placement">;
+  updatePlace: Options<"updatePlace">;
   recommended: string;
   frameLabel: string;
   copyTable: string;
   copyColumns: { key: string; ko: string; en: string; codes: string };
   existing: string;
-  capsuleTitle: string;
-  capsuleNote: string;
   notes: Record<ReviewSection, Note[]>;
 }
 
 const NOTES_EN: Record<ReviewSection, Note[]> = {
   updates: [
+    { title: "Outside Settings: A · Sidebar row", points: [
+      "What the shell has: the sidebar footer holds one row, Settings (SpaceSidebar footer). There is no version or account area, no app menu (Menu.setApplicationMenu(null)), and the titlebar's trailing buttons are … and the right-panel toggle. The tray menu exists only when the tray is on.",
+      "A (recommended): a row above Settings, only while an update is running, ready or failed. Label + % badge + a bare ProgressMeter as its second line; Ready shows Restart in the row; tapping opens Settings › Updates. Room for words and the one action, no new chrome.",
+      "B: a progress ring first in the titlebar buttons (tooltip with %). Visible with the sidebar closed, but tiny, no room for Restart, and crowds the 375 titlebar.",
+      "C: a % badge on the existing Settings row. Smallest change, but a badge on Settings doesn't say what it is.",
+      "With A, the window also shows native dock/taskbar progress (BrowserWindow.setProgressBar) so a collapsed sidebar or hidden window still shows it; no renderer UI.",
+    ] },
     { title: "Row", points: [
       "Same row as main: name, version, one action button. The button only ever shows the action you can take now (Update, Cancel, Restart, Retry); the stage is never a button label.",
       "Known size: ProgressMeter under the row, 42% · 44 MB of 105 MB. Unknown size: no fake bar; a spinner line with the bytes received.",
@@ -83,8 +88,15 @@ const NOTES_EN: Record<ReviewSection, Note[]> = {
     ] },
   ],
   approvals: [
+    { title: "Security, reorganised", points: [
+      "Order: Remote access · Device pairing · Paired devices (as today) → Permissions → Approved actions (new) → Saved keys → Diagnostics → Advanced · Allowed hosts (as today, last).",
+      "Models › Permissions (access mode, plan mode default) → Security. Whole section, PermissionsFields unchanged.",
+      "Models › Saved keys (SavedKeysRows, its states and replace/delete) → Security. Model add/edit still reads the same keys.",
+      "Privacy › Diagnostics (its only section) → Security. The Privacy page leaves the sidebar; 'privacy' and 'diagnostics' become Security search aliases.",
+      "Stay where they are: General › search API key (paired with the provider choice), MCP env/header secrets (part of each server's form), Server › connection URL, About › developer mode, Developer logs.",
+      "On another computer /security is refused: only Remote access collapses to its message; the moved sections still render.",
+    ] },
     { title: "List", points: [
-      "Sits after Permissions on Models & access (A, recommended): where the access mode is set. B puts it on Security.",
       "Row: kind, exact target in monospace on one line (hover: full text; tap or Enter: expands in place), scope tag, where it applies, date, one revoke button.",
       "Identical grants (kind, target, folder, scope) collapse into one row: '2 chats'. Revoke removes every grant in the row.",
       "Always grants confirm first; others revoke at once with a toast. Search and a kind filter appear past 8 rows.",
@@ -101,6 +113,13 @@ const NOTES_EN: Record<ReviewSection, Note[]> = {
 
 const NOTES_KO: Record<ReviewSection, Note[]> = {
   updates: [
+    { title: "설정 밖: A · 사이드바 줄", points: [
+      "현재 셸: 사이드바 아래에는 '설정' 한 줄만 있습니다(SpaceSidebar footer). 버전·계정 영역과 앱 메뉴는 없고(Menu.setApplicationMenu(null)), 제목줄 오른쪽 버튼은 …와 오른쪽 패널 토글입니다. 트레이 메뉴는 트레이를 켰을 때만 있습니다.",
+      "A(추천): 업데이트가 진행 중·준비됨·실패일 때만 '설정' 위에 한 줄. 이름 + % 배지 + 둘째 줄 얇은 ProgressMeter, 준비되면 줄 안에 '다시 시작', 누르면 설정 › 업데이트. 말과 동작 하나를 둘 자리가 있고 새 크롬이 없습니다.",
+      "B: 제목줄 버튼 맨 앞의 진행 링(툴팁에 %). 사이드바를 닫아도 보이지만 작고 '다시 시작'을 둘 자리가 없으며 375에서 제목줄이 좁아집니다.",
+      "C: 기존 '설정' 줄에 % 배지. 변경이 가장 작지만 배지가 무엇인지 알 수 없습니다.",
+      "A와 함께 창 자체에 네이티브 독·작업 표시줄 진행률(BrowserWindow.setProgressBar)을 표시합니다. 사이드바를 접거나 창을 숨겨도 보이며 화면 UI는 없습니다.",
+    ] },
     { title: "행", points: [
       "main과 같은 행입니다: 이름, 버전, 동작 버튼 하나. 버튼에는 지금 할 수 있는 동작(업데이트, 취소, 다시 시작, 다시 시도)만 표시하고 단계 이름은 표시하지 않습니다.",
       "크기를 알면 행 아래 ProgressMeter: 42% · 44MB / 105MB. 모르면 가짜 막대 없이 스피너와 받은 용량만 표시합니다.",
@@ -145,8 +164,15 @@ const NOTES_KO: Record<ReviewSection, Note[]> = {
     ] },
   ],
   approvals: [
+    { title: "보안 페이지 재구성", points: [
+      "순서: 원격 접속 · 기기 연결 · 연결된 기기(지금 그대로) → 권한 → 허용한 작업(새로) → 저장된 키 → 진단 → 고급 · 허용 호스트(지금 그대로, 맨 끝).",
+      "모델 › 권한(접근 권한, 계획 모드 기본값) → 보안. 섹션 전체, PermissionsFields 그대로.",
+      "모델 › 저장된 키(SavedKeysRows, 상태와 교체·삭제) → 보안. 모델 추가·편집은 같은 키를 계속 씁니다.",
+      "개인정보 › 진단(유일한 섹션) → 보안. 개인정보 페이지는 사이드바에서 빠지고 '개인정보', '진단'은 보안 검색어가 됩니다.",
+      "그대로 두는 것: 일반 › 검색 API 키(검색 제공자와 한 쌍), MCP 환경 변수·헤더 비밀값(서버 양식의 일부), 서버 › 연결 URL, 정보 › 개발자 모드, 개발자 로그.",
+      "다른 컴퓨터에서는 /security가 거절되므로 원격 접속만 안내 문구로 바뀌고, 옮긴 섹션은 그대로 보입니다.",
+    ] },
     { title: "목록", points: [
-      "모델 및 접근 권한 페이지의 '권한' 다음에 둡니다(A, 추천): 접근 모드를 정하는 곳입니다. B는 보안 페이지입니다.",
       "행: 종류, 정확한 대상(고정폭 한 줄, 마우스를 올리면 전체, 탭·Enter로 펼침), 범위 태그, 적용 위치, 날짜, 해제 버튼 하나.",
       "같은 허용(종류·대상·폴더·범위)은 한 행으로 묶습니다: '대화 2개'. 해제하면 묶인 허용을 모두 해제합니다.",
       "'항상' 허용은 확인 후 해제하고, 나머지는 바로 해제한 뒤 토스트로 알립니다. 8개를 넘으면 검색과 종류 필터를 보여 줍니다.",
@@ -167,7 +193,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     title: "Settings review",
     intro: "Four Settings changes in the real Settings shell. Pick a section, then its state. Everything outside the marked proposal pieces is the product UI as it is on main.",
     sections: { updates: "Updates", motion: "Reduce motion", errors: "Errors", approvals: "Approvals" },
-    controls: { width: "Width", theme: "Theme", wallpaper: "Wallpaper", language: "Language", variant: "Variant", state: "State", failure: "Failure", screen: "Screen", error: "Error", placement: "Placement" },
+    controls: { width: "Width", theme: "Theme", wallpaper: "Wallpaper", language: "Language", variant: "Variant", state: "State", failure: "Failure", screen: "Screen", error: "Error", placement: "Outside Settings" },
     widths: { desktop: "Desktop", "768": "768", "375": "375" },
     themes: { light: "Light", dark: "Dark" },
     wallpapers: { clouds: "Clouds", daisies: "Daisies", bloom: "Bloom", none: "None" },
@@ -179,14 +205,12 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     errorScreen: { mcp: "MCP form", skills: "Skill import", hosts: "Hosts (main)", wallpaper: "Wallpaper", toasts: "Toasts" },
     mcpError: { none: "None", idRequired: "ID empty", idInvalid: "ID invalid", commandRequired: "No command", urlRequired: "No URL", saveFailed: "Save failed" },
     approvals: { list: "List", long: "Long", empty: "Empty", loading: "Loading", error: "Error" },
-    placement: { models: "A · Models", security: "B · Security" },
+    updatePlace: { settings: "Settings page", sidebarRow: "A · Sidebar row", titlebar: "B · Titlebar ring", settingsBadge: "C · Settings badge" },
     recommended: "Recommended",
     frameLabel: "Settings preview",
     copyTable: "Copy (i18n keys)",
     copyColumns: { key: "Key", ko: "KO", en: "EN", codes: "Error codes" },
     existing: "on main",
-    capsuleTitle: "Outside Settings",
-    capsuleNote: "While a download runs and Settings is closed, the existing StatusCapsule above the composer shows it; tapping opens Settings › Updates.",
     notes: NOTES_EN,
   },
   "ko-KR": {
@@ -194,7 +218,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     title: "설정 검토",
     intro: "실제 설정 화면 안에서 네 가지 변경을 봅니다. 위에서 영역을 고르고 상태를 바꿔 보세요. 제안으로 표시한 부분 밖은 모두 main의 실제 화면입니다.",
     sections: { updates: "업데이트", motion: "동작 줄이기", errors: "오류", approvals: "허용한 작업" },
-    controls: { width: "너비", theme: "테마", wallpaper: "배경화면", language: "언어", variant: "안", state: "상태", failure: "실패 원인", screen: "화면", error: "오류", placement: "위치" },
+    controls: { width: "너비", theme: "테마", wallpaper: "배경화면", language: "언어", variant: "안", state: "상태", failure: "실패 원인", screen: "화면", error: "오류", placement: "설정 밖" },
     widths: { desktop: "데스크톱", "768": "768", "375": "375" },
     themes: { light: "라이트", dark: "다크" },
     wallpapers: { clouds: "구름", daisies: "데이지", bloom: "블룸", none: "없음" },
@@ -206,14 +230,12 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     errorScreen: { mcp: "MCP 양식", skills: "스킬 가져오기", hosts: "호스트(main)", wallpaper: "월페이퍼", toasts: "토스트" },
     mcpError: { none: "없음", idRequired: "ID 비어 있음", idInvalid: "ID 형식", commandRequired: "명령 없음", urlRequired: "URL 없음", saveFailed: "저장 실패" },
     approvals: { list: "목록", long: "긴 목록", empty: "비어 있음", loading: "불러오는 중", error: "오류" },
-    placement: { models: "A · 모델", security: "B · 보안" },
+    updatePlace: { settings: "설정 화면", sidebarRow: "A · 사이드바 줄", titlebar: "B · 제목줄 링", settingsBadge: "C · 설정 배지" },
     recommended: "추천",
     frameLabel: "설정 미리보기",
     copyTable: "문구(i18n 키)",
     copyColumns: { key: "키", ko: "한국어", en: "영어", codes: "오류 코드" },
     existing: "main에 있음",
-    capsuleTitle: "설정 밖에서",
-    capsuleNote: "다운로드 중에 설정을 닫으면 입력창 위의 기존 StatusCapsule이 진행을 보여 주고, 누르면 설정 › 업데이트를 엽니다.",
     notes: NOTES_KO,
   },
 };

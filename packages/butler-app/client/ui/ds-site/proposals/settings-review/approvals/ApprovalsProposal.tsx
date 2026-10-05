@@ -3,8 +3,8 @@ import { useAppLocale } from "@/app/copy";
 import { confirmAction } from "@/app/confirmation";
 import { notifyStatus } from "@/app/notifications";
 import { CardList, EmptyLine, Input, Inline, NativeSelect, NativeSelectOption, Stack } from "@/butler-ds";
-import { SettingsPage, SettingsSection } from "@/components/settings/SettingsFormComponents";
-import { ModelsPageProposal } from "./ModelsPageProposal";
+import { SettingsSection } from "@/components/settings/SettingsFormComponents";
+import { SecurityPageProposal } from "./SecurityPageProposal";
 import { t } from "../proposedCopy";
 import type { StageState } from "../state";
 import { grantFixture, groupGrants, type GrantKind, type GrantRow } from "./grants";
@@ -82,7 +82,5 @@ function EmptyMatch({ locale }: { locale: StageState["locale"] }) {
 
 export function ApprovalsProposal({ state }: { state: StageState }) {
   useAppLocale();
-  if (state.placement === "models") return <ModelsPageProposal grants={<GrantList state={state} />} />;
-  // B: Security. The real Security sections need the gateway; only the new section is shown here.
-  return <SettingsPage><GrantList state={state} /></SettingsPage>;
+  return <SecurityPageProposal grants={<GrantList state={state} />} />;
 }

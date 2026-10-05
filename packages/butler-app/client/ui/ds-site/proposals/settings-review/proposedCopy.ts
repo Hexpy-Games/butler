@@ -26,7 +26,11 @@ export const UPDATE_COPY: readonly CopyEntry[] = [
   { key: "settings.updateProgress.applying", ko: "적용 중", en: "Applying", surface: "row" },
   { key: "settings.updateProgress.restarting", ko: "다시 시작하는 중", en: "Restarting", surface: "row" },
   { key: "settings.updateProgress.cancelled", ko: "다운로드를 취소했습니다.", en: "Download cancelled.", codes: ["update_cancelled"], surface: "toast" },
-  { key: "settings.updateProgress.capsule", ko: "업데이트", en: "Update", surface: "label" },
+  { key: "shell.update.downloading", ko: "업데이트 받는 중", en: "Downloading update", surface: "row" },
+  { key: "shell.update.working", ko: "업데이트 준비 중", en: "Preparing update", surface: "row" },
+  { key: "shell.update.ready", ko: "업데이트 준비됨", en: "Update ready", surface: "row" },
+  { key: "shell.update.failed", ko: "업데이트 실패", en: "Update failed", surface: "row" },
+  { key: "shell.update.ring", ko: "업데이트 {percent}% · 열기", en: "Update {percent}% · Open", surface: "label" },
   { key: "settings.updateErrors.download", ko: "업데이트를 받지 못했습니다. 연결을 확인해 주세요.", en: "Couldn't download the update. Check your connection.", codes: ["update_http_unavailable", "update_artifact_unavailable", "update_manifest_unavailable"], surface: "notice" },
   { key: "settings.updateErrors.damaged", ko: "받은 파일을 확인하지 못했습니다. 다시 받아 주세요.", en: "The download didn't verify. Try again.", codes: ["update_artifact_sha256_mismatch", "update_manifest_sha256_mismatch", "update_signature_unsupported"], surface: "notice" },
   { key: "settings.updateErrors.incompatible", ko: "이 기기용 업데이트가 아직 없습니다.", en: "No update for this device yet.", codes: ["update_manifest_incompatible", "update_manifest_app_platform_missing", "update_manifest_agent_platform_missing"], surface: "notice" },
@@ -78,6 +82,8 @@ export const ERROR_COPY: readonly CopyEntry[] = [
 ];
 
 export const GRANT_COPY: readonly CopyEntry[] = [
+  { key: "settings.sectionDescriptions.security", ko: "접속, 권한, 키와 진단 정보를 관리합니다.", en: "Manage access, permissions, keys and diagnostics.", surface: "label" },
+  { key: "settings.sectionAliases.security (+)", ko: "권한, 허용한 작업, API 키, 저장된 키, 진단, 개인정보", en: "permissions, approvals, API keys, saved keys, diagnostics, privacy", surface: "label" },
   { key: "settings.pageSections.grants", ko: "허용한 작업", en: "Approved actions", surface: "label" },
   { key: "settings.pageSectionDescriptions.grants", ko: "묻지 않고 실행하도록 허용한 작업입니다.", en: "Actions Butler runs without asking.", surface: "label" },
   { key: "settings.grants.kind.command", ko: "명령 실행", en: "Run command", surface: "label" },

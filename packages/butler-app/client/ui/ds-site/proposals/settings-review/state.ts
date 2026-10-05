@@ -20,7 +20,7 @@ export type ErrorScreen = "mcp" | "skills" | "hosts" | "wallpaper" | "toasts";
 export type McpFieldError = "none" | "idRequired" | "idInvalid" | "commandRequired" | "urlRequired" | "saveFailed";
 
 export type ApprovalsState = "list" | "long" | "empty" | "loading" | "error";
-export type ApprovalsPlacement = "models" | "security";
+export type UpdatePlace = "settings" | "sidebarRow" | "titlebar" | "settingsBadge";
 
 export interface StageState {
   section: ReviewSection;
@@ -35,7 +35,7 @@ export interface StageState {
   errorScreen: ErrorScreen;
   mcpError: McpFieldError;
   approvals: ApprovalsState;
-  placement: ApprovalsPlacement;
+  updatePlace: UpdatePlace;
 }
 
 export const DEFAULT_STATE: StageState = {
@@ -43,7 +43,7 @@ export const DEFAULT_STATE: StageState = {
   update: "downloading", failure: "download", updateVariant: "proposal",
   motionVariant: "accessibility", motion: "off",
   errorScreen: "mcp", mcpError: "idRequired",
-  approvals: "list", placement: "models",
+  approvals: "list", updatePlace: "settings",
 };
 
 export const STAGE_MESSAGE = "butler-settings-review-proposal";
@@ -74,7 +74,7 @@ const CHOICES = {
   errorScreen: ["mcp", "skills", "hosts", "wallpaper", "toasts"],
   mcpError: ["none", "idRequired", "idInvalid", "commandRequired", "urlRequired", "saveFailed"],
   approvals: ["list", "long", "empty", "loading", "error"],
-  placement: ["models", "security"],
+  updatePlace: ["settings", "sidebarRow", "titlebar", "settingsBadge"],
 } as const satisfies { [K in keyof StageState]: readonly string[] };
 
 export function stateFromQuery(params: URLSearchParams): StageState {
