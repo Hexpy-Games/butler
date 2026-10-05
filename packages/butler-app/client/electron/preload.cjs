@@ -1055,7 +1055,7 @@ const butlerApp = Object.freeze({
       ...(typeof revision === "string" && revision ? { revision } : {}),
     }),
   }),
-  listMcpServers: () => requestJson("/mcp-servers"),
+  listMcpServers: () => requestBridgeResult("/mcp-servers"),
   listMcpCapabilities: () => requestJson("/mcp-capabilities"),
   listSkills: () => requestJson("/skills"),
   importSkill: ({ name, bytes, projectId } = {}) => {
@@ -1067,23 +1067,23 @@ const butlerApp = Object.freeze({
         : new TextEncoder().encode(String(bytes ?? "")).buffer;
     form.set("file", new Blob([fileBytes], { type: "application/zip" }), name || "skill.zip");
     if (projectId) form.set("project_id", projectId);
-    return requestJson("/skills/import", {
+    return requestBridgeResult("/skills/import", {
       method: "POST",
       body: form,
     });
   },
-  createMcpServer: (request) => requestJson("/mcp-servers", {
+  createMcpServer: (request) => requestBridgeResult("/mcp-servers", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  updateMcpServer: ({ serverId, request } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
+  updateMcpServer: ({ serverId, request } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
     method: "PATCH",
     body: JSON.stringify(request ?? {}),
   }),
-  deleteMcpServer: ({ serverId } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
+  deleteMcpServer: ({ serverId } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
     method: "DELETE",
   }),
-  probeMcpServer: ({ serverId } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}/probe`, {
+  probeMcpServer: ({ serverId } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}/probe`, {
     method: "POST",
     body: JSON.stringify({}),
   }),
@@ -1126,15 +1126,15 @@ const butlerApp = Object.freeze({
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),
-  discoverLocalModels: (request) => requestJson("/model-catalog/local/discover", {
+  discoverLocalModels: (request) => requestBridgeResult("/model-catalog/local/discover", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  registerLocalModel: (request) => requestJson("/model-catalog/local-models", {
+  registerLocalModel: (request) => requestBridgeResult("/model-catalog/local-models", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  updateLocalModel: ({ modelRef, request } = {}) => requestJson(`/model-catalog/local-models/${encodeURIComponent(modelRef ?? "")}`, {
+  updateLocalModel: ({ modelRef, request } = {}) => requestBridgeResult(`/model-catalog/local-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "PATCH",
     body: JSON.stringify(request ?? {}),
   }),

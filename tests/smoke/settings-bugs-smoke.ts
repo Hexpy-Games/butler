@@ -3,7 +3,8 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
+import { launchSmokeBrowser } from "../support/smoke-browser";
 import { createNativeAppServer } from "../support/native-app-server";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
@@ -12,7 +13,7 @@ let copy = getAppCopy("ko-KR");
 const screenshots = resolve(".tmp/settings-bugs");
 mkdirSync(screenshots, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const evidence: string[] = [];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 const toast = (page: Page) => page.locator('[data-sonner-toast][data-type="error"]').last();
@@ -62,8 +63,10 @@ async function paletteChecks(page: Page, prefix: string) {
     await page.keyboard.press("Escape");
   }
   let dialog = await search(page, "");
-  // Fourteen visible sections, plus any server-owned content results.
-  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), 14);
+  // #537: main declares fifteen sections, including Server. Assert every entry.
+  const expectedSections = ["general", "appearance", "personalization", "memory", "models", "updates", "usage", "privacy", "security", "system", "archives", "about", "mcp", "skills", "server"] as const;
+  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), expectedSections.length);
+  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) }).count(), 1);
   await capture(page, prefix, "palette-all-sections");
   await dialog.getByRole("combobox").fill("logs");
   await page.getByText(copy.commandPalette.empty, { exact: true }).waitFor();
@@ -95,14 +98,14 @@ async function skillChecks(page: Page, prefix: string) {
   page.on("request", (request) => { if (request.url().includes("/skills/import")) imports += 1; });
   const file = { name: "invalid.zip", mimeType: "application/zip", buffer: Buffer.from("invalid zip") };
   await page.locator('input[type="file"]').setInputFiles(file);
-  await toast(page).waitFor();
+  await page.getByText(copy.settings.skillErrors.invalid, { exact: true }).waitFor();
   await capture(page, prefix, "skill-import-error");
   assert.equal(await page.locator('input[type="file"]').inputValue(), "", "file input cleared for retry");
   await page.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[type="file"]')?.value === "");
   assert.equal(imports, 2, "same file imports twice");
-  await toast(page).waitFor({ state: "hidden" });
+  assert.equal(await toast(page).count(), 0, "skill failure is inline");
   await page.getByRole("button", { name: copy.settings.back, exact: true }).click();
 }
 
@@ -131,13 +134,13 @@ async function formChecks(page: Page, prefix: string) {
   assert.equal(await save.isDisabled(), true);
   await capture(page, prefix, "mcp-save-pending");
   release();
-  await toast(page).getByText(copy.settings.mcpCommandRequired, { exact: true }).waitFor();
+  await form.getByText(copy.settings.mcpCommandRequired, { exact: true }).waitFor();
   await page.unroute("**/mcp-servers");
   assert.equal(await page.locator("#mcp-server-name").inputValue(), "입력을 유지합니다");
   assert.equal(await page.locator("#mcp-server-id").inputValue(), "GitHub");
   await capture(page, prefix, "mcp-save-error-retained");
   await form.getByRole("button", { name: copy.common.cancel, exact: true }).click();
-  await toast(page).waitFor({ state: "hidden" });
+  assert.equal(await toast(page).count(), 0, "MCP field error has no toast");
 }
 
 async function mcpChecks(page: Page, prefix: string) {

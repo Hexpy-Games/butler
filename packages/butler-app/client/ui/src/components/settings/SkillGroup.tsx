@@ -25,7 +25,6 @@ export function SkillGroup({
           icon={skill.user_invocable ? <Sparkles /> : <FileText />}
           title={skill.name}
           description={skill.description || skill.file_path}
-          meta={skill.source}
         />
       ))}
     </CardList>

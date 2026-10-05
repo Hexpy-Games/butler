@@ -955,6 +955,11 @@ export interface AppCopy {
     copy: string;
   };
   settings: {
+    grants: { revokeFailed: string; loadFailed: string };
+    mcpErrors: { save: string; notFound: string; unavailable: string; remove: string; toggle: string; probe: string; };
+    skillErrors: { invalid: string; tooLarge: string; import: string; };
+    archiveErrors: { restore: string; loadMore: string; };
+    localModelErrors: { discover: string; register: string; };
     deleteSchedule: (name: string) => string;
     deleteMcpServer: (name: string) => string;
     mcpEnabled: string;
@@ -1106,6 +1111,7 @@ export interface AppCopy {
     };
     /** Wallpaper picker copy and its brief toasts. */
     wallpaper: {
+      moduleInvalid: string; imageUnsupported: string; imageTooLarge: string;
       options: string;
       none: string;
       image: (index: number) => string;
@@ -1484,6 +1490,7 @@ export interface AppCopy {
       developerLogSession: string;
     };
     errors: {
+      saveFailed: string;
       loadPersonalization: string;
       updateSettings: string;
       chooseFolder: string;

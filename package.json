@@ -45,6 +45,7 @@
     "app:branch-actions:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-branch-actions-smoke.ts",
     "app:activity-layout:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/activity-layout-smoke.ts",
     "app:steward-pill:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-steward-pill-smoke.ts",
+    "app:settings-errors:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/settings-errors-matrix.ts",
     "app:settings-bugs:harness": "${BUTLER_BUN:-bun} run tests/smoke/settings-bugs-harness.ts",
     "app:settings-bugs:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/settings-bugs-smoke.ts",
     "app:screen-contracts:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-screen-contracts-smoke.ts",

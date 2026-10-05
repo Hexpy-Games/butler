@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { settingsErrorCopy } from "@/app/settingsErrors";
+import type { McpFormErrors } from "./useMcpSettingsActions";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { McpTransportKind } from "@/app/types.ts";
@@ -24,16 +27,24 @@ export function McpServerForm({
   onCancel,
   onSave,
   busy,
+  errors = {},
 }: {
   form: McpServerFormState;
   busy: boolean;
+  errors?: McpFormErrors;
   onChange: (patch: Partial<McpServerFormState>) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
   useAppLocale();
   const copy = appCopy.settings;
-  const idError = mcpServerIdError(form.id);
+  const idProblem = mcpServerIdError(form.id);
+  const idError = errors.id ? settingsErrorCopy({ code: errors.id }, copy.mcpIdInvalid)
+    : idProblem === "required" ? copy.mcpIdRequired : idProblem ? copy.mcpIdInvalid : undefined;
+  useEffect(() => {
+    const first = errors.id ? "mcp-server-id" : errors.command ? "mcp-stdio-command" : errors.url ? "mcp-http-url" : null;
+    if (first) document.getElementById(first)?.focus();
+  }, [errors]);
   return (
     <Stack gap="sm">
       <Field data-invalid={Boolean(idError)}>
@@ -47,7 +58,7 @@ export function McpServerForm({
           onChange={(event) => onChange({ id: event.target.value })}
         />
         {idError ? <FieldError id="mcp-server-id-hint">
-          {idError === "required" ? copy.mcpIdRequired : copy.mcpIdInvalid}
+          {idError}
         </FieldError> : <FieldDescription id="mcp-server-id-hint">
           {copy.mcpIdPreview(form.id.toLowerCase().replace(/^-+|-+$/gu, ""))}
         </FieldDescription>}
@@ -89,9 +100,9 @@ export function McpServerForm({
         />
       </Field>
       {form.transport === "stdio" ? (
-        <StdioFields form={form} onChange={onChange} />
+        <StdioFields error={errors.command ? settingsErrorCopy({ code: errors.command }, copy.mcpCommandRequired) : undefined} form={form} onChange={onChange} />
       ) : (
-        <HttpFields form={form} onChange={onChange} />
+        <HttpFields error={errors.url ? settingsErrorCopy({ code: errors.url }, copy.mcpUrlRequired) : undefined} form={form} onChange={onChange} />
       )}
       <ButtonContainer size="default" justify="end">
         <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>

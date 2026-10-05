@@ -193,3 +193,48 @@ async fn mcp_03_misbehaving_server() -> Result<(), HarnessError> {
     );
     s.finish().await
 }
+
+/// MCP-04 — Save failures retain per-cause codes over the public HTTP boundary.
+#[tokio::test]
+async fn mcp_04_save_error_codes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("MCP-04")?.start().await?;
+    for (input, code) in [
+        (json!({"id": ""}), "mcp_server_id_required"),
+        (
+            json!({"id": "missing-command", "transport": "stdio"}),
+            "mcp_command_required",
+        ),
+        (
+            json!({"id": "missing-http-url", "transport": "http"}),
+            "mcp_url_required",
+        ),
+        (
+            json!({"id": "missing-sse-url", "transport": "sse"}),
+            "mcp_url_required",
+        ),
+    ] {
+        let reply = s.gw.post("/mcp-servers", input).await?;
+        assert_eq!(reply.status, 400, "{reply:?}");
+        assert_eq!(reply.body["error"]["code"], code);
+    }
+    let created =
+        s.gw.post("/mcp-servers", json!({"id": "valid", "command": "unused"}))
+            .await?;
+    assert_eq!(created.status, 201);
+    for (input, code) in [
+        (json!({"command": ""}), "mcp_command_required"),
+        (json!({"transport": "http", "url": ""}), "mcp_url_required"),
+        (json!({"transport": "sse", "url": ""}), "mcp_url_required"),
+    ] {
+        let reply = s.gw.patch("/mcp-servers/valid", input).await?;
+        assert_eq!(reply.status, 400);
+        assert_eq!(reply.body["error"]["code"], code);
+    }
+    let missing =
+        s.gw.patch("/mcp-servers/removed", json!({"command": "unused"}))
+            .await?;
+    assert_eq!(missing.status, 404);
+    assert_eq!(missing.body["error"]["code"], "mcp_server_not_found");
+    s.finish().await
+}
