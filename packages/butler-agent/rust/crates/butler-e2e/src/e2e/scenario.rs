@@ -21,6 +21,7 @@ use super::sandbox::Sandbox;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod setup;
 mod sources;
 mod stub;
 
@@ -107,30 +108,6 @@ pub struct Scenario {
 }
 
 impl Setup {
-    pub fn new(id: &str) -> Result<Self, HarnessError> {
-        let sandbox = Sandbox::new(id)?;
-        let mut placeholders = Placeholders::default();
-        placeholders.add("W", sandbox.workspace.display().to_string());
-        placeholders.add("D", sandbox.data.display().to_string());
-        placeholders.add("SANDBOX", sandbox.root.display().to_string());
-        Ok(Self {
-            id: id.to_owned(),
-            sandbox,
-            placeholders,
-            fixture: Fixture::Ready,
-            access: Access::FullAccess,
-            source: Source::None,
-            env: vec![("BUTLER_E2E_APP_NOW".into(), fixtures::FIXTURE_TIME.into())],
-            model: None,
-            stub_credential: true,
-            record_into: None,
-            launch_mode: LaunchMode::Harness,
-            replay_only: false,
-            extends: None,
-            login_refresh: false,
-        })
-    }
-
     /// Replays (or with `BUTLER_E2E_RECORD=1`, records) cassette `name`.
     pub fn cassette(mut self, name: &str) -> Self {
         self.source = Source::Cassette(name.to_owned());

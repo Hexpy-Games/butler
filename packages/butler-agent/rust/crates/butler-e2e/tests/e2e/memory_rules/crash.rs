@@ -2,7 +2,7 @@
 use super::{forget, support};
 use butler_e2e::e2e::{
     HarnessError,
-    scenario::{Fixture, Setup, accepted_turn_id},
+    scenario::{Fixture, Scenario, Setup, accepted_turn_id},
 };
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::json;
@@ -12,6 +12,13 @@ use std::time::Duration;
 async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    // Create the same committed starting rule once through the real tool.
+    // Each case gets the complete closed data snapshot, including the chat.
+    let (seed, baseline_output) = committed_seed().await?;
+    let installation_fingerprint = seed.sandbox.installation_fingerprint()?;
+    let installation = &seed.sandbox;
+    let baseline_data = &seed.sandbox.data;
+    let baseline_output = &baseline_output;
     let stages = [
         "intent", "archive", "source", "graph", "index", "notice", "receipt",
     ];
@@ -28,18 +35,16 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 );
             };
             trace("start");
-            let setup = Setup::new(&format!("RULES-CRASH-{stage}-{tool_name}"))?
+            let setup = Setup::with_installation(&format!("RULES-CRASH-{stage}-{tool_name}"), installation)?
                 .fixture(Fixture::Empty)
                 .stub_cassette(forget::stub()?)
                 .env("BUTLER_E2E_RULE_CRASH_POINTS", "1");
+            butler_e2e::e2e::sandbox::copy_tree(baseline_data, &setup.sandbox.data)?;
             let mut s = forget::start(setup).await?;
-            let output =
-                support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
-            assert_eq!(output["ok"], true, "{output}");
-            use sha2::{Digest, Sha256};
-            let receipt = s.sandbox.data.join("cognition/memory/rules/capture-receipts")
-                .join(format!("{:x}.json", Sha256::digest(output["operation_id"].as_str().unwrap().as_bytes())));
-            support::until(|| support::read_json(&receipt).is_some_and(|row| row["submitted"]["operation_id"] == output["operation_id"])).await;
+            assert_eq!(s.gw.messages("general").await?.iter().filter(|message|
+                message["role"] == "user" && message["text"] == forget::GLOBAL
+            ).count(), 1, "starting chat history was not copied completely");
+            let output = baseline_output;
             trace("original_committed");
             let original = support::active_rules(&s.sandbox.data).pop().unwrap();
             s.provider()?
@@ -112,7 +117,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                     {
                         return Ok::<_, HarnessError>(row["turn_id"].as_str().unwrap().to_owned());
                     }
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    tokio::task::yield_now().await;
                 }
             })
             .await
@@ -133,7 +138,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                     if view.data()["active_turn"].is_null() {
                         return Ok::<_, HarnessError>(());
                     }
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    tokio::task::yield_now().await;
                 }
             })
             .await
@@ -221,7 +226,46 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
         .try_collect::<Vec<_>>()
         .await?;
     assert_eq!(completed.len(), stages.len());
+    assert_eq!(
+        seed.sandbox.installation_fingerprint()?,
+        installation_fingerprint,
+        "shared installation was modified"
+    );
+    seed.finish().await?;
     Ok(())
+}
+
+async fn committed_seed() -> Result<(Scenario, serde_json::Value), HarnessError> {
+    use sha2::{Digest, Sha256};
+    let setup = Setup::new("RULES-CRASH-SEED")?
+        .fixture(Fixture::Empty)
+        .stub_cassette(forget::stub()?);
+    let mut s = forget::start(setup).await?;
+    let output = support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
+    assert_eq!(output["ok"], true, "{output}");
+    let receipt = s
+        .sandbox
+        .data
+        .join("cognition/memory/rules/capture-receipts")
+        .join(format!(
+            "{:x}.json",
+            Sha256::digest(output["operation_id"].as_str().unwrap().as_bytes())
+        ));
+    support::until(|| {
+        support::read_json(&receipt)
+            .is_some_and(|row| row["submitted"]["operation_id"] == output["operation_id"])
+    })
+    .await;
+    s.agent.terminate().await?;
+    assert!(
+        !s.sandbox
+            .data
+            .join("cognition/memory/rules/pending.json")
+            .exists()
+    );
+    assert_eq!(support::active_rules(&s.sandbox.data).len(), 1);
+    s.provider.take().unwrap().finish().await?;
+    Ok((s, output))
 }
 
 fn committed_result(data: &std::path::Path, turn: &str, tool: &str) -> Option<serde_json::Value> {

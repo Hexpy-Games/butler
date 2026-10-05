@@ -190,6 +190,7 @@ runs:
         isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
         if [ -n "$ARCHIVE_FILE" ]; then
           python3 "$isolate" cargo-nextest nextest list --archive-file "$ARCHIVE_FILE" --workspace-remap "$PWD" -E "$filterset" ${nextest_partition_args[@]+"${nextest_partition_args[@]}"}
+          set +e
           python3 "$isolate" cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
             --workspace-remap "$PWD" \
@@ -198,7 +199,9 @@ runs:
             ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+          run_status=("${PIPESTATUS[@]}")
         else
+          set +e
           python3 "$isolate" cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 -p butler-e2e \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
@@ -206,7 +209,11 @@ runs:
             ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+          run_status=("${PIPESTATUS[@]}")
         fi
+        set -e
+        if [ "${run_status[1]}" -ne 0 ]; then exit "${run_status[1]}"; fi
+        python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/check-nextest-status.py" "${run_status[0]}" "$RUNNER_TEMP/e2e-stub.log"
 
     # PERF-IDLE takes five minutes by design; its documented cargo-test runner
     # avoids nextest's three-minute per-test watchdog without changing budgets.

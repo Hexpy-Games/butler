@@ -87,6 +87,7 @@ jobs:
       # Owner-approved release exception: only the identified startup deadline
       # is advisory. Every test still runs with its original assertions/budgets.
       BUTLER_PREVIEW10_STARTUP_WARNING: ${{ inputs.platform == 'darwin-arm64' && contains(fromJSON('["batch/preview-10", "codex/captain-p10", "v0.1.0-preview.10"]'), github.head_ref || github.ref_name) && '1' || '0' }}
+      BUTLER_PREVIEW10_STORAGE_VIEW_WARNING: ${{ inputs.platform == 'darwin-arm64' && contains(fromJSON('["batch/preview-10", "codex/captain-p10", "v0.1.0-preview.10"]'), github.head_ref || github.ref_name) && '1' || '0' }}
     strategy:
       fail-fast: false
       matrix:
