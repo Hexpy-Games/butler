@@ -72,8 +72,9 @@ export const GRAIN_WALLPAPER = defineWallpaperModule({ manifest: grainManifest, 
 
 /**
  * Decoration (transparent, `decoration`: not offered as an app wallpaper): a
- * cherry branch along a card's top-right padding frame, petals drifting
- * across it; everything else see-through. `lush` (default on) fills the corner.
+ * mass of cherry blossom clusters (three depths, the branch only glimpsed) at
+ * a card's top-right padding frame, petals drifting across it; everything else
+ * see-through. `lush` (default on) fills the corner.
  */
 export const CHERRY_BLOSSOM_WALLPAPER = defineWallpaperModule({ manifest: cherryManifest, fragment: cherryFragment, stillTime: 37 });
 

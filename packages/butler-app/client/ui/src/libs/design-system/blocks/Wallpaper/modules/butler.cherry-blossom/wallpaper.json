@@ -4,7 +4,7 @@
     "en": "Cherry blossom",
     "ko": "벚꽃"
   },
-  "version": "1.0.0",
+  "version": "0.3.0",
   "engine": 1,
   "motion": "animated",
   "image": "none",

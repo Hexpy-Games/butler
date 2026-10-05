@@ -199,8 +199,9 @@ photos, `imageDim: noDarkStep`), `butler.stipple` (an image filter, two-pass,
 `pixelRatio: device`, `imageDim: none`, with a sample photo) and the image
 filter `butler.grain` (film grain, `amount` and black-and-white `mono`), and
 the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`: a
-cherry branch along a card's top-right padding frame with petals drifting
-across; boolean `lush`, on by default, fills the top-right corner); register
+mass of blossom clusters at a card's top-right padding frame, the branch only
+glimpsed, petals drifting across; boolean `lush`, on by default, fills the
+top-right corner); register
 more with `createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), module])`
 and pass the registry (image filters resolve against it too). Built-ins
 cannot be shadowed.
