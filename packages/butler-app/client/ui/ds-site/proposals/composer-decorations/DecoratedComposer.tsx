@@ -8,7 +8,7 @@ import {
 } from "@/butler-ds";
 import { CherryCanvas } from "./CherryCanvas";
 import type { ProposalCopy } from "./copy";
-import { CHERRY_BLOSSOM_MODULE, SHORELINE_SOURCE, type DecorationTheme } from "./decorationScenes";
+import { CHERRY_BLOSSOM_MODULE, SHORELINE_SOURCE, type DecorationTheme, type ShoreOption } from "./decorationScenes";
 import { CharacterHead, CharacterPaws, characterFor } from "./EdgeCharacter";
 import styles from "./ComposerDecorations.module.css";
 
@@ -29,14 +29,19 @@ const COMPOSER_RESERVE = 120;
  *   the waterline stays at the card's vertical middle at any height.
  * - Cherry blossom: a transparent canvas; the card's own glass shows through.
  */
-function DecorationBackground({ theme, tone }: { theme: Exclude<DecorationTheme, "none">; tone: "light" | "dark" }) {
+function DecorationBackground({ theme, tone, shore, lush }: {
+  theme: Exclude<DecorationTheme, "none">;
+  tone: "light" | "dark";
+  shore: ShoreOption;
+  lush: boolean;
+}) {
   return (
     <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}>
-      <div className={styles.art} data-scene={theme}>
+      <div className={styles.art} data-scene={theme} data-tone={tone} data-option={shore}>
         {theme === "shoreline" ? (
           <Wallpaper source={SHORELINE_SOURCE} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
         ) : (
-          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} />
+          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} lush={lush} key={String(lush)} />
         )}
       </div>
     </div>
@@ -48,12 +53,14 @@ function DecorationBackground({ theme, tone }: { theme: Exclude<DecorationTheme,
  * the page wallpaper, and Composer.tsx's ComposerCard (floating, large) with ComposerInputSurface
  * and ComposerToolbar's DS parts and props. Only the decoration layer and the character are new.
  */
-export function NewChatScreen({ copy, theme, character, wallpaper, tone, engagedAtStart }: {
+export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = "a", lush = true, engagedAtStart }: {
   copy: ProposalCopy;
   theme: DecorationTheme;
   character: boolean;
   wallpaper: WallpaperSource;
   tone: "light" | "dark";
+  shore?: ShoreOption;
+  lush?: boolean;
   engagedAtStart?: boolean;
 }) {
   const [draft, setDraft] = useState("");
@@ -81,7 +88,7 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, engaged
       <ConversationScroll masked={false} scrollable={false}>{null}</ConversationScroll>
       <ComposerCard large floating expanded={engaged} containerRef={(node) => { wrapRef.current = node; setWrap(node); }}
         onFocusCapture={() => setEngaged(true)} onSubmit={(event) => event.preventDefault()}>
-        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} />}
+        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} shore={shore} lush={lush} />}
         <ComposerCardExpandedBody>
           <ComposerCardEditor>
             <ComposerCardEditable>

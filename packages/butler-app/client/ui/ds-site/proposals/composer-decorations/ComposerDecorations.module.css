@@ -105,6 +105,47 @@
   transform: translateY(-50%);
 }
 
+/* Light mode: the day grade lifted to a high-key midday beach (pale sand, bright shallow
+   water). A grade of the scene itself, static, applied by the compositor. */
+.art[data-scene="shoreline"][data-tone="light"] {
+  filter: brightness(1.28) saturate(1.06);
+}
+
+/* (b) waterline off the text row: 6px above the card's bottom edge, sand behind all text. */
+.art[data-scene="shoreline"][data-option="b"] {
+  top: calc(100% - 6px);
+}
+
+/* (d) the subtlest treatment: one soft vertical tone gradient across the whole scene (edge to
+   edge, top to bottom, never shaped around text). Light: the water half eases toward white.
+   Dark: the sand half eases toward the night tint. */
+.background:has(> .art[data-scene="shoreline"][data-option="d"])::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.background:has(
+    > .art[data-scene="shoreline"][data-option="d"][data-tone="light"]
+  )::after {
+  background: linear-gradient(
+    180deg,
+    transparent 30%,
+    color-mix(in srgb, var(--neutral-white) 62%, transparent) 100%
+  );
+}
+
+.background:has(
+    > .art[data-scene="shoreline"][data-option="d"][data-tone="dark"]
+  )::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--grayscale-12) 66%, transparent) 0,
+    transparent 70%
+  );
+}
+
 .cherryCanvas {
   display: block;
   width: 100%;

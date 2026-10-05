@@ -23,6 +23,15 @@ export const SHORELINE_SOURCE: WallpaperSource = {
   kind: "live", module: "butler.shoreline", params: { shorePosition: 0.5556, foamAmount: 0.75, water: "tropical" },
 };
 
+/**
+ * Shoreline readability options under review (proposal page switch):
+ * a: accept the contrast as it falls; b: waterline moved off the text row, 6px above the
+ * bottom edge; c: no shoreline (the theme list loses it); d: a whole-scene exposure grade
+ * (no layer, nothing local: the scene itself is lifted in light and lowered in dark).
+ */
+export const SHORE_OPTIONS = ["a", "b", "c", "d"] as const;
+export type ShoreOption = (typeof SHORE_OPTIONS)[number];
+
 /** Page wallpapers to judge the card against (the new chat screen's background). */
 export const PAGE_WALLPAPERS = ["none", "butler.bloom", "butler.shoreline", "butler.photo-daisies", "butler.dusk"] as const;
 export type PageWallpaper = (typeof PAGE_WALLPAPERS)[number];

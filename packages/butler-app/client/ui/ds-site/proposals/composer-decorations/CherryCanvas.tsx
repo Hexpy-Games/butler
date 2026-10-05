@@ -22,6 +22,7 @@ uniform vec2 u_resolution;
 uniform float u_pixelRatio;
 uniform float u_time;
 uniform sampler2D u_noiseTexture;
+uniform float p_lush;
 out vec4 fragColor;
 `;
 const VERTEX = `#version 300 es
@@ -52,7 +53,7 @@ function program(gl: WebGL2RenderingContext, fragment: string): WebGLProgram | n
   return gl.getProgramParameter(linked, gl.LINK_STATUS) ? linked : null;
 }
 
-export function CherryCanvas({ fragment }: { fragment: string }) {
+export function CherryCanvas({ fragment, lush = true }: { fragment: string; lush?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -71,7 +72,7 @@ export function CherryCanvas({ fragment }: { fragment: string }) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-      uniforms = Object.fromEntries(["u_resolution", "u_pixelRatio", "u_time", "u_noiseTexture"].map((name) => [name, gl.getUniformLocation(linked!, name)]));
+      uniforms = Object.fromEntries(["u_resolution", "u_pixelRatio", "u_time", "u_noiseTexture", "p_lush"].map((name) => [name, gl.getUniformLocation(linked!, name)]));
       gl.uniform1i(uniforms.u_noiseTexture!, 0);
     };
     setup();
@@ -95,6 +96,7 @@ export function CherryCanvas({ fragment }: { fragment: string }) {
       gl.uniform2f(uniforms.u_resolution!, width, height);
       gl.uniform1f(uniforms.u_pixelRatio!, ratio);
       gl.uniform1f(uniforms.u_time!, reduced ? STILL_TIME : (clock / 1000) % PERIOD);
+      gl.uniform1f(uniforms.p_lush!, lush ? 1 : 0);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -138,6 +140,6 @@ export function CherryCanvas({ fragment }: { fragment: string }) {
       document.removeEventListener("visibilitychange", onVisibility);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [fragment]);
+  }, [fragment, lush]);
   return <canvas className={styles.cherryCanvas} ref={ref} data-scene-canvas="cherry-blossom" />;
 }
