@@ -601,6 +601,9 @@
   --access-read-icon: var(--text-tertiary);
   --switch-thumb: var(--neutral-white);
   --switch-track-bg: rgba(0, 0, 0, 0.18);
+  /* InlineReference favicon plate: a light tile, so dark glyphs read in both themes. */
+  --favicon-plate: var(--neutral-white);
+  --favicon-plate-line: rgba(0, 0, 0, 0.08);
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
@@ -907,6 +910,8 @@
   --send-fg: var(--color-text-inverse);
   --send-disabled-bg: var(--neutral-dark-text-disabled);
   --switch-track-bg: rgba(255, 255, 255, 0.16);
+  --favicon-plate: rgba(255, 255, 255, 0.92);
+  --favicon-plate-line: transparent;
   --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
   --command-overlay-bg: rgba(0, 0, 0, 0.26);
@@ -1048,6 +1053,8 @@
   --send-fg: var(--color-text-inverse);
   --send-disabled-bg: var(--grayscale-04);
   --switch-track-bg: rgba(0, 0, 0, 0.18);
+  --favicon-plate: var(--neutral-white);
+  --favicon-plate-line: rgba(0, 0, 0, 0.08);
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);

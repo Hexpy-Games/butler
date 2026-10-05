@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | A breakdown of usage by category | `KeyValueRow` | `ContextDonutButton` |
 | A busy control that confirms completion in place | `LoadingIndicator` |  |
+| A call to action that leaves the app (Install Git in a notice) | `Button` | `InlineReference` |
 | A canvas animation or media that must stay square (the thinking mark) | `AspectFrame` |  |
 | A capsule above the composer (progress, report) | `PillButton` |  |
 | A card that can be selected or clicked | `Card` | `Box` |
@@ -168,7 +169,7 @@
 | A small menu that mixes actions and a current choice | `OptionMenu` |  |
 | A spinner that resolves into done | `LoadingIndicator` | `SuccessCheck` |
 | A standalone icon action | `IconButton` | `GlyphToggle` |
-| A standalone link-like action | `Button` | `InlineReference` |
+| A standalone link that leaves the app, such as "Get a key" or "Learn more" (kind="external" inside Typo) | `InlineReference` |  |
 | A standalone panel with its own action | `SurfacePanel` | `SettingsSection` |
 | A static done status in a list of history | `Icons` | `SuccessCheck` |
 | A static glyph | `IconSlot` | `GlyphToggle` |
@@ -197,6 +198,7 @@
 | A trend over time | `ChartContainer` | `MetricCard` |
 | A trigger that opens a custom popover | `SelectButton` | `Select` |
 | A turn follows a plan with several steps | `TodoProgressPanel` |  |
+| A URL the user reads or copies (server address, endpoint) | `Typo` | `InlineReference` |
 | A view menu with radio and checkbox items | `DropdownMenu` |  |
 | A visible divider | `Separator` | `Space` |
 | A visible row menu | `OverflowActionMenu` | `ContextMenu` |
@@ -222,11 +224,13 @@
 | An empty new chat | `PromptSuggestionList` | `EmptyLine` |
 | An error tied to one place on the page | `Notice` | `Toast` |
 | An exact number must be typed | `Input` | `Slider` |
+| An external http(s) link in a sentence, a reply, a caption or a settings description (kind="external") | `InlineReference` |  |
 | An icon glyph | `IconSlot` | `AspectFrame` |
 | An icon next to a caption | `Inline` |  |
 | An icon that is the whole control | `IconButton` | `Icons` |
 | An icon that swaps to a toggle on hover | `GlyphToggle` | `IconSlot` |
 | An icon-only button | `IconButton` | `Tooltip` |
+| An in-app action styled as a link (retry, copy link, show more) | `Button` | `InlineReference` |
 | An inline error or result message | `Notice` | `Tag` |
 | An item in a dashboard grid | `Card` |  |
 | An on/off setting | `Switch` | `SegmentedControl` |
@@ -332,6 +336,7 @@
 | Main and aside columns on a page | `Grid` |  |
 | Make a whole list row clickable | `Clickable` |  |
 | Mark row types in lists and navigation | `Icons` |  |
+| Markdown output | `MarkdownContent` | `InlineReference` |
 | MCP headers and environment variables whose values may come from env or the keychain | `SettingsSecretRows` |  |
 | Mention a conversation or document inside a message or summary | `InlineReference` |  |
 | Metric cards | `MetricGrid` | `Grid` |
@@ -1164,12 +1169,17 @@ The Hugeicons free set from hugeicons.com (MIT), mapped to Butler names and size
 
 `import { InlineReference } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=components/InlineReference`
 
-A conversation or document mention inside running text, with its icon, that opens the target.
+A mention inside running text: a conversation or document (opens in the app) or an external URL (opens in the browser), with its icon.
 
 - Use for: Mention a conversation or document inside a message or summary
-- Not for: A standalone link-like action → `Button`
+- Use for: An external http(s) link in a sentence, a reply, a caption or a settings description (kind="external")
+- Use for: A standalone link that leaves the app, such as "Get a key" or "Learn more" (kind="external" inside Typo)
+- Not for: An in-app action styled as a link (retry, copy link, show more) → `Button`
+- Not for: A call to action that leaves the app (Install Git in a notice) → `Button`
+- Not for: A URL the user reads or copies (server address, endpoint) → `Typo`
+- Not for: Markdown output → `MarkdownContent`
 - Not for: A document in a list → `DocumentTile`
-- Tokens: `--text-primary`, `--selection`, `--icon-size-sm`
+- Tokens: `--accent-text`, `--text-primary`, `--selection`, `--icon-size-sm`, `--favicon-plate`, `--favicon-plate-line`, `--focus-ring-color`, `--motion-fast`
 
 ### Kbd
 
@@ -2098,7 +2108,7 @@ Document typography for rendered markdown: headings, lists, code frames, tables,
 - Use for: Assistant answers, READMEs and project documents rendered from markdown
 - Not for: UI text → `Typo`
 - Not for: Raw file contents → `ArtifactPreviewPre`
-- Tokens: `--line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`
+- Tokens: `--line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
 
 ### SplitBrowser
 

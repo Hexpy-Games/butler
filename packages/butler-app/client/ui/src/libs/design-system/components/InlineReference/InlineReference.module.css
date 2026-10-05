@@ -34,3 +34,78 @@ button.reference {
   width: 1em;
   height: 1em;
 }
+
+/* External link: plain inline text so long titles wrap with the sentence
+   (paragraphs, list items, table cells, headings). */
+.external {
+  border-radius: calc(var(--radius-control) / 2);
+  color: var(--accent-text);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.external:hover .label {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.external:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+/* One rounded box for globe and favicon alike: the swap never moves text. */
+.slot {
+  position: relative;
+  display: inline-block;
+  width: 1.125em;
+  height: 1.125em;
+  margin-inline-end: 0.25em;
+  border-radius: calc(var(--radius-control) / 2);
+  vertical-align: -0.2em;
+}
+
+.globe {
+  position: absolute;
+  display: flex;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.globe svg {
+  width: 0.95em;
+  height: 0.95em;
+}
+
+/* The plate keeps dark glyphs readable on dark surfaces and gives odd
+   shapes one tidy silhouette. `.slot` raises specificity over document
+   image rules (MarkdownContent sizes and frames `img`). */
+.slot .favicon {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  padding: 0.125em;
+  border: 0;
+  border-radius: inherit;
+  background: var(--favicon-plate);
+  inset: 0;
+  object-fit: contain;
+  opacity: 0;
+  outline: 1px solid var(--favicon-plate-line);
+  outline-offset: -1px;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.slot[data-favicon="loaded"] .favicon {
+  opacity: 1;
+}
+
+.slot[data-favicon="loaded"] .globe {
+  opacity: 0;
+}
