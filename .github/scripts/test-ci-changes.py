@@ -21,13 +21,13 @@ class Paths(unittest.TestCase):
     def test_responsible_jobs_and_workflow_fail_closed(self):
         cases = {
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
-            'packages/butler-i18n/src/locale.ts': {'ui'},
-            'packages/project-ledger/src/index.ts': {'ui'},
+            'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
+            'packages/project-ledger/src/index.ts': {'ui', 'ds'},
             'bun.lock': {'ui', 'site', 'ds', 'licenses'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
-            'packages/butler-app/client/electron/src/main.ts': {'ui', 'package', 'install', 'linux-package'},
+            'packages/butler-app/client/electron/src/main.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),

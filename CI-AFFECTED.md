@@ -9,7 +9,7 @@ path filter can leave a required check missing on documentation changes.
 | Inputs | Responsible checks |
 | --- | --- |
 | Agent Rust/resources, Cargo files, Rust/nextest configuration, VERSION | Format/source, clippy, workspace/E2E archives and shards, perf; native packaging/install/update checks because the agent is bundled |
-| App client, i18n, other Bun packages/tools/tests, Bun/TS configuration and lock | Bun unit suite, Windows source/build checks; UI assets also select existing site and DS browser smokes |
+| App client, i18n, other Bun packages/tools/tests, Bun/TS configuration and lock | Bun unit suite, Windows source/build checks, DS browser smokes; shared UI/i18n assets also select existing site checks |
 | Electron/main process, deploy, release/Windows packaging scripts, native installer inputs | Native package/install/update smokes on the existing platforms; updater UI integration paths keep their existing native smokes |
 | Site source | Site check/build/leak/font checks |
 | Dependency inventories/licenses | Existing deterministic license/disclosure checks |

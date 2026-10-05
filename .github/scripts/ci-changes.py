@@ -42,12 +42,14 @@ def categories(path):
         result.update(('package', 'install', 'linux-package'))
     if ui or shared or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
-    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
+    if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
         result.add('site')
     if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, ('tests/smoke/ds-site-*',)):
         result.add('ds')
     if matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
         result.add('licenses')
+    if 'ui' in result:
+        result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
     # Unknown executable/configuration inputs fail closed, rather than silently
     # leaving a new package or tool untested. Assets/readme and plans are docs.
     if not result and not path.startswith(('assets/readme/', 'plans/')):
