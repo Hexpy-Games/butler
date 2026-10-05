@@ -105,6 +105,7 @@ export function settingsWithDefaults(
     ...(record as Partial<SettingsView>),
     ...legacyTheme,
     reduce_motion: record.reduce_motion === true,
+    collapse_message_box: record.collapse_message_box !== false,
     // Settings cached before the `wallpaper` key keep their legacy look.
     wallpaper:
       parseWallpaperSetting(record.wallpaper) ??

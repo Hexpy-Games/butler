@@ -110,6 +110,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "max_simultaneous_workers",
         "access_mode",
         "appearance_theme",
+        "collapse_message_box",
         "reduce_motion",
         "main_screen_theme",
         "main_screen_theme_preset",
@@ -232,4 +233,14 @@ pub(super) fn normalize_model_fallback(
         }
     }
     json!({"enabled":enabled,"models":models})
+}
+
+/// A repeated appearance toggle has no mutation or persistence work.
+pub(super) fn unchanged_composer_fold(patch: &Value, current: &Value) -> bool {
+    patch.as_object().is_some_and(|patch| {
+        patch.len() == 1
+            && patch
+                .get("collapse_message_box")
+                .is_some_and(|value| Some(value) == current.get("collapse_message_box"))
+    })
 }

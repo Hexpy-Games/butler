@@ -307,11 +307,10 @@ impl super::AppApplication {
         let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
             self.project_creation.resolve_workspace_selection(token)
         })?;
-        if let Some(asset) = wallpaper::patched_image_asset(&prepared.patch)
-            && !self.wallpaper_asset_exists(asset.to_owned()).await?
-        {
-            return Err(wallpaper::unknown_asset());
+        if update::unchanged_composer_fold(&prepared.patch, &current) {
+            return Ok((wallpaper::source(&current), current));
         }
+        self.validate_wallpaper_patch(&prepared.patch).await?;
         self.dependencies
             .settings_mutations
             .apply(prepared.patch.clone(), prepared.projection)
@@ -363,5 +362,17 @@ impl super::AppApplication {
             .map_err(super::app_error)?;
         self.project_creation.set_workspace_root(workspace_root);
         Ok((previous, projection))
+    }
+
+    async fn validate_wallpaper_patch(
+        &self,
+        patch: &Value,
+    ) -> Result<(), crate::gateway::GatewayApplicationError> {
+        if let Some(asset) = wallpaper::patched_image_asset(patch)
+            && !self.wallpaper_asset_exists(asset.to_owned()).await?
+        {
+            return Err(wallpaper::unknown_asset());
+        }
+        Ok(())
     }
 }

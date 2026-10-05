@@ -46,6 +46,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   multiline_send_behavior: "modifier_enter_send_enter_newline",
   appearance_theme: "system",
   reduce_motion: false,
+  collapse_message_box: true,
   main_screen_theme: "bloom",
   main_screen_theme_preset: "monochrome",
   main_screen_theme_custom_colors: [

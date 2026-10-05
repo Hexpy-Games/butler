@@ -281,6 +281,15 @@ fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
                 .unwrap_or(false)
         ),
     );
+    output.insert(
+        "collapse_message_box".into(),
+        json!(
+            stored
+                .get("collapse_message_box")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        ),
+    );
     main_screen(stored, output);
     output.insert(
         "translucent_sidebar".into(),

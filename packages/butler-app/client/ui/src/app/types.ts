@@ -571,6 +571,7 @@ export interface SettingsView {
   appearance_theme: "system" | "light" | "dark";
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
+  collapse_message_box: boolean;
   main_screen_theme: "none" | "bloom" | "silk";
   main_screen_theme_preset:
     | "monochrome"
