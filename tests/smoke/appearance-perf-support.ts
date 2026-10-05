@@ -46,10 +46,10 @@ export function traceStats(events: TraceEvent[]) {
 /** Observe React fibers without changing the production bundle. No private content is exported. */
 export async function instrument(page: Page) {
   await page.addInitScript(() => {
-    const state = { components: 0, commits: 0, bitmaps: [] as number[][], glDraws: 0, start: 0, interactive: 0, longTasks: [] as { start: number; duration: number }[] };
+    const state = { components: 0, commits: 0, bitmaps: [] as number[][], glDraws: 0, start: 0, interactive: 0, observedLongTasks: [] as { start: number; duration: number }[] };
     (window as any).__appearance = state;
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) state.longTasks.push({ start: entry.startTime, duration: entry.duration });
+      for (const entry of list.getEntries()) state.observedLongTasks.push({ start: entry.startTime, duration: entry.duration });
     }).observe({ type: "longtask", buffered: true });
     (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
       supportsFiber: true, inject: () => 1, onCommitFiberUnmount: () => {},
@@ -127,6 +127,6 @@ export async function toggleMotion(page: Page) {
 export async function interactionLongTasks(page: Page, start: number, end: number) {
   // Give the observer its delivery turn; the measured interval stays unchanged.
   await page.waitForTimeout(60);
-  return page.evaluate(({ start, end }) => (window as any).__appearance.longTasks
+  return page.evaluate(({ start, end }) => (window as any).__appearance.observedLongTasks
     .filter((task: { start: number; duration: number }) => task.start < end && task.start + task.duration > start), { start, end });
 }
