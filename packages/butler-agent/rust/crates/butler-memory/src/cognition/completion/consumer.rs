@@ -2,19 +2,15 @@
 
 mod blocking;
 mod catchup;
+mod feedback;
+mod idle;
 mod probe;
 mod process;
 mod vector_schedule;
-use super::wake;
 pub use vector_schedule::{VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS};
 
 use parking_lot::Mutex;
-use std::{
-    path::PathBuf,
-    sync::Arc,
-    sync::atomic::AtomicBool,
-    time::{Duration, Instant},
-};
+use std::{path::PathBuf, sync::Arc, sync::atomic::AtomicBool, time::Instant};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -55,6 +51,7 @@ type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 /// Consumes the memory sync queue: registers completed turns and typed sources, projects them and
 /// embeds their vectors.
 pub struct MemorySyncConsumer {
+    instruction_owner: crate::cognition::RememberedRuleOwner,
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     registration: Arc<CognitionRegistrationService>,
@@ -82,7 +79,19 @@ impl MemorySyncConsumer {
         coordinator: Arc<CognitionWriteCoordinator>,
         clock: Clock,
     ) -> Self {
+        let publisher = Arc::new(crate::cognition::CompletionPublisher::new(
+            &data_root,
+            &environment,
+            clock.clone(),
+        ));
+        let instruction_owner = crate::cognition::RememberedRuleOwner::new(
+            data_root.clone(),
+            environment.clone(),
+            coordinator.clone(),
+            publisher,
+        );
         Self {
+            instruction_owner,
             data_root,
             environment,
             registration,
@@ -100,6 +109,12 @@ impl MemorySyncConsumer {
             probe: Arc::new(probe::ProbeReader::default()),
             vector_batch: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Use the runtime's configured instruction owner for every capture drain.
+    pub fn with_instruction_owner(mut self, owner: crate::cognition::RememberedRuleOwner) -> Self {
+        self.instruction_owner = owner;
+        self
     }
 
     /// Also embeds projected vector units with `embedding`.
@@ -170,6 +185,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),
@@ -192,7 +208,13 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let poll = process::poll(input);
+            let poll = async {
+                match feedback::drain(&input).await {
+                    Ok(Some(result)) => Ok(result),
+                    Ok(None) => process::poll(input).await,
+                    Err(error) => Err(error),
+                }
+            };
             tokio::pin!(poll);
             let result = tokio::select! {
                 result = &mut poll => result,
@@ -230,6 +252,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),
@@ -301,49 +324,6 @@ impl MemorySyncConsumer {
             butler_core::diagnostic!("[memory-sync-close] {}", error.code());
         }
     }
-
-    /// Bounds the backoff after a successful idle poll by the next catch-up.
-    /// Call only after polling an available generation: deferred work and absent
-    /// generations must keep their backoff even when catch-up is overdue.
-    pub fn idle_delay(&self, backoff: Duration) -> Duration {
-        self.catchup_at.lock().map_or(backoff, |last| {
-            backoff.min(catchup::INTERVAL.saturating_sub(last.elapsed()))
-        })
-    }
-
-    /// Sleeps up to `delay`, ending early when in-process work is signalled,
-    /// the queue changes (another process appended to it), or the consumer
-    /// closes. An idle loop calls this instead of polling on a short timer.
-    /// Returns whether something woke it before `delay` elapsed.
-    pub async fn wait_for_work(&self, delay: Duration) -> bool {
-        let memory_root = self.environment.memory_root(&self.data_root);
-        let queue = queue_length(&memory_root);
-        let deadline = Instant::now() + delay;
-        loop {
-            let slice = deadline
-                .saturating_duration_since(Instant::now())
-                .min(QUEUE_WATCH_INTERVAL);
-            if slice.is_zero() {
-                return false;
-            }
-            tokio::select! {
-                () = self.shutdown.cancelled() => return true,
-                () = wake::memory_work_signalled() => return true,
-                () = tokio::time::sleep(slice) => {}
-            }
-            if queue_length(&memory_root) != queue {
-                return true;
-            }
-        }
-    }
-}
-
-/// How often a long idle sleep looks at the queue file for appends made by
-/// another process. A metadata read, no database.
-const QUEUE_WATCH_INTERVAL: Duration = Duration::from_secs(2);
-
-fn queue_length(memory_root: &std::path::Path) -> u64 {
-    std::fs::metadata(memory_root.join("queue/sync.jsonl")).map_or(0, |meta| meta.len())
 }
 
 fn paused(input: &process::Input) -> CognitionResult<bool> {
@@ -353,6 +333,9 @@ fn paused(input: &process::Input) -> CognitionResult<bool> {
         .inspect(&lock)
         .map_err(CognitionError::from)?
         .state;
+    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!("[memory-sync-trace] coordinator={state:?}");
+    }
     Ok(matches!(
         state,
         ConsolidationLockState::Held

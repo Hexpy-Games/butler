@@ -119,9 +119,11 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;
+  readOnlyUnisolated: string;
   networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
@@ -382,6 +384,7 @@ export interface AppCopy {
     pendingApprovals: (count: number) => string;
     approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
+    grantedItems: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
     reportPreparing: (title: string) => string;
@@ -425,6 +428,9 @@ export interface AppCopy {
     noSkills: string;
     activeWork: string;
     allowedConversation: string;
+    grantScopeTag: string;
+    grantCommandScope: string;
+    grantTargetScope: string;
     revokeFailed: string;
     currentWork: string;
     turnActivities: string;
@@ -984,6 +990,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      memory: string;
       privacy: string;
       security: string;
       system: string;
@@ -1001,6 +1008,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      memory: string;
       privacy: string;
       security: string;
       system: string;
@@ -1018,6 +1026,7 @@ export interface AppCopy {
       usage: string[];
       logs: string[];
       personalization: string[];
+      memory: string[];
       privacy: string[];
       security: string[];
       system: string[];
@@ -1029,13 +1038,33 @@ export interface AppCopy {
     updateProgress: {
       idle: string; checking: string; downloading: string; verifying: string; ready: string;
       applying: string; restarting: string; failed: string; completed: string;
-      retry: string; cancel: string; bytesUnavailable: string;
-      checksumFailed: string; sourceFailed: string; cancelled: string; activationFailed: string;
+      retry: string; cancel: string; restart: string;
+      downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
-    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
+    updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
+    memory: {
+      reset: string; resetChatTitle: string; resetProfileTitle: string; resetProjectTitle: string;
+      resetBody: string; resetProfileBody: string; resetProjectBody: string; removed: string; kept: string;
+      removedChat: (n: number) => string; removedProfile: (entries: number, candidates: number) => string;
+      removedProject: (chats: number, instructions: number) => string; keptChat: string; keptProfile: string; keptProject: string;
+      resetNote: string; resetChatDone: string; resetProfileDone: string; resetProjectDone: string; resetFailed: string; nothingToReset: string;
+      thisChat: string; thisChatOnly: string; expiresInHours: (hours: number) => string; expiresInDays: (days: number) => string;
+      linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
+      freeSpace: string; project: string; none: string; profileBuildingOff: string;
+      notMeasured: string; unavailable: string; noProjects: string; allChats: string;
+      deleting: string; instructionsEmpty: string; deleteInstructionTitle: string;
+      chatsKept: string; instructionDeleted: string; deleteFailed: string;
+      freeWaiting: string; nothingToFree: string; inUse: string;
+      ago: (age: string) => string;
+      freeing: (bytes: string) => string; freed: (bytes: string) => string;
+      freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
+      facts: { instructions: string; chats: string; entries: string; candidates: string;
+        size: string; updated: string; canFree: string; summary: string };
+    };
     panels: {
       butlerModel: string;
       workerProfiles: string;
@@ -1200,7 +1229,7 @@ export interface AppCopy {
       korean: string;
       queueWhileBusy: string;
       steerCurrentTurn: string;
-      modifierEnterSendEnterNewline: string;
+      modifierEnterSendEnterNewline: (modifier: string) => string;
       enterSendShiftEnterNewline: string;
       system: string;
       light: string;
@@ -1420,8 +1449,6 @@ export interface AppCopy {
       chooseFolder: string;
       applyPersonalization: string;
       savePersonalization: string;
-      clearProfile: string;
-      clearProfileQueued: string;
       openProfileMigration: string;
       closeProfileMigration: string;
       copyMigrationPrompt: string;
@@ -1442,6 +1469,12 @@ export interface AppCopy {
       upToDate: string;
       updateChecking: string;
       updateUnavailable: string;
+      updateChoice: string;
+      updateCheckpoint: string;
+      updateAfterWork: string;
+      updateNow: string;
+      updateDeferred: string;
+      updateRestarting: string;
       updateApplying: string;
     };
     placeholders: {

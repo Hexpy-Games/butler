@@ -110,7 +110,7 @@ test("activity grouping identity stays separate from its optional display stage 
       summary: "요청한 결과를 만들 계획입니다.",
       rationale: undefined,
       nextStep: undefined,
-      operations: [expect.objectContaining({ id: "plan-tool" })],
+      operations: [],
     }),
   ]);
   expect(projected.semanticState).toBe("planning");

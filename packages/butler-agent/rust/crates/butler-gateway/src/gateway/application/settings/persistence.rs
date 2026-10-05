@@ -1,7 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError, CachedSql};
 use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageError> {
@@ -19,7 +19,7 @@ pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageErro
 
 pub(super) fn read_json(db: &Connection, key: &str) -> Result<Option<Value>, AppStorageError> {
     let value = db
-        .query_row(
+        .query_row_cached(
             "SELECT value_json FROM app_settings WHERE key=?1",
             [key],
             |row| row.get::<_, String>(0),

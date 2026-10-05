@@ -74,10 +74,14 @@ async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
     let conflict = ConversationAdmissionTurn::begin(make_input("changed", observer.clone()))
         .await
         .unwrap();
+    conflict.admit_inbound().await.unwrap();
+    let replayed_messages = session_messages(&store).await;
+    assert_eq!(replayed_messages.len(), 1);
     assert_eq!(
-        conflict.admit_inbound().await.unwrap_err().code(),
-        "conversation_source_ref_conflict"
+        replayed_messages[0].message.id,
+        admitted_messages[0].message.id
     );
+    assert_eq!(replayed_messages[0].parts, admitted_messages[0].parts);
 
     let mut evidence = Map::new();
     evidence.insert("nested".into(), json!({"digest":"digest-nested"}));

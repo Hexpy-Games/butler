@@ -69,6 +69,7 @@ pub(super) fn assert_interrupted_retirement() {
         CREATE INDEX idx_alias_postings_entity ON memory_alias_postings(node_id,gram,source_id,surface_original);
         CREATE INDEX idx_alias_postings_scope_gram_node ON memory_alias_postings(identity_scope,project_id,gram,node_id);").unwrap();
     let graph = GraphRepository {
+        _reader_pin: None,
         connection: Some(db),
     };
     let stop = CancellationToken::new();

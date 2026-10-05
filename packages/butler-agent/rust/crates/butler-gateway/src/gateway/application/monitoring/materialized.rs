@@ -1,13 +1,16 @@
 //! Change-driven monitor projection: reads never hydrate historical messages.
 //! Rebuild compact references and artifact labels only after their sources change.
-use super::super::{message_visibility::owner_visible, storage::AppStorageError};
+use super::super::{
+    message_visibility::owner_visible,
+    storage::{AppStorageError, CachedSql},
+};
 use super::{AppWorkStatusConversationFact, conversation::safe_conversation_label};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::{cmp::Reverse, collections::HashSet, sync::LazyLock};
 
 pub(crate) fn refresh(db: &Connection) -> Result<(), AppStorageError> {
     let dirty: bool = db
-        .query_row(
+        .query_row_cached(
             "SELECT EXISTS(SELECT 1 FROM app_work_monitor_dirty)",
             [],
             |row| row.get(0),
@@ -18,6 +21,9 @@ pub(crate) fn refresh(db: &Connection) -> Result<(), AppStorageError> {
     }
     // Source rows and their invalidation are read/settled under the same write
     // reservation. A concurrent writer cannot have its dirty mark erased.
+    if !db.is_autocommit() {
+        return refresh_dirty(db);
+    }
     let tx = rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
         .map_err(AppStorageError::sqlite)?;
     refresh_dirty(&tx)?;

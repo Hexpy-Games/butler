@@ -11,6 +11,7 @@ import { $selectDropPoint } from "./drop-selection";
 import { registerComposerFocus } from "./composerFocus";
 import { focusComposer } from "./focusComposer";
 import { useHotkey } from "@/butler-ds";
+import { KEY_ENTER_COMMAND } from "lexical";
 
 export function ComposerEditorPlugin() {
   const [editor] = useLexicalComposerContext();
@@ -19,6 +20,14 @@ export function ComposerEditorPlugin() {
   const savedSelection = useRef<BaseSelection | null>(null);
   useHotkey("mod+shift+e", () => focusComposer(editor.getRootElement()), { enabled: true });
   useEffect(() => registerComposerFocus(editor, savedSelection), [editor]);
+  // Handle send before PlainTextPlugin inserts a line break. React's bubble
+  // handler sees defaultPrevented and cannot submit the same key twice.
+  useEffect(() => editor.registerCommand(KEY_ENTER_COMMAND, event => {
+    if (!event) return false;
+    if (event.isComposing || event.keyCode === 229) return true;
+    useComposerStore.getState().handleKeyDown(event);
+    return event.defaultPrevented;
+  }, COMMAND_PRIORITY_HIGH), [editor]);
   useEffect(() => {
     const desired = parts ?? { version: 1 as const, parts: text ? [{ type: "text" as const, text }] : [] };
     const current = editor.getEditorState().read($readComposerContent);

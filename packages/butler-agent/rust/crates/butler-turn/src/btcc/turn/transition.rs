@@ -18,10 +18,9 @@ pub(super) fn guided_final(
         &payload_body(turn, &result, &content, &content_sha256)?,
     )?;
     let outbox_id = digest(&format!(
-        "btcc-canonical-delivery.v1\0{}\0{}\0{}",
+        "btcc-canonical-delivery.v2\0{}\0{}",
         turn.turn_id,
-        turn.revision + 1,
-        reference.sha256
+        turn.revision + 1
     ));
     let payload = FinalPayload {
         reference: reference.clone(),
@@ -37,7 +36,9 @@ pub(super) fn guided_final(
         changed_files: result.changed_files,
         plan: None,
         model_identity: result.model_identity,
-        execution_outcome: None,
+        execution_outcome: (result.terminal_outcome
+            == Some(super::contracts::TerminalOutcome::Failed))
+        .then_some(crate::btcc::ExecutionOutcome::Failed),
         extensions: Map::new(),
     };
     Ok(TurnTransition::AcceptFinal {
@@ -73,7 +74,7 @@ fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) 
 }
 
 /// The digested payload body. Its key order and omissions determine the
-/// payload reference and outbox id, so they are part of the stored format.
+/// payload reference, so they are part of the stored format.
 fn payload_body(
     turn: &TurnRecord,
     result: &super::contracts::AgentLoopResult,
@@ -94,6 +95,12 @@ fn payload_body(
     }
     if let Some(value) = &result.runtime_failure {
         body.insert("runtimeFailure".into(), json_value(value)?);
+    }
+    if result.terminal_outcome == Some(super::contracts::TerminalOutcome::Failed) {
+        body.insert(
+            "executionOutcome".into(),
+            json_value(&crate::btcc::ExecutionOutcome::Failed)?,
+        );
     }
     if !result.artifacts.is_empty() {
         body.insert("artifacts".into(), json_value(&result.artifacts)?);

@@ -467,7 +467,9 @@ function collectTimelineEventPatch(
       const message = event.payload?.message;
       if (!message || message.chat_id !== activeChatId) continue;
       incoming.push(message);
-      noteAssistantMessageTerminalState(message);
+      // A paused segment completes while its turn still awaits a decision.
+      // Keep terminal inference for legacy, ordinary message updates.
+      if (!event.payload?.segment_completed) noteAssistantMessageTerminalState(message);
       continue;
     }
     if (event.type === "message.deleted") {
@@ -1049,25 +1051,17 @@ export function collapseAssistantAttempts(
   messages: MessageRecord[],
 ): MessageRecord[] {
   const latestByTurn = new Map<string, MessageRecord>();
-  const result: MessageRecord[] = [];
   for (const message of messages) {
-    if (message.role === "user" || !message.turn_id) {
-      result.push(message);
-      continue;
-    }
+    if (message.role === "user" || !message.turn_id) continue;
     const previous = latestByTurn.get(message.turn_id);
     if (!previous || messageCursor(message) >= messageCursor(previous)) {
       latestByTurn.set(message.turn_id, message);
     }
   }
-  for (const message of messages) {
-    if (message.role === "user" || !message.turn_id) continue;
-    if (latestByTurn.get(message.turn_id)?.id === message.id)
-      result.push(message);
-  }
-  return result.sort(
-    (left, right) => messageCursor(left) - messageCursor(right),
-  );
+  // The input already has transcript order, including form answers inserted
+  // by decision time. Their synthetic rows have no durable message cursor.
+  return messages.filter(message => message.role === "user" || !message.turn_id || message.status === "delivered"
+    || latestByTurn.get(message.turn_id)?.id === message.id);
 }
 
 function messageCursor(message: MessageRecord): number {
@@ -1825,6 +1819,7 @@ export function appThemeClasses(
 
 export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
+  if (section === "memory") return "memory";
   if (section === "updates") return "updates";
   if (section.includes("security") || section.includes("보안")) return "security";
   if (

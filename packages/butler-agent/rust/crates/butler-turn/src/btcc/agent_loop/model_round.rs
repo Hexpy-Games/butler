@@ -156,7 +156,6 @@ async fn project_context(
         semantic_messages: &state.messages,
         transport_messages: replay.messages.as_deref().unwrap_or(&state.messages),
         tools: &surface.tools,
-        phase: state.phase,
     };
     input
         .policy
@@ -247,7 +246,7 @@ async fn send_request(
         instructions: prepared.instructions.as_deref(),
         tools: &surface.tools,
         tool_surface_digest: surface.digest.as_deref(),
-        tool_choice: active_tool_choice(prepared.tool_choice, state.phase),
+        tool_choice: prepared.tool_choice,
         reasoning_effort: &input.semantic.model.reasoning_effort,
         cancellation: input.cancellation.clone(),
         attachments: &prepared.images.attachments,
@@ -400,7 +399,6 @@ struct ContextProjectionSource<'a> {
     semantic_messages: &'a [super::contracts::ModelRoundMessage],
     transport_messages: &'a [super::contracts::ModelRoundMessage],
     tools: &'a [super::contracts::ModelRoundTool],
-    phase: LoopPhase,
 }
 
 fn context_input<'a>(
@@ -416,23 +414,12 @@ fn context_input<'a>(
         model_ref: source.model_ref,
         instructions: prepared.instructions.as_deref(),
         tools: source.tools,
-        tool_choice: active_tool_choice(prepared.tool_choice, source.phase),
+        tool_choice: prepared.tool_choice,
         attachments: &prepared.images.attachments,
         butler_data: prepared.request.butler_data.as_deref(),
         max_model_facing_bytes: crate::btcc::continuation_budget::model_context_byte_limit(
             input.semantic.model.context_window_tokens,
         ),
-    }
-}
-
-/// The final-report round never forces a tool choice.
-fn active_tool_choice(
-    choice: Option<super::contracts::ToolChoice>,
-    phase: LoopPhase,
-) -> Option<super::contracts::ToolChoice> {
-    match phase {
-        LoopPhase::Working => choice,
-        LoopPhase::FinalReport => None,
     }
 }
 

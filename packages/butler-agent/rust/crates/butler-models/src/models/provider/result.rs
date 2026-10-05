@@ -60,6 +60,7 @@ pub(super) fn decode(
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
+        nonfinal: nonfinal(&response, carrier),
         text,
         tool_calls: calls,
         text_tool_call_names,
@@ -69,6 +70,24 @@ pub(super) fn decode(
         provider_identity: identity,
         raw: Some(response),
         accepted_checkpoint: None,
+    }
+}
+
+/// Normalize provider message semantics before the general turn loop sees them.
+fn nonfinal(response: &Value, carrier: Carrier) -> bool {
+    match carrier {
+        Carrier::Responses => response
+            .get("output")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .rfind(|item| item.get("type").and_then(Value::as_str) == Some("message"))
+            .is_some_and(|item| item.get("phase").and_then(Value::as_str) == Some("commentary")),
+        Carrier::Chat { .. } => response
+            .pointer("/choices/0/message/channel")
+            .and_then(Value::as_str)
+            .is_some_and(|channel| matches!(channel, "analysis" | "commentary")),
+        Carrier::Anthropic | Carrier::Gemini => false,
     }
 }
 
@@ -253,6 +272,7 @@ fn gemini(value: &Value, model: &str, round: u32) -> Fields {
         .unwrap_or_default();
     let text = parts
         .iter()
+        .filter(|item| item.get("thought").and_then(Value::as_bool) != Some(true))
         .filter_map(|item| item.get("text").and_then(Value::as_str))
         .collect::<Vec<_>>()
         .join("\n");

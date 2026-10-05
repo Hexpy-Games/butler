@@ -14,8 +14,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { replay: "Replay", context: "Context window", full: "42% full", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed" },
-  "ko-KR": { replay: "다시 재생", context: "컨텍스트 창", full: "42% 사용", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패" },
+  "en-US": { replay: "Replay", context: "Context window", full: "42% full", downloading: "Downloading", received: "44 MB downloaded", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed" },
+  "ko-KR": { replay: "다시 재생", context: "컨텍스트 창", full: "42% 사용", downloading: "다운로드 중", received: "44MB 받음", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -37,6 +37,10 @@ function FillChange({ context }: { context: ShowcaseRenderContext }) {
 }
 
 export const stories: ShowcaseStory[] = [
+  {
+    name: "Indeterminate", states: ["unknown total"],
+    render: (context) => <ProgressMeter indeterminate label={text(context).downloading} meta={text(context).received} ariaLabel={text(context).downloading} />,
+  },
   {
     name: "Fill change",
     states: ["changing"],

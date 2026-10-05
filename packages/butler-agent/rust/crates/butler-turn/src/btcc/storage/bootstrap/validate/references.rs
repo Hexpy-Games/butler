@@ -387,7 +387,16 @@ const RULES: &[Rule] = &[
         from_column: "work_id",
         to_table: "btcc_guided_works",
         to_column: "work_id",
-        filter: None,
+        filter: Some("source.work_id NOT LIKE 'operation-turn:%'"),
+    },
+    // Ordinary operations have a durable Turn scope, not a fabricated Work.
+    Rule {
+        name: "effect_operation_turn",
+        from_table: "btcc_guided_effects",
+        from_column: "work_id",
+        to_table: "(SELECT 'operation-turn:' || turn_id AS work_id FROM btcc_turns)",
+        to_column: "work_id",
+        filter: Some("source.work_id LIKE 'operation-turn:%'"),
     },
     Rule {
         name: "effect_plan",
@@ -396,7 +405,7 @@ const RULES: &[Rule] = &[
         to_table: "btcc_guided_work_plan_revisions",
         to_column: "plan_revision_id",
         filter: Some(
-            r"NOT EXISTS (
+            r"(source.work_id NOT LIKE 'operation-turn:%' OR source.plan_revision_id <> '') AND NOT EXISTS (
       SELECT 1 FROM btcc_guided_works work
       WHERE work.work_id = source.work_id AND work.scope_kind = 'project'
     )",
@@ -446,6 +455,8 @@ const RULES: &[Rule] = &[
 
 pub(super) fn validate(db: &Connection) -> StorageResult<()> {
     for rule in RULES {
+        let started = std::time::Instant::now();
+        super::activated::trace(&format!("reference_{}_begin", rule.name), started);
         let predicate = rule
             .filter
             .map_or(String::new(), |filter| format!("AND {filter}"));
@@ -461,6 +472,7 @@ pub(super) fn validate(db: &Connection) -> StorageResult<()> {
             .optional()
             .map_err(StorageError::sqlite)?
             .is_some();
+        super::activated::trace(&format!("reference_{}_end", rule.name), started);
         if orphan {
             return Err(StorageError::new(
                 StorageCode::AgentBtccMigrationReferenceCheckFailed,

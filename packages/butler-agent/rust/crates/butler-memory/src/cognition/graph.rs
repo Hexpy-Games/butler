@@ -6,6 +6,7 @@ mod cache_validation;
 mod cache_work;
 mod candidates;
 mod consolidate;
+pub(in crate::cognition) mod episode_fts;
 mod failure;
 mod identity_decision;
 pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
@@ -75,6 +76,7 @@ pub(in crate::cognition) struct ProjectionWindowOwner<'a> {
 
 pub(super) struct GraphRepository {
     connection: Option<Connection>,
+    _reader_pin: Option<super::generation::pins::GenerationPin>,
 }
 
 impl GraphRepository {
@@ -283,6 +285,7 @@ impl GraphRepository {
             .map_err(db_error)?;
         Ok(Self {
             connection: Some(connection),
+            _reader_pin: path.parent().map(super::generation::pins::pin),
         })
     }
 
@@ -294,6 +297,7 @@ impl GraphRepository {
             .map_err(db_error)?;
         Ok(Self {
             connection: Some(connection),
+            _reader_pin: path.parent().map(super::generation::pins::pin),
         })
     }
 

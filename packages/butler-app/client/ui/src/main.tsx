@@ -2,11 +2,10 @@ import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { WallpaperModulesProvider } from "@/components/common/WallpaperModulesProvider.tsx";
-import { AppConfirmationDialog } from "@/components/common/AppConfirmationDialog.tsx";
+import { AppDialogs } from "@/components/common/AppDialogs.tsx";
 import { AppShell } from "@/pages/AppShell.tsx";
 import { ThinkingMarkHarness } from "@/pages/ThinkingMarkHarness.tsx";
-import { ActivityLayoutHarness } from "@/pages/ActivityLayoutHarness.tsx";
-import { VisualHarness } from "@/pages/VisualHarness.tsx";
+import { ComponentHarness } from "@/pages/ComponentHarness.tsx";
 import "@/butler-ds/tokens.css";
 
 const visualMode = typeof window !== "undefined"
@@ -29,11 +28,11 @@ createRoot(rootElement).render(
         : visualMode === "thinking-mark"
         ? <ThinkingMarkHarness />
         : visualMode === "components"
-          ? new URLSearchParams(window.location.search).get("surface") === "activity-layout" ? <ActivityLayoutHarness /> : <VisualHarness />
+          ? <ComponentHarness />
           : visualMode === "design-system"
             ? <Suspense fallback={null}><DesignSystemViewer /></Suspense>
             : <AppShell />}
     </WallpaperModulesProvider>
-    <AppConfirmationDialog />
+    <AppDialogs />
   </ErrorBoundary>,
 );

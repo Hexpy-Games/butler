@@ -3,6 +3,48 @@
 use rusqlite::{Connection, OpenFlags, Result};
 use std::path::Path;
 
+/// Startup scans can traverse overflow pages without a copy per page. macOS
+/// uses the caller's bounded page cache: mapping amplifies physical reads on
+/// the full owner-scale integrity scan on the hosted runner.
+/// Callers close or unmap the temporary window before serving requests.
+pub const VALIDATION_MMAP_BYTES: i64 = if cfg!(target_os = "macos") {
+    0
+} else if cfg!(unix) {
+    8_589_934_592
+} else {
+    0
+};
+
+/// Coalesce the filesystem reads of a complete startup integrity scan. This
+/// is advisory only: SQLite still reads and validates the current database,
+/// including WAL contents, and no validation result is cached.
+pub fn advise_validation_scan(path: &Path) {
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(file) = std::fs::File::open(path) else {
+            return;
+        };
+        let Ok(metadata) = file.metadata() else {
+            return;
+        };
+        // Darwin takes a signed 32-bit count per advice. Smaller contiguous
+        // ranges avoid the overflow-page scan issuing tiny physical reads.
+        const RANGE: u64 = 67_108_864;
+        let mut offset = 0;
+        while offset < metadata.len() {
+            let count = RANGE.min(metadata.len() - offset);
+            if rustix::fs::fcntl_rdadvise(&file, offset, count).is_err() {
+                break;
+            }
+            offset += count;
+        }
+        // Close before SQLite opens: closing another descriptor must never
+        // release SQLite's POSIX locks during validation.
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = path;
+}
+
 /// Open a file database with rusqlite's normal default flags.
 pub fn open(path: impl AsRef<Path>) -> Result<Connection> {
     open_with_flags(path, OpenFlags::default())

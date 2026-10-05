@@ -6,8 +6,8 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
-    BoxStoreService, FeedbackBufferService, KnowHowService, LegacyMetadataIntegrityService,
-    MemoryHealthService, Phase, PhaseError, PhaseExecutor,
+    KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService, Phase, PhaseError,
+    PhaseExecutor,
 };
 use butler_runtime::operations::CycleMetrics;
 
@@ -18,9 +18,7 @@ pub(in crate::host) struct CyclePhases {
     pub(in crate::host) metrics: Arc<CycleMetrics>,
     pub(in crate::host) briefing: Arc<BriefingGeneration>,
     pub(in crate::host) profile: Arc<ProfileConsolidation>,
-    pub(in crate::host) box_store: Arc<BoxStoreService>,
     pub(in crate::host) legacy_metadata: Arc<LegacyMetadataIntegrityService>,
-    pub(in crate::host) feedback: Arc<FeedbackBufferService>,
     pub(in crate::host) knowhow: Arc<KnowHowService>,
     pub(in crate::host) health: Arc<MemoryHealthService>,
 }
@@ -35,19 +33,8 @@ impl PhaseExecutor for CyclePhases {
         Box::pin(async move {
             match phase {
                 Phase::Preflight => Ok(butler_core::json::json_object!({ "ok": true })),
-                Phase::FeedbackTriage => self.profile.feedback_triage(),
+                Phase::FeedbackTriage => self.profile.feedback_triage(cancellation).await,
                 Phase::ProfileConsolidation => self.profile.consolidate(run_id, cancellation).await,
-                Phase::BoxIndex => self
-                    .box_store
-                    .rebuild_index()
-                    .await
-                    .map(|report| {
-                        butler_core::json::json_object!({
-                            "indexed_count": report.indexed_count,
-                            "skipped_count": report.skipped_count,
-                        })
-                    })
-                    .map_err(cognition_phase_error),
                 Phase::MemoryMetadataIntegrity => self
                     .legacy_metadata
                     .check()
@@ -55,7 +42,6 @@ impl PhaseExecutor for CyclePhases {
                     .map(|report| {
                         butler_core::json::json_object!({
                             "chunk_count": report.chunk_count,
-                            "missing_box_refs_count": report.missing_box_refs_count,
                             "missing_feedback_refs_count": report.missing_feedback_refs_count,
                         })
                     })
@@ -71,27 +57,7 @@ impl PhaseExecutor for CyclePhases {
                         })
                     })
                     .map_err(cognition_phase_error),
-                Phase::KnowhowRevision => {
-                    let feedback = self
-                        .feedback
-                        .active_targets(
-                            chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
-                                .timestamp_millis(),
-                        )
-                        .await
-                        .map_err(cognition_phase_error)?;
-                    self.knowhow
-                        .revise(&feedback, self.feedback.as_ref())
-                        .await
-                        .map(|report| {
-                            butler_core::json::json_object!({
-                                "revised_knowhow_count": report.revised_knowhow_count,
-                                "demoted_knowhow_count": report.demoted_knowhow_count,
-                                "applied_feedback_count": report.applied_feedback_count,
-                            })
-                        })
-                        .map_err(cognition_phase_error)
-                }
+                Phase::KnowhowRevision => Ok(butler_core::json::json_object!({"deferred":true})),
                 Phase::MemoryHealth => self
                     .health
                     .read()
@@ -123,20 +89,6 @@ impl PhaseExecutor for CyclePhases {
                     );
                     Ok(butler_core::json::json_object!({ "raw_text_included": false }))
                 }
-                Phase::BoxRetention => self
-                    .box_store
-                    .retention(
-                        chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
-                            .timestamp_millis(),
-                    )
-                    .await
-                    .map(|report| {
-                        butler_core::json::json_object!({
-                            "expired_candidate_count": report.expired_candidate_count,
-                            "pruned_box_owned_count": report.pruned_box_owned_count,
-                        })
-                    })
-                    .map_err(cognition_phase_error),
             }
         })
     }

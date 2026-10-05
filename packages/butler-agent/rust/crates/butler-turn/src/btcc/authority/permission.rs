@@ -79,7 +79,7 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
     );
     let command = matches!(capability, "run_command" | "run_command_remote_observation");
     let scope = if file_edit {
-        json!({"kind":"workspace_file_edit"})
+        json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
     } else if command {
         let mut scope = serde_json::Map::new();
         scope.insert("kind".into(), json!("command"));
@@ -104,17 +104,22 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
             collation
         )?)[..32]
     );
-    let basename = std::path::Path::new(workspace)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("");
     Ok(ConversationPermission {
+        capability: capability.into(),
+        target: butler_core::public_text::sanitize_public_delta(&permission_target(facts, command)),
+        cwd: command.then(|| {
+            input
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or(workspace)
+                .to_owned()
+        }),
         grant_ref,
         owner_session_id: owner.to_owned(),
         workspace_path: workspace.to_owned(),
         scope_key,
         title: if file_edit {
-            "작업 폴더의 파일 편집".into()
+            "동일한 파일 작업".into()
         } else {
             title
                 .filter(|value| !value.is_empty())
@@ -125,16 +130,49 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
                 })
                 .into()
         },
-        description: if file_edit {
-            format!("{basename} 안의 파일 쓰기·수정")
-        } else if command {
-            format!(
-                "{} · 허용한 명령·작업 위치에만 적용",
-                executable.unwrap_or("명령")
-            )
-        } else {
-            "허용한 대상·입력에만 적용".into()
-        },
+        description: permission_description(file_edit, command, executable),
         created_at: String::new(),
     })
+}
+
+fn permission_description(file_edit: bool, command: bool, executable: Option<&str>) -> String {
+    if file_edit {
+        "허용한 경로·입력에만 적용".into()
+    } else if command {
+        format!(
+            "{} · 허용한 명령·작업 위치에만 적용",
+            executable.unwrap_or("명령")
+        )
+    } else {
+        "허용한 대상·입력에만 적용".into()
+    }
+}
+
+fn permission_target(facts: PermissionFacts<'_>, command: bool) -> String {
+    let keys: &[&str] = if command {
+        &["command"]
+    } else {
+        &["path", "directory", "root"]
+    };
+    for key in keys {
+        if let Some(value) = facts.input.get(key).and_then(Value::as_str) {
+            return value.into();
+        }
+    }
+    for key in ["requests", "edits"] {
+        if let Some(items) = facts.input.get(key).and_then(Value::as_array) {
+            let paths = items
+                .iter()
+                .filter_map(|item| item.get("path").and_then(Value::as_str))
+                .collect::<Vec<_>>();
+            if !paths.is_empty() {
+                return paths.join("\n");
+            }
+        }
+    }
+    if facts.target.starts_with("observation:") {
+        facts.workspace.into()
+    } else {
+        facts.target.into()
+    }
 }

@@ -11,7 +11,7 @@ mod service;
 pub(crate) mod workspace_edit;
 pub mod workspace_file;
 
-pub use identity::{accepted_plan_effect_id, effect_input_sha256, reviewed_effect_action_key};
+pub use identity::{accepted_plan_effect_id, effect_input_sha256};
 pub use service::EffectService;
 
 #[cfg(any(test, feature = "test-support"))]

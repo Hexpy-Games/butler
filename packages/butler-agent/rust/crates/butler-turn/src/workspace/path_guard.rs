@@ -3,8 +3,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
 
-/// Whether a requested path must be workspace-relative (delegated
-/// subsessions) or may also be absolute inside the workspace.
+/// Whether a caller explicitly requires workspace-relative paths or resolves
+/// paths using the OS account permissions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathForm {
     RelativeOnly,
@@ -62,9 +62,7 @@ impl GuardResult {
     }
     pub fn safe_path(&self) -> Option<String> {
         let candidate = match &self.absolute {
-            Some(path) => path
-                .strip_prefix(&self.root)
-                .ok()?
+            Some(path) => butler_platform::secure_fs::relative_path(path, &self.root)?
                 .to_string_lossy()
                 .into_owned(),
             None => butler_core::public_text::trim_js_whitespace(&self.requested).to_owned(),
@@ -83,23 +81,31 @@ impl GuardResult {
     pub fn public_rejection(&self) -> Value {
         let mut result = serde_json::Map::new();
         result.insert("ok".into(), json!(false));
+        result.insert("workspace_root".into(), json!(self.root));
         if let Some(path) = self.safe_path() {
             result.insert("path".into(), json!(path));
         }
         if let Some(reason) = self.reason {
             result.insert("reason".into(), json!(reason));
         }
+        if matches!(
+            self.reason,
+            Some("path_escape" | "symlink_escape" | "parent_escape")
+        ) {
+            result.insert(
+                "message".into(),
+                json!("Use a path inside the session workspace root."),
+            );
+        }
         if self.protected {
             result.insert("code".into(), json!("protected_path"));
             result.insert(
                 "message".into(),
-                json!(
-                    "Project Ledger source records must be mutated through Project Ledger commands."
-                ),
+                json!("Project Ledger paths must be accessed through their dedicated tools."),
             );
             result.insert(
                 "next".into(),
-                json!([{ "command": "project-ledger record update --id <id> --from FILE|-" }]),
+                json!([{ "action": "Use Project Ledger tools for its records; choose ordinary workspace files for file tools." }]),
             );
         }
         Value::Object(result)
@@ -114,7 +120,7 @@ struct Resolved {
 }
 
 /// Starts a guard result and lexically resolves the request. Empty requests,
-/// absolute requests in relative-only mode and relative `..` traversal are
+/// absolute requests and relative `..` traversal in relative-only mode are
 /// rejected without touching the filesystem beyond the root.
 fn resolve_request(
     root: &Path,
@@ -141,7 +147,7 @@ fn resolve_request(
     }
     let root_real = root_lex.canonical()?;
     out.root = root_real.clone();
-    if !requested_path.is_absolute() && has_parent_segment(requested) {
+    if path_form == PathForm::RelativeOnly && has_parent_segment(requested) {
         out.reason = Some("parent_traversal_not_allowed");
         return Ok((out, None));
     }
@@ -152,7 +158,7 @@ fn resolve_request(
     };
     let absolute = match inside_relative(&root_lex, &unresolved) {
         Some(relative) => root_real.join(relative),
-        None => unresolved,
+        None => realpath_or_nearest(&unresolved),
     };
     Ok((
         out,
@@ -169,23 +175,27 @@ fn admit_contained(
     out: &mut GuardResult,
     resolved: &Resolved,
     protected_roots: &[PathBuf],
+    path_form: PathForm,
 ) -> bool {
     let Resolved {
         root_real,
         absolute,
     } = resolved;
     out.absolute = Some(absolute.clone());
+    if path_form == PathForm::RelativeOrAbsolute {
+        return true;
+    }
+    if protected_path(root_real, absolute, protected_roots) {
+        out.reason = Some("protected_path");
+        out.protected = true;
+        return false;
+    }
     let Some(relative) = inside_relative(root_real, absolute) else {
         out.reason = Some("path_escape");
         return false;
     };
     if looks_sensitive(&relative.to_string_lossy()) {
         out.reason = Some("sensitive_path_blocked");
-        return false;
-    }
-    if protected_path(root_real, absolute, protected_roots) {
-        out.reason = Some("protected_path");
-        out.protected = true;
         return false;
     }
     true
@@ -199,7 +209,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
     let Some(resolved) = resolved else {
         return Ok(out);
     };
-    if !admit_contained(&mut out, &resolved, input.protected_roots) {
+    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
         return Ok(out);
     }
     let Resolved {
@@ -211,7 +221,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         return Ok(out);
     };
     out.real = Some(real.clone());
-    if inside_relative(&root_real, &real).is_none() {
+    if input.path_form == PathForm::RelativeOnly && inside_relative(&root_real, &real).is_none() {
         out.reason = Some("symlink_escape");
         return Ok(out);
     }
@@ -241,7 +251,8 @@ impl Installation {
 
     fn contains(&self, candidate: &Path) -> bool {
         self.0.as_ref().is_some_and(|(lexical, real)| {
-            candidate.starts_with(lexical) || candidate.starts_with(real)
+            butler_platform::secure_fs::path_is_within(candidate, lexical)
+                || butler_platform::secure_fs::path_is_within(candidate, real)
         })
     }
 }
@@ -255,12 +266,16 @@ pub(crate) fn resolve_workspace_mutation_guard(
     let Some(resolved) = resolved else {
         return Ok(out);
     };
-    let installation = Installation::resolve(input.installation_root)?;
+    let installation = Installation::resolve(
+        input
+            .installation_root
+            .filter(|_| input.path_form == PathForm::RelativeOnly),
+    )?;
     if installation.contains(&resolved.absolute) {
         out.reason = Some("program_directory_read_only");
         return Ok(out);
     }
-    if !admit_contained(&mut out, &resolved, input.protected_roots) {
+    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
         return Ok(out);
     }
     let Resolved {
@@ -270,14 +285,22 @@ pub(crate) fn resolve_workspace_mutation_guard(
     match absolute.canonical() {
         Ok(real) => {
             out.real = Some(real.clone());
-            out.reason = existing_target_rejection(&root_real, &absolute, &real, &installation)?;
+            out.reason = existing_target_rejection(
+                &root_real,
+                &absolute,
+                &real,
+                &installation,
+                input.path_form,
+            )?;
         }
         Err(_) if input.leaf == Leaf::MayBeMissing => {
             let parent = absolute.parent().unwrap_or(&root_real);
             let parent_real = realpath_or_nearest(parent);
             if installation.contains(&parent_real) {
                 out.reason = Some("program_directory_read_only");
-            } else if inside_relative(&root_real, &parent_real).is_none() {
+            } else if input.path_form == PathForm::RelativeOnly
+                && inside_relative(&root_real, &parent_real).is_none()
+            {
                 out.reason = Some("parent_escape");
             } else {
                 match absolute.file_name() {
@@ -298,11 +321,12 @@ fn existing_target_rejection(
     absolute: &Path,
     real: &Path,
     installation: &Installation,
+    path_form: PathForm,
 ) -> std::io::Result<Option<&'static str>> {
     if installation.contains(real) {
         return Ok(Some("program_directory_read_only"));
     }
-    if inside_relative(root_real, real).is_none() {
+    if path_form == PathForm::RelativeOnly && inside_relative(root_real, real).is_none() {
         return Ok(Some("symlink_escape"));
     }
     let meta = std::fs::symlink_metadata(absolute)?;
@@ -330,10 +354,7 @@ pub fn safe_workspace_path(path: &str) -> Option<&str> {
 }
 
 pub(crate) fn safe_cursor_path(path: &str) -> bool {
-    !path.is_empty()
-        && !path.starts_with(['/', '\\', '~'])
-        && !has_parent_segment(path)
-        && !has_drive_prefix(path)
+    !path.is_empty() && !path.starts_with('~') && !has_parent_segment(path)
 }
 
 fn has_drive_prefix(value: &str) -> bool {
@@ -346,7 +367,7 @@ fn has_drive_prefix(value: &str) -> bool {
 fn has_parent_segment(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }
-pub(super) fn looks_sensitive(relative: &str) -> bool {
+pub fn looks_sensitive(relative: &str) -> bool {
     let parts: Vec<_> = relative
         .split(['/', '\\'])
         .filter(|part| !part.is_empty())
@@ -371,18 +392,10 @@ pub(super) fn looks_sensitive(relative: &str) -> bool {
 pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> bool {
     let target = realpath_or_nearest(target);
     let mut roots = vec![root.join(".project-ledger")];
-    if let Ok(data) = std::env::var("BUTLER_DATA")
-        && !butler_core::public_text::trim_js_whitespace(&data).is_empty()
-    {
-        roots.push(PathBuf::from(data).join("project-ledger/projects"));
-    }
-    if let Some(home) = butler_platform::user_dirs::home_dir() {
-        roots.push(home.join(".butler/project-ledger/projects"));
-    }
     roots.extend_from_slice(extra);
-    roots
-        .into_iter()
-        .any(|candidate| target.starts_with(realpath_or_nearest(&candidate)))
+    roots.into_iter().any(|candidate| {
+        butler_platform::secure_fs::path_is_within(&target, &realpath_or_nearest(&candidate))
+    })
 }
 fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
@@ -404,8 +417,8 @@ fn realpath_or_nearest(path: &Path) -> PathBuf {
         current = parent.to_path_buf();
     }
 }
-fn inside_relative<'a>(root: &Path, candidate: &'a Path) -> Option<&'a Path> {
-    let relative = candidate.strip_prefix(root).ok()?;
+fn inside_relative(root: &Path, candidate: &Path) -> Option<PathBuf> {
+    let relative = butler_platform::secure_fs::relative_path(candidate, root)?;
     // Node's isInside uses path.relative and rejects any result beginning
     // with "..", including a contained filename such as "..notes".
     (!relative.to_string_lossy().starts_with("..")).then_some(relative)

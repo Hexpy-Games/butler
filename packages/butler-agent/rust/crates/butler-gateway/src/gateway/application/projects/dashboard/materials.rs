@@ -72,7 +72,7 @@ pub(super) async fn get(
     let key = project.id.clone();
     let links = application
         .storage
-        .execute(move |db| ProjectSessionLinks::read(db, &key))
+        .read(move |db| ProjectSessionLinks::read(db, &key))
         .await
         .map_err(app_error)?;
     let overview = super::overview::facts(
@@ -328,7 +328,7 @@ async fn read_pinned_artifacts(
         let source_id = id.clone();
         let artifact = application
             .storage
-            .execute(move |db| read_artifact(db, &key, &source_id))
+            .read(move |db| read_artifact(db, &key, &source_id))
             .await
             .map_err(app_error)?;
         if let Some(artifact) = artifact

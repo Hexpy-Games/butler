@@ -28,6 +28,8 @@ pub struct AuthorityLoopContinuation {
     pub model_round_index: u32,
     pub iteration: u32,
     pub empty_response_recovery_used: bool,
+    #[serde(default, skip_serializing_if = "zero_continuations")]
+    pub automatic_continuations: u32,
     pub tool_results: Vec<ToolResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub presentation: Option<GuidedPresentation>,
@@ -52,6 +54,7 @@ impl AuthorityLoopContinuation {
             model_round_index: 0,
             iteration: 0,
             empty_response_recovery_used: false,
+            automatic_continuations: 0,
             tool_results: Vec::new(),
             presentation: None,
             batch: AuthorityBatch::default(),
@@ -238,4 +241,12 @@ pub(super) fn unexecuted_call(
         }),
         output: None,
     }
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde skip_serializing_if borrows its field"
+)]
+fn zero_continuations(count: &u32) -> bool {
+    *count == 0
 }

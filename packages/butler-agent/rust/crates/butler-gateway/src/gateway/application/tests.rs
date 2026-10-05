@@ -32,7 +32,7 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
     app.start_dispatch().await.unwrap();
     app.storage
         .execute(|db| {
-            let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+            let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
             for index in 1..=205 {
                 transaction
                     .execute(

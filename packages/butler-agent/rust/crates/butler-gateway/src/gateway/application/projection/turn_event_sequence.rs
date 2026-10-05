@@ -10,6 +10,9 @@ pub(super) fn next_sequence(
     identity_key: &str,
     identity: &str,
 ) -> Result<u64, AppStorageError> {
+    if let Some(sequence) = super::non_final::batch::sequence(identity_key, identity) {
+        return Ok(sequence + 1);
+    }
     let (scope_field, sequence_field, sql) = if identity_key == "sessionId" {
         (
             "session_id",

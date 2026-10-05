@@ -2,5 +2,10 @@
 slow-timeout = { period = "60s", terminate-after = 3 }
 
 [[profile.default.overrides]]
-filter = 'test(/^ins_/)'
+filter = 'test(/(^|::)ins_/)'
 slow-timeout = { period = "6m", terminate-after = 1 }
+
+# Start complete observation windows early; keep their original deadlines.
+[[profile.default.overrides]]
+filter = 'test(/^memory_idle::mem_idle_/) or test(/^schedule_store::sched_06_/) or test(/^startup_readiness::stalled_startup_exits_at_agent_deadline$/)'
+priority = 10

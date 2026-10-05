@@ -15,7 +15,7 @@ export function SpaceActivity({ session }: { session?: SessionSummary }) {
       passive
       role="status"
       aria-label={
-        interfaceProgressLabel({ safe_label: session?.safe_status_label ?? "", interface_content: session?.safe_status_content, interface_label_key: session?.safe_status_label_key, interface_label_parameters: session?.safe_status_label_parameters }) ||
+        (activity === "attention" && session?.attention_required ? appCopy.space.attention : interfaceProgressLabel({ safe_label: session?.safe_status_label ?? "", interface_content: session?.safe_status_content, interface_label_key: session?.safe_status_label_key, interface_label_parameters: session?.safe_status_label_parameters })) ||
         (activity === "working" ? appCopy.space.working : appCopy.space.attention)
       }
     >

@@ -69,6 +69,15 @@ impl StopSignal {
             requests.recv().await;
             listener.request_controlled();
         });
+        if std::env::var_os(crate::host::service::instance_identity::CLI_SUPERVISOR_NONCE).is_some()
+        {
+            let lease = butler_platform::process_control::StdinLease::capture()?;
+            let owner_stop = stop.clone();
+            tokio::spawn(async move {
+                let _ = lease.closed().await;
+                owner_stop.request_controlled();
+            });
+        }
         Ok(stop)
     }
 

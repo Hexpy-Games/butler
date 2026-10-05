@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 
 // Viewer harness: static DS build, no gateway, owner data or model calls.
 // Run after `bun run --cwd packages/butler-app/client/ui build:ds-site`.
@@ -15,7 +16,7 @@ const server = Bun.serve({
     return new Response(Bun.file(root + (path === "/" ? "/index.html" : path)));
   },
 });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage();
 const story = (name: string) => page.locator(`[data-ds-story="${name}"]`).first();
 

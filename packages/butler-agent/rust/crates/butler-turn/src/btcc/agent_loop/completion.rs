@@ -162,7 +162,7 @@ fn route(used_tools: &[String], closeout: &super::contracts::GuidedCloseout) -> 
     }
 }
 
-fn durable_work_tool(name: &str) -> bool {
+pub(super) fn durable_work_tool(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
         Some(
@@ -174,4 +174,22 @@ fn durable_work_tool(name: &str) -> bool {
                 | ToolName::RecordWorkDisposition
         )
     )
+}
+
+/// Progress records carry no evidence that the requested outcome was delivered.
+pub(super) fn bookkeeping_only(results: &[ToolResult]) -> bool {
+    !results.is_empty()
+        && results.iter().all(|result| {
+            result.ok
+                && (durable_work_tool(&result.name)
+                    || matches!(
+                        ToolName::parse(&result.name),
+                        Some(
+                            ToolName::UpdateTodoList
+                                | ToolName::ListTodoList
+                                | ToolName::UpdateWorkStreamState
+                                | ToolName::ListWorkStreams
+                        )
+                    ))
+        })
 }

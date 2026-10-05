@@ -10,7 +10,7 @@ pub(super) fn list(
 ) -> Result<Vec<SessionArtifactSummary>, AppStorageError> {
     require_chat(connection, session_id)?;
     let mut statement = connection
-        .prepare(
+        .prepare_cached(
             "WITH latest_messages AS ( \
                SELECT rowid AS message_rowid,id,chat_id,turn_id,role,safe_error_code \
                FROM messages \

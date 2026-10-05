@@ -1,19 +1,21 @@
 use std::sync::Arc;
 
 use butler_models::models::ModelConfigurationClock;
+use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
 use crate::host::service::ingress::IngressDispatcher;
 use crate::host::service::shutdown_trace::measure;
-use crate::host::{AgentRuntime, SystemIdentity};
+use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,
-) -> Result<(), BtccError> {
+) -> Result<bool, BtccError> {
+    let mut retry_pending = false;
     for pending in repository
         .pending_parent_inputs()
         .await
@@ -39,9 +41,11 @@ pub(super) async fn deliver_parent_results(
             request = request.bearer_auth(token);
         }
         let Ok(response) = request.send().await else {
+            retry_pending = true;
             continue;
         };
         if !response.status().is_success() {
+            retry_pending = true;
             continue;
         }
         repository
@@ -52,7 +56,7 @@ pub(super) async fn deliver_parent_results(
             .await
             .map_err(|error| failure(error.code(), error.message()))?;
     }
-    Ok(())
+    Ok(retry_pending)
 }
 
 pub(super) fn process_locale() -> String {
@@ -122,14 +126,15 @@ pub(super) async fn close_serving(
 ) -> Result<(), BtccError> {
     control.stop_accepting();
     let admission = measure("app_admission", gateway.stop_accepting()).await;
-    let turns = measure("turn_drain", dispatcher.close())
-        .await
-        .map_err(|e| failure(e.code, e.message));
-    let control_close = measure("control_close", control.close())
-        .await
-        .map_err(|message| {
-            failure("gateway_control_close_failed", message.to_string()).with_source(message)
-        });
+    // Admission is fenced; control connection joins do not publish Turn state.
+    let (turns, control_close) = tokio::join!(
+        measure("turn_drain", dispatcher.close()),
+        measure("control_close", control.close()),
+    );
+    let turns = turns.map_err(|e| failure(e.code, e.message));
+    let control_close = control_close.map_err(|message| {
+        failure("gateway_control_close_failed", message.to_string()).with_source(message)
+    });
     let publication = measure("progress_reconcile", progress.reconcile())
         .await
         .map(|_| ());
@@ -148,13 +153,15 @@ pub(super) async fn capture_configuration(
     installation: &crate::host::ResolvedInstallation,
 ) -> Result<crate::host::ServiceConfiguration, BtccError> {
     if butler_platform::secure_fs::OWNER_ONLY {
-        return crate::host::ServiceConfiguration::capture(data, home, installation);
+        return crate::host::ServiceConfiguration::capture(data, home, installation)
+            .and_then(require_supported_data);
     }
     let data = data.map(str::to_owned);
     let home = home.to_path_buf();
     let installation = installation.clone();
     tokio::task::spawn_blocking(move || {
         crate::host::ServiceConfiguration::capture(data.as_deref(), &home, &installation)
+            .and_then(require_supported_data)
     })
     .await
     .map_err(io)?
@@ -198,4 +205,35 @@ pub(super) async fn acquire_instance(
     instance.map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })
+}
+
+// Refuse before instance locks, credentials or runtime owners can write to DATA.
+fn require_supported_data(
+    config: crate::host::ServiceConfiguration,
+) -> Result<crate::host::ServiceConfiguration, BtccError> {
+    use crate::host::runtime::storage_bootstrap::{FreshStorageError, is_unsupported_legacy_data};
+    if is_unsupported_legacy_data(&config.data_root) {
+        return Err(failure(
+            "storage_bootstrap_failed",
+            FreshStorageError::ExistingData(config.data_root).to_string(),
+        ));
+    }
+    Ok(config)
+}
+
+/// Publish the grace deadline and executor record durably before admission.
+pub(super) async fn publish_readiness(
+    config: &ServiceConfiguration,
+) -> Result<Arc<ServiceReadiness>, BtccError> {
+    let root = config.data_root.clone();
+    let now_ms = SystemIdentity.now_epoch_millis();
+    let now_iso = SystemIdentity.now_iso();
+    tokio::task::spawn_blocking(move || {
+        ServiceReadiness::startup_grace(&root, now_ms).map_err(io)?;
+        ServiceReadiness::publish(&root, &now_iso, now_ms)
+            .map(Arc::new)
+            .map_err(io)
+    })
+    .await
+    .map_err(io)?
 }

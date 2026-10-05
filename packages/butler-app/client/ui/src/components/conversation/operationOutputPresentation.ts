@@ -7,7 +7,7 @@ export type OperationOutputSection = { title: string; content?: string; message?
 export type OperationOutputPresentation =
   | { kind: "code"; content: string }
   | { kind: "summary"; content: string }
-  | { kind: "command"; summary: string; content?: string }
+  | { kind: "command"; summary: string; command?: string; content?: string }
   | { kind: "sections"; summary: string; sections: OperationOutputSection[] };
 
 export function presentOperationOutput(
@@ -54,7 +54,10 @@ function commandOutput(value: Record<string, unknown>): OperationOutputPresentat
   const stdout = stringValue(value.stdout);
   const stderr = stringValue(value.stderr);
   const output = commandText(stdout, stderr);
-  return output ? { kind: "command", summary, content: output } : { kind: "command", summary };
+  return { kind: "command", summary,
+    ...(typeof value.command === "string" ? { command: value.command } : {}),
+    ...(output ? { content: output } : {}),
+  };
 }
 
 function commandText(stdout: string, stderr: string): string {

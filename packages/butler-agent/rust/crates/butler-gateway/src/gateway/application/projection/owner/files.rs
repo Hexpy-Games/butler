@@ -2,6 +2,7 @@
 
 use rusqlite::OptionalExtension;
 
+use super::super::{sync_chat_once, sync_deferred_once};
 use super::ProjectionContext;
 use crate::gateway::GatewayApplicationError;
 
@@ -12,7 +13,7 @@ pub(super) async fn open_turn_transcripts(
 ) -> Result<Vec<String>, GatewayApplicationError> {
     let chats = context
         .storage
-        .execute(|db| {
+        .inspect(|db| {
             let mut statement = db
                 .prepare(
                     "SELECT chat_id FROM turns WHERE state IN (\
@@ -48,7 +49,7 @@ pub(super) async fn resolve_chat_file(
     let candidate = candidate.to_owned();
     let chat = context
         .storage
-        .execute(move |db| {
+        .inspect(move |db| {
             db.query_row("SELECT id FROM chats WHERE id=?1", [&candidate], |row| {
                 row.get::<_, String>(0)
             })
@@ -69,4 +70,33 @@ fn transcript_file(chat: &str) -> String {
             "_"
         )
     )
+}
+
+async fn sync_chat(context: &ProjectionContext, chat: &str) -> Result<(), GatewayApplicationError> {
+    while sync_chat_once(context, chat).await? {
+        context.streaming.flush_due(context).await?;
+    }
+    Ok(())
+}
+
+pub(super) async fn sync_requested(
+    context: &ProjectionContext,
+    chat: &str,
+) -> Result<(), GatewayApplicationError> {
+    sync_chat(context, chat).await?;
+    while sync_deferred_once(context).await? {}
+    context.streaming.flush_all(context).await
+}
+
+pub(super) async fn drain_open_turns(
+    context: &ProjectionContext,
+) -> Result<(), GatewayApplicationError> {
+    // Existing checkpoints read only appended bytes, never whole transcripts.
+    for file in open_turn_transcripts(context).await? {
+        if let Some(chat) = resolve_chat_file(context, &file).await? {
+            sync_chat(context, &chat).await?;
+        }
+    }
+    while sync_deferred_once(context).await? {}
+    context.streaming.flush_all(context).await
 }

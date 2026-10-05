@@ -43,7 +43,7 @@ pub(super) fn execute(
     title: &str,
 ) -> Result<Outcome, GatewayApplicationError> {
     let tx = db
-        .transaction()
+        .savepoint()
         .map_err(|error| app_error(AppStorageError::sqlite(error)))?;
     let before = reader::read(&tx).map_err(app_error)?;
     if before.revision != command.expected_revision() {

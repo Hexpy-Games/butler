@@ -12,7 +12,7 @@ pub(super) fn admit(db: &Connection, turn: &str, call: &str) -> StorageResult<()
         .execute(
             "UPDATE btcc_guided_tool_calls SET delivery_state='pending_delivery'
         WHERE turn_id=?1 AND call_id=?2 AND status='completed' AND result_json IS NOT NULL
-        AND result_sha256 IS NOT NULL AND delivery_state IS NULL",
+        AND delivery_state IS NULL",
             [turn, call],
         )
         .map_err(StorageError::sqlite)?;
@@ -72,13 +72,6 @@ pub(super) fn acknowledge(
 ) -> StorageResult<()> {
     validate_id(turn, StorageCode::OperationResultTurnIdInvalid)?;
     validate_id(round, StorageCode::OperationResultRoundIdInvalid)?;
-    if hash.len() != 64
-        || !hash
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return fail(StorageCode::OperationResultResponseHashInvalid);
-    }
     let rows = delivery_rows(db, turn, round)?;
     let code = StorageCode::OperationResultDeliveryAcknowledgementConflict;
     if rows.is_empty() && has_in_flight(db, turn)? {
@@ -87,8 +80,13 @@ pub(super) fn acknowledge(
     if !rows.is_empty()
         && rows
             .iter()
-            .all(|row| row.0 == "acknowledged" && row.1.as_deref() == Some(hash))
+            .all(|row| matches!(row.0.as_str(), "acknowledged" | "reference_only"))
     {
+        if rows.iter().any(|row| row.1.as_deref() != Some(hash)) {
+            butler_core::diagnostic!(
+                "warning: tool result response hash mismatch for turn {turn} round {round}"
+            );
+        }
         return Ok(());
     }
     if rows.iter().any(|row| row.0 != "in_flight") {

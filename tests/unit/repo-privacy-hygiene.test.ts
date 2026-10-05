@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -16,14 +16,30 @@ function trackedFiles(): string[] {
   return result.stdout.toString("utf8").split("\0").filter(Boolean);
 }
 
-function readTrackedText(path: string): string | null {
-  if (!existsSync(join(root, path))) return null;
-  const buffer = readFileSync(join(root, path));
-  if (buffer.includes(0)) return null;
-  return buffer.toString("utf8");
+async function scanTrackedText(inspect: (file: string, text: string) => string[]): Promise<string[]> {
+  const files = trackedFiles();
+  const results: string[][] = new Array(files.length);
+  let cursor = 0;
+  // Bound open files while overlapping filesystem latency. Every tracked text
+  // is still read and inspected by each audit; no corpus or result cache.
+  await Promise.all(Array.from({ length: 16 }, async () => {
+    while (cursor < files.length) {
+      const index = cursor++;
+      const file = files[index]!;
+      let buffer: Buffer;
+      try { buffer = await readFile(join(root, file)); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") { results[index] = []; continue; }
+        throw error;
+      }
+      results[index] = buffer.includes(0) ? [] : inspect(file, buffer.toString("utf8"));
+    }
+  }));
+  return results.flat();
 }
 
-test("tracked files do not contain operator-specific hardcoded fixtures", () => {
+// test-category: security
+test("tracked files do not contain operator-specific hardcoded fixtures", async () => {
   const operatorSlug = ["yeon", "woo"].join("");
   const koreanOperatorName = ["연", "우"].join("");
   const koreanSystemName = ["조", "연", "우"].join("");
@@ -47,16 +63,9 @@ test("tracked files do not contain operator-specific hardcoded fixtures", () => 
     { label: "private dogfood place", value: ["함경", "옥"].join("") },
   ];
 
-  const findings: string[] = [];
-  for (const file of trackedFiles()) {
-    const text = readTrackedText(file);
-    if (text === null) continue;
-    for (const forbidden of forbiddenValues) {
-      if (text.includes(forbidden.value)) {
-        findings.push(`${file}: ${forbidden.label}`);
-      }
-    }
-  }
+  const findings = await scanTrackedText((file, text) => forbiddenValues
+    .filter((forbidden) => text.includes(forbidden.value))
+    .map((forbidden) => `${file}: ${forbidden.label}`));
 
   expect(findings).toEqual([]);
 });
@@ -71,6 +80,7 @@ const ALLOW_PRIVATE_IP_MARKER = "privacy-hygiene: allow-private-ip";
 const TEST_FILE_PATH = /(?:^|\/)(?:tests?|__tests__)(?:\/|\.rs$)|[._-]test\.[cm]?[jt]sx?$|_test\.rs$/u;
 
 function findPrivateLanAddresses(file: string, text: string): string[] {
+  if (!text.includes("10.") && !text.includes("172.") && !text.includes("192.168.")) return [];
   const markersHonored = TEST_FILE_PATH.test(file);
   const findings: string[] = [];
   for (const line of text.split("\n")) {
@@ -82,6 +92,7 @@ function findPrivateLanAddresses(file: string, text: string): string[] {
   return findings;
 }
 
+// test-category: pure-logic
 test("allow-private-ip marker is honored only on marked lines of test files", () => {
   const ip = ["192", "168", "0", "20"].join(".");
   const marked = `("${ip}", true), // ${ALLOW_PRIVATE_IP_MARKER} (LAN test)`;
@@ -95,13 +106,8 @@ test("allow-private-ip marker is honored only on marked lines of test files", ()
   ).toEqual([`crate/src/policy/tests.rs: ${ip}`]);
 });
 
-test("tracked files do not contain private LAN IP address literals", () => {
-  const findings: string[] = [];
-  for (const file of trackedFiles()) {
-    const text = readTrackedText(file);
-    if (text === null) continue;
-    findings.push(...findPrivateLanAddresses(file, text));
-  }
-
+// test-category: security
+test("tracked files do not contain private LAN IP address literals", async () => {
+  const findings = await scanTrackedText(findPrivateLanAddresses);
   expect(findings).toEqual([]);
 });

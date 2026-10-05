@@ -28,7 +28,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A spinner for work whose progress is known.", render: () => <Spinner size={16} label="Loading" /> },
     },
   ],
-  content: ["Meta shows the number (62%, 3/5)."],
-  accessibility: ["role=progressbar with aria-valuenow; tone never replaces the number."],
+  content: ["Meta shows the number (62%, 3/5).", "Use indeterminate for an unknown total: a spinner caption with optional received amount, no bar."],
+  accessibility: ["role=progressbar with aria-valuenow; tone never replaces the number.", "Indeterminate uses role=status and a static spinner under reduced motion."],
   tokens: ["--accent", "--color-success", "--selection", "--motion-deliberate"],
 };

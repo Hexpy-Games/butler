@@ -1,5 +1,6 @@
 //! Durable transcript byte boundary identity.
 
+use crate::gateway::application::storage::CachedSql;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::storage::AppStorageError;
@@ -30,7 +31,7 @@ const MAX_TRAILING_BYTES: usize = 128 * 1024;
 
 pub(super) fn load(db: &Connection, chat_id: &str) -> Result<Option<Checkpoint>, AppStorageError> {
     let oversized = db
-        .query_row(
+        .query_row_cached(
             "SELECT length(trailing_text)>?2 FROM app_transcript_projection_checkpoints \
              WHERE chat_id=?1",
             params![chat_id, MAX_TRAILING_BYTES.div_ceil(3) * 4],
@@ -39,13 +40,13 @@ pub(super) fn load(db: &Connection, chat_id: &str) -> Result<Option<Checkpoint>,
         .optional()
         .map_err(AppStorageError::sqlite)?;
     if oversized == Some(true) {
-        db.execute(
+        db.execute_cached(
             "UPDATE app_transcript_projection_checkpoints SET trailing_text='' WHERE chat_id=?1",
             [chat_id],
         )
         .map_err(AppStorageError::sqlite)?;
     }
-    db.query_row(
+    db.query_row_cached(
         "SELECT chat_id,session_id,transcript_path,file_device,file_inode,projected_bytes,\
          modified_at_ms,trailing_text,boundary_anchor_text,spool_path,spool_bytes,spool_end_offset \
          FROM app_transcript_projection_checkpoints WHERE chat_id=?1",
@@ -72,7 +73,12 @@ pub(super) fn load(db: &Connection, chat_id: &str) -> Result<Option<Checkpoint>,
 }
 
 pub(super) fn save(db: &Connection, value: &Checkpoint, now: &str) -> Result<(), AppStorageError> {
-    db.execute(
+    // A delta-only flush commits its final cursor with every receipt in the
+    // same transaction. Encoding intermediate unread tails does no useful work.
+    if super::non_final::batch::active() {
+        return Ok(());
+    }
+    db.execute_cached(
         "INSERT INTO app_transcript_projection_checkpoints(chat_id,session_id,transcript_path,\
          file_device,file_inode,projected_bytes,modified_at_ms,trailing_text,boundary_anchor_text,\
          spool_path,spool_bytes,spool_end_offset,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,\

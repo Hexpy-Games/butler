@@ -5,6 +5,7 @@ mod authority;
 mod bootstrap;
 mod budget;
 mod canonical;
+mod changes;
 mod claims;
 mod common;
 mod context_compactions;
@@ -13,6 +14,7 @@ mod effects;
 mod error;
 mod hydration;
 mod legacy_cutover;
+mod lifecycle;
 mod migration;
 mod model;
 mod operation_input;
@@ -20,12 +22,15 @@ mod operation_results;
 mod progress;
 mod progress_publication;
 mod project_work_runtime;
+mod read_pool;
 mod readiness;
 mod repository;
 mod runtime_owner;
 mod schema;
 mod stop;
+mod subsession_result;
 mod subsessions;
+pub(crate) use subsessions::ChildCompletion;
 mod tool_journal;
 mod transitions;
 mod wake;
@@ -59,6 +64,7 @@ pub use work::{
 };
 
 use butler_platform::sqlite;
+use lifecycle::{join_failed_initialization, join_owner_thread};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -108,7 +114,9 @@ pub struct BtccStorage {
 }
 
 struct StorageInner {
+    changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
+    readers: Option<Arc<read_pool::ReadPool>>,
 }
 
 struct LaneState {
@@ -122,8 +130,10 @@ impl BtccStorage {
     /// Opens the store, verifying its activation and runtime owner.
     pub async fn open(config: BtccStorageConfig) -> StorageResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
+        let (changes, _) = tokio::sync::watch::channel(());
         let (initialized_tx, initialized_rx) = oneshot::channel();
         let path = config.path;
+        let read_path = path.clone();
         let profile = config.profile;
         let activation = config.activation;
         let identity = config.runtime_owner;
@@ -160,9 +170,19 @@ impl BtccStorage {
                 return Err(error);
             }
         };
+        let readers = match read_pool::open(read_path, profile).await {
+            Ok(readers) => readers,
+            Err(error) => {
+                drop(sender);
+                join_failed_initialization(thread).await;
+                return Err(error);
+            }
+        };
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                changes,
+                readers,
                 lane: AsyncMutex::new(LaneState {
                     sender: Some(sender),
                     thread: Some(thread),
@@ -173,41 +193,23 @@ impl BtccStorage {
         })
     }
 
-    pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
+    pub(super) fn execute<T, F>(
+        &self,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
     {
         self.execute_with_owner(move |connection, _owner| operation(connection))
-            .await
     }
 
-    async fn execute_with_owner<T, F>(&self, operation: F) -> StorageResult<T>
-    where
-        T: Send + 'static,
-        F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
-    {
-        let (completion_tx, completion_rx) = oneshot::channel();
-        let job: DatabaseOperation = Box::new(move |connection, owner| {
-            let result = operation(connection, owner);
-            let _ignored_cancelled_caller = completion_tx.send(result);
-        });
-        let lane = self.inner.lane.lock().await;
-        let sender = lane.sender.as_ref().ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SqliteOwnerClosed,
-                "BTCC SQLite owner is closing or closed",
-            )
-        })?;
-        let permit = sender.reserve().await.map_err(|source| {
-            StorageError::new(
-                StorageCode::SqliteOwnerClosed,
-                "BTCC SQLite execution lane has closed",
-            )
-            .with_source(source)
-        })?;
-        permit.send(job);
-        drop(lane);
+    async fn complete<T: Send + 'static>(
+        &self,
+        job: DatabaseOperation,
+        completion_rx: oneshot::Receiver<StorageResult<T>>,
+    ) -> StorageResult<T> {
+        self.admit(job).await?;
         completion_rx.await.map_err(|source| {
             StorageError::new(
                 StorageCode::SqliteOperationCompletionLost,
@@ -219,6 +221,9 @@ impl BtccStorage {
 
     /// Closes the store once; every caller receives the owner thread's result.
     pub async fn close(&self) -> StorageResult<()> {
+        if let Some(pool) = &self.inner.readers {
+            pool.close().await;
+        }
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;
         if let Some(result) = &lane.close_result {
@@ -343,6 +348,11 @@ fn run_connection_lane(
 }
 
 fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<()> {
+    // The writer no longer serves request reads. Bound its page cache so adding
+    // independent readers does not retain SQLite's default 2 MiB writer cache.
+    connection
+        .pragma_update(None, "cache_size", -512)
+        .map_err(StorageError::sqlite)?;
     connection
         .busy_timeout(Duration::from_millis(5_000))
         .map_err(StorageError::sqlite)?;
@@ -447,26 +457,6 @@ fn storage_marker(
 fn parse_marker(value: &str, code: StorageCode) -> StorageResult<Value> {
     serde_json::from_str(value)
         .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
-}
-
-/// Joins the SQLite owner thread off the async runtime; a panic is reported
-/// with its own code (the payload is not an error).
-async fn join_owner_thread(thread: JoinHandle<StorageResult<()>>) -> StorageResult<()> {
-    let joined = tokio::task::spawn_blocking(move || thread.join())
-        .await
-        .map_err(|error| {
-            StorageError::new(StorageCode::SqliteJoinFailed, error.to_string()).with_source(error)
-        })?;
-    joined.map_err(|_panic_payload| {
-        StorageError::new(
-            StorageCode::SqliteThreadPanicked,
-            "BTCC SQLite owner thread panicked",
-        )
-    })?
-}
-
-async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {
-    let _ignored_initialization_result = tokio::task::spawn_blocking(move || thread.join()).await;
 }
 
 #[cfg(test)]

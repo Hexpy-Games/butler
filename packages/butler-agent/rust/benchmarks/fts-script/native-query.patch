@@ -1,0 +1,18 @@
+diff --git a/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs b/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
+index 915ba0b88..dbffdeb1e 100644
+--- a/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
++++ b/packages/butler-agent/rust/crates/butler-memory/src/cognition/graph/episode_fts/tokenize.rs
+@@ -60,0 +61,9 @@ pub(super) fn field(text: &str) -> String {
++// Offline experiment bridge: removed before any product adoption.
++fn experiment_query(text: &str) -> Option<String> {
++    static QUERIES: std::sync::OnceLock<Option<std::collections::HashMap<String, String>>> = std::sync::OnceLock::new();
++    QUERIES.get_or_init(|| {
++        let path = std::env::var("FTS_SCRIPT_QUERIES").ok()?;
++        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
++    }).as_ref()?.get(text).cloned()
++}
++
+@@ -61,0 +71,3 @@ pub(super) fn query(text: &str) -> String {
++    if let Some(query) = experiment_query(text) {
++        return query;
++    }

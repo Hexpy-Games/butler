@@ -55,5 +55,6 @@ pub(super) fn prefix(
             .join("; ");
         value = value.replace("__GUIDED_MUTATION_SCOPE__", &scope);
     }
+    value.push_str("\nProgress is not completion or permission. Full access executes; ask-first approves exact operations. Continue until the request is done, verified and answered, or an approval/question is pending.\n");
     Ok(value)
 }

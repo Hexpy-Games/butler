@@ -276,15 +276,16 @@ fn write_manifest(
         failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
     })?;
     bytes.push(b'\n');
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    let mut file = options.open(path).map_err(|source| {
-        failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
-    })?;
-    file.write_all(&bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|source| failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source))
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            file.write_all(&bytes).map_err(|source| {
+                failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
+            })?;
+            mutable_paths::ensure_data_authority(data_root, &[parent, path])
+        },
+        |source| failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source),
+    )
 }
 
 fn move_directory(data_root: &Path, from: &Path, to: &Path) -> CognitionResult<()> {

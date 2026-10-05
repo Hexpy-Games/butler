@@ -1,3 +1,4 @@
+import { useSessionViewSubscription } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
@@ -25,7 +26,13 @@ export function StewardParentProgress({
   progress: AnchoredStewardProgress;
 }) {
   useAppLocale();
-  const { child, rows } = progress;
+  const view = useButlerStore(state => state.sessionViews[progress.child.session_id]);
+  const refresh = useButlerStore(state => state.refreshSessionObserver);
+  useSessionViewSubscription(progress.child.session_id, refresh);
+  const child = view ? { ...progress.child, active_turn: view.active_turn, latest_turn: view.latest_turn,
+    status: view.status, approved_plan_total: view.approved_plan_total ?? progress.child.approved_plan_total,
+    approved_plan_completed: view.approved_plan_completed ?? progress.child.approved_plan_completed, waiting_for_children: view.waiting_for_children } : progress.child;
+  const rows = (child.active_turn ?? child.latest_turn)?.progress?.safe_progress_rows ?? progress.rows;
   const [resuming, setResuming] = useState(false);
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,

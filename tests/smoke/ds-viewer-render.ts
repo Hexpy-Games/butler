@@ -1,8 +1,8 @@
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -159,7 +159,7 @@ function viewerPageId(name: string): string {
 async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, string>> {
   const items = new Map<string, string>();
   for (const gallery of ["components", "blocks"]) {
-    await page.goto(viewerUrl(serverUrl, { page: gallery }), { waitUntil: "networkidle" });
+    await page.goto(viewerUrl(serverUrl, { page: gallery }), { waitUntil: "load" });
     await page.locator(`[data-ds-gallery="${gallery}"]`).waitFor({ state: "attached" });
     const cards = await page.locator("[data-ds-component]").evaluateAll((elements) =>
       elements.map((element) => [element.getAttribute("data-ds-component"), element.getAttribute("data-ds-item")]),
@@ -174,17 +174,21 @@ async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, s
 const STEP_TIMEOUT_MS = 15_000;
 
 async function captureComponent(page: Page, url: string, componentName: string, outputPath: string): Promise<void> {
-  await page.goto(url, { waitUntil: "networkidle", timeout: STEP_TIMEOUT_MS });
+  await page.goto(url, { waitUntil: "load", timeout: STEP_TIMEOUT_MS });
   const component = page.locator(
     `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
   );
   await component.waitFor({ state: "visible", timeout: STEP_TIMEOUT_MS });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  });
   await component.scrollIntoViewIfNeeded({ timeout: STEP_TIMEOUT_MS });
   await component.screenshot({ path: outputPath, animations: "disabled", timeout: STEP_TIMEOUT_MS });
 }
 
 async function renderViewport(
-  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  browser: Awaited<ReturnType<typeof launchSmokeBrowser>>,
   serverUrl: string,
   viewportName: ViewportName,
   requestedNames: string[],
@@ -229,7 +233,7 @@ async function renderViewport(
     const writtenPaths: string[] = [];
     for (const pageId of pageIds) {
       for (const theme of themes) {
-        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, locale, motion: "reduced" }), { waitUntil: "networkidle" });
+        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, locale, motion: "reduced" }), { waitUntil: "load" });
         await page.locator(`[data-ds-page="${pageId}"] main > *`).first().waitFor({ state: "visible" });
         if (await page.locator("[data-ds-not-found]").count()) throw new Error(`Unknown DS Viewer page: ${pageId}`);
         const suffix = `${themes.length > 1 ? `-${theme}` : ""}${locale === "ko" ? "-ko" : ""}${fullPage ? "-full" : ""}`;
@@ -291,7 +295,7 @@ const { componentNames: requestedNames, viewports, themes, locale, fullPage } = 
   Bun.argv.slice(2),
 );
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 
 try {
   const writtenPaths: string[] = [];

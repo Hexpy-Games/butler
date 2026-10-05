@@ -15,5 +15,5 @@ export function receiveUpdateProgress(event: TimelineEvent): void {
   if (value && typeof value.revision === "number") useUpdateProgressStore.getState().receive(value);
 }
 export function updateIsRunning(progress: UpdateProgressView | null): boolean {
-  return Boolean(progress && !["idle", "failed", "completed"].includes(progress.stage));
+  return Boolean(progress && !["idle", "ready", "failed", "completed"].includes(progress.stage));
 }

@@ -1,6 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
@@ -10,7 +11,7 @@ let textNodes = 0;
 let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
 const server = await createNativeAppServer({ onboardingComplete: false });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const fresh = { consent_version: null, accepted_at: null, completed_at: null };
 
 function assert(value: unknown, message: string): asserts value {
@@ -151,6 +152,5 @@ try {
   }
   console.log(JSON.stringify({ ok: true, cases, textNodes, minimumContrast, screenshots, transport: "browser/native-app", modelCalls: server.stubModelCalls.length }));
 } finally {
-  await browser.close();
-  await server.stop();
+  try { await browser.close(); } finally { await server.stop(); }
 }

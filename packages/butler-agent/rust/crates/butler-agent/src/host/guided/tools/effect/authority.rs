@@ -7,7 +7,7 @@ use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
     AuthorityOutcomeInput, EffectAdapter, EffectOutcome, ModelRoundToolCall, WorkView,
-    effect_input_sha256, reviewed_effect_action_key,
+    effect_input_sha256,
 };
 
 use super::{GuidedTools, ToolExecutionError, ordinary, wire_error};
@@ -57,63 +57,45 @@ pub(super) async fn gate(
         Ok(value) => value,
         Err(failure) => return error(failure.code(), failure.message()),
     };
-    let action_key = match reviewed_effect_action_key(work, adapter, &normalized_target) {
-        Ok(value) => value,
-        Err(failure) => return error(failure.code(), failure.message()),
-    };
-    let Some(plan) = &work.current_plan else {
-        return error(
-            "effect_plan_review_required",
-            "The current Plan revision is required before requesting Allow.",
-        );
+    let operation = ReviewedOperation {
+        plan_revision_id: "",
+        action_key: format!("operation:{occurrence}"),
+        normalized_target,
+        normalized_input,
+        adapter,
     };
     let resume_ref = owner.binding.authority_request_ref.as_deref().filter(|_| {
         owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
             && !*owner.authority_consumed.lock()
     });
     if let Some(request_ref) = resume_ref {
-        let execution = match owner
-            .authority
-            .execution(AuthorityExecutionInput {
-                owner_session_id: owner.binding.owner_session_id.clone(),
-                request_ref: request_ref.to_owned(),
-                source_session_id: Some(owner.binding.source_session_id.clone()),
-                client_message_id: None,
-                turn_id: owner.binding.turn_id.clone(),
-            })
-            .await
-        {
-            Ok(value) => value,
-            Err(failure) => {
-                return error(
-                    failure.code(),
-                    "The permission does not belong to this operation.",
-                );
-            }
-        };
-        if execution.source_work_id != work.work_id
-            || execution.workspace_path != owner.binding.workspace_path.to_string_lossy()
-            || execution.source_call_id.as_deref() != Some(occurrence)
-            || execution.decision != butler_turn::btcc::RequestDecision::Allowed
-            || execution.capability != adapter.capability()
-            || execution.normalized_target != normalized_target
-            || effect_input_sha256(&execution.normalized_input)
-                .ok()
-                .zip(effect_input_sha256(&normalized_input).ok())
-                .is_none_or(|(stored, current)| stored != current)
-            || execution.plan_revision_id != plan.plan_revision_id
-            || execution.action_key != action_key
-        {
-            return error(
-                "authority_request_identity_mismatch",
-                "The stored command identity changed before execution.",
-            );
-        }
-        return Ok(Gate::Execute(Some(Approved {
-            request_ref: request_ref.to_owned(),
-            source_work_id: work.work_id.clone(),
-        })));
+        return resume(owner, occurrence, work, request_ref, &operation).await;
     }
+    admit(owner, call, occurrence, work, operation).await
+}
+
+struct ReviewedOperation<'a> {
+    plan_revision_id: &'a str,
+    action_key: String,
+    normalized_target: String,
+    normalized_input: Value,
+    adapter: &'a dyn EffectAdapter,
+}
+
+async fn admit(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    work: &WorkView,
+    operation: ReviewedOperation<'_>,
+) -> Result<Gate, ToolExecutionError> {
+    let ReviewedOperation {
+        plan_revision_id,
+        action_key,
+        normalized_target,
+        normalized_input,
+        adapter,
+    } = operation;
     let input = AuthorityAdmissionInput {
         public_action_title: public_action_title(call),
         owner_session_id: owner.binding.owner_session_id.clone(),
@@ -122,7 +104,7 @@ pub(super) async fn gate(
         operation_occurrence_id: Some(occurrence.to_owned()),
         source_work_id: work.work_id.clone(),
         workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
-        plan_revision_id: plan.plan_revision_id.clone(),
+        plan_revision_id: plan_revision_id.to_owned(),
         action_key,
         authority_generation: 1,
         capability: adapter.capability().to_owned(),
@@ -259,4 +241,61 @@ fn valid_effect(effect_id: &str, identity: &str) -> bool {
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     }
     sha(identity) && effect_id.strip_prefix("guided-effect-").is_some_and(sha)
+}
+
+async fn resume(
+    owner: &GuidedTools,
+    occurrence: &str,
+    work: &WorkView,
+    request_ref: &str,
+    operation: &ReviewedOperation<'_>,
+) -> Result<Gate, ToolExecutionError> {
+    let ReviewedOperation {
+        plan_revision_id,
+        action_key,
+        normalized_target,
+        normalized_input,
+        adapter,
+    } = operation;
+    let execution = match owner
+        .authority
+        .execution(AuthorityExecutionInput {
+            owner_session_id: owner.binding.owner_session_id.clone(),
+            request_ref: request_ref.to_owned(),
+            source_session_id: Some(owner.binding.source_session_id.clone()),
+            client_message_id: None,
+            turn_id: owner.binding.turn_id.clone(),
+        })
+        .await
+    {
+        Ok(value) => value,
+        Err(failure) => {
+            return error(
+                failure.code(),
+                "The permission does not belong to this operation.",
+            );
+        }
+    };
+    if execution.source_work_id != work.work_id
+        || execution.workspace_path != owner.binding.workspace_path.to_string_lossy()
+        || execution.source_call_id.as_deref() != Some(occurrence)
+        || execution.decision != butler_turn::btcc::RequestDecision::Allowed
+        || execution.capability != adapter.capability()
+        || execution.normalized_target != *normalized_target
+        || effect_input_sha256(&execution.normalized_input)
+            .ok()
+            .zip(effect_input_sha256(normalized_input).ok())
+            .is_none_or(|(stored, current)| stored != current)
+        || execution.plan_revision_id != *plan_revision_id
+        || execution.action_key != *action_key
+    {
+        return error(
+            "authority_request_identity_mismatch",
+            "The stored command identity changed before execution.",
+        );
+    }
+    Ok(Gate::Execute(Some(Approved {
+        request_ref: request_ref.to_owned(),
+        source_work_id: work.work_id.clone(),
+    })))
 }

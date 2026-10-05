@@ -129,6 +129,12 @@ impl AppUpdateService {
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
         let prior = self.progress.snapshot().await;
+        if prior["stage"] == "ready" && !request.dry_run {
+            validate_request(&request)?;
+            return stage::read_json(&self.data, &self.installation, "updates/staged/app.json")
+                .await
+                .ok_or_else(|| UpdateCode::UpdateStatusInvalid.into());
+        }
         if matches!(
             prior["stage"].as_str(),
             Some("ready" | "applying" | "restarting")

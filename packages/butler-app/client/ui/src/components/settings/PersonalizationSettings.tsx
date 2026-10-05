@@ -69,10 +69,7 @@ export function PersonalizationSettings() {
       footer={
         <PersonalizationActions
           saving={saving}
-          personalizationLoaded={loaded}
-          clearProfileQueued={profilingDraft.clearProfile}
           hasChanges={hasChanges}
-          setPersonalizationDraft={setPersonalizationDraft}
           onSave={savePersonalization}
         />
       }

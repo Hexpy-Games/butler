@@ -116,10 +116,7 @@ impl AppApplication {
     pub(super) async fn archived_projects_owned(
         &self,
     ) -> Result<Vec<(String, AppProjectSummary)>, GatewayApplicationError> {
-        self.storage
-            .execute(|db| rows::archives(db))
-            .await
-            .map_err(app_error)
+        self.storage.read(rows::archives).await.map_err(app_error)
     }
 
     pub(crate) async fn create_project_owned(
@@ -215,11 +212,7 @@ impl AppApplication {
         &self,
         include_sessions: bool,
     ) -> Result<AppProjectList, GatewayApplicationError> {
-        let rows = self
-            .storage
-            .execute(|db| rows::list(db))
-            .await
-            .map_err(app_error)?;
+        let rows = self.storage.read(rows::list).await.map_err(app_error)?;
         let mut sessions_by_project: HashMap<String, Vec<AppSessionSummary>> = HashMap::new();
         if include_sessions {
             for session in self.list_sessions(Some("project".to_owned()), None).await? {

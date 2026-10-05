@@ -2,9 +2,11 @@
 
 mod control;
 mod delegation;
+mod followup;
 mod helpers;
 mod projection;
 mod result_delivery;
+mod selection;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -87,6 +89,7 @@ pub struct StewardDelegationRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
+    pub previous_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub model_ref: String,
     pub reasoning_effort: String,
@@ -118,6 +121,7 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    changes: tokio::sync::broadcast::Sender<(String, String)>,
 }
 
 impl SubsessionService {
@@ -137,7 +141,32 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            changes: tokio::sync::broadcast::channel(256).0,
         }
+    }
+
+    /// Change notifications after durable child execution state transitions.
+    pub fn subscribe_changes(&self) -> tokio::sync::broadcast::Receiver<(String, String)> {
+        self.changes.subscribe()
+    }
+
+    /// Signals an execution transition; readers reload the canonical projection.
+    pub async fn notify_execution_changed(&self, session: &str) -> Result<(), BtccError> {
+        if let Some(relation) = self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            let _ = self.changes.send((
+                relation
+                    .packet
+                    .parent_chat_id
+                    .unwrap_or(relation.parent_session_id),
+                session.into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Delegates a reviewed Steward-mode plan to a steward subsession. The
@@ -172,7 +201,8 @@ impl SubsessionService {
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        packet.prior_context = self.followup_context(&request).await?;
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",
             delegation: &ids.delegation_id,

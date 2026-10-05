@@ -108,8 +108,8 @@ pub(super) fn stored_wallpaper_source(db: &Connection) -> Result<Option<Value>, 
 }
 
 pub(super) use session::{
-    session_context_settings, session_controls_view, session_workspace_settings,
-    update_session_controls,
+    SessionWorkspaceSettings, session_context_settings, session_controls_view,
+    session_workspace_settings, update_session_controls,
 };
 pub(super) use view::ui_language;
 
@@ -253,10 +253,8 @@ impl super::AppApplication {
         &self,
     ) -> Result<String, crate::gateway::GatewayApplicationError> {
         let facts = self.dependencies.settings_facts.snapshot()?;
-        let subscribers = self.subscribers.clone();
-        let now = self.dependencies.identity_clock.now_iso();
         self.storage
-            .execute(move |db| Ok(global_settings(db, &subscribers, &facts, &now)?.language))
+            .read(move |db| Ok(controls::global_settings_readonly(db, &facts)?.language))
             .await
             .map_err(super::app_error)
     }
@@ -270,7 +268,7 @@ impl super::AppApplication {
         let workspace_root = self.project_creation.workspace_root();
         let subscribers = self.subscribers.clone();
         self.storage
-            .execute(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
+            .read(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
             .await
             .map_err(super::app_error)
     }

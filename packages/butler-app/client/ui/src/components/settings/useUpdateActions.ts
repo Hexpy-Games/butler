@@ -1,4 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { appCopy } from "@/app/copy";
 import { api } from "@/app/api";
 import type { UpdateApplyResult, UpdateComponentId, UpdateStatusView } from "@/app/types";
 import { useUpdateProgressStore } from "@/stores/updateProgressStore";
@@ -47,7 +48,14 @@ export function useUpdateActions({ setView, setLoading, setLoadFailed, reportErr
       });
       setView((previous) => mergeUpdateResult(previous, result));
     } catch (error) {
-      reportError(error, "apply");
+      // The failed/cancelled snapshot owns feedback, including a response arriving after SSE.
+      try {
+        const snapshot = await api<UpdateStatusView>("/updates");
+        useUpdateProgressStore.getState().receive(snapshot.progress);
+        setView(snapshot);
+        if (snapshot.progress?.stage === "failed") return;
+      } catch { /* Keep the stream's latest state when the source is unavailable. */ }
+      reportError(new Error(appCopy.settings.updateErrors.generic), "apply");
     }
   }, [reportError, setView]);
 

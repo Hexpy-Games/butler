@@ -32,7 +32,7 @@ impl StorageProgressPublication {
     /// Public progress facts of an exact persisted child turn, in source order.
     pub async fn read_child_progress_events(&self, turn_id: String) -> StorageResult<Vec<Value>> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 let mut statement = db.prepare_cached(
                 "SELECT p.event_id,p.turn_sequence,p.event_json FROM btcc_progress_events p \
                  JOIN btcc_turns t ON t.turn_id=p.turn_id AND t.session_id=p.session_id \
@@ -68,16 +68,22 @@ impl StorageProgressPublication {
             })
             .await
     }
+    /// Changes include progress, authority and parent outbox facts in this same store.
+    pub fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.storage.subscribe_changes()
+    }
+
     /// A publisher over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
 
-    /// Source order is session_sequence then event_id. A keyset bounds both
+    /// Session-first source order prevents concurrent inserts from overtaking
+    /// an earlier event in that session. A keyset bounds both
     /// transient hydration and a reconcile pass when an earlier event fails.
     pub async fn pending_page(
         &self,
-        after: Option<(u64, String)>,
+        after: Option<(String, u64)>,
         limit: usize,
     ) -> StorageResult<Vec<CommittedProgressEvent>> {
         let limit = i64::try_from(limit.clamp(1, 64)).unwrap_or(64);
@@ -157,24 +163,23 @@ fn read_child_operation_output_events(
 
 fn pending_page(
     connection: &Connection,
-    after: Option<(u64, String)>,
+    after: Option<(String, u64)>,
     limit: i64,
 ) -> StorageResult<Vec<CommittedProgressEvent>> {
-    let (sequence, event_id) = match after {
-        Some((sequence, event_id)) => (Some(sequence), event_id),
-        None => (None, String::new()),
+    let (session, sequence) = match after {
+        Some((session, sequence)) => (session, sequence),
+        None => (String::new(), 0),
     };
     let mut statement = connection
         .prepare(
             "SELECT event_id,action_id,session_id,turn_id,session_sequence,turn_sequence, \
                     event_json,destination_json FROM btcc_progress_events \
-             WHERE status='pending' AND (?1 IS NULL OR session_sequence>?1 \
-                OR (session_sequence=?1 AND event_id>?2)) \
-             ORDER BY session_sequence ASC,event_id ASC LIMIT ?3",
+             WHERE status='pending' AND (session_id,session_sequence)>(?1,?2) \
+             ORDER BY session_id ASC,session_sequence ASC,event_id ASC LIMIT ?3",
         )
         .map_err(StorageError::sqlite)?;
     let rows = statement
-        .query_map(params![sequence, event_id, limit], |row| {
+        .query_map(params![session, sequence, limit], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,

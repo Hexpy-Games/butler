@@ -90,6 +90,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         runtime_info: Arc::new(TestRuntimeInfo),
         model_catalog: Arc::new(TestModelCatalog),
         personalization: Arc::new(TestPersonalization),
+        memory_management: Arc::new(super::memory_management::TestMemory),
         monitoring: Arc::new(TestMonitoring),
         project_dashboard_ledger: Arc::new(crate::gateway::TestProjectDashboardLedger),
         plan_decision_ledger: Arc::new(crate::gateway::application::TestAppPlanDecisionLedger),
@@ -186,6 +187,7 @@ impl AppContextReadPort for TestContextRead {
                 compaction_summary: None,
                 session_usage: None,
                 auth_mode: butler_models::models::UsageAuthMode::Unknown,
+                configuration: None,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: 200_000,
                     reserved_output_tokens: 8_000,

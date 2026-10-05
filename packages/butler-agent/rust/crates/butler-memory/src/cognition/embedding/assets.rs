@@ -132,18 +132,15 @@ impl HashCache {
             return;
         }
         let path = root.join(HASH_CACHE_FILE);
-        let temporary = root.join(format!("{HASH_CACHE_FILE}.{}.tmp", std::process::id()));
-        if ensure_data_authority(data_root, &[&path, &temporary]).is_err() {
+        if ensure_data_authority(data_root, &[&path]).is_err() {
             return;
         }
-        let stored = serde_json::to_vec(self).ok().and_then(|bytes| {
-            File::create(&temporary)
-                .and_then(|mut file| file.write_all(&bytes))
-                .and_then(|()| fs::rename(&temporary, &path))
-                .ok()
-        });
-        if stored.is_none() {
-            let _ = fs::remove_file(&temporary);
+        if let Ok(bytes) = serde_json::to_vec(self) {
+            let _ = butler_platform::secure_fs::replace_private(
+                &path,
+                |file| file.write_all(&bytes),
+                std::convert::identity,
+            );
         }
     }
 }

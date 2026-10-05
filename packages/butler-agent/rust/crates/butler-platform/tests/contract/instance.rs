@@ -71,6 +71,8 @@ fn dropping_the_lock_releases_it_despite_a_duplicated_file() {
 #[test]
 fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
     assert_executable_identity_is_the_file();
+    #[cfg(windows)]
+    assert_identity_during_exit();
     let directory = scratch("lock-holder");
     let path = directory.join("instance.lock");
     let report = directory.join("report");
@@ -169,4 +171,36 @@ fn assert_executable_identity_is_the_file() {
     assert_eq!(same_executable(&original, &link), linked);
     assert_eq!(same_executable(&link, &original), linked);
     let _ = fs::remove_dir_all(&directory);
+}
+
+/// Exercise the snapshot/open race while only ending children created here.
+#[cfg(windows)]
+fn assert_identity_during_exit() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    for trial in 0..24 {
+        let mut child = helper_command("sleep").spawn().unwrap();
+        let pid = child.id();
+        let started = process_start(pid).unwrap().unwrap();
+        let done = Arc::new(AtomicBool::new(false));
+        let reading = Arc::clone(&done);
+        let observer = std::thread::spawn(move || {
+            let mut samples = 0;
+            while !reading.load(Ordering::Acquire) {
+                let identity = process_start(pid);
+                assert!(identity.is_ok(), "trial={trial} pid={pid}: {identity:?}");
+                samples += 1;
+            }
+            samples
+        });
+        std::thread::sleep(std::time::Duration::from_millis(1 + trial % 5));
+        terminate(pid, &started).unwrap();
+        child.wait().unwrap();
+        done.store(true, Ordering::Release);
+        let samples = observer.join().unwrap();
+        assert_eq!(process_start(pid).unwrap(), None);
+        eprintln!("process identity exit race: trial={trial} samples={samples}");
+    }
 }

@@ -1,4 +1,7 @@
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
+import { publishMemoryEvent } from "@/app/memoryEvents.ts";
+import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
+import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
 import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
@@ -28,6 +31,7 @@ const DESKTOP_NOTIFICATION_RECENT_WINDOW_MS = 60_000;
 const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
 
 export function useLiveSessionEvents(): void {
+  useSessionAttentionNotifications();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const projectedEventCursor = useButlerStore(
     (state) => state.sessionView?.cursors.events ?? 0,
@@ -61,6 +65,7 @@ export function useLiveSessionEvents(): void {
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       receiveUpdateProgress(event);
+      publishMemoryEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
@@ -70,6 +75,7 @@ export function useLiveSessionEvents(): void {
         advanceEventCursor(eventCursorRef, event.id);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
+        refreshSessionViewSubscriptions();
         return;
       }
       const state = useButlerStore.getState();
@@ -116,7 +122,10 @@ export function useLiveSessionEvents(): void {
       if (
         event.type === "space.changed" || event.type === "session.created" ||
         event.type === "project.created" || event.type === "project.updated" ||
-        event.type === "turn.state_changed" ||
+        event.type === "turn.state_changed" || event.type === "subsession.changed" ||
+        event.type.startsWith("question.") || event.type.startsWith("authority.") ||
+        event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
+        event.type === "session_queue.changed" || event.type === "session.queue.changed" ||
         (event.type === "session.updated" && !isProjectNavigationEvent(event))
       ) {
         if (!isProjectNavigationEvent(event)) {
@@ -139,8 +148,9 @@ export function useLiveSessionEvents(): void {
         activeSessionId,
         directChildSessionIds,
       );
+      refreshSessionViewSubscriptions(event);
       if (refreshesCanonicalParent) {
-        reconciliation.requestRefresh();
+        reconciliation.requestRefresh(event.type === "subsession.changed");
         if (eventSessionId(event) !== activeSessionId) {
           navigationReconciliation.requestRefresh();
         }
@@ -160,6 +170,7 @@ export function useLiveSessionEvents(): void {
         if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
+        refreshSessionViewSubscriptions();
       },
       subscribeResume: (resume) => subscribeAgentRuntimeState((state) => {
         if (state === "running") resume();
@@ -169,6 +180,7 @@ export function useLiveSessionEvents(): void {
       cancelled = true;
       disconnect();
       reconciliation.dispose();
+
       navigationReconciliation.dispose();
     };
   }, []);

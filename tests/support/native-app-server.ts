@@ -18,7 +18,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
@@ -58,10 +59,12 @@ export type NativeAppServerHandle = {
   connectUrl(): Promise<string>;
   /** Gives a browser context (or a page's context) a gateway browser session. */
   signIn(target: CookieJar | { context(): CookieJar }): Promise<void>;
+  /** Diagnose an unexpected shutdown without exposing the local auth token. */
+  assertRunning(): void;
   stop(): Promise<void>;
 };
 
-const repositoryRoot = resolve(import.meta.dir, "../..");
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
@@ -91,9 +94,12 @@ function hasExited(child: ChildProcess): boolean {
 function signalGroup(entry: TrackedEntry, signal: NodeJS.Signals): void {
   try {
     process.kill(-entry.pid, signal);
-  } catch {
-    // ESRCH: the group is already gone.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH" && hasExited(entry.child)) throw error;
   }
+  // Also signal the exact ChildProcess we own: restricted macOS runners can
+  // refuse group delivery. StopSignal coalesces duplicate graceful requests.
+  if (!hasExited(entry.child)) entry.child.kill(signal);
 }
 
 async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
@@ -111,10 +117,11 @@ function removeCleanupPaths(entry: TrackedEntry): void {
 async function stopTracked(entry: TrackedEntry, graceMs = 15_000): Promise<void> {
   entry.stopping ??= (async () => {
     if (!hasExited(entry.child)) {
+      entry.child.stdin?.end();
       signalGroup(entry, "SIGTERM");
       if (!(await waitForExit(entry.child, graceMs))) {
         signalGroup(entry, "SIGKILL");
-        await waitForExit(entry.child, 5_000);
+        if (!(await waitForExit(entry.child, 5_000))) throw new Error(`Owned gateway ${entry.pid} did not exit`);
       }
     }
     // Anything the leader forked and left behind in its group.
@@ -276,13 +283,13 @@ async function startStubModel(
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         id: `stub-${calls.length}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: "stub",
-        choices: [{ index: 0, finish_reason: finishReason, message: { role: "assistant", content: tool ? null : text, ...(toolCalls ? { tool_calls: toolCalls } : {}) } }], usage,
+        choices: [{ index: 0, finish_reason: finishReason, message: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls } : {}) } }], usage,
       }));
       return;
     }
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const base = { id: `stub-${calls.length}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "stub" };
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : { content: text }) } }] })}\n\n`);
+    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text, ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : {}) } }] })}\n\n`);
     response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\n`);
     response.end("data: [DONE]\n\n");
   });
@@ -331,6 +338,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
+      stdio: ["pipe", "pipe", "pipe"],
       cleanupPaths: [scratch],
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -338,6 +346,8 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         CODEX_HOME: join(home, ".codex"),
         TMPDIR: tmpdir(),
         BUTLER_DATA: butlerData,
+        BUTLER_APP_FOREGROUND_LEASE: "1",
+        BUTLER_APP_BUNDLED_SUPERVISOR: "1",
         BUTLER_APP_SERVER_HOST: "127.0.0.1",
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",
@@ -368,7 +378,11 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     try {
       if (token) {
         const response = await fetch(`${url}health`, { headers: { authorization: `Bearer ${token}` } });
-        if (response.ok) break;
+        if (response.ok) {
+          const readiness = await fetch(`${url}runtime-readiness`, { headers: { authorization: `Bearer ${token}` } });
+          const reply = await readiness.json() as { data?: { authenticated_gateway_ready?: boolean; btcc_executor_ready?: boolean } };
+          if (readiness.ok && reply.data?.authenticated_gateway_ready && reply.data.btcc_executor_ready) break;
+        }
       }
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {
@@ -390,6 +404,12 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   };
 
   return {
+    assertRunning() {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        const tail = token ? output.slice(-4000).replaceAll(token, "[redacted]") : output.slice(-4000);
+        throw new Error(`Native gateway exited: code=${child.exitCode}, signal=${child.signalCode}\n${tail}`);
+      }
+    },
     url,
     port,
     butlerData,

@@ -127,13 +127,18 @@ fn diagnostics(
     turns: &[LegacyTurn],
     evidence: &BTreeSet<String>,
 ) -> StorageResult<BTreeMap<String, Vec<Value>>> {
-    let ids = turns
-        .iter()
-        .map(|turn| turn.turn_id.as_str())
-        .collect::<BTreeSet<_>>();
     let mut found: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for turn_id in evidence {
-        if !ids.contains(turn_id.as_str()) {
+        let present = db
+            .query_row(
+                "SELECT 1 FROM btcc_turns WHERE turn_id=?1",
+                [turn_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(StorageError::sqlite)?
+            .is_some();
+        if !present {
             push_diagnostic(
                 &mut found,
                 turn_id,

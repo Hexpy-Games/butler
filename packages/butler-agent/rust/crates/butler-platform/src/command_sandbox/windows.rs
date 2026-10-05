@@ -5,9 +5,20 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+mod cwd;
+pub(super) use cwd::working_directory;
+
 pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;
+
+pub(super) fn member_access_dot(ch: char, previous: Option<char>, quoted: bool) -> bool {
+    ch == '.' && previous == Some(')') && !quoted
+}
+
+pub(super) fn path_script(command: &str) -> &str {
+    explicit_script(command).unwrap_or(command)
+}
 
 /// `cmd.exe /d /s /c <command>` takes the command verbatim: with `/s`, `cmd`
 /// strips the first and the last quote of the line and runs what is between.
@@ -65,8 +76,11 @@ pub(super) fn legacy_shell(
     // EncodedCommand preserves nested quotes and multi-line scripts without
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
+    let modules = default_modules(environment);
+    let shell_started = phase_marker("script_started");
+    let modules_ready = phase_marker("modules_ready");
     let script = format!(
-        "[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {command}"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{command}"
     );
     let encoded = STANDARD.encode(
         script
@@ -90,6 +104,32 @@ pub(super) fn legacy_shell(
         .map(str::to_owned)
         .to_vec(),
     }
+}
+
+fn phase_marker(phase: &str) -> String {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return String::new();
+    }
+    // Opt-in diagnostics contain no command, path, environment or output data.
+    // UTC ticks correlate shell startup/imports with the parent spawn interval.
+    format!(
+        "[Console]::Error.WriteLine('command_shell_phase phase={phase} utc_ticks=' + [DateTime]::UtcNow.Ticks); "
+    )
+}
+
+fn default_modules(environment: &HashMap<String, Option<String>>) -> &'static str {
+    if environment.iter().any(|(key, value)| {
+        key.eq_ignore_ascii_case("PSModulePath")
+            && value.as_deref().is_some_and(|path| !path.trim().is_empty())
+    }) {
+        return "";
+    }
+    // A normally launched App has no inherited PowerShell console module path.
+    // Load the trusted built-ins directly instead of scanning every module for
+    // their first command. Keep normal discovery for requested custom modules.
+    "Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1\"; Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1\"; "
 }
 
 // The tool accepts the common cmd-style `powershell.exe -Command "script"`.
@@ -120,4 +160,27 @@ fn explicit_script(command: &str) -> Option<&str> {
         .trim()
         .strip_prefix('"')?
         .strip_suffix('"')
+}
+
+/// Both reg.exe key paths and PowerShell registry-provider paths.
+pub(super) fn normalize_path_token(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+pub(super) fn is_registry_path(path: &str) -> bool {
+    let root = path.split(['/', '\\', ':']).next().unwrap_or_default();
+    [
+        "HKCU",
+        "HKLM",
+        "HKCR",
+        "HKU",
+        "HKCC",
+        "HKEY_CURRENT_USER",
+        "HKEY_LOCAL_MACHINE",
+        "HKEY_CLASSES_ROOT",
+        "HKEY_USERS",
+        "HKEY_CURRENT_CONFIG",
+    ]
+    .iter()
+    .any(|key| root.eq_ignore_ascii_case(key))
 }

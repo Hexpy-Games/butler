@@ -82,33 +82,20 @@ fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), crate::h
     let path = state_path(data_root, id);
     let parent = path.parent().ok_or("scheduler_state_path_invalid")?;
     ensure_data_authority(data_root, &[parent, &path]).map_err(|error| error.code().to_owned())?;
-    fs::create_dir_all(parent).map_err(crate::host::HostError::from_error)?;
-    let temporary = parent.join(format!(".{id}-{}.tmp", uuid::Uuid::new_v4()));
-    ensure_data_authority(data_root, &[&path, &temporary])
-        .map_err(|error| error.code().to_owned())?;
-    let result = (|| {
-        let mut bytes =
-            serde_json::to_vec_pretty(state).map_err(crate::host::HostError::from_error)?;
-        bytes.push(b'\n');
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        let _ = butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options
-            .open(&temporary)
-            .map_err(crate::host::HostError::from_error)?;
-        file.write_all(&bytes)
-            .map_err(crate::host::HostError::from_error)?;
-        file.sync_all()
-            .map_err(crate::host::HostError::from_error)?;
-        drop(file);
-        ensure_data_authority(data_root, &[&path, &temporary])
-            .map_err(|error| error.code().to_owned())?;
-        fs::rename(&temporary, &path).map_err(crate::host::HostError::from_error)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    butler_platform::secure_fs::create_private_dir_all(parent)
+        .map_err(crate::host::HostError::from_error)?;
+    let mut bytes = serde_json::to_vec_pretty(state).map_err(crate::host::HostError::from_error)?;
+    bytes.push(b'\n');
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| {
+            file.write_all(&bytes)
+                .map_err(crate::host::HostError::from_error)?;
+            ensure_data_authority(data_root, &[&path])
+                .map_err(|error| error.code().to_owned().into())
+        },
+        crate::host::HostError::from_error,
+    )
 }
 
 fn iso_at(now_ms: i64) -> String {

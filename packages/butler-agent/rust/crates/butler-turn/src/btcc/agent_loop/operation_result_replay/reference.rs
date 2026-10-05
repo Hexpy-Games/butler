@@ -10,11 +10,7 @@ pub(super) fn reference(
     selection: super::ExactResultReplaySelection,
 ) -> Result<OperationResultReference, BtccError> {
     let exact_read = selection.exact_read_capability;
-    let sha256 = record
-        .result_sha256
-        .clone()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| error(BtccCode::OperationResultReferenceUnavailable))?;
+    let sha256 = record.result_sha256.clone().unwrap_or_default();
     if record.result.is_none() {
         return Err(error(BtccCode::OperationResultReferenceUnavailable));
     }

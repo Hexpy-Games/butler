@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import type { MessageRecord, SessionView } from "@/app/types.ts";
-import { MessageRow } from "@/butler-ds";
+import { MessageRow, MessageTurnGroup } from "@/butler-ds";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { SessionObserverActivityGroup, type ObserverPhaseActivity } from "./SessionObserverActivityGroup.tsx";
@@ -11,8 +11,10 @@ export function SessionObserverTimeline({
   activeTurn,
   latestTurn,
   children,
+  delegatedGoal,
 }: {
   messages: MessageRecord[];
+  delegatedGoal?: string;
   activityHistory?: SessionView["activity_history"];
   activeTurn?: SessionView["active_turn"];
   latestTurn?: SessionView["latest_turn"];
@@ -36,8 +38,13 @@ export function SessionObserverTimeline({
     { kind: "activity"; id: string; activities: ObserverPhaseActivity[]; active?: SessionView["active_turn"] }> = [];
   for (const entry of ordered) {
     if (entry.kind === "message") {
+      const source = sources.get(entry.message.turn_id ?? "");
+      const activity = source ? projectTurnActivity(source.rows, source.turn_id) : undefined;
       entries.push({ kind: "message", id: entry.message.id,
-        message: { ...entry.message, turn_activity_rows: undefined } });
+        message: { ...entry.message, turn_activity_rows: undefined,
+          work_blocks: activity
+            ? activity.phaseActivities.length ? undefined : activity.workBlocks
+            : entry.message.work_blocks } });
     } else {
       const previous = entries.at(-1);
       if (previous?.kind === "activity") previous.activities.push(entry.activity);
@@ -51,8 +58,9 @@ export function SessionObserverTimeline({
     else entries.push({ kind: "activity", id: `active:${activeTurn.id}`, activities: [], active: activeTurn });
   }
 
+  const firstActivityId = entries.find((entry) => entry.kind === "activity")?.id;
   return (
-    <>
+    <MessageTurnGroup>
       {entries.map((entry) => (
         <Fragment key={entry.id}>
           <MessageRow
@@ -61,13 +69,13 @@ export function SessionObserverTimeline({
           >
             {entry.kind === "message"
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
-              : <SessionObserverActivityGroup activities={entry.activities} active={entry.active}
+              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active}
                   state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
           </MessageRow>
         </Fragment>
       ))}
       {children}
-    </>
+    </MessageTurnGroup>
   );
 }
 

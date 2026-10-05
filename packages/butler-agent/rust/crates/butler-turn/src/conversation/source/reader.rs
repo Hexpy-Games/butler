@@ -194,6 +194,15 @@ impl ConversationSourceReader {
         recall_pages::recovered(self.connection()?, after_id, limit)
     }
 
+    /// Recovered source identifiers only, for owner admission checks before hydration.
+    pub fn read_recovered_source_ids_page(
+        &self,
+        after_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> ConversationResult<Vec<String>> {
+        recall_pages::recovered_ids(self.connection()?, after_id, limit)
+    }
+
     /// A turn by id.
     pub fn read_turn(&self, id: &str) -> ConversationResult<Option<ConversationTurn>> {
         get_turn(self.connection()?, id)

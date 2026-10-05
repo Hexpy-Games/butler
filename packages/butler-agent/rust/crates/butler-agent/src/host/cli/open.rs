@@ -180,7 +180,20 @@ async fn request_link(
         .map_err(unavailable)?
         .error_for_status()
         .map_err(unavailable)?;
-    Ok(response.json::<Envelope>().await.map_err(unavailable)?.data)
+    let mut link = response.json::<Envelope>().await.map_err(unavailable)?.data;
+    // Endpoint discovery is authoritative: the gateway may have built its URL
+    // from a stale advertised port instead of the port this request reached.
+    let mut url = reqwest::Url::parse(endpoint).map_err(|_| {
+        CliError::failed(
+            "connection_code_unavailable",
+            "Invalid running agent endpoint.",
+        )
+    })?;
+    url.set_path("/connect");
+    url.set_query(None);
+    url.query_pairs_mut().append_pair("code", &link.code);
+    link.url = url.into();
+    Ok(link)
 }
 
 /// Hands the link to the desktop's default browser; false when that fails.

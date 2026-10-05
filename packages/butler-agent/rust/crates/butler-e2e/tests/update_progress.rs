@@ -219,6 +219,18 @@ async fn host_lifecycle(
     events: &LiveEvents,
     offset: usize,
 ) -> Result<(), HarnessError> {
+    let before = gw.get("/updates").await?.data()["progress"].clone();
+    let restart = gw
+        .post("/updates/apply", json!({"component":"app"}))
+        .await?;
+    assert_eq!(restart.status, 200, "{}", restart.text);
+    assert_eq!(restart.data()["stage_status"], "staged");
+    assert!(restart.data()["artifact_path"].as_str().is_some());
+    assert_eq!(
+        gw.get("/updates").await?.data()["progress"],
+        before,
+        "Restart reuses the staged package without another download or revision"
+    );
     let phases = ["verifying", "ready", "applying", "restarting", "failed"];
     for stage in phases {
         let reply = gw.post("/updates/progress", json!({"stage":stage})).await?;

@@ -144,9 +144,7 @@ impl GenerationVectorStore {
                     schema,
                 )))
                 .await
-                .map_err(|source| {
-                    error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
-                })?;
+                .map_err(unavailable)?;
             let receipt = persisted_receipt_in_table(&table, generation, rows)
                 .await?
                 .ok_or_else(|| error(CognitionCode::MemoryVectorReceiptMismatch))?;
@@ -189,7 +187,7 @@ pub(crate) async fn persisted_receipt(
     let table = match lance_store::shared(&root, TABLE).await {
         Ok(table) => table,
         Err(lancedb::Error::TableNotFound { .. }) => return Ok(None),
-        Err(_) => return Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
+        Err(source) => return Err(unavailable(source)),
     };
     persisted_receipt_in_table(&table, generation, rows).await
 }
@@ -213,10 +211,10 @@ async fn persisted_receipt_in_table(
         .limit(rows.len() + 1)
         .execute()
         .await
-        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?
+        .map_err(unavailable)?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
+        .map_err(unavailable)?;
     let mut seen = Vec::new();
     for batch in batches {
         for index in 0..batch.num_rows() {
@@ -305,8 +303,6 @@ fn schema() -> SchemaRef {
 
 /// The generation's table, created empty on first use.
 async fn open_or_create(root: &Path, schema: &SchemaRef) -> CognitionResult<Table> {
-    let unavailable =
-        |source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source);
     match lance_store::shared(root, TABLE).await {
         Ok(table) => Ok(table),
         Err(lancedb::Error::TableNotFound { .. }) => {
@@ -319,15 +315,23 @@ async fn open_or_create(root: &Path, schema: &SchemaRef) -> CognitionResult<Tabl
                 .map_err(unavailable)?;
             lance_store::shared(root, TABLE).await.map_err(unavailable)
         }
-        Err(_) => Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
+        Err(source) => Err(unavailable(source)),
     }
 }
 
+fn unavailable(source: lancedb::Error) -> CognitionError {
+    if matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1")
+    {
+        butler_core::diagnostic!("[memory-vector-store-trace] {source:?}");
+    }
+    error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
+}
+
 async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<SchemaRef> {
-    let actual = table
-        .schema()
-        .await
-        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
+    let actual = table.schema().await.map_err(unavailable)?;
     if actual.fields().len() != expected.fields().len()
         || actual
             .fields()

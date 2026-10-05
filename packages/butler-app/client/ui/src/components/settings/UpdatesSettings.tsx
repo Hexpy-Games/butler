@@ -2,10 +2,11 @@ import { useUpdateProgressStore, updateIsRunning } from "@/stores/updateProgress
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
-import { notifyError } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type {
   UpdateStatusView,
 } from "@/app/types.ts";
+import { useAppUpdateState } from "@/hooks/useAppUpdateState.ts";
 import { Button, RefreshCcw } from "@/butler-ds";
 import {
   emptyComponentStatus,
@@ -25,11 +26,13 @@ export function resetUpdatesSettingsCache(): void {
 
 export function UpdatesSettings() {
   const copy = appCopy.settings;
+  const restartState = useAppUpdateState();
   const [view, setView] = useState<UpdateStatusView | null>(lastView);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const progress = useUpdateProgressStore((state) => state.progress);
-  const applying = updateIsRunning(progress) ? progress!.component : null;
+  const restartRunning = ["preparing", "restarting", "choice_required"].includes(restartState.status);
+  const applying = updateIsRunning(progress) ? progress!.component : restartRunning ? "app" : null;
 
   const reportError = useCallback((error: unknown, action: "check" | "apply") => {
     notifyError(error, action === "check" ? copy.errors.checkUpdates : copy.errors.applyUpdate,
@@ -40,6 +43,10 @@ export function UpdatesSettings() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (progress?.stage === "completed") void load();
+  }, [progress?.stage, load]);
 
   useEffect(() => {
     lastView = view;
@@ -80,9 +87,13 @@ export function UpdatesSettings() {
             key={status.component}
             status={status}
             applying={applying}
+            restartStatus={restartState.status}
             labels={copy.actions}
             progress={progress?.component === status.component ? progress : null}
-            onCancel={() => void api("/updates/cancel", { method: "POST" }).catch((error) => notifyError(error, copy.errors.applyUpdate))}
+            onCancel={() => void api<{ cancelled: boolean }>("/updates/cancel", { method: "POST" }).then(async (result) => {
+              if (result.cancelled) notifyStatus(copy.updateProgress.cancelled, { id: "app-update" });
+              await load();
+            }).catch((error) => notifyError(error, copy.errors.applyUpdate))}
             onApply={(component) => void apply(component)}
           />
         ))}

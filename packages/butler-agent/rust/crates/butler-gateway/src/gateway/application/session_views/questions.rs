@@ -8,6 +8,7 @@ pub(super) async fn read(
     messages: &[MessageRecord],
     active: Option<&str>,
 ) -> Result<(Value, Value, Value), GatewayApplicationError> {
+    let _measurement = app.storage.measure_view("questions");
     let mut turns: Vec<String> = messages.iter().filter_map(|m| m.turn_id.clone()).collect();
     turns.extend(active.map(str::to_owned));
     turns.extend(
@@ -26,18 +27,4 @@ pub(super) async fn read(
         .into_iter()
         .partition(|request| request["category"] == "ask_user");
     Ok((json!(pending), json!(answers), json!(approvals)))
-}
-
-pub(super) async fn insert(
-    app: &AppApplication,
-    view: &mut serde_json::Map<String, Value>,
-    owner: &str,
-    messages: &[MessageRecord],
-    active: Option<&str>,
-) -> Result<(), GatewayApplicationError> {
-    let (pending, answers, approvals) = read(app, owner, messages, active).await?;
-    view.insert("pending_questions".into(), pending);
-    view.insert("authority_requests".into(), approvals);
-    view.insert("question_answers".into(), answers);
-    Ok(())
 }

@@ -7,6 +7,15 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  publish-runtime-cache:
+    description: Preserve the SDK once per workflow; other producers still verify the complete restored SDK.
+    default: 'true'
+  artifact-cache-platform:
+    description: Optional native producer platform for artifact cache fallback.
+    default: ""
+  artifact-cache-kind:
+    description: Native production, debug workspace, or release E2E cache.
+    default: native
   components:
     description: Extra rustup components, comma separated (for example "clippy").
     required: false
@@ -16,6 +25,9 @@ inputs:
       "protoc" for checks that do not link ORT, "prebuilt-ort" for CI/dev
       builds, or "static-ort" for release builds.
     required: true
+  cache-workspace-crates:
+    description: Retain workspace libraries for archive producers.
+    default: "false"
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
@@ -90,6 +102,15 @@ runs:
         path: ${{ runner.temp }}/ort-cache/native-deps
         key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.ort.outputs.fingerprint }}
 
+    - name: Restore evicted static runtime from a successful native producer
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && steps.ort-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PLATFORM: ${{ runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64' }}
+        FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/static-runtime-artifact.py" restore "$PLATFORM" "$FINGERPRINT"
+
     - name: Prepare pinned static ONNX Runtime and protoc
       if: inputs.native-deps == 'static-ort'
       shell: bash
@@ -120,10 +141,52 @@ runs:
         path: ${{ runner.temp }}/ort-cache/native-deps
         key: ${{ steps.ort-cache.outputs.cache-primary-key }}
 
+    - name: Preserve the complete pinned static runtime outside cache eviction
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && inputs.publish-runtime-cache == 'true'
+      id: runtime-artifact
+      shell: bash
+      env:
+        PLATFORM: ${{ runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64' }}
+        FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/static-runtime-artifact.py" record "$PLATFORM" "$FINGERPRINT"
+    - uses: actions/upload-artifact@v4
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && inputs.publish-runtime-cache == 'true'
+      with:
+        name: ${{ steps.runtime-artifact.outputs.name }}
+        path: ${{ runner.temp }}/static-runtime-artifact/*
+        retention-days: 2
+        compression-level: 0
+        if-no-files-found: error
+
+    - name: Use mold on Linux
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y mold
+        echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
+
     - name: Cache Cargo build
+      id: cargo-cache
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
-        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
+        shared-key: ${{ inputs.cache-key }}-${{ runner.arch }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
-        cache-on-failure: true
+        cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
+        # Compiler/target/flags/lockfile are included by rust-cache. Cargo
+        # validates source fingerprints after restore; the tracked commit input
+        # rebuilds the Agent's embedded revision even on a docs-only commit.
+        # rust-cache ignores `key` when `shared-key` is set.
+        cache-on-failure: false
+
+    - name: Restore complete Cargo outputs and validated source freshness
+      if: inputs.artifact-cache-platform != ''
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CACHE_PLATFORM: ${{ inputs.artifact-cache-platform }}
+        CACHE_MODE: ${{ inputs.native-deps }}
+        CACHE_KIND: ${{ inputs.artifact-cache-kind }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"

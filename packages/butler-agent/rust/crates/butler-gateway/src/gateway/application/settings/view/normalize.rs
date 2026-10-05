@@ -7,6 +7,7 @@ pub(super) fn ui_defaults() -> Value {
         "bridge_mode":"local", "gateway_profile":"electron", "server_url":"",
         "default_project_workspace_label":"Project", "language":"en", "timezone":"UTC",
         "model":butler_models::models::LEGACY_DEFAULT_MODEL, "reasoning_effort":"medium",
+        "recall_mode":"accurate", "recall_judge_model":"default",
         "consolidation_model":"default", "consolidation_reasoning_effort":"xhigh",
         "effective_consolidation_model":butler_models::models::LEGACY_DEFAULT_MODEL, "consolidation_uses_butler_model":true,
         "context_window_tokens":258_000, "worker_profiles":[], "max_simultaneous_workers":10,

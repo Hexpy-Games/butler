@@ -18,6 +18,7 @@ cat > "$work/bin/security" <<'MOCK'
 #!/usr/bin/env bash
 set -eu
 if [ "${POLICY_CERT_FAIL:-}" = 1 ]; then exit 1; fi
+[ "$HOME" = "$POLICY_RUNNER_HOME" ] || { echo "credential profile mismatch" >&2; exit 33; }
 if [ "$1" = find-identity ]; then echo '1) ABCDEF "Developer ID Application: Fake (FAKETEAM)"'; fi
 MOCK
 cat > "$work/bin/curl" <<'MOCK'
@@ -31,6 +32,9 @@ exit 1
 MOCK
 cat > "$work/bin/codesign" <<'MOCK'
 #!/usr/bin/env bash
+if [ "$1" = --force ] && [ "${BUTLER_SIGN_IDENTITY:-}" = ABCDEF ]; then
+  [ "$HOME" = "$POLICY_RUNNER_HOME" ] || { echo "signing profile mismatch" >&2; exit 34; }
+fi
 if [ "$1" = -dv ]; then
   printf 'TeamIdentifier=FAKETEAM\nTimestamp=fake\nCodeDirectory flags=0x10000(runtime)\n' >&2
 fi
@@ -38,15 +42,27 @@ exit 0
 MOCK
 chmod +x "$work/bin/"*
 export PATH="$work/bin:$PATH"
+# Codesign only finds the identity under the runner HOME whose keychain search
+# list setup changed; isolated steps must sign with that HOME, not their own.
+export POLICY_RUNNER_HOME="$work/runner-home"
+mkdir -p "$POLICY_RUNNER_HOME"
 export GITHUB_REF_NAME=v0.1.0-preview.1
-"$script" setup > "$work/log" 2>&1
+HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1
 if [ -e "$POLICY_CALLS" ] || [ -e "$work/butler-signing-keys/AuthKey.p8" ]; then
   echo 'preview used notary credentials' >&2; exit 1
 fi
 grep -q '^BUTLER_SIGN_IDENTITY=ABCDEF$' "$GITHUB_ENV"
+grep -Fxq "BUTLER_SIGN_HOME=$POLICY_RUNNER_HOME" "$GITHUB_ENV"
+mkdir -p "$work/Fake.app/Contents"
+printf 'fake plist\n' > "$work/Fake.app/Contents/Info.plist"
+# Isolated HOME differs: only credential tools use the runner profile.
+HOME="$work/isolated-home" BUTLER_SIGN_IDENTITY=ABCDEF BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" \
+  "$script" sign-app "$work/Fake.app" > "$work/log" 2>&1
+HOME="$POLICY_RUNNER_HOME" BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" "$script" cleanup > "$work/log" 2>&1
+[ -d "$POLICY_RUNNER_HOME" ] || { echo 'cleanup removed the runner HOME' >&2; exit 1; }
 export POLICY_CERT_FAIL=1
 : > "$GITHUB_ENV"
-"$script" setup > "$work/log" 2>&1
+HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1
 grep -q '^BUTLER_SIGN_IDENTITY=-$' "$GITHUB_ENV"
 unset POLICY_CERT_FAIL
 export BUTLER_SIGN_IDENTITY=-
@@ -60,7 +76,7 @@ if "$script" verify-agent "$work/agent" > "$work/log" 2>&1; then
   echo 'stable accepted ad-hoc signing' >&2; exit 1
 fi
 export BUTLER_SIGN_IDENTITY=ABCDEF
-if "$script" setup > "$work/log" 2>&1; then
+if HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
   echo 'stable accepted rejected notary credentials' >&2; exit 1
 fi
 grep -q 'notarytool history' "$POLICY_CALLS"
@@ -72,7 +88,7 @@ if "$script" verify-dmg "$work/Fake.dmg" > "$work/log" 2>&1; then
 fi
 grep -q 'stapler validate' "$POLICY_CALLS"
 export POLICY_CERT_FAIL=1
-if "$script" setup > "$work/log" 2>&1; then
+if HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
   echo 'stable accepted certificate setup failure' >&2; exit 1
 fi
 echo 'policy: stable requires Developer ID and valid notary credentials'

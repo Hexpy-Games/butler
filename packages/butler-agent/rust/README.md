@@ -37,11 +37,14 @@ out as `<install>\bin\butler-agent.exe` next to a copy of `packages/butler-agent
 <install>\resources` (no subcommand runs the service; `stop`, `status`, `doctor` as on Unix).
 `butler stop` stops a Windows service through its control endpoint's `service_stop` command
 (the DATA shutdown flag while it is still starting) and ends it through a held process handle
-after the grace period; the service has no SIGTERM there. Not yet on Windows: read-only
-commands (refused with `command_observation_isolation_unavailable`), write protection of
+after the grace period; the service has no SIGTERM there. Not yet on Windows: OS-enforced read-only command isolation, write protection of
 program files, Task Scheduler registration, an owner-only access list on a DATA folder outside
 `%USERPROFILE%`, and the `butler.exe` command launcher (see `butler_platform::launcher`).
-Commands the agent runs go through `cmd.exe`. A `butler restart` whose output is a pipe holds
+Observation commands in ask-first use exact-command approval when the host lacks
+read-only isolation; full access runs directly. Results record `sandbox: unisolated`.
+Strict read-only Turns still require a sandbox. Protected data and credential paths
+remain guarded; lexical screening is not an OS sandbox.
+Commands the agent runs go through `cmd.exe` or PowerShell. A `butler restart` whose output is a pipe holds
 that pipe open until the new service exits, because Windows children inherit every inheritable
 handle and safe Rust cannot clear that; a terminal or file output is unaffected. Time zones
 come from the rules embedded in the executable (`butler_platform::time_zone`).

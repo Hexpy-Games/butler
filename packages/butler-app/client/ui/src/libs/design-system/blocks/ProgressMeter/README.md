@@ -44,3 +44,9 @@ Product code must not rebuild bars with `track`/`fill` spans and inline widths.
 
 ## Motion
 The fill spans the track and scales with `transform: scaleX(value)` from the inline start over `--motion-deliberate` (decelerate), so value changes never animate `width`. Reduced motion changes it instantly.
+
+### Unknown total
+
+Use `indeterminate` with a label and optional received-byte `meta`. It renders
+a 12px spinner beside one caption line, without a track or numeric percentage.
+`value` is optional in this state. Under reduced motion the spinner is static.

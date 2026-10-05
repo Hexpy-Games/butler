@@ -72,5 +72,92 @@ async fn opener_cuts_over_an_r2_nonterminal_turn_without_reexecuting_it() {
     assert_eq!(disposition, "completed");
     assert_eq!(outbox_status, "pending");
     assert!(evidence.contains("btcc.r3.legacy-turn-cutover.v2"));
-    storage.close().await.expect("close cutover owner");
+    cancelled_reader_joins_on_close(storage).await;
+}
+
+async fn cancelled_reader_joins_on_close(storage: BtccStorage) {
+    storage
+        .inner
+        .readers
+        .as_ref()
+        .expect("durable read pool")
+        .assert_quiet_retirement()
+        .await;
+    let reader = storage.clone();
+    let (started, ready) = tokio::sync::oneshot::channel();
+    let (release, blocked) = std::sync::mpsc::channel();
+    let query = tokio::spawn(async move {
+        reader
+            .read(move |db| {
+                started.send(()).expect("query admitted");
+                blocked.recv().expect("release cancelled read");
+                assert_eq!(
+                    db.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))
+                        .expect("connection still open"),
+                    1
+                );
+                Ok(())
+            })
+            .await
+    });
+    ready.await.expect("read started");
+    query.abort();
+    assert!(query.await.expect_err("caller cancelled").is_cancelled());
+    let state = storage
+        .read(|db| {
+            db.query_row(
+                "SELECT semantic_state FROM btcc_turns WHERE turn_id='legacy-turn'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(StorageError::sqlite)
+        })
+        .await
+        .expect("other reader remains available");
+    assert_eq!(state, "delivery_committed");
+    let (started, ready) = tokio::sync::oneshot::channel();
+    let closing = tokio::spawn(async move {
+        started.send(()).expect("closing");
+        storage.close().await
+    });
+    ready.await.expect("close started");
+    assert!(
+        !closing.is_finished(),
+        "close must wait for the cancelled query"
+    );
+    release.send(()).expect("release read");
+    closing
+        .await
+        .expect("close task")
+        .expect("close owner and readers");
+    reject_null_legacy_state().await;
+}
+
+// Security regression within the existing cutover race scenario: narrowing
+// candidates must not silently preserve malformed rows in a legacy schema.
+async fn reject_null_legacy_state() {
+    let fixture = Fixture::activated();
+    {
+        let db = Connection::open(&fixture.path).expect("malformed legacy fixture");
+        schema::create_current(&db).expect("companion schema");
+        db.execute_batch(
+            "DROP TABLE btcc_turns;
+             CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+             inbox_id TEXT NOT NULL UNIQUE, trigger_key TEXT NOT NULL, original_message_id TEXT NOT NULL,
+             original_message TEXT NOT NULL, admission_snapshot_ref TEXT NOT NULL,
+             model_selection_json TEXT NOT NULL, context_json TEXT NOT NULL, semantic_state TEXT,
+             active_checkpoint_id TEXT, route TEXT, final_payload_json TEXT, delivery_outbox_id TEXT,
+             canonical_assistant_message_id TEXT, revision INTEGER NOT NULL, execution_fence INTEGER NOT NULL,
+             final_disposition TEXT);
+             INSERT INTO btcc_turns VALUES ('bad-turn','session','inbox','trigger','message',
+             'preserve rejection','record','{}','{}',NULL,NULL,NULL,NULL,NULL,NULL,1,1,NULL);",
+        ).expect("legacy row with nullable state");
+    }
+    match BtccStorage::open(fixture.config("owner-invalid-state")).await {
+        Err(error) => assert!(error.message().contains("semantic_state"), "{error}"),
+        Ok(storage) => {
+            storage.close().await.expect("close unexpected opener");
+            panic!("a malformed legacy state was silently filtered out");
+        }
+    }
 }

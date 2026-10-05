@@ -41,3 +41,21 @@ $unexpected = @($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_
 "Protected child: ownerMatches=$($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $sid), nonUserAllowACEs=$($unexpected.Count), SDDL=$($acl.Sddl)" |
     Tee-Object -Append "$env:PREVIEW_ROOT/logs/acl-diagnosis.log"
 if ($unexpected.Count) { throw 'Protected child inherited a non-user Allow ACE' }
+# Preserve the old per-call implementation as a measured baseline. Every
+# invocation targets only the job's fresh profile; no registry is involved.
+$timer = [Diagnostics.Stopwatch]::StartNew()
+for ($index = 0; $index -lt 16; $index++) {
+    $env:BUTLER_ACL_PATH = Join-Path $env:HOME "legacy-$index.txt"
+    $content = "complete record $index"
+    [IO.File]::WriteAllText($env:BUTLER_ACL_PATH, $content)
+    $env:BUTLER_ACL_OPERATION = 'protect'
+    & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoLogo -NoProfile -NonInteractive -Command $script
+    if ($LASTEXITCODE -ne 0) { throw 'Legacy protection failed' }
+    $env:BUTLER_ACL_OPERATION = 'inspect'
+    $private = & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoLogo -NoProfile -NonInteractive -Command $script
+    if ($LASTEXITCODE -ne 0 -or $private -ne 'True') { throw 'Legacy inspection did not report private content' }
+    if ([IO.File]::ReadAllText($env:BUTLER_ACL_PATH) -ne $content) { throw 'Legacy file content changed' }
+}
+$timer.Stop()
+"Legacy per-call PowerShell ACL baseline: 16 complete files, 16 protects, 16 inspections, $($timer.Elapsed.TotalMilliseconds)ms" |
+    Tee-Object -Append "$env:PREVIEW_ROOT/logs/acl-diagnosis.log"

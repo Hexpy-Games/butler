@@ -15,6 +15,7 @@ import { readLocalComposerDraft, writeCachedComposerDraft } from "@/app/composer
 
 interface UseComposerSubmitProps {
   text: string;
+  readText?: () => string;
   setText: (text: string) => void;
   attachments: ComposerAttachment[];
   setAttachments: (attachments: ComposerAttachment[]) => void;
@@ -33,6 +34,7 @@ interface UseComposerSubmitProps {
 
 export function useComposerSubmit({
   text,
+  readText,
   setText,
   attachments,
   setAttachments,
@@ -52,7 +54,8 @@ export function useComposerSubmit({
     (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
       event.preventDefault();
       if (useButlerStore.getState().liveConnectionLost) return;
-      const value = text.trim();
+      const draftText = readText?.() ?? text;
+      const value = draftText.trim();
       if (
         (!value && attachments.length === 0) ||
         useComposerStore.getState().blockedAttachments.size > 0 ||
@@ -69,7 +72,7 @@ export function useComposerSubmit({
       setAccessMenuOpen(false);
       // The sent bubble flies from where the text sat (DS send flight).
       recordSendOrigin(submitted.textAreaRef?.current);
-      onSend(contentParts ? text : value, { ...composerControlsForSubmit({
+      onSend(draftText, { ...composerControlsForSubmit({
         model,
         reasoning,
         accessMode,
@@ -87,13 +90,14 @@ export function useComposerSubmit({
           // Session creation changes the active ID before the send is acknowledged.
           // Only clear the submitted cache, never the newly active editor.
           const cached = readLocalComposerDraft(sessionId);
-          if (cached?.text === text && JSON.stringify(cached.content_parts) === JSON.stringify(contentParts)) {
+          if (cached?.text === draftText && JSON.stringify(cached.content_parts) === JSON.stringify(contentParts)) {
             writeCachedComposerDraft(sessionId, "");
           }
         }
       } });
     },
     [
+      readText,
       text,
       attachments,
       isSending,

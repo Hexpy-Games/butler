@@ -29,9 +29,12 @@ struct Queued {
 }
 
 /// Makes this thread's connection defer event delivery until commit.
-pub(super) fn install(connection: &Connection) {
+pub(super) fn install(connection: &Connection, metrics: Arc<super::storage::metrics::Metrics>) {
     OUTBOX.with(|outbox| *outbox.borrow_mut() = Some(Outbox::default()));
-    connection.commit_hook(Some(|| {
+    connection.commit_hook(Some(move || {
+        metrics
+            .commits
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         with_outbox(|outbox| {
             let appended = std::mem::take(&mut outbox.open_transaction);
             outbox.committed.extend(appended);
@@ -78,10 +81,15 @@ pub(super) fn defer_committed(
 ) -> Option<Arc<PublishedEvent>> {
     OUTBOX.with(|outbox| match outbox.borrow_mut().as_mut() {
         Some(outbox) => {
-            outbox.committed.push(Queued {
+            let queued = Queued {
                 subscribers: subscribers.clone(),
                 event,
-            });
+            };
+            if super::storage::metrics::baseline() {
+                outbox.committed.push(queued);
+            } else {
+                outbox.open_transaction.push(queued);
+            }
             None
         }
         None => Some(event),
@@ -98,4 +106,16 @@ pub(super) fn flush() {
 
 fn with_outbox<T>(action: impl FnOnce(&mut Outbox) -> T) -> Option<T> {
     OUTBOX.with(|outbox| outbox.borrow_mut().as_mut().map(action))
+}
+
+/// Savepoint rollback does not invoke SQLite's transaction rollback hook.
+pub(super) fn snapshot() -> (usize, usize) {
+    with_outbox(|outbox| (outbox.open_transaction.len(), outbox.committed.len()))
+        .unwrap_or_default()
+}
+pub(super) fn restore((open, committed): (usize, usize)) {
+    with_outbox(|outbox| {
+        outbox.open_transaction.truncate(open);
+        outbox.committed.truncate(committed);
+    });
 }
