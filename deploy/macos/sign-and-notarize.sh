@@ -55,6 +55,7 @@ setup() {
   done
   if [ "$set_count" -eq 0 ] && [ "${BUTLER_SIGN_REQUIRED:-}" != 1 ]; then
     log "no signing secrets; release stays ad-hoc"
+    echo "::warning::macOS build is ad-hoc signed (no signing secrets); not Developer ID signed"
     return 0
   fi
   [ "$set_count" -eq 6 ] || die "signing secrets missing or partial ($set_count/6 set)"
@@ -133,6 +134,7 @@ setup_preview() {
       echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
     } >> "$GITHUB_ENV"
     log "certificate setup failed; unofficial preview uses ad-hoc signing"
+    echo "::warning::macOS build is ad-hoc signed (certificate setup failed); not Developer ID signed"
   fi
   log "unofficial preview: notarization disabled"
 }
@@ -149,13 +151,15 @@ cleanup() {
 # ---- signing ----------------------------------------------------------------
 
 # sign_path <path> [extra codesign args]: secure timestamp; hardened runtime
-# unless BUTLER_SIGN_NO_RUNTIME=1 (disk images). A read-only payload file (and
-# its directory) is made writable just for the call.
+# unless BUTLER_SIGN_NO_RUNTIME=1 (disk images) or ad-hoc. Ad-hoc code has no
+# Team ID, so hardened-runtime library validation would make dyld reject every
+# nested ad-hoc framework at launch. A read-only payload file (and its
+# directory) is made writable just for the call.
 sign_path() {
   local path=$1 mode="" dmode="" dir="" links="" alias status=0
   shift
   local args=(--force --sign "$BUTLER_SIGN_IDENTITY")
-  if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ]; then args+=(--options runtime); fi
+  if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ] && ! adhoc; then args+=(--options runtime); fi
   if ! adhoc; then args+=(--timestamp); fi
   if [ -n "${BUTLER_SIGN_KEYCHAIN:-}" ]; then args+=(--keychain "$BUTLER_SIGN_KEYCHAIN"); fi
   if [ -f "$path" ]; then

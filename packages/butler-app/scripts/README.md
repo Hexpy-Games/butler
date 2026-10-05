@@ -81,7 +81,10 @@ the Agent is gated on `codesign --check-notarization` (online ticket). Missing o
 
 Owner decision (2026-10-01): tags matching `vX.Y.Z-preview.*` are unofficial
 previews. Certificate setup runs independently of the notary credentials. If it
-fails, setup removes partial credentials and selects `codesign -s -`. Previews
+fails, setup removes partial credentials and selects `codesign -s -`, signed
+without the hardened runtime (ad-hoc code has no Team ID, so library
+validation would reject the nested Electron frameworks) and with a CI
+`::warning::` annotation. Previews
 never validate or use the notary API key, submit to notarization, staple, or
 require Gatekeeper's notarized verdict. Signature validity, payload closure,
 smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
