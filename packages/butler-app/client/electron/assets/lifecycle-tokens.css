@@ -1,0 +1,27 @@
+/* Generated from UI DS tokens.css by scripts/sync-lifecycle-assets.mjs. */
+:root {
+  --font-body: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR",
+    "Noto Sans CJK KR", "Segoe UI", Roboto, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Noto Color Emoji";
+  --space-none: 0;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-2xl: 24px;
+  --space-4xl: 40px;
+  --icon-size-2xl: 32px;
+  --typo-body-size: 14px;
+  --typo-body-weight: 400;
+  --typo-body-line-height: 1.45;
+  --typo-app-title-size: 15px;
+  --typo-app-title-weight: 620;
+  --typo-app-title-line-height: 1.4;
+  --color-surface-base: var(--grayscale-01);
+  --grayscale-01: #f8f9fa;
+  --text-primary: var(--color-text-primary);
+  --color-text-primary: var(--neutral-light-text-primary);
+  --neutral-light-text-primary: #222326;
+  --text-secondary: var(--color-text-secondary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --neutral-light-text-secondary: #696d73;
+}

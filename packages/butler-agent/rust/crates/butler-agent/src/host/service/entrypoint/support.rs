@@ -122,14 +122,15 @@ pub(super) async fn close_serving(
 ) -> Result<(), BtccError> {
     control.stop_accepting();
     let admission = measure("app_admission", gateway.stop_accepting()).await;
-    let turns = measure("turn_drain", dispatcher.close())
-        .await
-        .map_err(|e| failure(e.code, e.message));
-    let control_close = measure("control_close", control.close())
-        .await
-        .map_err(|message| {
-            failure("gateway_control_close_failed", message.to_string()).with_source(message)
-        });
+    // Admission is fenced; control connection joins do not publish Turn state.
+    let (turns, control_close) = tokio::join!(
+        measure("turn_drain", dispatcher.close()),
+        measure("control_close", control.close()),
+    );
+    let turns = turns.map_err(|e| failure(e.code, e.message));
+    let control_close = control_close.map_err(|message| {
+        failure("gateway_control_close_failed", message.to_string()).with_source(message)
+    });
     let publication = measure("progress_reconcile", progress.reconcile())
         .await
         .map(|_| ());

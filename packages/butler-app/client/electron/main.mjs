@@ -16,6 +16,8 @@ import {
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
+import { createQuitFeedback } from "./quit-feedback.mjs";
+import { spawnTracedAgent } from "./quit-agent-trace.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
@@ -264,7 +266,7 @@ let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
 let foregroundQuitSnapshot = null;
-let preconfirmedE2eQuit = false;
+let quitFeedback = null;
 let legacyMigrationPromise = null;
 let suppressInitialWindowForLogin = false;
 const foregroundRecoveryBudget = createRecoveryBudget();
@@ -294,7 +296,8 @@ let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
-  spawnProcess: spawn,
+  spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
+    (phase, edge) => quitFeedback?.phase(phase, edge)),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,
@@ -1761,6 +1764,7 @@ function scheduleTrayMenuRefresh() {
 }
 
 async function showMainWindow() {
+  if (isQuitting) return mainWindow;
   const win =
     mainWindow && !mainWindow.isDestroyed() ? mainWindow : await createWindow();
   if (startupPending()) return win;
@@ -2131,6 +2135,11 @@ async function createWindow() {
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
+    if (isWindows && !finalQuitAllowed) {
+      event.preventDefault();
+      app.quit();
+      return;
+    }
     if (!nativeShellPreferences.trayEnabled || isQuitting) return;
     event.preventDefault();
     win.hide();
@@ -2174,7 +2183,7 @@ async function createWindow() {
       scheduleTrayMenuRefresh();
       applyDeveloperModeToWindows();
       await firstDataPaint;
-      completeStartup(win, !suppressInitialWindowForLogin);
+      completeStartup(win, !suppressInitialWindowForLogin && !isQuitting);
       suppressInitialWindowForLogin = false;
       return win;
     }
@@ -2186,7 +2195,7 @@ async function createWindow() {
   await firstDataPaint;
   if (!completeStartup(win, !suppressInitialWindowForLogin)) return win;
   recordAppStartupProgress("window_ready", { windowReady: true });
-  if (!suppressInitialWindowForLogin) win.show();
+  if (!suppressInitialWindowForLogin && !isQuitting) win.show();
   suppressInitialWindowForLogin = false;
   return win;
 }
@@ -2364,9 +2373,7 @@ ipcMain.handle("butler:agent-service-diagnostics", () =>
   agentServiceControl.readAgentServiceDiagnostics(),
 );
 
-ipcMain.handle("butler:quit-app", (_event, input = {}) => {
-  preconfirmedE2eQuit = input?.confirmed === true &&
-    process.env.BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT === "1";
+ipcMain.handle("butler:quit-app", () => {
   app.quit();
   return { quitting: true };
 });
@@ -2701,6 +2708,7 @@ app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
+    quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
       tray = null;
@@ -2710,52 +2718,26 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (isQuitting) return;
   isQuitting = true;
+  // Visible feedback precedes any I/O. The Agent owns shutdown interruption
+  // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
+  mainWindow?.hide();
+  if (app.isReady() && !isMenuBarHelperProcess) {
+    quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage);
+    quitFeedback.begin(mainWindow);
+  }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void confirmForegroundQuitIfNeeded().then((confirmed) => {
-    if (!confirmed) {
-      isQuitting = false;
-      foregroundQuitSnapshot = null;
-      return;
-    }
-    return stopServerProcess({
-      reason: "app_quit",
-      activeWorkSnapshot: foregroundQuitSnapshot,
-    });
-  }).then(async (stopped) => {
-    if (stopped === undefined && !isQuitting) return stopped;
-    return stopped;
-  }).then((stopped) => {
-    if (stopped === undefined && !isQuitting) return;
+  void stopServerProcess({ reason: "app_quit" }).then(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).
     setImmediate(() => app.quit());
   }).catch((error) => {
-    isQuitting = false;
+    // Keep the owner alive on failure. Exiting would close the foreground
+    // containment while durable cleanup might still be running.
+    quitFeedback?.failed();
     console.error(error);
   });
 });
-
-async function confirmForegroundQuitIfNeeded() {
-  if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
-  // After an honored `butler stop` no Agent runs, so no work can be lost and
-  // the unreadable active-work state must not ask for confirmation.
-  if (bundledAgentSupervisor.agentState().state === "stopped") {
-    preconfirmedE2eQuit = false;
-    foregroundQuitSnapshot = null;
-    return true;
-  }
-  const snapshot = await readForegroundActiveWorkSnapshot();
-  const preconfirmed = preconfirmedE2eQuit;
-  preconfirmedE2eQuit = false;
-  const confirmed = preconfirmed || await confirmAppForegroundQuit({
-    snapshot,
-    language: await readDesktopLanguage(),
-    showMessageBox: (options) => dialog.showMessageBox(options),
-  });
-  foregroundQuitSnapshot = confirmed ? snapshot : null;
-  return confirmed;
-}
 
 async function readForegroundActiveWorkSnapshot() {
   try {
@@ -2858,7 +2840,9 @@ async function stopServerProcess({
       writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
     }
   }
-  const stopResult = await bundledAgentSupervisor.stop({ wait: true });
+  const stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  if (stopResult.stopped !== true) throw new Error("foreground_stop_incomplete");
+  quitFeedback?.phase("port_release");
   if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
       patch: { clean_exit: true },

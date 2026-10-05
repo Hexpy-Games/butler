@@ -81,21 +81,16 @@ impl RuntimeStores {
 
     pub(in crate::host) async fn close(&self) -> Result<(), BtccError> {
         // Attempt every release even if an earlier store reports an error.
-        let conversations = self
-            .conversations
-            .close()
-            .await
-            .map_err(|e| error(e.code(), e.message()));
-        let bindings = self
-            .bindings
-            .close()
-            .await
-            .map_err(|e| error(e.code(), e.message()));
-        let btcc = self
-            .btcc
-            .close()
-            .await
-            .map_err(|e| error(e.code(), e.message()));
+        // Producers have joined. These separate SQLite owners can close together.
+        use crate::host::service::shutdown_trace::measure;
+        let (conversations, bindings, btcc) = tokio::join!(
+            measure("conversations_store", self.conversations.close()),
+            measure("bindings_store", self.bindings.close()),
+            measure("btcc_store", self.btcc.close()),
+        );
+        let conversations = conversations.map_err(|e| error(e.code(), e.message()));
+        let bindings = bindings.map_err(|e| error(e.code(), e.message()));
+        let btcc = btcc.map_err(|e| error(e.code(), e.message()));
         conversations.and(bindings).and(btcc)
     }
 }
