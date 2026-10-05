@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { DropdownMenuRadioGroup, DropdownMenuRadioItem, Stack, Typo, Tooltip, OptionMenu, OptionMenuItem } from "@/butler-ds";
+import { OptionMenu, OptionMenuItem } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
 import {
@@ -18,22 +18,11 @@ import {
 export function AccessModeOptions({
   value,
   onSelect,
-  menu = false,
 }: {
   value: AccessMode;
-  menu?: boolean;
   onSelect: (mode: AccessMode) => void;
 }) {
   useAppLocale();
-  if (menu) return <DropdownMenuRadioGroup data-test-class="composer-menu" value={value} onValueChange={item => onSelect(item as AccessMode)}>
-    {ACCESS_MODES.map(item => <Tooltip key={item} wrap label={accessDescription(item)}>
-      <DropdownMenuRadioItem value={item}>
-        <Stack align="row" cross="center" gap="sm">
-          {accessModeIcon(item)}<Typo.Label as="span">{accessLabel(item)}</Typo.Label>
-        </Stack>
-      </DropdownMenuRadioItem>
-    </Tooltip>)}
-  </DropdownMenuRadioGroup>;
   return (
     <OptionMenu title={appCopy.composer.permission}>
       {ACCESS_MODES.map((item) => (

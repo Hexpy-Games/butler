@@ -27,6 +27,8 @@ const grants = [
   { grant_ref: "grant-folder", capability: "write_file", target: "C:/workspace", title: "", description: "" },
 ];
 let childReads = 0;
+let accessMode = "ask_first";
+const modeUpdates: string[] = [];
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const url = new URL(request.url);
   if (url.pathname === "/events/live") return new Response(new ReadableStream({
@@ -38,10 +40,16 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
     if (isChild) childReads++;
     data = isChild ? child : parent;
   } else if (url.pathname === "/session-queue") data = { queued_messages: [] };
-  else if (url.pathname.endsWith("/controls")) data = {
-    session_id: parent.session_id, controls: { model: HARNESS_MODEL_CATALOG.models[0]!.model_ref, reasoning_effort: "medium", access_mode: "ask_first", plan_mode: false },
-    catalog_generation: HARNESS_MODEL_CATALOG.generation,
-  };
+  else if (url.pathname.endsWith("/controls")) {
+    if (request.method === "PATCH") {
+      const patch = await request.json();
+      if (patch.access_mode) { accessMode = patch.access_mode; modeUpdates.push(accessMode); }
+    }
+    data = {
+      session_id: parent.session_id, controls: { model: HARNESS_MODEL_CATALOG.models[0]!.model_ref, reasoning_effort: "medium", access_mode: accessMode, plan_mode: false },
+      catalog_generation: HARNESS_MODEL_CATALOG.generation,
+    };
+  }
   else if (url.pathname === "/authority-requests") data = { session_id: parent.session_id, requests: [], permissions: grants };
   else if (url.pathname.endsWith("/output")) {
     const id = url.pathname.split("/").at(-2)!;
@@ -61,7 +69,7 @@ try {
   page.on("pageerror", error => console.error(error));
   page.on("console", message => { if (message.type() === "error") console.error(message.text()); });
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) {
-    parent = structuredClone(WIN_FIXES_PARENT); child = structuredClone(HARNESS_SS03_OBSERVER_VIEW);
+    parent = structuredClone(WIN_FIXES_PARENT); child = structuredClone(HARNESS_SS03_OBSERVER_VIEW); accessMode = "ask_first";
     parent.steward_children![0]!.relation.anchor_message_id = "harness-parent-user";
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=win-fixes&theme=${theme}`);
@@ -82,7 +90,7 @@ try {
     const command = rows.filter({ hasText: "명령 실행: node" }).first();
     await command.getByRole("button").click();
     const execution = command.getByText(/^실행:/u);
-    await execution.waitFor();
+    await page.waitForFunction(() => document.body.textContent?.includes('node -e "console.log(  42  )"'));
     assert.equal(await execution.textContent(), '실행: node -e "console.log(  42  )"', "canonical command preserves exact whitespace instead of a progress label");
     await command.getByText("결과:", { exact: true }).waitFor();
     assert((await command.innerText()).includes("42"));
@@ -107,21 +115,22 @@ try {
     await capture("modal");
     await page.getByRole("button", { name: "닫기", exact: true }).click();
     await page.locator('[data-slot="composer-compact-preview"]').click();
-    await page.locator('[data-test-class="access-button"]').click();
-    await page.locator('[data-test-class="granted-permissions"]').hover();
-    const submenu = page.locator('[data-test-class="granted-permissions-submenu"]');
-    await submenu.waitFor();
-    assert.equal(await submenu.locator('[data-test-class="granted-permission"]').count(), 2);
-    assert((await submenu.innerText()).includes("명령: node"));
-    if (width === 1280) {
-      const menuBox = await page.locator('[data-slot="dropdown-menu-content"]').boundingBox();
-      const subBox = await submenu.boundingBox();
-      assert(subBox!.x >= menuBox!.x + menuBox!.width, "desktop submenu opens to the right");
+    for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "먼저 확인"]]) {
+      await page.locator('[contenteditable="true"]').focus();
+      await page.locator('[data-test-class="access-button"]').click();
+      const menu = page.locator('[data-test-class="composer-menu"]');
+      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 3, "original three choices despite existing grants");
+      assert.equal(await page.locator('[data-test-class="granted-permissions"]').count(), 0);
+      assert(!(await menu.innerText()).includes("허용한"));
+      await capture(`permission-menu-${mode}`);
+      await menu.getByRole("button").filter({ has: page.getByText(label, { exact: true }) }).click();
+      await page.waitForFunction(label => document.querySelector('[data-test-class="access-button"]')?.getAttribute("aria-label") === `권한: ${label}`, label);
+      assert.equal(accessMode, mode, "canonical session controls receive selected mode");
+      assert.equal(modeUpdates.at(-1), mode);
+      await menu.waitFor({ state: "hidden" });
+      await capture(`permission-${mode}`);
     }
-    const visibleSub = await submenu.boundingBox();
-    assert(visibleSub && visibleSub.x >= 0 && visibleSub.x + visibleSub.width <= width, "submenu stays in the viewport");
-    await capture("permissions-submenu");
   }
-  writeFileSync(join(output, "ds-map.md"), "| Element | DS component |\n|---|---|\n| Tool rows/chips | WorkActivityBlock, WorkActivityToolRow, WorkActivityToolGroup, WorkActivityOutput |\n| Delegated card | SurfacePanel, Stack, Typo, IconButton |\n| Modal | Dialog, ScrollArea, MessageRow |\n| Permission menu/submenu | DropdownMenu, DropdownMenuSub, DropdownMenuRadioItem, Tag, Tooltip |\n| Changed files | DisclosureRow, ChangedLineDiff |\n");
-  console.log(JSON.stringify({ ok: true, screenshots: output, childReads, toolCalls: WIN_FIXES_ROWS.length, grantedItems: 2 }));
+  writeFileSync(join(output, "ds-map.md"), "| Element | DS component |\n|---|---|\n| Tool rows/chips | WorkActivityBlock, WorkActivityToolRow, WorkActivityToolGroup, WorkActivityOutput |\n| Delegated card | SurfacePanel, Stack, Typo, IconButton |\n| Modal | Dialog, ScrollArea, MessageRow |\n| Permission menu | Popover, OptionMenu, OptionMenuItem |\n| Changed files | DisclosureRow, ChangedLineDiff |\n");
+  console.log(JSON.stringify({ ok: true, screenshots: output, childReads, toolCalls: WIN_FIXES_ROWS.length, hiddenGrants: grants.length, modeSwitches: modeUpdates.length }));
 } finally { await browser.close(); server.stop(true); }

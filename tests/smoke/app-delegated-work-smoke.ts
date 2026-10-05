@@ -131,17 +131,9 @@ try {
     await capture("grants-collapsed");
     if (!baseline) {
       assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 0);
-      await page.getByRole("button", { name: appCopy.interfaceTemplates.grantedItems(20), exact: true }).click();
-      assert.equal(await page.locator('[data-test-class="granted-permission"]').count(), 20, "identical grants deduplicate");
-      const text = await page.locator('[data-test-class="granted-permissions"]').innerText();
-      assert(!/run_command|read_file|internal/.test(text), text);
-      assert(text.includes("node --check report-0.html") && text.includes("C:/workspace/report-1.html"));
-      await capture("grants-expanded");
-      await page.getByText("node --check report-0.html", { exact: true }).hover();
-      await page.getByRole("tooltip").filter({ hasText: "node --check report-0.html" }).waitFor();
-      const scroll = page.locator('[data-test-class="granted-permissions-scroll"]');
-      assert(await scroll.evaluate(el => el.clientHeight >= 100 && el.clientHeight <= 180 && el.scrollHeight > el.clientHeight), "DS scroll bounds the grant list");
-      assert(await scroll.evaluate(el => el.scrollWidth <= el.clientWidth + 1), "grant text stays within the menu");
+      assert.equal(await page.locator('[data-slot="option-menu-item"]').count(), 3, "only the original access modes");
+      assert.equal(await access.getAttribute("aria-label"), `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, "grants do not add a count");
+      assert(!(await page.locator('[data-test-class="composer-menu"]').innerText()).includes("Allowed"), "no grants section");
     }
     await page.keyboard.press("Escape");
     await pill.click();
@@ -209,7 +201,7 @@ try {
     await page.close();
   }
   console.log(JSON.stringify({ ok: true, baseline, timingsMs: timings, maxMs: Math.max(...timings), requests,
-    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "collapsed-grants", "deduplicated-exact-targets", "target-tooltip", "bounded-scroll"] }));
+    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "original-permission-menu-with-existing-grants"] }));
 } finally {
   await browser.close();
   await server.stop();
