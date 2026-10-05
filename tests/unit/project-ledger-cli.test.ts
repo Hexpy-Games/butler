@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 
 const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
@@ -79,6 +79,29 @@ function runLedgerJson(
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
   return JSON.parse(result.stdout);
+}
+
+// Independent reads can share the CLI startup window; mutations remain serial.
+function readLedgerJson(args: string[]): Promise<any> {
+  const project = projectArg(args);
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cliPath, ...args, "--json"], {
+      cwd: root,
+      env: { ...process.env, ...(project ? { BUTLER_DATA: testButlerData(project) } : {}) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (bytes) => { stdout += String(bytes); });
+    child.stderr.on("data", (bytes) => { stderr += String(bytes); });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      try {
+        expect(stderr).toBe("");
+        expect(code).toBe(0);
+        resolve(JSON.parse(stdout));
+      } catch (error) { reject(error); }
+    });
+  });
 }
 
 function runPlJson(
@@ -684,7 +707,7 @@ test("project-ledger plan create writes markdown body through the CLI", () => {
   }
 });
 
-test("project-ledger record CRUD covers modeled top-level source records", () => {
+test("project-ledger record CRUD covers modeled top-level source records", async () => {
   const project = tempProject();
   try {
     runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
@@ -720,19 +743,14 @@ test("project-ledger record CRUD covers modeled top-level source records", () =>
       expect(created.data.kind).toBe(kind);
       expect(created.data.id).toBe(id);
 
-      const shown = runLedgerJson([
-        "record",
-        "show",
-        "--project",
-        project,
-        "--kind",
-        kind,
-        "--id",
-        id,
-        "--body",
-      ]);
-      expect(shown.data.body).toContain(`Original ${kind} body.`);
-
+    }
+    const shownRecords = await Promise.all(cases.map(([kind, id]) => readLedgerJson([
+      "record", "show", "--project", project, "--kind", kind, "--id", id, "--body",
+    ])));
+    for (const [index, [kind]] of cases.entries()) {
+      expect(shownRecords[index].data.body).toContain(`Original ${kind} body.`);
+    }
+    for (const [kind, id] of cases) {
       const updated = runLedgerJson([
         "record",
         "update",
@@ -754,16 +772,12 @@ test("project-ledger record CRUD covers modeled top-level source records", () =>
       expect(updated.data.title).toBe(`${kind} updated`);
       expect(updated.data.validation).toBe("CLI CRUD test");
 
-      const updatedShown = runLedgerJson([
-        "record",
-        "show",
-        "--project",
-        project,
-        "--id",
-        id,
-        "--body",
-      ]);
-      expect(updatedShown.data.body).toContain(`Updated ${kind} body.`);
+    }
+    const updatedRecords = await Promise.all(cases.map(([, id]) => readLedgerJson([
+      "record", "show", "--project", project, "--id", id, "--body",
+    ])));
+    for (const [index, [kind]] of cases.entries()) {
+      expect(updatedRecords[index].data.body).toContain(`Updated ${kind} body.`);
     }
 
     const ledger = readFileSync(join(ledgerProjectRoot(project), "ledger.jsonl"), "utf8");

@@ -2,6 +2,7 @@
 
 mod activity;
 mod decode;
+mod files;
 mod records;
 
 pub use records::*;
@@ -9,7 +10,7 @@ pub use records::*;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use self::decode::{list, read};
+use self::decode::{direction_row, list, read, required_packet_string};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
@@ -49,6 +50,12 @@ pub struct StoredSubsessionDelegation {
     pub ordinal: i64,
     pub safe_title: String,
     pub created_at: String,
+}
+
+/// Both relation lookups for one App projection share the same WAL snapshot.
+pub(crate) struct SessionRelations {
+    pub children: Vec<StoredSubsessionDelegation>,
+    pub own: super::StorageResult<Option<StoredSubsessionDelegation>>,
 }
 
 /// A direction sent to a subsession.
@@ -91,6 +98,16 @@ pub struct SqliteSubsessionRepository {
     storage: BtccStorage,
 }
 
+/// One atomic child closeout, including its typed parent continuation.
+pub(crate) struct ChildCompletion {
+    pub session: String,
+    pub turn: String,
+    pub status: String,
+    pub summary: String,
+    pub evidence_refs: Vec<String>,
+    pub handoff: Option<crate::btcc::CapabilityHandoff>,
+}
+
 impl SqliteSubsessionRepository {
     /// A repository over the store.
     pub fn new(storage: BtccStorage) -> Self {
@@ -130,7 +147,7 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "d.delegation_id=?1", &id))
+            .read(move |db| read(db, "d.delegation_id=?1", &id))
             .await
     }
 
@@ -139,7 +156,7 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "r.child_session_id=?1", &id))
+            .read(move |db| read(db, "r.child_session_id=?1", &id))
             .await
     }
 
@@ -148,7 +165,25 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "r.relation_id=?1", &id))
+            .read(move |db| read(db, "r.relation_id=?1", &id))
+            .await
+    }
+
+    pub(crate) async fn projection_relations(
+        &self,
+        session: String,
+    ) -> super::StorageResult<SessionRelations> {
+        self.storage
+            .read(move |db| {
+                let children = list(
+                    db,
+                    "WHERE r.parent_session_id=?1 ORDER BY r.ordinal",
+                    [&session],
+                )?;
+                // Preserve the caller's handling of an undecodable own relation.
+                let own = read(db, "r.child_session_id=?1", &session);
+                Ok(SessionRelations { children, own })
+            })
             .await
     }
 
@@ -158,12 +193,28 @@ impl SqliteSubsessionRepository {
         parent: String,
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 list(
                     db,
                     "WHERE r.parent_session_id=?1 ORDER BY r.ordinal",
                     [parent],
                 )
+            })
+            .await
+    }
+
+    pub(crate) async fn latest_relation_for_parent(
+        &self,
+        parent: String,
+    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+        self.storage
+            .execute(move |db| {
+                Ok(list(
+                    db,
+                    "WHERE r.parent_session_id=?1 ORDER BY r.ordinal DESC LIMIT 1",
+                    [parent],
+                )?
+                .pop())
             })
             .await
     }
@@ -265,10 +316,28 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<Value>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT result_id,child_turn_id,status,summary,acceptance_evidence_json,created_at FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[relation],|r| {
-            let evidence:String=r.get(4)?;
-            Ok(serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?}))
-        }).optional().map_err(StorageError::sqlite)).await
+        self.storage.execute(move |db| db.query_row(
+            "SELECT r.result_id,r.child_turn_id,r.status,r.summary,r.acceptance_evidence_json,r.created_at,t.final_payload_json \
+             FROM btcc_steward_results r LEFT JOIN btcc_turns t ON t.turn_id=r.child_turn_id \
+             WHERE r.relation_id=?1 ORDER BY r.created_at DESC LIMIT 1", [relation], |r| {
+                let evidence: String = r.get(4)?;
+                let mut result = serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?});
+                let payload = r.get::<_, Option<String>>(6)?
+                    .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+                if let Some(payload) = payload {
+                    super::subsession_result::project_delivery(&mut result, &payload);
+                }
+                Ok(result)
+            }).optional().map_err(StorageError::sqlite)).await
+    }
+
+    pub(crate) async fn relation_by_work(
+        &self,
+        work: String,
+    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+        self.storage
+            .execute(move |db| read(db, "d.root_work_id=?1", &work))
+            .await
     }
 
     pub(crate) async fn open_relation_by_work(
@@ -347,13 +416,17 @@ impl SqliteSubsessionRepository {
 
     pub(crate) async fn commit_result(
         &self,
-        child_session: String,
-        child_turn: String,
-        status: String,
-        summary: String,
-        evidence_refs: Vec<String>,
+        completion: ChildCompletion,
         now: String,
     ) -> Result<(), StorageError> {
+        let ChildCompletion {
+            session: child_session,
+            turn: child_turn,
+            status,
+            summary,
+            evidence_refs,
+            handoff,
+        } = completion;
         self.storage.execute(move |db| {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
             let result_id = format!("result-{}", crate::btcc::digest_identity(&format!("btcc.subsession.result.v1\0{child_session}\0{child_turn}")));
@@ -365,8 +438,13 @@ impl SqliteSubsessionRepository {
             if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
-            tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now]).map_err(StorageError::sqlite)?;
-            let text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}");
+            let code = handoff.as_ref().map(|_| "capability_unavailable_in_child");
+            tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
+            let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}");
+            if let Some(handoff) = handoff {
+                let encoded = serde_json::to_string(&handoff).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
+                text.push_str(&format!("\ncapability_handoff: {encoded}\nContinue the requested action in this result Turn using your own granted tools and normal approval. Do not report this model/runtime-solvable issue to the user as an unfinished job. Reuse and revise the parent Plan to direct execution; the child is terminal."));
+            }
             let input = match packet.child_role {
                 ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
                     text: text.clone(), model_ref: model.into(),
@@ -417,23 +495,3 @@ impl SqliteSubsessionRepository {
 }
 
 const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";
-fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDirection> {
-    Ok(StoredSubsessionDirection {
-        instruction_id: row.get(0)?,
-        relation_id: row.get(1)?,
-        revision: row.get(2)?,
-        instruction: row.get(3)?,
-        created_at: row.get(4)?,
-    })
-}
-
-fn required_packet_string<'a>(value: &'a str, key: &str) -> Result<&'a str, StorageError> {
-    Some(value)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SubsessionPacketInvalid,
-                format!("Subsession packet is missing {key}"),
-            )
-        })
-}

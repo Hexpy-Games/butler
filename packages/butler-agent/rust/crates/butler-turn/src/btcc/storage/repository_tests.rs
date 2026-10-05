@@ -57,14 +57,19 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     conflict
         .command
         .edit_json(|command| command["message"]["content"] = json!("different"));
+    let (same, fresh) = repositories.load_or_admit(&conflict).await.unwrap();
+    assert!(!fresh);
+    assert_eq!(same.original_message, turn.original_message);
+    conflict
+        .command
+        .edit_json(|command| command["message"]["messageId"] = json!("another-message"));
     let error = repositories
         .load_or_admit(&conflict)
         .await
         .expect_err("conflicting replay must fail");
     assert_eq!(error.code(), "turn_replay_conflict");
 
-    // JSON.stringify(undefined) differs from JSON.stringify(null) in the
-    // legacy replay authority. An absent field must not become explicit null.
+    // Replay keeps the admitted context even when absent/null encoding differs.
     let mut null_content = prepared("turn-null", "trigger-null", "hash-null");
     null_content
         .command
@@ -77,14 +82,9 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
             .unwrap()
             .shift_remove("messageContent");
     });
-    assert_eq!(
-        repositories
-            .load_or_admit(&absent_content)
-            .await
-            .unwrap_err()
-            .code(),
-        "turn_replay_conflict"
-    );
+    let (same, fresh) = repositories.load_or_admit(&absent_content).await.unwrap();
+    assert!(!fresh);
+    assert_eq!(same.context["messageContent"], json!(null));
     assert!(!repositories.load_or_admit(&null_content).await.unwrap().1);
 
     let mut wake = prepared("turn-wake", "trigger-wake", "hash-wake");
@@ -370,6 +370,19 @@ async fn final_outbox_canonical_insert_and_observation_use_separate_transactions
         .await
         .expect("load delivered");
     assert_eq!(delivered.semantic_state, TurnSemanticState::Delivered);
+    assert_eq!(
+        repositories
+            .insert(&delivered)
+            .await
+            .expect("replay observed delivery"),
+        "assistant-1"
+    );
+    let mut stale = delivered.clone();
+    stale.revision += 1;
+    assert_eq!(
+        repositories.insert(&stale).await.unwrap_err().code(),
+        "canonical_outbox_mismatch"
+    );
     assert_eq!(
         delivered.canonical_assistant_message_id.as_deref(),
         Some("assistant-1")

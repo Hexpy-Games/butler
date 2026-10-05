@@ -9,9 +9,7 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use butler_memory::cognition::{
-    CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
-};
+use butler_memory::cognition::{ExactMemoryQuery, MemoryRecall};
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::{ContextPortAdapter, ConversationSessionReference};
 use butler_turn::btcc::{
@@ -38,8 +36,7 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub tool_artifacts: Arc<crate::host::ToolArtifactReader>,
     pub memory_query: Arc<ExactMemoryQuery>,
     pub memory_recall: Arc<MemoryRecall>,
-    pub memory_paths: CognitionPathEnvironment,
-    pub memory_publisher: Arc<CompletionPublisher>,
+    pub memory_writes: super::tools::MemoryWriteServices,
     pub conversation_reference: Arc<ConversationSessionReference>,
     pub conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     pub compactions: ContextCompactionRepository,
@@ -65,6 +62,15 @@ struct BoundTurn<'a> {
 }
 
 impl GuidedTurnFactoryAdapter {
+    fn journal(&self, turn_id: &str, activity: Arc<GuidedActivity>) -> Arc<GuidedJournal> {
+        Arc::new(GuidedJournal::new(
+            turn_id.to_owned(),
+            self.preparation.journal.clone(),
+            activity,
+            self.subsessions.repository(),
+        ))
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -132,18 +138,12 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
+            let workspace_path = resolved_workspace(&workspace, &mut phase)?;
             let surface = self.tool_surface(&mut phase).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
-            let work = Arc::new(GuidedWorkAdapter::new(
-                self.preparation.work.clone(),
-                work_scope.clone(),
-                policy.tracking_mode.clone(),
-                policy.role.as_str(),
-                language.clone(),
-                start.turn.original_message.clone(),
-            )?);
-            let workspace_path = workspace.get().map_err(|e| error(e.code()))?;
+            let (work, work_tools) =
+                self.work_adapters(start.turn, &phase, &work_scope, language.clone())?;
             let activity = Arc::new(GuidedActivity::new(
                 start.turn.turn_id.clone(),
                 source_revision.clone(),
@@ -194,12 +194,11 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 ),
                 self.memory_query.clone(),
                 self.memory_recall.clone(),
-                self.memory_paths.clone(),
-                self.memory_publisher.clone(),
+                self.memory_writes.clone(),
                 self.conversation_reference.clone(),
                 self.conversation_tools.clone(),
                 self.project_tools.clone(),
-                GuidedWorkTools::new(self.preparation.work.clone(), work_scope.clone()),
+                work_tools,
                 activity.clone(),
                 self.preparation.journal.clone(),
                 self.preparation.catalog.clone(),
@@ -265,11 +264,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);
-            let journal = Arc::new(GuidedJournal::new(
-                start.turn.turn_id.clone(),
-                self.preparation.journal.clone(),
-                activity.clone(),
-            ));
+            let journal = self.journal(&start.turn.turn_id, activity.clone());
             let text = Arc::new(GuidedTextState {
                 skill_catalog: self
                     .skill_catalog(phase.execution_policy.project_id.clone())
@@ -344,4 +339,41 @@ fn project_sources(context: &serde_json::Value) -> Vec<serde_json::Value> {
 
 fn error(code: &str) -> BtccError {
     BtccError::relayed(code.to_owned(), code)
+}
+
+impl GuidedTurnFactoryAdapter {
+    // Both owners share the admitted tool grant; the model never authors that grant.
+    fn work_adapters(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        phase: &butler_turn::btcc::GuidedPhaseSelection,
+        scope: &butler_turn::btcc::WorkTurnScope,
+        language: String,
+    ) -> Result<(Arc<GuidedWorkAdapter>, GuidedWorkTools), BtccError> {
+        let policy = &phase.execution_policy;
+        let work = GuidedWorkAdapter::new(
+            self.preparation.work.clone(),
+            scope.clone(),
+            policy.tracking_mode.clone(),
+            policy.role.as_str(),
+            language,
+            turn.original_message.clone(),
+        )?
+        .with_capability_recovery(&phase.authorized_names, self.preparation.journal.clone());
+        let tools = GuidedWorkTools::new(self.preparation.work.clone(), scope.clone())
+            .with_child_tools(
+                (policy.role.as_str() != "butler").then(|| phase.authorized_names.clone()),
+            );
+        Ok((Arc::new(work), tools))
+    }
+}
+
+/// Keep the model's policy root and tool reference on the same recovered path.
+fn resolved_workspace(
+    workspace: &butler_turn::workspace::WorkspaceReference,
+    phase: &mut butler_turn::btcc::GuidedPhaseSelection,
+) -> Result<PathBuf, BtccError> {
+    let path = workspace.get().map_err(|e| error(e.code()))?;
+    phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
+    Ok(path)
 }

@@ -114,6 +114,12 @@ pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocatio
     shell::add_arguments(command, invocation);
 }
 
+/// The same admitted directory in a form the native process launcher accepts.
+/// Call off async workers: Windows may query short names for long directories.
+pub fn working_directory(path: &Path) -> std::io::Result<std::path::PathBuf> {
+    shell::working_directory(path)
+}
+
 /// The shell of legacy compatibility commands: `/bin/bash [-o pipefail] -lc`
 /// on Unix and PowerShell on Windows (`BUTLER_POWERSHELL` in `environment`
 /// overrides `powershell.exe`).

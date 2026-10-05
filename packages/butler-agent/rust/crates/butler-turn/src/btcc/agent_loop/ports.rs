@@ -172,6 +172,11 @@ pub trait ProviderStreamObserver: Send + Sync {
     /// The text streamed in the latest model round is not the answer: the
     /// round called tools, or its answer candidate was sent back or replaced.
     fn round_text_discarded(&self) {}
+
+    /// The answer candidate failed review and must not become a delivered segment.
+    fn round_text_rejected(&self) {
+        self.round_text_discarded();
+    }
 }
 
 pub trait ProviderIdentityObserver: Send + Sync {

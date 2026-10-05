@@ -156,6 +156,10 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
         )
         .await?;
     assert_eq!(registered.status, 201, "{}", registered.text);
+    assert_eq!(
+        owner_only(&data, "butler.config.json"),
+        OWNER_ONLY.then_some(true)
+    );
     let settings =
         s.gw.patch(
             "/settings",

@@ -43,6 +43,11 @@ fn exact_read_arguments_preserve_source_bounds_and_nulls() {
     assert_eq!(parsed.result_ref, "ref");
     assert_eq!(parsed.work_id.as_deref(), Some("work"));
     assert_eq!(parsed.revision, None);
+    let mut diagnostic = args;
+    diagnostic["sha256"] = "different diagnostic".into();
+    assert!(exact_read_arguments(diagnostic.as_object().unwrap()).is_ok());
+    diagnostic.as_object_mut().unwrap().remove("sha256");
+    assert!(exact_read_arguments(diagnostic.as_object().unwrap()).is_ok());
 }
 
 #[tokio::test]

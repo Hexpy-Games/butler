@@ -11,7 +11,7 @@ src/capabilities/grep_files/args.rs	normalize	94
 src/capabilities/grep_files/response.rs	success	192
 src/capabilities/grep_files/search.rs	execute	125
 src/capabilities/list_files.rs	execute	149
-src/capabilities/read_file.rs	execute	255
+src/capabilities/read_file.rs	execute	228
 src/capabilities/write_file.rs	execute	130
 src/context/compaction.rs	compact_transcript	188
 src/context/conversation/format.rs	compile_prompt_material_context_plan	110

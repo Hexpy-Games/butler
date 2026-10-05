@@ -49,7 +49,7 @@ for suite in perf_inventory['rust-suites'].values():
     for name, test in suite['testcases'].items():
         if test['filter-match']['status'] != 'matches':
             continue
-        if name.startswith('idle_resources::'):
+        if name.startswith(('idle_resources::', 'data_perf::')):
             continue  # Complete libtest observation has its own runner.
         perf_cases.append((perf_durations.get(name, 10.0), suite['binary-name'], name))
 for duration, binary, name in sorted(perf_cases, key=lambda item: (-item[0], item[1:])):

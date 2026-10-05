@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
+#[path = "idle/catchup.rs"]
+mod catchup;
 
 fn graph(data: &Path) -> Option<PathBuf> {
     let root = data.join("cognition/memory");
@@ -26,10 +28,16 @@ pub(super) async fn memory_initialized(data: &Path) -> Result<(), HarnessError> 
     until(|| graph(data).is_some_and(|path| path.is_file())).await
 }
 
+pub(super) async fn canonical_initialized(data: &Path) -> Result<(), HarnessError> {
+    until(|| catchup::checkpoint_current(data)).await
+}
+
 async fn until(mut ready: impl FnMut() -> bool) -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(30), async {
         while !ready() {
-            tokio::task::yield_now().await;
+            // Each predicate opens fresh SQLite snapshots. Give the producer
+            // CPU between observations without extending the 30s watchdog.
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
@@ -64,8 +72,13 @@ fn settled(data: &Path, turn: &str) -> bool {
             |row| row.get(0),
         )
         .unwrap();
+    // Semantic/cache receipts precede the separate multilingual FTS drain.
+    // Include its committed pending work and migration cursor in quiescence;
+    // the unchanged idle window must cover no delayed background writes.
+    let fts_complete: bool = db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending) AND NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_trigger_version' AND value='2')", [], |row| row.get(0)).unwrap();
     complete == 1
         && deferred
+        && fts_complete
         && active == 0
         && pending <= 1_024
         // Graph/cache commits precede the writer lease's final COMMIT/close.
@@ -80,7 +93,38 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
     // Preserve all of that work; start the unchanged 10s zero-write window only
     // after the turn is projected/cached and its complete vector inputs are
     // durably deferred without an embedding worker.
-    until(|| settled(&s.sandbox.data, turn)).await?;
+    // Queue acknowledgement and semantic/cache completion can precede the
+    // canonical catch-up receipt and cursor commit. They are durable work too.
+    // Require this turn's complete reconciliation before measuring zero writes.
+    let mut waited_for_catchup = false;
+    let readiness = until(|| {
+        if !settled(&s.sandbox.data, turn) {
+            return false;
+        }
+        let ready = catchup::settled(&s.sandbox.data, turn);
+        waited_for_catchup |= !ready;
+        ready
+    })
+    .await;
+    if readiness.is_err() {
+        eprintln!(
+            "idle readiness timeout: base_settled={} canonical_flags={:?}",
+            settled(&s.sandbox.data, turn),
+            catchup::status(&s.sandbox.data, turn)
+        );
+        let log = s.sandbox.data.join("logs/butler-agent-service.stderr.log");
+        if let Ok(text) = fs::read_to_string(log) {
+            for line in text.lines().filter(|line| {
+                line.contains("[memory-catchup-trace]")
+                    || line.contains("[memory-sync-trace]")
+                    || line.contains("[native-memory-sync]")
+            }) {
+                eprintln!("service: {line}");
+            }
+        }
+    }
+    readiness?;
+    eprintln!("idle barrier: waited_for_canonical_catchup={waited_for_catchup}");
     let messages = s.gw.messages("general").await?;
     let record = instance_record(&s.sandbox.data).unwrap();
     let pids = ["pid", "cli_supervisor_pid"]
@@ -92,7 +136,7 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
     let after = pids.map(|pid| usage::sample(pid).unwrap());
     let after_files = stamps(&s.sandbox.data)?;
     assert!(
-        settled(&s.sandbox.data, turn),
+        settled(&s.sandbox.data, turn) && catchup::settled(&s.sandbox.data, turn),
         "deferred memory content changed"
     );
     assert_no_embedding_worker(pids[0])?;
@@ -146,7 +190,9 @@ fn stamps(root: &Path) -> Result<BTreeMap<PathBuf, (u64, SystemTime)>, HarnessEr
         if entry.file_type()?.is_dir() {
             files.extend(stamps(&entry.path())?);
         } else {
-            let metadata = entry.metadata()?;
+            // Directory enumeration caches NTFS attributes. Query the open
+            // file handle so prior writes cannot appear as new idle writes.
+            let metadata = fs::File::open(entry.path())?.metadata()?;
             files.insert(entry.path(), (metadata.len(), metadata.modified()?));
         }
     }

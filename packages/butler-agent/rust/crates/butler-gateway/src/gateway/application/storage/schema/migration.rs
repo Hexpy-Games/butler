@@ -193,7 +193,9 @@ pub(super) fn create_post_backfill_indexes(connection: &Connection) -> Result<()
                ON session_queued_messages(chat_id,client_message_id) WHERE client_message_id IS NOT NULL;\
              UPDATE chats SET kind='chat' WHERE kind='general';\
              CREATE INDEX IF NOT EXISTS messages_streaming_turn_idx \
-               ON messages(turn_id) WHERE role='assistant' AND status='streaming';",
+               ON messages(turn_id) WHERE role='assistant' AND status='streaming';\
+             CREATE INDEX IF NOT EXISTS messages_assistant_turn_idx \
+               ON messages(chat_id,turn_id) WHERE role='assistant';",
         )
         .map_err(AppStorageError::sqlite)
 }

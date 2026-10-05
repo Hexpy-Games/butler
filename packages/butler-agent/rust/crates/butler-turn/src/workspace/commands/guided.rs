@@ -163,10 +163,15 @@ async fn prepare_command(
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
     let invocation = invocation(input)?;
-    let environment = tokio::task::spawn_blocking({
+    let (environment, process_cwd) = tokio::task::spawn_blocking({
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
-        move || guided_environment(&host, &butler_data)
+        let cwd = cwd.clone();
+        move || {
+            let environment = guided_environment(&host, &butler_data)?;
+            let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
+            Ok::<_, CommandError>((environment, process_cwd))
+        }
     })
     .await
     .map_err(|error| {
@@ -182,7 +187,7 @@ async fn prepare_command(
     let mut command = Command::new(&invocation.program);
     command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     command
-        .current_dir(&cwd)
+        .current_dir(&process_cwd)
         .env_clear()
         .envs(environment)
         .stdin(Stdio::null())
@@ -364,7 +369,10 @@ pub(super) fn guarded_directory(
     })
     .map_err(CommandError::io)?;
     if let Some(reason) = result.reason {
-        return Err(CommandError::CwdRejected { reason });
+        return Err(CommandError::CwdRejected {
+            reason,
+            workspace_root: result.root.to_string_lossy().into_owned(),
+        });
     }
     result.absolute.ok_or_else(|| {
         CommandError::new(

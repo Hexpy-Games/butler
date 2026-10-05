@@ -1,6 +1,7 @@
 import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
+import { nativeShortcutModifier } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
@@ -76,7 +77,7 @@ export function GeneralSettings() {
           onChange={(value) =>
             update({ multiline_send_behavior: value as SettingsData["multiline_send_behavior"] }, setSettings)}
           options={[
-            { value: "modifier_enter_send_enter_newline", label: options.modifierEnterSendEnterNewline },
+            { value: "modifier_enter_send_enter_newline", label: options.modifierEnterSendEnterNewline(nativeShortcutModifier()) },
             { value: "enter_send_shift_enter_newline", label: options.enterSendShiftEnterNewline },
           ]}
         />

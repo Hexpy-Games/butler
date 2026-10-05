@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "ask_user/consecutive.rs"]
+mod consecutive;
 #[path = "ask_user/scale.rs"]
 pub(super) mod scale;
 #[path = "ask_user/stub.rs"]
@@ -37,6 +39,7 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
     assert_eq!(view.status, 200, "{}", view.text);
     let question = view.data()["pending_questions"][0].clone();
     assert_eq!(question["questions"], stub::questions());
+    assert_attention(&s, true).await?;
     Ok((s, turn, question))
 }
 fn answer() -> Value {
@@ -75,6 +78,7 @@ async fn completed(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.data()["pending_questions"], json!([]));
     assert_eq!(view.data()["question_answers"][0]["response"], answer());
+    assert_attention(s, false).await?;
     Ok(())
 }
 #[tokio::test]
@@ -242,6 +246,7 @@ async fn ask_user_deferred_restores_and_later_answer_enters_existing_queue()
         {
             assert_eq!(view.data()["pending_questions"], json!([]));
             assert_eq!(view.data()["question_answers"][0]["response"], answer());
+            assert_attention(&s, false).await?;
             break;
         }
         assert!(
@@ -301,5 +306,18 @@ async fn measure_idle(s: &Scenario, question: &Value) -> Result<(), HarnessError
         changes[1]
     );
     assert_eq!(changes, [0, 0], "idle question storage writes");
+    Ok(())
+}
+
+async fn assert_attention(s: &Scenario, expected: bool) -> Result<(), HarnessError> {
+    let nav = s.gw.get("/navigation").await?;
+    assert_eq!(nav.status, 200);
+    let general = nav.data()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "general")
+        .unwrap();
+    assert_eq!(general["attention_required"], expected, "{general}");
     Ok(())
 }

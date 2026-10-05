@@ -336,13 +336,10 @@ pub(super) const RESTORE_CLAIM_SQL: &str = "UPDATE session_queued_messages SET s
      WHERE chat_id=?2 AND turn_id=?3 AND state='queued' AND claim_id IS NULL \
        AND claim_owner IS NULL AND lease_expires_at IS NULL \
        AND terminal_result_message_id IS NULL AND dispatched_message_id=?4 \
-       AND input_identity_digest IS NOT NULL AND input_identity_digest<>'' \
        AND EXISTS (SELECT 1 FROM turns t JOIN messages m ON m.id=t.user_message_id \
          WHERE t.id=?3 AND t.chat_id=?2 \
            AND (t.state='thinking' OR (?5=1 AND t.state IN ('accepted','retrying'))) \
-           AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent' \
-           AND m.text=session_queued_messages.text \
-           AND m.content_parts_json IS session_queued_messages.content_parts_json) \
+           AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent') \
        AND EXISTS (SELECT 1 FROM events e \
          WHERE e.turn_id=?3 AND e.turn_id<>'' AND e.type='session_queue.changed' \
            AND e.created_at=session_queued_messages.updated_at \
@@ -358,7 +355,7 @@ fn restore_claim(
     reply_to_message_id: &str,
     restore: ClaimRestore,
 ) -> Result<bool, AppStorageError> {
-    connection
+    let changed = connection
         .execute_cached(
             RESTORE_CLAIM_SQL,
             params![
@@ -369,8 +366,24 @@ fn restore_claim(
                 restore == ClaimRestore::Interruption
             ],
         )
-        .map(|changed| changed == 1)
-        .map_err(AppStorageError::sqlite)
+        .map_err(AppStorageError::sqlite)?;
+    if changed == 1 {
+        let content_matches: bool = connection
+            .query_row_cached(
+                "SELECT m.text=q.text AND m.content_parts_json IS q.content_parts_json \
+             FROM session_queued_messages q JOIN messages m ON m.id=q.dispatched_message_id \
+             WHERE q.chat_id=?1 AND q.turn_id=?2 AND q.claim_id=?3",
+                params![chat_id, turn_id, original_claim],
+                |row| row.get(0),
+            )
+            .map_err(AppStorageError::sqlite)?;
+        if !content_matches {
+            butler_core::diagnostic!(
+                "warning: recovered queue content mismatch for turn {turn_id}"
+            );
+        }
+    }
+    Ok(changed == 1)
 }
 
 pub(super) fn settle(

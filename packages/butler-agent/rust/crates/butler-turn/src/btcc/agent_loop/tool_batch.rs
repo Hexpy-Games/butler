@@ -76,9 +76,9 @@ pub(super) async fn execute<'a>(
 ) -> Result<ToolResult, BtccError> {
     operation(
         invocation.progress,
-        &prepared.call.id,
-        &prepared.call.name,
+        &prepared.call,
         Status::Started,
+        None,
         None,
     )
     .await;
@@ -92,9 +92,9 @@ pub(super) async fn execute<'a>(
         };
         operation(
             invocation.progress,
-            &prepared.call.id,
-            &prepared.call.name,
+            &prepared.call,
             Status::Failed,
+            None,
             None,
         )
         .await;
@@ -121,29 +121,30 @@ pub(super) async fn execute<'a>(
         Err(ToolExecutionError::Integrity(error)) => {
             operation(
                 invocation.progress,
-                &prepared.call.id,
-                &prepared.call.name,
+                &prepared.call,
                 if invocation.cancellation.is_cancelled() {
                     Status::Cancelled
                 } else {
                     Status::Failed
                 },
                 None,
+                None,
             )
             .await;
             return Err(error);
         }
     };
+    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
     operation(
         invocation.progress,
-        &prepared.call.id,
-        &prepared.call.name,
+        &prepared.call,
         if result.ok {
             Status::Completed
         } else {
             Status::Failed
         },
         result.output.as_ref(),
+        operation_call_id.as_deref(),
     )
     .await;
     Ok(result)

@@ -29,7 +29,7 @@ impl Store {
             .ok_or_else(|| error("work_stream_input_invalid"))?;
         let list_id = list_id(object.get("list_id"), &scope.turn_id)?;
         let now = now_iso();
-        let prior_todo = read_object(&self.root.join("todos").join(format!("{list_id}.json")))?;
+        let prior_todo = read_object(&self.root.join("todos").join(record_name(&list_id)))?;
         let items = todo_items(object.get("todos"), prior_todo.as_ref(), &now)?;
         let title = text(object.get("title"), 120)
             .or_else(|| prior_todo.as_ref().and_then(|value| string(value, "title")));
@@ -111,7 +111,7 @@ impl Store {
             map.insert("last_user_turn_id".into(), json!(scope.turn_id));
             map.insert("status_note".into(), if target.0 == "complete" { Value::Null } else { source.and_then(|v|v.get("status_note")).cloned().unwrap_or(Value::Null) });
             map.insert("record_generation".into(), json!(generation));
-            write_atomic(&self.root.join("todos").join(format!("{list_id}.json")), &todo)?;
+            write_atomic(&self.root.join("todos").join(record_name(&list_id)), &todo)?;
             Ok(record)
         })?;
         Ok(
@@ -313,7 +313,7 @@ impl Store {
     }
 
     fn read_stream(&self, id: &str) -> Result<Option<Value>, BtccError> {
-        read_object(&self.root.join("work-streams").join(format!("{id}.json")))
+        read_object(&self.root.join("work-streams").join(record_name(id)))
     }
 
     pub(super) fn mutate(
@@ -331,10 +331,7 @@ impl Store {
             if next_generation != expected.unwrap_or(0) + 1 {
                 return Err(error("work_stream_generation_conflict"));
             }
-            write_atomic(
-                &self.root.join("work-streams").join(format!("{id}.json")),
-                &next,
-            )?;
+            write_atomic(&self.root.join("work-streams").join(record_name(id)), &next)?;
             Ok(next)
         })
     }
@@ -374,7 +371,7 @@ impl Store {
                 ],
             )
             .map_err(sql_error)?;
-        let current = read_object(&self.root.join("work-streams").join(format!("{id}.json")))?;
+        let current = read_object(&self.root.join("work-streams").join(record_name(id)))?;
         let result = action(current)?;
         transaction
             .execute(

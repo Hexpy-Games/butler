@@ -17,9 +17,17 @@ runs:
         $root = Join-Path 'C:\Users\yeonw\work\tmp' ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Force "$root/home","$root/data","$root/local","$root/roaming","$root/tmp" | Out-Null
         & ./deploy/windows-protocol-snapshot.ps1 -Output "$root/protocol-before.json"
+        # Keep build resource use bounded and preserve task identity if the
+        # runner disconnects before GitHub can upload its step logs (#500).
+        @{run_id=$env:GITHUB_RUN_ID; sha=$env:GITHUB_SHA; cache='${{ inputs.workflow }}'; powershell_pid=$PID} |
+          ConvertTo-Json -Compress | Set-Content -Encoding utf8 "$root/job.json"
+        $memory = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        if ($memory) {
+          "Native build: cargo_jobs=8 total_mib=$([math]::Round($memory.TotalVisibleMemorySize / 1024)) free_mib=$([math]::Round($memory.FreePhysicalMemory / 1024))"
+        }
         @("OWNER_JOB_ROOT=$root", "CARGO_TARGET_DIR=C:\Users\yeonw\work\target\${{ inputs.workflow }}",
           "CARGO_HOME=$env:USERPROFILE\.cargo", "RUSTUP_HOME=$env:USERPROFILE\.rustup",
-          "RUSTC_WRAPPER=sccache", "SCCACHE_DIR=C:\actions-cache\sccache",
+          "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=sccache", "SCCACHE_DIR=C:\actions-cache\sccache",
           "SCCACHE_SERVER_PORT=$(Get-Random -Minimum 42000 -Maximum 49000)",
           "BUTLER_SECRET_STORE=file", "BUTLER_PLATFORM_SYSTEM_SECRETS=0", "BUTLER_APP_DISABLE_SHELL_REGISTRATION=1",
           "BUN_INSTALL_CACHE_DIR=C:\actions-cache\bun",

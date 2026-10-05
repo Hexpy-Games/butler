@@ -75,12 +75,14 @@ pub(super) fn request(
         serde_json::from_str(&record.normalized_input_json).map_err(|source| {
             AuthorityError::policy("authority_request_corrupt").with_source(source)
         })?;
-    let approval = approval::summarize(approval::ApprovalFacts {
+    let facts = approval::ApprovalFacts {
         capability: &record.capability,
         target: &record.normalized_target,
         input: &input,
         workspace: &record.workspace_path,
-    });
+    };
+    let mut approval = approval::summarize(facts);
+    approval.operation = Some(approval::exact_operation(facts));
     Ok(AuthorityRequestProjection {
         request_ref: record.request_ref.clone(),
         category: record.category.clone(),

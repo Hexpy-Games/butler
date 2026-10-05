@@ -171,6 +171,10 @@ jobs:
             gh release create "$tag" "${files[@]}" --draft --title "$tag" "${notes_args[@]}"
           fi
 
+      - name: Prove Developer ID signing across the isolated HOME boundary
+        if: startsWith(github.ref_name, 'v0.1.0-preview.')
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/macos-signing-profile-proof.py
+
       - name: Fetch the previous App release manifest
         env:
           GH_TOKEN: ${{ github.token }}

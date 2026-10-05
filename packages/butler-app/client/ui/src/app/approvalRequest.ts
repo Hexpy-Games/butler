@@ -58,12 +58,23 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
     examples.push(text);
     examplesTruncated.push(Array.isArray(value.examples_truncated) && value.examples_truncated[index] === true);
   });
+  const operation = normalizeOperation(value.operation);
   return {
     actionKind, targets, count, examples,
+    ...(operation ? { operation } : {}),
     ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
   };
+}
+
+function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
+  if (!isRecord(value) || typeof value.tool !== "string" || !value.tool.trim()
+    || (value.access !== "read_only" && value.access !== "change")) return undefined;
+  const targets = (Array.isArray(value.targets) ? value.targets : [])
+    .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
+  return { tool: value.tool, access: value.access, targets,
+    ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
 }
 
 /**
@@ -75,6 +86,7 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
 export function approvalRequestView(
   card: Pick<AuthorityApprovalCard, "approval" | "scope" | "reason">,
   copy: ApprovalRequestCopy,
+  toolLabels: Record<string, string> = {},
 ): ApprovalRequestView {
   const { approval, scope } = card;
   if (!approval) {
@@ -89,9 +101,12 @@ export function approvalRequestView(
   const actionKind = (APPROVAL_ACTION_KINDS as readonly string[]).includes(approval.actionKind)
     ? approval.actionKind as ApprovalActionKind : "other";
   const workspace = workspaceLabel(approval);
+  const operation = approval.operation;
   return {
-    title: sentence(actionKind, approval, workspace, copy),
-    details: details(approval, actionKind, card, copy),
+    title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
+      : sentence(actionKind, approval, workspace, copy),
+    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets]
+      : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)

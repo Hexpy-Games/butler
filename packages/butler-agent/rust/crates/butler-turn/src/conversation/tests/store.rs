@@ -161,19 +161,15 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
     );
     let mut conflict = base;
     conflict.safe_code = Some("different".into());
-    assert_eq!(
-        store
-            .finalize_turn(FinalizeTurnInput {
-                turn_id: "ct_fixed".into(),
-                status: Some("complete".into()),
-                completed_at: Some("2026-09-14T00:00:01.000Z".into()),
-                outcome_capsule: Some(conflict),
-            })
-            .await
-            .unwrap_err()
-            .code(),
-        "conversation_outcome_generation_conflict"
-    );
+    store
+        .finalize_turn(FinalizeTurnInput {
+            turn_id: "ct_fixed".into(),
+            status: Some("complete".into()),
+            completed_at: Some("2026-09-14T00:00:01.000Z".into()),
+            outcome_capsule: Some(conflict),
+        })
+        .await
+        .unwrap();
     assert_eq!(
         store.read_turn_outcome("ct_fixed").await.unwrap().unwrap(),
         first

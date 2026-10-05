@@ -183,7 +183,7 @@ describe("bold-flanking", () => {
 
 describe("mixed-list", () => {
   test("flags a list that mixes sentence items and noun-phrase items", () => {
-    const source = "- 이벤트 종류 — **대화 기억 정리**, **사용자 정보 분석**\n- **새로고침**으로 다시 불러옵니다.\n";
+    const source = "- 이벤트 종류 — **대화 기억 정리**, **알아가기**\n- **새로고침**으로 다시 불러옵니다.\n";
     expect(at(source)).toEqual([["mixed-list", 2]]);
   });
 

@@ -59,7 +59,24 @@ pub trait ProfilePromptPort: Send + Sync {
     ) -> ContextFuture<'a, Option<String>>;
 }
 
+/// A complete active rule from the memory owner, selected for this binding.
+#[derive(Clone, Debug)]
+pub struct RememberedRuleProjection {
+    pub scope_session_id: Option<String>,
+    pub expires_at: Option<String>,
+    pub handle: String,
+    pub text: String,
+    pub project_id: Option<String>,
+    pub revision: String,
+}
+
 pub trait CognitionPromptPort: Send + Sync {
+    fn remembered_rules<'a>(
+        &'a self,
+        input: &'a PromptProjectionInput<'a>,
+        rules_root: &'a std::path::Path,
+    ) -> ContextFuture<'a, Vec<RememberedRuleProjection>>;
+
     fn scoped_feedback<'a>(
         &'a self,
         input: &'a PromptProjectionInput<'a>,

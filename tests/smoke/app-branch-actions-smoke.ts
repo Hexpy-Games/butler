@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Branch actions from a project-session answer against an isolated native
 // gateway (temp BUTLER_DATA, free port, stub model): "Start a new
 // conversation" creates a session in the same project and "Start a new
@@ -6,7 +7,7 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import type {
   MessageRecord,
@@ -72,7 +73,7 @@ function assertSeededFrom(view: { branch_seed?: BranchSeed }, sourceId: string, 
   assert.equal(view.branch_seed?.sourceMessageId, answer.id, "branch seed names the clicked answer");
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const project = (await server.api<{ project: ProjectSummary }>("/projects", {
     method: "POST", body: JSON.stringify({ source: "scratch", display_name: "Branch source project" }),

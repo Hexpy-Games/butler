@@ -20,6 +20,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 const COMPLETED_WINDOWS: usize = 30_000;
 const IDLE: Duration = Duration::from_secs(60);
+const IDLE_READ_BUDGET: u64 = 128 * 1024;
 
 /// Completed windows exercise the idle indexes without starting model work.
 fn seed_graph(path: &Path) {
@@ -58,17 +59,24 @@ fn signature(path: &Path) -> Option<(u64, SystemTime)> {
 }
 
 fn seed_imported_message(data: &Path) {
-    let canonical = sqlite::open(data.join("runtime/conversation-store.sqlite")).unwrap();
+    let path = data.join("runtime/conversation-store.sqlite");
+    let canonical = sqlite::open(&path).unwrap();
+    // Interleave unrelated writable WAL handles with the external writer. Their
+    // close notifications must not consume the final committed source wakeup.
+    let reader = sqlite::open(&path).unwrap();
+    canonical.execute_batch("BEGIN IMMEDIATE").unwrap();
     let now = "2026-09-29T00:00:00.000Z";
     canonical.execute("INSERT INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('idle-recovery-session','app',?1,?1,'active',4)", [now]).unwrap();
     canonical.execute("INSERT INTO conversation_messages(id,session_id,seq,role,status,visibility,provenance,created_at,origin_kind) VALUES('idle-recovery-message','idle-recovery-session',1,'user','complete','user','imported',?1,'user_input')", [now]).unwrap();
     canonical.execute("INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) VALUES('idle-recovery-part','idle-recovery-message',0,'text','{\"text\":\"Remember this recovery fact\"}','complete')", []).unwrap();
+    drop(reader);
     canonical
         .execute(
             "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
             [],
         )
         .unwrap();
+    canonical.execute_batch("COMMIT").unwrap();
 }
 
 fn hide_registered_message(graph: &Path) {
@@ -103,6 +111,24 @@ fn catchup_message_cursor(graph: &Path) -> Option<String> {
         .unwrap()
 }
 
+fn catchup_checkpoint_current(data: &Path, graph: &Path) -> bool {
+    let source = readonly(&data.join("runtime/conversation-store.sqlite"));
+    let (revision, identity): (String, String) = source
+        .query_row(
+            "SELECT CAST(s.revision AS TEXT),i.identity FROM conversation_public_source_state s,
+             conversation_source_identity i WHERE s.singleton=1 AND i.singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    readonly(graph).query_row(
+        "SELECT EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_revision' AND value=?1)
+         AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_source_identity' AND value=?2)
+         AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_done' AND value='1')",
+        params![revision, identity], |row| row.get(0),
+    ).unwrap()
+}
+
 async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     while catchup_message_cursor(graph).as_deref() != Some(expected) {
@@ -117,7 +143,9 @@ async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
 #[tokio::test]
 async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("MEM-IDLE-RECOVERY")?.fixture(Fixture::Empty);
+    let setup = Setup::new("MEM-IDLE-RECOVERY")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -160,6 +188,7 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     while recovery_observations(&graph) == 0 && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
+    print_sync_trace(&s.sandbox.logs);
     assert_eq!(
         recovery_observations(&graph),
         1,
@@ -181,8 +210,9 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("MEM-IDLE")?.fixture(Fixture::Empty);
     let graph = initialize_empty(&setup.sandbox.data)?;
-    let s = setup.start().await?;
+    // Upgrade a legacy schema with an aged deferred backlog already present.
     seed_graph(&graph);
+    let s = setup.start().await?;
 
     // Give the service time to discover the generation and finish its first sweep.
     tokio::time::sleep(Duration::from_secs(10)).await;
@@ -193,11 +223,30 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let coordinator = PathBuf::from(format!("{}.coord.sqlite", lock.display()));
     let graph_db = readonly(&graph);
     let lock_db = readonly(&coordinator);
+    let initialized: bool = graph_db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor')",
+        [], |row| row.get(0),
+    ).unwrap();
+    assert!(
+        initialized,
+        "background cache/FTS schema upgrade did not settle"
+    );
     let before_graph_version = data_version(&graph_db);
     let before_lock_version = data_version(&lock_db);
     let before_graph = signature(&graph);
     let before_wal = signature(&PathBuf::from(format!("{}-wal", graph.display())));
     let before_lock = signature(&lock);
+    // An unrelated filesystem miss must not turn an empty child list into an OS error.
+    let absent = s.sandbox.root.join("absent-for-child-count");
+    assert_eq!(
+        std::fs::metadata(absent).unwrap_err().kind(),
+        std::io::ErrorKind::NotFound
+    );
+    let memory_workers_before = butler_platform::process_names::child_count(
+        s.agent.pid().unwrap(),
+        butler_platform::process_names::Role::Memory,
+    )?;
+    assert_eq!(memory_workers_before, 0);
     let usage_before = butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?;
     if let Some(workers) =
         butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
@@ -215,8 +264,13 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let graph_changed = signature(&graph) != before_graph;
     let wal_changed = signature(&PathBuf::from(format!("{}-wal", graph.display()))) != before_wal;
     let lock_changed = signature(&lock) != before_lock;
+    let memory_workers = butler_platform::process_names::child_count(
+        s.agent.pid().unwrap(),
+        butler_platform::process_names::Role::Memory,
+    )?;
+    assert_eq!(memory_workers, 0);
     eprintln!(
-        "MEM-IDLE idle_window={idle_window:?} graph_commits={graph_commits} graph_changed={graph_changed} wal_changed={wal_changed} lock_changed={lock_changed} leases={leases}"
+        "MEM-IDLE memory_workers={memory_workers} idle_window={idle_window:?} graph_commits={graph_commits} graph_changed={graph_changed} wal_changed={wal_changed} lock_changed={lock_changed} leases={leases}"
     );
     assert_eq!(graph_commits, 0, "graph transactions during idle");
     assert!(
@@ -224,6 +278,7 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         "graph files changed during idle"
     );
     assert!(!lock_changed, "consolidation lock changed during idle");
+    assert_eq!(leases, 0, "consolidation leases during idle");
     assert_eq!(leases, 0, "idle leases with deferred backlog");
     if let Some(workers) =
         butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
@@ -250,14 +305,30 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         usage_before,
         butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?,
     ) {
+        let logical_reads = after
+            .read_chars
+            .zip(before.read_chars)
+            .map(|(a, b)| a.saturating_sub(b));
+        let physical_reads = after.read_bytes.saturating_sub(before.read_bytes);
+        let logical_writes = after
+            .write_chars
+            .zip(before.write_chars)
+            .map(|(a, b)| a.saturating_sub(b));
+        let physical_writes = after.write_bytes.saturating_sub(before.write_bytes);
         eprintln!(
-            "MEM-IDLE deferred_pending={pending} workers=0 rchar_delta={} read_bytes_delta={}",
-            after
-                .read_chars
-                .unwrap_or_default()
-                .saturating_sub(before.read_chars.unwrap_or_default()),
-            after.read_bytes.saturating_sub(before.read_bytes)
+            "MEM-IDLE deferred_pending={pending} workers=0 rchar_delta={logical_reads:?} read_bytes_delta={physical_reads} wchar_delta={logical_writes:?} write_bytes_delta={physical_writes}"
         );
+        assert!(
+            logical_reads.is_none_or(|reads| reads < IDLE_READ_BUDGET),
+            "idle logical reads: {logical_reads:?}"
+        );
+        assert!(
+            physical_reads < IDLE_READ_BUDGET,
+            "idle physical reads: {physical_reads}"
+        );
+        // wchar includes Tokio eventfd wakeups, not just filesystem writes.
+        // Disk counters and the graph/WAL/lock signatures must stay unchanged.
+        assert_eq!(physical_writes, 0, "idle physical writes");
     }
     s.finish().await
 }
@@ -265,7 +336,9 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn mem_idle_catches_changed_source_without_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("MEM-IDLE-CHANGE")?.fixture(Fixture::Empty);
+    let setup = Setup::new("MEM-IDLE-CHANGE")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let s = setup.start().await?;
     // Let the service's initial empty-source poll settle before changing it.
@@ -277,6 +350,9 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
     let changed_at = tokio::time::Instant::now();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(75);
     while catchup_message_cursor(&graph).as_deref() != Some("idle-recovery-message") {
+        if tokio::time::Instant::now() >= deadline {
+            print_sync_trace(&s.sandbox.logs);
+        }
         assert!(
             tokio::time::Instant::now() < deadline,
             "changed source was not caught up"
@@ -284,9 +360,35 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     assert_eq!(recovery_observations(&graph), 1);
+    // A public inventory revision can change without adding another notice.
+    // Complete reconciliation must checkpoint that revision durably too.
+    let canonical = sqlite::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
+    canonical.execute(
+        "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
+        [],
+    )?;
+    drop(canonical);
+    while !catchup_checkpoint_current(&s.sandbox.data, &graph) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "catch-up checkpoint did not reach a revision without new notices"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    print_sync_trace(&s.sandbox.logs);
     eprintln!(
         "MEM-IDLE-CHANGE catchup_ms={}",
         changed_at.elapsed().as_millis()
     );
     s.finish().await
+}
+
+fn print_sync_trace(logs: &Path) {
+    for number in 1..=3 {
+        if let Ok(log) = std::fs::read_to_string(logs.join(format!("agent-{number}.log"))) {
+            for line in log.lines().filter(|line| line.contains("-trace]")) {
+                eprintln!("agent-{number}: {line}");
+            }
+        }
+    }
 }

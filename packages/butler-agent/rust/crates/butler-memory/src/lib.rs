@@ -13,6 +13,7 @@ extern crate butler_core;
 
 pub mod cognition;
 pub mod coordination;
+pub mod management;
 pub mod profile;
 pub mod work_records;
 

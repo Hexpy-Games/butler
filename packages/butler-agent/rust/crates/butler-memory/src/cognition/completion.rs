@@ -83,21 +83,4 @@ impl CompletionPublisher {
         signal_memory_work();
         Ok(job)
     }
-
-    pub(crate) fn publish_feedback_quality_exclusion(
-        &self,
-        feedback_id: &str,
-        operation_id: &str,
-        revision: &str,
-    ) -> CognitionResult<String> {
-        let job = queue::append_feedback_quality(
-            &self.memory_root,
-            feedback_id,
-            operation_id,
-            revision,
-            &(self.now_iso)(),
-        )?;
-        signal_memory_work();
-        Ok(job)
-    }
 }

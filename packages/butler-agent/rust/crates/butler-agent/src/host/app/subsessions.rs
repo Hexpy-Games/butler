@@ -19,23 +19,35 @@ pub(crate) struct AppSubsessions {
     service: Arc<SubsessionService>,
     conversations: Arc<AgentConversationStore>,
     progress: StorageProgressPublication,
+    btcc: butler_turn::btcc::Btcc,
 }
 
 impl AppSubsessions {
-    pub(crate) fn new(
-        service: Arc<SubsessionService>,
-        conversations: Arc<AgentConversationStore>,
-        progress: StorageProgressPublication,
-    ) -> Self {
+    pub(crate) fn for_runtime(runtime: &crate::host::AgentRuntime) -> Self {
         Self {
-            service,
-            conversations,
-            progress,
+            service: runtime.subsessions.clone(),
+            conversations: runtime.conversations.clone(),
+            progress: runtime.progress.clone(),
+            btcc: runtime.btcc.clone(),
         }
     }
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
+        Some(self.service.subscribe_changes())
+    }
+
+    fn running_parents(&self, parents: Vec<String>) -> ApplicationFuture<Vec<String>> {
+        let service = self.service.clone();
+        Box::pin(async move {
+            service
+                .running_parents(parents)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn user_work_present(&self) -> ApplicationFuture<bool> {
         let repository = self.service.repository();
         Box::pin(async move {
@@ -112,8 +124,9 @@ impl AppSubsessionPort for AppSubsessions {
         relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
         let service = self.service.clone();
+        let btcc = self.btcc.clone();
         Box::pin(async move {
-            service
+            let accepted = service
                 .cancel(SubsessionCancelRequest {
                     parent_session_id,
                     parent_turn_id: "app-steward-control".into(),
@@ -123,7 +136,13 @@ impl AppSubsessionPort for AppSubsessions {
                     child_role: SessionRole::Steward,
                 })
                 .await
-                .map_err(|error| map_error(&error))
+                .map_err(|error| map_error(&error))?;
+            // Persist the stop request before fencing the running model. The
+            // queued stop still owns durable cancellation and result delivery.
+            if let Some(turn_id) = accepted["child_turn_id"].as_str() {
+                btcc.interrupt_turn(turn_id);
+            }
+            Ok(accepted)
         })
     }
 
@@ -214,7 +233,14 @@ async fn with_child_messages(
             .and_then(|turn| turn.get("retryable"))
             .and_then(serde_json::Value::as_bool)
             == Some(true);
-        let state = if recoverable {
+        let state = if object
+            .get("latest_turn")
+            .and_then(|value| value.get("state"))
+            .and_then(serde_json::Value::as_str)
+            == Some("cancelled")
+        {
+            "cancelled"
+        } else if recoverable {
             "runtime_fault"
         } else {
             turn_state(&turn.status)

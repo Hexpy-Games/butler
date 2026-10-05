@@ -55,7 +55,7 @@ impl Store {
                     return Err(error("work_stream_recovery_invalid"));
                 }
                 write_atomic(
-                    &self.root.join("work-streams").join(format!("{id}.json")),
+                    &self.root.join("work-streams").join(record_name(&id)),
                     &after,
                 )?;
             }
@@ -69,7 +69,7 @@ impl Store {
                     &self
                         .root
                         .join("workstream-plan-amendment-receipts")
-                        .join(format!("{receipt_id}.json")),
+                        .join(record_name(&receipt_id)),
                     &receipt,
                 )?;
             }
@@ -106,8 +106,7 @@ impl Store {
         let actual = match todo_id {
             Some(id) => {
                 safe_id(id, 80)?;
-                read_object(&self.root.join("todos").join(format!("{id}.json")))?
-                    .unwrap_or(Value::Null)
+                read_object(&self.root.join("todos").join(record_name(id)))?.unwrap_or(Value::Null)
             }
             None => Value::Null,
         };
@@ -124,7 +123,7 @@ impl Store {
         };
         let id = string(todo, "list_id").ok_or_else(|| error("work_stream_recovery_invalid"))?;
         safe_id(&id, 80)?;
-        write_atomic(&self.root.join("todos").join(format!("{id}.json")), todo)
+        write_atomic(&self.root.join("todos").join(record_name(&id)), todo)
     }
 }
 

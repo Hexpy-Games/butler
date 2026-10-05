@@ -5,7 +5,7 @@ use std::sync::Arc;
 use butler_memory::cognition::{CapsulePresence, CognitionError, CognitionPromptReader};
 use butler_runtime::context::{
     CognitionPromptPort, ContextError, ContextFuture, ProjectCapsuleStatus, PromptProjectionInput,
-    ScopedFeedbackProjection,
+    RememberedRuleProjection, ScopedFeedbackProjection,
 };
 use butler_turn::workspace::StoredSessionBinding;
 
@@ -24,27 +24,44 @@ fn error(error: CognitionError) -> ContextError {
 }
 
 impl CognitionPromptPort for CognitionPrompt {
-    fn scoped_feedback<'a>(
+    fn remembered_rules<'a>(
         &'a self,
         input: &'a PromptProjectionInput<'a>,
-    ) -> ContextFuture<'a, Vec<ScopedFeedbackProjection>> {
+        rules_root: &'a std::path::Path,
+    ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
+        let root = rules_root.to_owned();
+        let project = input.project_id.map(str::to_owned);
+        let session = input.session_id.to_owned();
         Box::pin(async move {
-            let rows = self
-                .reader
-                .scoped_feedback(
-                    input.session_id.to_owned(),
-                    input.project_id.map(str::to_owned),
+            let rules = tokio::task::spawn_blocking(move || {
+                butler_memory::cognition::list_chat_instructions(
+                    &root,
+                    project.as_deref(),
+                    &session,
                 )
-                .await
-                .map_err(error)?;
-            Ok(rows
+            })
+            .await
+            .map_err(|source| ContextError::port("rule_read_failed", "Rule read failed", source))?
+            .map_err(error)?;
+            Ok(rules
                 .into_iter()
-                .map(|row| ScopedFeedbackProjection {
-                    scope_kind: row.scope_kind,
-                    content: row.content,
+                .map(|rule| RememberedRuleProjection {
+                    scope_session_id: rule.scope_session_id,
+                    expires_at: rule.expires_at,
+                    handle: rule.handle,
+                    text: rule.text,
+                    project_id: rule.project_id,
+                    revision: rule.revision,
                 })
                 .collect())
         })
+    }
+
+    fn scoped_feedback<'a>(
+        &'a self,
+        _input: &'a PromptProjectionInput<'a>,
+    ) -> ContextFuture<'a, Vec<ScopedFeedbackProjection>> {
+        Box::pin(async { Ok(Vec::new()) })
     }
 
     fn generation_hot_cache<'a>(

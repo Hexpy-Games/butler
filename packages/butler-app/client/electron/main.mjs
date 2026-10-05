@@ -30,6 +30,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { testRendererConnection } from "./test-renderer-connection.mjs";
 import {
   createBundledAgentSupervisor,
 } from "./app-agent-supervisor.mjs";
@@ -2096,6 +2097,10 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
+    rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
+    rendererOrigin = rendererOriginForUrl(rendererUrl);
+  }
   const win = new BrowserWindow({
     show: false,
     width: 960,
@@ -2161,6 +2166,11 @@ async function createWindow() {
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
+  if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
+    const status = await win.webContents.executeJavaScript('fetch("/sessions").then(response => response.status)');
+    if (status !== 200) throw new Error("Test renderer is not authenticated");
+    console.log("Test renderer connected; authenticated sessions=200");
+  }
   if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {

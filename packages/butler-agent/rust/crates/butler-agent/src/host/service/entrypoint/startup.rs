@@ -16,29 +16,39 @@ pub(super) async fn until_ready(
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
     tokio::pin!(service);
-    let startup = async {
-        tokio::select! {
-            initialized = tokio::time::timeout(STARTUP_TIMEOUT, ready) => {
-                match initialized {
-                    Ok(Ok(())) => Ok(()),
-                    Ok(Err(_)) => Err(BtccError::relayed(
-                        "native_service_start_failed", "Startup ended before readiness",
-                    )),
-                    Err(_) => Err(BtccError::relayed(
-                        "native_service_start_timeout", "Startup did not finish within 90 seconds",
-                    )),
-                }
-            }
-            () = stop.wait() => Err(StopSignal::cancelled_startup()),
-        }
-    };
     tokio::select! {
-        // Preserve the actual failure when startup drops its readiness sender.
+        // A failed startup drops readiness before asynchronous cleanup finishes.
+        // Keep polling the service so its original error survives that teardown.
         biased;
         result = &mut service => result,
-        initialized = startup => {
-            initialized?;
-            service.await
+        initialized = tokio::time::timeout(STARTUP_TIMEOUT, ready) => {
+            match initialized {
+                Ok(_) => service.await,
+                Err(_) => {
+                    trace_timeout().await;
+                    Err(BtccError::relayed(
+                        "native_service_start_timeout", "Startup did not finish within 90 seconds",
+                    ))
+                },
+            }
         }
+        () = stop.wait() => Err(StopSignal::cancelled_startup()),
     }
+}
+
+/// Sample only after startup has already failed its original deadline. This
+/// adds no polling or resource work to successful startup or runtime idle.
+async fn trace_timeout() {
+    if !matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) || std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() != Ok("1")
+    {
+        return;
+    }
+    let resources = tokio::task::spawn_blocking(|| {
+        butler_platform::process_control::sample_usage(std::process::id())
+    })
+    .await;
+    butler_core::diagnostic!("[native-startup] phase=timeout_resources sample={resources:?}");
 }

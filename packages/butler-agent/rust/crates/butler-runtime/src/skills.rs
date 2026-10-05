@@ -5,6 +5,7 @@ mod catalog;
 mod contracts;
 mod install;
 mod projection;
+mod projection_index;
 
 use std::{
     collections::HashMap,
@@ -37,6 +38,7 @@ struct Inner {
     jobs: Arc<Semaphore>,
     closed: CancellationToken,
     catalog_cache: Mutex<CatalogCache>,
+    projection_index: Arc<Mutex<projection_index::Index>>,
 }
 
 struct CachedCatalog {
@@ -106,6 +108,7 @@ impl Skills {
                 jobs: Arc::new(Semaphore::new(MAX_BLOCKING_SKILL_JOBS)),
                 closed: CancellationToken::new(),
                 catalog_cache: Mutex::new(HashMap::new()),
+                projection_index: Arc::default(),
             }),
         }
     }
@@ -219,16 +222,17 @@ impl Skills {
     ) -> Result<Vec<Vec<String>>, SkillError> {
         let permit = self.permit().await?;
         let data = self.inner.data_root.clone();
+        let index = self.inner.projection_index.clone();
         blocking(permit, move || {
             Ok(sessions
                 .into_iter()
                 .map(|(session, turn, legacy_session)| {
-                    projection::loaded_names(&data, &session, turn.as_deref())
+                    projection_index::read(&index, &data, &session, turn.as_deref())
                         .or_else(|| {
                             legacy_session
                                 .filter(|legacy| legacy != &session)
                                 .and_then(|legacy| {
-                                    projection::loaded_names(&data, &legacy, turn.as_deref())
+                                    projection_index::read(&index, &data, &legacy, turn.as_deref())
                                 })
                         })
                         .unwrap_or_default()

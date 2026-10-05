@@ -22,6 +22,20 @@ async fn gateway_and_cli_preserve_each_others_config_and_credentials() -> Result
         .data
         .join("app/runtime/auth/local-agent-auth.json");
     let token_before = fs::read(&token_path)?;
+    for relative in [
+        "config/session-id.txt",
+        "state/startup-grace-until",
+        "state/app-foreground/executor-ready.json",
+        "state/butler-agent-native-service.json",
+    ] {
+        assert_eq!(
+            butler_platform::secure_fs::is_owner_only(&fs::metadata(
+                s.sandbox.data.join(relative)
+            )?),
+            butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+            "{relative}"
+        );
+    }
     for _ in 0..4 {
         let launch = s.agent.launch.clone();
         let cli = tokio::task::spawn_blocking(move || {

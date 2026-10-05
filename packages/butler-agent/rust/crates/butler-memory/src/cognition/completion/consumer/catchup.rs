@@ -66,8 +66,10 @@ fn claim_slot(input: &Input, schedule: Schedule) -> bool {
 
 async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport> {
     if input.shutdown.is_cancelled() || !claim_slot(input, schedule) {
+        trace("slot_skipped");
         return Ok(CatchupReport::default());
     }
+    trace("slot_claimed");
     let owned = input.clone();
     let handle = match super::blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
@@ -94,16 +96,19 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     else {
         return Ok(CatchupReport::default());
     };
+    trace(&format!("loaded unchanged={unchanged} work={}", work.len()));
     if unchanged {
         return Ok(unchanged_report(pass.state));
     }
     let work = unregistered(input, &handle, work).await?;
     let scanned = pass.scanned;
-    let missing = work.len();
     let registration = register(input, &handle, work).await?;
     if !registration.interrupted {
         pass.finish(epoch_ms(&(input.clock)()));
-        if missing > 0 && pass.cursor_advanced(&persisted) {
+        // Existing observations can cover every notice at a newer revision.
+        // Persist complete reconciliation whenever its checkpoint changes,
+        // even if registration itself had no new work. Unchanged idle is read-only.
+        if pass.state != persisted {
             save_state(input, &handle, &pass.state).await?;
         }
         *input.catchup_progress.lock() = Some((handle.graph_path.clone(), pass.state.clone()));
@@ -155,7 +160,7 @@ fn load(
     let mut pass = Pass::begin(stored, revision, identity, unclean || !cursors_valid);
     if !unchanged {
         pass.read_outcomes(&canonical)?;
-        pass.read_recovered_sources(&canonical)?;
+        pass.read_recovered_sources(&canonical, &handle.graph_path)?;
     }
     canonical.close().map_err(CognitionError::from)?;
     let work = std::mem::take(&mut pass.work);
@@ -259,11 +264,6 @@ impl Pass {
         pass
     }
 
-    fn cursor_advanced(&self, stored: &CatchupState) -> bool {
-        self.scanned > 0
-            && (self.state.outcome != stored.outcome || self.state.message != stored.message)
-    }
-
     /// Restarts both cursors from the start of their inventories.
     fn start_sweep(&mut self) {
         self.state.outcome = None;
@@ -288,6 +288,7 @@ impl Pass {
             .map_err(CognitionError::from)?;
         self.outcomes_at_end = outcomes.len() < OUTCOME_PAGE;
         for outcome in outcomes {
+            self.scanned += 1;
             self.state.outcome = Some(outcome.id.clone());
             self.work.push((
                 CognitionConversationSourceNotice::Turn {
@@ -307,18 +308,35 @@ impl Pass {
     fn read_recovered_sources(
         &mut self,
         canonical: &ConversationSourceReader,
+        graph_path: &std::path::Path,
     ) -> CognitionResult<()> {
+        let floor = butler_platform::sqlite::open_with_flags(
+            graph_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
         let remaining = NOTICE_BUDGET - self.work.len();
         let mut scanned = 0;
         while scanned < remaining {
             // Limit simultaneous hydrated bodies; the source's total scan budget
             // remains 256 and only compact notices survive to the awaits below.
             let batch_size = (remaining - scanned).min(16);
-            let messages = canonical
-                .read_recovered_source_page(self.state.message.as_deref(), Some(batch_size))
+            let ids = canonical
+                .read_recovered_source_ids_page(self.state.message.as_deref(), Some(batch_size))
                 .map_err(CognitionError::from)?;
-            let count = messages.len();
-            for message in messages {
+            let count = ids.len();
+            self.scanned += count;
+            for id in ids {
+                self.state.message = Some(id.clone());
+                if crate::coordination::admission_suppressed(&floor, "message", &id).map_err(
+                    |source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source),
+                )? {
+                    continue;
+                }
+                let Some(message) = canonical.read_message(&id).map_err(CognitionError::from)?
+                else {
+                    continue;
+                };
                 let hash = recovered_source_hash(&message.parts)?;
                 self.state.message = Some(message.message.id.clone());
                 self.work.push((
@@ -337,7 +355,6 @@ impl Pass {
                 break;
             }
         }
-        self.scanned = self.work.len();
         Ok(())
     }
 }
@@ -466,4 +483,10 @@ async fn save_state(
 
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
+}
+
+fn trace(message: &str) {
+    if std::env::var("BUTLER_E2E_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!("[memory-catchup-trace] {message}");
+    }
 }

@@ -17,6 +17,7 @@ export type SettingsSectionId =
   | "usage"
   | "logs"
   | "personalization"
+  | "memory"
   | "privacy"
   | "security"
   | "system"
@@ -552,6 +553,8 @@ export interface SettingsView {
   timezone: string;
   model: string;
   reasoning_effort: ReasoningEffort;
+  recall_mode: "faster" | "accurate";
+  recall_judge_model: string;
   consolidation_model: string;
   consolidation_reasoning_effort: ReasoningEffort;
   effective_consolidation_model: string;
@@ -773,6 +776,8 @@ export interface SessionSummary {
   };
   last_activity_at: string;
   active_turn_state?: string;
+  running_delegated_work?: boolean;
+  attention_required?: boolean;
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
@@ -874,6 +879,7 @@ export interface PlanDocumentRecord {
 
 export interface MessageRecord {
   question_answer?: AnsweredUserQuestions;
+  question_summary?: UserQuestion[];
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
   content_parts?: import("./messageContent").MessageContent;
   id: string;
@@ -1160,6 +1166,9 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  approved_plan_revision?: number;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   authority_requests?: unknown[];
   pending_questions?: PendingUserQuestions[];
   question_answers?: AnsweredUserQuestions[];
@@ -1629,6 +1638,7 @@ export interface TimelineEvent {
   created_at?: string;
   payload?: {
     message?: MessageRecord;
+    segment_completed?: boolean;
     turn?: {
       id: string;
       chat_id: string;
@@ -1641,6 +1651,7 @@ export interface TimelineEvent {
     chat_id?: string;
     role?: MessageRecord["role"];
     session_id?: string;
+    child_session_id?: string;
     session?: unknown;
     turn_id?: string;
     state?: string;
@@ -1787,6 +1798,8 @@ export type ApprovalRisk = "low" | "medium" | "high";
  * generic sentence instead of dropping the request.
  */
 export interface ApprovalSummary {
+  /** Exact local decision facts; do not apply workspace-label normalization. */
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string };
   commandAccess?: "read_only_unisolated";
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
@@ -1811,6 +1824,7 @@ export interface ApprovalTarget {
 
 export interface ConversationPermissionView {
   grant_ref: string; title: string; description: string;
+  capability?: string; target?: string; cwd?: string;
 }
 
 /** Server-backed projection bound to the session id it was fetched for. */

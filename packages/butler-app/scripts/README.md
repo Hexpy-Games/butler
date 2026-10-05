@@ -80,8 +80,8 @@ after the App passes its signing policy and smoke checks. A bare CLI binary cann
 the Agent is gated on `codesign --check-notarization` (online ticket). Missing or partial secrets fail the release.
 
 Owner decision (2026-10-01): tags matching `vX.Y.Z-preview.*` are unofficial
-previews. Certificate setup runs independently of the notary credentials. If it
-fails, setup removes partial credentials and selects `codesign -s -`. Previews
+previews. Since 2026-10-05 they skip certificate setup and always sign ad-hoc
+(`codesign -s -`) without the production-signing requirement. Previews
 never validate or use the notary API key, submit to notarization, staple, or
 require Gatekeeper's notarized verdict. Signature validity, payload closure,
 smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
@@ -149,3 +149,16 @@ package-neutral orchestration.
 - `SPEC-BUTLER-DEDICATED-CLIENT-APP-EXPERIENCE` - Butler Dedicated Client App Experience
 - `SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM` - Butler Dedicated Client Design System
 - `SPEC-RELEASE-PACKAGING` - Release Packaging
+
+Release recovery keeps credential tools in the job-private `BUTLER_SIGN_HOME` that
+created their temporary keychain; Butler package/gate/smoke commands retain fresh
+HOME and data directories. The release records a paired old/current Developer ID
+probe before claiming that profile binding caused a repair (#498).
+
+If a published preview lacks its macOS App, dispatch `macos-release-recovery.yml`
+from a later qualified preview tag with the target and baseline tags. It uses the
+target's immutable product source and checksum-verified published Agent, changes
+only the signing tool, refuses to replace an existing macOS App, preserves all
+existing platform entries, regenerates checksums, and runs the real published
+baseline-to-target update smoke. It cannot run from a branch or stable tag.
+The npm tarball and SHA-256 are release assets; packing never publishes to npm.

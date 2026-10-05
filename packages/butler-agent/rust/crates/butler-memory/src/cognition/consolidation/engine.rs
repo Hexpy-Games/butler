@@ -106,6 +106,8 @@ pub struct RunCycle {
     pub run_id: Option<String>,
     /// Resume an existing run from its checkpoint.
     pub resume: bool,
+    /// End after this phase for an owner control limited to one memory kind.
+    pub stop_after: Option<Phase>,
     /// Stops the cycle when cancelled.
     pub cancellation: CancellationToken,
     /// The model rate budget, checked before each phase.
@@ -117,6 +119,7 @@ impl Default for RunCycle {
         Self {
             run_id: None,
             resume: false,
+            stop_after: None,
             cancellation: CancellationToken::new(),
             rate_budget: Arc::new(|| None),
         }
@@ -181,6 +184,9 @@ impl CycleService {
         }
         for (index, phase) in Phase::ALL.iter().copied().enumerate() {
             if cycle.checkpoint.completed_phases.contains(&phase) {
+                if input.stop_after == Some(phase) {
+                    break;
+                }
                 continue;
             }
             if input.cancellation.is_cancelled() {
@@ -194,6 +200,9 @@ impl CycleService {
             }
             if self.run_phase(&mut cycle, phase, index, &input).await? == Step::LockHeld {
                 return self.lock_held(cycle, phase);
+            }
+            if input.stop_after == Some(phase) {
+                break;
             }
         }
         self.complete(cycle).await
@@ -380,7 +389,6 @@ impl CycleService {
         } else {
             CheckpointStatus::CompletedWithErrors
         };
-        checkpoint.next_phase_index = Phase::ALL.len();
         checkpoint.updated_at = self.host.now_iso();
         let result = result::build_result(
             &self.data_root,

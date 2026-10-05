@@ -1,0 +1,163 @@
+{
+  "provenance": "synthetic stub replay; no live model recording",
+  "parent": [
+    {
+      "type": "function_call",
+      "name": "start_work",
+      "arguments": {
+        "objective": "AI 연구를 조사해 주세요."
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "replace_work_plan",
+      "arguments": {
+        "objective": "AI 연구를 조사해 주세요.",
+        "execution_mode": "steward",
+        "actions": [
+          {
+            "action_key": "research",
+            "description": "AI 연구를 조사해 주세요.",
+            "dependency_keys": []
+          }
+        ],
+        "checks": [
+          "원문 근거 확인"
+        ]
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "record_work_review",
+      "arguments": {
+        "subject": "plan",
+        "verdict": "accept",
+        "summary": "Ready"
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "delegate_to_steward",
+      "arguments": {
+        "request": "AI 연구를 조사해 주세요.",
+        "safe_title": "AI 연구"
+      }
+    }
+  ],
+  "child": [
+    {
+      "type": "function_call",
+      "name": "replace_work_plan",
+      "arguments": {
+        "objective": "AI 연구를 조사해 주세요.",
+        "execution_mode": "direct",
+        "actions": [
+          {
+            "action_key": "research",
+            "description": "AI 연구를 조사해 주세요.",
+            "dependency_keys": []
+          }
+        ],
+        "checks": [
+          "원문 근거 확인"
+        ]
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "record_work_review",
+      "arguments": {
+        "subject": "plan",
+        "verdict": "accept",
+        "summary": "Ready"
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "record_work_disposition",
+      "arguments": {
+        "work_id": "{{WORK}}",
+        "disposition": "completed",
+        "summary": "Original evidence: paper A verified.",
+        "action_updates": [
+          {
+            "action_key": "research",
+            "status": "done"
+          }
+        ],
+        "remaining_actions": [],
+        "followups": []
+      }
+    },
+    {
+      "type": "message",
+      "text": "Original evidence: paper A verified."
+    }
+  ],
+  "followup": [
+    {
+      "type": "function_call",
+      "name": "steer_steward",
+      "arguments": {
+        "relation_id": "{{RELATION}}",
+        "instruction": "다시 조사해줄래?",
+        "safe_title": "AI 논문·리서치 재조사"
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "start_work",
+      "arguments": {
+        "objective": "AI 연구를 조사해 주세요."
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "replace_work_plan",
+      "arguments": {
+        "objective": "AI 연구를 조사해 주세요.",
+        "execution_mode": "steward",
+        "actions": [
+          {
+            "action_key": "research",
+            "description": "AI 연구를 조사해 주세요.",
+            "dependency_keys": []
+          }
+        ],
+        "checks": [
+          "원문 근거 확인"
+        ]
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "record_work_review",
+      "arguments": {
+        "subject": "plan",
+        "verdict": "accept",
+        "summary": "Ready"
+      }
+    },
+    {
+      "type": "function_call",
+      "name": "delegate_to_steward",
+      "arguments": {
+        "request": "다시 조사해줄래? 추가 원문도 확인해 주세요.",
+        "safe_title": "AI 연구 재조사",
+        "previous_relation_id": "{{RELATION}}"
+      }
+    }
+  ],
+  "synthesis": [
+    {
+      "type": "message",
+      "text": "원문 확인 결과를 정리했습니다."
+    }
+  ],
+  "fallback": [
+    {
+      "type": "message",
+      "text": "{}"
+    }
+  ]
+}

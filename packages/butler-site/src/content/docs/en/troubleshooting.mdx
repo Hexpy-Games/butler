@@ -54,7 +54,24 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
 
 ## The app does not open
 
-The Butler app is not notarized by Apple, so macOS may block it the first time you open it. Choose **Open Anyway** in **System Settings → Privacy & Security**.
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    The Butler app is not notarized by Apple, so macOS may block it the first time you open it. Choose **Open Anyway** in **System Settings → Privacy & Security**.
+  </TabPanel>
+  <TabPanel value="windows">
+    Windows preview builds are unsigned. If SmartScreen appears, continue only when you trust the source of the build. The published `0.1.0-preview.5` release has no downloadable Windows installer.
+  </TabPanel>
+  <TabPanel value="linux">
+    Open Butler from your app list after installing the DEB or Arch package. If it does not start, check the service logs below.
+  </TabPanel>
+</Tabs>
 
 ## Model connection problems
 
@@ -125,7 +142,7 @@ For the standalone Agent, `butler update --check` checks for a new version. `but
 <Steps>
   1. In **Settings → General → Notification permission**, check **OS notification status**.
   2. Click **Test** to send a test notification.
-  3. If no notification appears, click **macOS notification settings** and allow Butler notifications in System Settings.
+  3. If no notification appears, click the notification settings link for your operating system and allow Butler notifications there.
 </Steps>
 
 ## Check the logs
@@ -188,13 +205,28 @@ These are common errors and how to fix them.
 
 ### App
 
-<Steps>
-  1. Quit Butler.
-  2. Download the latest `butler-app-<version>-darwin-arm64.dmg` from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
-  3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
-</Steps>
-
-On Linux, download the latest DEB or Arch package and install it again with the commands in [Install](/en/help/getting-started/install/#download).
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    <Steps>
+      1. Quit Butler.
+      2. Download the latest `butler-app-<version>-darwin-arm64.dmg` from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+      3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
+    </Steps>
+  </TabPanel>
+  <TabPanel value="windows">
+    The published `0.1.0-preview.5` release has no downloadable Windows installer. Check [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) for a Windows package.
+  </TabPanel>
+  <TabPanel value="linux">
+    Download the latest DEB or Arch package and install it again with the commands in [Install](/en/help/getting-started/install/#download).
+  </TabPanel>
+</Tabs>
 
 Conversations, memory and Agent settings are stored in the data folder (`~/.butler`), outside the app, so they remain after you reinstall the app.
 
@@ -207,7 +239,7 @@ Reinstall into a new version folder. Leave the existing installation folder unch
 Report a problem you cannot fix as a new issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues). You can also open the Butler repository from **GitHub repository** in **Settings → About**. Include the following to make the cause easier to find.
 
 - **Version** from **Settings → About**
-- macOS version and Mac chip type
+- Operating system and version; processor type on macOS
 - The steps that led to the problem
 - For a first-run preparation failure, the content copied with **Copy info for a bug report**
 - For the standalone Agent, the output of `butler version --json` and `butler doctor --json`
@@ -220,7 +252,7 @@ Report a problem you cannot fix as a new issue in [GitHub Issues](https://github
 
 ### Does the Agent stop when I close the window?
 
-The Agent included in the app runs only while Butler is open. If you turn on **Show in tray and menu bar** in **Settings → General**, the app stays in the menu bar after you close the window.
+The Agent included in the app runs only while Butler is open. If you turn on **Keep app available after closing the window** in **Settings → General**, its menu stays available after you close the window.
 
 ### Where is my data stored?
 
@@ -252,7 +284,7 @@ A code works once, within 60 seconds, and three wrong entries invalidate it. Ent
 
 ### Can I use Butler on Windows or Linux?
 
-You can use it on Linux. Preview releases provide a DMG for Apple silicon Macs, DEB packages for Linux (x64, arm64) and an Arch package (x64). There is no Windows installer or native Agent bundle for Windows yet. To install, see [Install](/en/help/getting-started/install/).
+Linux desktop packages are available. Windows builds are in source preview, but the published release has no downloadable installer or Agent package. For release files, see [Install](/en/help/getting-started/install/).
 
 ### I installed an earlier version and preparation keeps failing.
 

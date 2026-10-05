@@ -13,10 +13,10 @@ status: published
 - Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
 - Linux x64 / arm64: DEB 패키지
 - Arch Linux x64: Arch 패키지
-- Windows x64 프리뷰: 서명되지 않은 Agent와 브라우저 UI
+- Windows x64 소스 프리뷰: 이 릴리스에는 내려받을 설치 파일이 없음
 
 <Notice tone="info">
-  macOS와 Linux에서는 Butler Agent가 앱에 포함되어 있어 따로 설치하지 않습니다. 앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다.
+  macOS와 Linux 앱에는 Butler Agent가 포함되어 있으며, 앱이 열려 있는 동안 실행됩니다. Windows는 소스 프리뷰만 있고 이 릴리스에는 내려받을 설치 파일이 없습니다.
 </Notice>
 
 ## 내려받기
@@ -34,11 +34,15 @@ status: published
       1. [0.1.0 preview.5 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5)를 엽니다.
       2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg)를 내려받습니다.
       3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
+      4. 처음 열 때 Gatekeeper가 Butler 실행을 막으면 Butler를 마우스 오른쪽 버튼으로 클릭하고 **열기**를 고릅니다. 그래도 열리지 않으면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
     </Steps>
+    <Notice tone="info" title="파일 확인 (선택)">
+      DMG와 `.sha256` 파일을 같은 폴더에 받은 뒤 `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`를 실행합니다. `OK`가 나오면 파일이 릴리스에 올라온 것과 같습니다.
+    </Notice>
   </TabPanel>
   <TabPanel value="windows">
-    <Notice tone="warning" title="Agent 프리뷰">
-      서명되지 않은 x64 Agent와 브라우저 UI를 제공합니다. 설치 방법과 제한 사항은 아래 Windows 프리뷰 안내를 따릅니다.
+    <Notice tone="info" title="소스 프리뷰">
+      공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다. 이후 Windows 패키지는 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 확인합니다.
     </Notice>
   </TabPanel>
   <TabPanel value="linux">
@@ -63,26 +67,6 @@ status: published
 
 `0.1.0-preview.5` 앱을 설치한 뒤 **미리보기 버전 받기**를 켜면 다음 프리뷰를 **설정 → 업데이트**에서 받을 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
 
-### 파일 확인 (선택)
-
-릴리스에는 파일마다 SHA-256 체크섬(`.sha256`)이 함께 올라갑니다. DMG와 체크섬 파일을 같은 폴더에 받은 뒤 확인합니다.
-
-```bash
-cd ~/Downloads
-shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256
-```
-
-`OK`가 나오면 내려받은 파일이 게시된 파일과 같습니다.
-
-## 처음 열기
-
-macOS 프리뷰 빌드는 서명되어 있지만 Apple 공증(notarization)을 거치지 않습니다. 처음 열 때 Gatekeeper 안내가 표시됩니다.
-
-<Steps>
-  1. 응용 프로그램 폴더에서 Butler를 마우스 오른쪽 버튼으로 클릭하고 **열기**를 선택합니다.
-  2. 열리지 않으면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
-</Steps>
-
 ## 첫 실행 설정
 
 처음 실행하면 앱 안에서 첫 실행 설정이 진행됩니다. 환영 화면에서 인터페이스 언어를 고르고 동의한 뒤 AI를 연결합니다. AI 연결 마지막 단계에서 답변 언어를 선택합니다. 단계별 안내는 [첫 실행](/help/getting-started/first-run/)을 참고합니다.
@@ -91,13 +75,36 @@ macOS 프리뷰 빌드는 서명되어 있지만 Apple 공증(notarization)을 �
 
 ## 앱 없이 Agent만 쓰기
 
-헤드리스 Agent는 Apple Silicon macOS와 glibc 기반 Linux x64 / arm64를 지원합니다.
+<Tabs
+  label="운영체제"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    헤드리스 Agent는 Apple Silicon macOS를 지원합니다.
 
-```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
-# Node.js 사용 시
-npx @hexpygames/butler install
-```
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # Node.js 사용 시
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+  <TabPanel value="windows">
+    공개된 릴리스에는 내려받을 Windows Agent 설치 파일이 없습니다. Windows 빌드는 소스 프리뷰입니다.
+  </TabPanel>
+  <TabPanel value="linux">
+    헤드리스 Agent는 glibc 기반 Linux x64 / arm64를 지원합니다.
+
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # Node.js 사용 시
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+</Tabs>
 
 자세한 관리 명령은 [Butler Agent CLI](/help/advanced/agent-cli/)를 참고합니다.
 
@@ -112,21 +119,3 @@ npx @hexpygames/butler install
     description="버전별 변경 사항과 배포 파일을 확인합니다."
   />
 </CardGrid>
-
-## Windows x64 Agent 프리뷰
-
-Windows 프리뷰는 서명되지 않은 Agent 전용 배포입니다. Agent 매니페스트에 `windows-x64`가 있는 프리뷰 릴리스의 ZIP과 `install.ps1`을 사용합니다. PowerShell에서 `0.1.0-preview.N`을 해당 릴리스 버전으로 바꿉니다.
-
-```powershell
-$env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
-butler open
-# Node.js 사용 시
-npx @hexpygames/butler install
-```
-
-설치기는 SHA-256 체크섬을 검증하고 `%LOCALAPPDATA%\Butler`에 설치하며, 사용자 PATH에 `butler`를 추가하고 Agent를 시작합니다. 명령을 찾을 수 없으면 새 터미널을 엽니다. UI는 브라우저에서 사용합니다. 백그라운드 프로세스는 `butler start`, `stop`, `restart`, `status`로 관리합니다.
-
-- Agent 전용 설치는 작업 스케줄러(Task Scheduler)를 통한 자동 시작을 지원합니다. `butler startup enable`로 켜고, `butler startup status`로 확인하거나 `butler startup disable`로 해제합니다.
-- LAN 원격 접속과 페어링을 지원합니다.
-- 명령 쓰기 샌드박스는 지원하지 않습니다. 명령 실행에는 승인이 필요합니다.
-- SmartScreen 경고가 표시되면 **추가 정보 → 실행**을 선택합니다(More info → Run anyway).

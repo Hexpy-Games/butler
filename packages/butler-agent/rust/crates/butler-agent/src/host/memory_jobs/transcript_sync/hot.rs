@@ -204,17 +204,59 @@ fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
     let _lock = acquire_lock(&lock_path)?;
     let now: DateTime<Utc> = SystemTime::now().into();
     if topic.is_some() {
+        return append_topic(target, entry);
+    }
+    let Some(output) = global_output(target, project, session_id, body, now)? else {
+        return Ok(());
+    };
+    let result: Result<(), crate::host::HostError> = (|| {
         let mut options = fs::OpenOptions::new();
-        options.create(true).append(true);
+        options.write(true).create_new(true);
         let _ = butler_platform::secure_fs::owner_only(&mut options);
-        options
-            .open(target)
-            .and_then(|mut file| file.write_all(entry.as_bytes()))
+        let mut file = options.open(temp).map_err(|source| {
+            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+        })?;
+        file.write_all(output.as_bytes())
+            .and_then(|()| file.sync_all())
             .map_err(|source| {
                 crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
             })?;
-        return Ok(());
+        drop(file);
+        butler_platform::secure_fs::rename(temp, target)
+            .and_then(|()| butler_platform::secure_fs::sync_directory(parent).unwrap_or(Ok(())))
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+            })
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(temp);
     }
+    result
+}
+
+fn append_topic(target: &Path, entry: &str) -> Result<(), crate::host::HostError> {
+    let append = || -> std::io::Result<()> {
+        let existed = target.try_exists()?;
+        let mut file = butler_platform::secure_fs::append_private(target)?;
+        file.write_all(entry.as_bytes())?;
+        file.sync_all()?;
+        if !existed && let Some(parent) = target.parent() {
+            butler_platform::secure_fs::sync_directory(parent).unwrap_or(Ok(()))?;
+        }
+        Ok(())
+    };
+    append().map_err(|source| {
+        crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+    })
+}
+
+fn global_output(
+    target: &Path,
+    project: &str,
+    session_id: &str,
+    body: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<String>, crate::host::HostError> {
     let source_id = {
         let digest = Sha256::digest(format!("{project}\0{session_id}\0{body}").as_bytes());
         let mut hex = format!("{digest:x}");
@@ -228,7 +270,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
         Err(_) => return Err("legacy_hot_write_failed".into()),
     };
     if current.contains(&start) {
-        return Ok(());
+        return Ok(None);
     }
     if body.encode_utf16().count() > 8000 {
         return Err("hot_cache_entry_too_large".into());
@@ -247,32 +289,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
         },
         block
     );
-    let output = compact::compact(&appended, 20 * 1024);
-    let result: Result<(), crate::host::HostError> = (|| {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        let _ = butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(temp).map_err(|source| {
-            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
-        })?;
-        if let Ok(metadata) = fs::metadata(target) {
-            fs::set_permissions(temp, metadata.permissions()).map_err(|source| {
-                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
-            })?;
-        }
-        file.write_all(output.as_bytes())
-            .and_then(|()| file.sync_all())
-            .map_err(|source| {
-                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
-            })?;
-        fs::rename(temp, target).map_err(|source| {
-            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
-        })
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temp);
-    }
-    result
+    Ok(Some(compact::compact(&appended, 20 * 1024)))
 }
 
 struct CacheLock(PathBuf);

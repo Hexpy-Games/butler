@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { useSessionViewSubscription } from "./useSessionViewSubscription";
+import { useSessionViewSubscription, refreshSessionViewSubscriptions } from "./useSessionViewSubscription";
 
 let root: Root | undefined;
 
@@ -20,60 +20,37 @@ afterEach(async () => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("session view hook performs one initial request and bounded cadence without a response loop", async () => {
+test("session view hook shares an initial read and coalesces live events without idle polling", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
-  const callbacks: Array<() => void> = [];
-  let cleared = false;
+  Object.assign(globalThis, {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true,
+  });
   let requests = 0;
   let releaseFirstRequest: (() => void) | undefined;
-  const nativeSetInterval = dom.window.setInterval.bind(dom.window);
-  const nativeClearInterval = dom.window.clearInterval.bind(dom.window);
-  dom.window.setInterval = ((callback: TimerHandler) => {
-    callbacks.push(callback as () => void);
-    return 1;
-  }) as typeof dom.window.setInterval;
-  dom.window.clearInterval = (() => {
-    cleared = true;
-  }) as typeof dom.window.clearInterval;
-  Object.assign(globalThis, {
-    window: dom.window,
-    document: dom.window.document,
-    navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement,
-    Node: dom.window.Node,
-    IS_REACT_ACT_ENVIRONMENT: true,
-  });
   const refresh = () => {
-    requests += 1;
-    if (requests === 1) {
-      return new Promise<void>((resolve) => {
-        releaseFirstRequest = resolve;
-      });
-    }
+    requests++;
+    if (requests === 1) return new Promise<void>(resolve => { releaseFirstRequest = resolve; });
   };
-  const container = dom.window.document.querySelector("#root");
-  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
-  root = createRoot(container);
-  await act(async () => root?.render(<Harness refresh={refresh} />));
+  root = createRoot(dom.window.document.querySelector("#root")!);
+  await act(async () => root?.render(<><Harness refresh={refresh} /><Harness refresh={refresh} /></>));
   expect(requests).toBe(1);
+  const event = { type: "subsession.changed", payload: { child_session_id: "steward-1" } };
   await act(async () => {
-    callbacks[0]?.();
-    callbacks[0]?.();
+    refreshSessionViewSubscriptions(event);
+    refreshSessionViewSubscriptions(event);
   });
   expect(requests).toBe(1);
   releaseFirstRequest?.();
   await act(async () => Promise.resolve());
-  await act(async () => callbacks[0]?.());
   expect(requests).toBe(2);
-  await act(async () => callbacks[0]?.());
-  expect(requests).toBe(3);
+  await act(async () => Promise.resolve());
+  expect(requests).toBe(2);
   await act(async () => root?.unmount());
   root = undefined;
-  expect(cleared).toBe(true);
-  // Keep the real timer methods referenced so the fake cadence cannot silently
-  // become a browser-level timer in this behavioral test.
-  expect(nativeSetInterval).toBeDefined();
-  expect(nativeClearInterval).toBeDefined();
+  refreshSessionViewSubscriptions(event);
+  await act(async () => Promise.resolve());
+  expect(requests).toBe(2);
 });
 
 function Harness({

@@ -149,7 +149,9 @@ impl DeveloperLogStore {
         )?;
         reject_symlink(destination)?;
         reject_symlink(&temporary)?;
-        fs::rename(&temporary, destination)?;
+        secure_fs::rename(&temporary, destination)?;
+        secure_fs::sync_directory(destination.parent().unwrap_or(&self.data_root))
+            .unwrap_or(Ok(()))?;
         cleanup.commit();
         Ok(MAX_ENTRIES)
     }

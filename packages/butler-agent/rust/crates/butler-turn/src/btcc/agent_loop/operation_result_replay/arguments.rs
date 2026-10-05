@@ -31,13 +31,6 @@ pub(super) fn exact_read_arguments(
         .and_then(Value::as_str)
         .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or_default();
-    if sha256.len() != 64
-        || !sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(error(BtccCode::OperationResultHashInvalid));
-    }
     let revision = nullable_safe_integer(
         value.get("revision"),
         BtccCode::OperationResultRevisionInvalid,

@@ -6621,6 +6621,14 @@ License: https://github.com/unicode-rs/unicode-properties/blob/5397cff4305ae3783
 Copyright (c) 2015 The Rust Project Developers
 
 ===== COMPONENT =====
+unicode-script 0.5.8
+MIT OR Apache-2.0
+License: https://github.com/unicode-rs/unicode-script/blob/20cae8782e71e26180198b350b1746c0ba042c41/LICENSE-APACHE
+License: https://github.com/unicode-rs/unicode-script/blob/20cae8782e71e26180198b350b1746c0ba042c41/LICENSE-MIT
+Copyright 2021 The Unicode-rs Developers
+Copyright (c) 2019 Manish Goregaokar
+
+===== COMPONENT =====
 unicode-segmentation 1.13.3
 MIT OR Apache-2.0
 License: https://github.com/unicode-rs/unicode-segmentation/blob/66a032fd8d667bc47ac5b640b151dff3f5356d07/COPYRIGHT

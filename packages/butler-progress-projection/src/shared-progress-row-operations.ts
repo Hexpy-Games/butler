@@ -126,3 +126,19 @@ function progressStateRank(state: string): number {
   if (state === "thinking" || state === "accepted") return 1;
   return 0;
 }
+
+/** Fold lifecycle events by durable call identity, retaining the call's target and final result. */
+export function mergeToolRows<Row extends SharedProgressRow>(rows: Row[]): Row[] {
+  const positions = new Map<string, number>();
+  const result: Row[] = [];
+  for (const row of rows) {
+    const key = row.tool_call_id;
+    const index = key ? positions.get(key) : undefined;
+    if (index !== undefined) result[index] = mergeToolRow(result[index]!, row);
+    else {
+      if (key) positions.set(key, result.length);
+      result.push(row);
+    }
+  }
+  return result;
+}

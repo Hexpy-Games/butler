@@ -14,3 +14,5 @@ export type {
   SharedTurnEvent,
   SharedWorkBlockPhase,
 } from "./progress-projection-contract.ts";
+
+export { mergeToolRows } from "./shared-progress-row-operations.ts";

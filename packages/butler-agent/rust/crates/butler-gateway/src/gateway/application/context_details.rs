@@ -3,8 +3,7 @@
 use serde_json::{Value, json};
 
 use super::{
-    AppApplication, AppContextBudgetFacts, AppContextReadQuery, AppSessionViewPage,
-    GatewayApplicationError, app_error, settings,
+    AppApplication, AppContextBudgetFacts, AppContextReadQuery, GatewayApplicationError, app_error,
 };
 use crate::gateway::MessageRole;
 use butler_runtime::context::{
@@ -12,7 +11,7 @@ use butler_runtime::context::{
 };
 use butler_runtime::operations::SessionUsageView;
 
-const MESSAGE_LIMIT: usize = 16;
+pub(super) mod records;
 const RECENT_CHAR_LIMIT: usize = 32_000;
 
 impl AppApplication {
@@ -20,169 +19,186 @@ impl AppApplication {
         &self,
         session_id: String,
     ) -> Result<ContextDetails, GatewayApplicationError> {
-        self.refresh_message_projection_owned(session_id.clone())
-            .await?;
+        self.refresh_baseline_projection(session_id.clone()).await?;
         let session = self.get_session(session_id.clone()).await?;
-        let messages = self
-            .message_window(
-                session_id.clone(),
-                AppSessionViewPage {
-                    after_cursor: None,
-                    before_cursor: None,
-                    limit: MESSAGE_LIMIT,
-                },
-            )
-            .await?
-            .view
-            .messages;
-        let latest_turn = self.latest_session_turn(session_id.clone()).await?;
-        let artifacts = self.artifact_page(session_id.clone()).await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
         let subscribers = self.subscribers.clone();
         let now = self.dependencies.identity_clock.now_iso();
-        let query_session = session_id.clone();
-        let (controls, turn_count, file_count) = self
+        let query = session_id.clone();
+        let records = self
             .storage
-            .execute(move |db| {
-                let controls = settings::session_context_settings(
-                    db,
-                    &subscribers,
-                    &facts,
-                    &query_session,
-                    &now,
-                )?;
-                let turn_count = db
-                    .query_row(
-                        "SELECT COUNT(*) FROM turns WHERE chat_id=?1",
-                        [&query_session],
-                        |row| row.get::<_, u64>(0),
-                    )
-                    .map_err(super::storage::AppStorageError::sqlite)?;
-                let file_count = db
-                    .query_row(
-                        "SELECT COUNT(*) FROM message_files WHERE owner_session_id=?1",
-                        [&query_session],
-                        |row| row.get::<_, u64>(0),
-                    )
-                    .map_err(super::storage::AppStorageError::sqlite)?;
-                Ok((controls, turn_count, file_count))
-            })
+            .read(move |db| records::read(db, &query, &facts, &subscribers, &now))
             .await
             .map_err(app_error)?;
+        self.project_context(session, records).await
+    }
+
+    pub(super) async fn project_context(
+        &self,
+        session: super::AppSessionSummary,
+        records: records::Records,
+    ) -> Result<ContextDetails, GatewayApplicationError> {
+        let _measurement = self.storage.measure_view("context");
+        let latest_turn = &records.latest_turn;
+        let controls = &records.controls;
         let latest_started = latest_turn.as_ref().and_then(|turn| {
             chrono::DateTime::parse_from_rfc3339(&turn.created_at)
                 .ok()
                 .map(|value| value.timestamp_millis())
         });
-        let host = self
-            .dependencies
-            .context_read
-            .read(AppContextReadQuery {
-                runtime_session_id: session.session_hint.clone(),
-                turn_id: latest_turn.as_ref().map(|turn| turn.id.clone()),
-                latest_turn_started_at_ms: latest_started,
-                model_ref: controls.model.clone(),
-                context_window_tokens: controls.context_window_tokens,
-            })
-            .await?;
+        let host = self.dependencies.context_read.read(AppContextReadQuery {
+            runtime_session_id: session.session_hint.clone(),
+            turn_id: latest_turn.as_ref().map(|turn| turn.id.clone()),
+            latest_turn_started_at_ms: latest_started,
+            model_ref: controls.model.clone(),
+            context_window_tokens: controls.context_window_tokens,
+        });
+        let host = async {
+            let _measurement = self.storage.measure_view("context_host");
+            host.await
+        };
 
-        let data_root = self.butler_data.clone();
-        let (persona_configured, eol_configured) = tokio::task::spawn_blocking(move || {
-            (
-                configured_text(&data_root.join("personas/active.md")),
-                configured_text(&data_root.join("eol.md")),
-            )
-        })
-        .await
-        .map_err(GatewayApplicationError::internal_from)?;
-        let static_tokens =
-            tokens("Butler runtime contract, role policy, transport contract, and safety rules.");
-        let live_tokens = tokens(&json!({
+        let host = host.await?;
+        let (persona_configured, eol_configured) = if let Some(facts) = &host.configuration {
+            (facts.persona_configured, facts.eol_configured)
+        } else {
+            let data_root = self.butler_data.clone();
+            let _measurement = self.storage.measure_view("context_configured");
+            tokio::task::spawn_blocking(move || {
+                (
+                    configured_text(&data_root.join("personas/active.md")),
+                    configured_text(&data_root.join("eol.md")),
+                )
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+        };
+        let counts = derive_tokens(
+            &session,
+            &records,
+            &host,
+            persona_configured,
+            eol_configured,
+        );
+        Ok(render_context(
+            &session,
+            &records,
+            host,
+            counts,
+            &self.dependencies.identity_clock.now_iso(),
+        ))
+    }
+}
+
+fn derive_tokens(
+    session: &super::AppSessionSummary,
+    records: &records::Records,
+    host: &super::AppContextReadFacts,
+    persona_configured: bool,
+    eol_configured: bool,
+) -> CategoryTokens {
+    let records::Records {
+        messages,
+        artifacts,
+        controls,
+        turn_count,
+        file_count,
+        ..
+    } = records;
+    let static_tokens =
+        tokens("Butler runtime contract, role policy, transport contract, and safety rules.");
+    let live_tokens = tokens(&json!({
             "language":controls.language, "persona": if persona_configured {"configured"} else {"empty"},
             "eol": if eol_configured {"configured"} else {"empty"}, "model":controls.model,
             "access_mode":controls.access_mode, "plan_mode":controls.plan_mode,
         }).to_string());
-        let runtime_tokens = tokens(
-            &json!({
-                "runtimeSessionId":session.session_hint, "projectId":session.project_id,
-                "sessionKind":session.kind.as_str(), "turnCount":turn_count,
-            })
-            .to_string(),
-        );
-        let latest_input = messages
-            .iter()
-            .rev()
-            .find(|message| matches!(message.role, MessageRole::User))
-            .map_or(0, |message| bounded_tokens(&message.text));
-        let recent_tokens = host
-            .usage
-            .as_ref()
-            .map_or_else(|| tokens(&bounded_recent(&messages)), |_| 0);
-        let retrieved_tokens = host.compaction_summary.as_deref().map_or(0, tokens);
-        let reference_tokens = artifacts.len() as u64 * 48 + file_count * 24;
-        let known = static_tokens
-            + live_tokens
-            + runtime_tokens
-            + retrieved_tokens
-            + latest_input
-            + reference_tokens;
-        let working_tokens = host.usage.as_ref().map_or(recent_tokens, |usage| {
-            usage.prompt_tokens.saturating_sub(known)
-        });
-        let budget = &host.budget;
-        let available = budget.context_window_tokens.saturating_sub(
-            budget.reserved_output_tokens
-                + budget.reserved_tool_tokens
-                + budget.compaction_prompt_reserve_tokens
-                + static_tokens
-                + live_tokens
-                + runtime_tokens,
-        );
-        let used_working = working_tokens + retrieved_tokens + latest_input + reference_tokens;
-        let working_ratio = if available == 0 {
-            1.0
-        } else {
-            used_working as f64 / available as f64
-        };
-        let mut categories = categories(
-            budget,
-            &CategoryTokens {
-                static_context: static_tokens,
-                live_configuration: live_tokens,
-                runtime_state: runtime_tokens,
-                working: working_tokens,
-                retrieved: retrieved_tokens,
-                current_input: latest_input,
-                references: reference_tokens,
-                reference_count: artifacts.len() as u64 + file_count,
-            },
-        );
-        if let Some(usage) = &host.usage {
-            reconcile(&mut categories, usage.prompt_tokens);
-        }
-        let used = host
-            .usage
-            .as_ref()
-            .map_or_else(|| occupied_total(&categories), |usage| usage.prompt_tokens);
-        let view = json!({
-            "session_id":session_id,"model_ref":controls.model,"auth_mode":host.auth_mode,
-            "provider_id":controls.model.split_once('/').map(|v|v.0),
-            "model_id":controls.model.split_once('/').map(|v|v.1),
-            "token_count_source":host.usage.as_ref().map_or("character_estimate",|v|v.source.as_str()),
-            "used_tokens":used,"budget_tokens":budget.context_window_tokens,
-            "max_output_tokens":budget.max_output_tokens,
-            "available_working_context_tokens":available,"used_working_context_tokens":used_working,
-            "usable_user_message_tokens":available,
-            "auto_compact_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_AUTO_COMPACT_RATIO).floor()),
-            "hard_pressure_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_HARD_PRESSURE_RATIO).floor()),
-            "ratio":if budget.context_window_tokens == 0 {0.0} else {used as f64 / budget.context_window_tokens as f64},
-            "status":if working_ratio >= WORKING_CONTEXT_AUTO_COMPACT_RATIO {"high"} else if working_ratio >= 0.7 {"medium"} else {"low"},
-            "categories":categories,"updated_at":self.dependencies.identity_clock.now_iso(),
-        });
-        Ok(ContextDetails {
-            view,
-            usage: host.session_usage,
+    let runtime_tokens = tokens(
+        &json!({
+            "runtimeSessionId":session.session_hint, "projectId":session.project_id,
+            "sessionKind":session.kind.as_str(), "turnCount":turn_count,
         })
+        .to_string(),
+    );
+    let latest_input = messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, MessageRole::User))
+        .map_or(0, |message| bounded_tokens(&message.text));
+    let recent_tokens = host
+        .usage
+        .as_ref()
+        .map_or_else(|| tokens(&bounded_recent(messages)), |_| 0);
+    let retrieved_tokens = host.compaction_summary.as_deref().map_or(0, tokens);
+    let reference_tokens = artifacts.len() as u64 * 48 + file_count * 24;
+    let known = static_tokens
+        + live_tokens
+        + runtime_tokens
+        + retrieved_tokens
+        + latest_input
+        + reference_tokens;
+    let working_tokens = host.usage.as_ref().map_or(recent_tokens, |usage| {
+        usage.prompt_tokens.saturating_sub(known)
+    });
+    CategoryTokens {
+        static_context: static_tokens,
+        live_configuration: live_tokens,
+        runtime_state: runtime_tokens,
+        working: working_tokens,
+        retrieved: retrieved_tokens,
+        current_input: latest_input,
+        references: reference_tokens,
+        reference_count: artifacts.len() as u64 + file_count,
+    }
+}
+
+fn render_context(
+    session: &super::AppSessionSummary,
+    records: &records::Records,
+    host: super::AppContextReadFacts,
+    counts: CategoryTokens,
+    now: &str,
+) -> ContextDetails {
+    let budget = &host.budget;
+    let available = budget.context_window_tokens.saturating_sub(
+        budget.reserved_output_tokens
+            + budget.reserved_tool_tokens
+            + budget.compaction_prompt_reserve_tokens
+            + counts.static_context
+            + counts.live_configuration
+            + counts.runtime_state,
+    );
+    let used_working = counts.working + counts.retrieved + counts.current_input + counts.references;
+    let working_ratio = if available == 0 {
+        1.0
+    } else {
+        used_working as f64 / available as f64
+    };
+    let mut categories = categories(budget, &counts);
+    if let Some(usage) = &host.usage {
+        reconcile(&mut categories, usage.prompt_tokens);
+    }
+    let used = host
+        .usage
+        .as_ref()
+        .map_or_else(|| occupied_total(&categories), |usage| usage.prompt_tokens);
+    let view = json!({
+        "session_id":session.id,"model_ref":records.controls.model,"auth_mode":host.auth_mode,
+        "provider_id":records.controls.model.split_once('/').map(|v|v.0),
+        "model_id":records.controls.model.split_once('/').map(|v|v.1),
+        "token_count_source":host.usage.as_ref().map_or("character_estimate",|v|v.source.as_str()),
+        "used_tokens":used,"budget_tokens":budget.context_window_tokens,
+        "max_output_tokens":budget.max_output_tokens,
+        "available_working_context_tokens":available,"used_working_context_tokens":used_working,
+        "usable_user_message_tokens":available,
+        "auto_compact_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_AUTO_COMPACT_RATIO).floor()),
+        "hard_pressure_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_HARD_PRESSURE_RATIO).floor()),
+        "ratio":if budget.context_window_tokens == 0 {0.0} else {used as f64 / budget.context_window_tokens as f64},
+        "status":if working_ratio >= WORKING_CONTEXT_AUTO_COMPACT_RATIO {"high"} else if working_ratio >= 0.7 {"medium"} else {"low"},
+        "categories":categories,"updated_at":now,
+    });
+    ContextDetails {
+        view,
+        usage: host.session_usage,
     }
 }
 
@@ -193,6 +209,7 @@ pub(super) struct ContextDetails {
 }
 
 /// Token counts per context category, before reconciliation.
+#[derive(Clone, Copy)]
 struct CategoryTokens {
     static_context: u64,
     live_configuration: u64,

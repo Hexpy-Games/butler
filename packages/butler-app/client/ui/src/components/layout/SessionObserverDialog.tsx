@@ -57,6 +57,7 @@ export function SessionObserverDialog() {
         <ScrollArea fill dataTestClass="steward-observer-transcript">
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
             <SessionObserverTimeline
+              delegatedGoal={view?.relation?.safe_title}
               messages={view?.messages ?? []}
               activityHistory={view?.activity_history}
               activeTurn={view?.active_turn}

@@ -53,11 +53,7 @@ pub(super) fn eligible(root: &Path, paths: &CognitionPathEnvironment) -> Cogniti
     {
         return Ok(false);
     }
-    match fs::metadata(paths.cognition_root(root).join("feedback/feedback.md")) {
-        Ok(metadata) => Ok(metadata.len() == 0),
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(true),
-        Err(source) => Err(durable::io_error(source)),
-    }
+    Ok(true)
 }
 
 pub(super) fn reserve(root: &Path, now: &str) -> CognitionResult<Intent> {

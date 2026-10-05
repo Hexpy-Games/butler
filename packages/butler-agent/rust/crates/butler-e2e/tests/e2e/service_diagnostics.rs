@@ -83,6 +83,7 @@ async fn fresh_service_uses_routine_model_and_it_runs_a_turn() -> Result<(), Har
 async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SERVICE-LOG-EXPORT")?
+        .env("BUTLER_E2E_HOLD_CANONICAL_WAKE", "1")
         .stub_cassette(Cassette::load("Q-02")?)
         .start()
         .await?;
@@ -91,6 +92,7 @@ async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), 
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let start = s.agent.cli_async(&["start", "--json"]).await?;
     assert_eq!(start.code, Some(0), "{start:?}");
+    idle::canonical_initialized(&s.sandbox.data).await?;
     let (turn_id, turn) = s
         .turn("general", "Reply with exactly the word: waiting")
         .await?;

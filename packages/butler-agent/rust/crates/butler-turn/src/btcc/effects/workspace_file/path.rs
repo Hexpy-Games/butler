@@ -33,19 +33,23 @@ pub(super) fn relative(value: &str) -> EffectResult<String> {
     if trimmed.contains('\0') {
         return Err(invalid("write_file effect path contains a null byte"));
     }
-    if Path::new(&trimmed).is_absolute() || absolute_windows(&trimmed) {
-        return Err(invalid("write_file effect path must be workspace-relative"));
+    if Path::new(&trimmed).is_absolute() {
+        return Ok(lexical_absolute(Path::new(&trimmed))?
+            .to_string_lossy()
+            .replace('\\', "/"));
+    }
+    if absolute_windows(&trimmed) {
+        return Err(invalid("Path is not absolute on this OS"));
     }
     let slash = trimmed.replace('\\', "/");
-    if slash.split('/').any(|part| part == "..") {
-        return Err(invalid(
-            "write_file effect path cannot traverse a parent directory",
-        ));
+    let mut parts = Vec::new();
+    for part in slash.split('/').filter(|p| !p.is_empty() && *p != ".") {
+        if part == ".." && parts.last().is_some_and(|p| *p != "..") {
+            parts.pop();
+        } else {
+            parts.push(part);
+        }
     }
-    let parts: Vec<_> = slash
-        .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect();
     if parts.is_empty() {
         return Err(invalid(
             "write_file effect path must identify one workspace file",
@@ -64,17 +68,10 @@ pub(super) fn contained(workspace: &Path, value: &str) -> EffectResult<String> {
     }
     let workspace = lexical_absolute(workspace)?;
     let absolute = lexical_absolute(Path::new(&trimmed))?;
-    let contained = absolute.strip_prefix(&workspace).map_err(|source| {
-        invalid("write_file effect path must identify a file inside the workspace")
-            .with_source(source)
-    })?;
-    let value = contained.to_string_lossy();
-    if value.is_empty() || value.starts_with("..") {
-        return Err(invalid(
-            "write_file effect path must identify a file inside the workspace",
-        ));
+    match absolute.strip_prefix(&workspace) {
+        Ok(value) if !value.as_os_str().is_empty() => relative(&value.to_string_lossy()),
+        _ => relative(&absolute.to_string_lossy()),
     }
-    relative(&value)
 }
 fn lexical_absolute(path: &Path) -> EffectResult<PathBuf> {
     let path = if path.is_absolute() {

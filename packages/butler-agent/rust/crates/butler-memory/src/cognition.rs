@@ -4,7 +4,6 @@
 
 use std::{future::Future, pin::Pin};
 
-mod box_store;
 mod briefing;
 mod completion;
 mod configured_cycle;
@@ -16,9 +15,7 @@ mod embedding_port;
 mod error;
 mod exact_query;
 mod extraction;
-mod feedback;
-mod feedback_buffer;
-mod generation;
+pub(crate) mod generation;
 mod generation_vectors;
 mod graph;
 mod graph_consolidation;
@@ -49,16 +46,13 @@ pub(crate) use crate::cognition::legacy::lance_writer::{LegacyLanceWriter, Legac
 pub use crate::cognition::legacy::memory_import::{
     LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
 };
-pub use crate::cognition::legacy::metadata::{
-    LegacyMetadataIntegrityService, MissingBoxRef, MissingFeedbackRef,
-};
+pub use crate::cognition::legacy::metadata::{LegacyMetadataIntegrityService, MissingFeedbackRef};
 pub use crate::cognition::legacy::recall::{LegacyRecallRequest, recall_legacy};
 pub use crate::cognition::legacy::session_sync::{
     LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
     legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
     read_legacy_new_lines,
 };
-pub use box_store::BoxStoreService;
 pub use briefing::{
     BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
     BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
@@ -78,7 +72,8 @@ pub use configured_cycle::{
 };
 pub(crate) use configured_projects::{registered_project_names, registered_projects};
 pub use consolidation::{
-    CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RunCycle,
+    CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RateBudget,
+    RunCycle,
 };
 pub use continuity_recovery::{
     ContinuityRecoveryAction, ContinuityRecoveryManifestView, ContinuityRecoveryService,
@@ -91,7 +86,6 @@ pub use embedding_port::{
 pub use error::{CognitionCode, CognitionError, CognitionResult};
 pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
-pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
     AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration,
     GenerationEmbedding, GenerationFormat, GenerationManifest, GenerationReadiness,
@@ -105,9 +99,14 @@ pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
+pub use knowhow_store::FeedbackTarget;
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
 pub use mcp_graph::read_mcp_legacy_graph;
 pub use memory_health::{MemoryHealthReport, MemoryHealthService};
+pub use memory_recall::{
+    ConfiguredRecallJudge, RecallJudgeCandidate, RecallJudgeFuture, RecallJudgeModelFuture,
+    RecallJudgeModelSource, RecallJudgePort, RecallJudgeResult, RecallJudgeUnavailable,
+};
 pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};
 pub use memory_recall::{RecallMetric, RecallMetricSink};
 pub use migration::CognitionNamespaceMigrationService;
@@ -121,14 +120,15 @@ pub use registration::{
     CognitionConversationSourceNotice, CognitionRegistrationService, ConsumeTypedLifecycleInput,
     ConversationRegistrationOutcome, RegisterConversationSourceInput,
 };
-pub(crate) use source_reference::{MemorySourceCandidate, MemorySourceReference};
+pub(crate) use source_reference::MemorySourceReference;
 pub(in crate::cognition) use sources::assert_conversation_source_current;
 
 pub use sources::{
     CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, ExplicitMemoryUpdateInput,
-    ExplicitMemoryUpdateResult, PreparedConversationSource, TaskMemoryIngestionResult,
-    hydrate_conversation_source, ingest_task_outcome_memory, prepare_conversation_source,
-    read_prior_public_context, update_explicit_memory,
+    PreparedConversationSource, RememberedRule, RememberedRuleOwner, RememberedRuleReceipt,
+    RememberedRuleTarget, RuleCommitObserver, TaskMemoryIngestionResult, fence_instruction_project,
+    hydrate_conversation_source, ingest_task_outcome_memory, list_chat_instructions,
+    list_remembered_rules, prepare_conversation_source, read_prior_public_context,
 };
 pub use vector_optimize::{VectorOptimizeOutcome, VectorOptimizeService};
 pub(crate) use windows::{
@@ -142,3 +142,14 @@ pub(crate) type PhaseExecutionFuture<'a> = Pin<
             + 'a,
     >,
 >;
+
+pub(crate) use project_capsule::capsule_path;
+
+mod admission;
+
+pub(crate) use generation::pins::pinned as generation_reader_pinned;
+pub use generation::reset::ResetResult;
+pub(crate) use generation::reset::{
+    begin as begin_conversation_reset, receipt as reset_receipt, run as reset_conversations,
+    save_leased as save_reset_receipt,
+};

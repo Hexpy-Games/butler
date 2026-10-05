@@ -83,11 +83,12 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
     let semantic_state = parse_state(&row.semantic_state)?;
     let checkpoint = load_checkpoint(connection, &row, semantic_state)?;
     let delivery_outbox = load_outbox(connection, row.delivery_outbox_id.as_deref())?;
-    let final_payload = row
+    let mut final_payload = row
         .final_payload_json
         .as_deref()
         .map(hydrate_final_payload)
         .transpose()?;
+    restore_delivery_text(final_payload.as_mut(), delivery_outbox.as_ref());
     let turn = TurnRecord {
         wake_identity: load_wake_identity(connection, &row.turn_id)?,
         model_selection: typed(
@@ -134,6 +135,26 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
     };
     assert_record(&turn)?;
     Ok(turn)
+}
+
+/// The durable outbox owns delivery text; payload ids bind it to the final.
+/// Legacy Unicode normalization and content digests never decide recovery.
+fn restore_delivery_text(payload: Option<&mut FinalPayload>, outbox: Option<&DeliveryOutbox>) {
+    let Some((payload, outbox)) = payload.zip(outbox) else {
+        return;
+    };
+    if payload.reference.id == outbox.final_payload_ref.id {
+        if payload.content != outbox.content
+            || payload.reference.sha256 != outbox.final_payload_ref.sha256
+            || crate::btcc::identity::digest(&outbox.content) != payload.content_sha256
+        {
+            butler_core::diagnostic!(
+                "warning: final/outbox content mismatch for {}",
+                outbox.outbox_id
+            );
+        }
+        payload.content.clone_from(&outbox.content);
+    }
 }
 
 fn typed<T: serde::de::DeserializeOwned>(value: &str, code: StorageCode) -> StorageResult<T> {
@@ -271,8 +292,6 @@ pub(super) fn hydrate_final_payload(value: &str) -> StorageResult<FinalPayload> 
         StorageError::new(StorageCode::InvalidFinalPayload, error.to_string()).with_source(error)
     })?;
     if payload.reference.id.is_empty()
-        || payload.reference.sha256.is_empty()
-        || payload.content_sha256.is_empty()
         || payload.model_identity.as_ref().is_some_and(|identity| {
             !model_ref(&identity.requested_model_ref)
                 || !model_ref(&identity.effective_model_ref)
@@ -361,7 +380,7 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
         .as_ref()
         .zip(turn.delivery_outbox.as_ref())
         .is_some_and(|(payload, outbox)| {
-            payload.reference == outbox.final_payload_ref && payload.content == outbox.content
+            payload.turn_id == turn.turn_id && payload.reference.id == outbox.final_payload_ref.id
         });
     if !matches {
         return Err(error(

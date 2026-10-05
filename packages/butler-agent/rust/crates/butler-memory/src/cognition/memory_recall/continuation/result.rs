@@ -215,6 +215,8 @@ pub(super) struct View<'a> {
 impl View<'_> {
     pub(super) fn into_owned(self) -> RecallResponse {
         RecallResponse {
+            detail_pin: None,
+            full_details: Vec::new(),
             status: self.status,
             results: self.results.to_vec(),
             coverage: self.coverage,

@@ -883,6 +883,7 @@ dependencies = [
  "chrono",
  "flate2",
  "futures-util",
+ "hmac 0.12.1",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
@@ -964,6 +965,7 @@ version = "0.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "async-trait",
  "base64 0.22.1",
  "butler-core",
  "butler-models",
@@ -975,7 +977,9 @@ dependencies = [
  "futures-util",
  "indexmap 2.14.2",
  "lance",
+ "lance-io",
  "lancedb",
+ "object_store",
  "ort",
  "parking_lot",
  "regex",
@@ -988,6 +992,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "unicode-normalization",
+ "unicode-script",
  "unicode-segmentation",
  "url",
  "uuid",
@@ -1045,6 +1050,7 @@ dependencies = [
  "rustix 1.1.5",
  "same-file",
  "security-framework",
+ "serde",
  "serde_json",
  "sysinfo",
  "thiserror 2.0.20",
@@ -1055,6 +1061,7 @@ dependencies = [
  "winsafe",
  "zbus-secret-service-keyring-store",
  "zeroize",
+ "zip",
 ]
 
 [[package]]
@@ -1077,6 +1084,7 @@ dependencies = [
  "image",
  "indexmap 2.14.2",
  "lopdf",
+ "memchr",
  "parking_lot",
  "regex",
  "regress",
@@ -7552,6 +7560,12 @@ name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+
+[[package]]
+name = "unicode-script"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee"
 
 [[package]]
 name = "unicode-segmentation"

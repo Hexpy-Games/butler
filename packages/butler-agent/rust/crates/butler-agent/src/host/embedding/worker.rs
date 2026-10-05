@@ -26,16 +26,15 @@ pub(crate) async fn run() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     };
     let mut engine: Option<EmbeddingEngine> = None;
-    let mut stdin = tokio::io::stdin();
+    let mut input = owner_input();
     let mut stdout = tokio::io::stdout();
     let mut frame = Vec::with_capacity(8 * 1024);
-    let mut chunk = [0_u8; 8 * 1024];
     let idle_exit = worker_idle_exit();
     let mut idle_deadline = tokio::time::Instant::now() + idle_exit;
     loop {
-        let read = match tokio::time::timeout_at(idle_deadline, stdin.read(&mut chunk)).await {
-            Ok(Ok(count)) => count,
-            Ok(Err(_)) => return std::process::ExitCode::SUCCESS,
+        let read = match tokio::time::timeout_at(idle_deadline, input.recv()).await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => return std::process::ExitCode::SUCCESS,
             Err(_) => {
                 // Tokio's stdin reader owns a blocking read thread. Returning
                 // through #[tokio::main] can wait for that thread until EOF,
@@ -45,10 +44,7 @@ pub(crate) async fn run() -> std::process::ExitCode {
                 std::process::exit(0);
             }
         };
-        if read == 0 {
-            return std::process::ExitCode::SUCCESS;
-        }
-        for byte in &chunk[..read] {
+        for byte in &read {
             if *byte != b'\n' {
                 if frame.len() >= MAX_FRAME_BYTES {
                     let _ = write_response(
@@ -81,6 +77,27 @@ pub(crate) async fn run() -> std::process::ExitCode {
     }
 }
 
+// Read independently of inference/asset initialization. EOF must stop this
+// mutation-free process even while its CPU worker has not finished loading.
+fn owner_input() -> tokio::sync::mpsc::Receiver<Vec<u8>> {
+    let (sender, receiver) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        let mut stdin = tokio::io::stdin();
+        let mut chunk = [0_u8; 8 * 1024];
+        loop {
+            match stdin.read(&mut chunk).await {
+                Ok(0) | Err(_) => std::process::exit(0),
+                Ok(count) => {
+                    if sender.send(chunk[..count].to_vec()).await.is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    receiver
+}
+
 async fn handle(
     request: WorkerRequest,
     data_root: &std::path::Path,
@@ -95,28 +112,20 @@ async fn handle(
                 || request.resplit
                 || request.max_embeddings.is_some() =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed | WorkerOperation::Tokenize
             if request.texts.is_empty() || request.texts.len() > MAX_TEXTS =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed if request.checked && request.texts.iter().any(String::is_empty) => {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Tokenize
             if request.checked || request.resplit || request.max_embeddings.is_some() =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed
             if (!request.checked && (request.resplit || request.max_embeddings.is_some()))
@@ -124,12 +133,11 @@ async fn handle(
                     .max_embeddings
                     .is_some_and(|count| count == 0 || count > MAX_TEXTS) =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Initialize | WorkerOperation::Embed | WorkerOperation::Tokenize => {
             if engine.is_none() {
+                initialization_barrier();
                 if let Err(code) = assets::ensure(data_root).await {
                     return WorkerResponse::error(id, code);
                 }
@@ -191,4 +199,24 @@ async fn write_response(
     bytes.push(b'\n');
     stdout.write_all(&bytes).await.map_err(|_| ())?;
     stdout.flush().await.map_err(|_| ())
+}
+
+// Hold a native worker at the CPU initialization boundary for owner-death E2Es.
+fn initialization_barrier() {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
+        return;
+    }
+    if let Some(path) = std::env::var_os("BUTLER_E2E_EMBED_INIT_BARRIER")
+        && std::fs::write(path, std::process::id().to_string()).is_ok()
+    {
+        loop {
+            std::thread::park();
+        }
+    }
+}
+
+fn invalid_request() -> WorkerResult {
+    WorkerResult::Error {
+        code: "embed_invalid_request".to_owned(),
+    }
 }

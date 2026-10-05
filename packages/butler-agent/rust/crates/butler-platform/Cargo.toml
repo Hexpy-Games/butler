@@ -27,17 +27,19 @@ rustix.workspace = true
 dunce.workspace = true
 libproc.workspace = true
 sysinfo.workspace = true
+zip.workspace = true
+serde.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
 dunce.workspace = true
+winsafe.workspace = true
 iana-time-zone.workspace = true
 if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
-winsafe.workspace = true
 same-file = "1.0.6"
 atomicwrites.workspace = true
 filedescriptor = "0.8.3"

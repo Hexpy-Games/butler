@@ -21,6 +21,7 @@ impl AppApplication {
     }
 }
 
+/// References are sorted by descending byte length by the materialized projection.
 pub(super) fn safe_conversation_label(
     value: &str,
     internal_refs: &[String],
@@ -42,8 +43,13 @@ pub(super) fn safe_conversation_label(
     static LONG_HEX: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?i)\b[0-9a-f]{24,}\b"));
 
     let mut text = value.to_owned();
-    for reference in internal_refs {
-        text = text.replace(reference, "internal reference");
+    // Longer references cannot match the original label. Shorter replacements
+    // retain their original order and inspect the current text after each match.
+    let start = internal_refs.partition_point(|reference| reference.len() > value.len());
+    for reference in &internal_refs[start..] {
+        if text.contains(reference) {
+            text = text.replace(reference, "internal reference");
+        }
     }
     text = MARKDOWN_LINK.replace_all(&text, "$1").into_owned();
     text = URL.replace_all(&text, "reference").into_owned();

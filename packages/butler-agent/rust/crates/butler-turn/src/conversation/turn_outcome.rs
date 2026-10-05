@@ -24,7 +24,7 @@ impl AgentConversationStore {
 }
 
 /// Writes a turn's outcome capsule. An older generation keeps the stored
-/// capsule; the same generation must hash identically; a newer one replaces
+/// capsule; the same generation keeps its stored receipt; a newer one replaces
 /// it and publishes `conversation.turn_outcome_written`.
 pub(super) fn write_outcome(
     connection: &Connection,
@@ -58,14 +58,19 @@ pub(super) fn write_outcome(
             return Ok(existing);
         }
         if requested_generation == existing.generation {
-            if capsule.source_hash != existing.source_hash {
+            if capsule.request_message_id != existing.request_message_id
+                || capsule.public_assistant_message_id != existing.public_assistant_message_id
+            {
                 return Err(ConversationError::new(
                     ConversationCode::ConversationOutcomeGenerationConflict,
-                    format!(
-                        "Turn outcome generation conflict: {}:{}",
-                        capsule.turn_id, capsule.generation
-                    ),
+                    "Turn outcome message identity conflict",
                 ));
+            }
+            if capsule.source_hash != existing.source_hash {
+                butler_core::diagnostic!(
+                    "warning: turn outcome replay content hash mismatch for {}",
+                    capsule.turn_id
+                );
             }
             return Ok(existing);
         }
@@ -233,11 +238,13 @@ pub(super) fn read_outcome(
             capsule.public_assistant_message_id.clone(),
         ],
     )?;
-    if outcome_hash(&capsule, &referenced)? == capsule.source_hash {
-        Ok(Some(capsule))
-    } else {
-        Ok(None)
+    if outcome_hash(&capsule, &referenced)? != capsule.source_hash {
+        butler_core::diagnostic!(
+            "warning: turn outcome content hash mismatch for {}",
+            capsule.turn_id
+        );
     }
+    Ok(Some(capsule))
 }
 
 fn outcome_hash(capsule: &TurnOutcomeCapsule, referenced: &str) -> ConversationResult<String> {

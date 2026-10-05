@@ -69,7 +69,6 @@ pub(super) async fn execute(
         .get("workspace_root")
         .and_then(Value::as_str)
         .filter(|s| !butler_core::public_text::trim_js_whitespace(s).is_empty());
-    let supplied_root = supplied_root_raw.map(butler_core::public_text::trim_js_whitespace);
     let root = bound_root
         .clone()
         .or_else(|| supplied_root_raw.map(PathBuf::from))
@@ -96,32 +95,6 @@ pub(super) async fn execute(
             "The read_file cursor points outside the requested batch.",
             "Restart the batch without cursor.",
         ));
-    }
-    if let (Some(_), Some(supplied)) = (&bound_root, supplied_root) {
-        for request in &requests {
-            let guard = workspace
-                .guard(
-                    PathBuf::from(supplied),
-                    request.path.clone(),
-                    super::arguments::path_form(&input),
-                    input.protected_ledger_roots.to_vec(),
-                )
-                .await
-                .map_err(owner_error)?
-                .map_err(guard_io_error)?;
-            if guard.reason == Some("protected_path") {
-                let mut result = failure(
-                    "protected_path",
-                    "Project Ledger files must be inspected through their dedicated tool policy.",
-                    "Use the admitted workspace root or the Project Ledger inspection tools.",
-                );
-                if let Some(path) = guard.safe_path() {
-                    result["path"] = json!(path);
-                }
-                result["guard"] = guard.public_rejection();
-                return Ok(result);
-            }
-        }
     }
     let mut results = Vec::with_capacity(requests.len());
     let (mut total_input, mut total_output, mut files_read) = (0usize, 0usize, 0usize);

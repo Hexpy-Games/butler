@@ -1,7 +1,10 @@
 //! Public App read projections over the single SQLite owner.
+use crate::gateway::application::storage::CachedSql;
 
 mod artifacts;
+mod message_rows;
 mod plan;
+pub(super) use message_rows::streaming_message;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -72,26 +75,7 @@ pub(super) fn list_message_page(
         .prepare_cached(&query)
         .map_err(AppStorageError::sqlite)?;
     let mut rows = statement
-        .query_map(params![chat_id, cursor, bounded + 1], |row| {
-            Ok(MessageRow {
-                cursor: row.get(0)?,
-                id: row.get(1)?,
-                chat_id: row.get(2)?,
-                turn_id: row.get(3)?,
-                conversation_session_id: row.get(4)?,
-                conversation_turn_id: row.get(5)?,
-                conversation_message_id: row.get(6)?,
-                role: row.get(7)?,
-                text: row.get(8)?,
-                content_parts_json: row.get(9)?,
-                status: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
-                safe_error_code: row.get(13)?,
-                retryable: row.get(14)?,
-                plan_json: row.get(15)?,
-            })
-        })
+        .query_map(params![chat_id, cursor, bounded + 1], message_rows::read)
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)?;
@@ -158,7 +142,7 @@ pub(super) fn list_turns(
 ) -> Result<TurnListView, AppStorageError> {
     require_chat(connection, chat_id)?;
     let cursor = turn_cursor(after_cursor);
-    let mut statement = connection.prepare(
+    let mut statement = connection.prepare_cached(
         "SELECT rowid,id,chat_id,user_message_id,state,safe_status_label,safe_error_code,\
          retryable,cancellable,attempt,execution_controls_json,execution_model_json,created_at,updated_at \
          FROM turns WHERE chat_id=?1 AND rowid>?2 ORDER BY rowid ASC LIMIT 200",
@@ -183,7 +167,7 @@ pub(super) fn latest_turn(
 ) -> Result<Option<TurnRecord>, AppStorageError> {
     require_chat(connection, chat_id)?;
     connection
-        .query_row(
+        .query_row_cached(
             "SELECT rowid,id,chat_id,user_message_id,state,safe_status_label,safe_error_code,\
              retryable,cancellable,attempt,execution_controls_json,execution_model_json,created_at,updated_at \
              FROM turns WHERE chat_id=?1 ORDER BY rowid DESC LIMIT 1",
@@ -201,7 +185,7 @@ pub(super) fn exact_turn(
     turn_id: &str,
 ) -> Result<Option<TurnRecord>, AppStorageError> {
     connection
-        .query_row(
+        .query_row_cached(
             "SELECT rowid,id,chat_id,user_message_id,state,safe_status_label,safe_error_code,\
              retryable,cancellable,attempt,execution_controls_json,execution_model_json,created_at,updated_at \
              FROM turns WHERE id=?1",
@@ -219,7 +203,7 @@ pub(super) fn latest_message_cursor(
     chat_id: &str,
 ) -> Result<u64, AppStorageError> {
     connection
-        .query_row(
+        .query_row_cached(
             "SELECT COALESCE(MAX(rowid),0) FROM messages WHERE chat_id=?1",
             [chat_id],
             |row| row.get(0),
@@ -345,7 +329,7 @@ fn attachments(
     ids: &[String],
 ) -> Result<HashMap<String, Vec<MessageFileRef>>, AppStorageError> {
     let mut result = HashMap::new();
-    let mut statement = connection.prepare("SELECT f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at \
+    let mut statement = connection.prepare_cached("SELECT f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at \
         FROM message_attachments a JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position")
         .map_err(AppStorageError::sqlite)?;
     for id in ids {
@@ -411,7 +395,7 @@ fn changed_files(
 ) -> Result<HashMap<String, Vec<ChangedFileDetail>>, AppStorageError> {
     let mut result = HashMap::new();
     let mut statement = connection
-        .prepare(
+        .prepare_cached(
             "SELECT safe_path_label,detail_json FROM message_changed_files \
         WHERE message_id=?1 ORDER BY position",
         )
@@ -447,7 +431,7 @@ fn changed_files(
 
 fn require_chat(connection: &Connection, chat_id: &str) -> Result<(), AppStorageError> {
     let found = connection
-        .query_row("SELECT 1 FROM chats WHERE id=?1", [chat_id], |_| Ok(()))
+        .query_row_cached("SELECT 1 FROM chats WHERE id=?1", [chat_id], |_| Ok(()))
         .optional()
         .map_err(AppStorageError::sqlite)?;
     found.ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))

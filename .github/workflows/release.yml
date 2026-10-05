@@ -207,6 +207,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the exact npm release asset without registry publication
+        run: python3 .github/scripts/isolated.py python3 deploy/npm/pack-release.py "$GITHUB_REF_NAME" dist/release/npm
+
       # install.sh refuses an archive whose Agent version is not the release's.
       - name: Check the tag against the Agent version
         run: |
@@ -254,6 +260,8 @@ jobs:
             dist/agent/merged/agent-update-manifest.json
             deploy/install.sh
             deploy/install.ps1
+            dist/release/npm/*.tgz
+            dist/release/npm/*.tgz.sha256
           )
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Butler release $GITHUB_REF_NAME"

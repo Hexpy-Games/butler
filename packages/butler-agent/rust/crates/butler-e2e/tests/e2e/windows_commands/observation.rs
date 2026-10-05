@@ -30,7 +30,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         || listing_command().to_owned(),
         |target| {
             let path = match target {
-                "data" => setup.sandbox.data.join("secrets.json"),
+                "data" => setup.sandbox.data.join("canary.txt"),
                 _ => setup.sandbox.home.join(".ssh/id_ed25519"),
             };
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -42,8 +42,8 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             }
         },
     );
-    let (url, script, server) =
-        provider::start(&command, access == Access::AskFirst && protected.is_none()).await?;
+    let refused = protected == Some("credentials");
+    let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
     std::fs::create_dir_all(&local)?;
@@ -61,7 +61,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
-    if access == Access::AskFirst && protected.is_none() {
+    if access == Access::AskFirst && !refused {
         approve_exact(&s, &id, &command).await?;
     }
     let turn =
@@ -69,31 +69,20 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let requests = script.requests.lock().unwrap().clone();
-    if access == Access::AskFirst && protected.is_none() {
-        let feedback = provider::outputs(&requests[1])
-            .into_iter()
-            .find(|v| v["error"].is_object())
-            .expect("recoverable policy feedback");
-        assert_eq!(
-            feedback["error"]["code"], "effect_work_required",
-            "{feedback}"
-        );
-        assert_eq!(feedback["error"]["recoverable"], true);
-        assert!(
-            feedback["error"]["next_action"]
-                .as_str()
-                .unwrap()
-                .contains("Runtime handles approval")
-        );
-        eprintln!("OBSERVATION preflight feedback: {}", feedback["error"]);
-    }
+    assert!(
+        !requests
+            .iter()
+            .flat_map(provider::outputs)
+            .any(|v| v["error"].is_object()),
+        "read-only observation never requires Work/Plan effect repair"
+    );
     let output = requests
         .iter()
         .rev()
         .flat_map(provider::outputs)
         .find(|v| v["command"] == command)
         .expect("model gets structured command result");
-    if protected.is_some() {
+    if refused {
         assert_eq!(output["error"], "protected_path", "{output}");
         assert!(
             !requests
@@ -103,6 +92,12 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
                 .contains("protected-canary")
         );
         assert!(s.gw.approval_requests("general").await?.is_empty());
+    } else if protected == Some("data") {
+        assert_eq!(output["exit_code"], 0, "{output}");
+        assert_eq!(
+            output["stdout"].as_str().unwrap().trim(),
+            "protected-canary"
+        );
     } else {
         assert_eq!(output["exit_code"], 0, "{output}");
         assert_eq!(output["sandbox"], "unisolated", "{output}");
@@ -133,7 +128,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
     }
     eprintln!(
         "OBSERVATION {access:?} protected={protected:?}: {} in {:?}",
-        if protected.is_some() {
+        if refused {
             "protected path refused without approval or content"
         } else {
             "registry/non-recursive listing/model result/plan verified"
@@ -209,8 +204,8 @@ async fn observation_full_access_lists_downloads_without_approval() -> Result<()
 }
 
 #[tokio::test]
-async fn observation_still_refuses_data_and_credentials_in_both_modes() -> Result<(), HarnessError>
-{
+async fn observation_data_uses_normal_approval_and_credentials_stay_refused()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
         !butler_platform::command_sandbox::READ_ONLY_SANDBOX,

@@ -12,14 +12,14 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 use serde_json::{Value, json};
 
-const PROMPT: &str =
+pub(super) const PROMPT: &str =
     "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.";
 
 fn secret(key: &str, value: &str) -> Value {
     json!({"key": key, "source": "literal", "value": value})
 }
 
-async fn add_server(s: &Scenario, env: Vec<Value>) -> Result<Value, HarnessError> {
+pub(super) async fn add_server(s: &Scenario, env: Vec<Value>) -> Result<Value, HarnessError> {
     let reply = s
         .gw
         .post(
@@ -32,12 +32,12 @@ async fn add_server(s: &Scenario, env: Vec<Value>) -> Result<Value, HarnessError
     Ok(reply.data().clone())
 }
 
-async fn probe(s: &Scenario) -> Result<Value, HarnessError> {
+pub(super) async fn probe(s: &Scenario) -> Result<Value, HarnessError> {
     let reply = s.gw.post("/mcp-servers/e2e/probe", json!({})).await?;
     Ok(reply.body)
 }
 
-fn healthy(probe: &Value) -> bool {
+pub(super) fn healthy(probe: &Value) -> bool {
     probe["data"]["servers"]
         .as_array()
         .and_then(|servers| servers.iter().find(|server| server["id"] == "e2e"))

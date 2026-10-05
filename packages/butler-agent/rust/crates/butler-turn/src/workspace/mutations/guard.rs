@@ -138,11 +138,7 @@ fn path(
     };
     let public = match absolute.strip_prefix(&guard.root) {
         Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
-        Err(_) => {
-            let mut guard = guard;
-            guard.reason = Some("path_escape");
-            return Ok(Err(guard));
-        }
+        Err(_) => absolute.to_string_lossy().replace('\\', "/"),
     };
     Ok(Ok(GuardedPath {
         public: if public.is_empty() {

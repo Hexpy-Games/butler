@@ -23,12 +23,33 @@ struct Output<'a, T: Serialize + ?Sized> {
     response: &'a T,
 }
 
-pub(super) fn bytes<T: Serialize + ?Sized>(response: &T) -> CognitionResult<usize> {
-    butler_core::json::serde_serialized_bytes(&Envelope {
+/// Preserve legacy page selection while also accounting for compact handle overhead.
+pub(super) fn bytes<T: Serialize + ?Sized>(
+    response: &T,
+    results: &[RecallResultItem],
+) -> CognitionResult<usize> {
+    let legacy = serialized_bytes(&Envelope {
         ok: true,
         output: Output { ok: true, response },
-    })
-    .map_err(|source| {
+    })?;
+    let mut compact = legacy;
+    for result in results {
+        let old = serialized_bytes(&result.interpretations)? + "\"interpretations\":".len();
+        // SHA-256 handles always have this exact length and JSON escaping.
+        let metadata = serde_json::json!({
+            "interpretation_handle": concat!("memory-detail:v1:",
+                "0000000000000000000000000000000000000000000000000000000000000000"),
+            // Full source view plus distinct packed-view variants: at most 8 + 8.
+            "interpretation_count": 16,
+        });
+        let replacement = serialized_bytes(&metadata)? - 2; // object body
+        compact = compact.saturating_sub(old) + replacement;
+    }
+    Ok(legacy.max(compact))
+}
+
+fn serialized_bytes<T: Serialize + ?Sized>(value: &T) -> CognitionResult<usize> {
+    butler_core::json::serde_serialized_bytes(value).map_err(|source| {
         CognitionError::new(CognitionCode::SerializationBudget, "serialization_budget")
             .with_source(source)
     })

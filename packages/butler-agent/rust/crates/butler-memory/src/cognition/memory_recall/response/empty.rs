@@ -42,6 +42,8 @@ pub(crate) fn empty(
         Outcome::Complete
     };
     RecallResponse {
+        detail_pin: None,
+        full_details: Vec::new(),
         status: derive_status(0, outcome),
         results: vec![],
         coverage: RecallCoverage {

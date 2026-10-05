@@ -14,7 +14,7 @@ use super::{
 };
 use crate::host::service::restart_handoff::RestartHandoff;
 use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
-use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind, WorkStatus};
+use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
 struct Executed {
@@ -133,7 +133,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
             let subsessions = subsessions.as_ref();
-            failed(
+            let poll = failed(
                 &item,
                 &error,
                 &queue,
@@ -141,7 +141,14 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
                 delivery.as_ref(),
                 subsessions,
             )
-            .await
+            .await;
+            // Retryability depends on the settled queue, so invalidate after settlement.
+            if let Ok(envelope) = Envelope::from_record(&item.record) {
+                let _ = subsessions
+                    .notify_execution_changed(&envelope.peer.id)
+                    .await;
+            }
+            poll
         }
     }
 }
@@ -399,22 +406,30 @@ async fn complete_subsession_child(
                 super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
-    let (content, work_status) = match &outcome.result {
-        TurnOutcomeKind::Delivered(value) => (value.content.as_str(), value.work_status),
-        TurnOutcomeKind::AlreadyDelivered(value) => (value.content.as_str(), value.work_status),
+    let (content, failed) = match &outcome.result {
+        TurnOutcomeKind::Delivered(value) => (
+            value.content.as_str(),
+            value.runtime_failure.is_some()
+                || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+        ),
+        TurnOutcomeKind::AlreadyDelivered(value) => (
+            value.content.as_str(),
+            value.runtime_failure.is_some()
+                || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+        ),
+        TurnOutcomeKind::Suspended { .. } => {
+            return subsessions
+                .notify_execution_changed(session_id)
+                .await
+                .map_err(|error| {
+                    super::IngressError::new("subsession_projection_changed_failed", error.code())
+                });
+        }
         _ => return Ok(()),
     };
-    let status = match work_status {
-        Some(WorkStatus::Completed) => "success",
-        Some(WorkStatus::Blocked) => "blocked",
-        Some(WorkStatus::Abandoned) => "failed",
-        _ => {
-            return Err(super::IngressError::new(
-                "subsession_work_incomplete",
-                "Subsession Work is not terminal",
-            ));
-        }
-    };
+    // Result delivery and Work disposition are independent. Keep unfinished
+    // Work intact; only an explicit failure makes a delivered result fail.
+    let status = if failed { "failed" } else { "success" };
     subsessions
         .complete_child(session_id, turn_id, status, content.to_owned())
         .await

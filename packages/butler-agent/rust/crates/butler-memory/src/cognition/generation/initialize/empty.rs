@@ -29,7 +29,6 @@ pub(super) fn assert_truly_empty(
         .task_ids()
         .map_err(|source| unreadable().with_source(source))?
         .is_empty()
-        || nonempty_text(&cognition_root.join("feedback/feedback.md"))?
     {
         return Err(requires_rebuild());
     }
@@ -115,14 +114,6 @@ fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
 fn open(path: &Path) -> CognitionResult<Connection> {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| unreadable().with_source(source))
-}
-
-fn nonempty_text(path: &Path) -> CognitionResult<bool> {
-    match fs::read_to_string(path) {
-        Ok(text) => Ok(!text.trim().is_empty()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(_) => Err(unreadable()),
-    }
 }
 
 pub(super) fn has_entries(path: &Path) -> CognitionResult<bool> {

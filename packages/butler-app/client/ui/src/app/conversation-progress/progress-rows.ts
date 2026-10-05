@@ -11,6 +11,12 @@ const INTERNAL_RAW_TOOL_NAMES = new Set([
   "update_todo_list",
   "list_todo_list",
   "model_preparation",
+  "start_work",
+  "continue_work",
+  "replace_work_plan",
+  "record_work_checkpoint",
+  "record_work_review",
+  "record_work_disposition",
 ]);
 const LIFECYCLE_LABELS = new Set([
   "accepted", "started", "thinking", "queued for butler service",

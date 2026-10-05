@@ -66,6 +66,41 @@ impl SessionUsageIndex {
         pricing: &dyn Fn(&str) -> Option<ModelPricing>,
     ) -> SessionUsage {
         self.refresh(&data_root.join(USAGE_FILE), pricing);
+        self.session_usage(runtime_session_id)
+    }
+
+    /// Refresh usage and another prompt-log projection in one fresh file pass.
+    /// Usage still counts only newline-terminated rows and accepts complete
+    /// oversized events; the other projection retains its own trailing policy.
+    pub fn read_with_rows<S>(
+        &mut self,
+        data_root: &Path,
+        runtime_session_id: &str,
+        pricing: &dyn Fn(&str) -> Option<ModelPricing>,
+        state: &mut S,
+        callbacks: (impl FnOnce(&mut S), impl FnMut(&mut S, &[u8])),
+    ) -> SessionUsage {
+        let (reset, mut visit) = callbacks;
+        let mut tail = std::mem::take(&mut self.tail);
+        tail.advance_with_trailing(
+            &data_root.join(USAGE_FILE),
+            &mut (&mut *self, state),
+            |(index, state)| {
+                index.scopes.clear();
+                reset(state);
+            },
+            |(index, state), row| {
+                if row.ends_with(b"\n") {
+                    index.fold(row, pricing);
+                }
+                visit(state, row);
+            },
+        );
+        self.tail = tail;
+        self.session_usage(runtime_session_id)
+    }
+
+    fn session_usage(&self, runtime_session_id: &str) -> SessionUsage {
         let scope = self
             .scopes
             .get(&format!("btcc-guided:{runtime_session_id}"))

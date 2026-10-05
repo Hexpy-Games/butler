@@ -255,6 +255,10 @@ pub(crate) struct RecallResultItem {
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct RecallResponse {
+    #[serde(skip)]
+    pub full_details: Vec<RecallResultItem>,
+    #[serde(skip)]
+    pub detail_pin: Option<crate::cognition::memory_recall::details::DetailPin>,
     pub status: RecallStatus,
     pub results: Vec<RecallResultItem>,
     pub coverage: RecallCoverage,

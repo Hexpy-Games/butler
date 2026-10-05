@@ -1,0 +1,23 @@
+{
+  "delegated|steward|ask_first|mutation": 805,
+  "delegated|steward|ask_first|read_only": 799,
+  "delegated|steward|full_access|mutation": 805,
+  "delegated|steward|full_access|read_only": 799,
+  "delegated|steward|read_only|mutation": 805,
+  "delegated|steward|read_only|read_only": 799,
+  "delegated|worker|ask_first": 160,
+  "delegated|worker|full_access": 160,
+  "delegated|worker|read_only": 160,
+  "legacy|butler|ask_first|ledger": 2517,
+  "legacy|butler|ask_first|local": 2454,
+  "legacy|butler|ask_first|none": 2454,
+  "legacy|butler|full_access|ledger": 2517,
+  "legacy|butler|full_access|local": 2454,
+  "legacy|butler|full_access|none": 2454,
+  "legacy|butler|read_only|ledger": 2517,
+  "legacy|butler|read_only|local": 2454,
+  "legacy|butler|read_only|none": 2454,
+  "phase_minimal|butler|direct": 182,
+  "phase_minimal|butler|execution": 774,
+  "phase_minimal|butler|read_only": 707
+}

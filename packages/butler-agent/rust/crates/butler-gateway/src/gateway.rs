@@ -5,6 +5,8 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+mod file_watch;
+pub use file_watch::FileChangeWatch;
 mod auth;
 mod crypto;
 mod devices;
@@ -40,11 +42,12 @@ pub use application::{
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
     AppBranchConversationReader, AppBranchSummarizer, AppBranchSummary, AppBranchSummaryInput,
-    AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts, AppContextReadFacts,
-    AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
-    AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
-    AppDeveloperLogsQuery, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
-    AppIdentityClock, AppLedgerSourceRequest, AppMessageFileSnapshot, AppMessageFileStorage,
+    AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
+    AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
+    AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
+    AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
+    AppFileDownload, AppFileUpload, AppFileWrite, AppIdentityClock, AppLedgerSourceRequest,
+    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
     AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
     AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
     AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
@@ -77,8 +80,9 @@ pub use application::{
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, OperationOutputChunk, OperationOutputView,
-    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
+    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
+    VisualAdmissionRequest,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -297,6 +301,13 @@ pub trait GatewayApplication:
         command: AppModelCatalogCommand,
         cancellation: CancellationToken,
     ) -> ApplicationFuture<serde_json::Value>;
+    fn memory_management(
+        &self,
+        _command: AppMemoryCommand,
+        _cancellation: CancellationToken,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn personalization(
         &self,
         command: AppPersonalizationCommand,

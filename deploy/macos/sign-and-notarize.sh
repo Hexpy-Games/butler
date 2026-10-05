@@ -13,6 +13,7 @@
 # cleanup logs one line and exits 0, so PR CI and local builds stay ad-hoc.
 #   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc preview or self-test)
 #   BUTLER_SIGN_KEYCHAIN  keychain holding the identity (optional)
+#   BUTLER_SIGN_HOME      job-private credential-tool profile (set by CI setup)
 #   BUTLER_SIGN_TEAM_ID   expected Team ID on every signature (optional)
 #   BUTLER_NOTARY_KEY_PATH / BUTLER_NOTARY_KEY_ID / BUTLER_NOTARY_ISSUER_ID
 set -euo pipefail
@@ -29,6 +30,16 @@ die() { printf 'sign: error: %s\n' "$*" >&2; exit 1; }
 enabled() { [ -n "${BUTLER_SIGN_IDENTITY:-}" ]; }
 preview() { [[ ${GITHUB_REF_NAME:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; }
 adhoc() { [ "${BUTLER_SIGN_IDENTITY:-}" = "-" ]; }
+
+# Credential tools must share the profile that created the temporary keychain.
+# App packaging still runs with its own fresh HOME and BUTLER_DATA.
+signing_tool() {
+  if [ -n "${BUTLER_SIGN_HOME:-}" ]; then
+    env HOME="$BUTLER_SIGN_HOME" "$@"
+  else
+    "$@"
+  fi
+}
 
 # ---- CI credentials ---------------------------------------------------------
 
@@ -71,35 +82,38 @@ setup_certificate() {
     die "certificate secrets missing or partial"
   fi
   local pw kc="$default_keychain" p12 g2 identity g2_note=""
+  umask 077
+  export BUTLER_SIGN_HOME="$tmp_dir/butler-signing-home"
+  mkdir -p "$BUTLER_SIGN_HOME"
   pw=$(openssl rand -base64 24)
   echo "::add-mask::$pw"
-  umask 077
   mkdir -p "$key_dir"
   p12=$key_dir/cert.p12
   printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | base64 --decode > "$p12"
-  security create-keychain -p "$pw" "$kc"
-  security set-keychain-settings -lut 21600 "$kc"
-  security unlock-keychain -p "$pw" "$kc"
-  security import "$p12" -k "$kc" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
-  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pw" "$kc" >/dev/null
+  signing_tool security create-keychain -p "$pw" "$kc"
+  signing_tool security set-keychain-settings -lut 21600 "$kc"
+  signing_tool security unlock-keychain -p "$pw" "$kc"
+  signing_tool security import "$p12" -k "$kc" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+  signing_tool security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pw" "$kc" >/dev/null
   # Apple's public intermediate, so the chain builds; a failure surfaces at verify.
   g2=$key_dir/DeveloperIDG2CA.cer
   if curl -fsSL --retry 3 -o "$g2" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer; then
-    security import "$g2" -k "$kc" >/dev/null || g2_note=" (Developer ID G2 intermediate import failed)"
+    signing_tool security import "$g2" -k "$kc" >/dev/null || g2_note=" (Developer ID G2 intermediate import failed)"
   else
     g2_note=" (Developer ID G2 intermediate could not be fetched)"
   fi
   if [ -n "$g2_note" ]; then log "warning:$g2_note"; fi
   # Prepend to the user search list; delete-keychain in cleanup removes it again.
   # shellcheck disable=SC2046
-  security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+  signing_tool security list-keychains -d user -s "$kc" $(signing_tool security list-keychains -d user | tr -d '"')
   rm -f "$p12" "$g2"
 
-  identity=$(security find-identity -v -p codesigning "$kc" |
+  identity=$(signing_tool security find-identity -v -p codesigning "$kc" |
     awk -v team="($APPLE_TEAM_ID)" '/Developer ID Application/ && index($0, team) {print $2; exit}')
   [ -n "$identity" ] || die "no Developer ID Application identity for the configured team$g2_note"
 
   {
+    echo "BUTLER_SIGN_HOME=$BUTLER_SIGN_HOME"
     echo "BUTLER_SIGN_IDENTITY=$identity"
     echo "BUTLER_SIGN_KEYCHAIN=$kc"
     echo "BUTLER_SIGN_TEAM_ID=$APPLE_TEAM_ID"
@@ -108,26 +122,24 @@ setup_certificate() {
   log "signing identity ready for team $APPLE_TEAM_ID"
 }
 
+# Unofficial previews never use the Developer ID: ad-hoc signing, no notarization.
 setup_preview() {
-  if ! "$here/sign-and-notarize.sh" setup-certificate; then
-    cleanup
-    {
-      echo "BUTLER_SIGN_IDENTITY=-"
-      echo "BUTLER_SIGN_KEYCHAIN="
-      echo "BUTLER_SIGN_TEAM_ID="
-      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
-    } >> "$GITHUB_ENV"
-    log "certificate setup failed; unofficial preview uses ad-hoc signing"
-  fi
-  log "unofficial preview: notarization disabled"
+  {
+    echo "BUTLER_SIGN_IDENTITY=-"
+    echo "BUTLER_SIGN_KEYCHAIN="
+    echo "BUTLER_SIGN_TEAM_ID="
+  } >> "$GITHUB_ENV"
+  log "unofficial preview: ad-hoc signing, notarization disabled"
 }
 
 cleanup() {
   local kc=${BUTLER_SIGN_KEYCHAIN:-$default_keychain}
+  local profile=${BUTLER_SIGN_HOME:-$tmp_dir/butler-signing-home}
   if [ -e "$kc" ]; then
-    security delete-keychain "$kc" || log "warning: keychain delete failed"
+    BUTLER_SIGN_HOME="$profile" signing_tool security delete-keychain "$kc" || log "warning: keychain delete failed"
   fi
   rm -rf "$key_dir"
+  if [ "$profile" = "$tmp_dir/butler-signing-home" ]; then rm -rf "$profile"; fi
   log "keychain and keys removed"
 }
 
@@ -150,7 +162,7 @@ sign_path() {
     links=$(find "$dir" -maxdepth 1 -type f -inum "$(stat -f %i "$path")" ! -path "$path")
     chmod u+w "$path" "$dir"
   fi
-  codesign "${args[@]}" "$@" "$path" || status=$?
+  signing_tool codesign "${args[@]}" "$@" "$path" || status=$?
   if [ -n "$mode" ]; then
     # codesign replaces hard-linked Mach-O files with a new inode. Rebind every
     # sibling link before restoring permissions or sealing the enclosing App.
@@ -203,9 +215,9 @@ sign_app() {
   local app=${1%/} list files bundles f b agent agent_inode=""
   [ -d "$app/Contents" ] || die "not an app bundle: $app"
   [ -f "$entitlements" ] || die "entitlements missing: $entitlements"
-  list=$(mktemp)
-  files=$(mktemp)
-  bundles=$(mktemp)
+  list=$(mktemp "$tmp_dir/butler-sign-list.XXXXXX")
+  files=$(mktemp "$tmp_dir/butler-sign-files.XXXXXX")
+  bundles=$(mktemp "$tmp_dir/butler-sign-bundles.XXXXXX")
   agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
   if [ -f "$agent" ]; then agent_inode=$(stat -f '%d:%i' "$agent"); fi
 
@@ -261,7 +273,7 @@ notarize() {
     die "notary API key env is incomplete"
   fi
   local auth=(--key "$BUTLER_NOTARY_KEY_PATH" --key-id "$BUTLER_NOTARY_KEY_ID" --issuer "$BUTLER_NOTARY_ISSUER_ID")
-  work=$(mktemp -d)
+  work=$(mktemp -d "$tmp_dir/butler-sign-work.XXXXXX")
   case "$path" in
     *.dmg|*.zip|*.pkg) sub=$path ;;
     *) sub=$work/$(basename "$path").zip; ditto -c -k --keepParent "$path" "$sub" ;;

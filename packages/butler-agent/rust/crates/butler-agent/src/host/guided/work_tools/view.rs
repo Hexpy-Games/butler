@@ -83,6 +83,7 @@ fn disposition(work: &WorkView, result: &mut Value) {
             "summary":value.summary,
             "remaining_actions":value.remaining_actions,
             "next_condition":value.next_condition,
+            "capability_handoff":value.next_condition.as_deref().and_then(butler_turn::btcc::CapabilityHandoff::from_condition),
         });
     }
 }
