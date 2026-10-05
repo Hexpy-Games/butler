@@ -2,7 +2,7 @@ import { projectTurnActivity } from "@/app/conversation-progress";
 import { appCopy, useAppLocale } from "@/app/copy";
 import type { MessageRecord } from "@/app/types";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
-import { Stack, Tag } from "@/butler-ds";
+import { Stack, Tag, Typo } from "@/butler-ds";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { AssistantFailureNotice } from "./FailureNoticeContainer";
 import { CompletedTurnActivity } from "./CompletedTurnActivity";
@@ -60,6 +60,12 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
           text={message.text}
         />
       )}
+      {message.question_summary?.map(question => (
+        <Stack key={question.id} gap="none" data-test-class="assistant-question-summary">
+          <Typo.Caption tone="tertiary">{question.eyebrow}</Typo.Caption>
+          <Typo.Body wrap="anywhere">{question.title}</Typo.Body>
+        </Stack>
+      ))}
       {message.plan_document ? (
         <PlanDocumentMessage plan={message.plan_document} />
       ) : null}

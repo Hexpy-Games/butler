@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "ask_user/consecutive.rs"]
+mod consecutive;
 #[path = "ask_user/scale.rs"]
 pub(super) mod scale;
 #[path = "ask_user/stub.rs"]

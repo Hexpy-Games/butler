@@ -22,10 +22,20 @@ export function freezeConversationActivity(
   turnProgress: Record<string, TurnProgressSnapshot>,
 ): MessageRecord[] {
   let changed = false;
+  const segmentEnds = new Map<string, number>();
   const next = messages.map((message) => {
+    const turnId = message.turn_id;
+    const snapshot = turnId ? turnProgress[turnId] : undefined;
+    const previousEnd = turnId ? segmentEnds.get(turnId) : undefined;
+    const end = message.status === "delivered" ? Date.parse(message.updated_at ?? "") : Infinity;
+    if (turnId && message.role === "assistant" && Number.isFinite(end)) segmentEnds.set(turnId, end);
+    const segment = snapshot ? { ...snapshot, safe_progress_rows: snapshot.safe_progress_rows?.filter(row => {
+      const at = Date.parse(row.created_at ?? "");
+      return !Number.isFinite(at) || ((previousEnd === undefined || at > previousEnd) && (!Number.isFinite(end) || at <= end));
+    }) } : undefined;
     const frozen = freezeMessageActivity(
       message,
-      message.turn_id ? turnProgress[message.turn_id] : undefined,
+      segment,
     );
     if (frozen !== message) changed = true;
     return frozen;
@@ -90,7 +100,7 @@ function freezePhaseActivity(
   snapshot: TurnProgressSnapshot | null | undefined,
 ): MessageRecord {
   const rows = (snapshot?.safe_progress_rows ?? []).filter(isRetainedActivityRow);
-  if (rows.length === 0) return message;
+  if (!snapshot) return message;
   if (message.turn_activity_rows && progressRowsEqual(message.turn_activity_rows, rows))
     return message;
   return { ...message, turn_activity_rows: rows };

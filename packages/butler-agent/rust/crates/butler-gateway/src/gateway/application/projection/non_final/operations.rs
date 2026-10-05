@@ -152,7 +152,7 @@ pub(super) fn project_suspended(
         }))?,
         now,
     )?;
-    super::stream_message::settle_suspended(db, subscribers, chat, turn, now)?;
+    super::stream_message::settle_suspended(db, subscribers, chat, turn, now, authority_pending)?;
     if authority_pending {
         return Ok((false, false));
     }

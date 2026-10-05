@@ -72,3 +72,28 @@ fn response(item: &Value) -> ResponseRecord {
             .collect(),
     }
 }
+
+pub(crate) fn consecutive_cassette() -> Result<Cassette, HarnessError> {
+    let mut c = cassette()?;
+    let question = c.exchanges[0].clone();
+    let final_answer = c.exchanges[1].clone();
+    c.exchanges.clear();
+    for step in 0..4 {
+        let mut exchange = if step < 3 {
+            question.clone()
+        } else {
+            final_answer.clone()
+        };
+        exchange.request.key.round = (0..step)
+            .flat_map(|_| ["function_call".into(), "function_call_output".into()])
+            .collect();
+        if step < 3 {
+            exchange.response = response(
+                &json!({"type":"function_call","id":format!("fc_question_{step}"),
+                "call_id":format!("call_question_{step}"),"name":"ask_user","arguments":questions().to_string(),"status":"completed"}),
+            );
+        }
+        c.exchanges.push(exchange);
+    }
+    Ok(c)
+}

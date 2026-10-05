@@ -876,6 +876,7 @@ export interface PlanDocumentRecord {
 
 export interface MessageRecord {
   question_answer?: AnsweredUserQuestions;
+  question_summary?: UserQuestion[];
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
   content_parts?: import("./messageContent").MessageContent;
   id: string;

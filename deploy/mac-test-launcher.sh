@@ -20,7 +20,7 @@ cleanup() {
       cp -R "$BUTLER_DATA/$relative/." "$log_root/$relative/"
     fi
   done
-  if [ "${1:-}" = --smoke ]; then
+  if [ "${smoke_mode:-}" = --smoke ]; then
     python3 - "$BUTLER_DATA" "$BUTLER_APP_SERVER_PORT" <<'PY' || result=1
 import json, pathlib, socket, sys
 data, port = pathlib.Path(sys.argv[1]), int(sys.argv[2])
@@ -42,20 +42,24 @@ export BUTLER_APP_DISABLE_SHELL_REGISTRATION=1 BUTLER_SERVICE_MANAGER=off
 export BUTLER_SECRET_STORE=file BUTLER_PLATFORM_SYSTEM_SECRETS=0
 export BUTLER_APP_AGENT_LIFECYCLE_MODE=app-foreground BUTLER_APP_ALLOW_LIFECYCLE_TEST_OVERRIDE=1
 export BUTLER_APP_SERVER_HOST=127.0.0.1
+export BUTLER_APP_TEST_AUTO_CONNECT=1
 export BUTLER_APP_SERVER_PORT
 BUTLER_APP_SERVER_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
 mkdir -p "$HOME" "$BUTLER_DATA" "$CODEX_HOME" "$BUTLER_APP_ELECTRON_USER_DATA_DIR"
-trap 'cleanup "${1:-}"' EXIT
+trap 'cleanup' EXIT
 trap 'exit 130' INT TERM
-app_args=()
-if [ "${1:-}" = --smoke ]; then app_args+=(--single-process); fi
-"$package_root/Butler.app/Contents/MacOS/Butler" "${app_args[@]}" >"$test_home/app.log" 2>"$test_home/app-error.log" &
+set -- "${1:-}"
+smoke_mode=$1
+set --
+if [ "$smoke_mode" = --smoke ]; then set -- --single-process; fi
+"$package_root/Butler.app/Contents/MacOS/Butler" "$@" >"$test_home/app.log" 2>"$test_home/app-error.log" &
 app_pid=$!
 printf 'Test app PID: %s; port: %s\n' "$app_pid" "$BUTLER_APP_SERVER_PORT"
-if [ "${1:-}" = --smoke ]; then
-  python3 - "$BUTLER_DATA" "$app_pid" "$BUTLER_APP_SERVER_PORT" <<'PY'
+if [ "$smoke_mode" = --smoke ]; then
+  python3 - "$BUTLER_DATA" "$app_pid" "$BUTLER_APP_SERVER_PORT" "$test_home/app.log" <<'PY'
 import json, os, pathlib, sys, time, urllib.request
 data, pid, port = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+log = pathlib.Path(sys.argv[4])
 deadline = time.monotonic() + 60
 while time.monotonic() < deadline:
     os.kill(pid, 0)
@@ -66,7 +70,8 @@ while time.monotonic() < deadline:
             assert response.status == 200
         instance = json.loads((data/'app/runtime/foreground/instance.json').read_text())
         assert instance['app_pid'] == pid and instance['state'] == 'ready'
-        print('Test app connected; authenticated Agent health=200')
+        assert 'Test renderer connected; authenticated sessions=200' in log.read_text()
+        print('Test app connected; authenticated renderer sessions=200; Agent health=200')
         break
     except (OSError, ValueError, KeyError, AssertionError):
         time.sleep(.2)
