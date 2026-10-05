@@ -2,13 +2,8 @@ name: Butler Windows Desktop Source
 
 on:
   pull_request:
-    paths:
-      - "packages/butler-app/client/electron/**"
-      - "packages/butler-app/client/ui/**"
-      - "packages/butler-app/scripts/windows/**"
-      - ".github/workflows/windows.yml"
-
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -20,7 +15,14 @@ defaults:
     shell: pwsh
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: windows.yml
+
   desktop-source:
+    needs: changes
+    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.package == 'true'
     name: Windows Electron and UI checks
     runs-on: windows-latest
     steps:
@@ -44,3 +46,24 @@ jobs:
         run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Quality
       - name: Build UI assets
         run: npm.cmd --prefix packages/butler-app/client/ui run build
+
+  gate:
+    name: windows gate
+    if: always()
+    needs: [changes, desktop-source]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"ui": ["desktop-source"], "package": ["desktop-source"]}'
+          workflow: windows.yml
+      - name: Require selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"desktop-source": ["ui", "package"]}'
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py

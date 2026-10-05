@@ -1,0 +1,52 @@
+name: Changed CI inputs
+description: Compare PR/base trees and previously successful input hashes
+inputs:
+  workflow:
+    description: Calling workflow file
+    required: true
+outputs:
+  rust:
+    description: Selected rust inputs
+    value: ${{ steps.paths.outputs.rust }}
+  ui:
+    description: Selected ui inputs
+    value: ${{ steps.paths.outputs.ui }}
+  site:
+    description: Selected site inputs
+    value: ${{ steps.paths.outputs.site }}
+  ds:
+    description: Selected ds inputs
+    value: ${{ steps.paths.outputs.ds }}
+  package:
+    description: Selected package inputs
+    value: ${{ steps.paths.outputs.package }}
+  install:
+    description: Selected install inputs
+    value: ${{ steps.paths.outputs.install }}
+  linux-package:
+    description: Selected linux-package inputs
+    value: ${{ steps.paths.outputs.linux-package }}
+  workflows:
+    description: Selected workflows inputs
+    value: ${{ steps.paths.outputs.workflows }}
+  docs-only:
+    description: Selected docs-only inputs
+    value: ${{ steps.paths.outputs.docs-only }}
+  electron:
+    description: Selected electron inputs
+    value: ${{ steps.paths.outputs.electron }}
+  licenses:
+    description: Selected licenses inputs
+    value: ${{ steps.paths.outputs.licenses }}
+  selection:
+    description: Selected selection inputs
+    value: ${{ steps.paths.outputs.selection }}
+runs:
+  using: composite
+  steps:
+    - id: paths
+      shell: bash
+      env:
+        CI_WORKFLOW: ${{ inputs.workflow }}
+        GH_TOKEN: ${{ github.token }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/ci-changes.py" select "$CI_WORKFLOW"

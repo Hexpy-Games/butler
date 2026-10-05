@@ -7,15 +7,19 @@ on:
       - "CONTRIBUTING.md"
       - "assets/readme/**"
   pull_request:
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
   workflow_dispatch:
 permissions:
+  actions: read
   contents: read
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: licenses.yml
+
   licenses:
+    needs: changes
+    if: needs.changes.outputs.licenses == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +27,27 @@ jobs:
         with:
           node-version: 24
       - name: Validate locked inventory and deterministic notices
-        run: |
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          node deploy/licenses/generate.mjs --check
-          node deploy/licenses/check.mjs
-          python3 deploy/licenses/check-disclosure.py
+        run: python3 .github/scripts/isolated.py node deploy/licenses/generate.mjs --check
+      - run: python3 .github/scripts/isolated.py node deploy/licenses/check.mjs
+      - run: python3 .github/scripts/isolated.py python3 deploy/licenses/check-disclosure.py
+
+  gate:
+    name: licenses gate
+    if: always()
+    needs: [changes, licenses]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"licenses": ["licenses"]}'
+          workflow: licenses.yml
+      - name: Require selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"licenses": ["licenses"]}'
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py
