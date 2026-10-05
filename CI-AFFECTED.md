@@ -12,9 +12,9 @@ path filter can leave a required check missing on documentation changes.
 | App client, i18n, other Bun packages/tools/tests, Bun/TS configuration and lock | Bun unit suite, Windows source/build checks, DS browser smokes; shared UI/i18n assets also select existing site checks |
 | Electron/main process, deploy, release/Windows packaging scripts, native installer inputs | Native package/install/update smokes on the existing platforms; updater UI integration paths keep their existing native smokes |
 | Site source | Site check/build/leak/font checks |
-| Dependency inventories/licenses | Existing deterministic license/disclosure checks |
+| Dependency inventories, locked catalog inputs and license notices | Existing deterministic license/disclosure checks |
 | `.github/**` | Every category |
-| Markdown outside the site and `.github`, plans, readme assets | Repository/CI lint only |
+| Documentation Markdown, plans, readme assets (runtime prompts/skills/fixtures and distribution notices retain their owners) | Repository/CI lint only |
 | Unclassified executable/configuration input | All categories, conservatively |
 
 Existing job names, reusable test workflows, assertions, matrix entries and
@@ -54,7 +54,7 @@ content proof. Receipt artifacts last 30 days; eviction only costs extra work.
 
 ## Validation and measurement
 
-Local regression checks: seven tests in `.github/scripts/test-ci-changes.py`,
+Local regression checks: eight tests in `.github/scripts/test-ci-changes.py`,
 including receipt ownership of every selected gate check across all 128 flag
 combinations, and the existing
 `Gate`/`ArtifactTrust` tests from `.github/scripts/test-ci-invariants.py`. All run

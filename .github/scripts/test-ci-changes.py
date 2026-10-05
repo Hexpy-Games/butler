@@ -33,6 +33,10 @@ class Paths(unittest.TestCase):
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
+            'packages/butler-agent/rust/docs/agent-context-audit.md': set(),
+            'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
+            'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
+            'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
             'plans/new-plan.md': set(),
             '.github/CI.md': set(changes.GROUPS),
             '.github/workflows/windows.yml': set(changes.GROUPS),
@@ -41,6 +45,16 @@ class Paths(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
+
+    # test-category: security
+    def test_every_locked_license_input_selects_its_validator(self):
+        self.assertGreater(len(changes.LICENSE_INPUTS), 20)
+        for path in changes.LICENSE_INPUTS:
+            with self.subTest(path=path):
+                self.assertIn('licenses', changes.categories(path))
+        for path in ['packages/butler-app/client/ui/src/libs/design-system/fonts/LICENSE.md',
+                     'packages/butler-agent/resources/new-model/NOTICE.txt']:
+            self.assertIn('licenses', changes.categories(path))
 
     # test-category: pure-logic
     def test_content_modes_deletions_and_renames_are_hashed(self):

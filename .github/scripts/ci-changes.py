@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,11 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
              'packages/butler-app/client/ui/src/components/settings/Update*')
 
+# The locked inventory declares the non-manifest inputs it fingerprints too.
+# Read the checkout, never an owner's runtime data directory.
+LICENSE_INPUTS = set(json.loads((Path(__file__).resolve().parents[2] /
+                                'deploy/licenses/catalog.json').read_text())['inputs'])
+
 
 def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
@@ -29,7 +35,11 @@ def matches(path, patterns):
 def categories(path):
     if path.startswith('.github/'):
         return set(GROUPS)
-    if path.endswith('.md') and not path.startswith('packages/butler-site/'):
+    notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
+    license_input = path in LICENSE_INPUTS or bool(notice)
+    runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
+                        (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
+    if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
         return set()
     result = set()
     rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', 'rust-toolchain*'))
@@ -40,13 +50,15 @@ def categories(path):
         result.add('rust')
     if rust or package or path == 'VERSION':
         result.update(('package', 'install', 'linux-package'))
-    if ui or shared or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
+    bun_source = path.startswith('packages/') and not rust and path.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs'))
+    manifest = path.startswith('packages/') and path.endswith('/package.json')
+    if ui or shared or bun_source or manifest or path.startswith(('tests/', 'tools/')) or (path.startswith('packages/') and not rust and not package and not path.startswith('packages/butler-site/')):
         result.add('ui')
     if path.startswith(('packages/butler-site/', 'packages/butler-app/client/ui/', 'packages/butler-i18n/')) or shared or matches(path, ('tests/smoke/ds-site-*',)):
         result.add('site')
     if path.startswith('packages/butler-app/client/ui/') or shared or matches(path, ('tests/smoke/ds-site-*',)):
         result.add('ds')
-    if matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
+    if license_input or matches(path, ('*lock*', 'Cargo.toml', '**/Cargo.toml', '**/package.json', 'deploy/licenses/*', '**/licenses/*', 'LICENSE*')):
         result.add('licenses')
     if 'ui' in result:
         result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
