@@ -3,20 +3,20 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { DisclosureRow } from "@/butler-ds";
 import { useSavedKeys } from "@/components/settings/hooks/useSavedKeys";
-import { PermissionsFields } from "@/components/settings/PermissionsFields";
+import type { SettingsView as SettingsData } from "@/app/types";
 import { SavedKeysRows } from "@/components/settings/SavedKeysRows";
 import { SecurityAllowedHostsField } from "@/components/settings/SecurityAllowedHostsField";
 import { SecurityDevicesSection } from "@/components/settings/SecurityDevicesSection";
 import { SecurityPairingSection } from "@/components/settings/SecurityPairingSection";
 import { SecurityRemoteAccessFields } from "@/components/settings/SecurityRemoteAccessFields";
-import { SettingsPage, SettingsSection, SettingsSwitch } from "@/components/settings/SettingsFormComponents";
+import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "@/components/settings/SettingsFormComponents";
 import { useSecuritySettings } from "@/components/settings/useSecuritySettings";
 import { useSettingsUIStore } from "@/stores/settingsUIStore";
 
 // PROPOSAL COPY of components/settings/SecuritySettings.tsx, reorganised. Each section keeps its
 // product component, field order and behaviour; only where it renders changes:
 //   remote-access, device-pairing, paired-devices   (Security, unchanged, first)
-//   permissions        ← Models › 권한 (ModelsSettings.tsx: PermissionsFields)
+//   permissions        ← Models › 권한, access mode only (Plan mode default → 일반 › 대화 입력)
 //   grants             NEW (허용한 작업)
 //   saved-keys         ← Models › 저장된 키 (ModelsSettings.tsx: SavedKeysRows)
 //   diagnostics        ← Privacy › 진단 (PrivacySettings.tsx; the Privacy page is removed)
@@ -35,7 +35,20 @@ function MovedSections({ grants }: { grants: ReactNode }) {
   return (
     <>
       <SettingsSection id="permissions" kind="form" title={sections.permissions}>
-        <PermissionsFields />
+        {/* The access-mode field of PermissionsFields, unchanged; Plan mode default moves to 일반 › 대화 입력. */}
+        {draft ? (
+          <SettingsSelect
+            settingId="access-mode"
+            label={settingsCopy.fields.access}
+            value={draft.access_mode}
+            onChange={(value) => update({ access_mode: value as SettingsData["access_mode"] }, setSettings)}
+            options={[
+              { value: "full_access", label: appCopy.permissions.fullAccess },
+              { value: "ask_first", label: appCopy.permissions.askFirst },
+              { value: "read_only", label: appCopy.permissions.readOnly },
+            ]}
+          />
+        ) : null}
       </SettingsSection>
       {grants}
       {savedKeys.state !== "unsupported" && (
