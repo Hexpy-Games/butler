@@ -14,6 +14,7 @@ use crate::btcc::StorageCode;
 pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     let started = std::time::Instant::now();
     trace("activated_begin", started);
+    sqlite::advise_validation_scan(path);
     let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(StorageError::sqlite)?;
     // Full validation revisits overflow pages. Both the bounded page cache and
