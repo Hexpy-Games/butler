@@ -1,0 +1,215 @@
+/* Proposal page only (ds-site). Composer surfaces stay owned by ComposerCard/TintedGlass;
+   this file lays out the preview frames and the decoration layers that a DS slot would own. */
+
+/* body does not scroll (tokens.css); the page is its own scroll container. */
+.pageRoot {
+  height: 100%;
+  overflow-y: auto;
+  padding-block: var(--space-3xl);
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+}
+
+.frames {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
+}
+
+.frames[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (width <= 1100px) {
+  .frames[data-count="2"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.frame {
+  min-width: 0;
+  padding: var(--space-lg);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+}
+
+/* The new chat screen, cropped: page wallpaper behind, composer at the bottom. One inset
+   (the adaptive composer gutter, 16px) on every side. */
+.screen {
+  position: relative;
+  display: grid;
+  align-content: end;
+  min-height: 16rem;
+  margin-inline: auto;
+  padding: var(--space-lg);
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--radius-panel);
+}
+
+.screen[data-width="375"] {
+  max-width: 375px;
+}
+
+/* On a phone the preview bleeds to the viewport edges, so the composer gets exactly the
+   app's width (viewport minus the 16px composer gutter on each side). */
+@media (width <= 600px) {
+  .frames {
+    margin-inline: calc(-1 * var(--space-lg));
+  }
+
+  .frame {
+    padding: 0;
+    border-width: 0;
+    border-radius: 0;
+  }
+
+  .screen {
+    border-radius: 0;
+  }
+}
+
+.composerStage {
+  position: relative;
+  z-index: 1;
+  width: min(100%, var(--conversation-content-width, 760px));
+  margin-inline: auto;
+}
+
+/* ---- Card background (what a ComposerCard `decoration` slot would render) ---- */
+
+.background {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.art {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+
+/* TintedGlass's own recipe (tint, stronger at the top and bottom edges) at a per-scene alpha
+   that keeps text-primary >= 4.5:1 over the scene in both themes (measured on the page). */
+.scrim {
+  --decor-scrim: 74%;
+  --decor-scrim-edge: 82%;
+
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(
+        in srgb,
+        var(--tinted-glass-tint) var(--decor-scrim-edge),
+        transparent
+      )
+      0,
+    color-mix(in srgb, var(--tinted-glass-tint) var(--decor-scrim), transparent)
+      var(--tinted-glass-edge-size),
+    color-mix(in srgb, var(--tinted-glass-tint) var(--decor-scrim), transparent)
+      calc(100% - var(--tinted-glass-edge-size)),
+    color-mix(
+        in srgb,
+        var(--tinted-glass-tint) var(--decor-scrim-edge),
+        transparent
+      )
+      100%
+  );
+}
+
+/* A bright scene needs less white over it; dark text already reads on it. */
+.background[data-composer-decoration="cherry-blossom"] .scrim {
+  --decor-scrim: 30%;
+  --decor-scrim-edge: 50%;
+}
+
+/* Light text needs the scene pushed down. Measured floors (pulse dip included): text-primary
+   >= 7.5:1 and text-secondary/placeholder >= 3:1 in every scene and theme. */
+:global(.theme-dark) .background .scrim {
+  --decor-scrim: 76%;
+  --decor-scrim-edge: 84%;
+}
+
+/* ---- Edge character: head behind the card, paws in front on the top edge ---- */
+
+.head,
+.paws {
+  position: absolute;
+  right: 14%;
+  width: 44px;
+  pointer-events: none;
+}
+
+.head {
+  bottom: calc(100% - 8px);
+  height: 34px;
+}
+
+.paws {
+  top: -5px;
+  height: 10px;
+}
+
+.head svg,
+.paws svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.fur {
+  fill: var(--grayscale-01);
+  stroke: var(--grayscale-07);
+  stroke-width: 1;
+}
+
+.inner,
+.blush {
+  fill: var(--red-03);
+}
+
+.blush {
+  opacity: 0.8;
+}
+
+.eye {
+  fill: var(--grayscale-11);
+}
+
+.toe {
+  fill: none;
+  stroke: var(--grayscale-06);
+  stroke-linecap: round;
+  stroke-width: 0.8;
+}
+
+.stalk {
+  fill: none;
+  stroke: var(--red-08);
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.eyeWhite {
+  fill: var(--neutral-white);
+  stroke: var(--red-08);
+  stroke-width: 1;
+}
+
+.shell {
+  fill: var(--red-05);
+  stroke: var(--red-08);
+  stroke-width: 1;
+}
+
+.shellSpot {
+  fill: var(--red-03);
+}
