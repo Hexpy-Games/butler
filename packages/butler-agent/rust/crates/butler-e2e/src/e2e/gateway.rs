@@ -21,6 +21,7 @@ pub struct Reply {
     pub text: String,
     /// Header wait, complete body read, and full JSON parse; content-free diagnostics.
     pub phases: Option<[Duration; 3]>,
+    pub dispatch_timing: Option<String>,
 }
 
 impl Reply {
@@ -120,6 +121,11 @@ impl Gateway {
         let started = observe.then(Instant::now);
         let response = request.send().await?;
         let headers = started.map(|start| start.elapsed());
+        let dispatch_timing = response
+            .headers()
+            .get("x-butler-e2e-dispatch-us")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
         let status = response.status().as_u16();
         let started = observe.then(Instant::now);
         let text = response.text().await?;
@@ -135,6 +141,7 @@ impl Gateway {
             body,
             text,
             phases,
+            dispatch_timing,
         })
     }
 

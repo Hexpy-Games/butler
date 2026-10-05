@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 // 13,312 registrations in the project, plus unrelated owner-scale message history.
 fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     let started = std::time::Instant::now();
-    eprintln!("ARTIFACT-FIXTURE phase=seed_begin");
+    seed_usage("seed_begin");
     let mut db =
         butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
     // This fixture inserts the complete 1.2GB history into several interleaved
@@ -18,11 +18,13 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
         tx.execute("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES(?1,'Other','chat',NULL,'now','now')",[format!("scale-chat-{i}")]).unwrap();
     }
     seed_history(&tx);
+    seed_usage("history_complete");
     eprintln!(
         "ARTIFACT-FIXTURE phase=history_complete rows=300000 elapsed_ms={}",
         started.elapsed().as_millis()
     );
     let ids = seed_registrations(&tx, chat);
+    seed_usage("registrations_complete");
     // Reattachment must not inflate counts, and its latest delivered origin wins.
     tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES('reattached',?1,'latest-turn','assistant','','delivered','now','now')",[chat]).unwrap();
     tx.execute(
@@ -41,6 +43,7 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
             .unwrap();
     }
     tx.commit().unwrap();
+    seed_usage("commit_complete");
     eprintln!(
         "ARTIFACT-FIXTURE phase=seed_committed registrations=13312 elapsed_ms={}",
         started.elapsed().as_millis()
@@ -55,6 +58,13 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     let mut ordered = vec![ids[0].clone(), ids[1].clone()];
     ordered.extend(ids[2..].iter().rev().cloned());
     ordered
+}
+
+fn seed_usage(phase: &str) {
+    eprintln!(
+        "ARTIFACT-FIXTURE phase={phase} io={:?}",
+        butler_platform::process_control::usage::sample(std::process::id())
+    );
 }
 
 fn seed_registrations(db: &Connection, chat: &str) -> Vec<String> {

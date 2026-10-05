@@ -135,13 +135,12 @@ async fn views(
             let db = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
             db.query_row("SELECT text FROM messages WHERE turn_id=?1 AND role='assistant' ORDER BY rowid DESC LIMIT 1", [&db_turn], |row| row.get::<_, String>(0)).optional().unwrap()
         }).await.unwrap();
-        let start = measure_latency.then(Instant::now);
+        let start = measure_latency.then(storage_concurrency_support::start_request);
         let reply = gw
             .get(&format!("/session-view?session_id={session}"))
             .await?;
         if let Some(start) = start {
-            samples.push(u64::try_from(start.elapsed().as_micros()).unwrap());
-            phases.observe(reply.phases.unwrap());
+            samples.push(phases.observe_reply(&reply, start, samples.len()));
         }
         assert_eq!(reply.status, 200, "{}", reply.text);
         let view = reply.data();
@@ -194,6 +193,7 @@ fn storage_metrics(
         serde_json::from_slice(&std::fs::read(path.with_extension("metrics.json"))?)?;
     assert_eq!(metrics["busy"], 0, "SQLite BUSY/LOCKED");
     let (persist_p95_us, view_p95_us) = if measure_latency {
+        storage_concurrency_support::report_slow_views(&metrics);
         assert!(
             view_samples.len() >= SESSIONS,
             "did not sample during streaming"

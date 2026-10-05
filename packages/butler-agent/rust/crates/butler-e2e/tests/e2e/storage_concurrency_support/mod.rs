@@ -140,7 +140,23 @@ pub(super) async fn verify_skill_record_boundaries(
 #[derive(Default)]
 pub(super) struct HttpPhases([Vec<u64>; 3]);
 impl HttpPhases {
-    pub(super) fn observe(&mut self, values: [std::time::Duration; 3]) {
+    pub(super) fn observe_reply(
+        &mut self,
+        reply: &butler_e2e::e2e::gateway::Reply,
+        timing: (u128, std::time::Instant),
+        index: usize,
+    ) -> u64 {
+        let elapsed_us = u64::try_from(timing.1.elapsed().as_micros()).unwrap();
+        if elapsed_us > 20_000 {
+            eprintln!(
+                "STORAGE REQUEST sample={index} started_unix_us={} http_us={elapsed_us} server_start_and_us={:?}",
+                timing.0, reply.dispatch_timing
+            );
+        }
+        self.observe(reply.phases.unwrap());
+        elapsed_us
+    }
+    fn observe(&mut self, values: [std::time::Duration; 3]) {
         for (samples, elapsed) in self.0.iter_mut().zip(values) {
             samples.push(u64::try_from(elapsed.as_micros()).unwrap());
         }
@@ -153,6 +169,24 @@ impl HttpPhases {
                 "STORAGE HTTP phase={name} count={} p95_us={p95}",
                 samples.len()
             );
+        }
+    }
+}
+
+pub(super) fn start_request() -> (u128, std::time::Instant) {
+    (
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros(),
+        std::time::Instant::now(),
+    )
+}
+
+pub(super) fn report_slow_views(metrics: &Value) {
+    if let Some(phases) = metrics["view_slow"].as_array() {
+        for phase in phases {
+            eprintln!("STORAGE SLOW VIEW phase_start_us_elapsed={phase}");
         }
     }
 }

@@ -192,6 +192,7 @@ impl Gateway {
             body,
             text,
             phases: None,
+            dispatch_timing: None,
         })
     }
 

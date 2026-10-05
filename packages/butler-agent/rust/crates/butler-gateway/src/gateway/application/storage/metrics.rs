@@ -13,6 +13,7 @@ pub(in crate::gateway::application) struct Metrics {
     pub(in crate::gateway::application) commits: AtomicU64,
     operations: Mutex<Vec<u64>>,
     view_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
+    slow_views: Mutex<Vec<(&'static str, u128, u128)>>,
     write_phases: Mutex<std::collections::BTreeMap<&'static str, Vec<u64>>>,
     busy: AtomicU64,
 }
@@ -20,10 +21,18 @@ pub(in crate::gateway::application) struct ViewMeasurement {
     metrics: std::sync::Arc<Metrics>,
     name: &'static str,
     start: std::time::Instant,
+    unix_us: u128,
 }
 impl Drop for ViewMeasurement {
     fn drop(&mut self) {
-        self.metrics.view_phase(self.name, self.start.elapsed());
+        let elapsed = self.start.elapsed();
+        self.metrics.view_phase(self.name, elapsed);
+        if elapsed.as_micros() > 20_000 {
+            self.metrics
+                .slow_views
+                .lock()
+                .push((self.name, self.unix_us, elapsed.as_micros()));
+        }
     }
 }
 pub(super) fn view_measurement(
@@ -34,6 +43,10 @@ pub(super) fn view_measurement(
         metrics,
         name,
         start: std::time::Instant::now(),
+        unix_us: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros(),
     })
 }
 
@@ -94,7 +107,7 @@ impl Metrics {
                 histogram[index] += 1;
             }
         }
-        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"view_phase_us":*self.view_phases.lock(),"write_phase_us":*self.write_phases.lock(),"histogram_upper_us":bounds,"histogram_counts":histogram});
+        let value = serde_json::json!({"commits":self.commits.load(Ordering::Relaxed),"wal_bytes":bytes,"busy":self.busy.load(Ordering::Relaxed),"operation_us":*operations,"view_phase_us":*self.view_phases.lock(),"view_slow":*self.slow_views.lock(),"write_phase_us":*self.write_phases.lock(),"histogram_upper_us":bounds,"histogram_counts":histogram});
         std::fs::write(database.with_extension("metrics.json"), value.to_string()).map_err(
             |error| {
                 AppStorageError::new(
