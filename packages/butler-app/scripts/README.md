@@ -80,8 +80,8 @@ after the App passes its signing policy and smoke checks. A bare CLI binary cann
 the Agent is gated on `codesign --check-notarization` (online ticket). Missing or partial secrets fail the release.
 
 Owner decision (2026-10-01): tags matching `vX.Y.Z-preview.*` are unofficial
-previews. Certificate setup runs independently of the notary credentials. If it
-fails, setup removes partial credentials and selects `codesign -s -`. Previews
+previews. Since 2026-10-05 they skip certificate setup and always sign ad-hoc
+(`codesign -s -`) without the production-signing requirement. Previews
 never validate or use the notary API key, submit to notarization, staple, or
 require Gatekeeper's notarized verdict. Signature validity, payload closure,
 smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
