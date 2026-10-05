@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Box, PageContainer, ScrollArea, SegmentedControl, Stack, Switch, Tag, Typo } from "@/butler-ds";
+import { Box, PageContainer, ScrollArea, SegmentedControl, Slider, Stack, Switch, Tag, Typo } from "@/butler-ds";
 import { PAGE_COPY } from "./copy";
 import {
-  DEFAULT_STATE, STAGE_MESSAGE, STAGE_SIZE, stateFromQuery, stateToQuery,
+  clampInset, DEFAULT_STATE, INSET_MAX, INSET_STEP, STAGE_MESSAGE, STAGE_SIZE, stateFromQuery, stateToQuery,
   type StageState, type StageWidth,
 } from "./state";
 
@@ -108,6 +108,10 @@ export function ComposerControlsProposalPage() {
             <Toggle label={copy.plan} checked={state.plan} onChange={(plan) => update({ plan })} />
             <Toggle label={copy.question} checked={state.question} onChange={(question) => update({ question })} />
             <Toggle label={copy.attachment} checked={state.attachment} onChange={(attachment) => update({ attachment })} />
+            <Control label={`${copy.inset} · ${state.inset}px`}>
+              <Slider aria-label={copy.inset} min={0} max={INSET_MAX} step={INSET_STEP} value={state.inset}
+                onValueChange={(value) => update({ inset: clampInset(value) })} />
+            </Control>
           </Stack>
         </Box>
 

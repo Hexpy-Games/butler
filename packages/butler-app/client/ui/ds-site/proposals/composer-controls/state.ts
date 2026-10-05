@@ -15,11 +15,13 @@ export interface StageState {
   theme: "light" | "dark";
   wallpaper: StageWallpaper;
   locale: ProposalLocale;
+  /** Control row inline inset from the card edges, px (0-32, step 2). The owner picks the final value. */
+  inset: number;
 }
 
 export const DEFAULT_STATE: StageState = {
   variant: "split", mode: "idle", plan: true, question: false, attachment: false,
-  theme: "light", wallpaper: "clouds", locale: "ko-KR",
+  theme: "light", wallpaper: "clouds", locale: "ko-KR", inset: 0,
 };
 
 export const STAGE_MESSAGE = "butler-composer-proposal";
@@ -37,6 +39,14 @@ export const STAGE_SIZE: Record<StageWidth, { width: number; height: number }> =
   "375": { width: 375, height: 760 },
 };
 
+export const INSET_MAX = 32;
+export const INSET_STEP = 2;
+
+export function clampInset(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(INSET_MAX, Math.max(0, Math.round(value / INSET_STEP) * INSET_STEP));
+}
+
 const pick = <T extends string>(value: string | null, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
 
@@ -51,13 +61,14 @@ export function stateFromQuery(params: URLSearchParams): StageState {
     theme: pick(params.get("theme"), ["light", "dark"], DEFAULT_STATE.theme),
     wallpaper: pick(params.get("wallpaper"), ["clouds", "daisies", "bloom", "none"], DEFAULT_STATE.wallpaper),
     locale: pick(params.get("locale"), ["en-US", "ko-KR"], DEFAULT_STATE.locale),
+    inset: clampInset(Number(params.get("inset") ?? DEFAULT_STATE.inset)),
   };
 }
 
 export function stateToQuery(state: StageState): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(state)) {
-    params.set(key, typeof value === "boolean" ? (value ? "1" : "0") : value);
+    params.set(key, typeof value === "boolean" ? (value ? "1" : "0") : String(value));
   }
   return params;
 }
