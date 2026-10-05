@@ -14,7 +14,7 @@ export interface StageState {
 }
 
 export const DEFAULT_STATE: StageState = {
-  variant: "rolling", scenario: "fanout", theme: "light", wallpaper: "clouds", locale: "ko-KR", motion: "full",
+  variant: "open", scenario: "fanout", theme: "light", wallpaper: "clouds", locale: "ko-KR", motion: "full",
 };
 
 export const STAGE_MESSAGE = "butler-task-graph-proposal";
@@ -38,7 +38,7 @@ const pick = <T extends string>(value: string | null, allowed: readonly T[], fal
 
 export function stateFromQuery(params: URLSearchParams): StageState {
   return {
-    variant: pick(params.get("variant"), ["rolling", "rail"], DEFAULT_STATE.variant),
+    variant: pick(params.get("variant"), ["open", "select"], DEFAULT_STATE.variant),
     scenario: pick(params.get("scenario"), SCENARIOS, DEFAULT_STATE.scenario),
     theme: pick(params.get("theme"), ["light", "dark"], DEFAULT_STATE.theme),
     wallpaper: pick(params.get("wallpaper"), ["clouds", "daisies", "bloom", "none"], DEFAULT_STATE.wallpaper),
