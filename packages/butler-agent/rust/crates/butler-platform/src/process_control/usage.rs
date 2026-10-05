@@ -21,6 +21,10 @@ pub struct ProcessUsage {
     /// Bytes written to storage. Windows supplies a conservative native I/O
     /// upper bound, including buffered/network writes.
     pub write_bytes: u64,
+    /// Cumulative native macOS user CPU counter from pidrusage; absent elsewhere.
+    pub cpu_user_time: Option<u64>,
+    /// Cumulative native macOS system CPU counter from pidrusage; absent elsewhere.
+    pub cpu_system_time: Option<u64>,
 }
 
 /// Samples native process counters; unavailable metrics remain `None`.
@@ -37,6 +41,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             read_bytes: counter(&io, "read_bytes")?,
             write_chars: Some(counter(&io, "wchar")?),
             write_bytes: counter(&io, "write_bytes")?,
+            cpu_user_time: None,
+            cpu_system_time: None,
         }))
     }
     #[cfg(target_os = "macos")]
@@ -53,6 +59,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             read_bytes: usage.ri_diskio_bytesread,
             write_chars: None,
             write_bytes: usage.ri_diskio_byteswritten,
+            cpu_user_time: Some(usage.ri_user_time),
+            cpu_system_time: Some(usage.ri_system_time),
         }))
     }
     #[cfg(target_os = "windows")]
@@ -81,6 +89,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             read_bytes: disk.total_read_bytes,
             write_chars: Some(disk.total_written_bytes),
             write_bytes: disk.total_written_bytes,
+            cpu_user_time: None,
+            cpu_system_time: None,
         }))
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

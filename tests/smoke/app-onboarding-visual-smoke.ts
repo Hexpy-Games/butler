@@ -71,7 +71,14 @@ try {
       await panel.getByRole("radio", { name: /직접 입력/u }).click();
       await panel.getByRole("textbox").fill("민수님");
       assert(!/ask_user|온보딩|스튜어드/u.test(await page.locator("body").innerText()), "Internal names stay out of visible copy");
-      assert.equal(await page.getByText("답변을 기다리고 있습니다.", { exact: true }).count(), 1);
+      const waitingStatusCount = await page.getByText("답변을 기다리고 있습니다.", { exact: true }).count();
+      if (waitingStatusCount !== 1) {
+        const view = await server.api<{ active_turn?: { state?: string }; latest_turn?: { state?: string }; pending_questions?: unknown[] }>("/session-view?session_id=general");
+        console.log(JSON.stringify({ surface: "question-status", width, theme, waitingStatusCount,
+          activeState: view.active_turn?.state, latestState: view.latest_turn?.state,
+          pendingQuestions: view.pending_questions?.length }));
+      }
+      assert.equal(waitingStatusCount, 1);
       await capture("question");
       if (width === 375) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       const row = await general.boundingBox();

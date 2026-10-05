@@ -75,8 +75,8 @@ async fn settled_sources(data: &Path) -> Result<(), HarnessError> {
     drop(canonical);
     support::until(|| {
         let db = butler_platform::sqlite::open_with_flags(support::graph(data), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-        let errors: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows WHERE error_code IS NOT NULL", [], |row| row.get(0)).unwrap();
-        assert_eq!(errors, 0, "migration setup must keep all extraction error-free");
+        let errors = db.prepare("SELECT state,error_code FROM memory_projection_windows WHERE error_code IS NOT NULL ORDER BY state,error_code").unwrap().query_map([], |row| Ok((row.get::<_, String>(0)?,row.get::<_, String>(1)?))).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
+        assert!(errors.is_empty(), "migration setup must keep all extraction error-free: {errors:?}");
         let complete = turns.iter().all(|turn| db.query_row("SELECT EXISTS(SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision WHERE c.source_key=?1 AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete')", [format!("conversation_turn:{turn}")], |row| row.get::<_, bool>(0)).unwrap());
         complete && db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_projection_windows WHERE state IN ('pending','running','planned'))", [], |row| row.get::<_, bool>(0)).unwrap()
     }).await;
