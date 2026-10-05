@@ -10,6 +10,9 @@ use butler_e2e::e2e::{
 use serde_json::json;
 use std::time::Duration;
 
+#[path = "support/paused_transcript.rs"]
+mod paused_transcript;
+
 pub(super) async fn setup(
     mode: stub::Mode,
     access: Access,
@@ -121,7 +124,7 @@ async fn reasoning_only_response_and_todo_updates_continue() -> Result<(), Harne
 #[tokio::test]
 async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = setup(stub::Mode::Approval, Access::AskFirst).await?;
+    let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskFirst).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let turn =
         s.gw.wait_turn(
@@ -135,6 +138,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
     assert_eq!(script.requests.lock().unwrap().len(), 1);
     let cards = s.gw.approval_requests("general").await?;
     assert_eq!(cards.len(), 1);
+    paused_transcript::assert_segments(&s, false).await?;
     let reference = cards[0]["request_ref"].as_str().unwrap();
     let reply =
         s.gw.post(
@@ -148,6 +152,9 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     assert_eq!(script.requests.lock().unwrap().len(), 2);
+    paused_transcript::assert_segments(&s, true).await?;
+    s.restart().await?;
+    paused_transcript::assert_segments(&s, true).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -155,7 +162,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
 #[tokio::test]
 async fn pending_question_pauses_and_answer_resumes_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = setup(stub::Mode::Question, Access::FullAccess).await?;
+    let (mut s, script, server) = setup(stub::Mode::Question, Access::FullAccess).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let paused =
         s.gw.wait_turn(
@@ -167,6 +174,7 @@ async fn pending_question_pauses_and_answer_resumes_same_turn() -> Result<(), Ha
         .await?;
     assert_eq!(turn_state(&paused), "waiting_for_form", "{paused}");
     assert_eq!(script.requests.lock().unwrap().len(), 1);
+    paused_transcript::assert_segments(&s, false).await?;
     let response = s.gw.get("/session-view?session_id=general").await?;
     let view = response.data();
     let reference = view["pending_questions"][0]["request_ref"]
@@ -180,6 +188,9 @@ async fn pending_question_pauses_and_answer_resumes_same_turn() -> Result<(), Ha
             .await?;
     assert_eq!(turn_state(&done), "delivered", "{done}");
     assert_eq!(script.requests.lock().unwrap().len(), 2);
+    paused_transcript::assert_segments(&s, true).await?;
+    s.restart().await?;
+    paused_transcript::assert_segments(&s, true).await?;
     let messages = s.gw.messages("general").await?;
     assert!(
         messages
@@ -383,6 +394,13 @@ mod stub {
             }
         } else {
             message("{}")
+        };
+        let item = if matches!(script.mode, Mode::Approval | Mode::Question)
+            && item["type"] == "function_call"
+        {
+            json!([message(super::paused_transcript::PREAMBLE), item])
+        } else {
+            item
         };
         ([("content-type", "text/event-stream")], wire(&item)).into_response()
     }

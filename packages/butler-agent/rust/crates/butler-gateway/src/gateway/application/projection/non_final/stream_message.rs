@@ -1,6 +1,6 @@
 //! The provisional assistant message of a streaming turn: `message.updated`
-//! with status `streaming` under one id per turn, which the final answer later
-//! reuses (`message.created` with the same id).
+//! with status `streaming` under one id per uninterrupted segment, which the
+//! final answer later reuses (`message.created` with the same id).
 //!
 //! The message shows one provider stream at a time (`turn_stream_drafts`):
 //! deltas of the current stream are appended, the first delta of a new stream
@@ -111,7 +111,7 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         }
         Some(_) => return Ok(()),
         None => {
-            let id = format!("message-stream-{turn}");
+            let id = format!("message-{}", uuid::Uuid::new_v4());
             db.execute(
                 "INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) \
                  VALUES(?1,?2,?3,'assistant',?4,'streaming',?5,?5,0)",
@@ -121,7 +121,7 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
             id
         }
     };
-    updated(target, &id)
+    updated(target, &id, false)
 }
 
 /// Marks `stream` as not the answer, when it is the turn's current stream.
@@ -171,7 +171,7 @@ pub(super) fn stop(
             params![now, id],
         )
         .map_err(AppStorageError::sqlite)?;
-        return updated(&target, &id);
+        return updated(&target, &id, false);
     }
     db.execute("DELETE FROM messages WHERE id=?1", [&id])
         .map_err(AppStorageError::sqlite)?;
@@ -186,11 +186,9 @@ pub(super) fn stop(
     Ok(())
 }
 
-/// Finalizes the turn's provisional message when the turn is suspended
-/// (delivered while a Steward or Worker runs): its text is what the turn
-/// delivered. The child's result comes back later as a new turn, never as a
-/// continuation of this one, so nothing else settles the message. Later deltas
-/// are ignored because the turn is no longer open.
+/// Freezes text already shown before suspension, including questions and
+/// approvals. A resumed turn starts a new provisional message; it cannot
+/// overwrite the segment the principal read before making their decision.
 pub(super) fn settle_suspended(
     db: &Connection,
     subscribers: &EventSubscribers,
@@ -218,7 +216,7 @@ pub(super) fn settle_suspended(
         params![now, id],
     )
     .map_err(AppStorageError::sqlite)?;
-    updated(&target, &id)
+    updated(&target, &id, true)
 }
 
 /// Marks the turn's provisional message failed when the turn ended without a
@@ -251,14 +249,14 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
         params![code, now, id],
     )
     .map_err(AppStorageError::sqlite)?;
-    updated(&target, &id)
+    updated(&target, &id, false)
 }
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
     Ok(db
         .query_row(
             "SELECT 1 FROM turns WHERE id=?1 AND state IN \
-             ('accepted','thinking','streaming','waiting_for_tool','retrying','cancelling')",
+             ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','retrying','cancelling')",
             [turn],
             |_| Ok(true),
         )
@@ -285,7 +283,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row(
-        "SELECT id,status FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' \
+        "SELECT id,status FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -294,7 +292,11 @@ fn latest(
     .map_err(AppStorageError::sqlite)
 }
 
-fn updated(target: &StreamTarget<'_>, id: &str) -> Result<(), AppStorageError> {
+fn updated(
+    target: &StreamTarget<'_>,
+    id: &str,
+    segment_completed: bool,
+) -> Result<(), AppStorageError> {
     let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?
         .messages
         .into_iter()
@@ -307,7 +309,7 @@ fn updated(target: &StreamTarget<'_>, id: &str) -> Result<(), AppStorageError> {
         target.subscribers,
         "message.updated",
         Some(target.turn),
-        service::map(&json!({"message": message}))?,
+        service::map(&json!({"message": message, "segment_completed": segment_completed}))?,
         target.now,
     )?;
     Ok(())

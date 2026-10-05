@@ -1634,6 +1634,7 @@ export interface TimelineEvent {
   created_at?: string;
   payload?: {
     message?: MessageRecord;
+    segment_completed?: boolean;
     turn?: {
       id: string;
       chat_id: string;

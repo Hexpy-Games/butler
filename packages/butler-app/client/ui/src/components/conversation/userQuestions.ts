@@ -23,24 +23,23 @@ export function withQuestionAnswers(messages: MessageRecord[], answers: readonly
   if (!completed.length) return messages;
   const messageIds = new Set(messages.map(m => m.id));
   const followups = new Map(completed.map(a => [`question-followup-${a.request_ref}`, a]));
-  const remaining = new Map<string, AnsweredUserQuestions[]>();
-  for (const answer of completed) {
-    if (messageIds.has(`question-followup-${answer.request_ref}`)) continue;
-    const group = remaining.get(answer.source_turn_id) ?? [];
-    group.push(answer); remaining.set(answer.source_turn_id, group);
-  }
+  const remaining = completed.filter(answer => !messageIds.has(`question-followup-${answer.request_ref}`))
+    .sort((left, right) => Date.parse(left.updated_at) - Date.parse(right.updated_at));
+  let nextAnswer = 0;
   const result: MessageRecord[] = [];
-  const insert = (turn?: string) => {
-    const group = turn ? remaining.get(turn) : undefined;
-    for (const answer of group ?? []) result.push({ id: answer.request_ref, role: "user", text: "", question_answer: answer,
+  const insert = (answer: AnsweredUserQuestions) => {
+    result.push({ id: answer.request_ref, role: "user", text: "", question_answer: answer,
       turn_id: answer.source_turn_id, created_at: answer.updated_at, updated_at: answer.updated_at });
-    if (turn) remaining.delete(turn);
   };
   for (const message of messages) {
-    if (message.role === "assistant") insert(message.turn_id);
+    // Message creation belongs to this segment, not the turn's start. A later
+    // streamed delta updates the segment but never moves the principal answer.
+    while (nextAnswer < remaining.length && Date.parse(remaining[nextAnswer].updated_at) <= Date.parse(message.created_at ?? "")) {
+      insert(remaining[nextAnswer++]);
+    }
     const answer = followups.get(message.id);
     result.push(answer ? { ...message, text: "", question_answer: answer } : message);
   }
-  for (const turn of remaining.keys()) insert(turn);
+  while (nextAnswer < remaining.length) insert(remaining[nextAnswer++]);
   return result;
 }
