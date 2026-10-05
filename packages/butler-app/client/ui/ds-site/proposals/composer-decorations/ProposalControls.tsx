@@ -1,9 +1,9 @@
 import {
-  Grid, NativeSelect, NativeSelectOption, SegmentedControl, SettingsField, SettingsSection, Stack, Switch, Typo,
+  BUILTIN_WALLPAPERS, Grid, NativeSelect, NativeSelectOption, SegmentedControl, SettingsField, SettingsSection, Stack, Switch, Typo,
   wallpaperLabelText,
 } from "@/butler-ds";
 import type { ProposalCopy } from "./copy";
-import { DECORATION_REGISTRY, PAGE_WALLPAPERS, type DecorationTheme, type PageWallpaper } from "./decorationScenes";
+import { PAGE_WALLPAPERS, type DecorationTheme, type PageWallpaper } from "./decorationScenes";
 import type { ProposalState } from "./proposalState";
 
 /** What ships: two fields in Settings → Appearance, right under Wallpaper / Motion / Pause on battery. */
@@ -67,7 +67,7 @@ export function PreviewKnobs({ state, onChange }: { state: ProposalState; onChan
         <NativeSelect aria-label="Page wallpaper" size="sm" stretch value={state.wallpaper}
           onChange={(event) => onChange({ wallpaper: event.currentTarget.value as PageWallpaper })}>
           {PAGE_WALLPAPERS.map((id) => {
-            const module = id === "none" ? null : DECORATION_REGISTRY.get(id);
+            const module = id === "none" ? null : BUILTIN_WALLPAPERS.get(id);
             return <NativeSelectOption key={id} value={id}>{module ? wallpaperLabelText(module.manifest.name, lang) : "None"}</NativeSelectOption>;
           })}
         </NativeSelect>

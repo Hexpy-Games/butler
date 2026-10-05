@@ -1,29 +1,26 @@
-import {
-  BUILTIN_WALLPAPERS,
-  createWallpaperRegistry,
-  defineWallpaperModule,
-  type WallpaperSource,
-} from "@/butler-ds";
+import { defineWallpaperModule, type WallpaperSource } from "@/butler-ds";
 import sakuraManifest from "./sakura/wallpaper.json";
 import sakuraFragment from "./sakura/shader.frag?raw";
 
 /**
- * Composer background scenes. Shoreline is the shipped `butler.shoreline` module, imported as is.
- * Cherry blossom is new art in the shared module format (no cherry asset exists in the repo yet),
- * so it runs under the same Wallpaper engine budget: 20fps, DPR 1, paused hidden/offscreen.
+ * Composer background scenes.
+ * - Shoreline: the shipped `butler.shoreline` module on the DS Wallpaper engine, unchanged.
+ * - Cherry blossom: new art in the shared module format (validated by defineWallpaperModule),
+ *   drawn with a transparent background. The Wallpaper engine is opaque today, so the proposal
+ *   runs it in CherryCanvas under the same budget and pause policy (see the DS gap in README).
  */
-export const CHERRY_BLOSSOM_WALLPAPER = defineWallpaperModule({ manifest: sakuraManifest, fragment: sakuraFragment, stillTime: 37 });
-
-export const DECORATION_REGISTRY = createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), CHERRY_BLOSSOM_WALLPAPER]);
+export const CHERRY_BLOSSOM_MODULE = defineWallpaperModule({ manifest: sakuraManifest, fragment: sakuraFragment, stillTime: 37 });
 
 export type DecorationTheme = "none" | "shoreline" | "cherry-blossom";
 export const DECORATION_THEMES: readonly DecorationTheme[] = ["none", "shoreline", "cherry-blossom"];
 
-export const DECORATION_SOURCES: Record<Exclude<DecorationTheme, "none">, WallpaperSource> = {
-  // On a 140px scene anchored at the card bottom: the surf line sits ~47px up, so the pill at rest
-  // shows water and arriving waves, the open card shows sand behind the text and surf below.
-  shoreline: { kind: "live", module: "butler.shoreline", params: { shorePosition: 0.1, foamAmount: 0.75 } },
-  "cherry-blossom": { kind: "live", module: CHERRY_BLOSSOM_WALLPAPER.manifest.id },
+/**
+ * The shoreline's mean waterline sits at `base` of the canvas height, with
+ * base = 0.48 + (shorePosition - 0.5) * 0.36 (shader.frag:182, no content rect). 0.5556 puts
+ * it at 0.5: the canvas is centred on the card, so the waterline tracks the card's middle.
+ */
+export const SHORELINE_SOURCE: WallpaperSource = {
+  kind: "live", module: "butler.shoreline", params: { shorePosition: 0.5556, foamAmount: 0.75, water: "tropical" },
 };
 
 /** Page wallpapers to judge the card against (the new chat screen's background). */

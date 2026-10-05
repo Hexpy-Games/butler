@@ -1,4 +1,3 @@
-import type { Ref } from "react";
 import type { DecorationTheme } from "./decorationScenes";
 import styles from "./ComposerDecorations.module.css";
 
@@ -12,9 +11,9 @@ export function characterFor(theme: DecorationTheme): CharacterKind {
  * The part behind the card: rendered before ComposerCard, so the card paints over its lower
  * 8px and the character looks like it is peeking over the top edge. Decorative only.
  */
-export function CharacterHead({ kind, headRef }: { kind: CharacterKind; headRef: Ref<HTMLDivElement> }) {
+export function CharacterHead({ kind }: { kind: CharacterKind }) {
   return (
-    <div aria-hidden="true" className={styles.head} data-character={kind} ref={headRef}>
+    <div aria-hidden="true" className={styles.head} data-character={kind}>
       <svg viewBox="0 0 44 34" focusable="false">
         {kind === "cat" ? (
           <g>
