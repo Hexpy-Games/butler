@@ -7,8 +7,6 @@ import {
   Box,
   ButtonContainer,
   ComposerCard,
-  ComposerCardExpandedBody,
-  ComposerCardExpandedControls,
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,
   ComposerQuestionPanel,
@@ -18,7 +16,6 @@ import {
   Stack,
 } from "@/butler-ds";
 import { ComposerAttachments } from "@/components/conversation/ComposerAttachments";
-import { ComposerCompactPreview } from "@/components/conversation/ComposerCompactPreview";
 import { ComposerFileInput } from "@/components/conversation/ComposerFileInput";
 import { imageRefusalLabel } from "@/components/conversation/composerImagePolicy";
 import { useComposerStore } from "@/components/conversation/composerStore";
@@ -29,7 +26,7 @@ import { proposalAttachment } from "./fixture";
 
 export type ComposerVariant = "split" | "cluster";
 
-/** ComposerToolbar's send/stop branch, unchanged: the same DS button and the same conditions. */
+/** ComposerToolbar's send/stop branch: same DS button and conditions; the fold-only ExpandedControls wrapper is gone. */
 function SendSlot() {
   useAppLocale();
   const isSending = useComposerStore((store) => store.isSending);
@@ -50,10 +47,8 @@ function SendSlot() {
     return <ComposerSendButton mode="stop" aria-label={appCopy.composer.stop} onClick={onStop} />;
   }
   return (
-    <ComposerCardExpandedControls>
-      <ComposerSendButton aria-label={appCopy.composer.send} disabled={!canSend}
-        disabledReason={blockedImage ? imageRefusalLabel(blockedImage) : undefined} />
-    </ComposerCardExpandedControls>
+    <ComposerSendButton aria-label={appCopy.composer.send} disabled={!canSend}
+      disabledReason={blockedImage ? imageRefusalLabel(blockedImage) : undefined} />
   );
 }
 
@@ -111,9 +106,10 @@ export interface ProposalComposerProps {
 }
 
 /**
- * The card is the product composer card unchanged: ComposerCard large, the editor body, and the
- * same ComposerCardToolbar row (padding, min-height, divider), which now holds only the compact
- * preview slot, the spacer and send/stop at the same place. Only the controls move out.
+ * The card is the product composer card with the fold removed (always expanded; the fold-only
+ * wrappers ComposerCardExpandedBody / ExpandedControls / CompactPreview are gone): ComposerCard
+ * large, the editor and attachments, and the same ComposerCardToolbar row (padding, min-height,
+ * divider), which now holds only the spacer and send/stop at the same place.
  */
 export function ProposalComposer({ variant, copy, question, fileInputRef, blockRef }: ProposalComposerProps) {
   useAppLocale();
@@ -125,7 +121,7 @@ export function ProposalComposer({ variant, copy, question, fileInputRef, blockR
     // container) around card + row: what the DS `controls` slot gives the row in the implementation.
     <div className={`${composerStyles.wrap} ${composerStyles.large}`} data-proposal-variant={variant} ref={blockRef}>
       <Stack gap="xs" cross="center">
-        <ComposerCard large expanded onSubmit={submit}>
+        <ComposerCard large onSubmit={submit}>
           {question ? (
             <ComposerQuestionPanel
               key="proposal-question"
@@ -141,12 +137,9 @@ export function ProposalComposer({ variant, copy, question, fileInputRef, blockR
               onExpand={() => setQuestionState("open")}
             />
           ) : null}
-          <ComposerCardExpandedBody>
-            <ComposerTextArea />
-            <ComposerAttachments />
-          </ComposerCardExpandedBody>
+          <ComposerTextArea />
+          <ComposerAttachments />
           <ComposerCardToolbar>
-            <ComposerCompactPreview />
             <ComposerCardToolbarSpacer />
             <SendSlot />
           </ComposerCardToolbar>
