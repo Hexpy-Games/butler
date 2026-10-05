@@ -4,6 +4,27 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
+// Only scheduled briefings are handled here; artifact turns stay strict replay.
+pub(super) fn briefing_response(request: &Value) -> Option<ResponseRecord> {
+    let raw = request["input"]
+        .as_str()
+        .or_else(|| request["input"][0]["content"][0]["text"].as_str())?;
+    let task: Value = serde_json::from_str(raw).ok()?;
+    let kind = match task["task"].as_str()? {
+        "general_new_chat_briefing" => "current_interest",
+        "project_new_chat_briefing" => "project_status",
+        _ => return None,
+    };
+    let content = json!({"moment":"Today","title":"Welcome","description":"Topics to discuss",
+        "suggestions":(0..4).map(|n|json!({"id":format!("topic-{n}"),"title":format!("Topic {n}"),
+            "description":"Explore","text":"Discuss this topic","source_kind":kind})).collect::<Vec<_>>(),
+        "title_variants":{"morning":"Welcome","afternoon":"Welcome","evening":"Welcome","night":"Welcome"}});
+    Some(response(
+        &json!({"type":"message","id":"msg_artifact_briefing","role":"assistant","status":"completed",
+        "content":[{"type":"output_text","text":content.to_string(),"annotations":[]}]}),
+    ))
+}
+
 pub(super) fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;

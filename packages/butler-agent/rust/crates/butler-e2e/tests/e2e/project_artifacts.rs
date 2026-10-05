@@ -133,6 +133,9 @@ async fn delivered_artifact_crosses_only_same_project_after_restart() -> Result<
     let accepted = format!("Exact accepted bytes: {nonce}\n");
     fs::write(generated.join("accepted.txt"), &accepted)?;
     let mut scenario = setup.start().await?;
+    scenario
+        .provider()?
+        .set_chat_responder(stub::briefing_response);
     let project_id = project(&scenario, "Shared files").await?;
     let origin_chat = chat(&scenario, &project_id).await?;
     let (origin_turn, published) = scenario.turn(&origin_chat, "Publish").await?;

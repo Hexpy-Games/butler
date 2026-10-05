@@ -7,6 +7,18 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     seed_usage("seed_begin");
     let mut db =
         butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
+    // The Agent is stopped during fixture construction. Write each new page
+    // once, rather than through a multi-GB WAL and its immediate checkpoint.
+    // Keep the durable transaction and every index; restore WAL before restart.
+    assert_eq!(
+        db.pragma_query_value(None, "journal_mode", |row| row.get::<_, String>(0))
+            .unwrap(),
+        "wal"
+    );
+    let journal: String = db
+        .query_row("PRAGMA journal_mode=DELETE", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(journal, "delete");
     // This fixture inserts the complete 1.2GB history into several interleaved
     // indexes. Keep its temporary writer's working pages resident rather than
     // repeatedly spilling/rereading them through SQLite's default 2MiB cache.
@@ -44,6 +56,10 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     }
     tx.commit().unwrap();
     seed_usage("commit_complete");
+    let journal: String = db
+        .query_row("PRAGMA journal_mode=WAL", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(journal, "wal");
     eprintln!(
         "ARTIFACT-FIXTURE phase=seed_committed registrations=13312 elapsed_ms={}",
         started.elapsed().as_millis()
@@ -123,19 +139,23 @@ fn seed_history(db: &Connection) {
 #[tokio::test]
 async fn many_matches_page_completely_at_owner_scale() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("PROJECT-ARTIFACT-PAGES")?
+    let mut s = Setup::new("PROJECT-ARTIFACT-PAGES")?
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;
+    s.provider()?.set_chat_responder(stub::briefing_response);
     eprintln!("ARTIFACT-FIXTURE phase=agent_ready");
     let p = project(&s, "Large project").await?;
     let a = chat(&s, &p).await?;
+    s.agent.terminate().await?;
     let data = s.sandbox.data.clone();
     let seed_project = p.clone();
     let seed_chat = a.clone();
     let expected = tokio::task::spawn_blocking(move || seed(&data, &seed_project, &seed_chat))
         .await
         .unwrap();
+    s.restart().await?;
+    verify_dashboard(&s, &p, &a, &expected[1]).await?;
     eprintln!("ARTIFACT-FIXTURE phase=before_reader");
     let b = chat(&s, &p).await?;
     eprintln!("ARTIFACT-FIXTURE phase=reader_ready");
@@ -215,4 +235,38 @@ async fn many_matches_page_completely_at_owner_scale() -> Result<(), HarnessErro
         fs::metadata(db)?.len()
     );
     s.finish().await
+}
+
+async fn verify_dashboard(
+    s: &Scenario,
+    project: &str,
+    origin: &str,
+    latest_file: &str,
+) -> Result<(), HarnessError> {
+    let reply =
+        s.gw.get(&format!(
+            "/projects/{project}/dashboard/artifacts?limit=100"
+        ))
+        .await?;
+    assert_eq!(reply.status, 200);
+    let data = reply.data();
+    let items = data["items"].as_array().unwrap();
+    assert_eq!(items.len(), 100);
+    assert!(data["nextCursor"].is_string());
+    assert_eq!(items[0]["file_id"], latest_file);
+    assert_eq!(items[0]["turn_id"], "latest-turn");
+    for item in items {
+        assert_eq!(item["project_id"], project);
+        assert_eq!(item["session_id"], origin);
+        assert_eq!(item["mime_type"], "text/plain");
+        assert_eq!(item["size_bytes"], 8);
+        assert_eq!(item["revision"], "revision");
+    }
+    for (position, item) in items.iter().skip(1).enumerate() {
+        let row = 13_311 - position;
+        assert_eq!(item["file_id"], format!("file-scale-{row:05}"));
+        assert_eq!(item["title"], format!("other-{row}"));
+        assert_eq!(item["turn_id"], "origin-turn");
+    }
+    Ok(())
 }

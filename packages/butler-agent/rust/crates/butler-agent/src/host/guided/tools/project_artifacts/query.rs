@@ -50,9 +50,11 @@ pub(super) struct Artifact {
 
 // Group by registration, not title: distinct deliverables can share a name.
 // Reattachments retain a stable file id and expose only their latest delivered origin.
+// Keep the project range outermost: sampled startup statistics can otherwise
+// select every assistant message across the owner's unrelated chat history.
 const CANDIDATES: &str = "WITH origins AS (\
     SELECT a.file_id,MAX(m.rowid) AS latest FROM chats c \
-    JOIN messages m ON m.chat_id=c.id \
+    CROSS JOIN messages m ON m.chat_id=c.id \
     JOIN message_attachments a ON a.message_id=m.id \
     WHERE c.project_id=?1 AND m.role='assistant' AND m.status='delivered' \
     AND (m.safe_error_code IS NULL OR m.safe_error_code NOT IN \

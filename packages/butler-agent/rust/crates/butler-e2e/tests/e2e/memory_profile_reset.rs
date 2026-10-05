@@ -76,6 +76,7 @@ async fn profile_reset_preserves_names_consent_settings_and_replay_preserves_fut
         "profile changed while another writer held the lease"
     );
     lease.execute_batch("ROLLBACK")?;
+    drop(lease);
     wait(&s, &id).await?;
     assert_eq!(count(&db), 0);
     let after = s.gw.get("/personalization").await?.data().clone();
@@ -122,6 +123,7 @@ async fn profile_reset_preserves_names_consent_settings_and_replay_preserves_fut
         future,
         "recovery cleared post-reset profile content"
     );
+    drop(db);
     s.finish().await?;
     server.abort();
     Ok(())
