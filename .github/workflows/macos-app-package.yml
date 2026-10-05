@@ -3,6 +3,10 @@ name: macOS App package
 on:
   workflow_dispatch:
     inputs:
+      diagnose-validation-only:
+        description: Investigate full owner validation; does not qualify an App release
+        type: boolean
+        default: false
       candidate-version:
         description: Exact preview candidate (empty keeps preview.99 packaging)
         required: false
@@ -18,6 +22,9 @@ on:
         default: false
   workflow_call:
     inputs:
+      diagnose-validation-only:
+        type: boolean
+        default: false
       candidate-version:
         type: string
         default: ''
@@ -40,11 +47,16 @@ permissions:
   actions: read
 
 concurrency:
-  group: macos-app-package-${{ github.ref }}
+  group: ${{ inputs.diagnose-validation-only && format('macos-validation-{0}', github.ref) || format('macos-app-package-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
+  validation-diagnostic:
+    if: inputs.diagnose-validation-only
+    uses: ./.github/workflows/macos-validation-diagnostic.yml
+
   package:
+    if: ${{ !inputs.diagnose-validation-only }}
     name: Package and smoke unsigned darwin-arm64 App
     runs-on: macos-15
     timeout-minutes: 150
