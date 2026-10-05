@@ -40,9 +40,9 @@ const NOTES_EN: Record<ReviewSection, Note[]> = {
   updates: [
     { title: "Outside Settings: sidebar row (chosen)", points: [
       "What the shell has: the sidebar footer holds one row, Settings (SpaceSidebar footer). There is no version or account area, no app menu (Menu.setApplicationMenu(null)), and the titlebar's trailing buttons are … and the right-panel toggle. The tray menu exists only when the tray is on.",
-      "A row above 설정, only while an update is running, ready or failed. One line: ring + \"Downloading update\" + percent (badge slot). Ready: full ring + \"Update ready\" + Restart in the row. Checking or verifying: spinner. Failed: alert icon. Tapping opens Settings › Updates.",
+      "A row above 설정, only while an update is running, ready or failed, never in the selected style (hover fill only on hover). One line: DS ProgressRing + \"Downloading update\" + percent (badge slot). Ready: full green ring (tone success) + \"Update ready\" + the DS NavRow action: an IconButton (RotateCcw, tooltip \"Restart\") in ButtonContainer icon-sm. Checking or verifying: indeterminate ring. Failed: alert icon. Tapping opens Settings › Updates.",
       "Spacing: the footer becomes one group; the update row and 설정 are --sidebar-row-spacing (4px desktop, 8px phone) apart, like rows in every other sidebar group, instead of touching.",
-      "The ring is a stand-in: ContextDonutButton's ring without its button. The DS has no non-interactive ring (gap: ProgressRing).",
+      "Restart uses the only NavRow action the DS defines (icon-only IconButton in ButtonContainer icon-sm, as SpaceRowActions): 30×30 (44 touch), radius 8, ghost, glyph 16 (20), secondary → primary on hover, box at the row edge and glyph 7px in (the shell's -8px action offset), mirroring the 8px start inset. A text action in a NavRow is not defined: DS gap §7.8. Ring and gear: both 16px (20 touch) at the same x; the ring stroke (2px vs 1px) is gap §7.1.",
       "The window also shows native dock/taskbar progress (BrowserWindow.setProgressBar), so a collapsed sidebar or hidden window still shows it.",
     ] },
     { title: "Row", points: [
@@ -116,9 +116,9 @@ const NOTES_KO: Record<ReviewSection, Note[]> = {
   updates: [
     { title: "설정 밖: 사이드바 줄(선택됨)", points: [
       "현재 셸: 사이드바 아래에는 '설정' 한 줄만 있습니다(SpaceSidebar footer). 버전·계정 영역과 앱 메뉴는 없고(Menu.setApplicationMenu(null)), 제목줄 오른쪽 버튼은 …와 오른쪽 패널 토글입니다. 트레이 메뉴는 트레이를 켰을 때만 있습니다.",
-      "업데이트가 진행 중·준비됨·실패일 때만 '설정' 위에 한 줄. 링 + '업데이트 받는 중' + 퍼센트(배지 자리). 준비되면 가득 찬 링 + '업데이트 준비됨' + 줄 안의 '다시 시작'. 확인 중에는 스피너, 실패는 경고 아이콘. 누르면 설정 › 업데이트.",
+      "업데이트가 진행 중·준비됨·실패일 때만 '설정' 위에 한 줄. 선택 상태 스타일은 쓰지 않고 마우스를 올릴 때만 배경이 생깁니다. DS ProgressRing + '업데이트 받는 중' + 퍼센트(배지 자리). 준비되면 초록색 완료 링 + '업데이트 준비됨' + 동작 자리의 DS NavRow 동작(ButtonContainer icon-sm 안 IconButton, RotateCcw, 툴팁 '다시 시작'). 확인 중에는 계속 도는 링, 실패는 경고 아이콘. 누르면 설정 › 업데이트.",
       "간격: 아래 영역을 한 그룹으로 보고 업데이트 줄과 '설정' 사이를 --sidebar-row-spacing(4px desktop, 8px phone)으로 둡니다. 사이드바의 다른 그룹 안 줄 간격과 같습니다.",
-      "링은 대체 구현입니다: 버튼을 뺀 ContextDonutButton의 링. DS에 상호작용 없는 링이 없습니다(gap: ProgressRing).",
+      "'다시 시작'은 DS가 정의한 유일한 NavRow 동작(SpaceRowActions처럼 ButtonContainer icon-sm 안의 아이콘 IconButton)을 그대로 씁니다: 30×30(터치 44), 반경 8, ghost, 아이콘 16(20), 평소 secondary → 마우스를 올리면 primary. 버튼 상자는 줄 끝에, 아이콘은 오른쪽 7px 안쪽(셸의 -8px 동작 오프셋)에 놓여 왼쪽 8px 여백과 맞습니다. NavRow 안 글자 버튼은 DS에 정의되어 있지 않아 §7.8 gap으로 올립니다. 링 선 굵기(2px, 톱니바퀴 1px)는 §7.1 gap입니다.",
       "창 자체에도 네이티브 독·작업 표시줄 진행률(BrowserWindow.setProgressBar)을 표시해 사이드바를 접거나 창을 숨겨도 보입니다.",
     ] },
     { title: "행", points: [
