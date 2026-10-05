@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Box, PageContainer, ScrollArea, SegmentedControl, Spinner, Stack, StatusCapsule, Tag, Typo } from "@/butler-ds";
+import { Box, PageContainer, ScrollArea, SegmentedControl, Stack, Tag, Typo } from "@/butler-ds";
 import { PAGE_COPY } from "./copy";
 import { CopyTable } from "./CopyTable";
 import { ERROR_COPY, GRANT_COPY, MOTION_COPY, UPDATE_COPY } from "./proposedCopy";
@@ -26,7 +26,7 @@ function useAvailableWidth() {
 }
 
 const RECOMMENDED: Partial<Record<keyof StageState, string>> = {
-  updateVariant: "proposal", motionVariant: "accessibility", placement: "models",
+  updateVariant: "proposal", motionVariant: "accessibility", updatePlace: "sidebarRow",
 };
 
 /** "Proposals → Settings review": section switch, state controls, the width-true frame, notes. */
@@ -84,7 +84,8 @@ export function SettingsReviewPage() {
                   {segment("section", copy.controls.screen, copy.sections)}
                   <Stack align="row" wrap gap="lg" rowGap="md">
                     {state.section === "updates" ? <>
-                      {segment("updateVariant", copy.controls.variant, copy.updateVariant)}
+                      {segment("updatePlace", copy.controls.placement, copy.updatePlace)}
+                      {state.updatePlace === "settings" ? segment("updateVariant", copy.controls.variant, copy.updateVariant) : null}
                       {segment("update", copy.controls.state, copy.update)}
                       {state.update === "failed" ? segment("failure", copy.controls.failure, copy.failure) : null}
                     </> : null}
@@ -96,10 +97,7 @@ export function SettingsReviewPage() {
                       {segment("errorScreen", copy.controls.screen, copy.errorScreen)}
                       {state.errorScreen === "mcp" ? segment("mcpError", copy.controls.error, copy.mcpError) : null}
                     </> : null}
-                    {state.section === "approvals" ? <>
-                      {segment("placement", copy.controls.placement, copy.placement)}
-                      {segment("approvals", copy.controls.state, copy.approvals)}
-                    </> : null}
+                    {state.section === "approvals" ? segment("approvals", copy.controls.state, copy.approvals) : null}
                   </Stack>
                   <Stack align="row" wrap gap="lg" rowGap="md">
                     <Control label={copy.controls.width}>
@@ -130,16 +128,6 @@ export function SettingsReviewPage() {
                 </Stack>
               </div>
 
-              {state.section === "updates" ? (
-                <Box surface="raised" border="hairline" radius="panel" padding="lg">
-                  <Stack gap="sm">
-                    <Typo.Label>{copy.capsuleTitle}</Typo.Label>
-                    <Stack align="row" gap="none"><StatusCapsule icon={<Spinner size={14} />} title={copy.sections.updates}
-                      detail={copy.update.downloading} progress="42%" /></Stack>
-                    <Typo.Caption tone="secondary">{copy.capsuleNote}</Typo.Caption>
-                  </Stack>
-                </Box>
-              ) : null}
 
               <Stack gap="md">
                 {notes.map((note, index) => (

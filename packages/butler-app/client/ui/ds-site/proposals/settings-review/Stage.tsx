@@ -20,11 +20,13 @@ import { installSettingsFixture, proposalSettings } from "./fixture";
 import { AppearanceProposal } from "./motion/AppearanceProposal";
 import { STAGE_MESSAGE, stateFromQuery, WALLPAPERS, type StageState } from "./state";
 import { UpdatesProposal } from "./updates/UpdatesProposal";
+import { t } from "./proposedCopy";
+import { ShellProposal } from "./shell/ShellProposal";
 
 function pageSection(state: StageState): SettingsSectionId {
   if (state.section === "updates") return "updates";
   if (state.section === "motion") return "appearance";
-  if (state.section === "approvals") return state.placement === "models" ? "models" : "security";
+  if (state.section === "approvals") return "security";
   return ({ mcp: "mcp", skills: "skills", hosts: "security", wallpaper: "appearance", toasts: "general" } as const)[state.errorScreen];
 }
 
@@ -38,6 +40,7 @@ export function SettingsReviewStage() {
   const [state, setState] = useState<StageState>(() => stateFromQuery(new URLSearchParams(location.search)));
   const [ready, setReady] = useState(false);
   const [compactPane, setCompactPane] = useState<"master" | "detail">("detail");
+  const [phone] = useState(() => window.matchMedia("(width <= 640px)").matches);
   useAppLocale();
 
   useEffect(() => {
@@ -72,12 +75,30 @@ export function SettingsReviewStage() {
     setState((current) => ({ ...current, ...next }));
     window.parent.postMessage({ type: `${STAGE_MESSAGE}:patch`, patch: next }, location.origin);
   };
-  const groups = createSettingsSectionGroups(appCopy.settings, false);
+  // Proposal (Security reorganisation): Privacy's only section moves to Security, so the Privacy
+  // page leaves the sidebar and Security gets a description that covers what it now holds.
+  const reorganised = state.section === "approvals";
+  const groups = createSettingsSectionGroups(appCopy.settings, false).map((group) => ({
+    ...group,
+    sections: group.sections
+      .filter((item) => !(reorganised && item.id === "privacy"))
+      .map((item) => reorganised && item.id === "security"
+        ? { ...item, description: t(state.locale, "settings.sectionDescriptions.security") } : item),
+  }));
   const sections = groups.flatMap((group) => group.sections);
   const active = pageSection(state);
   const descriptor = sections.find((item) => item.id === active);
   const title = descriptor?.label ?? appCopy.settings.title;
   if (!ready) return null;
+  if (state.section === "updates" && state.updatePlace !== "settings") {
+    return (
+      <WallpaperModulesProvider>
+        <Wallpaper source={WALLPAPERS[state.wallpaper]} scope="viewport" />
+        <ShellProposal state={state} phone={phone} />
+        <AppToaster />
+      </WallpaperModulesProvider>
+    );
+  }
   return (
     <WallpaperModulesProvider>
       <Wallpaper source={WALLPAPERS[state.wallpaper]} scope="viewport" />
