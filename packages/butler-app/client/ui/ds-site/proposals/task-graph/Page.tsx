@@ -109,7 +109,7 @@ export function TaskGraphProposalPage() {
 
               <Stack gap="md">
                 <Typo.H2>{copy.notesTitle}</Typo.H2>
-                {(["open", "select"] as const).map((variant) => (
+                {(["stacked", "picker", "combined"] as const).map((variant) => (
                   <Box key={variant} surface="raised" border="hairline" radius="panel" padding="lg">
                     <Stack gap="sm">
                       <Stack align="row" gap="sm" cross="center">

@@ -30,7 +30,9 @@ export interface TaskNode {
 export const sessionIdOf = (node: TaskNode) => (node.assignee ? `task-session-${node.id}` : undefined);
 
 export interface TaskEdge { from: string; to: string }
-export interface TaskGraph { nodes: TaskNode[]; edges: TaskEdge[] }
+/** One graph = one plan's executable task DAG. A session can run several at once. */
+export interface TaskGraph { id: string; title: L; nodes: TaskNode[]; edges: TaskEdge[] }
+type Shape = Omit<TaskGraph, "id" | "title">;
 
 const LUNA = "GPT-6 Luna";
 const SOL = "GPT-6.1 Sol";
@@ -70,7 +72,7 @@ const review = (status: TaskStatus): TaskNode => ({
   id: "review", title: t("결과 검토", "Review the result"), status, steps: [],
 });
 
-const fan = (nodes: TaskNode[]): TaskGraph => ({
+const fan = (nodes: TaskNode[]): Shape => ({
   nodes,
   edges: [
     { from: "brief", to: "r1" }, { from: "brief", to: "r2" }, { from: "brief", to: "r3" },
@@ -81,7 +83,7 @@ const fan = (nodes: TaskNode[]): TaskGraph => ({
 
 const chainEdges = [{ from: "scan", to: "rules" }, { from: "rules", to: "move" }];
 
-function longGraph(): TaskGraph {
+function longGraph(): Shape {
   const n = (id: string, ko: string, en: string, status: TaskStatus, ordinal?: number, extra: Partial<TaskNode> = {}): TaskNode => ({
     id, title: t(ko, en), status,
     assignee: ordinal ? { ordinal, model: ordinal % 2 ? LUNA : SOL } : undefined,
@@ -119,11 +121,14 @@ function longGraph(): TaskGraph {
   };
 }
 
-export function scenarioGraph(scenario: Scenario): TaskGraph {
-  switch (scenario) {
-    case "empty": return { nodes: [], edges: [] };
+type Kind = "one" | "oneDone" | "chain" | "chainDone" | "fanout" | "failed" | "cancelled" | "long";
+
+function shape(kind: Kind): Shape {
+  switch (kind) {
     case "one": return { nodes: [{ ...move, id: "one", assignee: { ordinal: 1, model: LUNA } }], edges: [] };
+    case "oneDone": return { nodes: [{ ...move, id: "one", status: "completed", took: 96, assignee: { ordinal: 1, model: LUNA } }], edges: [] };
     case "chain": return { nodes: [scan, rules, move], edges: chainEdges };
+    case "chainDone": return { nodes: [scan, rules, { ...move, status: "completed", took: 161 }], edges: chainEdges };
     case "fanout": return fan([
       brief,
       research("r1", "Obsidian", "completed", { startedAgo: 540, took: 184 }),
@@ -143,5 +148,37 @@ export function scenarioGraph(scenario: Scenario): TaskGraph {
       edges: chainEdges,
     };
     case "long": return longGraph();
+  }
+}
+
+const TITLES: Record<Kind, L> = {
+  one: t("회의록 정리", "Clean up meeting notes"),
+  oneDone: t("회의록 정리", "Clean up meeting notes"),
+  chain: t("다운로드 폴더 정리", "Tidy the Downloads folder"),
+  chainDone: t("다운로드 폴더 정리", "Tidy the Downloads folder"),
+  fanout: t("노트 앱 세 개 비교", "Compare three note apps"),
+  failed: t("요금제 비교표 갱신", "Refresh the pricing table"),
+  cancelled: t("사진 백업 정리", "Sort the photo backup"),
+  long: t("검색 결과 정렬 개선", "Improve search ranking"),
+};
+
+/** Node ids are namespaced by graph so several graphs share one tab, selection and dialogs. */
+function graph(kind: Kind): TaskGraph {
+  const raw = shape(kind);
+  const id = (node: string) => `${kind}-${node}`;
+  return {
+    id: kind, title: TITLES[kind],
+    nodes: raw.nodes.map((node) => ({ ...node, id: id(node.id) })),
+    edges: raw.edges.map((edge) => ({ from: id(edge.from), to: id(edge.to) })),
+  };
+}
+
+/** The graphs of one conversation for a page scenario. */
+export function scenarioGraphs(scenario: Scenario): TaskGraph[] {
+  switch (scenario) {
+    case "empty": return [];
+    case "two": return [graph("fanout"), graph("chainDone")];
+    case "many": return [graph("chainDone"), graph("long"), graph("failed"), graph("fanout"), graph("cancelled"), graph("oneDone")];
+    default: return [graph(scenario)];
   }
 }

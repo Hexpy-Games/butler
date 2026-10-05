@@ -14,6 +14,8 @@ export interface GraphViewProps {
   selected: string | null;
   renderCard: (id: string) => ReactNode;
   onSelect: (id: string) => void;
+  /** Combined layout: the caller owns one shared horizontal ScrollArea for every band. */
+  bare?: boolean;
 }
 
 /** Focus moves with the arrows: right/left follow edges, up/down stay in the column. */
@@ -37,7 +39,7 @@ export function moveFocus(event: KeyboardEvent<HTMLElement>, next: (id: string) 
 }
 
 /** Desktop: ranks left to right inside a horizontal DS ScrollArea (edge fades follow the scroll). */
-export function GraphCanvas({ graph, index, columns, label, selected, renderCard, onSelect }: GraphViewProps) {
+export function GraphCanvas({ graph, index, columns, label, selected, renderCard, onSelect, bare = false }: GraphViewProps) {
   const host = useRef<HTMLDivElement>(null);
   const origin = useRef<SVGSVGElement>(null);
   const { rects, size } = useCardRects(host, origin, [graph, columns]);
@@ -59,8 +61,7 @@ export function GraphCanvas({ graph, index, columns, label, selected, renderCard
     const d = `M ${from.right} ${from.midY} C ${from.right + bend} ${from.midY}, ${to.left - bend} ${to.midY}, ${to.left} ${to.midY}`;
     return [<EdgePath key={`${edge.from}-${edge.to}`} d={d} edge={edge} tone={edgeTone(index.byId.get(edge.from)!, index.byId.get(edge.to)!)} />];
   });
-  return (
-    <ScrollArea orientation="x" dataTestClass="task-graph-canvas">
+  const body = (
       <div ref={host} role="group" aria-label={label} onKeyDown={(event) => moveFocus(event, (id) => neighbor(event.key, id, columns, index), onSelect)}>
         <Stack gap="none">
           {/* Zero-height layer: the SVG paints first, the transformed columns paint over it. */}
@@ -82,6 +83,6 @@ export function GraphCanvas({ graph, index, columns, label, selected, renderCard
           </Box>
         </Stack>
       </div>
-    </ScrollArea>
   );
+  return bare ? body : <ScrollArea orientation="x" dataTestClass="task-graph-canvas">{body}</ScrollArea>;
 }
