@@ -100,6 +100,7 @@ export function ComposerControlsStage() {
             variant={state.variant}
             copy={PAGE_COPY[state.locale].composer}
             question={state.question}
+            inset={state.inset}
             fileInputRef={fileInputRef}
             blockRef={setBlock}
           />

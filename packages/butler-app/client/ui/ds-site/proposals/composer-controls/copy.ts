@@ -21,6 +21,7 @@ interface PageCopy {
   plan: string;
   question: string;
   attachment: string;
+  inset: string;
   language: string;
   frameLabel: string;
   notesTitle: string;
@@ -32,7 +33,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "en-US": {
     eyebrow: "Proposal · #473",
     title: "Composer controls",
-    intro: "The composer card stays exactly as it ships today. Only its controls move into the space below the card; send and stop stay where they are. Every control is a glass pill and the row never wraps.",
+    intro: "The controls move out of the composer card into the space below it, so the card loses its toolbar row: empty, it is one line with send/stop at the end of that line, and it grows as text wraps. Radius, text inset, font and send size stay as they ship today. Every control is a glass pill and the row never wraps.",
     variant: "Variant",
     variants: { split: "A · Split", cluster: "B · Cluster" },
     recommended: "Recommended",
@@ -47,6 +48,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     plan: "Plan on",
     question: "Question",
     attachment: "Attachment",
+    inset: "Control row side inset",
     language: "Language",
     frameLabel: "Composer preview",
     notesTitle: "Variants",
@@ -64,7 +66,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "ko-KR": {
     eyebrow: "제안 · #473",
     title: "컴포저 컨트롤",
-    intro: "컴포저 카드는 지금 앱과 똑같이 둡니다. 컨트롤만 카드 바로 아래 빈 공간으로 옮기고, 보내기와 중지 버튼은 지금 자리에 그대로 둡니다. 컨트롤마다 글래스 필을 쓰고 줄은 한 줄로 유지합니다.",
+    intro: "컨트롤을 카드 바로 아래로 옮기면서 카드 안 툴바 줄을 없앱니다. 비어 있을 때 카드는 한 줄이고, 보내기·중지 버튼은 그 줄 끝에 있습니다. 글이 길어지면 카드가 줄 단위로 늘어납니다. 모서리, 글자 여백, 글꼴, 보내기 크기는 지금 앱과 같습니다. 컨트롤마다 글래스 필을 쓰고 줄은 한 줄로 유지합니다.",
     variant: "안",
     variants: { split: "A · 양쪽 정렬", cluster: "B · 왼쪽 모음" },
     recommended: "추천",
@@ -79,6 +81,7 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     plan: "계획 켜짐",
     question: "질문",
     attachment: "첨부",
+    inset: "컨트롤 좌우 여백",
     language: "언어",
     frameLabel: "컴포저 미리보기",
     notesTitle: "안 비교",
