@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { DesignSystemViewer } from "@/butler-ds/viewer/DesignSystemViewer.tsx";
@@ -9,8 +10,12 @@ import "@/butler-ds/tokens.css";
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("DS site root element is missing.");
 
+// Design proposals live beside the viewer (?proposal=<id>), lazy-loaded so the viewer bundle is unchanged.
+const params = new URLSearchParams(location.search);
+const LifecycleWindowsProposal = lazy(() => import("./proposals/lifecycle-windows/index.tsx"));
+
 createRoot(rootElement).render(
   <ErrorBoundary>
-    <DesignSystemViewer />
+    {params.get("proposal") === "lifecycle-windows" ? <Suspense><LifecycleWindowsProposal stage={params.get("stage")} /></Suspense> : <DesignSystemViewer />}
   </ErrorBoundary>,
 );
