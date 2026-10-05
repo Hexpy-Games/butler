@@ -7,6 +7,7 @@ import { DropdownMenuItem, DropdownMenuPortal, DropdownMenuSub, DropdownMenuSubC
   DropdownMenuSubTrigger, ScrollArea, Stack, Tag, Typo, Tooltip } from "@/butler-ds";
 
 function permissionKey(item: ConversationPermissionView) {
+  if (!item.capability || !item.target) return item.grant_ref;
   return JSON.stringify([item.capability, item.target, item.cwd, item.description]);
 }
 
@@ -31,11 +32,11 @@ export function GrantedPermissions({ permissions, sessionId }: {
     <DropdownMenuPortal><DropdownMenuSubContent sideOffset={12} data-test-class="granted-permissions-submenu">
       <ScrollArea maxHeight="xs" dataTestClass="granted-permissions-scroll">
         {grants.map(item => {
-          const command = item.capability === "run_command";
+          const command = item.capability === "run_command" || item.capability === "run_command_remote_observation";
           const kind = command ? appCopy.interfaceStatus.command
-            : appCopy.guided.tools[item.capability ?? ""] ?? item.capability ?? item.title;
+            : appCopy.guided.tools[item.capability ?? ""] ?? (item.capability || item.title);
           const target = item.target || item.title;
-          const label = `${kind}: ${command ? commandProgram(target) : target}`;
+          const label = item.capability ? `${kind}: ${command ? commandProgram(target) : target}` : target;
           return <DropdownMenuItem key={item.grant_ref} data-test-class="granted-permission"
             aria-label={appCopy.interfaceTemplates.revoke(label)} disabled={revoking !== undefined}
             onSelect={async event => {

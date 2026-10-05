@@ -70,10 +70,11 @@ export function OperationOutputDetails({
     latest?.complete === true,
   );
 
+  const execution = output.kind === "command" ? output.command ?? command : command;
   return (
     <Stack gap="xs">
-      {command ? <Typo.Caption>{appCopy.interfaceStatus.execution}: {command}</Typo.Caption> : null}
-      {command ? <Typo.Caption>{appCopy.interfaceStatus.result}:</Typo.Caption> : null}
+      {execution ? <Typo.Caption wrap="pre">{appCopy.interfaceStatus.execution}: {execution}</Typo.Caption> : null}
+      {execution ? <Typo.Caption>{appCopy.interfaceStatus.result}:</Typo.Caption> : null}
       {output.kind === "summary" ? (
         <Typo.Caption>{output.content}</Typo.Caption>
       ) : output.kind === "sections" ? (

@@ -7,7 +7,9 @@ export function commandProgram(command: string): string {
     const flag = words.findIndex(word => /^(?:-command|-c|\/c|\/k)$/iu.test(word));
     if (flag >= 0) {
       const nested = words.slice(flag + 1).join(" ").replace(/^["']|["']$/gu, "").replace(/^&\s*/u, "");
-      return commandProgram(nested) || executable;
+      const program = commandProgram(nested);
+      const scriptKeyword = /^(?:if|for|foreach|while|try|switch|return|throw|function)$/iu.test(program);
+      return /^[\p{L}_][\p{L}\p{N}_.-]*$/u.test(program) && !scriptKeyword ? program : executable;
     }
   }
   return executable;

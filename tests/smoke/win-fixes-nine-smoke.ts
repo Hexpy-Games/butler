@@ -46,7 +46,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
   else if (url.pathname.endsWith("/output")) {
     const id = url.pathname.split("/").at(-2)!;
     const content = JSON.stringify(id.startsWith("read") ? { files: [{ path: "index.html", content: "<title>Butler</title>" }] }
-      : id === "write" ? { path: "index.html", written_bytes: 21 } : { ok: true, stdout: "42\n", stderr: "", exit_code: 0 });
+      : id === "write" ? { path: "index.html", written_bytes: 21 } : { ok: true, command: id === "command" ? 'node -e "console.log(  42  )"' : "node --version", stdout: "42\n", stderr: "", exit_code: 0 });
     data = { content, complete: true, byte_end: content.length };
   } else if (url.pathname === "/navigation") data = { projects: [], chats: [], space: { nodes: [] } };
   if (data !== undefined) return Response.json({ ok: true, data });
@@ -81,7 +81,9 @@ try {
     assert(!(await rows.allTextContents()).some(text => text.includes("index.html, index.html") || text.includes("도구 사용")));
     const command = rows.filter({ hasText: "명령 실행: node" }).first();
     await command.getByRole("button").click();
-    await command.getByText('실행: node -e "console.log(42)"', { exact: true }).waitFor();
+    const execution = command.getByText(/^실행:/u);
+    await execution.waitFor();
+    assert.equal(await execution.textContent(), '실행: node -e "console.log(  42  )"', "canonical command preserves exact whitespace instead of a progress label");
     await command.getByText("결과:", { exact: true }).waitFor();
     assert((await command.innerText()).includes("42"));
     await rows.first().scrollIntoViewIfNeeded();

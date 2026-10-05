@@ -95,7 +95,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
     const label = interfaceProgressLabel(row);
     const name = row.safe_tool_name ?? "";
     const knownTitle = ["en-US", "ko-KR"] as const;
-    if (knownTitle.some(locale => [getAppCopy(locale).guided.tools[name], publicOperationTitle(name, locale)].includes(label))) {
+    if (knownTitle.some(locale => [getAppCopy(locale).guided.tools[name], publicOperationTitle(name, locale), getAppCopy(locale).guided.tools.fallback, getAppCopy(locale).progress.fallback].includes(label))) {
       return publicToolLabel(row);
     }
     return label && ![row.safe_tool_name, appCopy.guided.tools.fallback, appCopy.progress.fallback].includes(label)
