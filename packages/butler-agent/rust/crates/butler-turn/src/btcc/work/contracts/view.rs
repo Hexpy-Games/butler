@@ -110,6 +110,17 @@ pub struct ToolResultRef {
     pub attached_at: String,
 }
 
+impl ToolResultRef {
+    /// Durable result ownership and revision, independent of payload diagnostics.
+    pub fn same_identity(&self, other: &Self) -> bool {
+        self.result_ref == other.result_ref
+            && self.revision == other.revision
+            && self.tool_call_id == other.tool_call_id
+            && self.tool_name == other.tool_name
+            && self.origin_turn_id == other.origin_turn_id
+    }
+}
+
 /// A progress checkpoint of a Work against its plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

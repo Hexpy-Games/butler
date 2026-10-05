@@ -251,7 +251,15 @@ fn write_atomic(data_root: &Path, path: &Path, temp: &Path, body: &str) -> Cogni
         file.write_all(body.as_bytes())
             .and_then(|()| file.sync_all())
             .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
-        fs::rename(temp, path)
+        drop(file);
+        butler_platform::secure_fs::rename(temp, path)
+            .and_then(|()| {
+                butler_platform::secure_fs::sync_directory(
+                    path.parent()
+                        .ok_or_else(|| std::io::Error::other("missing cache parent"))?,
+                )
+                .unwrap_or(Ok(()))
+            })
             .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))
     })();
     if created_temp {

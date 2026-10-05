@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use rusqlite::{OptionalExtension, TransactionBehavior};
+use rusqlite::OptionalExtension;
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -58,9 +58,7 @@ impl AppApplication {
         let saved = self
             .storage
             .execute(move |db| {
-                let tx = db
-                    .transaction_with_behavior(TransactionBehavior::Immediate)
-                    .map_err(AppStorageError::sqlite)?;
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                 if let Some(row) = store::row(&tx, &request.request_id)? {
                     tx.commit().map_err(AppStorageError::sqlite)?;
                     return Ok(SaveOutcome::Existing(row));

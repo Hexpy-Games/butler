@@ -60,6 +60,9 @@ async fn tool_02_write_edit_and_read_only() -> Result<(), HarnessError> {
     );
 
     let ro_prompt = format!("Create ro.txt in your workspace containing exactly `gamma {marker}`.");
+    let requests = s.provider()?.requests();
+    super::token_metrics::report(&s, &requests, "write/edit replay")?;
+    super::token_cache::verify_write_edit(&s, &requests, &rows, &turn_id, &marker).await?;
     let turn_id = send(&s, &ro_prompt, "read_only").await?;
     let turn =
         s.gw.wait_terminal(
@@ -274,7 +277,48 @@ async fn allow_and_settle(
         "the service exited while resuming the approved turn"
     );
     assert_eq!(fs::read_to_string(target)?.trim_end(), "approved-by-user");
+    allow_result_read(s, target).await?;
     all_turns_terminal(s, "turn did not finish after Allow").await
+}
+
+/// The read-back is a separate exact operation approval in ask-first mode.
+async fn allow_result_read(s: &Scenario, target: &Path) -> Result<(), HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout());
+    loop {
+        let cards = s.gw.approval_requests("general").await?;
+        if let Some(card) = cards.first() {
+            assert_eq!(cards.len(), 1, "One exact read-back approval expected");
+            assert_eq!(
+                card["executable"], "read_file",
+                "Unexpected follow-up operation"
+            );
+            assert_eq!(card["approval"]["examples"], json!([target]));
+            let allowed =
+                s.gw.post(
+                    &format!(
+                        "/authority-requests/{}/allow?session_id=general",
+                        card["request_ref"].as_str().unwrap()
+                    ),
+                    json!({"scope":"once"}),
+                )
+                .await?;
+            assert_eq!(allowed.status, 202);
+            return Ok(());
+        }
+        if s.gw
+            .turns("general")
+            .await?
+            .iter()
+            .all(|t| TERMINAL.contains(&turn_state(t)))
+        {
+            return Ok(());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Exact read-back approval did not appear"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }
 
 /// Revokes the conversation grant that Allow created; it is no longer listed.
@@ -286,6 +330,8 @@ async fn revoke_conversation_grant(s: &Scenario) -> Result<(), HarnessError> {
         1,
         "unexpected conversation grants: {permissions}"
     );
+    assert_eq!(grants[0]["capability"], "write_file");
+    assert_eq!(grants[0]["target"], "approved.txt");
     let grant = grants[0]["grant_ref"]
         .as_str()
         .or_else(|| grants[0]["ref"].as_str())

@@ -28,10 +28,6 @@ pub(crate) struct MemorySourceCandidate {
 }
 
 pub(crate) struct ResolvedMemorySource {
-    pub(crate) generation_id: String,
-    pub(crate) source_id: String,
-    pub(crate) episode_id: String,
-    pub(crate) revision: String,
     pub scalar: Arc<str>,
     pub source_hash: String,
     pub source_kind: String,
@@ -92,10 +88,6 @@ impl MemorySourceReference {
             return Err(error(CognitionCode::MemorySourceChanged));
         };
         Ok(ResolvedMemorySource {
-            generation_id: generation.generation_id,
-            source_id,
-            episode_id: row.episode_id,
-            revision: row.revision,
             scalar: source.scalar,
             source_hash: source.source_hash,
             source_kind: source.source_kind,

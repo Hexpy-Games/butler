@@ -1,5 +1,6 @@
 import {
   AiChip,
+  Notebook,
   Archive,
   Activity,
   BookOpenText,
@@ -39,6 +40,7 @@ function createSettingsSectionMap(
   });
 
   return {
+    memory: section("memory", settingsCopy.sections.memory, <Notebook />),
     general: section("general", settingsCopy.sections.general, <SlidersHorizontal />),
     models: section("models", settingsCopy.sections.models, <AiChip />),
     appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
@@ -75,7 +77,7 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization", "models"],
+    sectionIds: ["general", "appearance", "personalization", "memory", "models"],
   },
   {
     id: "app-and-system",

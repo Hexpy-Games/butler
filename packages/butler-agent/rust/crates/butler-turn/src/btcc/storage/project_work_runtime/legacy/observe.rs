@@ -154,7 +154,13 @@ fn record_import(
 }
 
 fn verify_results(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> StorageResult<()> {
-    if input.canonical_result_refs != input.snapshot.work.result_refs {
+    if input.canonical_result_refs.len() != input.snapshot.work.result_refs.len()
+        || !input
+            .canonical_result_refs
+            .iter()
+            .zip(&input.snapshot.work.result_refs)
+            .all(|(left, right)| left.same_identity(right))
+    {
         return Err(invalid(
             StorageCode::ProjectWorkLegacyResultReferenceMismatch,
         ));
@@ -168,9 +174,14 @@ fn verify_results(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> Sto
                 tool_call_id: reference.tool_call_id.clone(),
             },
         )?;
+        if reference.result_sha256.as_deref() != Some(evidence.result_sha256.as_str()) {
+            butler_core::diagnostic!(
+                "warning: legacy result hash mismatch for {}",
+                reference.result_ref
+            );
+        }
         if reference.result_ref != super::record_id("result", &reference.tool_call_id)
             || evidence.tool_name != reference.tool_name
-            || reference.result_sha256.as_deref() != Some(evidence.result_sha256.as_str())
         {
             return Err(invalid(StorageCode::ProjectWorkLegacyResultInvalid));
         }

@@ -43,6 +43,7 @@ pub(super) fn prepare(
 ) -> CognitionResult<PreparedCapsule> {
     check_active(cancellation, deadline)?;
     let memory_root = paths.memory_root(data_root);
+    let reset_epoch = super::reset::epoch(data_root, paths, project_id)?;
     let target = capsule_path(&memory_root, project_id);
     let project_lock = project_lock_path(data_root, paths, project_id);
     let failure_log = failure_log_path(data_root, paths);
@@ -99,6 +100,7 @@ pub(super) fn prepare(
     let mut counts = source_counts(&snapshot);
     let body = render(project_id, &snapshot, &mut counts, super::now_epoch_ms());
     Ok(PreparedCapsule {
+        reset_epoch,
         project_id: project_id.to_owned(),
         path: target,
         body,
@@ -163,7 +165,7 @@ pub(super) fn read_text(data_root: &Path, path: &Path) -> CognitionResult<String
         .unwrap_or_default())
 }
 
-pub(super) fn capsule_path(memory_root: &Path, project_id: &str) -> PathBuf {
+pub(crate) fn capsule_path(memory_root: &Path, project_id: &str) -> PathBuf {
     let safe = sanitize_project_memory_id(project_id);
     memory_root.join("projects").join(format!("{safe}.md"))
 }

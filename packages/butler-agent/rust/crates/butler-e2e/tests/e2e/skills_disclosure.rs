@@ -144,8 +144,25 @@ async fn skill_222_catalog_load_resource_and_guard() -> Result<(), HarnessError>
         s.provider()?.misses()
     );
     let repeated = s.provider()?.requests();
-    assert_eq!(repeated.len(), 9);
-    assert!(repeated[6].to_string().contains("PROJECT_BODY_222"));
-    assert!(!repeated[6].to_string().contains("CHANGED_BODY_222"));
+    // Count the two exact four-round skill turns independently of background
+    // profile extraction, which is now selected through the memory model.
+    let skill_requests: Vec<_> = repeated
+        .iter()
+        .filter(|request| {
+            butler_e2e::e2e::matching::key("/codex/responses", request, &Default::default())
+                .user_request
+                == PROMPT
+        })
+        .collect();
+    assert_eq!(skill_requests.len(), 8);
+    assert!(skill_requests[5].to_string().contains("PROJECT_BODY_222"));
+    assert!(!skill_requests[5].to_string().contains("CHANGED_BODY_222"));
+    assert!(
+        skill_requests[6]
+            .to_string()
+            .contains("BUNDLED_RESOURCE_222")
+    );
+    assert!(skill_requests[7].to_string().contains("skill_path_invalid"));
+    assert!(s.provider()?.misses().is_empty());
     s.finish().await
 }

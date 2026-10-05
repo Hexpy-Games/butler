@@ -9,6 +9,7 @@ use super::DateParser;
 fn local_time_zones_resolve_like_javascript() {
     local_times_resolve_through_dst_gaps_and_overlaps_like_javascript();
     maintenance_uses_process_local_day_and_rejects_unknown_zones();
+    daily_ticks_follow_calendar_boundaries();
     crate::host::time::prompt_clock::tests::prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones();
 }
 
@@ -57,6 +58,29 @@ fn maintenance_uses_process_local_day_and_rejects_unknown_zones() {
             zone.local_day_and_minute(instant.timestamp_millis())
                 .unwrap(),
             ("2026-09-23".into(), 210)
+        );
+    }
+}
+
+fn daily_ticks_follow_calendar_boundaries() {
+    for (zone, instant, seconds) in [
+        ("UTC", "2026-09-23T03:29:30Z", 30),
+        ("UTC", "2026-09-23T03:30:00Z", 1_800),
+        ("UTC", "2026-09-23T03:59:59Z", 1),
+        ("UTC", "2026-09-23T04:00:00Z", 72_000),
+        ("UTC", "2026-09-23T23:59:59Z", 1),
+        ("America/New_York", "2024-03-10T06:59:00Z", 1_860),
+        ("America/New_York", "2024-11-03T05:59:00Z", 9_060),
+        ("Pacific/Apia", "2011-12-30T09:59:00Z", 60),
+    ] {
+        let parser = DateParser::new(zone).unwrap();
+        let now = chrono::DateTime::parse_from_rfc3339(instant)
+            .unwrap()
+            .timestamp_millis();
+        assert_eq!(
+            crate::host::memory_jobs::context_maintenance::next_tick_delay(&parser, now),
+            std::time::Duration::from_secs(seconds),
+            "{zone} {instant}",
         );
     }
 }

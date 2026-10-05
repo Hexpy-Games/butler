@@ -145,6 +145,7 @@ jobs:
           "$isolate" bun tests/smoke/app-update-work-stream.ts
           "$isolate" bun tests/smoke/quick-fixes-smoke.ts
           "$isolate" bun tests/smoke/quick-fixes-compare.ts
+          "$isolate" bun tests/smoke/app-memory-smoke.ts
           "$isolate" bun build tests/smoke/settings-release-compare.ts --target node --packages external --outdir .tmp/node-smokes
           "$isolate" node .tmp/node-smokes/settings-release-compare.js
 
@@ -158,6 +159,7 @@ jobs:
             .tmp/update-choice-smoke/
             .tmp/quick-fixes/
             .tmp/quick-fixes-comparison/
+            .tmp/memory-shots/
             .tmp/settings-release-comparison/
           if-no-files-found: error
 

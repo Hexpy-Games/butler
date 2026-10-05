@@ -6,6 +6,11 @@
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::os::windows::fs::OpenOptionsExt;
+
+#[cfg(feature = "test-support")]
+pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
+    None
+}
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -154,6 +159,31 @@ pub(super) fn sync_path(path: &Path) -> io::Result<()> {
 
 pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
     dunce::canonicalize(path)
+}
+
+pub(super) fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    let stem = key.split('.').next().unwrap_or(key).to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+            })
+        });
+    if !device
+        && !key.starts_with('~')
+        && !key.ends_with(['.', ' '])
+        && !key
+            .chars()
+            .any(|c| c.is_control() || "<>:\"/\\|?*".contains(c))
+    {
+        return std::borrow::Cow::Borrowed(key);
+    }
+    let mut encoded = String::from("~");
+    for byte in key.as_bytes() {
+        use std::fmt::Write;
+        let _ = write!(encoded, "{byte:02x}");
+    }
+    std::borrow::Cow::Owned(encoded)
 }
 
 pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {

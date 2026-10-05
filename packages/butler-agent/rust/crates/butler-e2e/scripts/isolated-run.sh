@@ -6,6 +6,6 @@ run_root=$(mktemp -d "${TMPDIR:-/tmp}/butler-e2e-run.XXXXXX")
 trap 'rm -rf "$run_root"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-export HOME="$run_root/home" BUTLER_DATA="$run_root/data"
-mkdir -p "$HOME" "$BUTLER_DATA"
+export HOME="$run_root/home" BUTLER_DATA="$run_root/data" TMPDIR="$run_root/tmp"
+mkdir -p "$HOME" "$BUTLER_DATA" "$TMPDIR"
 "$@"

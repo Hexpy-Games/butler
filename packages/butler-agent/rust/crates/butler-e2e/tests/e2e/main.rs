@@ -2,7 +2,6 @@
 mod access;
 mod agent_context;
 mod agent_exit;
-mod agent_feedback;
 mod alias_index_drop;
 mod app_state;
 mod app_storage_scale;
@@ -13,9 +12,11 @@ mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
 mod cli_surface;
+mod context_telemetry;
 mod credential_store;
 mod credentials;
 mod default_model;
+mod downloads_live;
 mod durable_configuration;
 mod durable_files;
 mod embed_download;
@@ -55,6 +56,7 @@ mod migration;
 mod monitoring_scale;
 mod onboarding;
 mod onboarding_form;
+mod outbox_identity;
 mod perf_ask_user;
 mod personalization;
 mod personalization_defaults;
@@ -64,6 +66,7 @@ mod projection_backlog;
 mod projection_settlement;
 mod projects;
 mod queue_admission_shutdown;
+mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
 mod quota;
@@ -93,10 +96,15 @@ mod steward_results;
 mod storage_resilience;
 mod streaming;
 mod subsession_legacy;
+mod token_cache;
+#[path = "support/token_metrics.rs"]
+mod token_metrics;
 mod tools;
 mod tools_effects;
 mod turn;
+mod turn_continuation;
 mod turn_faults;
+mod unicode_delivery;
 mod update_channels;
 mod update_discovery;
 mod updates;
@@ -114,3 +122,25 @@ mod workspace;
 mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
+
+mod btcc_cutover;
+mod data_perf;
+mod delegate_followup;
+mod mac_app_update;
+mod memory_instructions;
+mod memory_management;
+mod memory_profile_reset;
+mod memory_reset;
+mod memory_wiring_more;
+mod native_worker_ownership;
+mod project_artifacts;
+mod project_workspace;
+mod schedule_handoff;
+mod storage_concurrency;
+mod supervisor_ownership;
+
+#[path = "support/memory_reset_support.rs"]
+mod memory_reset_support;
+
+mod skills_cleanup;
+mod storage_concurrency_support;

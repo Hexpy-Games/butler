@@ -74,15 +74,31 @@ impl SubsessionService {
         Ok(lines)
     }
 
+    /// Visible parent execution presence, excluding interrupted child turns.
+    pub async fn running_parents(&self, parents: Vec<String>) -> Result<Vec<String>, BtccError> {
+        let candidates = self
+            .repository
+            .running_descendants(parents)
+            .await
+            .map_err(BtccError::from)?;
+        let mut running = std::collections::HashSet::new();
+        for (parent, relation) in candidates {
+            if !running.contains(&parent) && !self.child_recoverable(&relation).await? {
+                running.insert(parent);
+            }
+        }
+        Ok(running.into_iter().collect())
+    }
+
     /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
-        let children = self
+        let relations = self
             .repository
-            .relations_for_parent(session_id.into())
+            .projection_relations(session_id.into())
             .await
             .map_err(BtccError::from)?;
         // An undecodable child row projects as no relation instead of failing.
-        let relation = match self.repository.by_child(session_id.into()).await {
+        let relation = match relations.own {
             Err(error) if error.code() == StorageCode::SubsessionPacketInvalid.as_str() => {
                 butler_core::diagnostic!("[native-btcc] undecodable subsession child row ignored");
                 None
@@ -90,7 +106,7 @@ impl SubsessionService {
             other => other.map_err(BtccError::from)?,
         };
         let mut summaries = Vec::new();
-        for child in children {
+        for child in relations.children {
             summaries.push(self.project_child(&child).await?);
         }
         let (stewards, workers): (Vec<_>, Vec<_>) = summaries
@@ -142,9 +158,10 @@ impl SubsessionService {
             }
             value
         });
-        let waiting_for_children = self
-            .waiting_for_children(&relation.child_session_id)
-            .await?;
+        let waiting_for_children = result_view.is_none()
+            && self
+                .waiting_for_children(&relation.child_session_id)
+                .await?;
         let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"terminal":result_view.is_some()});
         if let Some((id, _)) = &latest {
             self.plan_counters(id, &mut projection).await?;

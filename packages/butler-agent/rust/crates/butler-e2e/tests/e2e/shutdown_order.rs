@@ -391,6 +391,10 @@ async fn record_write_deadline(mode: &str) -> Result<(), HarnessError> {
     let written = logs.find("record_write_hold:end").unwrap();
     let removed = logs.find("instance_release:removed").unwrap();
     assert!(release < written && written < removed, "{logs}");
+    assert!(
+        !logs[release..].contains("phase=instance_file_rename edge=begin"),
+        "forced release allowed a fenced record writer to publish: {logs}"
+    );
     let waiting = logs.find("record_lock_wait:begin").unwrap();
     assert!(release < waiting && waiting < written, "{logs}");
     if mode == "stalled-rename" {

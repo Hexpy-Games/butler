@@ -134,10 +134,7 @@ pub(super) fn record_failure_best_effort(
         return;
     };
     bytes.push(b'\n');
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    set_private_mode(&mut options);
-    if let Ok(mut file) = options.open(path) {
+    if let Ok(mut file) = butler_platform::secure_fs::append_private(&path) {
         let _ = file.write_all(&bytes);
         let _ = file.sync_data();
     }
@@ -157,6 +154,9 @@ pub(super) fn commit(
         .assert_for_path(lock_path)
         .map_err(CognitionError::from)?;
     ensure_source_authority(data_root, paths, &prepared.path)?;
+    if super::reset::epoch(data_root, paths, &prepared.project_id)? != prepared.reset_epoch {
+        return Err(error(CognitionCode::MemorySourceChanged));
+    }
     if !sources_are_current(
         data_root,
         paths,

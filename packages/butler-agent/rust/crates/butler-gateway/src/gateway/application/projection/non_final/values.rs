@@ -1,5 +1,6 @@
 //! Transport value normalization shared by non-final projections.
 
+use crate::gateway::application::storage::CachedSql;
 use butler_core::public_text::fixed_regex;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -102,7 +103,7 @@ pub(super) fn turn_id(
     let Some(reply) = text(message.get("replyToMessageId")) else {
         return Ok(None);
     };
-    db.query_row(
+    db.query_row_cached(
         "SELECT id FROM turns WHERE chat_id=?1 AND user_message_id=?2 ORDER BY rowid DESC LIMIT 1",
         params![chat, reply],
         |r| r.get(0),

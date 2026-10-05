@@ -279,6 +279,9 @@ pub struct ModelRoundRequest<'a> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageAttribution {
+    /// Runtime-owned request classification; absent in older durable rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_kind: Option<String>,
     pub turn_id: String,
     pub phase: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -299,6 +302,10 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundResult {
+    /// The provider explicitly marked visible text as progress rather than a final answer.
+    /// Providers without such a distinction leave this false; Work review still applies.
+    #[serde(default)]
+    pub nonfinal: bool,
     pub text: Option<String>,
     #[serde(default)]
     pub tool_calls: Vec<ModelRoundToolCall>,

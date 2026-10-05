@@ -28,6 +28,15 @@ impl Sandbox {
     /// Creates a fresh sandbox under the system temp dir. The directory is
     /// removed on success; the last five failures are retained and printed.
     pub fn new(scenario: &str) -> Result<Self, HarnessError> {
+        Self::allocate(scenario, None)
+    }
+
+    /// The caller keeps this immutable installation alive through all children.
+    pub fn with_installation(scenario: &str, installation: &Self) -> Result<Self, HarnessError> {
+        Self::allocate(scenario, Some(installation))
+    }
+
+    fn allocate(scenario: &str, installation: Option<&Self>) -> Result<Self, HarnessError> {
         let base = std::env::temp_dir().join("butler-e2e");
         fs::create_dir_all(&base)?;
         // Canonical path: macOS temp dirs are symlinks, and the product resolves them.
@@ -37,31 +46,15 @@ impl Sandbox {
             path: root.clone(),
             success: false,
         };
-        let install = root.join("install");
-        let resources = install.join("resources");
-        let binary = install
-            .join("bin")
-            .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
-        fs::create_dir_all(install.join("bin"))?;
-        // A copy (an APFS clone), never a hard link: macOS reports a process's
-        // executable (proc_pidpath) under the name its file was last looked
-        // up by, so sandboxes sharing one inode see each other's paths, and
-        // the product's instance identity check then refuses the CLI's
-        // gateway control requests (`gateway_control_identity_invalid`).
-        let source = agent_binary()?;
-        executable::copy(&source, &binary).map_err(|error| {
-            harness_error(format!(
-                "copy E2E agent {} to {}: {error}",
-                source.display(),
-                binary.display()
-            ))
-        })?;
-        copy_tree(&resource_source(), &resources)?;
-        fs::create_dir_all(resources.join("app-client/dist"))?;
-        fs::write(
-            resources.join("app-client/dist/index.html"),
-            "<!doctype html><title>e2e</title>",
-        )?;
+        let (install, resources, binary) = if let Some(installation) = installation {
+            (
+                installation.install.clone(),
+                installation.resources.clone(),
+                installation.binary.clone(),
+            )
+        } else {
+            prepare_installation(&root)?
+        };
         let sandbox = Self {
             data: root.join("data"),
             workspace: root.join("workspace"),
@@ -101,6 +94,35 @@ impl Sandbox {
         entries.sort();
         Ok(entries)
     }
+}
+
+fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), HarnessError> {
+    let install = root.join("install");
+    let resources = install.join("resources");
+    let binary = install
+        .join("bin")
+        .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
+    fs::create_dir_all(install.join("bin"))?;
+    // A copy (an APFS clone), never a hard link: macOS reports a process's
+    // executable (proc_pidpath) under the name its file was last looked
+    // up by, so sandboxes sharing one inode see each other's paths, and
+    // the product's instance identity check then refuses the CLI's
+    // gateway control requests (`gateway_control_identity_invalid`).
+    let source = agent_binary()?;
+    executable::copy(&source, &binary).map_err(|error| {
+        harness_error(format!(
+            "copy E2E agent {} to {}: {error}",
+            source.display(),
+            binary.display()
+        ))
+    })?;
+    copy_tree(&resource_source(), &resources)?;
+    fs::create_dir_all(resources.join("app-client/dist"))?;
+    fs::write(
+        resources.join("app-client/dist/index.html"),
+        "<!doctype html><title>e2e</title>",
+    )?;
+    Ok((install, resources, binary))
 }
 
 fn create_root(base: &Path, scenario: &str) -> Result<PathBuf, HarnessError> {

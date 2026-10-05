@@ -38,6 +38,7 @@ impl From<&TurnRecord> for TurnVersion {
 }
 
 pub(super) struct CanonicalDelivery {
+    pub revision: u64,
     pub turn_id: String,
     pub session_id: String,
     pub delivery_outbox: Option<DeliveryOutbox>,
@@ -46,6 +47,7 @@ pub(super) struct CanonicalDelivery {
 impl From<&TurnRecord> for CanonicalDelivery {
     fn from(turn: &TurnRecord) -> Self {
         Self {
+            revision: turn.revision,
             turn_id: turn.turn_id.clone(),
             session_id: turn.session_id.clone(),
             delivery_outbox: turn.delivery_outbox.clone(),

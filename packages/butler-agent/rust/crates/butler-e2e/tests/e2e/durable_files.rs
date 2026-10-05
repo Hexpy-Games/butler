@@ -181,6 +181,11 @@ async fn interrupted_transcript_write_retains_the_whole_outbound_pair() -> Resul
     let _ = s.turn("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.").await?;
     let mut events = Vec::<Value>::new();
     for path in files(&s.sandbox.data.join("transcripts")) {
+        assert_eq!(
+            butler_platform::secure_fs::is_owner_only(&fs::metadata(&path)?),
+            butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+            "transcript permissions"
+        );
         events.extend(
             fs::read_to_string(path)?
                 .lines()

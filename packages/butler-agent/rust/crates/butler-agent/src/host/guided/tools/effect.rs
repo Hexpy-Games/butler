@@ -7,6 +7,7 @@ mod ledger_input;
 mod mcp;
 mod observation;
 mod restart;
+mod runtime_work;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;
@@ -44,7 +45,7 @@ pub(super) async fn execute(
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
     };
-    if let Some(result) = observation::execute(owner, call, &scope).await? {
+    if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
     if owner.binding.access_mode == AccessMode::ReadOnly {
@@ -73,23 +74,38 @@ pub(super) async fn execute(
             None,
         );
     }
-    let Some(work) = owner
+    let work = owner
         .work
         .bound_work()
         .await
         .map_err(ToolExecutionError::Integrity)?
-    else {
-        return ordinary(
-            "effect_work_required",
-            "Create concise Work, record a Plan with this command action and an accepting Plan Review, then retry the same command. Runtime requests Allow automatically; do not ask the user to fix runtime policy.",
-            None,
-        );
-    };
+        .unwrap_or_else(|| runtime_work::untracked(owner));
     let prepared = prepare(owner, call, occurrence, scope, &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
     };
+    Box::pin(execute_prepared(
+        owner,
+        invocation,
+        call,
+        occurrence,
+        work,
+        (target, input, adapter),
+    ))
+    .await
+}
+
+/// Approval and journal dispatch share the prepared exact operation.
+async fn execute_prepared(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    work: WorkView,
+    prepared: (String, Value, Arc<dyn EffectAdapter>),
+) -> Result<JsonDocument, ToolExecutionError> {
+    let (target, input, adapter) = prepared;
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
         && !*owner.authority_consumed.lock();
@@ -118,15 +134,15 @@ pub(super) async fn execute(
             access: EffectAccess::Full,
             occurrence_id: Some(occurrence.to_owned()),
             signal: invocation.cancellation.clone(),
-            target,
+            target: target.clone(),
             input,
-            adapter,
+            adapter: adapter.clone(),
         })
         .await
     {
         Ok(outcome) => outcome,
         Err(error) if super::feedback::solvable(error.code()) => {
-            return ordinary(error.code(), error.message(), Some("rejected"));
+            return contract_feedback(error.code(), error.message(), adapter.capability(), &target);
         }
         Err(error) => return Err(ToolExecutionError::Integrity(error.into())),
     };
@@ -135,7 +151,7 @@ pub(super) async fn execute(
     {
         return Ok(feedback);
     }
-    outcome_result(outcome)
+    outcome_result(outcome, adapter.capability(), &target)
 }
 
 /// The target, input and adapter of the persistent effect `call` asks for.
@@ -187,9 +203,9 @@ fn ordinary(
     status: Option<&str>,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut value = json!({"ok":false,"error":{"code":code,"message":message}});
-    if code == "effect_work_required" || super::feedback::solvable(code) {
+    if super::feedback::solvable(code) {
         value["error"]["recoverable"] = true.into();
-        value["error"]["next_action"] = "Correct the Work/Plan using the admitted tools, then retry the same command. Runtime handles approval; do not hand runtime policy repair to the user.".into();
+        value["error"]["next_action"] = super::feedback::repair(code).into();
     }
     if let Some(status) = status {
         value["error"]["effect_status"] = status.into();
@@ -244,7 +260,11 @@ fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
     )
 }
 
-fn outcome_result(outcome: EffectOutcome) -> Result<JsonDocument, ToolExecutionError> {
+fn outcome_result(
+    outcome: EffectOutcome,
+    capability: &str,
+    target: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     match outcome {
         EffectOutcome::Applied {
             result,
@@ -265,10 +285,26 @@ fn outcome_result(outcome: EffectOutcome) -> Result<JsonDocument, ToolExecutionE
             }
             receipt_result(&result, &public)
         }
+        EffectOutcome::Rejected(error) if super::feedback::solvable(&error.code) => {
+            contract_feedback(&error.code, &error.message, capability, target)
+        }
         EffectOutcome::Rejected(error) => ordinary(&error.code, &error.message, Some("rejected")),
         EffectOutcome::Failed(error) => ordinary(&error.code, &error.message, Some("failed")),
         EffectOutcome::Uncertain { error, .. } => {
             ordinary(&error.code, &error.message, Some("uncertain"))
         }
     }
+}
+
+fn contract_feedback(
+    code: &str,
+    message: &str,
+    capability: &str,
+    target: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let mut value = json!({"ok":false,"error":{"code":code,"message":message,
+        "recoverable":true,"next_action":super::feedback::repair(code),
+        "required_effect":{"capability":capability,"target":target}}});
+    value["error"]["effect_status"] = "rejected".into();
+    JsonDocument::from_value(&value).map_err(wire_error)
 }

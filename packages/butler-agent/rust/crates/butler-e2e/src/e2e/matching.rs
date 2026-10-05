@@ -76,7 +76,7 @@ pub fn normalize_volatile(text: &str) -> String {
                 "{{TIME}}",
             ),
             (
-                r"\bcr_(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|scheduled_[0-9]{14})\b",
+                r"\bcr_(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|scheduled_[0-9]{14}(?:_[0-9a-f]{32})?)\b",
                 "{{RUN_ID}}",
             ),
             (

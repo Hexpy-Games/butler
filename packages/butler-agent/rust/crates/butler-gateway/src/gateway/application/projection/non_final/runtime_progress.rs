@@ -160,7 +160,7 @@ fn tool_row(kind: &str, p: &Map<String, Value>, id: &str, row: &mut Map<String, 
         return;
     }
     let tool = safe(p.get("toolName"), "Tool");
-    let input = optional(p.get("inputLabel"));
+    let input = tool_input(p);
     let fallback = input
         .as_ref()
         .map(|value| format!("{tool}: {value}"))
@@ -355,6 +355,17 @@ fn integer_value(value: Option<&Value>) -> Option<u64> {
     .filter(|value| value.is_finite() && *value >= 0.0)
     .map(|value| butler_core::json::saturating_u64(value.floor()))
 }
+fn tool_input(p: &Map<String, Value>) -> Option<String> {
+    if p.get("bridgePhase").and_then(Value::as_str) == Some("btcc_operation") {
+        p.get("inputLabel")
+            .and_then(Value::as_str)
+            .map(butler_core::public_text::sanitize_public_delta)
+            .filter(|value| !value.is_empty())
+    } else {
+        optional(p.get("inputLabel"))
+    }
+}
+
 fn optional(value: Option<&Value>) -> Option<String> {
     let value = value?;
     let value = match value {

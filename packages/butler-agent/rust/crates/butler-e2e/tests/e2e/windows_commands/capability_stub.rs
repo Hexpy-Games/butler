@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) const PROMPT: &str = "Windows 기본 파일 작업을 실행해줘";
+pub(super) const PROMPT: &str = "다운로드 폴더 정리해줘";
 pub(super) const DELEGATE_PROMPT: &str = "Steward에게 파일 작성을 위임해줘";
 
 #[derive(Clone)]
@@ -25,6 +25,7 @@ pub(super) struct Script {
     step: Mutex<usize>,
     child_step: Mutex<usize>,
     pub(super) delegated: AtomicBool,
+    pub(super) work: AtomicBool,
     sent: Mutex<Option<Instant>>,
     pub result: Mutex<Option<(Value, Duration)>>,
     pub disposition: Mutex<Option<Value>>,
@@ -52,6 +53,7 @@ pub(super) async fn start(
         step: Mutex::new(0),
         child_step: Mutex::new(1),
         delegated: AtomicBool::new(false),
+        work: AtomicBool::new(false),
         sent: Mutex::new(None),
         result: Mutex::new(None),
         disposition: Mutex::new(None),
@@ -71,6 +73,7 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let delegated = script.delegated.load(Ordering::SeqCst);
+    let work = script.work.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
         "/codex/responses",
         &body,
@@ -93,7 +96,7 @@ async fn reply(
         let mut s = counter.lock().unwrap();
         let step = *s;
         *s += 1;
-        step
+        if delegated || work { step } else { step + 3 }
     };
     if delegated && !child {
         let item = parent(step);
@@ -140,6 +143,7 @@ async fn reply(
             *script.sent.lock().unwrap() = Some(Instant::now());
             call("operation", case.tool, &case.args)
         }
+        4 if !delegated && !work => message("파일 확인 완료"),
         4 => {
             let work = outputs
                 .iter()
@@ -162,17 +166,8 @@ async fn reply(
         .into_response()
 }
 
-fn action(case: &Case) -> Value {
-    let mut action = json!({"action_key":"basic","description":"Run the exact test operation"});
-    if matches!(case.tool, "write_file" | "edit_file" | "run_command") {
-        let target = if case.tool == "run_command" {
-            "workspace-command:.".to_owned()
-        } else {
-            format!("workspace:{}", case.args["path"].as_str().unwrap())
-        };
-        action["effect"] = json!({"capability":case.tool,"target":target});
-    }
-    action
+fn action(_case: &Case) -> Value {
+    json!({"action_key":"basic","description":"Run the exact test operation"})
 }
 
 fn call(id: &str, name: &str, args: &Value) -> Value {

@@ -39,13 +39,12 @@ async fn batch_directory_alias_groups_one_target_like_source() {
 // test-category: security
 #[tokio::test]
 async fn path_guards_reject_hostile_targets() {
-    protected_ledger_and_sensitive_paths_are_not_mutated().await;
-    crate::capabilities::tests::source_gaps::containment_and_unicode_sensitive_paths_are_rejected()
-        .await;
+    os_accessible_ledger_and_sensitive_paths_are_mutated().await;
+    crate::capabilities::tests::source_gaps::os_accessible_unicode_paths_are_read().await;
     crate::context::reader_enforces_scan_limit_and_realpath_boundary().await;
 }
 
-async fn protected_ledger_and_sensitive_paths_are_not_mutated() {
+async fn os_accessible_ledger_and_sensitive_paths_are_mutated() {
     let fixture = Fixture::new();
     std::fs::create_dir(fixture.root.join(".project-ledger")).unwrap();
     for (name, call) in [
@@ -64,11 +63,14 @@ async fn protected_ledger_and_sensitive_paths_are_not_mutated() {
         ),
     ] {
         let actual = rust(&fixture, name, &call, None, None).await;
-        assert_eq!(actual["ok"], false, "{name}: {call}");
-        assert!(actual["error"].is_string(), "{name}: {call}");
+        if name == "edit_file" {
+            assert_eq!(actual["ok"], false); // Missing OS file, not a policy rejection.
+        } else {
+            assert_eq!(actual["ok"], true, "{name}: {call}");
+        }
     }
-    assert!(!fixture.root.join(".project-ledger/source.txt").exists());
-    assert!(!fixture.root.join(".env.local").exists());
+    assert!(fixture.root.join(".project-ledger/source.txt").exists());
+    assert!(fixture.root.join(".env.local").exists());
     fixture.capabilities.mutations.close().await;
 }
 

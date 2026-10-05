@@ -81,6 +81,7 @@ async function activity(page: Page, width: number, theme: string) {
     await page.getByRole("button", { name: "위임 작업", exact: true }).click();
     const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
     await dialog.waitFor();
+    assert.equal(await dialog.getByText("자료 검색과 검사를 마쳤습니다.", { exact: true }).count(), state === "completed" ? 1 : 0, "final reply appears only after completion");
     const toggle = dialog.locator('[data-test-class="toggle-turn-activity-disclosure"]');
     assert.equal(await toggle.count(), 1, "observer retains the work's activity record");
     await toggle.click();

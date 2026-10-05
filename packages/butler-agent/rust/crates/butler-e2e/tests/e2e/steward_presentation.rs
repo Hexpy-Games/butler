@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod files;
 #[path = "steward_presentation/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
@@ -15,9 +16,7 @@ use std::time::{Duration, Instant};
 async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-PRESENTATION", &url)
-        .await?
-        .env("BUTLER_E2E_HOLD_TOOL", "read_file");
+    let setup = setup("STEWARD-PRESENTATION", &url)?.env("BUTLER_E2E_HOLD_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -29,6 +28,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
         .unwrap_or_else(|_| panic!("{}\n{}", diagnostic(&script), s.agent.logs()));
     let view = s.gw.get("/session-view?session_id=general").await?;
     let child = &view.data()["steward_children"][0];
+    assert_sidebar_work(&s, true).await?;
     assert_eq!(child["approved_plan_total"], 2, "{child}");
     assert_eq!(child["approved_plan_completed"], 1, "{child}");
     assert!(
@@ -65,9 +65,194 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
     assert_eq!(complete["approved_plan_completed"], 2);
+    assert!(
+        complete["result"]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("키센스.txt"),
+        "Delivery must preserve decomposed filename bytes: {complete}"
+    );
+    files::assert_delegated_files(&s).await?;
+    assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
     assert_eq!(activity.data()["workers"][0]["worker_id"], worker);
     assert_direction(&s, &script, relation);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<(), HarnessError> {
+    use std::sync::atomic::Ordering;
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    script.blocked_disposition.store(true, Ordering::SeqCst);
+    script.release.notify_one();
+    let setup = setup("STEWARD-DELIVERED-BLOCKED-WORK", &url)?;
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(setup.sandbox.data.join(name), name)?;
+    }
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    let child = wait_result(&s).await?;
+    assert_eq!(child["result"]["status"], "success", "{child}");
+    assert_eq!(child["result"]["work_status"], "blocked", "{child}");
+    assert_eq!(child["status"], "delivered", "{child}");
+    assert_eq!(child["approved_plan_completed"], 1);
+    let own =
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            child["session_id"].as_str().unwrap()
+        ))
+        .await?;
+    assert_eq!(own.data()["status"], "delivered");
+    assert_eq!(own.data()["latest_turn"]["delivery_state"], "delivered");
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let status: String = db
+        .query_row(
+            "SELECT status FROM btcc_guided_works WHERE session_id=?1",
+            [child["session_id"].as_str().unwrap()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        status, "blocked",
+        "Work must retain its unfinished disposition"
+    );
+    drop(db);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+pub(super) async fn unfinished_disposition_delivers_failure() -> Result<(), HarnessError> {
+    use std::sync::atomic::Ordering;
+    let (url, script, server) = stub::start().await?;
+    script.open_disposition.store(true, Ordering::SeqCst);
+    script.release.notify_one();
+    let setup = setup("STEWARD-OPEN-DISPOSITION", &url)?;
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(setup.sandbox.data.join(name), name)?;
+    }
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let child = loop {
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let child = &view.data()["steward_children"][0];
+        if child["result"].is_object() {
+            break child.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Open disposition lost its parent result: {view:?}\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(child["result"]["status"], "failed", "{child}");
+    assert!(
+        child["result"]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("could not complete")
+    );
+    assert_eq!(
+        child["approved_plan_completed"], 1,
+        "Unfinished actions remain unfinished"
+    );
+    loop {
+        let messages = s.gw.messages("general").await?;
+        if messages.iter().any(|message| {
+            message["text"] == "Delegated work could not complete; progress remains saved."
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Failed child result never reached the parent: {messages:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn stopped_steward_projects_terminal_state_and_publishes_change() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = setup("STEWARD-STOP", &url)?;
+    std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    tokio::time::timeout(Duration::from_secs(20), script.held.notified())
+        .await
+        .unwrap();
+    assert_sidebar_work(&s, true).await?;
+    assert_owner_scale_sidebar(&s).await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert!(view.data()["active_turn"].is_null(), "parent has ended");
+    let child = &view.data()["steward_children"][0];
+    let relation = child["relation"]["relation_id"].as_str().unwrap();
+    let child_id = child["session_id"].as_str().unwrap();
+    let cursor = view.data()["cursors"]["events"].as_u64().unwrap();
+    s.gw.post(
+        &format!("/steward-relations/{relation}/cancel"),
+        json!({"parent_session_id":"general"}),
+    )
+    .await?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let own =
+            s.gw.get(&format!("/session-view?session_id={child_id}"))
+                .await?;
+        if own.data()["status"] == "cancelled" {
+            assert!(own.data()["active_turn"].is_null());
+            assert_ne!(own.data()["waiting_for_children"], true);
+            assert_eq!(own.data()["latest_turn"]["cancellable"], false);
+            break;
+        }
+        assert!(Instant::now() < deadline, "{own:?}\n{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let confirmed = Instant::now();
+    loop {
+        let events = s.gw.events_since(cursor).await?;
+        if events.iter().any(|event| {
+            event["type"] == "subsession.changed"
+                && event["payload"]["child_session_id"] == child_id
+        }) {
+            break;
+        }
+        butler_e2e::assert_wall_clock_budget!(
+            confirmed.elapsed(),
+            Duration::from_millis(500),
+            "terminal event"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "missing terminal event: {events:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_sidebar_work(&s, false).await?;
+    butler_e2e::assert_wall_clock_budget!(
+        confirmed.elapsed(),
+        Duration::from_millis(500),
+        "terminal navigation"
+    );
+    println!(
+        "stop confirmation to event/navigation: {} ms",
+        confirmed.elapsed().as_millis()
+    );
+    script.release.notify_one();
     s.finish().await?;
     server.abort();
     Ok(())
@@ -91,9 +276,9 @@ async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, H
         let child = &view.data()["steward_children"][0];
         let messages = s.gw.messages("general").await?;
         if child["result"].is_object()
-            && messages
-                .iter()
-                .any(|message| message["text"] == "Approach B verified.")
+            && messages.iter().any(|message| {
+                message["text"] == "Approach B verified." && message["status"] == "delivered"
+            })
         {
             return Ok(child.clone());
         }
@@ -106,9 +291,7 @@ async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, H
 async fn interrupted_steward_exposes_resume_and_keeps_the_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-RESUME", &url)
-        .await?
-        .env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
+    let setup = setup("STEWARD-RESUME", &url)?.env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -193,7 +376,7 @@ fn assert_direction(
                 && item["name"] == "read_file"
                 && item["call_id"] == "read-b")
             .count(),
-        2
+        3
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(
@@ -222,13 +405,71 @@ fn diagnostic(script: &stub::Script) -> String {
         .join("\n")
 }
 
-async fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
+fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
-    Ok(Setup::new(id)?
+    let setup = Setup::new(id)?;
+    // Holding/interruption fixtures need the debug-only tool hooks. The
+    // original navigation/event budgets still apply to this slower binary.
+    if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
+        butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
+    }
+    Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", port))
+        .env("BUTLER_APP_SERVER_PORT", "0"))
+}
+
+async fn assert_sidebar_work(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    running: bool,
+) -> Result<(), HarnessError> {
+    let navigation = s.gw.get("/navigation").await?;
+    let parent = navigation.data()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == "general")
+        .unwrap();
+    assert_eq!(parent["running_delegated_work"], running, "{parent}");
+    Ok(())
+}
+
+async fn assert_owner_scale_sidebar(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    let db =
+        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    db.execute_batch(
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
+        INSERT INTO chats(id,title,kind,created_at,updated_at)
+        SELECT 'busy-scale-'||i,'Idle chat '||i,'chat','2026-01-01','2026-01-01' FROM n;",
+    )
+    .unwrap();
+    let started = Instant::now();
+    let navigation = s.gw.get("/navigation").await?;
+    let elapsed = started.elapsed();
+    let chats = navigation.data()["chats"].as_array().unwrap();
+    assert_eq!(chats.len(), 601, "complete navigation at owner scale");
+    assert_eq!(
+        chats
+            .iter()
+            .filter(|chat| chat["running_delegated_work"] == true)
+            .count(),
+        1
+    );
+    assert!(
+        chats
+            .iter()
+            .any(|chat| chat["id"] == "general" && chat["running_delegated_work"] == true)
+    );
+    butler_e2e::assert_wall_clock_budget!(
+        elapsed,
+        Duration::from_millis(500),
+        "601-chat delegated navigation"
+    );
+    println!(
+        "601-chat complete delegated navigation: {} ms",
+        elapsed.as_millis()
+    );
+    Ok(())
 }

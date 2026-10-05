@@ -1,4 +1,5 @@
 //! Terminal assistant-message delivery, work-block, and activity projection.
+use crate::gateway::application::storage::CachedSql;
 
 use std::collections::BTreeMap;
 
@@ -24,14 +25,27 @@ pub(super) fn decorate(
         let Some(turn) = message.turn_id.as_deref() else {
             continue;
         };
-        let Some(snapshot) = progress
-            .get(turn)
-            .filter(|value| terminal(value.state.as_ref()))
-        else {
+        let Some(snapshot) = progress.get(turn).filter(|value| {
+            terminal(value.state.as_ref())
+                || matches!(message.status, crate::gateway::MessageStatus::Delivered)
+        }) else {
             continue;
         };
+        let previous_end: Option<String> = db.query_row(
+            "SELECT updated_at FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' \
+             AND rowid<?3 ORDER BY rowid DESC LIMIT 1",
+            rusqlite::params![message.chat_id, turn, message.cursor], |row| row.get(0),
+        ).optional().map_err(AppStorageError::sqlite)?;
+        let mut snapshot = snapshot.clone();
+        snapshot.safe_progress_rows.retain(|row| {
+            let at = row.get("created_at").and_then(Value::as_str);
+            at.is_none_or(|at| {
+                previous_end.as_deref().is_none_or(|end| at > end)
+                    && at <= message.updated_at.as_str()
+            })
+        });
         let explicit = db
-            .query_row(
+            .query_row_cached(
                 "SELECT delivery_metadata_json FROM app_terminal_turn_projections WHERE turn_id=?1",
                 [turn],
                 |row| row.get::<_, Option<String>>(0),
@@ -46,18 +60,14 @@ pub(super) fn decorate(
             message.limitations = snapshot.limitations.clone();
         }
         let blocks = work_blocks::project(&snapshot.safe_progress_rows);
-        if !blocks.is_empty() {
-            message.work_blocks = Some(blocks);
-        }
+        message.work_blocks = Some(blocks);
         let activity = snapshot
             .safe_progress_rows
             .iter()
             .filter(|row| is_activity(row))
             .cloned()
             .collect::<Vec<_>>();
-        if !activity.is_empty() {
-            message.turn_activity_rows = Some(activity);
-        }
+        message.turn_activity_rows = Some(activity);
     }
     Ok(())
 }

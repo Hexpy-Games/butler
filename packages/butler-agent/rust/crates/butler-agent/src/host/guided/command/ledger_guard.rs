@@ -220,14 +220,8 @@ fn resolve(candidate: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
     Some(lexical(&path))
 }
 
-fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) -> bool {
-    let mut roots = vec![
-        workspace.join(".project-ledger"),
-        data.join("project-ledger/projects"),
-    ];
-    if let Some(home) = home {
-        roots.push(home.join(".butler/project-ledger/projects"));
-    }
+fn protected(path: &Path, workspace: &Path, _data: &Path, _home: Option<&Path>) -> bool {
+    let roots = [workspace.join(".project-ledger")];
     let target = real_or_nearest(path);
     roots
         .into_iter()

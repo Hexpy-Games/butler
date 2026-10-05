@@ -5,6 +5,9 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+mod cwd;
+pub(super) use cwd::working_directory;
+
 pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;
@@ -74,8 +77,10 @@ pub(super) fn legacy_shell(
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
     let modules = default_modules(environment);
+    let shell_started = phase_marker("script_started");
+    let modules_ready = phase_marker("modules_ready");
     let script = format!(
-        "[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{command}"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{command}"
     );
     let encoded = STANDARD.encode(
         script
@@ -99,6 +104,19 @@ pub(super) fn legacy_shell(
         .map(str::to_owned)
         .to_vec(),
     }
+}
+
+fn phase_marker(phase: &str) -> String {
+    if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+        != Some(std::ffi::OsStr::new("1"))
+    {
+        return String::new();
+    }
+    // Opt-in diagnostics contain no command, path, environment or output data.
+    // UTC ticks correlate shell startup/imports with the parent spawn interval.
+    format!(
+        "[Console]::Error.WriteLine('command_shell_phase phase={phase} utc_ticks=' + [DateTime]::UtcNow.Ticks); "
+    )
 }
 
 fn default_modules(environment: &HashMap<String, Option<String>>) -> &'static str {

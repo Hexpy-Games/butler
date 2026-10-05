@@ -7,6 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use axum::extract::DefaultBodyLimit;
+use axum::serve::ListenerExt;
 use axum::{Extension, Router, routing::any};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -40,6 +41,13 @@ pub(super) fn spawn(
         }))
         .into_make_service_with_connect_info::<SocketAddr>();
     tokio::spawn(async move {
+        // Small JSON/SSE tails must not wait for an acknowledgement of a
+        // preceding packet. Apply to loopback and dynamically bound LAN peers.
+        let listener = listener.tap_io(|stream| {
+            if let Err(error) = stream.set_nodelay(true) {
+                butler_core::diagnostic!("[gateway] TCP_NODELAY unavailable: {error}");
+            }
+        });
         axum::serve(listener, service)
             .with_graceful_shutdown(closed.cancelled_owned())
             .await

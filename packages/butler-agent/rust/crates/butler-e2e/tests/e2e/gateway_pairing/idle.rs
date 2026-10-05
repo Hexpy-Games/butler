@@ -39,6 +39,7 @@ async fn paired_devices_have_zero_idle_writes_and_request_driven_last_seen()
     butler_e2e::gate!();
     let s = Setup::new("SSD-PAIRED")?
         .data_folder_token()
+        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .start()
         .await?;
     let app = admin(&s);
@@ -58,6 +59,23 @@ async fn paired_devices_have_zero_idle_writes_and_request_driven_last_seen()
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .expect("open isolated App DB");
+    let generation = s
+        .sandbox
+        .data
+        .join("cognition/memory/active-generation.json");
+    assert!(!generation.exists(), "bootstrap hold was not reached");
+    std::fs::write(
+        s.sandbox.data.join("state/e2e-memory-bootstrap-release"),
+        "release",
+    )?;
+    tokio::time::timeout(Duration::from_secs(90), async {
+        while !generation.exists() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("held memory bootstrap did not publish its generation");
+    super::super::super::memory_fixture::settle(&s.sandbox.data).await?;
     let initial_seen = seen(&db, id);
     tokio::time::sleep(Duration::from_secs(2)).await;
     let before = version(&db);

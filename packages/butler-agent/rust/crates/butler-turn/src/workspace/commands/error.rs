@@ -41,10 +41,11 @@ pub(crate) type CommandSource = Arc<dyn Error + Send + Sync>;
 pub enum CommandError {
     /// The workspace path guard rejected the command directory; `reason` is
     /// the guard's wire code.
-    #[error(
-        "{reason}: The requested command directory is outside the admitted workspace safety policy."
-    )]
-    CwdRejected { reason: &'static str },
+    #[error("{reason}: Use a command directory inside the session workspace: {workspace_root}")]
+    CwdRejected {
+        reason: &'static str,
+        workspace_root: String,
+    },
     /// A command check failed (empty command, cwd outside the workspace, timeout,
     /// capture limit, cancelled lane). Nothing lower-level failed.
     #[error("{code}: {message}")]
@@ -99,7 +100,7 @@ impl CommandError {
         match self {
             Self::Io { .. } => CommandCode::CommandIoFailed.as_str(),
             Self::Detected { code, .. } | Self::Failed { code, .. } => code.as_str(),
-            Self::CwdRejected { reason } => reason,
+            Self::CwdRejected { reason, .. } => reason,
         }
     }
 
@@ -108,9 +109,8 @@ impl CommandError {
         match self {
             Self::Detected { message, .. } | Self::Failed { message, .. } => message.clone(),
             Self::Io { source } => source.to_string(),
-            Self::CwdRejected { .. } => {
-                "The requested command directory is outside the admitted workspace safety policy."
-                    .to_owned()
+            Self::CwdRejected { workspace_root, .. } => {
+                format!("Use a command directory inside the session workspace: {workspace_root}")
             }
         }
     }

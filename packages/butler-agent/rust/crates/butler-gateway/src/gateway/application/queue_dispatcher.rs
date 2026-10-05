@@ -242,7 +242,7 @@ async fn recover_and_drain(
     let chats = if let Some(chat) = only_chat {
         vec![chat.to_owned()]
     } else {
-        app.storage.execute(queued_chats).await.map_err(app_error)?
+        app.storage.read(queued_chats).await.map_err(app_error)?
     };
     for chat in chats {
         drain_chat(cancellation, app, &chat).await?;
@@ -258,7 +258,7 @@ async fn drain_chat(
     let chat = chat_id.to_owned();
     let rows = app
         .storage
-        .execute(move |db| queued_rows(db, &chat))
+        .read(move |db| queued_rows(db, &chat))
         .await
         .map_err(app_error)?;
     for row in rows {
@@ -268,7 +268,7 @@ async fn drain_chat(
         let chat = chat_id.to_owned();
         let active = app
             .storage
-            .execute(move |db| session_has_active_turn(db, &chat))
+            .read(move |db| session_has_active_turn(db, &chat))
             .await
             .map_err(app_error)?;
         if active {
@@ -335,7 +335,7 @@ struct QueuedRow {
     text: String,
     control_resolution_json: String,
 }
-fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
+fn queued_rows(db: &Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
     let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
         .map_err(AppStorageError::sqlite)?;
     statement
@@ -362,7 +362,7 @@ pub(super) const LEASE_DEADLINE_SQL: &str = "SELECT MIN(lease_expires_at) \
     AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 \
     AND (claim_owner IS NULL OR claim_owner<>?2)";
 
-fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
+fn queued_chats(db: &Connection) -> Result<Vec<String>, AppStorageError> {
     let mut statement = db
         .prepare_cached(QUEUED_CHATS_SQL)
         .map_err(AppStorageError::sqlite)?;
@@ -372,7 +372,7 @@ fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
-fn session_has_active_turn(db: &mut Connection, chat: &str) -> Result<bool, AppStorageError> {
+fn session_has_active_turn(db: &Connection, chat: &str) -> Result<bool, AppStorageError> {
     db.query_row_cached("SELECT 1 FROM turns t WHERE chat_id=?1 AND NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching')) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }

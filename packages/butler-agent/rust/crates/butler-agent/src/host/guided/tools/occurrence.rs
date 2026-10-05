@@ -118,3 +118,12 @@ pub(super) fn occurrence(
 fn hash(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
+
+impl Occurrence {
+    /// Rule mutations replay the same durable owner operation when a provider
+    /// issues a fresh ID after interruption; the resume pool matches exact arguments.
+    pub(super) fn permits_signature_resume(&self, name: &str) -> bool {
+        self.provider_call_id.is_none()
+            || matches!(name, "update_explicit_memory" | "forget_explicit_memory")
+    }
+}

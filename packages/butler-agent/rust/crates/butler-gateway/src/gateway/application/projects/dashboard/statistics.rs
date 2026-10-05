@@ -7,7 +7,7 @@ mod view;
 
 use serde_json::Value;
 
-use super::super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
+use super::super::{AppApplication, GatewayApplicationError, app_error};
 use super::contracts::AppProjectDashboardStatisticsQuery;
 use super::project::read_project;
 
@@ -25,23 +25,13 @@ pub(super) async fn get(
     let app_project_id = project.id.clone();
     let session_projection = application
         .storage
-        .execute(move |db| {
-            let Ok(transaction) = db.transaction() else {
-                return Ok(None);
-            };
+        .read(move |db| {
             let mut projection = base;
-            if app::populate(
-                &transaction,
-                &app_project_id,
-                &app_calendar,
-                &mut projection,
-            )
-            .is_err()
+            if app::populate(db, &app_project_id, &app_calendar, &mut projection).is_err()
                 || view::source_count(&projection) > 20_000
             {
                 return Ok(None);
             }
-            transaction.commit().map_err(AppStorageError::sqlite)?;
             Ok(Some(projection))
         })
         .await

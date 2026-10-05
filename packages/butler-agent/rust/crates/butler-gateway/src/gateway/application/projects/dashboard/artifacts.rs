@@ -43,7 +43,7 @@ pub(super) async fn get(
     let limit = query.limit;
     let rows = application
         .storage
-        .execute(move |db| read_artifact_page(db, &project_key, before_rowid, &before_file, limit))
+        .read(move |db| read_artifact_page(db, &project_key, before_rowid, &before_file, limit))
         .await
         .map_err(app_error)?;
     let selected = rows.iter().take(query.limit).collect::<Vec<_>>();
@@ -80,7 +80,7 @@ pub(super) async fn attach(
     let project_key = project_id.to_owned();
     let artifact = application
         .storage
-        .execute(move |db| read_artifact(db, &project_key, &id))
+        .read(move |db| read_artifact(db, &project_key, &id))
         .await
         .map_err(app_error)?
         .ok_or_else(source_unavailable)?;
@@ -125,7 +125,7 @@ fn read_artifact_page(
         .prepare(
             "SELECT m.rowid,m.id,m.chat_id,m.turn_id,c.title,f.id,f.kind,f.mime_type,\
              f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at \
-             FROM chats c JOIN messages m ON m.chat_id=c.id \
+             FROM chats c CROSS JOIN messages m ON m.chat_id=c.id \
              JOIN message_attachments a ON a.message_id=m.id \
              JOIN message_files f ON f.id=a.file_id WHERE c.project_id=?1 \
              AND m.role='assistant' AND m.status='delivered' AND \
@@ -289,7 +289,7 @@ pub(super) fn read_artifact(
         .query_row(
             "SELECT m.id,m.chat_id,m.turn_id,c.title, f.id,f.kind,f.mime_type,\
              f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at FROM chats c \
-             JOIN messages m ON m.chat_id=c.id JOIN message_attachments a ON a.message_id=m.id \
+             CROSS JOIN messages m ON m.chat_id=c.id JOIN message_attachments a ON a.message_id=m.id \
              JOIN message_files f ON f.id=a.file_id WHERE c.project_id=?1 AND f.id=?2 \
              AND m.role='assistant' AND m.status='delivered' AND \
              NOT (m.safe_error_code IS NOT NULL AND m.safe_error_code IN \

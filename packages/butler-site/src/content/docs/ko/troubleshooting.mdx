@@ -54,7 +54,24 @@ status: published
 
 ## 앱이 열리지 않을 때
 
-Butler 앱은 Apple 공증을 거치지 않아 처음 열 때 macOS가 실행을 막을 수 있습니다. **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
+<Tabs
+  label="운영체제"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    Butler 앱은 Apple 공증을 거치지 않아 처음 열 때 macOS가 실행을 막을 수 있습니다. **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
+  </TabPanel>
+  <TabPanel value="windows">
+    Windows 프리뷰 빌드는 서명되지 않았습니다. SmartScreen이 표시되면 빌드 출처를 신뢰할 수 있을 때만 계속합니다. 공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다.
+  </TabPanel>
+  <TabPanel value="linux">
+    DEB 또는 Arch 패키지를 설치한 뒤 앱 목록에서 Butler를 엽니다. 시작하지 않으면 아래 서비스 로그를 확인합니다.
+  </TabPanel>
+</Tabs>
 
 ## 모델 연결 문제
 
@@ -125,7 +142,7 @@ standalone Agent는 `butler update --check`로 새 버전을 확인합니다. `b
 <Steps>
   1. **설정 → 일반 → 알림 권한**에서 **OS 알림 상태**를 확인합니다.
   2. **테스트**를 눌러 테스트 알림을 보냅니다.
-  3. 알림이 보이지 않으면 **macOS 알림 설정**을 눌러 시스템 설정에서 Butler 알림을 허용합니다.
+  3. 알림이 보이지 않으면 사용 중인 운영체제의 알림 설정 링크를 눌러 Butler 알림을 허용합니다.
 </Steps>
 
 ## 로그 확인
@@ -188,13 +205,28 @@ butler doctor --check installation
 
 ### 앱
 
-<Steps>
-  1. Butler를 종료합니다.
-  2. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 최신 `butler-app-<버전>-darwin-arm64.dmg`를 내려받습니다.
-  3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓아 기존 앱을 바꿉니다.
-</Steps>
-
-Linux에서는 최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting-started/install/#내려받기)의 명령으로 다시 설치합니다.
+<Tabs
+  label="운영체제"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    <Steps>
+      1. Butler를 종료합니다.
+      2. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 최신 `butler-app-<버전>-darwin-arm64.dmg`를 내려받습니다.
+      3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓아 기존 앱을 바꿉니다.
+    </Steps>
+  </TabPanel>
+  <TabPanel value="windows">
+    공개된 `0.1.0-preview.5` 릴리스에는 내려받을 Windows 설치 파일이 없습니다. Windows 패키지는 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 확인합니다.
+  </TabPanel>
+  <TabPanel value="linux">
+    최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting-started/install/#내려받기)의 명령으로 다시 설치합니다.
+  </TabPanel>
+</Tabs>
 
 대화와 기억, Agent 설정은 앱이 아니라 데이터 폴더(`~/.butler`)에 저장되므로 앱을 다시 설치해도 유지됩니다.
 
@@ -207,7 +239,7 @@ Linux에서는 최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting
 해결되지 않는 문제는 [GitHub Issues](https://github.com/Hexpy-Games/butler/issues)에 새 이슈로 보고합니다. Butler 저장소는 **설정 → 정보**의 **GitHub 저장소**에서도 열 수 있습니다. 보고할 때 다음을 함께 적으면 원인을 찾기 쉽습니다.
 
 - **설정 → 정보**의 **버전**
-- macOS 버전과 Mac 칩 종류
+- 운영체제와 버전, macOS라면 프로세서 종류
 - 문제가 생기기까지의 순서
 - 첫 실행 준비 실패라면 **문제 보고용 정보 복사**로 복사한 내용
 - standalone Agent라면 `butler version --json`과 `butler doctor --json` 출력
@@ -220,7 +252,7 @@ Linux에서는 최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting
 
 ### 창을 닫으면 Agent도 멈추나요?
 
-앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다. **설정 → 일반**의 **트레이 및 메뉴바에 표시**를 켜면 창을 닫아도 앱이 메뉴바에 남습니다.
+앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다. **설정 → 일반**의 **창을 닫아도 앱 아이콘 표시**를 켜면 창을 닫은 뒤에도 앱 메뉴를 열 수 있습니다.
 
 ### 데이터는 어디에 저장되나요?
 
@@ -252,7 +284,7 @@ Linux에서는 최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting
 
 ### Windows나 Linux에서 쓸 수 있나요?
 
-Linux에서는 쓸 수 있습니다. 프리뷰 릴리스는 Apple Silicon Mac용 DMG와 Linux용 DEB(x64, arm64), Arch(x64) 패키지를 제공합니다. Windows용 설치 파일과 네이티브 Agent 번들은 아직 제공하지 않습니다. 설치 방법은 [설치](/help/getting-started/install/)를 참고합니다.
+Linux 데스크톱 패키지는 제공됩니다. Windows 빌드는 소스 프리뷰이며 공개된 릴리스에는 내려받을 설치 파일이나 Agent 패키지가 없습니다. 릴리스 파일은 [설치](/help/getting-started/install/)에서 확인합니다.
 
 ### 이전 버전을 설치했는데 준비가 계속 실패합니다.
 

@@ -84,7 +84,7 @@ async fn replay(
             "$path=Join-Path $env:USERPROFILE 'Downloads';",
         )
     };
-    let (url, script, server) = provider::start(&command, false).await?;
+    let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.root.join("local");
     let roaming = setup.sandbox.root.join("roaming");
     std::fs::create_dir_all(&local)?;
@@ -99,6 +99,7 @@ async fn replay(
         .env("APPDATA", roaming.display().to_string())
         // Match the installed App, which does not inherit a console module path.
         .env("PSModulePath", "")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
@@ -144,7 +145,26 @@ async fn replay(
     // A later closeout/briefing request need not replay command output. Check
     // the request that actually carries it; verify() retains all content checks.
     assert!(received.to_string().contains("DownloadsPath"));
-    let elapsed = script.elapsed.lock().unwrap().unwrap() + read_elapsed;
+    let command_elapsed = script.elapsed.lock().unwrap().unwrap();
+    eprintln!(
+        "PROFILE-TIMING model_tool_roundtrip_ms={:.3} full_output_read_ms={:.3}",
+        command_elapsed.as_secs_f64() * 1000.,
+        read_elapsed.as_secs_f64() * 1000.
+    );
+    for line in s.agent.logs().lines().filter(|line| {
+        line.contains("command_phase_timing") || line.contains("command_process_timing")
+    }) {
+        eprintln!("{line}");
+    }
+    let elapsed = command_elapsed + read_elapsed;
+    if let Some(stderr) = full.get("stderr").and_then(Value::as_str) {
+        for line in stderr
+            .lines()
+            .filter(|line| line.starts_with("command_shell_phase "))
+        {
+            eprintln!("{line}");
+        }
+    }
     butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), "Downloads observation");
     eprintln!(
         "PROFILE-OBSERVATION command: {:.1}ms",
@@ -263,16 +283,16 @@ async fn profile_downloads_with_default_dot_butler_layout_in_both_access_modes()
 }
 
 #[tokio::test]
-async fn literal_current_directory_stays_protected_after_member_access() -> Result<(), HarnessError>
-{
+async fn literal_current_directory_uses_normal_approval_after_member_access()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows path syntax"
     );
     let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
-    let setup = Setup::new("PROFILE-DOT-DENIED")?;
-    let (url, script, server) = provider::start(command, false).await?;
+    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskFirst);
+    let (url, script, server) = provider::start(command).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)
         .env("BUTLER_CODEX_BASE_URL", url)
@@ -281,7 +301,12 @@ async fn literal_current_directory_stays_protected_after_member_access() -> Resu
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1")
         .start()
         .await?;
-    let (_, turn) = s.turn("general", super::stub::PROMPT).await?;
+    let accepted = s.gw.say("general", super::stub::PROMPT).await?;
+    let id = accepted_turn_id(&accepted)?;
+    super::observation::approve_exact(&s, &id, command).await?;
+    let turn =
+        s.gw.wait_terminal("general", &id, Duration::from_secs(15))
+            .await?;
     assert_eq!(turn_state(&turn), "delivered");
     let requests = script.requests.lock().unwrap().clone();
     let output = requests
@@ -289,17 +314,15 @@ async fn literal_current_directory_stays_protected_after_member_access() -> Resu
         .rev()
         .flat_map(provider::outputs)
         .find(|v| v["command"] == command)
-        .expect("protected result");
-    assert_eq!(output["error"], "protected_path");
-    assert_eq!(output["protected_path"], ".");
-    assert_eq!(output["stdout"], "");
+        .expect("approved result");
+    assert_eq!(output["exit_code"], 0);
+    assert!(output.get("protected_path").is_none());
     let elapsed = script.elapsed.lock().unwrap().unwrap();
     butler_e2e::assert_wall_clock_budget!(
         elapsed,
-        Duration::from_secs(1),
-        "Protected path refusal"
+        Duration::from_secs(5),
+        "Data directory approval"
     );
-    assert!(s.gw.approval_requests("general").await?.is_empty());
     s.finish().await?;
     server.abort();
     Ok(())

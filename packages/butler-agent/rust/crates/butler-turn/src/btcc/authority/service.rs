@@ -114,13 +114,34 @@ impl PrincipalAuthority {
     pub async fn waiting_source_sessions(&self) -> AuthorityResult<Vec<String>> {
         self.in_lane(|repo| repo.waiting_source_sessions()).await
     }
+    /// Visible conversations waiting for a principal decision (including delegated work).
+    pub async fn attention_owners(&self, owners: Vec<String>) -> AuthorityResult<Vec<String>> {
+        self.in_lane(move |repo| repo.attention_owners(&owners))
+            .await
+    }
     /// The owner's standing conversation permissions.
     pub async fn list_permissions(
         &self,
         owner_session_id: String,
     ) -> AuthorityResult<Vec<ConversationPermission>> {
-        self.in_lane(move |repo| repo.list_permissions(&owner_session_id))
-            .await
+        let collation = self.collation.clone();
+        self.in_lane(move |repo| {
+            let mut grants = repo.list_permissions(&owner_session_id)?;
+            let mut sources = std::collections::HashMap::new();
+            for record in repo.permission_records(&owner_session_id)? {
+                let grant = super::permission::for_record(&record, &collation)?;
+                sources.insert(grant.grant_ref.clone(), grant);
+            }
+            for grant in &mut grants {
+                if let Some(source) = sources.remove(&grant.grant_ref) {
+                    grant.capability = source.capability;
+                    grant.target = source.target;
+                    grant.cwd = source.cwd;
+                }
+            }
+            Ok(grants)
+        })
+        .await
     }
     /// Revokes a standing permission.
     pub async fn revoke_permission(

@@ -7,6 +7,8 @@ const UPDATE_KEYS: &[&str] = &[
     "timezone",
     "model",
     "reasoning_effort",
+    "recall_mode",
+    "recall_judge_model",
     "consolidation_model",
     "consolidation_reasoning_effort",
     "context_window_tokens",
@@ -41,6 +43,15 @@ pub(super) fn is_request(value: &Value) -> bool {
     if input
         .get("update_previews")
         .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    if input
+        .get("recall_mode")
+        .is_some_and(|v| !matches!(v.as_str(), Some("faster" | "accurate")))
+        || input
+            .get("recall_judge_model")
+            .is_some_and(|v| !v.is_string())
     {
         return false;
     }

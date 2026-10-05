@@ -74,6 +74,10 @@ CREATE INDEX IF NOT EXISTS idx_btcc_progress_events_pending_page
 ON btcc_progress_events(session_sequence, event_id)
 WHERE status = 'pending';
 
+CREATE INDEX IF NOT EXISTS idx_btcc_progress_events_pending_session_page
+ON btcc_progress_events(session_id, session_sequence, event_id)
+WHERE status='pending';
+
 CREATE INDEX IF NOT EXISTS idx_btcc_progress_events_turn
 ON btcc_progress_events(turn_id, turn_sequence);
 

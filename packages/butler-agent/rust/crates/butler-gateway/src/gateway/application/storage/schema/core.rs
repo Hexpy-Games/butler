@@ -292,6 +292,9 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS app_automations_updated_idx
     ON app_automations(updated_at DESC);
 
+    CREATE INDEX IF NOT EXISTS chats_project_artifacts_idx
+    ON chats(project_id,id);
+
     CREATE INDEX IF NOT EXISTS message_files_owner_idx
     ON message_files(owner_session_id, message_id);
 

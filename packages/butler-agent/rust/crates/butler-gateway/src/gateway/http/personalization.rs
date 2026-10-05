@@ -19,6 +19,9 @@ pub(super) async fn route(
     request: axum::http::Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if uri.path().starts_with("/memory/") {
+        return super::memory_management::route(state, request, uri).await;
+    }
     let locale = query_locale(uri);
     let (command, status) = match (request.method(), uri.path()) {
         (&Method::GET, "/personalization") => {
@@ -145,4 +148,11 @@ fn profile_import(value: &Value) -> bool {
         && input.get("text").is_some_and(Value::is_string)
         && input.get("source").is_none_or(Value::is_string)
         && input.get("model").is_none_or(Value::is_string)
+}
+
+pub(super) fn settings_path(uri: &Uri) -> bool {
+    matches!(
+        uri.path().split('/').nth(1),
+        Some("memory" | "personalization")
+    )
 }

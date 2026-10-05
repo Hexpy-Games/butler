@@ -62,6 +62,7 @@ pub(super) async fn public_result(
     before: Option<Snapshot>,
     effect: Option<&str>,
 ) -> Result<JsonDocument, BtccError> {
+    let _timing = super::timing::CommandTiming::new("guided_output");
     let cleanup = SpoolCleanup(spooled.payload_source.path.clone());
     let (bytes, _cleanup) = resources
         .jobs
@@ -112,6 +113,7 @@ pub(super) async fn registered_result(
     origin: OutputOrigin<'_>,
     registered_context: RegisteredContext<'_>,
 ) -> Result<JsonDocument, BtccError> {
+    let _timing = super::timing::CommandTiming::new("registered_output");
     if result.cancelled || registered_context.abort.is_cancelled() {
         return Err(error("command_cancelled"));
     }

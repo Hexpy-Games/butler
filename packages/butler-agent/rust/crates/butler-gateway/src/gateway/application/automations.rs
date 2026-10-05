@@ -17,3 +17,5 @@ pub(crate) use scheduler::AutomationScheduler;
 #[cfg(debug_assertions)]
 pub(crate) use scheduler::next_due_read_count;
 pub(crate) use scheduler::signals;
+
+pub(super) use store::read_targets;

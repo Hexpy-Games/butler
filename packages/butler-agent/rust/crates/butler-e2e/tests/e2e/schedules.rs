@@ -81,10 +81,15 @@ fn make_file(name: &str) -> String {
 /// App phrases in the user's language: edit one file, named inside the
 /// workspace, in the folder named by its label (never an absolute path),
 /// medium risk.
-fn assert_file_edit_approval(request: &Value, workspace_label: &str, file: &str) {
+fn assert_file_edit_approval(
+    request: &Value,
+    workspace_label: &str,
+    file: &str,
+    workspace: &std::path::Path,
+) {
     assert_eq!(
         request["approval"],
-        json!({"action_kind": "edit_files", "count": 1, "examples": [file], "risk": "medium",
+        json!({"operation":{"tool":"write_file","access":"change","targets":[workspace.join(file)]},"action_kind": "edit_files", "count": 1, "examples": [file], "risk": "medium",
                "targets": [{"kind": "folder", "path": workspace_label},
                            {"kind": "file", "path": file}]}),
         "{request}"
@@ -116,7 +121,7 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
         .find(|request| request["source_turn_id"] == turn_id.as_str())
         .unwrap_or_else(|| panic!("no approval request for the ask-first schedule: {requests:?}"));
     let label = s.sandbox.data.file_name().unwrap().to_str().unwrap();
-    assert_file_edit_approval(request, label, &asked);
+    assert_file_edit_approval(request, label, &asked, &s.sandbox.data);
     assert!(
         !s.sandbox.data.join(&asked).exists(),
         "the ask-first schedule wrote before approval"

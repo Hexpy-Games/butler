@@ -30,7 +30,6 @@ export type PersonalizationDraft = {
     mode: ProfilingMode;
     extractorModel: string;
     extractorReasoningEffort: SettingsData["reasoning_effort"];
-    clearProfile: boolean;
   };
 };
 

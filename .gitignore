@@ -27,6 +27,7 @@ data/topics/
 tests/.env.test
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
+/target/
 __pycache__/
 node_modules
 dist/

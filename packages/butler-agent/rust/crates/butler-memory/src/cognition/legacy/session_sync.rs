@@ -91,43 +91,21 @@ impl LegacySessionOffsets {
         let parent = path
             .parent()
             .ok_or_else(|| failure(CognitionCode::LegacySessionOffsetWriteFailed))?;
-        let temp = parent.join(format!(
-            "session-sync-offset.json.tmp-{}",
-            uuid::Uuid::new_v4()
-        ));
-        ensure_data_authority(data_root, &[memory_root, parent, &path, &temp])?;
-        fs::create_dir_all(parent).map_err(|source| {
+        ensure_data_authority(data_root, &[memory_root, parent, &path])?;
+        butler_platform::secure_fs::create_private_dir_all(parent).map_err(|source| {
             failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
         })?;
         let content = serde_json::to_vec_pretty(&self.values).map_err(|source| {
             failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
         })?;
-        let result: CognitionResult<()> = (|| {
-            let mut options = fs::OpenOptions::new();
-            options.write(true).create_new(true);
-            butler_platform::secure_fs::owner_only(&mut options);
-            let mut file = options.open(&temp).map_err(|source| {
-                failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
-            })?;
-            if let Ok(metadata) = fs::metadata(&path) {
-                fs::set_permissions(&temp, metadata.permissions()).map_err(|source| {
-                    failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
-                })?;
-            }
-            file.write_all(&content)
-                .and_then(|()| file.sync_all())
-                .map_err(|source| {
-                    failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
-                })?;
-            fs::rename(&temp, &path).map_err(|source| {
-                failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
-            })?;
-            Ok(())
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(temp);
-        }
-        result
+        butler_platform::secure_fs::replace_private(
+            &path,
+            |file| file.write_all(&content),
+            std::convert::identity,
+        )
+        .map_err(|source| {
+            failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+        })
     }
 }
 
@@ -223,11 +201,7 @@ pub fn append_legacy_session_diagnostic(
             .ok_or_else(|| failure(CognitionCode::LegacyDiagnosticFailed))?,
     )
     .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;
-    let mut options = fs::OpenOptions::new();
-    options.append(true).create(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    let mut file = options
-        .open(path)
+    let mut file = butler_platform::secure_fs::append_private(&path)
         .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;
     writeln!(file, "{}", json!({"timestamp": chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         "reason":"session_sync_unparseable_transcript", "session_id":session_id, "project":project, "line_count":line_count}))

@@ -187,7 +187,13 @@ impl Gateway {
         let status = response.status().as_u16();
         let text = response.text().await?;
         let body = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-        Ok(Reply { status, body, text })
+        Ok(Reply {
+            status,
+            body,
+            text,
+            phases: None,
+            dispatch_timing: None,
+        })
     }
 
     /// Raw bytes of `GET <path>`.

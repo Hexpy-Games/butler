@@ -7,7 +7,7 @@ mod recovery;
 mod shutdown;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     future::Future,
     path::PathBuf,
     pin::Pin,
@@ -80,7 +80,10 @@ struct DispatchDone {
     result: IngressPoll,
 }
 
+type CompletedDispatch = Result<(tokio::task::Id, DispatchDone), tokio::task::JoinError>;
+
 struct Lifecycle {
+    completed: VecDeque<CompletedDispatch>,
     closing: bool,
     active_sessions: HashSet<String>,
     active_queue_ids: HashSet<String>,
@@ -130,12 +133,25 @@ impl IngressDispatcher {
             restart_handoff,
             shutdown: tokio_util::sync::CancellationToken::new(),
             lifecycle: Mutex::new(Lifecycle {
+                completed: VecDeque::new(),
                 closing: false,
                 active_sessions: HashSet::new(),
                 active_queue_ids: HashSet::new(),
                 task_keys: HashMap::new(),
                 tasks: JoinSet::new(),
             }),
+        }
+    }
+
+    /// JoinSet notification preserves completion wakes even for panicking tasks.
+    /// Canceling this wait leaves the result owned by the set or the lifecycle.
+    pub(crate) async fn wait_for_completion(&self) {
+        let mut state = self.lifecycle.lock().await;
+        if let Some(done) = state.tasks.join_next_with_id().await {
+            state.completed.push_back(done);
+        } else {
+            drop(state);
+            std::future::pending::<()>().await;
         }
     }
 
@@ -148,7 +164,11 @@ impl IngressDispatcher {
             ));
         }
         let mut summary = IngressPoll::default();
-        while let Some(done) = state.tasks.try_join_next_with_id() {
+        while let Some(done) = state
+            .completed
+            .pop_front()
+            .or_else(|| state.tasks.try_join_next_with_id())
+        {
             match done {
                 Ok((id, done)) => {
                     state.task_keys.remove(&id);
@@ -172,7 +192,7 @@ impl IngressDispatcher {
             return Ok(summary);
         }
         recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;
-        let capacity = 5usize.saturating_sub(state.tasks.len());
+        let capacity = dispatch_capacity().saturating_sub(state.tasks.len());
         let waiting_sessions = waiting_sessions(&self.authority).await?;
         let claimed = claim_pending(
             self.queue.clone(),
@@ -217,7 +237,10 @@ impl IngressDispatcher {
         let mut state = self.lifecycle.lock().await;
         state.closing = true;
         self.shutdown.cancel();
-        while let Some(done) = state.tasks.join_next_with_id().await {
+        while let Some(done) = match state.completed.pop_front() {
+            Some(done) => Some(done),
+            None => state.tasks.join_next_with_id().await,
+        } {
             match done {
                 Ok((id, done)) => {
                     state.task_keys.remove(&id);
@@ -275,4 +298,18 @@ async fn waiting_sessions(authority: &PrincipalAuthority) -> Result<HashSet<Stri
             .with_source(source)
         })
         .map(|sessions| sessions.into_iter().collect())
+}
+
+fn dispatch_capacity() -> usize {
+    if matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && let Some(capacity) = std::env::var("BUTLER_E2E_INGRESS_CAPACITY")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| (1..=16).contains(value))
+    {
+        return capacity;
+    }
+    5
 }

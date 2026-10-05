@@ -15,7 +15,6 @@ use std::{
 
 use crate::cognition::{
     CognitionResult, CognitionSourceRow,
-    feedback::{FeedbackSourceRow, excluded_source_ids},
     graph::{GraphRecallReader, RecallEpisodeRow, RecallMention, RelationshipState},
     recall::{
         RecallEvidence, RecallEvidenceRelation, RecallEvidenceSupport, RecallReadArgs,
@@ -187,25 +186,8 @@ pub(super) fn current_source_rows(
     data_root: &Path,
     ids: &[String],
 ) -> CognitionResult<Vec<CognitionSourceRow>> {
-    let all_rows = graph.source_rows(ids)?;
-    let feedback_rows = all_rows
-        .iter()
-        .map(|row| FeedbackSourceRow {
-            source_id: &row.source_id,
-            episode_id: &row.episode_id,
-            revision: &row.revision,
-            content_hash: &row.content_hash,
-        })
-        .collect::<Vec<_>>();
-    let excluded = excluded_source_ids(
-        &data_root.join("cognition/feedback"),
-        &feedback_rows,
-        |operation| graph.quality_receipt_json(operation),
-    )?;
-    Ok(all_rows
-        .into_iter()
-        .filter(|row| !excluded.contains(&row.source_id))
-        .collect())
+    let _ = data_root;
+    graph.source_rows(ids)
 }
 
 /// The episode identities hydration checks sources against.

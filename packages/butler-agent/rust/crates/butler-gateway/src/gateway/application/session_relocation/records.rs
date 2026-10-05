@@ -1,6 +1,6 @@
 //! Durable relocation state stored on the existing App database lane.
 
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use super::super::{
@@ -43,9 +43,7 @@ pub(super) fn reserve(
     request: &AppRelocateSessionRequest,
     snapshot: &AppRelocationSnapshot,
 ) -> Result<Row, GatewayApplicationError> {
-    let tx = db
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(sqlite_error)?;
+    let tx = db.savepoint().map_err(sqlite_error)?;
     let view = space::read_view(&tx).map_err(app_error)?;
     let (session, destination, source_parent) = validate_target(&tx, request, &view)?;
     if snapshot.active_execution || snapshot.open_child {
@@ -179,7 +177,7 @@ pub(super) fn store_binding(
     operation_id: &str,
     binding: AppRelocationBinding,
 ) -> Result<(), GatewayApplicationError> {
-    let tx = db.transaction().map_err(sqlite_error)?;
+    let tx = db.savepoint().map_err(sqlite_error)?;
     let mut row = read_row(&tx, operation_id)?.ok_or(GatewayApplicationError::internal())?;
     let mut before: Before = serde_json::from_str(&row.from_json).map_err(json_error)?;
     before.binding = Some(binding);
@@ -224,7 +222,7 @@ pub(super) fn abort(
     row: &Row,
     error_code: &str,
 ) -> Result<(), GatewayApplicationError> {
-    let tx = db.transaction().map_err(sqlite_error)?;
+    let tx = db.savepoint().map_err(sqlite_error)?;
     tx.execute(
         "UPDATE app_session_relocations SET phase='aborted',error_code=?1 WHERE operation_id=?2 AND phase IN ('preparing','prepared','bound')",
         params![error_code, row.operation_id],

@@ -13,7 +13,7 @@ import { assertNewChatSurfaces } from "../support/newchat-visual.ts";
 const output = resolve(process.env.BUTLER_SETTINGS_COMPARISON ?? ".tmp/settings-release-comparison");
 const temporary = mkdtempSync(join(tmpdir(), "settings-preview8-"));
 const revision = execFileSync("git", ["rev-parse", "v0.1.0-preview.8^{commit}"], { encoding: "utf8" }).trim();
-const sections = ["General", "Appearance", "Personalization", "Models", "Updates", "Usage", "Privacy", "Security", "System events", "Archives", "About", "MCP", "Skills", "Server"];
+const sections = ["General", "Appearance", "Personalization", "Memory", "Models", "Updates", "Usage", "Privacy", "Security", "System events", "Archives", "About", "MCP", "Skills", "Server"];
 const report: unknown[] = [];
 
 async function capture(page: Page, directory: string, name: string) {

@@ -147,7 +147,7 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
         } else {
             input.path.clone()
         };
-        return Ok(Err(failure(
+        let mut rejection = failure(
             &safe,
             if guard.reason == Some("directory_not_allowed") {
                 "not_a_file"
@@ -156,7 +156,12 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
             },
             "The file path is not an admitted workspace file.",
             "Choose a contained, non-sensitive regular file path.",
-        )));
+        );
+        if let Some(fields) = rejection.as_object_mut() {
+            fields.insert("workspace_root".into(), json!(guard.root));
+            fields.insert("guard".into(), guard.public_rejection());
+        }
+        return Ok(Err(rejection));
     };
     let checks = [
         (

@@ -1,6 +1,6 @@
 //! App progress publication from committed BTCC facts through the native transcript.
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use butler_gateway::gateway::{TranscriptWriter, normalize_committed_turn_event};
 use butler_turn::btcc::{
     BtccError, CommittedProgressEvent, EventVisibility, PeerKind, StorageProgressPublication,
+    SubsessionService,
 };
 
 const PAGE_SIZE: usize = 32;
@@ -15,6 +16,7 @@ const PAGE_SIZE: usize = 32;
 pub(crate) struct ProgressPublisher {
     repository: StorageProgressPublication,
     writer: Arc<TranscriptWriter>,
+    subsessions: Arc<SubsessionService>,
     /// One pass at a time: a pass appends every event it read before the next
     /// pass reads the store, so the periodic pass and a delivery's flush never
     /// append an event twice or out of source order.
@@ -30,18 +32,24 @@ impl ProgressPublisher {
     pub(crate) fn new(
         repository: StorageProgressPublication,
         writer: Arc<TranscriptWriter>,
+        subsessions: Arc<SubsessionService>,
     ) -> Self {
         Self {
             repository,
             writer,
+            subsessions,
             pass: Mutex::new(()),
         }
     }
 
+    pub(crate) fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.repository.subscribe_changes()
+    }
+
     /// Each page releases its hydrated events before the next SQLite read.
-    /// Failures remain pending; the keyset lets later events proceed this pass.
-    /// On return, every event committed before the call has been attempted:
-    /// published ones precede anything appended to the transcript afterwards.
+    /// A failed event holds its session's later events; other sessions proceed.
+    /// Session-first keysets keep concurrent inserts behind that session's cursor.
+    /// Published events precede anything appended after this pass returns.
     pub(crate) async fn reconcile(&self) -> Result<ProgressPublicationSummary, BtccError> {
         let _pass = self.pass.lock().await;
         let mut summary = ProgressPublicationSummary {
@@ -49,6 +57,7 @@ impl ProgressPublisher {
             published: 0,
         };
         let mut after = None;
+        let mut blocked = HashSet::new();
         loop {
             let page = self
                 .repository
@@ -60,9 +69,13 @@ impl ProgressPublisher {
             }
             let page_len = page.len();
             for event in page {
-                after = Some((event.session_sequence, event.event_id.clone()));
+                after = Some((event.session_id.clone(), event.session_sequence));
+                if blocked.contains(&event.session_id) {
+                    continue;
+                }
                 summary.attempted += 1;
                 if self.publish(&event).await.is_ok()
+                    && self.invalidate_child(&event).await.is_ok()
                     && self
                         .repository
                         .mark_published(&event.event_id)
@@ -70,6 +83,8 @@ impl ProgressPublisher {
                         .is_ok()
                 {
                     summary.published += 1;
+                } else {
+                    blocked.insert(event.session_id);
                 }
             }
             if page_len < PAGE_SIZE {
@@ -77,6 +92,17 @@ impl ProgressPublisher {
             }
         }
         Ok(summary)
+    }
+
+    // Child transcripts are read directly from BTCC, rather than projected as
+    // App chats. Publish their canonical-view invalidation after durable progress.
+    async fn invalidate_child(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {
+        if event.event.visibility != Some(EventVisibility::Internal) {
+            self.subsessions
+                .notify_execution_changed(&event.session_id)
+                .await?;
+        }
+        Ok(())
     }
 
     async fn publish(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {

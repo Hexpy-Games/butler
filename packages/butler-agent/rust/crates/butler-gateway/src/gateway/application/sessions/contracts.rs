@@ -122,6 +122,10 @@ pub struct AppChatSummary {
     pub updated_at: String,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent navigation facts, not mutually exclusive states"
+)]
 #[derive(Clone, Debug, Serialize)]
 pub struct AppSessionSummary {
     #[serde(skip)]
@@ -146,6 +150,8 @@ pub struct AppSessionSummary {
     pub last_message_preview: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_turn_state: Option<String>,
+    pub running_delegated_work: bool,
+    pub attention_required: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_status_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

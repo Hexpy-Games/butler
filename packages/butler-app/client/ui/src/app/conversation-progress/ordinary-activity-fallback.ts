@@ -1,3 +1,4 @@
+import { mergeToolRows } from "../../../../../../butler-progress-projection/src/index.ts";
 import type { ProgressRow } from "../types.ts";
 import { appCopy } from "../copy.ts";
 import type { PhaseActivity } from "./activity.ts";
@@ -37,7 +38,7 @@ function dedupeOrdinaryOperations(rows: ProgressRow[], turnId: string): Progress
   const seenToolCallIds = new Set<string>();
   const seenRowIds = new Set<string>();
   const operations: ProgressRow[] = [];
-  for (const row of rows) {
+  for (const row of mergeToolRows(rows)) {
     if (
       row.bridge_phase !== "btcc_operation" ||
       (row.turn_id !== undefined && row.turn_id.trim() !== turnId) ||

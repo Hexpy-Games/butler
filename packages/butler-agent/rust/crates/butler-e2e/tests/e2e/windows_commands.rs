@@ -10,12 +10,16 @@
 mod capabilities;
 #[path = "windows_commands/capability_stub.rs"]
 mod capability_stub;
+#[path = "windows_commands/file_paths.rs"]
+mod file_paths;
 #[path = "windows_commands/observation.rs"]
 mod observation;
 #[path = "windows_commands/observation_stub.rs"]
 mod observation_stub;
 #[path = "windows_commands/private_metadata.rs"]
 mod private_metadata;
+#[path = "windows_commands/profile_files.rs"]
+mod profile_files;
 #[path = "windows_commands/profile_observation.rs"]
 mod profile_observation;
 #[path = "windows_commands/stub.rs"]

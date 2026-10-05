@@ -147,7 +147,7 @@ pub(super) async fn build(
 
     let reports = application
         .storage
-        .execute({
+        .read({
             let project_id = input.project_id.clone();
             move |db| read_reports(db, &project_id)
         })
@@ -183,7 +183,7 @@ pub(super) async fn build(
     for mut unit in units {
         let followups = application
             .storage
-            .execute({
+            .read({
                 let project_id = input.project_id.clone();
                 let source_id = unit.source.source_id.clone();
                 move |db| read_followups(db, &project_id, &source_id)

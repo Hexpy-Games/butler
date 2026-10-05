@@ -115,6 +115,11 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         [format!("conversation_turn:{turn_id}")], |row| row.get::<_, i64>(0)).unwrap() == 1).await;
     until(|| cache_complete(&graph, &turn_id)).await;
     let refreshed = std::fs::read(&cache)?;
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(&cache)?),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+        "hot cache privacy"
+    );
     let refreshed_modified = std::fs::metadata(&cache)?.modified()?;
     assert_ne!(before, refreshed, "cache must refresh before restart");
     assert!(String::from_utf8_lossy(&refreshed).contains("blue iris"));
@@ -153,6 +158,16 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    // Seed dormant Box data after initialization, including an expired item and
+    // an invalid index. Daily maintenance must neither validate nor rewrite it.
+    let box_root = s.sandbox.data.join("cognition/box");
+    std::fs::create_dir_all(box_root.join("items/box_expired"))?;
+    std::fs::write(
+        box_root.join("items/box_expired/manifest.json"),
+        br#"{"box_item_id":"box_expired","retention":{"expires_at":"2020-01-01T00:00:00Z"}}"#,
+    )?;
+    std::fs::write(box_root.join("index.sqlite"), b"dormant index\0\xff")?;
+    let box_before = box_snapshot(&box_root)?;
     let calls_before_refresh = server.chat_requests().len();
     s.gw = s.agent.start_again().await?;
     until(|| {
@@ -190,6 +205,29 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .join("state/scheduler/consolidation-cycle.json"),
     )?)?;
     assert_eq!(cycle["status"], "ok", "{cycle}");
+    assert_eq!(
+        box_snapshot(&box_root)?,
+        box_before,
+        "daily cycle changed dormant Box paths, bytes or modification times"
+    );
+    let summary = s
+        .sandbox
+        .data
+        .join("cognition/consolidation/run-summary.jsonl");
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(&summary)?),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+        "maintenance summary privacy"
+    );
+    for job in ["session-sync", "consolidation-cycle"] {
+        assert_eq!(
+            butler_platform::secure_fs::is_owner_only(&std::fs::metadata(
+                s.sandbox.data.join(format!("state/scheduler/{job}.json"))
+            )?),
+            butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+            "{job} privacy"
+        );
+    }
     let reply =
         s.gw.post(
             "/sessions",
@@ -226,4 +264,34 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         "completed new memory never reached the active cache or another chat's hot-cache document"
     );
     Ok(())
+}
+
+// Include every relative path (also empty directories), bytes and timestamps so
+// additions, deletions and same-content replacements all fail the comparison.
+type BoxSnapshot = Vec<(std::path::PathBuf, Vec<u8>, std::time::SystemTime)>;
+
+fn box_snapshot(root: &Path) -> std::io::Result<BoxSnapshot> {
+    fn visit(root: &Path, path: &Path, entries: &mut BoxSnapshot) -> std::io::Result<()> {
+        let metadata = std::fs::metadata(path)?;
+        let bytes = if metadata.is_file() {
+            std::fs::read(path)?
+        } else {
+            Vec::new()
+        };
+        entries.push((
+            path.strip_prefix(root).unwrap().to_owned(),
+            bytes,
+            metadata.modified()?,
+        ));
+        if metadata.is_dir() {
+            for entry in std::fs::read_dir(path)? {
+                visit(root, &entry?.path(), entries)?;
+            }
+        }
+        Ok(())
+    }
+    let mut entries = Vec::new();
+    visit(root, root, &mut entries)?;
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(entries)
 }

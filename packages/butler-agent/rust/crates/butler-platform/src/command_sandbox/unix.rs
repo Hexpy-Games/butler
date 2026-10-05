@@ -8,6 +8,10 @@ pub(super) const ESCAPE: char = '\\';
 
 pub(super) const POSIX: bool = true;
 
+pub(super) fn working_directory(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    Ok(path.to_path_buf())
+}
+
 pub(super) fn member_access_dot(_ch: char, _previous: Option<char>, _quoted: bool) -> bool {
     false
 }

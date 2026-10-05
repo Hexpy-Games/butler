@@ -125,9 +125,9 @@ fn pending_record(
         source_call_id: input
             .operation_occurrence_id
             .filter(|value| !value.is_empty()),
-        source_work_id: required(&input.source_work_id, "source Work")?,
+        source_work_id: input.source_work_id,
         workspace_path: required(&input.workspace_path, "workspace")?,
-        plan_revision_id: required(&input.plan_revision_id, "Plan revision")?,
+        plan_revision_id: input.plan_revision_id,
         action_key: required(&input.action_key, "action")?,
         authority_generation: generation,
         capability: required(&input.capability, "capability")?,
@@ -158,15 +158,32 @@ fn pending_record(
 }
 
 /// What an authority request approves: one reviewed effect or one command.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Category {
     ReviewedEffect,
+    Observation,
     Command,
 }
 
 impl Category {
     fn of(input: &AuthorityAdmissionInput) -> Self {
-        if input.category.as_deref() == Some("reviewed_effect") {
+        if (input.category.as_deref() == Some("command_observation")
+            && input.capability == "run_command"
+            && matches!(
+                input
+                    .normalized_input
+                    .get("state_effect")
+                    .and_then(serde_json::Value::as_str),
+                Some("read_only" | "validation")
+            ))
+            || (input.category.as_deref() == Some("file_observation")
+                && matches!(
+                    input.capability.as_str(),
+                    "list_files" | "read_file" | "grep_files"
+                ))
+        {
+            Self::Observation
+        } else if input.category.as_deref() == Some("reviewed_effect") {
             Self::ReviewedEffect
         } else {
             Self::Command
@@ -175,7 +192,8 @@ impl Category {
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::ReviewedEffect => "reviewed_effect",
+            // Preserve the deployed CHECK; capability identifies the observation subtype.
+            Self::ReviewedEffect | Self::Observation => "reviewed_effect",
             Self::Command => "command",
         }
     }
@@ -183,6 +201,7 @@ impl Category {
     fn default_reason(self) -> &'static str {
         match self {
             Self::ReviewedEffect => "Apply one reviewed effect",
+            Self::Observation => "Read files",
             Self::Command => "Run one reviewed command",
         }
     }
@@ -190,7 +209,7 @@ impl Category {
     /// The reviewed capability, or the command's first executable.
     fn executable(self, input: &AuthorityAdmissionInput) -> AuthorityResult<String> {
         Ok(match self {
-            Self::ReviewedEffect => {
+            Self::ReviewedEffect | Self::Observation => {
                 identity::slice_utf16(identity::required(&input.capability, "capability")?, 96)
             }
             Self::Command => first_executable(

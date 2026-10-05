@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
+use tokio::{sync::oneshot, task::JoinSet};
 
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -20,8 +20,6 @@ use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::{IngressDispatcher, IngressPoll};
 use crate::host::{ProgressPublisher, ServiceConfiguration};
-
-const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
 
 /// What the poll loop drives.
 pub(super) struct PollOwners<'a> {
@@ -65,22 +63,24 @@ pub(super) async fn poll_service(
     let (stop_maintenance, maintenance_stop) = oneshot::channel();
     let mut maintenance = JoinSet::new();
     maintenance.spawn(run_service_maintenance(
-        progress,
+        progress.clone(),
         parent_client.clone(),
         subsessions.clone(),
         app_endpoint.clone(),
         maintenance_stop,
     ));
-    let mut fallback_poll = tokio::time::interval_at(
-        tokio::time::Instant::now() + INBOUND_QUEUE_FALLBACK_POLL,
-        INBOUND_QUEUE_FALLBACK_POLL,
-    );
-    fallback_poll.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let queue_changes = watch_queue(&queue, &config.data_root).await?;
+    let mut storage_changes = progress.subscribe_changes();
     let mut dispatch_ready = false;
     let result = loop {
+        storage_changes.borrow_and_update();
         if stop.requested() || stop.flag_requested(&shutdown_flag) {
             stop.request();
             break Ok(());
+        }
+        #[cfg(debug_assertions)]
+        if dispatch_ready {
+            hold_queue_claims(&config.data_root).await?;
         }
         let summary =
             match poll_inbound_dispatch(dispatcher, readiness, !dispatch_ready, &config.data_root)
@@ -93,6 +93,10 @@ pub(super) async fn poll_service(
                 Err(error) => break Err(error),
             };
         log_inbound_summary(logs, summary);
+        let deferred = match queue.next_deferred_delay().await {
+            Ok(delay) => delay,
+            Err(error) => break Err(io(error)),
+        };
         #[cfg(debug_assertions)]
         if let Err(error) = injected_service_failure(&config.data_root).await {
             break Err(error);
@@ -105,17 +109,47 @@ pub(super) async fn poll_service(
             },
             joined = maintenance.join_next() => break unexpected_maintenance_exit(joined),
             () = queue.wait_for_enqueue() => {},
-            _ = fallback_poll.tick() => {},
+            () = dispatcher.wait_for_completion() => {},
+            () = wait_for_deferred(deferred) => {},
+            change = queue_changes.changed() => { if let Err(error) = change { break Err(io(error)); } },
+            _ = storage_changes.changed() => {},
         }
     };
-    let _ = stop_maintenance.send(());
+    result.and(join_maintenance(stop_maintenance, maintenance).await)
+}
+
+async fn watch_queue(
+    queue: &butler_gateway::gateway::InboundQueue,
+    root: &std::path::Path,
+) -> Result<butler_gateway::gateway::FileChangeWatch, BtccError> {
+    queue
+        .observe_changes(vec![
+            crate::host::service::instance::shutdown_flag_path(root),
+            root.join("e2e-service-exit"),
+        ])
+        .await
+        .map_err(io)
+}
+
+async fn wait_for_deferred(delay: Option<Duration>) {
+    match delay {
+        Some(delay) => tokio::time::sleep(delay).await,
+        None => std::future::pending().await,
+    }
+}
+
+async fn join_maintenance(
+    stop: oneshot::Sender<()>,
+    mut maintenance: JoinSet<Result<(), BtccError>>,
+) -> Result<(), BtccError> {
+    let _ = stop.send(());
     super::super::shutdown_trace::event("maintenance_join:begin");
-    let maintenance_result = match maintenance.join_next().await {
+    let result = match maintenance.join_next().await {
         Some(joined) => maintenance_join_result(joined),
         None => Ok(()),
     };
     super::super::shutdown_trace::event("maintenance_join:end");
-    result.and(maintenance_result)
+    result
 }
 
 fn log_inbound_summary(logs: ServiceLogMode, summary: IngressPoll) {
@@ -155,13 +189,48 @@ async fn poll_inbound_dispatch(
 
 #[cfg(debug_assertions)]
 async fn hold_dispatch_readiness(data_root: &std::path::Path) -> Result<(), BtccError> {
+    hold_ingress_barrier(
+        data_root,
+        "BUTLER_E2E_HOLD_DISPATCH_READY",
+        "e2e-dispatch-ready-held",
+        "e2e-dispatch-ready-release",
+    )
+    .await
+}
+
+#[cfg(debug_assertions)]
+async fn hold_queue_claims(data_root: &std::path::Path) -> Result<(), BtccError> {
+    hold_ingress_barrier(
+        data_root,
+        "BUTLER_E2E_HOLD_QUEUE_CLAIMS",
+        "e2e-queue-claims-held",
+        "e2e-queue-claims-release",
+    )
+    .await?;
+    match tokio::fs::remove_file(data_root.join("e2e-queue-claims-held")).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(BtccError::relayed(
+            "e2e_dispatch_ready_hold_failed",
+            error.to_string(),
+        )),
+    }
+}
+
+#[cfg(debug_assertions)]
+async fn hold_ingress_barrier(
+    data_root: &std::path::Path,
+    switch: &str,
+    held: &str,
+    release: &str,
+) -> Result<(), BtccError> {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || std::env::var("BUTLER_E2E_HOLD_DISPATCH_READY").as_deref() != Ok("1")
+        || std::env::var(switch).as_deref() != Ok("1")
     {
         return Ok(());
     }
-    let held = data_root.join("e2e-dispatch-ready-held");
-    let release = data_root.join("e2e-dispatch-ready-release");
+    let held = data_root.join(held);
+    let release = data_root.join(release);
     tokio::fs::write(held, b"held")
         .await
         .map_err(|error| BtccError::relayed("e2e_dispatch_ready_hold_failed", error.to_string()))?;

@@ -1,4 +1,8 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
+#[path = "capabilities/current_work.rs"]
+mod current_work;
+#[path = "capabilities/delegation.rs"]
+mod delegation;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
@@ -36,7 +40,7 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
         s.gw.post(
             "/projects",
             json!({"source":"existing_folder",
-        "folder_selection_token":selection(&s.sandbox.home.join("Downloads")),"display_name":"Profile capability"}),
+        "folder_selection_token":selection(&s.sandbox.root),"display_name":"Profile capability"}),
         )
         .await?;
     assert_eq!(project.status, 201, "{}", project.text);
@@ -52,25 +56,33 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
 }
 
 fn cases(data: &Path) -> Vec<Case> {
-    let case = |tool, args| Case {
-        tool,
-        args,
-        refused: false,
+    let case = |tool, mut args: Value| {
+        if tool == "run_command" {
+            args["cwd"] = json!("home/Downloads");
+        }
+        Case {
+            tool,
+            args,
+            refused: false,
+        }
     };
-    let protected = data.display().to_string();
+    let ordinary_data = "home/.butler";
     vec![
         case(
             "list_files",
-            json!({"root":".","max_depth":1,"max_results":100}),
+            json!({"root":"home/Downloads","max_depth":1,"max_results":100}),
         ),
-        case("read_file", json!({"requests":[{"path":"보고서.txt"}]})),
+        case(
+            "read_file",
+            json!({"requests":[{"path":"home/Downloads/보고서.txt"}]}),
+        ),
         case(
             "write_file",
-            json!({"path":"새 파일.txt","content":"처음 내용\n","overwrite":false}),
+            json!({"path":"home/Downloads/새 파일.txt","content":"처음 내용\n","overwrite":false}),
         ),
         case(
             "edit_file",
-            json!({"path":"새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
+            json!({"path":"home/Downloads/새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
         ),
         case(
             "run_command",
@@ -94,25 +106,46 @@ fn cases(data: &Path) -> Vec<Case> {
         ),
         Case {
             tool: "list_files",
-            args: json!({"root":protected}),
-            refused: true,
+            args: json!({"root":ordinary_data,"max_depth":1,"max_results":100,
+                "exclude_globs":["home/.butler/*/*"]}),
+            refused: false,
         },
         Case {
             tool: "read_file",
-            args: json!({"requests":[{"path":data.join("canary.txt")}]}),
-            refused: true,
+            args: json!({"requests":[{"path":"home/.butler/canary.txt"}]}),
+            refused: false,
         },
         Case {
             tool: "write_file",
-            args: json!({"path":data.join("refused.txt"),"content":"never"}),
-            refused: true,
+            args: json!({"path":"home/.butler/approved.txt","content":"approved"}),
+            refused: false,
         },
         Case {
             tool: "run_command",
             args: json!({"command":format!("Get-Content -LiteralPath '{}'",data.join("canary.txt").display()),
             "state_effect":"read_only","summary":"보호 경로 확인"}),
+            refused: false,
+        },
+        Case {
+            tool: "run_command",
+            args: json!({"command":"Get-Content -LiteralPath '.ssh/id_ed25519'",
+                "state_effect":"read_only","summary":"자격 증명 경로 확인"}),
             refused: true,
         },
+        Case {
+            tool: "write_file",
+            args: json!({"path":"home/.butler/../escape.txt","content":"ordinary parent"}),
+            refused: false,
+        },
+        case(
+            "write_file",
+            json!({"path":"home/.butler/project-ledger/projects/e2e/approved.txt","content":"ordinary data"}),
+        ),
+        case(
+            "run_command",
+            json!({"command":"Get-Content -LiteralPath (Join-Path $env:BUTLER_DATA 'canary.txt')",
+            "state_effect":"read_only","summary":"데이터 경로 확인","output_mode":"full"}),
+        ),
     ]
 }
 
@@ -161,12 +194,63 @@ async fn operation(
             card["approval"]["action_kind"],
             if case.tool == "run_command" {
                 "run_command"
+            } else if matches!(case.tool, "read_file" | "list_files" | "grep_files") {
+                "other"
             } else {
                 "edit_files"
             }
         );
+        let examples = if case.tool == "run_command" {
+            json!([case.args["command"]])
+        } else if case.tool == "list_files" {
+            json!([s.sandbox.root.join(case.args["root"].as_str().unwrap())])
+        } else if case.tool == "read_file" {
+            json!([s
+                .sandbox
+                .root
+                .join(case.args["requests"][0]["path"].as_str().unwrap())])
+        } else {
+            json!([if case.args["path"] == "home/.butler/../escape.txt" {
+                "home/escape.txt"
+            } else {
+                case.args["path"].as_str().unwrap()
+            }])
+        };
+        assert_eq!(card["approval"]["examples"], examples);
+        let operation = &card["approval"]["operation"];
+        assert_eq!(operation["tool"], case.tool);
+        assert_eq!(
+            operation["access"],
+            if matches!(case.tool, "read_file" | "list_files" | "grep_files")
+                || matches!(
+                    case.args["state_effect"].as_str(),
+                    Some("read_only" | "validation")
+                )
+            {
+                "read_only"
+            } else {
+                "change"
+            }
+        );
+        if case.tool == "list_files" {
+            assert_eq!(operation["targets"], examples);
+        } else if case.tool == "run_command" {
+            assert_eq!(operation["command"], case.args["command"]);
+            let cwd = case.args["cwd"].as_str().filter(|path| *path != ".");
+            assert_eq!(
+                operation["targets"],
+                json!([
+                    cwd.map_or_else(|| s.sandbox.root.clone(), |path| s.sandbox.root.join(path))
+                ])
+            );
+        }
         if case.tool == "write_file" {
-            assert!(!s.sandbox.home.join("Downloads/새 파일.txt").exists());
+            assert!(
+                !s.sandbox
+                    .root
+                    .join(case.args["path"].as_str().unwrap())
+                    .exists()
+            );
         }
         let reply =
             s.gw.post(
@@ -178,10 +262,7 @@ async fn operation(
             )
             .await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
-    } else if access == Access::AskFirst
-        && !case.refused
-        && !matches!(case.tool, "read_file" | "list_files")
-    {
+    } else if access == Access::AskFirst && !case.refused {
         panic!(
             "Mutation/command must show an approval card: {turn}; result={:?}",
             script.result.lock().unwrap()
@@ -200,7 +281,12 @@ async fn operation(
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
-        assert!(output.to_string().contains("protected_path"), "{output}");
+        let expected = if case.tool == "write_file" {
+            "parent_traversal_not_allowed"
+        } else {
+            "protected_path"
+        };
+        assert!(output.to_string().contains(expected), "{output}");
         assert!(!output.to_string().contains("PRIVATE_CANARY"));
     } else {
         assert!(output["ok"] == true || output["exit_code"] == 0, "{output}");
@@ -219,7 +305,10 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
     match index {
         0 => {
             assert_eq!(output["truncated"], false);
-            assert_eq!(output["files"], json!([{"path":"보고서.txt","bytes":13}]));
+            assert_eq!(
+                output["files"],
+                json!([{"path":"home/Downloads/보고서.txt","bytes":13}])
+            );
         }
         1 => {
             assert_eq!(output["files"][0]["content"], "기존 내용");
@@ -252,93 +341,37 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             assert_eq!(output["stdout"].as_str().unwrap().trim(), "한국어 출력");
             assert_eq!(output["output_presentation"]["truncated"], false);
         }
-        _ => {
-            assert!(!s.sandbox.data.join("refused.txt").exists());
-            assert_eq!(
-                std::fs::read_to_string(s.sandbox.data.join("canary.txt"))?,
-                "PRIVATE_CANARY"
+        8 => {
+            assert_eq!(output["truncated"], false);
+            assert!(
+                output["files"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|f| f["path"] == "home/.butler/canary.txt")
             );
         }
+        9 => assert_eq!(output["files"][0]["content"], "PRIVATE_CANARY"),
+        10 => assert_eq!(
+            std::fs::read_to_string(s.sandbox.data.join("approved.txt"))?,
+            "approved"
+        ),
+        12 => assert_eq!(output["error"], "protected_path"),
+        13 => assert_eq!(
+            std::fs::read_to_string(s.sandbox.home.join("escape.txt"))?,
+            "ordinary parent"
+        ),
+        14 => assert_eq!(
+            std::fs::read_to_string(
+                s.sandbox
+                    .data
+                    .join("project-ledger/projects/e2e/approved.txt")
+            )?,
+            "ordinary data"
+        ),
+        11 | 15 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
+        _ => panic!("Unknown capability case {index}"),
     }
-    Ok(())
-}
-
-async fn delegated_approval(
-    s: &Scenario,
-    chat: &str,
-    script: &provider::Script,
-) -> Result<(), HarnessError> {
-    use std::sync::atomic::Ordering;
-    script.select(Case {
-        tool: "write_file",
-        args: json!({"path":"위임 파일.txt","content":"승인된 내용"}),
-        refused: false,
-    });
-    script.delegated.store(true, Ordering::SeqCst);
-    s.turn(chat, provider::DELEGATE_PROMPT).await?;
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let card = loop {
-        let cards = s.gw.approval_requests(chat).await?;
-        if let Some(card) = cards
-            .iter()
-            .find(|c| c["approval"]["action_kind"] == "edit_files")
-        {
-            break card.clone();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Child approval missing from parent session: cards={cards:?}, view={:?}",
-            s.gw.get(&format!("/session-view?session_id={chat}"))
-                .await?
-                .data()
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    };
-    assert!(!s.sandbox.home.join("Downloads/위임 파일.txt").exists());
-    let view =
-        s.gw.get(&format!("/session-view?session_id={chat}"))
-            .await?;
-    assert!(
-        view.data()["authority_requests"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|r| r["request_ref"] == card["request_ref"]),
-        "Parent UI receives the pending card"
-    );
-    let reply =
-        s.gw.post(
-            &format!(
-                "/authority-requests/{}/allow?session_id={chat}",
-                card["request_ref"].as_str().unwrap()
-            ),
-            json!({"scope":"once"}),
-        )
-        .await?;
-    assert_eq!(reply.status, 202, "{}", reply.text);
-    loop {
-        let view =
-            s.gw.get(&format!("/session-view?session_id={chat}"))
-                .await?;
-        if view.data()["steward_children"][0]["result"]["status"] == "success" {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Child did not resume after parent Allow: {view:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    assert_eq!(
-        std::fs::read_to_string(s.sandbox.home.join("Downloads/위임 파일.txt"))?,
-        "승인된 내용"
-    );
-    let (_, elapsed) = script.result.lock().unwrap().clone().unwrap();
-    butler_e2e::assert_wall_clock_budget!(
-        elapsed,
-        Duration::from_secs(5),
-        "Delegated write approval/resume"
-    );
     Ok(())
 }
 
@@ -356,7 +389,7 @@ async fn setup(
     let mut setup = Setup::new("WINDOWS-BASIC")?;
     setup.sandbox.data = setup.sandbox.home.join(".butler");
     for folder in [
-        ".butler",
+        ".butler/project-ledger/projects/e2e",
         "Downloads/정리",
         "Documents",
         "Desktop",
@@ -408,7 +441,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         assert!(s.gw.approval_requests(&chat).await?.is_empty());
     }
     eprintln!(
-        "WINDOWS-BASIC {access:?}: 12 complete cases in {:?}",
+        "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",
         started.elapsed()
     );
     s.finish().await?;
@@ -430,35 +463,6 @@ async fn real_profile_like_basic_capabilities_in_both_access_modes() -> Result<(
 }
 
 #[tokio::test]
-async fn sequential_file_capabilities_close_the_current_work() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, chat, script, server) = setup(Access::FullAccess).await?;
-    for index in 0..8 {
-        let name = format!("report-{index}.txt");
-        let content = format!("complete current report {index}");
-        std::fs::write(s.sandbox.home.join("Downloads").join(&name), &content)?;
-        let case = Case {
-            tool: "read_file",
-            args: json!({"requests":[{"path":name}]}),
-            refused: false,
-        };
-        let (output, _) = operation(&s, &chat, &script, &case, Access::FullAccess).await?;
-        assert_eq!(output["files"][0]["content"], content);
-        assert_eq!(output["files_read"], 1);
-        assert_eq!(output["truncated"], false);
-        let disposition = script.disposition.lock().unwrap().clone().unwrap();
-        assert_eq!(
-            disposition["ok"], true,
-            "current Work disposition: {disposition}"
-        );
-        assert_eq!(disposition["work"]["status"], "completed");
-    }
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
-
-#[tokio::test]
 async fn delegated_file_approval_is_visible_in_parent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
@@ -466,7 +470,7 @@ async fn delegated_file_approval_is_visible_in_parent() -> Result<(), HarnessErr
         "Windows child approval"
     );
     let (s, chat, script, server) = setup(Access::AskFirst).await?;
-    delegated_approval(&s, &chat, &script).await?;
+    delegation::approve(&s, &chat, &script).await?;
     s.finish().await?;
     server.abort();
     Ok(())

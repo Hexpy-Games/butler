@@ -45,11 +45,21 @@ async fn use_local_model(s: &Scenario, server_url: &str) -> Result<String, Harne
             json!({
                 "provider_id": "local", "api_type": "openai_compatible", "platform": "ollama",
                 "server_url": server_url, "model_id": LOCAL_MODEL, "display_name": LOCAL_MODEL,
+                "api_key": "e2e-custom-private-placeholder",
                 "context_window_tokens": 131_072, "source": "discovered"
             }),
         )
         .await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
+    for path in ["butler.config.json", "auth/custom-model-credentials.json"] {
+        assert_eq!(
+            butler_platform::secure_fs::is_owner_only(&std::fs::metadata(
+                s.sandbox.data.join(path)
+            )?),
+            butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+            "{path}"
+        );
+    }
     let model_ref = reply.data()["model"]["model_ref"]
         .as_str()
         .unwrap()

@@ -29,6 +29,7 @@ fn fixture() -> Connection {
 
 fn generation() -> MemoryGenerationHandle {
     MemoryGenerationHandle {
+        reader_pin: None,
         generation_id: "generation".into(),
         graph_path: PathBuf::new(),
         root: PathBuf::new(),

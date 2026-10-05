@@ -311,6 +311,7 @@ pub(crate) fn delegation_identities_are_byte_stable() {
         work_id: "w",
         plan_revision_id: "p",
         review_revision_id: "r",
+        previous_relation_id: None,
     };
     assert_eq!(
         serde_json::to_string(&steward).unwrap(),

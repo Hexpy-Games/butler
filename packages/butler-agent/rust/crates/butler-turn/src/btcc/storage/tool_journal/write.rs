@@ -98,10 +98,16 @@ pub(super) fn finish(
     ).optional().map_err(StorageError::sqlite)?;
     if let Some((status, result, files, error_code)) = current
         && status == input.status.as_str()
-        && result.as_deref() == result_json
-        && files == changed_files_json
-        && error_code == input.error_code
     {
+        if result.as_deref() != result_json
+            || files != changed_files_json
+            || error_code != input.error_code
+        {
+            butler_core::diagnostic!(
+                "warning: completed tool result content mismatch for {}",
+                input.call_id
+            );
+        }
         return Ok(());
     }
     Err(error(

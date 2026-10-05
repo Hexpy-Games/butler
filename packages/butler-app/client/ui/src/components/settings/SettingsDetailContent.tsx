@@ -4,6 +4,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { ArchivesSettings } from "./ArchivesSettings";
 import { DeveloperLogsSettings } from "./DeveloperLogsSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { MemorySettings } from "./MemorySettings";
 import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
@@ -24,6 +25,7 @@ export function SettingsDetailContent({
 }) {
   return (
     <>
+      {activeSection === "memory" && <MemorySettings />}
       {activeSection === "general" && <GeneralSettings />}
       {activeSection === "models" && <ModelsSettings />}
       {activeSection === "appearance" && <AppearanceSettings />}

@@ -91,3 +91,68 @@ jobs:
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline $candidate
             if ($LASTEXITCODE) { throw 'Published preview update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
+
+  real-chat:
+    name: Released Windows real folder chat (gpt-6-luna)
+    runs-on: windows-latest
+    environment: live-e2e
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: protoc
+          cache-key: released-windows-live
+      - name: Verify and use the published Agent for one real folder turn
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
+          API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a preview tag' }
+          if (!$env:CODEX_AUTH_SECRET -and !$env:API_KEY_SECRET) { throw 'A live-e2e credential is required' }
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $root | Out-Null
+          try {
+            $assets = Join-Path $root 'assets'
+            gh release download $env:RELEASE_TAG --dir $assets --pattern 'butler-agent-*-windows-x64.zip*'
+            if ($LASTEXITCODE) { throw 'Released Agent download failed' }
+            $archive = @(Get-ChildItem $assets/*-windows-x64.zip)
+            if ($archive.Count -ne 1) { throw 'Expected one released Agent archive' }
+            $expected = (Get-Content ($archive[0].FullName + '.sha256')).Split(' ')[0]
+            if ((Get-FileHash $archive[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Agent checksum mismatch' }
+            Expand-Archive $archive[0].FullName (Join-Path $root 'agent')
+            $binary = @(Get-ChildItem "$root/agent" -Recurse -Filter butler-agent.exe)
+            if ($binary.Count -ne 1) { throw 'Expected one released Agent executable' }
+            $env:BUTLER_E2E_BIN = $binary[0].FullName
+            $env:BUTLER_E2E_SKIP_BUILD = '1'
+            $env:BUTLER_E2E_TIER = 'live'
+            $env:BUTLER_E2E_MODEL = 'openai/gpt-6-luna@low'
+            $env:BUTLER_E2E_LIVE_MAX_TURNS = '1'
+            $env:BUTLER_E2E_RELEASED_VERSION = $env:RELEASE_TAG.Substring(1)
+            if ($env:CODEX_AUTH_SECRET) {
+              $credential = Join-Path $root 'codex-auth.json'
+              [System.IO.File]::WriteAllText($credential, $env:CODEX_AUTH_SECRET)
+              $env:BUTLER_E2E_CODEX_AUTH_JSON = $credential
+              $env:BUTLER_E2E_PROVIDER = 'openai-subscription'
+            } else {
+              $env:BUTLER_E2E_API_KEY_ENV = 'API_KEY_SECRET'
+              $env:BUTLER_E2E_PROVIDER = 'openai'
+            }
+            $env:BUTLER_SECRET_STORE = 'file'
+            $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'
+            $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
+            $env:LOCALAPPDATA = Join-Path $root 'local'
+            $env:APPDATA = Join-Path $root 'roaming'
+            New-Item -ItemType Directory $env:LOCALAPPDATA,$env:APPDATA | Out-Null
+            $version = python .github/scripts/isolated.py $env:BUTLER_E2E_BIN --version
+            if ($LASTEXITCODE -or $version -notmatch [regex]::Escape($env:BUTLER_E2E_RELEASED_VERSION)) { throw 'Released binary version mismatch' }
+            Push-Location packages/butler-agent/rust
+            try {
+              python ../../../.github/scripts/isolated.py cargo test --locked -p butler-e2e --test e2e downloads_live::released_windows_folder_real_chat -- --exact --test-threads=1 --nocapture
+              if ($LASTEXITCODE) { throw 'Released real folder chat failed' }
+            } finally { Pop-Location }
+          } finally { Remove-Item -Recurse -Force $root }

@@ -3,6 +3,7 @@
 //! Both page kinds open the generation's graph and canonical snapshot, read,
 //! then close them (a close failure wins over the read's own result).
 
+mod ranking;
 use std::{path::Path, time::Instant};
 
 use crate::cognition::{
@@ -46,9 +47,20 @@ pub(super) fn initial(
     vector: &VectorFacts,
     metrics: Option<&dyn RecallMetricSink>,
     clocks: Clocks<'_>,
+    prepared: Option<PreparedSelection>,
 ) -> CognitionResult<RecallResponse> {
     pinned(read, clocks, |sources| {
-        let selected = select(read, &sources, vector, metrics, clocks)?;
+        let pin =
+            super::details::DetailPin::new(read.generation, sources.graph, sources.canonical)?;
+        let selected = match prepared {
+            Some(prepared) if prepared.pin == pin => prepared.selected,
+            Some(prepared) => {
+                let mut selected = select(read, &sources, vector, metrics, clocks)?;
+                ranking::reapply(&prepared, &pin, &mut selected, sources.graph)?;
+                selected
+            }
+            None => select(read, &sources, vector, metrics, clocks)?,
+        };
         if selected.empty_search {
             return Ok(response::empty(
                 read.input,
@@ -136,11 +148,17 @@ fn pinned(
     let result = butler_core::js_date::format_iso_millis((clocks.now_millis)())
         .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"))
         .and_then(|now_iso| {
-            body(Sources {
+            let mut response = body(Sources {
                 graph: &graph,
                 canonical: canonical.as_ref(),
                 now_iso: &now_iso,
-            })
+            })?;
+            response.detail_pin = Some(super::details::DetailPin::new(
+                read.generation,
+                &graph,
+                canonical.as_ref(),
+            )?);
+            Ok(response)
         });
     close_sources(graph, canonical, result)
 }
@@ -235,7 +253,7 @@ fn record_returned(
     }
 }
 
-fn open_sources(
+pub(super) fn open_sources(
     generation: &MemoryGenerationHandle,
 ) -> CognitionResult<(Option<ConversationSourceReader>, GraphRecallReader)> {
     let canonical_path = generation
@@ -264,11 +282,11 @@ fn open_sources(
     Ok((canonical, graph))
 }
 
-fn close_sources(
+pub(super) fn close_sources<T>(
     graph: GraphRecallReader,
     canonical: Option<ConversationSourceReader>,
-    result: CognitionResult<RecallResponse>,
-) -> CognitionResult<RecallResponse> {
+    result: CognitionResult<T>,
+) -> CognitionResult<T> {
     let graph_close = graph.close();
     let canonical_close = canonical
         .map(ConversationSourceReader::close)
@@ -278,4 +296,48 @@ fn close_sources(
                 .with_source(error)
         });
     graph_close.and(canonical_close).and(result)
+}
+
+/// Owned candidates and source revision; no reader or transaction survives preparation.
+pub(super) struct PreparedSelection {
+    pub selected: Selection,
+    pub pin: super::details::DetailPin,
+    pub candidates: Vec<super::judge::RecallJudgeCandidate>,
+    pub stamps: Vec<ranking::CandidateStamp>,
+    pub ranking: Option<Vec<usize>>,
+}
+
+pub(super) fn prepare_judge(
+    read: &PageRead<'_>,
+    vector: &VectorFacts,
+    metrics: Option<&dyn RecallMetricSink>,
+    clocks: Clocks<'_>,
+) -> CognitionResult<PreparedSelection> {
+    let (canonical, graph) = open_sources(read.generation)?;
+    let result = (|| {
+        let now_iso =
+            butler_core::js_date::format_iso_millis((clocks.now_millis)()).ok_or_else(|| {
+                CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments")
+            })?;
+        let sources = Sources {
+            graph: &graph,
+            canonical: canonical.as_ref(),
+            now_iso: &now_iso,
+        };
+        let selected = select(read, &sources, vector, metrics, clocks)?;
+        let pin = super::details::DetailPin::new(read.generation, &graph, canonical.as_ref())?;
+        let (candidates, stamps) = if super::judge::gate(&selected) {
+            ranking::candidates(&selected, &graph)?
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        Ok(PreparedSelection {
+            selected,
+            pin,
+            candidates,
+            stamps,
+            ranking: None,
+        })
+    })();
+    close_sources(graph, canonical, result)
 }

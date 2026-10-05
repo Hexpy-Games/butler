@@ -525,6 +525,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       idempotencyKey: body.idempotency_key,
     });
   }
+  if (url.pathname.startsWith("/memory/")) {
+    return await callBridge<T>(bridge, "memoryRequest", {
+      path: url.pathname, method, body: parseBody(options.body),
+    });
+  }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {
     const body = parseBody(options.body);

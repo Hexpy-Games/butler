@@ -1,10 +1,9 @@
 //! Bounded native log readers and one-owner follow state.
 
-mod redaction;
 mod summary;
 #[cfg(test)]
 mod tests;
-pub use redaction::redact_log_line;
+pub use super::log_redaction::redact_log_line;
 pub use summary::{export_line, log_is_error, log_summary};
 
 use butler_platform::secure_fs::FileId;

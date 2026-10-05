@@ -3,15 +3,13 @@
 # Entries may only shrink or disappear; new entries need review.
 src/host/app/monitoring/events.rs	run_events	94
 src/host/app/runtime_ports/assets.rs	<AppAssets as AppNativeAssetResolver>::resolve	95
-src/host/app/runtime_ports/context_read.rs	read_usage	103
 src/host/app/runtime_ports/model_catalog.rs	AppModelCatalog::execute_inner	141
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::execute_inner	82
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	132
+src/host/app/server.rs	AppServer::open_with_artifacts	116
 src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
-src/host/embedding/worker.rs	handle	85
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
@@ -20,7 +18,7 @@ src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	139
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	217
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	206
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -30,19 +28,17 @@ src/host/guided/project_tools/evidence.rs	canonical_record	89
 src/host/guided/project_tools/lifecycle.rs	execute	86
 src/host/guided/project_tools/lifecycle/closeout.rs	closeout	97
 src/host/guided/project_tools/options.rs	command	144
-src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	186
+src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	160
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
-src/host/guided/tools.rs	GuidedTools::new	99
+src/host/guided/tools.rs	GuidedTools::new	97
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	409
-src/host/guided/tools/effect.rs	execute	108
-src/host/guided/tools/effect/authority.rs	gate	124
+src/host/guided/tools/dispatch.rs	execute	332
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	141
+src/host/guided/tools/execute.rs	execute	137
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
@@ -52,14 +48,10 @@ src/host/guided/work_streams/prompt.rs	render	92
 src/host/guided/work_streams/storage.rs	Store::update_todo	101
 src/host/mcp/registry_cli.rs	run	162
 src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapshot	110
-src/host/memory_jobs/consolidation_phase.rs	<CyclePhases as PhaseExecutor>::execute	114
-src/host/memory_jobs/daily.rs	DailyCognitionJobs::new	90
-src/host/memory_jobs/profile_consolidation.rs	ProfileConsolidation::consolidate	84
-src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	118
+src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
-src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	401
+src/host/runtime.rs	AgentRuntime::open	392
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/internal_subsession.rs	bind	87

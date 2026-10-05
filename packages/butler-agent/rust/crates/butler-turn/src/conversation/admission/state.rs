@@ -189,17 +189,22 @@ impl ConversationAdmissionTurn {
             .find(|v| v.kind == ConversationPartKind::MessageContent)
             .map(|v| &v.content_json);
         let expected = self.input.envelope.content_parts.as_ref();
-        if message.message.turn_id.as_deref() != Some(&self.turn.id)
-            || message.message.role != role
-            || content != text
-            || (role == ConversationRole::User
-                && !self.input.envelope.resume
-                && stringify_optional(content_parts)? != stringify_optional(expected)?)
+        if message.message.turn_id.as_deref() != Some(&self.turn.id) || message.message.role != role
         {
             return Err(ConversationError::new(
                 ConversationCode::ConversationSourceRefConflict,
                 "conversation_source_ref_conflict",
             ));
+        }
+        if content != text
+            || (role == ConversationRole::User
+                && !self.input.envelope.resume
+                && stringify_optional(content_parts)? != stringify_optional(expected)?)
+        {
+            butler_core::diagnostic!(
+                "warning: conversation source content mismatch for {}",
+                message.message.id
+            );
         }
         let mut state = self.state.lock().await;
         match role {

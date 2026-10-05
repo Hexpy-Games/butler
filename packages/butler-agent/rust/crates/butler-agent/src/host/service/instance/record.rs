@@ -78,15 +78,28 @@ pub(super) fn write_record(
             })?;
         super::record_fault::hold_write(record);
         super::record_fault::hold_rename();
+        // Forced cleanup can fence publication while this staged writer waits.
+        // It must release the record lock without renaming or syncing a record
+        // that the deadline thread is about to remove.
+        if DEADLINE_RELEASE.load(Ordering::Acquire) {
+            return Err("native_service_record_released".into());
+        }
         super::super::shutdown_trace::measure_sync("instance_file_rename", || {
-            fs::rename(&temporary, path)
+            secure_fs::rename(&temporary, path)
+        })
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
+        super::super::shutdown_trace::measure_sync("instance_directory_fsync", || {
+            secure_fs::sync_directory(parent).unwrap_or(Ok(()))
         })
         .map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
         })
     })();
-    drop(file);
+    super::super::shutdown_trace::measure_sync("instance_staged_file_close", || drop(file));
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }

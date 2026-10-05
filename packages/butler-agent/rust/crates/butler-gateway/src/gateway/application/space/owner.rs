@@ -175,7 +175,7 @@ fn commit_relocation(
     clock: &dyn AppIdentityClock,
 ) -> Result<RelocationCommit, GatewayApplicationError> {
     let tx = db
-        .transaction()
+        .savepoint()
         .map_err(|error| app_error(AppStorageError::sqlite(error)))?;
     let changed = tx
         .execute(

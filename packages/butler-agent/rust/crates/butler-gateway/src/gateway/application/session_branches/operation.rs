@@ -1,6 +1,5 @@
 //! Branch request resolution, context preparation, and readiness publication.
 
-use rusqlite::TransactionBehavior;
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -84,9 +83,7 @@ impl AppApplication {
             let event = self
                 .storage
                 .execute(move |db| {
-                    let tx = db
-                        .transaction_with_behavior(TransactionBehavior::Immediate)
-                        .map_err(AppStorageError::sqlite)?;
+                    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                     let changed = store::mark_ready(&tx, &request_id)?;
                     let event = if changed {
                         Some(super::super::sessions::branch_session_created_event(
