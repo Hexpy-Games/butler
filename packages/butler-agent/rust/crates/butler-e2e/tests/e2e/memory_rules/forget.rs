@@ -174,6 +174,17 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     target(&s, ra)?;
     let output = support::tool(&s, &ca, CORRECT, "update_explicit_memory").await?;
     assert_eq!(output["ok"], true, "{output}");
+    support::until(|| {
+        support::active_rules(&s.sandbox.data).iter().any(|row| {
+            row["handle"] == ra["handle"]
+                && row["revision"] != ra["revision"]
+                && std::fs::read_to_string(
+                    rules.join(format!("{}.md", row["record_id"].as_str().unwrap())),
+                )
+                .is_ok_and(|text| text == "The user's bike lock code is 6401.")
+        })
+    })
+    .await;
     let corrected = support::active_rules(&s.sandbox.data)
         .into_iter()
         .find(|row| row["handle"] == ra["handle"])

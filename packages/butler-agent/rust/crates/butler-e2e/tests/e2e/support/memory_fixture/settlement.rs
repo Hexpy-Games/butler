@@ -45,6 +45,10 @@ fn settled(data: &Path, turns: &[String]) -> Result<bool, HarnessError> {
             .join("graph.sqlite"),
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
+    let schema_ready: bool = db.query_row("SELECT COUNT(*)=6 FROM sqlite_schema WHERE type='table' AND name IN ('memory_projection_windows','memory_projection_jobs','memory_chunks','memory_vector_units','memory_state','memory_episode_fts_pending')", [], |row| row.get(0))?;
+    if !schema_ready {
+        return Ok(false);
+    }
     let gate_path = data.join("cognition/consolidation/locks/consolidation.lock.coord.sqlite");
     if !turns_complete(&db, turns)? {
         return Ok(false);
@@ -55,14 +59,19 @@ fn settled(data: &Path, turns: &[String]) -> Result<bool, HarnessError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
         Err(error) => return Err(error.into()),
     };
+    // The production consumer treats an uncreated queue as empty.
+    let queue_empty = match fs::read_to_string(memory.join("queue/sync.jsonl")) {
+        Ok(queue) => queue.trim().is_empty(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+        Err(error) => return Err(error.into()),
+    };
     Ok(complete
         && captures
         && !memory.join("rules/pending.json").exists()
         && !gate_path
             .with_file_name("consolidation.lock.coord.sqlite-journal")
             .exists()
-        && fs::read_to_string(memory.join("queue/sync.jsonl"))
-            .is_ok_and(|queue| queue.trim().is_empty()))
+        && queue_empty)
 }
 
 fn turns_complete(db: &Connection, turns: &[String]) -> Result<bool, HarnessError> {

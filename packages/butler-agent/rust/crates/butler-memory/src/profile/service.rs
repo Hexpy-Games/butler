@@ -354,6 +354,13 @@ where
             .with_source(source)
         })?
         .ok_or_else(|| ProfileError::new(ProfileCode::MemoryWriteBusy, "Memory writer is busy."))?;
+    complete_leased(lease, operation)
+}
+
+fn complete_leased<T>(
+    lease: crate::coordination::CognitionWriteLease,
+    operation: impl FnOnce() -> ProfileResult<T>,
+) -> ProfileResult<T> {
     let result = operation();
     let release = lease.release(result.is_ok()).map_err(|source| {
         ProfileError::new(

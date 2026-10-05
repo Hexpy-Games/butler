@@ -4,10 +4,11 @@ use rusqlite::{Connection, OpenFlags, Result};
 use std::path::Path;
 
 /// Startup scans can traverse overflow pages without a copy per page. macOS
-/// bounds resident mapped pages below the small hosted runner's memory budget.
+/// uses the caller's bounded page cache: mapping amplifies physical reads on
+/// the full owner-scale integrity scan on the hosted runner.
 /// Callers close or unmap the temporary window before serving requests.
 pub const VALIDATION_MMAP_BYTES: i64 = if cfg!(target_os = "macos") {
-    2_147_483_648
+    0
 } else if cfg!(unix) {
     8_589_934_592
 } else {

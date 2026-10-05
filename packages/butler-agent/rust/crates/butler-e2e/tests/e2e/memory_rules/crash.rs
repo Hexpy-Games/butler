@@ -36,6 +36,10 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             let output =
                 support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
             assert_eq!(output["ok"], true, "{output}");
+            use sha2::{Digest, Sha256};
+            let receipt = s.sandbox.data.join("cognition/memory/rules/capture-receipts")
+                .join(format!("{:x}.json", Sha256::digest(output["operation_id"].as_str().unwrap().as_bytes())));
+            support::until(|| support::read_json(&receipt).is_some_and(|row| row["submitted"]["operation_id"] == output["operation_id"])).await;
             trace("original_committed");
             let original = support::active_rules(&s.sandbox.data).pop().unwrap();
             s.provider()?
@@ -62,6 +66,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             .await;
             let boundary = support::read_json(&state.join("rule-crash-reached.json")).unwrap();
             assert_eq!(boundary["stage"], stage);
+            assert_ne!(boundary["operation_id"], output["operation_id"], "held the preceding capture instead of the requested mutation");
             trace("checkpoint_held");
             let instructions = s.gw.get("/memory/instructions").await?;
             assert_eq!(instructions.status, 200, "{}", instructions.text);

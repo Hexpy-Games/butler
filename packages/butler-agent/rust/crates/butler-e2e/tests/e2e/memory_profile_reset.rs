@@ -50,8 +50,32 @@ async fn profile_reset_preserves_names_consent_settings_and_replay_preserves_fut
     assert_eq!(checked.status, 200, "{}", checked.text);
     let id = uuid::Uuid::new_v4().to_string();
     let input = json!({"operation_id":id,"inventory_revision":checked.data()["revision"]});
+    let state = s.sandbox.data.join("state");
+    std::fs::write(state.join("profile-reset-acquire-arm"), &id)?;
     let accepted = s.gw.post("/memory/reset/profile", input.clone()).await?;
     assert_eq!(accepted.status, 202, "{}", accepted.text);
+    tokio::time::timeout(Duration::from_secs(90), async {
+        while !state.join("profile-reset-acquire-reached").exists() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("accepted profile reset did not reach acquisition");
+    // A legitimate writer arrives after the reset intent was accepted. The reset
+    // must wait for that lease rather than fail and leave its intent stranded.
+    let lease_db = s
+        .sandbox
+        .data
+        .join("cognition/consolidation/locks/consolidation.lock.coord.sqlite");
+    let lease = sqlite::open(&lease_db)?;
+    lease.execute_batch("BEGIN IMMEDIATE")?;
+    std::fs::write(state.join("profile-reset-acquire-release"), &id)?;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    assert!(
+        count(&db) > 0,
+        "profile changed while another writer held the lease"
+    );
+    lease.execute_batch("ROLLBACK")?;
     wait(&s, &id).await?;
     assert_eq!(count(&db), 0);
     let after = s.gw.get("/personalization").await?.data().clone();
