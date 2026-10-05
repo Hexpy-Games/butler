@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Card, Circle, CircleAlert, CircleX, Eye, ICON_SIZE, IconSlot, LoadingIndicator, Minus,
-  RollingStatusLine, RollingSwap, Stack, Tag, Typo, WorkerActivityRow, type TagTone,
+  RollingStatusLine, RollingSwap, Stack, Tag, Typo, type TagTone,
 } from "@/butler-ds";
-import type { ProposalLocale, TaskGraphCopy, TaskStatus, Variant } from "./copy";
+import type { ProposalLocale, TaskGraphCopy, TaskStatus } from "./copy";
 import type { TaskNode } from "./fixture";
 
 export const STATUS_TONE: Record<TaskStatus, TagTone> = {
@@ -36,7 +36,7 @@ export function assigneeLine(node: TaskNode, copy: TaskGraphCopy): string {
 }
 
 /** Rolls the running worker's current step every few seconds (RollingSwap honors reduced motion). */
-function RunningStep({ steps, locale }: { steps: TaskNode["steps"]; locale: ProposalLocale }) {
+export function RunningStep({ steps, locale }: { steps: TaskNode["steps"]; locale: ProposalLocale }) {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     if (steps.length < 2) return undefined;
@@ -58,14 +58,14 @@ export interface TaskCardProps {
   node: TaskNode;
   copy: TaskGraphCopy;
   locale: ProposalLocale;
-  variant: Variant;
   elapsed: number | null;
   selected: boolean;
-  onSelect: (id: string) => void;
+  /** Click or Enter/Space on the card (select, and open the conversation in variant A). */
+  onActivate: (id: string) => void;
 }
 
 /** A task card: title, status, worker and model, time. Read-only; selecting it shows the detail. */
-export function TaskCard({ node, copy, locale, variant, elapsed, selected, onSelect }: TaskCardProps) {
+export function TaskCard({ node, copy, locale, elapsed, selected, onActivate }: TaskCardProps) {
   const title = node.title[locale];
   const time = elapsed === null ? null : copy.elapsed(elapsed);
   const running = node.status === "running";
@@ -80,7 +80,8 @@ export function TaskCard({ node, copy, locale, variant, elapsed, selected, onSel
       data-task-id={node.id}
       data-task-status={node.status}
       data-test-class="task-graph-card"
-      onClick={() => onSelect(node.id)}
+      aria-haspopup={node.assignee ? "dialog" : undefined}
+      onClick={() => onActivate(node.id)}
     >
       <Stack gap="xs">
         <Stack align="row" gap="sm" cross="start">
@@ -92,10 +93,7 @@ export function TaskCard({ node, copy, locale, variant, elapsed, selected, onSel
           <Tag size="sm" tone={STATUS_TONE[node.status]}>{copy.status[node.status]}</Tag>
           {time ? <Typo.Caption tone="tertiary" numeric="tabular" wrap="nowrap">{time}</Typo.Caption> : null}
         </Stack>
-        {running && variant === "rolling" ? <RunningStep steps={node.steps} locale={locale} /> : null}
-        {running && variant === "rail" ? (
-          <WorkerActivityRow id={`rail-${node.id}`} compact title={<RunningStep steps={node.steps} locale={locale} />} phase={node.phase} />
-        ) : null}
+        {running ? <RunningStep steps={node.steps} locale={locale} /> : null}
       </Stack>
     </Card>
   );

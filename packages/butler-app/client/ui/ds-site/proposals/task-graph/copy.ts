@@ -9,6 +9,8 @@ export type TaskStatus =
   | "failed" | "cancelled" | "blocked" | "paused";
 
 export interface TaskGraphCopy {
+  /** Inspector tab label. */
+  tab: string;
   title: string;
   empty: string;
   /** "3/6 완료" */
@@ -31,8 +33,13 @@ export interface TaskGraphCopy {
     after: string;
     next: string;
     none: string;
-    viewActivity: string;
+    step: string;
+    document: string;
+    openDocument: string;
+    conversation: string;
+    noSession: string;
   };
+  document: { goal: string; criteria: string; after: string };
   blockedByFailure: string;
 }
 
@@ -54,6 +61,7 @@ const elapsedEn = (seconds: number) => {
 
 export const TASK_GRAPH_COPY: Record<ProposalLocale, TaskGraphCopy> = {
   "ko-KR": {
+    tab: "작업",
     title: "위임 작업",
     empty: "아직 위임한 작업이 없습니다",
     doneCount: (done, total) => `${done}/${total} 완료`,
@@ -70,11 +78,14 @@ export const TASK_GRAPH_COPY: Record<ProposalLocale, TaskGraphCopy> = {
     graphLabel: "위임 작업 흐름",
     detail: {
       status: "상태", assignee: "담당", model: "모델", elapsed: "걸린 시간",
-      after: "앞선 작업", next: "다음 작업", none: "없음", viewActivity: "활동 보기",
+      after: "앞선 작업", next: "다음 작업", none: "없음", step: "지금 하는 일",
+      document: "작업 문서", openDocument: "열기", conversation: "대화 보기", noSession: "아직 배정 전",
     },
+    document: { goal: "목표", criteria: "완료 기준", after: "앞선 작업" },
     blockedByFailure: "앞선 작업이 실패했습니다",
   },
   "en-US": {
+    tab: "Tasks",
     title: "Delegated tasks",
     empty: "Nothing delegated yet",
     doneCount: (done, total) => `${done}/${total} done`,
@@ -91,14 +102,16 @@ export const TASK_GRAPH_COPY: Record<ProposalLocale, TaskGraphCopy> = {
     graphLabel: "Delegated task flow",
     detail: {
       status: "Status", assignee: "Assignee", model: "Model", elapsed: "Time",
-      after: "After", next: "Next", none: "None", viewActivity: "View activity",
+      after: "After", next: "Next", none: "None", step: "Now",
+      document: "Task document", openDocument: "Open", conversation: "View conversation", noSession: "Not assigned yet",
     },
+    document: { goal: "Goal", criteria: "Done when", after: "After" },
     blockedByFailure: "An earlier task failed",
   },
 };
 
 export type Scenario = "empty" | "one" | "chain" | "fanout" | "failed" | "cancelled" | "long";
-export type Variant = "rolling" | "rail";
+export type Variant = "open" | "select";
 
 interface PageCopy {
   eyebrow: string;
@@ -127,9 +140,9 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "en-US": {
     eyebrow: "Proposal · task graph",
     title: "Delegated task graph",
-    intro: "A read-only graph of the tasks this conversation delegated, in the Summary tab under the existing progress list. Cards show title, status, worker and model, and time. Lines are prerequisites. Select a card to read its detail; nothing can be edited or dragged.",
-    variant: "Running highlight",
-    variants: { rolling: "A · Live line", rail: "B · Phase rail" },
+    intro: "A read-only graph of the tasks this conversation delegated, in its own Tasks tab of the inspector (Summary is unchanged). Cards show title, status, worker and model, and time; lines are prerequisites. A card opens the worker's conversation in the existing session dialog and its task document in the existing document dialog. Drag the inspector edge to resize it; the width is kept. Nothing can be edited.",
+    variant: "Card click",
+    variants: { open: "A · Opens conversation", select: "B · Selects only" },
     recommended: "Recommended",
     scenario: "State",
     scenarios: {
@@ -148,16 +161,16 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     frameLabel: "Summary tab preview",
     notesTitle: "Variants",
     notes: {
-      rolling: "The running card keeps the same size as every other card. Its icon is the DS spinner, its last line swaps the worker's current step with RollingSwap, and the lines into it use the worker-active color. Reduced motion stops the swap and the spinner loop. Done draws the LoadingIndicator check.",
-      rail: "Adds the WorkerActivityRow phase rail to the running card, so its active segment pulses (DS keyframes, static under reduced motion). More visible, but the card grows and the rail labels are English-only today (DS gap).",
+      open: "Click or Enter selects the card and opens the worker's conversation in the session dialog, as delegated sessions open today. Arrow keys only move the selection. The detail under the graph keeps the facts, the task document and a View conversation button. Unassigned tasks only select.",
+      select: "Click only selects; the conversation opens from View conversation in the detail. Calmer for browsing a long graph, but one more step to the conversation the owner asked for.",
     },
   },
   "ko-KR": {
     eyebrow: "제안 · 작업 그래프",
     title: "위임 작업 그래프",
-    intro: "이 대화가 위임한 작업을 요약 탭의 기존 진행 목록 아래에 읽기 전용 그래프로 보여 줍니다. 카드에는 제목, 상태, 작업자와 모델, 걸린 시간이 있고 선은 선행 관계입니다. 카드를 고르면 상세를 볼 수 있으며 편집하거나 끌어 옮길 수는 없습니다.",
-    variant: "진행 중 강조",
-    variants: { rolling: "A · 현재 단계 줄", rail: "B · 단계 막대" },
+    intro: "이 대화가 위임한 작업을 인스펙터의 별도 '작업' 탭에 읽기 전용 그래프로 보여 줍니다(요약 탭은 그대로). 카드에는 제목, 상태, 작업자와 모델, 걸린 시간이 있고 선은 선행 관계입니다. 카드를 누르면 작업자의 대화가 기존 대화 창에, 작업 문서가 기존 문서 창에 열립니다. 인스펙터 가장자리를 끌어 너비를 바꿀 수 있고 너비는 기억됩니다. 편집은 할 수 없습니다.",
+    variant: "카드 누르기",
+    variants: { open: "A · 대화 열기", select: "B · 선택만" },
     recommended: "추천",
     scenario: "상태",
     scenarios: {
@@ -176,8 +189,8 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     frameLabel: "요약 탭 미리보기",
     notesTitle: "안 비교",
     notes: {
-      rolling: "진행 중 카드도 다른 카드와 크기가 같습니다. 아이콘은 DS 스피너, 마지막 줄은 작업자의 현재 단계를 RollingSwap으로 바꿔 보여 주고, 들어오는 선은 작업 중 색을 씁니다. 모션 줄이기에서는 바뀜 효과와 스피너 회전이 멈춥니다. 완료되면 LoadingIndicator 체크가 그려집니다.",
-      rail: "진행 중 카드에 WorkerActivityRow 단계 막대를 더해 현재 단계가 깜박입니다(DS 키프레임, 모션 줄이기에서는 정지). 더 눈에 띄지만 카드가 커지고 막대 라벨이 지금은 영어로만 나옵니다(DS 공백).",
+      open: "누르거나 Enter를 치면 카드가 선택되고 작업자의 대화가 지금 위임 대화를 여는 대화 창에 열립니다. 화살표 키는 선택만 옮깁니다. 그래프 아래 상세에는 사실 정보, 작업 문서, '대화 보기' 버튼이 남습니다. 배정 전 작업은 선택만 됩니다.",
+      select: "누르면 선택만 되고 대화는 상세의 '대화 보기'로 엽니다. 긴 그래프를 훑기엔 차분하지만 요청한 대화까지 한 단계가 더 있습니다.",
     },
   },
 };

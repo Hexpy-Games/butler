@@ -1,8 +1,9 @@
 import type { ProposalLocale, Scenario, TaskStatus } from "./copy";
 
 // Proposal-only fixtures. The shape mirrors the read model Codex adds (see the spec on the page):
-// GET /sessions/{id}/task-graph -> { nodes, edges, revision, cursor }. Times are offsets from "now"
-// so the elapsed clock runs in the preview.
+// GET /sessions/{id}/task-graph -> { nodes, edges, revision, cursor }. Each node also carries the
+// worker's child session id (opens the existing session dialog) and its task document ref
+// (opens the existing project document dialog). Times are offsets from "now".
 
 type L = Record<ProposalLocale, string>;
 const t = (ko: string, en: string): L => ({ "ko-KR": ko, "en-US": en });
@@ -17,12 +18,16 @@ export interface TaskNode {
   startedAgo?: number;
   /** Seconds the finished attempt took (terminal states). */
   took?: number;
-  /** Worker phase for the DS phase rail (running only). */
-  phase?: "orienting" | "planning" | "executing" | "verifying" | "reporting";
   /** Current steps of a running worker (rolled in the card); finished steps for the detail. */
   steps: L[];
   reason?: L;
+  /** Spec node the task implements and its done criteria (the task document body). */
+  spec?: string;
+  criteria?: L[];
 }
+
+/** The worker's child session: present once the task is assigned. */
+export const sessionIdOf = (node: TaskNode) => (node.assignee ? `task-session-${node.id}` : undefined);
 
 export interface TaskEdge { from: string; to: string }
 export interface TaskGraph { nodes: TaskNode[]; edges: TaskEdge[] }
@@ -42,7 +47,7 @@ const rules: TaskNode = {
 };
 const move: TaskNode = {
   id: "move", title: t("파일 옮기고 이름 정리하기", "Move and rename files"), status: "running",
-  assignee: { ordinal: 2, model: LUNA }, startedAgo: 125, phase: "executing",
+  assignee: { ordinal: 2, model: LUNA }, startedAgo: 125,
   steps: [t("사진 폴더로 옮기는 중", "Moving photos"), t("문서 이름 고치는 중", "Renaming documents"), t("중복 파일 확인 중", "Checking duplicates")],
 };
 
@@ -93,8 +98,8 @@ function longGraph(): TaskGraph {
     n("l3c", "화면 문구 정리", "Tidy the result labels", "completed", 4),
     n("l4", "변경 합치기", "Merge the changes", "completed", 1),
     n("l5a", "한국어 검색 확인", "Check Korean search", "completed", 2),
-    n("l5b", "영어 검색 확인", "Check English search", "running", 3, { phase: "verifying" }),
-    n("l5c", "속도 측정", "Measure speed", "running", 4, { phase: "executing" }),
+    n("l5b", "영어 검색 확인", "Check English search", "running", 3, {}),
+    n("l5c", "속도 측정", "Measure speed", "running", 4, {}),
     n("l5d", "화면 확인", "Check the screen", "pending"),
     n("l6", "결과 검토", "Review results", "pending"),
     n("l7", "지적 사항 반영", "Apply review notes", "pending"),
@@ -122,8 +127,8 @@ export function scenarioGraph(scenario: Scenario): TaskGraph {
     case "fanout": return fan([
       brief,
       research("r1", "Obsidian", "completed", { startedAgo: 540, took: 184 }),
-      research("r2", "Notion", "running", { startedAgo: 540, phase: "executing" }),
-      research("r3", "Bear", "running", { startedAgo: 540, phase: "verifying" }),
+      research("r2", "Notion", "running", { startedAgo: 540 }),
+      research("r3", "Bear", "running", { startedAgo: 540 }),
       compare("pending"), review("pending"),
     ]);
     case "failed": return fan([
