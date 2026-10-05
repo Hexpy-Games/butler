@@ -9,6 +9,7 @@ use super::fixture_binding::FixtureAgentLoop;
 
 pub(crate) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> ModelRoundResult {
     ModelRoundResult {
+        nonfinal: false,
         text: Some(text.into()),
         tool_calls: calls,
         text_tool_call_names: vec![],

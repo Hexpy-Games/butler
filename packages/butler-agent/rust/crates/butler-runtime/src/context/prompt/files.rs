@@ -35,70 +35,54 @@ pub(super) fn read_config(data_root: &Path) -> ContextResult<Value> {
     Ok(serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())))
 }
 
-pub(super) async fn build_rules_content(
+pub(super) async fn build_rules_section(
     rules_dir: &Path,
     binding: &StoredSessionBinding,
-) -> ContextResult<Option<String>> {
-    let rules_dir = rules_dir.to_owned();
-    let project_id = binding.project_id.clone();
-    tokio::task::spawn_blocking(move || read_rules_content(&rules_dir, project_id.as_deref()))
-        .await
-        .map_err(|error| {
-            ContextError::new(ContextCode::PromptFileReadError, "Rule read failed")
-                .with_source(error)
-        })?
-}
-
-fn read_rules_content(rules_dir: &Path, project_id: Option<&str>) -> ContextResult<Option<String>> {
-    let Some(index) = read_text_if_exists(&rules_dir.join("INDEX.md"))? else {
+    cognition: &dyn super::CognitionPromptPort,
+) -> ContextResult<Option<butler_turn::btcc::ContextSection>> {
+    let projection = super::PromptProjectionInput {
+        session_id: &binding.session_id,
+        project_id: binding.project_id.as_deref(),
+    };
+    let rules = cognition.remembered_rules(&projection, rules_dir).await?;
+    if rules.is_empty() {
         return Ok(None);
-    };
-    let mut blocks = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for relative in parse_rule_links(&index) {
-        let resolved_relative = relative.trim_start_matches('/');
-        let path = rules_dir.join(resolved_relative);
-        if !seen.insert(resolved_relative.to_owned()) || !rule_applies(&path, project_id)? {
-            continue;
-        }
-        if let Some(content) = read_text_if_exists(&path)? {
-            blocks.push(format!("### {relative}\n\n{content}"));
-        }
     }
-    Ok((!blocks.is_empty()).then(|| blocks.join("\n\n---\n\n")))
-}
-
-fn rule_applies(path: &Path, project_id: Option<&str>) -> ContextResult<bool> {
-    let Some(binding) = read_text_if_exists(&path.with_extension("source.json"))? else {
-        return Ok(true);
-    };
-    let binding: Value = serde_json::from_str(&binding).map_err(|error| {
-        ContextError::new(ContextCode::PromptFileReadError, "Invalid rule binding")
-            .with_source(error)
-    })?;
-    Ok(binding
-        .get("project_id")
-        .and_then(Value::as_str)
-        .is_none_or(|bound| Some(bound) == project_id))
-}
-
-fn parse_rule_links(index: &str) -> Vec<String> {
-    index
-        .split('\n')
-        .filter_map(|line| {
-            let mut offset = 0;
-            while let Some(open) = line[offset..].find('(') {
-                let start = offset + open + 1;
-                let close = line[start..].find(')')?;
-                let value = &line[start..start + close];
-                if value.ends_with(".md") {
-                    return Some(value.to_owned());
-                }
-                offset = start + close + 1;
-            }
-            None
+    let content = rules
+        .iter()
+        .map(|rule| {
+            format!(
+                "[{}] scope={}{}\n{}",
+                rule.handle,
+                if rule.scope_session_id.is_some() {
+                    "chat"
+                } else if rule.project_id.is_some() {
+                    "project"
+                } else {
+                    "all"
+                },
+                rule.expires_at
+                    .as_ref()
+                    .map(|iso| format!(" expires={iso}"))
+                    .unwrap_or_default(),
+                rule.text
+            )
         })
-        .collect()
+        .collect::<Vec<_>>()
+        .join("\n\n---\n\n");
+    let targets = rules.iter().map(|rule| serde_json::json!({
+        "handle":rule.handle, "expected_revision":rule.revision, "project_id":rule.project_id,
+    })).collect::<Vec<_>>();
+    let mut section = super::runtime::section(
+        "rules",
+        "Active Rules",
+        content,
+        "live_configuration",
+        "mandatory_hot_cache",
+        "user",
+    );
+    section.source = Some(serde_json::json!({"rememberedRuleSnapshot":targets}));
+    Ok(Some(section))
 }
 
 pub(super) fn active_persona(data_root: &Path) -> ContextResult<Option<String>> {

@@ -27,7 +27,7 @@ pub(super) fn single(args: &Map<String, Value>) -> Result<ExactEdit, Value> {
         .ok_or_else(|| {
             super::invalid(
                 "path is required for a single edit.",
-                "Retry with a workspace-relative path.",
+                "Retry with a absolute or workspace-relative path.",
             )
         })?;
     let old_text = args
@@ -115,7 +115,7 @@ pub(super) fn batch(value: &Value) -> Result<Vec<ExactEdit>, Value> {
             .ok_or_else(|| {
                 super::invalid(
                     format!("edits[{index}].path is required."),
-                    "Retry with workspace-relative paths.",
+                    "Retry with absolute or workspace-relative paths.",
                 )
             })?;
         let old_text = item

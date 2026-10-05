@@ -26,7 +26,10 @@ regex.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
 lance.workspace = true
+lance-io.workspace = true
 lancedb.workspace = true
+async-trait.workspace = true
+object_store.workspace = true
 ort = { workspace = true, optional = true }
 tokenizers.workspace = true
 parking_lot.workspace = true
@@ -38,6 +41,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
+unicode-script.workspace = true
 unicode-segmentation.workspace = true
 url.workspace = true
 

@@ -60,13 +60,9 @@ impl GatewayApplication for AppApplication {
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            Box::pin(updates.apply(request))
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::apply(self.dependencies.updates.clone(), request)
     }
+
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
         let this = self.clone_handle();
         Box::pin(async move {
@@ -139,6 +135,10 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.list_chats().await })
     }
+    fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.read_user_work().await })
+    }
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.read_navigation().await })
@@ -167,6 +167,14 @@ impl GatewayApplication for AppApplication {
         self.dependencies
             .model_catalog
             .execute(command, cancellation)
+    }
+    fn memory_management(
+        &self,
+        command: AppMemoryCommand,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.memory_owned(command, cancellation).await })
     }
     fn personalization(
         &self,
@@ -474,22 +482,10 @@ impl GatewayApplication for AppApplication {
         })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
-        let storage = self.storage.clone();
-        Box::pin(async move {
-            storage
-                .execute(|connection| events::latest(connection))
-                .await
-                .map_err(app_error)
-        })
+        self.event_cursor_read()
     }
     fn replay_events(&self, after: f64, limit: usize) -> ApplicationFuture<Vec<AppEventEnvelope>> {
-        let storage = self.storage.clone();
-        Box::pin(async move {
-            storage
-                .execute(move |db| events::replay(db, after, limit))
-                .await
-                .map_err(app_error)
-        })
+        self.event_replay_read(after, limit)
     }
     fn subscribe_events(
         &self,

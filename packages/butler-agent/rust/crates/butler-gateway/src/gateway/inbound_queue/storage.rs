@@ -1,6 +1,8 @@
 //! Filesystem state transitions for one source-format inbound queue.
 
 mod claim;
+mod deferred;
+pub(super) use deferred::next_delay;
 mod identity;
 mod io;
 mod settlement;

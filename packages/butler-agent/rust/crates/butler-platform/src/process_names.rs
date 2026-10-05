@@ -255,3 +255,8 @@ pub fn write_legacy_fixture(path: &Path) -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::Unsupported, "Unix fixture"))
     }
 }
+
+#[cfg(feature = "test-support")]
+mod children;
+#[cfg(feature = "test-support")]
+pub use children::child_count;

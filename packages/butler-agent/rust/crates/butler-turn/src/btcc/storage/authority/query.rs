@@ -1,4 +1,4 @@
-use rusqlite::{Connection, OptionalExtension, Row, ToSql, params};
+use rusqlite::{Connection, OptionalExtension, Row, ToSql};
 
 use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityError, AuthorityRecord, AuthorityResult,
@@ -135,6 +135,9 @@ pub(super) fn list_permissions(
     statement
         .query_map([owner], |row| {
             Ok(ConversationPermission {
+                capability: String::new(),
+                target: String::new(),
+                cwd: None,
                 grant_ref: row.get(0)?,
                 owner_session_id: row.get(1)?,
                 workspace_path: row.get(2)?,
@@ -170,29 +173,10 @@ pub(super) fn list_decided(db: &Connection) -> AuthorityResult<Vec<AuthorityReco
             "{ROW} WHERE decision IN ('allowed','denied','modified') \
         AND ((source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
-        AND (capability='ask_user' OR EXISTS (SELECT 1 FROM btcc_guided_works work \
-        WHERE work.work_id=btcc_authority_requests.source_work_id \
-        AND work.session_id=btcc_authority_requests.source_session_id \
-        AND work.status IN ('open','blocked')))) OR (capability='ask_user' AND outcome='pending' AND outcome_receipt_json IS NOT NULL)) AND close_reason IS NULL ORDER BY updated_at ASC"
+        ) OR (capability='ask_user' AND outcome='pending' AND outcome_receipt_json IS NOT NULL)) AND close_reason IS NULL ORDER BY updated_at ASC"
         ),
         &[],
     )
-}
-pub(super) fn source_work_eligible(
-    db: &Connection,
-    session: &str,
-    work: &str,
-) -> AuthorityResult<bool> {
-    let status: Option<String> = db
-        .query_row(
-            "SELECT status FROM btcc_guided_works \
-        WHERE work_id=?1 AND session_id=?2 LIMIT 1",
-            params![work, session],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(sql)?;
-    Ok(matches!(status.as_deref(), Some("open" | "blocked")))
 }
 pub(super) fn resume_source(
     db: &Connection,
@@ -292,4 +276,41 @@ pub(super) fn question_history(
     let mut seen = std::collections::HashSet::new();
     records.retain(|r| seen.insert(r.request_ref.clone()));
     Ok(records)
+}
+
+pub(super) fn permission_records(
+    db: &Connection,
+    owner: &str,
+) -> AuthorityResult<Vec<AuthorityRecord>> {
+    many(
+        db,
+        &format!(
+            "{ROW} WHERE owner_session_id=?1 AND decision='allowed' AND allow_scope='conversation' ORDER BY created_at"
+        ),
+        &[&owner],
+    )
+}
+
+pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
+    let owners = serde_json::to_string(owners)
+        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let mut statement = db
+        .prepare_cached(
+            "SELECT a.owner_session_id FROM json_each(?1) p \
+         JOIN btcc_authority_requests a ON a.owner_session_id=p.value \
+         JOIN btcc_turns t ON t.turn_id=a.source_turn_id \
+         WHERE a.close_reason IS NULL AND a.decision='pending' \
+         AND t.semantic_state='admitted' AND t.suspension_reason='authority_pending' \
+         UNION SELECT a.owner_session_id FROM json_each(?1) p \
+         JOIN btcc_authority_requests a INDEXED BY idx_btcc_questions_deferred ON a.owner_session_id=p.value \
+         WHERE a.capability='ask_user' AND a.decision='modified' AND a.close_reason IS NULL \
+         AND a.outcome_receipt_json IS NULL \
+         AND json_extract(CASE WHEN a.capability='ask_user' THEN a.private_alternative_input END,'$.status')='deferred'",
+        )
+        .map_err(sql)?;
+    statement
+        .query_map([owners], |row| row.get(0))
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)
 }

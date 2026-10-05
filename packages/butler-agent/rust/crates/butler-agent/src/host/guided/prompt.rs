@@ -1,6 +1,8 @@
 //! Turn-bound Guided request text assembled from the admitted source records.
 
 mod attachments;
+mod helpers;
+use helpers::{js_truthy, json, nonempty_array};
 mod documents;
 mod excerpts;
 mod phase_memory;
@@ -53,31 +55,6 @@ pub(crate) async fn resolve_guided_response_language(
     documents::response_language(documents, turn).await
 }
 
-fn js_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(value) => value
-            .as_f64()
-            .is_some_and(|value| value != 0.0 && !value.is_nan()),
-        Value::String(value) => !value.is_empty(),
-        _ => true,
-    }
-}
-
-fn json(value: &Value) -> Result<String, BtccError> {
-    butler_core::json::stringify(value).map_err(|error| {
-        BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
-    })
-}
-
-fn nonempty_array(turn: &TurnRecord, field: &str) -> bool {
-    turn.context
-        .get(field)
-        .and_then(Value::as_array)
-        .is_some_and(|value| !value.is_empty())
-}
-
 fn source_prompt(
     turn: &TurnRecord,
     state: &GuidedTextState,
@@ -127,6 +104,7 @@ fn source_prompt(
     }
     entries.push(format!("User request:\n{}", turn.original_message));
     entries.push(scope);
+    entries.extend(delegated_tools(state));
     if let Some(work) = work_context::render(state.work.context.as_ref()) {
         let summary = butler_core::public_text::trim_js_whitespace(&work);
         if !summary.is_empty() {
@@ -293,6 +271,41 @@ fn request_bytes(
         })
 }
 
+async fn work_stream_context(
+    state: &GuidedTextState,
+    session_id: &str,
+) -> Result<String, BtccError> {
+    let mut work_stream = if state.phase.execution_policy.tracking_mode == "none" {
+        String::new()
+    } else {
+        let mut projection = state
+            .work_streams
+            .prompt_context(
+                session_id.to_owned(),
+                state.phase.execution_policy.project_id.clone(),
+            )
+            .await?;
+        let workers = state
+            .subsessions
+            .worker_prompt_lines(session_id.to_owned(), projection.worker_task_ids)
+            .await?;
+        if !workers.is_empty() {
+            projection.text.push_str("\nLinked Workers:\n");
+            projection.text.push_str(&workers.join("\n"));
+        }
+        projection.text
+    };
+    let delegation = state
+        .subsessions
+        .latest_steward_prompt(session_id.to_owned())
+        .await?;
+    if !delegation.is_empty() {
+        work_stream.push('\n');
+        work_stream.push_str(&delegation);
+    }
+    Ok(work_stream)
+}
+
 impl PromptPort for GuidedPrompt {
     fn render<'a>(
         &'a self,
@@ -330,26 +343,7 @@ impl PromptPort for GuidedPrompt {
                 .await
                 .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
             let image_attachments = attachments::provider_images(turn);
-            let work_stream = if state.phase.execution_policy.tracking_mode == "none" {
-                String::new()
-            } else {
-                let mut projection = state
-                    .work_streams
-                    .prompt_context(
-                        turn.session_id.clone(),
-                        state.phase.execution_policy.project_id.clone(),
-                    )
-                    .await?;
-                let workers = state
-                    .subsessions
-                    .worker_prompt_lines(turn.session_id.clone(), projection.worker_task_ids)
-                    .await?;
-                if !workers.is_empty() {
-                    projection.text.push_str("\nLinked Workers:\n");
-                    projection.text.push_str(&workers.join("\n"));
-                }
-                projection.text
-            };
+            let work_stream = work_stream_context(state, &turn.session_id).await?;
             let exact_prompt = source_prompt(
                 turn,
                 state,
@@ -464,14 +458,7 @@ impl PromptPort for GuidedPrompt {
                 },
                 request: RoundRequestOptions {
                     butler_data: Some(state.butler_data.clone()),
-                    usage_attribution: Some(UsageAttribution {
-                        turn_id: turn.turn_id.clone(),
-                        phase: "guided".into(),
-                        reasoning_effort: Some(
-                            invocation.model_execution.selected_reasoning_effort(),
-                        ),
-                        round_index: None,
-                    }),
+                    usage_attribution: Some(request_usage(turn, state, invocation)),
                     cache_scope: Some(format!("btcc-guided:{}", turn.session_id)),
                     stable_provider_cache_prefix: state.phase.stable_provider_cache_prefix.clone(),
                     ..Default::default()
@@ -479,5 +466,30 @@ impl PromptPort for GuidedPrompt {
                 final_synthesis: FinalSynthesis::Never,
             })
         })
+    }
+}
+
+fn delegated_tools(state: &GuidedTextState) -> Option<String> {
+    (state.phase.execution_policy.role.as_str() != "butler").then(|| format!("Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.", state.phase.authorized_names.join(", ")))
+}
+
+fn request_usage(
+    turn: &TurnRecord,
+    state: &GuidedTextState,
+    invocation: GuidedInvocation<'_>,
+) -> UsageAttribution {
+    UsageAttribution {
+        session_kind: Some(
+            if state.phase.execution_policy.role.as_str() == "butler" {
+                "parent"
+            } else {
+                "delegated"
+            }
+            .into(),
+        ),
+        turn_id: turn.turn_id.clone(),
+        phase: state.phase.phase.as_str().into(),
+        reasoning_effort: Some(invocation.model_execution.selected_reasoning_effort()),
+        round_index: None,
     }
 }

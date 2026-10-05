@@ -25,6 +25,7 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
         [
             (r"guided-work-[0-9a-f]{64}".to_owned(), "ECHO_"),
             (r"guided-plan-[0-9a-f]{64}".to_owned(), "PLAN_ECHO_"),
+            (r"memory-detail:v1:[0-9a-f]{64}".to_owned(), "DETAIL_ECHO_"),
             // A streamed answer keeps its provisional id, `message-stream-<turn>`.
             (format!(r"\bmessage-(?:stream-turn-)?{UUID}"), "MSG_ECHO_"),
         ]
@@ -37,6 +38,9 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
         .collect()
     });
     let mut placeholders = lock(&state.placeholders);
+    if let Some(args) = recall_read_args(request) {
+        placeholders.add("RECALL_READ_ARGS", args.to_string());
+    }
     for (pattern, prefix) in patterns {
         for found in pattern.find_iter(request) {
             let value = found.as_str();
@@ -55,6 +59,20 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
             placeholders.add(&format!("{prefix}{next}"), value);
         }
     }
+}
+
+// Echo the complete source-read arguments from the first recalled result.
+fn recall_read_args(request: &str) -> Option<serde_json::Value> {
+    let request: serde_json::Value = serde_json::from_str(request).ok()?;
+    request["input"].as_array()?.iter().find_map(|item| {
+        if item["type"] != "function_call_output" {
+            return None;
+        }
+        let output: serde_json::Value = serde_json::from_str(item["output"].as_str()?).ok()?;
+        output["output"]["results"][0]["evidence"][0]
+            .get("read_args")
+            .cloned()
+    })
 }
 
 /// Takes the first matching fault. Tool-scoped argument mutations
@@ -93,14 +111,17 @@ pub(super) fn consume_fault(state: &State, position: usize) {
 pub(super) fn remint_ids(response: &mut ResponseRecord, generation: usize) {
     static PATTERN: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
     let Some(pattern) = PATTERN
-        .get_or_init(|| regex::Regex::new(r"\b((?:resp|msg|fc|rs|call)_[A-Za-z0-9]+)").ok())
+        .get_or_init(|| regex::Regex::new(r#"("(?:id|item_id|call_id|response_id)"\s*:\s*")((?:resp|msg|fc|rs|call)_[A-Za-z0-9_]+)(")"#).ok())
         .as_ref()
     else {
         return;
     };
     for chunk in &mut response.chunks {
         chunk.text = pattern
-            .replace_all(&chunk.text, format!("${{1}}r{generation}").as_str())
+            .replace_all(
+                &chunk.text,
+                format!("${{1}}${{2}}r{generation}${{3}}").as_str(),
+            )
             .into_owned();
     }
 }

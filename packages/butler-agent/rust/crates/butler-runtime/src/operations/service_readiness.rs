@@ -1,6 +1,6 @@
 //! Source foreground-executor readiness publication owned by the live service.
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,29 +20,22 @@ pub struct ServiceReadiness {
 
 impl ServiceReadiness {
     /// Publish only after the native queue consumer and BTCC are initialized.
-    pub fn publish(data_root: &Path, now_iso: &str, now_ms: i64) -> io::Result<Self> {
+    pub fn publish(data_root: &Path, now_iso: &str, _now_ms: i64) -> io::Result<Self> {
         let directory = data_root.join("state/app-foreground");
         secure_fs::create_private_dir_all(&directory)?;
         let pid = std::process::id();
         let path = directory.join("executor-ready.json");
-        let temporary = directory.join(format!("executor-ready.json.{pid}.{now_ms}.tmp"));
         let record = json!({
             "schema": SCHEMA, "pid": pid, "readyAt": now_iso, "rawTextIncluded": false,
         });
-        let result = (|| {
-            let mut options = OpenOptions::new();
-            options.write(true).create(true).truncate(true);
-            let _ = secure_fs::owner_only(&mut options);
-            let mut file = options.open(&temporary)?;
-            serde_json::to_writer_pretty(&mut file, &record)?;
-            file.write_all(b"\n")?;
-            drop(file);
-            fs::rename(&temporary, &path)
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(temporary);
-        }
-        result?;
+        secure_fs::replace_private(
+            &path,
+            |file| {
+                serde_json::to_writer_pretty(&mut *file, &record)?;
+                file.write_all(b"\n")
+            },
+            std::convert::identity,
+        )?;
         Ok(Self {
             path,
             pid,
@@ -94,10 +87,11 @@ impl ServiceReadiness {
     }
 
     pub fn startup_grace(data_root: &Path, now_ms: i64) -> io::Result<()> {
-        fs::create_dir_all(data_root.join("state"))?;
-        fs::write(
-            data_root.join("state/startup-grace-until"),
-            format!("{}\n", now_ms as f64 / 1000.0 + 45.0),
+        secure_fs::create_private_dir_all(&data_root.join("state"))?;
+        secure_fs::replace_private(
+            &data_root.join("state/startup-grace-until"),
+            |file| writeln!(file, "{}", now_ms as f64 / 1000.0 + 45.0),
+            std::convert::identity,
         )
     }
 }

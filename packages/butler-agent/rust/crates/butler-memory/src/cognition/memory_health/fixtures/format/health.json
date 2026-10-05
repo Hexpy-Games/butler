@@ -31,7 +31,7 @@
       "profile_pending_windows_count": null,
       "maintenance_last_run_at": "<time>",
       "maintenance_failed_phases": [
-        "box_index"
+        "memory_metadata_integrity"
       ],
       "writer_gate_status": "initialization_available",
       "writer_gate_reason": null
@@ -135,7 +135,7 @@
       "maintenanceStatus": "failed",
       "maintenanceLastRunAt": "<time>",
       "maintenanceFailedPhases": [
-        "box_index"
+        "memory_metadata_integrity"
       ],
       "stale": false,
       "diagnostics": [
@@ -180,7 +180,7 @@
       "profile_pending_windows_count": null,
       "maintenance_last_run_at": "<time>",
       "maintenance_failed_phases": [
-        "box_index"
+        "memory_metadata_integrity"
       ],
       "writer_gate_status": "initialization_available",
       "writer_gate_reason": null
@@ -284,7 +284,7 @@
       "maintenanceStatus": "failed",
       "maintenanceLastRunAt": "<time>",
       "maintenanceFailedPhases": [
-        "box_index"
+        "memory_metadata_integrity"
       ],
       "stale": false,
       "diagnostics": [

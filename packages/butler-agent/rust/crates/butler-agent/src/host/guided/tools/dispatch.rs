@@ -1,7 +1,10 @@
 //! Invoke the concrete domain owner; the caller owns occurrence and result journaling.
 
+pub(super) mod file_observation;
 mod mcp;
+mod project;
 mod publication;
+mod steward;
 mod web;
 mod work;
 use butler_core::tool_protocol::ToolName;
@@ -27,7 +30,7 @@ pub(super) async fn execute(
         return Box::pin(super::image::execute(owner, invocation, call)).await;
     }
     if super::memory_write::supports(&call.name) {
-        return super::memory_write::execute(owner, invocation, call, call_id);
+        return super::memory_write::execute(owner, invocation, call, call_id).await;
     }
     if web::supports(&call.name) {
         return web::execute(owner, invocation, call).await;
@@ -57,66 +60,7 @@ pub(super) async fn execute(
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::DelegateToSteward {
-        let request = call
-            .arguments
-            .get("request")
-            .and_then(Value::as_str)
-            .map(butler_core::public_text::trim_js_whitespace)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "steward_delegation_input_invalid",
-                    "request is required",
-                ))
-            })?;
-        let reviewed = owner
-            .work
-            .bound_work()
-            .await
-            .map_err(ToolExecutionError::Integrity)?
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "delegation_reviewed_plan_required",
-                    "Reviewed parent Work is required",
-                ))
-            })?;
-        let result = owner
-            .subsessions
-            .delegate_steward(
-                butler_turn::btcc::StewardDelegationRequest {
-                    parent_session_id: owner.binding.source_session_id.clone(),
-                    parent_turn_id: owner.binding.turn_id.clone(),
-                    anchor_message_id: invocation.turn.original_message_id.clone(),
-                    request: request.to_owned(),
-                    safe_title: call
-                        .arguments
-                        .get("safe_title")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    model_ref: owner.binding.model_ref.clone(),
-                    reasoning_effort: owner.binding.reasoning_effort.clone(),
-                    access_mode: access_mode(owner),
-                },
-                &reviewed,
-            )
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        if let Some(relation_id) = result.get("relation_id").and_then(Value::as_str) {
-            owner
-                .work_streams
-                .link_orchestration(
-                    crate::host::guided::work_streams::WorkStreamScope {
-                        session_id: owner.binding.source_session_id.clone(),
-                        origin_chat_id: None,
-                        project_id: owner.binding.memory.project_id.clone(),
-                        turn_id: owner.binding.turn_id.clone(),
-                    },
-                    relation_id.to_owned(),
-                )
-                .await
-                .map_err(ToolExecutionError::Integrity)?;
-        }
-        return encoded(&result);
+        return steward::execute(owner, invocation, call).await;
     }
     if call.name == ToolName::ListAutomations {
         return list_automations(owner, call).await;
@@ -343,28 +287,13 @@ pub(super) async fn execute(
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
-        let workspace = owner
-            .binding
-            .workspace_reference
-            .as_ref()
-            .map(butler_turn::workspace::WorkspaceReference::get)
-            .transpose()
-            .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "project_workspace_unavailable",
-                    error.code(),
-                ))
-            })?
-            .unwrap_or_else(|| owner.binding.workspace_path.clone());
-        let result = owner.project.execute(&call.name, &call.arguments,
-            crate::host::guided::project_tools::ProjectToolScope {
-                project_id: owner.binding.memory.project_id.clone(),
-                workspace_path: workspace,
-                installation_root: owner.binding.installation_root.clone(),
-            }).await.unwrap_or_else(|error| json!({"ok":false,"error":{
-                "code":"tool_error", "message":format!("{} could not complete: {}", call.name, error.code())
-            }}));
-        return encoded(&result);
+        return project::execute(owner, call).await;
+    }
+    if matches!(
+        call.name.as_str(),
+        "read_file" | "list_files" | "grep_files"
+    ) {
+        return file_observation::execute(owner, call, call_id).await;
     }
     let args = Value::Object(call.arguments.clone());
     if matches!(
@@ -411,8 +340,9 @@ pub(super) async fn execute(
             .read(owner.binding.memory.clone(), args)
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
-        "read_file" | "list_files" | "grep_files" | "list_skills" | "load_skill"
-        | "read_skill_file" => file_capability(owner, call, &args).await,
+        "list_skills" | "load_skill" | "read_skill_file" => {
+            file_capability(owner, call, &args).await
+        }
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",
@@ -420,11 +350,7 @@ pub(super) async fn execute(
             )));
         }
     };
-    encoded(&result.unwrap_or_else(|error| {
-        json!({"ok":false,"error":{
-            "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code())
-        }})
-    }))
+    encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
 }
 
 async fn file_capability(

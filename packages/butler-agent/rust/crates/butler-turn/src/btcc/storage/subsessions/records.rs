@@ -68,6 +68,9 @@ pub struct SubsessionPacket {
     pub access_mode: String,
     pub execution_mode: PacketExecutionMode,
     pub objective: String,
+    /// Runtime-attached previous request and canonical result for a fresh follow-up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prior_context: Option<String>,
     pub acceptance_criteria: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation_brief: Option<String>,
@@ -272,6 +275,7 @@ impl SubsessionPacket {
             access_mode: "full_access".into(),
             execution_mode: PacketExecutionMode::Mutation,
             objective: objective.into(),
+            prior_context: None,
             acceptance_criteria: Vec::new(),
             implementation_brief: None,
             plan_action: None,

@@ -35,7 +35,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     inFlight.current.delete(key); setPending(new Set(inFlight.current));
     if (!applied) setFailed(key);
   };
-  const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest);
+  const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   return {
     title: view.title, details: view.details, risk: view.risk, actionKind: view.actionKind,
     conversationScope: view.conversationScope, scope: request.scope, pending: pending.has(key),

@@ -58,7 +58,7 @@ pub(super) async fn get(
         Some(cursor) => cursor.rowid,
         None => application
             .storage
-            .execute(|db| {
+            .read(|db| {
                 db.query_row("SELECT COALESCE(MAX(rowid),0) FROM messages", [], |row| {
                     row.get::<_, i64>(0)
                 })
@@ -79,7 +79,7 @@ pub(super) async fn get(
     let message_limit = query.limit + 1;
     let message_rows = application
         .storage
-        .execute(move |db| {
+        .read(move |db| {
             read_public_messages(db, &key, watermark, &before_at, &before_id, message_limit)
         })
         .await
@@ -189,7 +189,7 @@ async fn read_ledger_events(
     let key = project_id.to_owned();
     let links = application
         .storage
-        .execute(move |db| ProjectSessionLinks::read(db, &key))
+        .read(move |db| ProjectSessionLinks::read(db, &key))
         .await
         .map_err(|_| ())?;
     let titles = snapshot

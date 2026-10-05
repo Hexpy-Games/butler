@@ -1,4 +1,6 @@
 //! Required composition ports and owned App transport values.
+mod artifacts;
+pub use artifacts::*;
 
 use super::sessions::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppWorkStreamReader,
@@ -169,6 +171,9 @@ pub struct AppAuthorityDecisionInput {
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
+    fn attention_sessions(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn session_requests(
         &self,
         owner_session_id: String,
@@ -272,6 +277,7 @@ pub struct AppApplicationDependencies {
     pub settings_mutations: Arc<dyn AppSettingsMutationPort>,
     pub runtime_info: Arc<dyn AppRuntimeInfoProvider>,
     pub model_catalog: Arc<dyn super::AppModelCatalogPort>,
+    pub memory_management: Arc<dyn super::AppMemoryPort>,
     pub personalization: Arc<dyn super::AppPersonalizationPort>,
     pub monitoring: Arc<dyn super::AppMonitoringPort>,
     pub project_dashboard_ledger: Arc<dyn super::AppProjectDashboardLedgerPort>,
@@ -317,6 +323,12 @@ pub struct AppContextBudgetFacts {
 }
 
 #[derive(Clone, Debug)]
+pub struct AppContextConfigurationFacts {
+    pub persona_configured: bool,
+    pub eol_configured: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct AppContextReadFacts {
     pub usage: Option<AppContextUsage>,
     pub compaction_summary: Option<String>,
@@ -324,6 +336,8 @@ pub struct AppContextReadFacts {
     pub session_usage: Option<butler_runtime::operations::SessionUsageView>,
     /// How the session's model is billed (`ContextDetailsView.auth_mode`).
     pub auth_mode: butler_models::models::UsageAuthMode,
+    /// Fresh host file facts; absent ports retain the App's direct fallback.
+    pub configuration: Option<AppContextConfigurationFacts>,
     pub budget: AppContextBudgetFacts,
 }
 
@@ -331,51 +345,8 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
-pub struct AppWorkerActivitySourcePage {
-    pub children: Vec<Value>,
-    pub after: Option<(String, String, String)>,
-}
-
-pub trait AppSubsessionPort: Send + Sync {
-    fn activity_cursor_parents(
-        &self,
-        _worker: String,
-        _history: bool,
-        _parent: Option<String>,
-    ) -> ApplicationFuture<Option<Vec<String>>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    fn activity_page(
-        &self,
-        _history: bool,
-        _after: Option<(String, String, String)>,
-        _parent: Option<String>,
-        _limit: usize,
-    ) -> ApplicationFuture<Option<AppWorkerActivitySourcePage>> {
-        Box::pin(async { Ok(None) })
-    }
-    fn projection(
-        &self,
-        session_id: String,
-        page: Option<AppSessionViewPage>,
-    ) -> ApplicationFuture<Value>;
-    fn cancel(&self, parent_session_id: String, relation_id: String) -> ApplicationFuture<Value>;
-    fn resume(&self, parent_session_id: String, relation_id: String) -> ApplicationFuture<Value>;
-    fn read_operation_output_chunks(
-        &self,
-        turn_id: String,
-        request_id: String,
-        result_id: String,
-    ) -> ApplicationFuture<Vec<super::operation_output::OperationOutputChunk>>;
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct AppSessionViewPage {
-    pub after_cursor: Option<u64>,
-    pub before_cursor: Option<u64>,
-    pub limit: usize,
-}
+mod subsessions;
+pub use subsessions::{AppSessionViewPage, AppSubsessionPort, AppWorkerActivitySourcePage};
 
 #[derive(Clone, Debug)]
 pub struct AppSettingsFacts {
@@ -467,30 +438,4 @@ pub struct AppApplicationConfig {
     pub butler_data: PathBuf,
     pub project_workspace_root: PathBuf,
     pub folder_selection_secret: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ArtifactMaterializationRequest {
-    pub allowed_roots: Vec<PathBuf>,
-    pub candidates: Vec<ArtifactFileCandidate>,
-    pub existing_content_keys: Vec<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ArtifactFileCandidate {
-    pub candidate_paths: Vec<PathBuf>,
-    pub name: String,
-    pub mime_type: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MaterializedResponderFile {
-    pub id: String,
-    pub kind: String,
-    pub mime_type: String,
-    pub safe_name: String,
-    pub size_bytes: u64,
-    pub sha256: String,
-    pub storage_name: String,
-    pub created_at: String,
 }

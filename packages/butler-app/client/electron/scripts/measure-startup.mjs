@@ -8,7 +8,8 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 
 const args = process.argv.slice(2);
-const executable = args[0];
+const valueOptions = ["--runs", "--json", "--electron-root"];
+const executable = args.find((arg, index) => !arg.startsWith("--") && !valueOptions.includes(args[index - 1]));
 if (!executable) throw new Error("Usage: measure-startup.mjs <built executable> [--runs 5] [--json file] [--electron-root directory]");
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 const runs = Number(option("--runs", "5"));
@@ -79,6 +80,7 @@ async function measure(mode, run, env) {
   if (forcedStop) throw new Error(`${mode}/${run}: forced_stop`);
   const metrics = Object.fromEntries(events.filter((event) => event.elapsed_ms !== null).map((event) => [event.stage, event.elapsed_ms]));
   metrics.splash_after_ready = elapsed("splash_painted") - elapsed("app_ready");
+  if (!Number.isFinite(metrics.splash_after_ready)) throw new Error(`${mode}/${run}: missing splash_painted or app_ready timing`);
   for (const stage of ["prepare", "service", "screen", "upgrade", "data"]) {
     const start = elapsed(`stage_${stage}_start`), end = elapsed(`stage_${stage}_end`);
     if (start !== undefined && end !== undefined) metrics[`interval_${stage}`] = end - start;

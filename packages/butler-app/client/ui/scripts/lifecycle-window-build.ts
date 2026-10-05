@@ -12,7 +12,7 @@ function inputHashes() {
   const directories = ["src/libs/design-system", "src/components/lifecycle", "scripts"];
   const files = directories.flatMap((directory) => readdirSync(resolve(uiRoot, directory), { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && /\.(css|ts|tsx)$/.test(entry.name) && !/\.(test|showcase|guidance)\./.test(entry.name))
-    .map((entry) => resolve(entry.parentPath, entry.name))).filter((path) => !path.includes("/generated/"));
+    .map((entry) => resolve(entry.parentPath, entry.name))).filter((path) => !path.replaceAll("\\", "/").includes("/generated/"));
   files.push(font, resolve(uiRoot, "../../../../packages/butler-i18n/src/lifecycle.ts"));
   return Object.fromEntries(files.sort((a, b) => relative(uiRoot, a).replaceAll("\\", "/").localeCompare(relative(uiRoot, b).replaceAll("\\", "/"), "en")).map((file) => [relative(uiRoot, file).replaceAll("\\", "/"), createHash("sha256").update(readFileSync(file)).digest("hex")]));
 }

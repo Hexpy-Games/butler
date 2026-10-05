@@ -9,8 +9,11 @@ export async function openLifecycleLog(state, timings, supervisor = {}) {
   await mkdir(directory, { recursive: true });
   const file = join(directory, `lifecycle-diagnostics-${new Date().toISOString().replaceAll(":", "-")}.json`);
   const report = { kind: state.kind, stage: state.stage, failedStage: state.failedStage,
-    timings, supervisor: { state: supervisor.state, pid: supervisor.pid, ready: supervisor.ready,
-      exitCode: supervisor.exitCode, safeErrorCode: supervisor.safeErrorCode },
+    timings, supervisor: { phase: supervisor.phase, pid: supervisor.pid, agentState: supervisor.agent_state,
+      safeErrorCode: supervisor.last_error_code,
+      lastExit: supervisor.last_exit ? { code: supervisor.last_exit.code, signal: supervisor.last_exit.signal } : undefined,
+      containment: supervisor.containment ? { kind: supervisor.containment.kind, verified: supervisor.containment.verified,
+        ownerDeathGuaranteed: supervisor.containment.owner_death_guaranteed } : undefined },
     platform: process.platform, arch: process.arch, version: app.getVersion() };
   await writeFile(file, JSON.stringify(report, null, 2), { mode: 0o600 });
   const files = (await readdir(directory)).filter((name) => /^lifecycle-diagnostics-.*\.json$/.test(name)).sort();

@@ -4,8 +4,10 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod latency_trace;
 mod listeners;
 mod mcp_servers;
+mod memory_management;
 mod message_files;
 mod model_catalog;
 mod monitors;
@@ -94,6 +96,7 @@ struct Client {
 /// Host and Origin admission, CORS preflight before auth, then the
 /// authorized route; every answer to an admitted origin carries CORS headers.
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
+    let timing = latency_trace::start(&request);
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
     let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
@@ -132,6 +135,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             }
         }
     };
+    latency_trace::finish(timing, &mut response);
     security::apply_cors(&mut response, &origin);
     response
 }
@@ -227,7 +231,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/model-catalog" || uri.path().starts_with("/model-catalog/") {
         return model_catalog::route(state, request, &uri).await;
     }
-    if uri.path() == "/personalization" || uri.path().starts_with("/personalization/") {
+    if personalization::settings_path(&uri) {
         return personalization::route(state, request, &uri).await;
     }
     if matches!(
@@ -271,7 +275,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if method == Method::GET
         && matches!(
             uri.path(),
-            "/app-info" | "/navigation" | "/command-palette" | "/archives"
+            "/app-info" | "/navigation" | "/command-palette" | "/archives" | "/user-work"
         )
     {
         return shell::route(state, &uri).await;

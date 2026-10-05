@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::work_blocks::project;
 
+// test-category: pure-logic
 #[test]
 fn work_blocks_merge_tool_updates_and_exclude_internal_tools() {
     let blocks = project(&[
@@ -31,6 +32,17 @@ fn work_blocks_merge_tool_updates_and_exclude_internal_tools() {
             "safe_label":"Inspect", "state":"delivered", "turn_event_sequence":4
         }),
     ]);
+    let standalone = project(&[
+        json!({"id":"a-start", "kind":"used_tool", "bridge_phase":"btcc_operation",
+            "tool_call_id":"a", "safe_label":"read_file", "state":"running", "turn_event_sequence":1}),
+        json!({"id":"a-end", "kind":"used_tool", "bridge_phase":"btcc_operation",
+            "tool_call_id":"a", "safe_label":"read_file", "state":"delivered", "turn_event_sequence":2}),
+        json!({"id":"b", "kind":"used_tool", "bridge_phase":"btcc_operation",
+            "tool_call_id":"b", "safe_label":"run_command", "state":"delivered", "turn_event_sequence":3}),
+    ]);
+    assert_eq!(standalone.len(), 2);
+    assert_eq!(standalone[0]["rows"][0]["state"], "delivered");
+    assert_eq!(standalone[1]["rows"][0]["tool_call_id"], "b");
     assert_eq!(blocks.len(), 1);
     assert_eq!(blocks[0]["state"], "delivered");
     assert_eq!(blocks[0]["rows"].as_array().unwrap().len(), 1);

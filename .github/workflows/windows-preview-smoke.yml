@@ -2,28 +2,17 @@ name: Unsigned Windows preview smoke
 
 on:
   pull_request:
-    paths:
-      - .github/workflows/windows-preview-smoke.yml
-      - .github/workflows/windows-native-deps.yml
-      - .github/actions/build-windows-agent/**
-      - .github/actions/rust-agent-setup/**
-      - .github/actions/windows-owner-setup/**
-      - deploy/windows-owner-cleanup.ps1
-      - deploy/windows-protocol-snapshot.ps1
-      - deploy/windows-e2e-artifacts.ps1
-      - packages/butler-agent/**
-      - packages/butler-npm/**
-      - deploy/install.ps1
-      - deploy/windows-startup-smoke.ps1
-      - deploy/windows-preview-smoke.ps1
-      - deploy/windows-acl-diagnosis.ps1
-      - .github/workflows/release.yml
   workflow_dispatch:
     inputs:
       native-cache:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
         type: string
+      native-loop:
+        description: Run the owner-host native checks before hosted final confirmation
+        required: false
+        type: boolean
+        default: false
       diagnose-powershell:
         description: Run isolated startup diagnostics instead of build/test jobs
         required: false
@@ -31,6 +20,7 @@ on:
         default: false
 
 permissions:
+  actions: read
   contents: read
 
 defaults:
@@ -43,16 +33,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: windows-preview-smoke.yml
+
   build:
+    needs: changes
     name: Build unsigned Windows preview
-    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: ${{ inputs.native-cache || 'windows-preview' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
           owner-runner: 'true'
@@ -70,19 +66,21 @@ jobs:
         run: ./deploy/windows-owner-cleanup.ps1
 
   stub:
+    needs: changes
     name: Platform contracts and debug stub chat
-    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
       BUTLER_E2E_TIER: stub
       RUST_TEST_THREADS: 8
       RUSTFLAGS: -C target-feature=+crt-static
+      BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: ${{ inputs.native-cache || 'windows-preview-stub' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - name: Isolate runtime and check directories
         run: |
           $root = $env:OWNER_JOB_ROOT
@@ -101,7 +99,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-e2e --tests -- -D warnings
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-agent -p butler-e2e --tests -- -D warnings
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -137,8 +135,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test windows_startup_xml --test installed_preview --test windows_commands --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration `
-            --test service_supervision --test service_diagnostics --test long_paths --test gateway_remote --test gateway_pairing --test cli_remote --no-run --message-format=json 2>&1 |
+            --test e2e --no-run --message-format=json 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the stub harness
@@ -158,9 +155,19 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test turn `
-            turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
+            turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Terminal settlement without filesystem notifications
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e projection_settlement:: `
+            -- --test-threads=1 --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Stub chat and durable config under a long data path
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
@@ -169,7 +176,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test long_paths `
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e long_paths:: `
             -- --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/long-paths.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -181,8 +188,63 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test windows_commands -- --test-threads=8 --nocapture
+          $env:BUTLER_E2E_PERF = '1'
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture 2>&1 |
+            Tee-Object "$env:PREVIEW_ROOT/logs/command-matrix.log"
+          Remove-Item Env:BUTLER_E2E_PERF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Selected project workspace and approval E2E
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e project_workspace:: -- --test-threads=8 --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Read-only real-profile Downloads command
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          # Only the Agent's observation HOME/USERPROFILE is real. Its data,
+          # CODEX_HOME, XDG dirs, local/roaming profiles and fixtures stay temporary.
+          $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
+          $env:BUTLER_E2E_PERF = '1'
+          try {
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
+              windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
+              -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
+      - name: Prepare verified embedding assets for native memory qualification
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        working-directory: .
+        run: python .github/scripts/isolated.py python .github/scripts/prepare-native-embedding.py
+      - name: Native service recovery, full shutdown queue and memory reset
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics', 'memory_reset', 'memory_profile_reset', 'paired-idle', 'artifact-owner-scale', 'unicode_delivery', 'delegate_followup', 'steward_presentation', 'ask_user', 'memory-rules-cursor', 'context_telemetry', 'project-instruction-reset', 'storage_concurrency', 'memory-rules-crash', 'memory-rules-correction', 'memory-rules-forget', 'memory-recall-judge')) {
+            $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+            $filter = switch ($test) {
+              'paired-idle' { 'gateway_pairing::support::idle::paired_devices_have_zero_idle_writes_and_request_driven_last_seen' }
+              'artifact-owner-scale' { 'project_artifacts::scale::many_matches_page_completely_at_owner_scale' }
+              'memory-rules-cursor' { 'memory_wiring_more::cursor::' }
+              'project-instruction-reset' { 'memory_wiring_more::duration::project_reset_includes_temporary_instructions_and_keeps_other_scopes' }
+              'memory-rules-crash' { 'memory_wiring_more::crash::' }
+              'memory-rules-correction' { 'memory_wiring_more::wiring_more_correction_supersedes_previous_rule_in_next_prompt' }
+              'memory-rules-forget' { 'memory_wiring_more::forget::rules_forget_and_correction_preserve_other_bindings_after_restart' }
+              'memory-recall-judge' { 'memory::recall_judge::' }
+              default { "$test`::" }
+            }
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e $filter `
+              -- --test-threads=8 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/$test.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Export compiled verification harnesses
         run: |
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
@@ -191,6 +253,21 @@ jobs:
           name: windows-e2e
           path: ${{ env.PREVIEW_ROOT }}/artifacts
           if-no-files-found: error
+      - name: Preserve failed native fixtures before isolated cleanup
+        if: always()
+        run: |
+          $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
+          if (Test-Path $failures) {
+            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
+      - name: Preserve native regression evidence before isolated cleanup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-regression-logs
+          path: ${{ env.PREVIEW_ROOT }}/logs
+          if-no-files-found: warn
+          retention-days: 14
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
@@ -198,6 +275,7 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
+    if: ${{ !inputs.native-loop }}
     needs: [build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -228,16 +306,6 @@ jobs:
         run: |
           $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
-      - name: Existing CLI E2E
-        if: ${{ !cancelled() }}
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests cli_surface   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native command tool environment, Unicode and Downloads chat
         if: ${{ !cancelled() }}
         run: |
@@ -245,55 +313,20 @@ jobs:
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
             Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: LAN listener, bind failures and API pairing smoke
+      - name: Hosted terminal settlement live-event regression
         if: ${{ !cancelled() }}
         run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          $env:BUTLER_E2E_REQUIRE_LAN = '1'
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests gateway_remote,gateway_pairing,cli_remote   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/lan-pairing.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing active plus queued shutdown recovery E2E
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests projection_settlement
+      - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests queue_shutdown   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/queue-shutdown.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing data migration and configuration durability E2E
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests migration,durable_configuration   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/data-durability.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Unmanaged supervisor recovery and operational log export
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests service_supervision,service_diagnostics   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/paths-supervision.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Require every hosted verification harness
-        if: ${{ !cancelled() }}
-        run: |
-          $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'windows_commands','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
-          "Verified all 12 compiled harnesses: $($actual -join ',')"
+          "Verified installed harnesses: $($actual -join ',')"
       - name: Task Scheduler installed artifact E2E (disposable runner only)
         working-directory: .
         run: |
@@ -306,12 +339,28 @@ jobs:
           $env:BUTLER_APP_SERVER_PORT = '0'
           $env:BUTLER_SECRET_STORE = 'file'
           ./deploy/windows-startup-smoke.ps1 -Launcher "$env:LOCALAPPDATA/Butler/bin/butler.exe"
+      - name: Preserve failed hosted harness fixtures
+        if: failure()
+        run: |
+          $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
+          if (Test-Path $failures) {
+            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-stub-logs
-          path: ${{ runner.temp }}/windows-verify/logs/*.log
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
+      - name: Keep installed harness completion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-completed-installed
+          path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Remove temporary verification profiles
         if: always()
         run: |
@@ -319,6 +368,96 @@ jobs:
             Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
           }
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+
+  hosted:
+    name: Hosted Windows E2E (${{ matrix.shard }})
+    if: ${{ !inputs.native-loop }}
+    needs: stub
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
+          - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
+          - {shard: data, tests: 'cli_surface,migration,durable_configuration,project_workspace,queue_notifications'}
+          - {shard: basics, tests: 'windows_commands'}
+    env:
+      BUTLER_E2E_TIER: stub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ runner.temp }}/windows-verify/artifacts
+      - name: Isolate the existing compiled harnesses
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
+          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
+          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" >> $env:GITHUB_ENV
+      - name: Run every existing selected harness
+        env:
+          SELECTED_HARNESSES: ${{ matrix.tests }}
+          BUTLER_E2E_REQUIRE_LAN: ${{ matrix.shard == 'remote' && '1' || '' }}
+        run: |
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests $env:SELECTED_HARNESSES.Split(',') |
+            Tee-Object "$env:PREVIEW_ROOT/logs/harnesses.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Keep harness completion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-completed-${{ matrix.shard }}
+          path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve hosted failure fixtures
+        if: failure()
+        run: |
+          $fixtures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e'
+          if (Test-Path $fixtures) {
+            Copy-Item $fixtures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
+      - name: Keep diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-${{ matrix.shard }}-logs
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
+      - name: Remove temporary verification profiles
+        if: always()
+        run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+
+  gate:
+    name: Complete Windows preview verification
+    if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [changes, build, stub, release, hosted]
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require selected preview checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"build":["package"],"stub":["package"],"release":["package"],"hosted":["package"]}'
+        run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
+      - uses: ./.github/actions/windows-preview-gate
+        if: needs.changes.outputs.package == 'true'
+        with:
+          results: ${{ toJSON(needs) }}
+      - name: Publish successful inputs
+        if: success() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"package": ["build", "stub", "release", "hosted"]}'
+          workflow: windows-preview-smoke.yml
 
   diagnose-native:
     name: Isolated native PowerShell startup probe
@@ -336,12 +475,13 @@ jobs:
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
+        env:
+          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
         run: ./deploy/windows-owner-cleanup.ps1
 
   diagnose-hosted:
     name: Isolated hosted PowerShell startup probe
     if: inputs.diagnose-powershell
-    needs: diagnose-native
     runs-on: windows-latest
     timeout-minutes: 10
     steps:

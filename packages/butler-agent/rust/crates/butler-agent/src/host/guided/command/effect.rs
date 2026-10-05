@@ -29,9 +29,8 @@ pub(super) async fn prepare(
         .map_err(BtccError::from)?;
     let root_identity = canonical_root(&workspace);
     let cwd_identity = canonical_root(&cwd);
-    let relative = cwd_identity
-        .strip_prefix(&root_identity)
-        .map_err(|source| error("command_cwd_rejected").with_source(source))?;
+    let relative = butler_platform::secure_fs::relative_path(&cwd_identity, &root_identity)
+        .ok_or_else(|| error("command_cwd_rejected"))?;
     let relative = if relative.as_os_str().is_empty() {
         ".".to_owned()
     } else {
@@ -40,6 +39,9 @@ pub(super) async fn prepare(
             .replace(std::path::MAIN_SEPARATOR, "/")
     };
     let mut proposed = args.clone();
+    proposed
+        .entry("state_effect")
+        .or_insert_with(|| Value::String("read_only".into()));
     proposed.insert("cwd".into(), Value::String(relative.clone()));
     let input = normalize(&Value::Object(proposed))
         .map_err(|e| BtccError::relayed("command_effect_invalid", e.to_string()).with_source(e))?;
@@ -48,6 +50,9 @@ pub(super) async fn prepare(
     };
     let target = target(&relative, effect);
     let adapter = CommandEffectAdapter {
+        observation: owner.clone(),
+        installation_root: scope.installation_root.map(Path::to_path_buf),
+        allowed_tools_and_effects: scope.allowed_tools_and_effects.map(<[String]>::to_vec),
         commands: owner.commands.clone(),
         output: owner.output.clone(),
         jobs: owner.jobs.clone(),
@@ -68,6 +73,9 @@ pub(super) async fn prepare(
 }
 
 struct CommandEffectAdapter {
+    observation: GuidedCommand,
+    installation_root: Option<PathBuf>,
+    allowed_tools_and_effects: Option<Vec<String>>,
     commands: Commands,
     output: ToolOutput,
     jobs: super::jobs::CommandJobs,
@@ -148,63 +156,7 @@ impl EffectAdapter for CommandEffectAdapter {
                     "The approved command input is not a normalized command.",
                 )));
             };
-            let data = self.butler_data.clone();
-            let before = self
-                .jobs
-                .run(move || super::artifacts::snapshot(&data))
-                .await
-                .map_err(|error| {
-                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
-                })?;
-            let started = std::time::SystemTime::now();
-            let spooled = self
-                .commands
-                .submit_guided(GuidedCommandInput {
-                    command: command.into(),
-                    cwd: Some(self.cwd.to_string_lossy().into_owned()),
-                    workspace_root: self.root_identity.clone(),
-                    butler_data: self.butler_data.clone(),
-                    timeout_ms: args.get("timeout_ms").and_then(Value::as_f64),
-                    access: GuidedAccess::FullAccessContained,
-                    host_environment: (*self.host_environment).clone(),
-                    abort: signal.clone(),
-                })
-                .map_err(|error| {
-                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
-                })?
-                .await
-                .map_err(|source| {
-                    butler_turn::btcc::EffectFailure::adapter("Command completion was lost")
-                        .with_source(source)
-                })?
-                .map_err(|error| {
-                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
-                })?;
-            let effect = if self.effect == "remote_observation" {
-                "remote_observation"
-            } else {
-                "command_mutation"
-            };
-            let result = output::public_result(
-                output::OutputResources {
-                    output: &self.output,
-                    jobs: &self.jobs,
-                },
-                spooled,
-                output::OutputOrigin {
-                    args,
-                    workspace: &self.root_identity,
-                    data_root: &self.butler_data,
-                    started,
-                },
-                Some(before),
-                Some(effect),
-            )
-            .await
-            .map_err(|error| {
-                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
-            })?;
-            Ok(AdapterOutcome::Applied(result))
+            self.run_admitted(args, command, signal).await
         })
     }
     fn reconcile<'a>(
@@ -236,6 +188,103 @@ impl EffectAdapter for CommandEffectAdapter {
     }
 }
 
+impl CommandEffectAdapter {
+    async fn run_admitted(
+        &self,
+        args: &Map<String, Value>,
+        command: &str,
+        signal: &CancellationToken,
+    ) -> Result<AdapterOutcome, butler_turn::btcc::EffectFailure> {
+        if matches!(self.effect.as_str(), "read_only" | "validation") {
+            let result = self
+                .observation
+                .execute_observation(
+                    args,
+                    CommandScope {
+                        workspace_reference: None,
+                        workspace_path: &self.workspace,
+                        butler_data: &self.butler_data,
+                        access_mode: butler_turn::btcc::AccessMode::FullAccess,
+                        abort: signal.clone(),
+                        allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
+                        installation_root: self.installation_root.as_deref(),
+                    },
+                )
+                .await
+                .map_err(|error| {
+                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                })?;
+            return Ok(AdapterOutcome::Applied(result));
+        }
+        self.run_mutation(args, command, signal).await
+    }
+
+    async fn run_mutation(
+        &self,
+        args: &Map<String, Value>,
+        command: &str,
+        signal: &CancellationToken,
+    ) -> Result<AdapterOutcome, butler_turn::btcc::EffectFailure> {
+        let data = self.butler_data.clone();
+        let before = self
+            .jobs
+            .run(move || super::artifacts::snapshot(&data))
+            .await
+            .map_err(|error| {
+                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+            })?;
+        let started = std::time::SystemTime::now();
+        let spooled = self
+            .commands
+            .submit_guided(GuidedCommandInput {
+                command: command.into(),
+                cwd: Some(self.cwd.to_string_lossy().into_owned()),
+                workspace_root: self.root_identity.clone(),
+                butler_data: self.butler_data.clone(),
+                timeout_ms: args.get("timeout_ms").and_then(Value::as_f64),
+                access: GuidedAccess::FullAccessContained,
+                host_environment: (*self.host_environment).clone(),
+                abort: signal.clone(),
+            })
+            .map_err(|error| {
+                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+            })?
+            .await
+            .map_err(|source| {
+                butler_turn::btcc::EffectFailure::adapter("Command completion was lost")
+                    .with_source(source)
+            })?
+            .map_err(|error| {
+                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+            })?;
+        let effect = if self.effect == "remote_observation" {
+            "remote_observation"
+        } else {
+            "command_mutation"
+        };
+        let result = output::public_result(
+            output::OutputResources {
+                output: &self.output,
+                jobs: &self.jobs,
+            },
+            spooled,
+            output::OutputOrigin {
+                args,
+                workspace: &self.root_identity,
+                data_root: &self.butler_data,
+                started,
+            },
+            Some(before),
+            Some(effect),
+        )
+        .await
+        .map_err(|error| {
+            butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+        })?;
+        Ok(AdapterOutcome::Applied(result))
+    }
+}
+
 fn canonical_root(path: &Path) -> PathBuf {
     butler_platform::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
@@ -256,10 +305,13 @@ fn normalize(value: &Value) -> Result<Value, crate::host::HostError> {
     let effect = source
         .get("state_effect")
         .and_then(Value::as_str)
-        .filter(|value| matches!(*value, "mutation" | "remote_observation"))
-        .ok_or(
-            "run_command persistent effect requires state_effect mutation or remote_observation",
-        )?;
+        .filter(|value| {
+            matches!(
+                *value,
+                "mutation" | "remote_observation" | "read_only" | "validation"
+            )
+        })
+        .ok_or("run_command requires a valid state_effect")?;
     let required = |key: &str| -> Result<&str, crate::host::HostError> {
         source
             .get(key)

@@ -2,6 +2,7 @@
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
+
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,25 @@ const PRIVATE_FILE: u32 = FileMode::OWNER_ONLY.0;
 const PERMISSION_BITS: u32 = 0o7777;
 /// Read, write and execute bits of owner, group and others.
 const ACCESS_BITS: u32 = 0o777;
+
+#[cfg(feature = "test-support")]
+pub(super) fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(file.sync_all().and_then(|()| {
+            rustix::fs::fadvise(file, 0, None, rustix::fs::Advice::DontNeed).map_err(Into::into)
+        }))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = file;
+        None
+    }
+}
+
+pub(super) fn current_metadata(path: &Path) -> io::Result<Metadata> {
+    fs::symlink_metadata(path)
+}
 
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
     let mut builder = fs::DirBuilder::new();
@@ -95,7 +115,12 @@ pub(super) fn restrict_file(path: &Path) -> Option<io::Result<()>> {
 }
 
 pub(super) fn restrict_open_file(file: &File) -> Option<io::Result<()>> {
-    Some(file.set_permissions(fs::Permissions::from_mode(PRIVATE_FILE)))
+    Some(file.metadata().and_then(|metadata| {
+        if metadata.permissions().mode() & PERMISSION_BITS == PRIVATE_FILE {
+            return Ok(());
+        }
+        file.set_permissions(fs::Permissions::from_mode(PRIVATE_FILE))
+    }))
 }
 
 pub(super) fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
@@ -147,6 +172,10 @@ pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
 
 pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
+}
+
+pub(super) fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    std::borrow::Cow::Borrowed(key)
 }
 
 pub(super) fn exchange_directories(left: &Path, right: &Path) -> Result<(), ExchangeError> {

@@ -166,7 +166,7 @@ fn update_project(
     input: &AppProjectUpdate,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let row = rows::any_by_id(&tx, project_id)?.ok_or_else(|| {
         AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
     })?;
@@ -204,7 +204,7 @@ fn lifecycle_project(
     pinned: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let row = rows::any_by_id(&tx, project_id)?.ok_or_else(|| {
         AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
     })?;

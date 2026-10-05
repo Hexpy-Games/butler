@@ -171,7 +171,7 @@ impl ChildRecord {
         Ok(Some(update))
     }
 
-    /// The existing record has this child's identity and exact body.
+    /// The existing record has this child's identity and compatible body.
     fn same_as_existing(
         &self,
         raw: &str,
@@ -190,13 +190,49 @@ impl ChildRecord {
         {
             return Err(conflict());
         }
-        if records::frontmatter_body_ref(raw) != body {
-            return Err(ProjectLedgerReadError::record_show(
-                "project_work_immutable_content_conflict",
-            ));
+        if records::frontmatter_body_ref(raw) == body {
+            return Ok(());
         }
-        Ok(())
+        if self.value.get("schema").and_then(Value::as_str)
+            == Some("butler.btcc-project-work-result-reference.v1")
+        {
+            let existing: Value =
+                serde_json::from_str(records::frontmatter_body_ref(raw)).map_err(|_| conflict())?;
+            if same_result_record_identity(&existing, &self.value) {
+                butler_core::diagnostic!(
+                    "warning: project result record content mismatch for {}",
+                    self.id
+                );
+                return Ok(());
+            }
+        }
+        Err(ProjectLedgerReadError::record_show(
+            "project_work_immutable_content_conflict",
+        ))
     }
+}
+
+fn same_result_record_identity(left: &Value, right: &Value) -> bool {
+    let Some((left_result, right_result)) = left.get("result").zip(right.get("result")) else {
+        return false;
+    };
+    let same_field = |left: &Value, right: &Value, key: &str| {
+        left.get(key)
+            .zip(right.get(key))
+            .is_some_and(|(left, right)| left == right)
+    };
+    ["schema", "sessionId", "scope"]
+        .iter()
+        .all(|key| same_field(left, right, key))
+        && [
+            "resultRef",
+            "toolCallId",
+            "toolName",
+            "originTurnId",
+            "sequence",
+        ]
+        .iter()
+        .all(|key| same_field(left_result, right_result, key))
 }
 
 pub(super) struct WorkViewUpdates<'a> {

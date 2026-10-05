@@ -53,7 +53,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "It renders a real <button>; pass type=\"submit\" only inside forms.",
-    "Disabled buttons use the disabled tone and never scale on press.",
+    "Disabled buttons use the disabled tone and never scale on press. Use aria-disabled to retain focus after an operation; activation is blocked.",
     "Focus draws the shared --focus-ring.",
   ],
   tokens: ["--control-height-md", "--radius-control", "--send-bg", "--focus-ring", "--motion-scale-press"],

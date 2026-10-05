@@ -22,7 +22,8 @@ export function createMarkRenderer(canvas: HTMLCanvasElement, inputs: MarkLoopIn
     const rect = canvas.getBoundingClientRect();
     const side = Math.max(1, Math.min(rect.width, rect.height || rect.width));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    resizeSurface(surface, Math.round(side * dpr), Math.round(side * dpr) / DESIGN_SIZE, side);
+    const pixelSide = Math.round(side * dpr);
+    resizeSurface(surface, pixelSide, pixelSide / DESIGN_SIZE, side);
     draw();
   };
   return {

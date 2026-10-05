@@ -126,22 +126,15 @@ pub async fn load_guided_turn_work(
             "authority_context_missing",
         ));
     }
-    let stored = stored.filter(|execution| execution.capability != "ask_user");
-    if let Some(execution) = stored.as_ref() {
-        if execution.source_session_id != scope.session_id
+    if let Some(execution) = stored.as_ref()
+        && (execution.source_session_id != scope.session_id
             || execution.source_turn_id != scope.turn_id
-            || execution.workspace_path != workspace_path
-        {
-            return Err(GuidedPreparationError::Contract(
-                "authority_request_identity_mismatch",
-            ));
-        }
-        let bound = service.bound_work_for_turn(scope.turn_id.clone()).await?;
-        if bound.as_ref().map(|work| &work.work_id) != Some(&execution.source_work_id) {
-            return Err(GuidedPreparationError::Contract(
-                "authority_source_work_unavailable",
-            ));
-        }
+            // Questions carry no operation permission or workspace scope.
+            || (execution.capability != "ask_user" && execution.workspace_path != workspace_path))
+    {
+        return Err(GuidedPreparationError::Contract(
+            "authority_request_identity_mismatch",
+        ));
     }
     let initial = if tracking_mode == "none" {
         GuidedWork {
@@ -151,17 +144,5 @@ pub async fn load_guided_turn_work(
     } else {
         load_initial_guided_work(service, &scope).await?
     };
-    if let Some(execution) = stored.as_ref()
-        && (!initial.bound
-            || initial
-                .context
-                .as_ref()
-                .map(|context| &context.work.work_id)
-                != Some(&execution.source_work_id))
-    {
-        return Err(GuidedPreparationError::Contract(
-            "authority_source_work_unavailable",
-        ));
-    }
     Ok(initial)
 }

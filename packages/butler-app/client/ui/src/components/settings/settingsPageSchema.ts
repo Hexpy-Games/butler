@@ -21,6 +21,12 @@ const WORKER_PROFILE_FIELDS = [
  * and every setting renders inside the one section that declares it.
  */
 export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSectionSchema[]> = {
+  memory: [
+    { id: "instructions", kind: "list", fields: [] },
+    { id: "chat-memory", kind: "status", fields: [] },
+    { id: "profile-memory", kind: "status", fields: [] },
+    { id: "project-memory", kind: "status", fields: ["memory-project"] },
+  ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send"] },
@@ -38,7 +44,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },
     { id: "response-style", kind: "form", fields: ["response-language", "persona-preset", "persona", "eol"] },
-    { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning"] },
+    { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning", "memory-link"] },
     { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
   // Memory cleanup and worker profiles show when the Advanced disclosure is open.

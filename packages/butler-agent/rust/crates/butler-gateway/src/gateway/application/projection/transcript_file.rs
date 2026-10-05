@@ -16,12 +16,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .butler_data
         .join("transcripts")
         .join(transcript_name(&session_id));
-    let chat = chat_id.to_owned();
-    let prior = context
-        .storage
-        .execute(move |db| super::checkpoint::load(db, &chat))
-        .await
-        .map_err(app_error)?;
+    let prior = previous_checkpoint(context, chat_id).await?;
     let path_for_read = path.clone();
     let state = tokio::task::spawn_blocking(move || file_state(&path_for_read))
         .await
@@ -168,4 +163,19 @@ fn spool_path(data: &std::path::Path, chat: &str, path: &std::path::Path) -> Pat
     hash.update(path.to_string_lossy().as_bytes());
     data.join("transcript-projection-spool")
         .join(format!("{:x}.json", hash.finalize()))
+}
+
+async fn previous_checkpoint(
+    context: &ProjectionContext,
+    chat_id: &str,
+) -> Result<Option<Checkpoint>, GatewayApplicationError> {
+    if let Some(cursor) = context.streaming.checkpoint(chat_id) {
+        return Ok(Some(cursor));
+    }
+    let chat = chat_id.to_owned();
+    context
+        .storage
+        .inspect(move |db| super::checkpoint::load(db, &chat))
+        .await
+        .map_err(app_error)
 }

@@ -545,7 +545,7 @@
     rgba(255, 255, 255, 0.96),
     rgba(250, 250, 248, 0.96)
   );
-  --settings-bg: rgba(255, 255, 255, 0.96);
+  --settings-bg: var(--color-surface-base);
   --settings-panel-bg: rgba(255, 255, 255, 0.78);
   --control-bg: rgba(255, 255, 255, 0.82);
   --control-hover-bg: rgba(255, 255, 255, 0.94);
@@ -1004,7 +1004,7 @@
     rgba(255, 255, 255, 0.96),
     rgba(250, 250, 248, 0.96)
   );
-  --settings-bg: rgba(255, 255, 255, 0.96);
+  --settings-bg: var(--color-surface-base);
   --settings-panel-bg: rgba(255, 255, 255, 0.78);
   --control-bg: rgba(255, 255, 255, 0.82);
   --control-hover-bg: rgba(255, 255, 255, 0.94);

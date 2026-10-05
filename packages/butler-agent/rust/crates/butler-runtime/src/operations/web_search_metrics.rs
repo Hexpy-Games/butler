@@ -99,10 +99,7 @@ impl WebSearchMetrics {
         event["rawTextStored"] = Value::Bool(false);
         let events = metrics.join("web-search-usage.jsonl");
         ensure_regular_file(&self.data_root, &metrics, &events)?;
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        secure_fs::no_follow(&mut options);
-        let mut output = options.open(events)?;
+        let mut output = secure_fs::append_private(&events)?;
         serde_json::to_writer(&mut output, &event).map_err(json_io_error)?;
         output.write_all(b"\n")
     }

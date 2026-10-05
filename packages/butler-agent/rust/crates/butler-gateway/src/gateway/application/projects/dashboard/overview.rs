@@ -35,7 +35,7 @@ pub(super) async fn get(
             let key = project.id.clone();
             let links = application
                 .storage
-                .execute(move |db| ProjectSessionLinks::read(db, &key))
+                .read(move |db| ProjectSessionLinks::read(db, &key))
                 .await
                 .map_err(app_error)?;
             facts(
@@ -237,7 +237,7 @@ async fn metrics(
     let seven_parameter = format!("{seven_day}T00:00:00.000Z");
     let metrics = application
         .storage
-        .execute(move |db| read_metrics(db, &key, &first_parameter, &seven_parameter))
+        .read(move |db| read_metrics(db, &key, &first_parameter, &seven_parameter))
         .await
         .map_err(app_error)?;
     let counts = metrics

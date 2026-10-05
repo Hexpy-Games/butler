@@ -34,15 +34,15 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { testRendererConnection } from "./test-renderer-connection.mjs";
 import {
   createBundledAgentSupervisor,
 } from "./app-agent-supervisor.mjs";
 import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
-import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
 import {
-  planAppForegroundUpdateStop,
-  quitAndInstallAppUpdate,
+  createAppUpdateCoordinator,
 } from "./app-foreground-update.mjs";
+import { watchAppUserWork } from "./app-user-work-events.mjs";
 import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
@@ -2105,6 +2105,10 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
+    rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
+    rendererOrigin = rendererOriginForUrl(rendererUrl);
+  }
   const win = new BrowserWindow({
     show: false,
     width: 960,
@@ -2179,6 +2183,11 @@ async function createWindow() {
   await win.loadURL(rendererUrl);
   startupTiming("renderer_loaded");
   startupStage("data");
+  if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
+    const status = await win.webContents.executeJavaScript('fetch("/sessions").then(response => response.status)');
+    if (status !== 200) throw new Error("Test renderer is not authenticated");
+    console.log("Test renderer connected; authenticated sessions=200");
+  }
   if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
     startupStage("upgrade");
     const migration = await ensureLegacyAppServiceMigration();
@@ -2381,47 +2390,36 @@ ipcMain.handle("butler:quit-app", () => {
   return { quitting: true };
 });
 
-async function runAppUpdateQuit(quitAndInstall) {
-  return await quitAndInstallAppUpdate({
-    readActiveWork: readForegroundActiveWorkSnapshot,
-    confirmQuit: async (snapshot) =>
-      await confirmAppForegroundQuit({
-        snapshot,
-        language: await readDesktopLanguage(),
-        showMessageBox: (options) => dialog.showMessageBox(options),
-      }),
-    stopForUpdate: async (snapshot) => {
-      const updateRestoreState = foregroundInstance?.state ?? null;
-      if (foregroundInstance?.state === "ready") {
-        foregroundInstance = transitionAppForeground(
-          foregroundInstance,
-          "update_pending",
-        );
-        writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-      }
-      const stopResult = await stopServerProcess({
-        reason: "app_update",
-        activeWorkSnapshot: snapshot,
-        requireSettledDrain: true,
-        updateRestoreState,
-      });
-      if (stopResult?.update_ready !== true) {
-        return stopResult ?? {
-          update_ready: false,
-          drain: null,
-          raw_text_included: false,
-        };
-      }
-      isQuitting = true;
-      finalQuitAllowed = true;
-      return stopResult;
-    },
-    quitAndInstall,
-  });
-}
+const appUpdateCoordinator = createAppUpdateCoordinator({
+  readActiveWork: readForegroundActiveWorkSnapshot,
+  watchWork: (onChange) => watchAppUserWork({
+    connect: (signal) => appServerFetch("/events/live", { signal }),
+    onChange,
+  }),
+  stopForUpdate: async () => {
+    const result = await stopServerProcess({ reason: "app_update" });
+    if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
+    isQuitting = true;
+    finalQuitAllowed = true;
+    return { update_ready: true };
+  },
+  onState: (state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("butler:app-update-state", state);
+      if (state.status === "choice_required") mainWindow.show();
+    }
+  },
+});
 
+ipcMain.handle("butler:app-update-state", () => appUpdateCoordinator.state());
+ipcMain.handle("butler:app-update-choice", (event, input) => {
+  if (event.sender !== mainWindow?.webContents) return { ok: false };
+  return appUpdateCoordinator.choose(input);
+});
 ipcMain.handle("butler:quit-and-install-update", async () =>
-  await runAppUpdateQuit(() => autoUpdater.quitAndInstall()),
+  await appUpdateCoordinator.request(async () => ({
+    activate: () => autoUpdater.quitAndInstall(), cancel: () => {},
+  })),
 );
 
 function windowForControlEvent(event) {
@@ -2608,21 +2606,19 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
-  const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
-    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
-    externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
-  let update;
-  try {
-    update = await runAppUpdateQuit(() => {
-      helper.activate();
-      finalQuitAllowed = true;
-      app.quit();
-    });
-  } catch (error) {
-    helper.cancel();
-    throw error;
-  }
-  if (!update.update_started) helper.cancel();
+  const update = await appUpdateCoordinator.request(async () => {
+    const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
+      installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
+      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
+    return {
+      cancel: helper.cancel,
+      activate: () => {
+        helper.activate();
+        // Electron must finish the pending IPC tick before the allowed quit.
+        setImmediate(() => app.quit());
+      },
+    };
+  });
   return { opened: update.update_started, update };
 });
 
@@ -2678,7 +2674,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ retry: () => bundledAgentSupervisor.stop({ wait: true, reason: "startup_retry" }), diagnostics: () => bundledAgentSupervisor.diagnostics() });
+      configureStartupActions({ retry: () => bundledAgentSupervisor.stop({ wait: true, preserveWork: true, reason: "startup_retry" }), diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -2742,24 +2738,14 @@ app.on("before-quit", (event) => {
 });
 
 async function readForegroundActiveWorkSnapshot() {
-  try {
-    const navigation = await readAppData("/navigation");
-    const workerActivity = await readAppData("/worker-activity");
-    if (!navigation || !workerActivity) {
-      return classifyAppForegroundActiveWork({ readFailed: true });
-    }
-    const chatIds = Array.isArray(navigation.chats)
-      ? navigation.chats
-        .map((chat) => safeString(chat?.id))
-        .filter(Boolean)
-      : [];
-    const queues = await Promise.all(chatIds.map((chatId) =>
-      readAppData(`/session-queue?session_id=${encodeURIComponent(chatId)}`),
-    ));
-    return classifyAppForegroundActiveWork({ navigation, workerActivity, queues });
-  } catch {
-    return classifyAppForegroundActiveWork({ readFailed: true });
+  if (bundledAgentSupervisor.agentState().state === "stopped") {
+    return { classification: "no_active_work" };
   }
+  try {
+    const snapshot = await readAppData("/user-work");
+    if (snapshot?.classification) return snapshot;
+  } catch { /* Do not mistake a read failure for running work. */ }
+  return classifyAppForegroundActiveWork({ readFailed: true });
 }
 
 process.once("SIGINT", () => {
@@ -2770,147 +2756,35 @@ process.once("SIGTERM", () => {
   app.quit();
 });
 
-async function stopServerProcess({
-  reason = "app_shutdown",
-  activeWorkSnapshot = null,
-  requireSettledDrain = false,
-  updateRestoreState = null,
-} = {}) {
-  let checkpointResult = "not_needed";
-  let drainResult = null;
-  const updatePlan = requireSettledDrain
-    ? planAppForegroundUpdateStop({
-      usesAppForegroundLifecycle,
-      foregroundState: foregroundInstance?.state ?? null,
-      activeWorkSnapshot,
-      restoreState: updateRestoreState,
-    })
-    : null;
-  if (requireSettledDrain && !updatePlan.allowed) {
-    return restoreForegroundAfterUpdateDrainFailure({
-      status: "drain_unavailable",
-      cancellation_requests: 0,
-      cancellation_failures: 0,
-      settled: false,
-      raw_text_included: false,
-    }, updatePlan.restoreState);
-  }
-  const shouldDrain = requireSettledDrain
-    ? updatePlan.requiresDrain
-    : Boolean(
-      activeWorkSnapshot &&
-      activeWorkSnapshot.classification !== "no_active_work",
-    );
-  if (usesAppForegroundLifecycle && foregroundInstance) {
-    if (
-      shouldDrain &&
-      ["ready", "degraded", "update_pending"].includes(foregroundInstance.state)
-    ) {
-      foregroundInstance = transitionAppForeground(
-        foregroundInstance,
-        "draining",
-      );
-      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-      try {
-        drainResult = await drainAppForegroundActiveWork({
-          snapshot: activeWorkSnapshot,
-          cancelTurn: cancelForegroundTurn,
-          cancelWorker: cancelForegroundWorker,
-          readSnapshot: readForegroundActiveWorkSnapshot,
-        });
-      } catch (error) {
-        if (!requireSettledDrain) throw error;
-        return restoreForegroundAfterUpdateDrainFailure({
-          status: "drain_failed",
-          cancellation_requests: 0,
-          cancellation_failures: 1,
-          settled: false,
-          raw_text_included: false,
-        }, updatePlan?.restoreState);
-      }
-      checkpointResult = drainResult.status;
-      if (requireSettledDrain && !foregroundDrainReadyForUpdate(drainResult)) {
-        return restoreForegroundAfterUpdateDrainFailure(
-          drainResult,
-          updatePlan?.restoreState,
-        );
-      }
-    }
-    // An external `butler stop` may already have left the instance stopped.
-    if (foregroundInstance.state !== "stopped") {
-      foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
-      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-    }
+async function stopServerProcess({ reason = "app_shutdown" } = {}) {
+  appUpdateCoordinator.dispose();
+  if (usesAppForegroundLifecycle && foregroundInstance && foregroundInstance.state !== "stopped") {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
   const stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
   if (stopResult.stopped !== true) throw new Error("foreground_stop_incomplete");
   quitFeedback?.phase("port_release");
+  const checkpointed = stopResult.stopped && stopResult.containment_released &&
+    bundledAgentSupervisor.diagnostics().last_exit?.code === 0;
   if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
-      patch: { clean_exit: true },
+      patch: { clean_exit: isMac ? checkpointed : true },
     });
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
     writeAppForegroundLastExit(butlerDataRoot, {
       generation: foregroundInstance.generation,
       exitReason: reason,
-      graceful: true,
-      checkpointResult,
+      graceful: isMac ? checkpointed : true,
+      checkpointResult: isMac && !checkpointed ? "checkpoint_failed" : "native_shutdown",
       processGroupDead: foregroundInstance.process_group_id !== null &&
         stopResult.containment_released,
       processTreeDead: stopResult.containment_released,
-      portReleased: await waitForAppForegroundPortRelease({
-        port,
-        isPortAvailable,
-      }),
+      portReleased: await waitForAppForegroundPortRelease({ port, isPortAvailable }),
     });
   }
   foregroundQuitSnapshot = null;
-  if (requireSettledDrain) {
-    return {
-      update_ready: true,
-      drain: drainResult,
-      raw_text_included: false,
-    };
-  }
-}
-
-function foregroundDrainReadyForUpdate(drain) {
-  return drain?.settled === true &&
-    Number(drain?.cancellation_failures ?? 0) === 0 &&
-    ["not_needed", "settled"].includes(drain?.status);
-}
-
-function restoreForegroundAfterUpdateDrainFailure(drain, restoreState = null) {
-  if (foregroundInstance?.state === "draining" && restoreState) {
-    foregroundInstance = transitionAppForeground(foregroundInstance, restoreState);
-    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-  }
-  foregroundQuitSnapshot = null;
-  return {
-    update_ready: false,
-    drain,
-    raw_text_included: false,
-  };
-}
-
-async function cancelForegroundTurn(turnId) {
-  const response = await appServerFetch(
-    `/turns/${encodeURIComponent(turnId)}/cancel`,
-    { method: "POST" },
-  );
-  if (!response.ok) throw new Error("foreground_turn_cancel_failed");
-}
-
-async function cancelForegroundWorker(workerId) {
-  const response = await appServerFetch(
-    `/worker-activity/${encodeURIComponent(workerId)}/control`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "cancel" }),
-    },
-  );
-  if (!response.ok) throw new Error("foreground_worker_cancel_failed");
+  return { ...stopResult, checkpointed };
 }
 
 async function appServerFetch(path, init = {}) {

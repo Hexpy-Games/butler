@@ -68,6 +68,17 @@ pub fn node_platform() -> &'static str {
     }
 }
 
+/// The current host and command shell for the Agent's system prompt.
+pub fn runtime_prompt_environment() -> String {
+    let (os, shell) = match std::env::consts::OS {
+        "macos" => ("macOS", "POSIX shell (/bin/sh)"),
+        "windows" => ("Windows", "PowerShell"),
+        "linux" => ("Linux", "POSIX shell (/bin/sh)"),
+        other => (other, "system shell"),
+    };
+    format!("OS: {os}\nShell: {shell}")
+}
+
 /// The `<os>-<arch>` tag of the release artifacts that run on this host:
 /// `darwin-arm64`, `linux-x64`, `windows-x64`, ... (other architectures keep
 /// Rust's name).

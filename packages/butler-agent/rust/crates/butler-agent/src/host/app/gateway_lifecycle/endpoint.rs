@@ -6,8 +6,9 @@ use std::{net::SocketAddr, path::PathBuf};
 use crate::host::service::configuration::AppServiceConfiguration;
 use butler_gateway::gateway::LocalAuthConfig;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct ActiveAppEndpoint {
+    changes: tokio::sync::watch::Sender<()>,
     current: std::sync::Arc<RwLock<Option<ActiveAppEndpointSnapshot>>>,
 }
 
@@ -20,7 +21,21 @@ pub(crate) struct ActiveAppEndpointSnapshot {
     pub(crate) database_path: PathBuf,
 }
 
+impl Default for ActiveAppEndpoint {
+    fn default() -> Self {
+        let (changes, _) = tokio::sync::watch::channel(());
+        Self {
+            changes,
+            current: Default::default(),
+        }
+    }
+}
+
 impl ActiveAppEndpoint {
+    pub(crate) fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.changes.subscribe()
+    }
+
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -45,9 +60,11 @@ impl ActiveAppEndpoint {
             database_path: configuration.db_path.clone(),
         };
         *self.current.write() = Some(snapshot);
+        self.changes.send_replace(());
     }
 
     pub(crate) fn clear(&self) {
         *self.current.write() = None;
+        self.changes.send_replace(());
     }
 }

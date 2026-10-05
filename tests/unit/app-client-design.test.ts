@@ -1921,7 +1921,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(appCopySource()).not.toContain(
     "프로필 후보",
   );
-  expect(renderer).toContain("copy.actions.clearProfile");
+  expect(renderer).not.toContain("copy.actions.clearProfile");
+  expect(renderer).toContain("/memory/reset/");
   expect(renderer).toContain("SystemEventsSettings");
   expect(renderer).toContain(
     "`/system-events?limit=${PAGE_SIZE}&offset=${offset}`",
@@ -2339,7 +2340,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainLabel");
   expect(renderer).toContain("function toolchainSummaryLabel");
   expect(renderer).toContain("function toolchainGroupLabel");
-  expect(renderer).toContain("return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool");
+  expect(renderer).toContain("appCopy.guided.tools[name] ?? appCopy.guided.tools.fallback");
+  expect(renderer).not.toContain("return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool");
   expect(renderer).not.toContain('label.includes("검증")');
   expect(renderer).not.toContain('label.includes("review")');
   expect(renderer).not.toContain("Using web search:");
@@ -2791,10 +2793,13 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(electronMain).toContain("createBundledAgentSupervisor");
 });
 
+// test-category: format-pin
 test("thinking mark components expose state and theme contracts", () => {
   const canvasMark = [
     "ButlerThinkingMark.tsx",
     "markLoop.ts",
+    "markRenderer.ts",
+    "markObservers.ts",
   ].map((file) => read(`packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/${file}`)).join("\n");
   const svgIcon = read(
     "packages/butler-app/client/ui/src/components/common/ButlerMarkIcon.tsx",
@@ -3913,13 +3918,13 @@ describe("app-client design system foundation", () => {
     expect(workerActivityRowStyles).toContain("worker-phase-pulse");
     expect(workerActivityRowStyles).toContain(".noIcon");
     expect(automationRunList).toContain("ActivityFeed");
-    expect(disclosureRow).toContain("className={cn(styles.labelRegion");
+    expect(disclosureRow).toContain("className={dsClass(cn(styles.trigger, !icon && styles.noIcon))}");
     expect(disclosureRow).toContain("stretch");
     expect(disclosureRow).toContain("onClick={onToggle}");
     expect(disclosureRow).toContain('surface?: "selection" | "plain"');
     expect(disclosureRow).toContain("data-surface={surface}");
-    expect(disclosureRowStyles).toContain(
-      "grid-template-columns: minmax(0, 1fr) auto",
+    expect(disclosureRowStyles).toMatch(
+      /grid-template-columns:\s*var\(--disclosure-line\) var\(--disclosure-line\) minmax\(0, 1fr\)\s*fit-content\(50%\);/u,
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");
@@ -3939,7 +3944,7 @@ describe("app-client design system foundation", () => {
     expect(turnActivityTimeline).toContain('variant="inline"');
     expect(turnActivityTimeline).not.toContain("paddingInlineStart");
     expect(buttonStyles).toContain(".button.variantInline");
-    expect(buttonStyles).toContain(".button.variantInline:hover:not(:disabled)");
+    expect(buttonStyles).toContain('.button.variantInline:hover:not(:disabled, [aria-disabled="true"])');
     expect(buttonStyles).toContain('.button.variantInline[data-has-icon-text="true"]');
     expect(buttonStyles).toContain("text-decoration: underline");
     const workActivityStyles = read(
@@ -4039,10 +4044,9 @@ describe("app-client design system foundation", () => {
         "packages/butler-app/client/ui/src/components/inspector/WorkersPanel.tsx",
       ),
     ).toContain("workActivityToolsForBlock(block)");
-    expect(messageRowStyles).toContain(
-      '+ [data-test-class~="turn-result-section"]',
-    );
-    expect(messageRowStyles).toContain("margin-top: var(--space-4)");
+    expect(messageRowStyles).toContain("flex-direction: column");
+    expect(messageRowStyles).toContain("gap: var(--space-lg)");
+    expect(messageRowStyles).toContain(".turnGroup > .row");
     expect(filteredSelectStyles).toContain("color: var(--text-primary)");
     expect(filteredSelectStyles).toContain("color: var(--text-secondary)");
     expect(filteredSelectStyles).toContain('[data-selected="true"]');

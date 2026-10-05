@@ -63,20 +63,24 @@ impl MemoryStartup<'_> {
         embedding: Arc<crate::host::EmbeddingOwner>,
         vector: Arc<butler_memory::cognition::GenerationVectorAdapter>,
     ) -> Result<MemorySync, BtccError> {
-        let opened = super::stores::check_startup(self.stop).and_then(|()| {
-            MemorySync::open(
-                crate::host::memory_jobs::sync::MemorySyncStartup {
-                    data_root: &paths.data_root,
-                    paths: cognition_paths,
-                    unclean_previous_exit: paths.unclean_previous_exit,
-                    fresh: self.fresh,
-                },
-                coordinator,
-                provider,
-                embedding,
-                vector,
-            )
-        });
+        let opened = match super::stores::check_startup(self.stop) {
+            Err(error) => Err(error),
+            Ok(()) => {
+                MemorySync::open(
+                    crate::host::memory_jobs::sync::MemorySyncStartup {
+                        data_root: &paths.data_root,
+                        paths: cognition_paths,
+                        unclean_previous_exit: paths.unclean_previous_exit,
+                        fresh: self.fresh,
+                    },
+                    coordinator,
+                    provider,
+                    embedding,
+                    vector,
+                )
+                .await
+            }
+        };
         let owner =
             close_after_memory_sync_error(opened, self.observer, self.work_streams, self.stores)
                 .await?;

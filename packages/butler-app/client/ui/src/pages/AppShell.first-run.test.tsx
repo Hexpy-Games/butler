@@ -8,7 +8,8 @@ import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "@/app/onboarding.ts";
 import type { ModelCatalogView, SettingsView, SpaceView } from "@/app/types.ts";
 import { useOnboardingStore } from "@/stores/onboardingStore.ts";
-import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import { getAppCopy, getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import { nativeShortcutModifier } from "@/app/nativeNotifications.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 
 // First-run language choices switch the app locale; hand it and the settings UI
@@ -253,6 +254,25 @@ test("a fresh install shows the welcome instead of the workspace", async () => {
   await act(async () => rendered.root.unmount());
 });
 
+for (const { platform, modifier } of [
+  { platform: "win32", modifier: "Ctrl" },
+  { platform: "darwin", modifier: "⌘" },
+  { platform: "linux", modifier: "Ctrl" },
+] as const) {
+  test(`first-run copy and shortcut hint render for ${platform}`, async () => {
+    const previousLocale = getAppLocale();
+    const rendered = await renderAppShell({}, { onboarding: FRESH_ONBOARDING }, platform, true, "ko-KR");
+    try {
+      await waitForText(rendered.container, "Butler는 이 컴퓨터에서 파일을 정리하고, 명령을 실행하고, 예약 작업을 챙기며 일을 대신합니다.");
+      expect(rendered.container.querySelector('[data-test-class="shortcut-hint"]')?.textContent)
+        .toBe(`${modifier} Enter 전송, Enter 줄바꿈`);
+    } finally {
+      await act(async () => rendered.root.unmount());
+      setAppCopyLanguage(previousLocale);
+    }
+  });
+}
+
 test("an agent with completed onboarding and current consent opens the workspace directly", async () => {
   const rendered = await renderAppShell({}, { onboarding: currentOnboarding });
   await waitForText(rendered.container, "Workspace");
@@ -313,6 +333,9 @@ test("first-run keeps the workspace chrome unmounted and gives the setup the res
 async function renderAppShell(
   storageValues: Record<string, string>,
   agentSettings: Partial<SettingsView>,
+  platform: "win32" | "darwin" | "linux" = "win32",
+  includeShortcutHint = false,
+  locale?: "en-US" | "ko-KR",
 ): Promise<{ container: HTMLElement; root: Root; patches: unknown[]; storage: Storage }> {
   const dom = new JSDOM(
     "<!doctype html><html><body><div id=\"root\"></div></body></html>",
@@ -326,6 +349,12 @@ async function renderAppShell(
     Node: dom.window.Node,
     DocumentFragment: dom.window.DocumentFragment,
   });
+  if (locale) {
+    Object.defineProperty(dom.window.navigator, "languages", {
+      configurable: true,
+      value: [locale],
+    });
+  }
   Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
     configurable: true,
     value: () => null,
@@ -348,7 +377,7 @@ async function renderAppShell(
         patches.push(patch);
         return {};
       },
-      platform: "win32",
+      platform,
       minimizeWindow: async () => ({}),
       toggleWindowMaximize: async () => ({}),
       closeWindow: async () => ({}),
@@ -356,13 +385,23 @@ async function renderAppShell(
   });
 
   const { AppShell } = await import("./AppShell");
+  if (locale) setAppCopyLanguage(locale);
   const container = dom.window.document.getElementById("root");
   if (!container) throw new Error("Missing test root");
   const root = createRoot(container);
   await act(async () => {
-    root.render(<AppShell />);
+    root.render(includeShortcutHint ? <><AppShell /><ShortcutHintHarness /></> : <AppShell />);
   });
   return { container, root, patches, storage: dom.window.localStorage };
+}
+
+function ShortcutHintHarness() {
+  const copy = getAppCopy("ko-KR").settings.options;
+  return (
+    <span data-test-class="shortcut-hint">
+      {copy.modifierEnterSendEnterNewline(nativeShortcutModifier())}
+    </span>
+  );
 }
 
 async function clickButton(container: HTMLElement, label: string): Promise<void> {

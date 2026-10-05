@@ -8,6 +8,18 @@ pub(super) const ESCAPE: char = '\\';
 
 pub(super) const POSIX: bool = true;
 
+pub(super) fn working_directory(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    Ok(path.to_path_buf())
+}
+
+pub(super) fn member_access_dot(_ch: char, _previous: Option<char>, _quoted: bool) -> bool {
+    false
+}
+
+pub(super) fn path_script(command: &str) -> &str {
+    command
+}
+
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     command.args(&invocation.arguments);
 }
@@ -34,4 +46,12 @@ pub(super) fn legacy_shell(
         program: "/bin/bash".into(),
         arguments,
     }
+}
+
+pub(super) fn is_registry_path(_path: &str) -> bool {
+    false
+}
+
+pub(super) fn normalize_path_token(path: &str) -> String {
+    path.to_owned()
 }

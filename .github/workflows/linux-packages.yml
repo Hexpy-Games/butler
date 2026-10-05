@@ -5,41 +5,35 @@ name: Linux packages
 # releases, #261) as a DEB for x64 and arm64 and an Arch package for x64. Every
 # package is installed in a clean distribution container and its agent is run
 # headless (start, /health, stop).
-# Tagged releases call this workflow once from release.yml; publication waits
+# Tagged releases call this workflow per platform; publication waits
 # for all clean-container install and headless agent smoke checks.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
   workflow_call:
-  pull_request:
-    paths:
-      - ".github/workflows/linux-packages.yml"
-      - ".github/workflows/release.yml"
-      - ".github/actions/rust-agent-setup/**"
-      - "packages/butler-agent/rust/Cargo.lock"
-      - "packages/butler-agent/rust/crates/butler-agent/Cargo.toml"
-      - "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml"
-      - "packages/butler-agent/rust/crates/butler-memory/Cargo.toml"
-      - "packages/butler-agent/rust/scripts/prepare-static-ort.py"
-      - "packages/butler-app/scripts/release/**"
-      - "packages/butler-app/client/electron/**"
-      - "deploy/**"
-      - "bun.lock"
-      - "**/package.json"
+    inputs:
+      label:
+        type: string
+        default: all
+      platforms:
+        type: string
+        default: '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]'
+      smokes:
+        type: string
+        default: ''
+      shared-agents:
+        type: boolean
+        default: false
+      agent-prefix:
+        type: string
+        default: agent-payload
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: linux-packages-${{ github.event_name }}-${{ github.ref }}
+  group: linux-packages-${{ inputs.label || 'all' }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -55,25 +49,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: linux-x64
-            runner: ubuntu-24.04
-            formats: --format=deb --format=pacman
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-            formats: --format=deb
+        include: ${{ fromJSON(inputs.platforms || '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Rust and the selected ONNX Runtime
+        if: inputs.shared-agents != true
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && 'static-ort' || 'prebuilt-ort' }}
           cache-key: package-${{ matrix.target }}
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: ./.github/actions/bun-setup
         with:
           bun-version: 1.3.11
 
@@ -96,17 +85,20 @@ jobs:
       - name: Install App client dependencies and build the renderer
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun install --frozen-lockfile --ignore-scripts
           npm --prefix packages/butler-app/client/ui run build
 
       # The payload producer accepts this binary and does not rebuild the agent.
       - name: Build the native agent
+        if: inputs.shared-agents != true
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
             cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
@@ -115,10 +107,22 @@ jobs:
           fi
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+      - uses: actions/download-artifact@v4
+        if: inputs.shared-agents == true
+        with:
+          name: ${{ inputs.agent-prefix }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/shared-agent
+      - name: Use the shared native Agent
+        if: inputs.shared-agents == true
+        run: |
+          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
+
       - name: Package the App
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
           bun test tests/unit/package-versions.test.ts
           bun run deploy/app/linux-version-smoke.ts
@@ -157,11 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { target: linux-x64, runner: ubuntu-24.04, format: deb, image: "ubuntu:24.04" }
-          - { target: linux-x64, runner: ubuntu-24.04, format: deb, image: "debian:trixie" }
-          - { target: linux-x64, runner: ubuntu-24.04, format: pacman, image: "archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04" }
-          - { target: linux-arm64, runner: ubuntu-24.04-arm, format: deb, image: "ubuntu:24.04" }
+        include: ${{ fromJSON(inputs.smokes || '[{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"ubuntu:24.04"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"debian:trixie"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"pacman","image":"archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","format":"deb","image":"ubuntu:24.04"}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

@@ -159,7 +159,7 @@ pub(super) fn publish(
             .parent()
             .ok_or_else(|| error(CognitionCode::HotCacheIoFailed))?;
         ensure_data_authority(data_root, &[parent])?;
-        fs::create_dir_all(parent).map_err(io_failed)?;
+        butler_platform::secure_fs::create_private_dir_all(parent).map_err(io_failed)?;
         replace_file(data_root, path, parent, &rendered.body)?;
     }
     if !rendered.audit.is_empty() {
@@ -170,36 +170,38 @@ pub(super) fn publish(
 
 /// Atomically replaces the cache file and syncs its directory.
 fn replace_file(data_root: &Path, path: &Path, parent: &Path, body: &str) -> CognitionResult<()> {
-    let temp = parent.join(format!(".cache-{}.tmp", uuid::Uuid::new_v4()));
-    ensure_data_authority(data_root, &[path, parent, &temp])?;
-    let written: CognitionResult<()> = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(io_failed)?;
-        file.write_all(body.as_bytes()).map_err(io_failed)?;
-        file.sync_all().map_err(io_failed)?;
-        fs::rename(&temp, path).map_err(io_failed)?;
-        butler_platform::secure_fs::sync_path(parent).map_err(io_failed)
-    })();
-    if written.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    written
+    ensure_data_authority(data_root, &[path, parent])?;
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            file.write_all(body.as_bytes()).map_err(io_failed)?;
+            ensure_data_authority(data_root, &[path, parent])
+        },
+        io_failed,
+    )
 }
 
 /// Appends legacy and unparseable blocks removed from the cache to its audit file.
 fn append_audit(data_root: &Path, path: &Path, audit: &str) -> CognitionResult<()> {
     let audit_path = path.with_extension("md.audit.md");
     ensure_data_authority(data_root, &[&audit_path])?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(audit_path)
+    let existed = audit_path.try_exists().map_err(io_failed)?;
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    butler_platform::secure_fs::owner_only(&mut options);
+    butler_platform::secure_fs::no_follow(&mut options);
+    let mut file = options.open(&audit_path).map_err(io_failed)?;
+    butler_platform::secure_fs::restrict_open_file(&file)
+        .unwrap_or(Ok(()))
         .map_err(io_failed)?;
     file.write_all(audit.as_bytes()).map_err(io_failed)?;
-    file.sync_all().map_err(io_failed)
+    file.sync_all().map_err(io_failed)?;
+    if !existed && let Some(parent) = audit_path.parent() {
+        butler_platform::secure_fs::sync_directory(parent)
+            .unwrap_or(Ok(()))
+            .map_err(io_failed)?;
+    }
+    Ok(())
 }
 
 fn io_failed(source: std::io::Error) -> CognitionError {

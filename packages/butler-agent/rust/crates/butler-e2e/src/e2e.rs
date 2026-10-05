@@ -58,6 +58,12 @@ impl From<serde_json::Error> for HarnessError {
     }
 }
 
+impl From<rusqlite::Error> for HarnessError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self(format!("sqlite: {error}"))
+    }
+}
+
 impl From<reqwest::Error> for HarnessError {
     fn from(error: reqwest::Error) -> Self {
         Self(format!("http: {error}"))

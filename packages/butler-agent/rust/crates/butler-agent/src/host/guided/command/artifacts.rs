@@ -9,7 +9,6 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
-use uuid::Uuid;
 
 use butler_core::locale::LocaleCollation;
 use butler_platform::secure_fs;
@@ -268,19 +267,13 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         }
         return (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination);
     }
-    let temporary = directory.join(format!(".{}.tmp", Uuid::new_v4()));
-    let written = (|| {
-        use std::io::Write;
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        let _ = secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).ok()?;
-        file.write_all(bytes).ok()?;
-        fs::rename(&temporary, &destination).ok()?;
-        (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination)
-    })();
-    let _ = fs::remove_file(&temporary);
-    written
+    secure_fs::replace_private(
+        &destination,
+        |file| std::io::Write::write_all(file, bytes),
+        std::convert::identity,
+    )
+    .ok()?;
+    (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination)
 }
 
 fn safe_name(source: &str) -> String {

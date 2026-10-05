@@ -68,7 +68,6 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
       </SettingsSection>
       <SettingsSection id="advanced-models" kind="form" title={settingsCopy.modelsAdvanced.title}>
         <DisclosureRow
-          surface="plain"
           data-test-class="settings-models-advanced"
           title={settingsCopy.modelsAdvanced.contents}
           open={advancedOpen}

@@ -25,9 +25,10 @@ pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&st
 }
 pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
-        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPlan, execute, review, and report this delegated request to Butler.",
+        "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.",
         packet.objective,
-        criteria(packet)
+        criteria(packet),
+        packet.prior_context.as_deref().unwrap_or("none")
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<String> {
@@ -334,6 +335,8 @@ pub(super) struct StewardIdentity<'a> {
     pub(super) work_id: &'a str,
     pub(super) plan_revision_id: &'a str,
     pub(super) review_revision_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) previous_relation_id: Option<&'a str>,
 }
 
 /// The request identity a worker delegation id is derived from.

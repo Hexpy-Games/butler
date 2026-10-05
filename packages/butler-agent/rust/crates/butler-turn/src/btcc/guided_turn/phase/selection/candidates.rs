@@ -40,6 +40,12 @@ pub(super) fn provider_candidates(
         names.extend(catalog.profile("workTracking").iter().cloned());
     }
     add_role_tools(&mut names, catalog, policy);
+    if authorized
+        .iter()
+        .any(|tool| tool.name == ToolName::ProjectArtifacts)
+    {
+        names.insert("project_artifacts".into());
+    }
     names
 }
 

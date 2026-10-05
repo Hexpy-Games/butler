@@ -29,7 +29,7 @@ enum Relayed {
         text: String,
     },
     /// The latest round's text is not the answer.
-    Discard,
+    Discard { rejected: bool },
 }
 
 /// One published event.
@@ -42,6 +42,7 @@ enum Frame {
     },
     Discarded {
         stream_id: String,
+        rejected: bool,
     },
 }
 
@@ -69,6 +70,11 @@ impl ProviderStreamObserver for RelayObserver {
         ) else {
             return;
         };
+        // Empty provider deltas carry no text and cannot satisfy the durable
+        // stream event contract. Never let one block later session progress.
+        if text.is_empty() {
+            return;
+        }
         // A closed queue means the loop has finished; late deltas are dropped.
         let _ = self.sender.send(Relayed::Delta {
             stream_id: stream_id.to_owned(),
@@ -78,7 +84,11 @@ impl ProviderStreamObserver for RelayObserver {
     }
 
     fn round_text_discarded(&self) {
-        let _ = self.sender.send(Relayed::Discard);
+        let _ = self.sender.send(Relayed::Discard { rejected: false });
+    }
+
+    fn round_text_rejected(&self) {
+        let _ = self.sender.send(Relayed::Discard { rejected: true });
     }
 }
 
@@ -156,11 +166,12 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
                 text,
             } => {
                 *open = Some(stream_id.clone());
-                if let Some(Frame::Text {
-                    stream_id: last,
-                    sequence: last_sequence,
-                    text: last_text,
-                }) = frames.last_mut()
+                if !uncoalesced()
+                    && let Some(Frame::Text {
+                        stream_id: last,
+                        sequence: last_sequence,
+                        text: last_text,
+                    }) = frames.last_mut()
                     && *last == stream_id
                 {
                     last_text.push_str(&text);
@@ -173,9 +184,12 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
                     text,
                 });
             }
-            Relayed::Discard => {
+            Relayed::Discard { rejected } => {
                 if let Some(stream_id) = open.take() {
-                    frames.push(Frame::Discarded { stream_id });
+                    frames.push(Frame::Discarded {
+                        stream_id,
+                        rejected,
+                    });
                 }
             }
         }
@@ -198,9 +212,15 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
                 payload.insert("target".into(), "final_candidate".into());
                 "model.stream.text_delta"
             }
-            Frame::Discarded { stream_id } => {
+            Frame::Discarded {
+                stream_id,
+                rejected,
+            } => {
                 payload.insert("streamId".into(), stream_id.into());
                 payload.insert("status".into(), "discarded".into());
+                if rejected {
+                    payload.insert("reason".into(), "answer_rejected".into());
+                }
                 "model.stream.completed"
             }
         };
@@ -214,4 +234,11 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
             );
         }
     }
+}
+
+fn uncoalesced() -> bool {
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var_os("BUTLER_E2E_STREAM_UNCOALESCED").is_some()
 }

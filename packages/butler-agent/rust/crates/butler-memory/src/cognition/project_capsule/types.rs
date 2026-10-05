@@ -69,6 +69,7 @@ pub(super) struct ProjectCapsuleSourceCounts {
 }
 
 pub(super) struct PreparedCapsule {
+    pub reset_epoch: Option<String>,
     pub project_id: String,
     pub path: PathBuf,
     pub body: String,

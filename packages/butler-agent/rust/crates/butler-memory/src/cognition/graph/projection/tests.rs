@@ -66,6 +66,7 @@ fn claim_pins_exact_input_and_enforces_nonce() {
 #[test]
 fn persisted_policy_is_used_by_the_next_claim() {
     let mut graph = crate::cognition::graph::GraphRepository {
+        _reader_pin: None,
         connection: Some(database()),
     };
     // Existing policy rows remain part of live claim selection after removing

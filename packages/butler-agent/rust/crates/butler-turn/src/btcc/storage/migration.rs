@@ -1,5 +1,6 @@
 mod authority;
 mod monitoring;
+mod startup_indexes;
 mod subsession;
 
 use rusqlite::{Connection, TransactionBehavior, params};
@@ -7,6 +8,29 @@ use rusqlite::{Connection, TransactionBehavior, params};
 use super::schema::{effects, work};
 
 pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
+    if !startup_indexes::needs_backfill(connection)? {
+        return apply_transaction(connection);
+    }
+    let cache: i64 = connection.pragma_query_value(None, "cache_size", |row| row.get(0))?;
+    let mapping: i64 = connection.pragma_query_value(None, "mmap_size", |row| row.get(0))?;
+    // Missing indexes traverse the complete historical rows too. Use the same
+    // bounded startup reader window, then release it before runtime admission.
+    connection.pragma_update(None, "cache_size", -65_536_i64)?;
+    connection.pragma_update(
+        None,
+        "mmap_size",
+        butler_platform::sqlite::VALIDATION_MMAP_BYTES,
+    )?;
+    let migrated = apply_transaction(connection);
+    let restored = (|| {
+        connection.pragma_update(None, "mmap_size", mapping)?;
+        connection.pragma_update(None, "cache_size", cache)?;
+        connection.release_memory()
+    })();
+    migrated.and(restored)
+}
+
+fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     authority::migrate(&transaction)?;
     subsession::migrate(&transaction)?;
@@ -26,6 +50,22 @@ pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
     monitoring::indexes(&transaction)?;
+    // Add after the legacy column/table migrations; idle polls must never walk
+    // terminal history, including databases opened before suspension_reason existed.
+    transaction.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_btcc_turns_authority_waiting ON btcc_turns(session_id)
+         WHERE semantic_state='admitted' AND suspension_reason='authority_pending';
+         CREATE INDEX IF NOT EXISTS idx_btcc_subsession_outbox_pending
+         ON btcc_subsession_outbox(created_at) WHERE status='pending';
+         CREATE INDEX IF NOT EXISTS idx_btcc_turn_checkpoint_reference
+         ON btcc_turns(active_checkpoint_id) WHERE active_checkpoint_id IS NOT NULL;
+         CREATE INDEX IF NOT EXISTS idx_btcc_turn_outbox_reference
+         ON btcc_turns(delivery_outbox_id) WHERE delivery_outbox_id IS NOT NULL;
+         CREATE INDEX IF NOT EXISTS idx_btcc_turn_message_reference
+         ON btcc_turns(canonical_assistant_message_id)
+         WHERE canonical_assistant_message_id IS NOT NULL;",
+    )?;
+    startup_indexes::cutover(&transaction)?;
     transaction.commit()
 }
 

@@ -33,7 +33,9 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
-  const text = useComposerStore((store) => store.text);
+  // The shell needs only the empty/nonempty boundary; the editor owns text.
+  useComposerStore((store) => store.text.trim().length > 0);
+  const text = useComposerStore.getState().text;
   const setText = useComposerStore((store) => store.setText);
   const textAreaRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);

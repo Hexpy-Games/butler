@@ -50,6 +50,7 @@ pub(super) async fn prepare(
     let progress = Arc::new(ProgressPublisher::new(
         runtime.progress.clone(),
         writer.clone(),
+        runtime.subsessions.clone(),
     ));
     let queue = runtime.inbound_queue.clone();
     let restart_handoff = Arc::new(RestartHandoff::new(

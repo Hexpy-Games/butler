@@ -1,7 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Isolated dashboard fixture at DASHBOARD_URL; never sends a conversation or changes a real project.
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, hasTouch: true,
   storageState: process.env.DASHBOARD_TEST_STATE ?? ".tmp/project-dashboard-164/fixture-browser-state.json" });
 const page = await context.newPage();

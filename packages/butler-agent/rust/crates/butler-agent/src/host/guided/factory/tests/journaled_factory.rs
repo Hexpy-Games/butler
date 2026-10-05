@@ -231,12 +231,17 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             Arc::new(|| 0),
             1,
         )),
-        memory_paths: Default::default(),
-        memory_publisher: Arc::new(butler_memory::cognition::CompletionPublisher::new(
-            &scratch.0.clone(),
+        memory_writes: crate::host::guided::tools::MemoryWriteServices::new(
+            &scratch.0,
             &Default::default(),
+            Arc::new(
+                butler_memory::coordination::CognitionWriteCoordinator::new(Arc::new(
+                    crate::host::SystemIdentity,
+                ))
+                .unwrap(),
+            ),
             Arc::new(|| "now".into()),
-        )),
+        ),
         compactions: ContextCompactionRepository::new(storage.clone()),
         attachment_context: Arc::new(butler_runtime::context::AttachmentContext::new(
             scratch.0.clone(),

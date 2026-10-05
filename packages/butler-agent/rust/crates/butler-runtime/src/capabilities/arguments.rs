@@ -62,13 +62,9 @@ pub(super) fn context(input: &CapabilityInvocation<'_>, root: PathBuf) -> Mutati
     }
 }
 
-/// Delegated subsessions (with an effect allow-list) address workspace-relative paths only.
-pub(super) fn path_form(input: &CapabilityInvocation<'_>) -> butler_turn::workspace::PathForm {
-    if input.allowed_tools_and_effects.is_some() {
-        butler_turn::workspace::PathForm::RelativeOnly
-    } else {
-        butler_turn::workspace::PathForm::RelativeOrAbsolute
-    }
+/// Absolute paths use OS permissions; relative paths resolve against the session workspace.
+pub(super) fn path_form(_input: &CapabilityInvocation<'_>) -> butler_turn::workspace::PathForm {
+    butler_turn::workspace::PathForm::RelativeOrAbsolute
 }
 
 pub(super) fn allowed(input: &CapabilityInvocation<'_>, effect: &str) -> bool {
@@ -78,6 +74,9 @@ pub(super) fn allowed(input: &CapabilityInvocation<'_>, effect: &str) -> bool {
 }
 
 pub(super) fn scope(path: &str, scopes: Option<&[String]>) -> bool {
+    if Path::new(path).is_absolute() {
+        return true;
+    }
     let Some(scopes) = scopes else {
         return true;
     };

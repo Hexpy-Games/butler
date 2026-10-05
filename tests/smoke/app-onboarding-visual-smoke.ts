@@ -5,15 +5,18 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { assertNewChatSurfaces } from "../support/newchat-visual.ts";
 
 const output = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/onboarding-p7-screenshots");
 mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 const screenshots: string[] = [];
 try {
+  // Reuse the context for sandboxed single-process Chromium.
+  const page = await browser.newPage({ reducedMotion: "reduce" });
   for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
     let asked = false;
-    const server = await createNativeAppServer({ onboardingComplete: false,
+    const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist"), onboardingComplete: false,
       stubToolCall: request => {
         if (asked || !JSON.stringify(request.messages).includes("처음 설정을 도와주세요")) return null;
         asked = true;
@@ -22,7 +25,7 @@ try {
         return { name: "ask_user", arguments: { questions: [{ id: "address", eyebrow: "호칭", title: "어떻게 불러드리면 좋겠습니까?", kind: "single", allow_custom: true,
           options: [{ id: "name", label: "이름으로 부르기", description: "알려주신 이름으로 부릅니다." }, { id: "nickname", label: "별명으로 부르기", description: "편한 별명을 알려주세요." }] }] } };
       } });
-    const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height: 900 });
     try {
       const now = new Date().toISOString();
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, onboarding: { consent_version: 2, accepted_at: now, completed_at: now } }) });
@@ -37,17 +40,7 @@ try {
         const path = `${output}/${surface}-${width}-${theme}-ko.png`;
         await page.screenshot({ path }); screenshots.push(path);
       };
-      const welcome = page.locator('[data-test-class="new-chat-empty-state"] header [data-slot="card"]');
-      assert.equal(await welcome.count(), 1, "Welcome copy has a solid DS surface");
-      const surface = await welcome.evaluate(node => {
-        const color = getComputedStyle(node).backgroundColor;
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d")!;
-        context.fillStyle = color;
-        context.fillRect(0, 0, 1, 1);
-        return { color, alpha: context.getImageData(0, 0, 1, 1).data[3] };
-      });
-      assert.equal(surface.alpha, 255, `Welcome surface is opaque: ${surface.color}`);
+      await assertNewChatSurfaces(page);
       await capture("new-chat");
       const general = page.getByRole("button", { name: "일반", exact: true });
       if (!(await general.isVisible())) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
@@ -78,13 +71,20 @@ try {
       await panel.getByRole("radio", { name: /직접 입력/u }).click();
       await panel.getByRole("textbox").fill("민수님");
       assert(!/ask_user|온보딩|스튜어드/u.test(await page.locator("body").innerText()), "Internal names stay out of visible copy");
-      assert.equal(await page.getByText("답변을 기다리고 있습니다.", { exact: true }).count(), 1);
+      const waitingStatusCount = await page.getByText("답변을 기다리고 있습니다.", { exact: true }).count();
+      if (waitingStatusCount !== 1) {
+        const view = await server.api<{ active_turn?: { state?: string }; latest_turn?: { state?: string }; pending_questions?: unknown[] }>("/session-view?session_id=general");
+        console.log(JSON.stringify({ surface: "question-status", width, theme, waitingStatusCount,
+          activeState: view.active_turn?.state, latestState: view.latest_turn?.state,
+          pendingQuestions: view.pending_questions?.length }));
+      }
+      assert.equal(waitingStatusCount, 1);
       await capture("question");
       if (width === 375) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       const row = await general.boundingBox();
       assert(row && row.x >= 0 && row.x + row.width <= width, "sidebar General row is inside the viewport");
       await capture("sidebar");
-    } finally { await page.close(); await server.stop(); }
+    } finally { await server.stop(); }
   }
   console.log(JSON.stringify({ ok: true, screenshots, cases: 16, caretTolerancePx: 1 }));
 } finally { await browser.close(); }

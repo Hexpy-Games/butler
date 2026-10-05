@@ -4,7 +4,7 @@ use butler_turn::workspace::{SessionRole, StoredSessionBinding};
 
 use super::cache::live_configuration_hash;
 use super::files::{
-    active_persona, bounded_persona, build_rules_content, read_config, read_text_if_exists,
+    active_persona, bounded_persona, build_rules_section, read_config, read_text_if_exists,
     resolve_language, resource_path,
 };
 use super::runtime::{
@@ -17,14 +17,20 @@ use crate::context::ContextCode;
 impl PromptAssembler {
     pub(super) fn runtime_system_context(&self) -> ContextResult<Vec<ContextSection>> {
         let mut sections = Vec::new();
+        let contract = read_text_if_exists(&resource_path(
+            &self.paths,
+            &["prompts", "runtime-system-contract.md"],
+        ))?
+        .unwrap_or_default();
+        let content = format!(
+            "{contract}\n## Host Environment\n{}\nUse paths and commands for this OS. Do not assume macOS paths or commands on Windows or Linux.",
+            butler_platform::launcher::runtime_prompt_environment(),
+        );
         push(
             &mut sections,
             "runtime-system-contract",
             "Runtime System Contract",
-            read_text_if_exists(&resource_path(
-                &self.paths,
-                &["prompts", "runtime-system-contract.md"],
-            ))?,
+            Some(content),
             "static_context",
             "profile",
             "user",
@@ -222,15 +228,15 @@ impl PromptAssembler {
             "profile",
             "user",
         );
-        push(
-            &mut live,
-            "rules",
-            "Active Rules",
-            build_rules_content(&self.paths.memory_rules_root, input.binding).await?,
-            "live_configuration",
-            "mandatory_hot_cache",
-            "user",
-        );
+        if let Some(rules) = build_rules_section(
+            &self.paths.memory_rules_root,
+            input.binding,
+            self.dependencies.cognition.as_ref(),
+        )
+        .await?
+        {
+            live.push(rules);
+        }
         let projection = PromptProjectionInput {
             session_id: &input.binding.session_id,
             project_id: input.binding.project_id.as_deref(),

@@ -1,0 +1,26 @@
+name: Verify merged Agent manifests
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  merge:
+    name: Merge per-platform manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download the manifests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
+          path: dist/agent
+
+      - name: Merge and inspect
+        run: |
+          set -euo pipefail
+          python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
+            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
+          jq -r '.artifacts[] | "\(.platform) \(.artifact_name) \(.sha256)"' dist/agent/merged/agent-update-manifest.json
+          test "$(jq '.artifacts | length' dist/agent/merged/agent-update-manifest.json)" = 3

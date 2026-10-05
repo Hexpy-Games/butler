@@ -1,4 +1,4 @@
-/** Real packaged macOS .90 -> .91 update through Settings, with isolated DATA. */
+/** Real packaged macOS update, update choices and quit with isolated DATA. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -9,10 +9,15 @@ import { createMacZip, prepareBundledAgentResource } from "../../packages/butler
 import { verifyMacFrameworkLinks, verifyMacPackageMetadata } from "../../deploy/app/native-mac-package-smoke.ts";
 import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
 import { normalizeMacBundle, signMacBundle } from "../../packages/butler-app/scripts/release/native-mac-signing.ts";
+import { updateWorkFixture } from "../support/update-work-fixture.ts";
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { freePort } from "../support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 const root = process.cwd();
+const mode = process.env.BUTLER_UPDATE_SMOKE_WORK ?? "idle";
+assert.ok(["idle", "now", "defer", "background-quit"].includes(mode));
+const work = updateWorkFixture(mode);
 const dir = mkdtempSync(join(tmpdir(), "butler-packaged-update-"));
 const data = join(dir, "data");
 const home = join(dir, "home");
@@ -22,6 +27,7 @@ assert.match(from, /^0\.1\.0-preview\.\d+$/u);
 assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const profile = process.env.BUTLER_UPDATE_SMOKE_PROFILE ?? "release";
 const agentBuilds = process.env.BUTLER_UPDATE_SMOKE_AGENT_BUILDS;
+const discovery = process.env.BUTLER_UPDATE_SMOKE_DISCOVERY === "1";
 const rust = join(root, "packages/butler-agent/rust");
 const target = resolve(process.env.CARGO_TARGET_DIR ?? join(rust, "target"));
 const electronRoot = join(root, "packages/butler-app/client/electron");
@@ -44,6 +50,9 @@ async function run(command: string, args: string[], extra: Record<string, string
 }
 
 async function packageVersion(version: string) {
+  const cache = process.env.BUTLER_UPDATE_SMOKE_BUNDLE_CACHE;
+  const cached = cache ? join(cache, version, "Butler.app") : null;
+  if (cached && await Bun.file(join(cached, "Contents/Info.plist")).exists()) return cached;
   const tagEnv = { GITHUB_REF_NAME: `v${version}`, CARGO_PROFILE_DEV_DEBUG: "0", CARGO_PROFILE_DEV_INCREMENTAL: "false" };
   if (!agentBuilds) await run("cargo", ["build", "--locked", "--profile", profile, "-p", "butler-agent", "--bin", "butler-agent", "--no-default-features", "--features", "static-ort"], tagEnv, rust);
   const work = join(dir, version);
@@ -70,6 +79,10 @@ async function packageVersion(version: string) {
   assert.equal(versionOutput.status, 0);
   assert.match(versionOutput.stdout, new RegExp(version.replaceAll(".", "\\.")));
   console.log(`PACKAGED ${version}: ${versionOutput.stdout.trim()}`);
+  if (cached) {
+    await run("ditto", [bundle, cached]);
+    return cached;
+  }
   return bundle;
 }
 
@@ -109,11 +122,8 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
 
 async function serveUpdate(zip: string) {
   const sha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(zip).arrayBuffer()).digest("hex");
-  server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, fetch(request) {
-    if (new URL(request.url).pathname === "/v1/chat/completions") {
-      return Response.json({ id: "update-smoke", object: "chat.completion", created: 0, model: "stub",
-        choices: [{ index: 0, message: { role: "assistant", content: "Update smoke stub." }, finish_reason: "stop" }] });
-    }
+  server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, async fetch(request) {
+    if (new URL(request.url).pathname === "/v1/chat/completions") return work.provider(request);
     return new URL(request.url).pathname === "/update.zip" ? new Response(Bun.file(zip)) : Response.json({ artifacts: [{
       component: "app", product: "butler-app", platform: "darwin-arm64", version: to, channel: "preview", bundled_agent_version: to,
       artifact_url: `http://127.0.0.1:${server!.port}/update.zip`, sha256,
@@ -128,8 +138,49 @@ async function serveUpdate(zip: string) {
   return server.port;
 }
 
+async function archiveAdmission(zip: string, installed: string) {
+  const executable = join(installed, "Contents/Resources/bundled-agent/bin/butler-agent");
+  const helper = spawn(executable, ["--installation-root", installed, "--resource-root", join(installed, "Contents/Resources/bundled-agent/resources"), "app-update-install", zip, join(installed, "Contents/MacOS/Butler"), "2147483647"], {
+    env, stdio: ["pipe", "pipe", "pipe"],
+  });
+  let diagnostic = "";
+  helper.stderr.on("data", bytes => { diagnostic += String(bytes); });
+  const exited = new Promise<number | null>((done) => helper.once("exit", done));
+  try {
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error("Archive admission did not become ready")), 60_000);
+      let output = "";
+      helper.stdout.on("data", bytes => {
+        output += String(bytes);
+        if (output.includes("app-update-ready")) { clearTimeout(timer); done(); }
+      });
+      helper.once("exit", () => { clearTimeout(timer); fail(new Error(`Archive helper exited: ${diagnostic}`)); });
+      helper.once("error", fail);
+    });
+    const container = join(dir, "installed");
+    const staging = readdirSync(container).filter(name => name.startsWith(".butler-update."));
+    assert.equal(staging.length, 1);
+    const candidate = join(container, staging[0]!, "Butler.app");
+    verifyMacFrameworkLinks(candidate);
+    verifyMacPackageMetadata(candidate, to, true);
+    await run("codesign", ["--verify", "--deep", "--strict", "--verbose=4", candidate]);
+    await run("codesign", ["--verify", "--deep", "--strict", "--verbose=4", installed]);
+    helper.stdin.end();
+    assert.equal(await exited, 1, "EOF cancels admission without activating");
+    verifyMacPackageMetadata(installed, from, true);
+    assert.equal(readdirSync(container).filter(name => name.startsWith(".butler-update.")).length, 0);
+    console.log(JSON.stringify({ ok: true, smoke: "packaged-zip-native-admission", installed: from, candidate: to,
+      stagedSignatureVerified: true, frameworkLinksPreserved: true, rolesAndPermissionsVerified: true, cancelledBeforeExchange: true }));
+  } finally {
+    helper.stdin.end();
+    if (helper.exitCode === null && helper.signalCode === null) helper.kill("SIGTERM");
+    await exited;
+  }
+}
+
 async function smoke() {
   mkdirSync(home); mkdirSync(data);
+  seedBackgroundOwners();
   writeFileSync(join(data, "update-sentinel.txt"), "preserved");
   const first = process.env.BUTLER_UPDATE_SMOKE_FROM_BUNDLE ?? await packageVersion(from);
   const second = process.env.BUTLER_UPDATE_SMOKE_TO_BUNDLE ?? await packageVersion(to);
@@ -142,16 +193,23 @@ async function smoke() {
   // Agent hard links and modes. Bun/Node cpSync can rewrite links to the source.
   await run("ditto", [first, installed]);
   verifyMacPackageMetadata(installed, from, true);
+  if (process.env.BUTLER_UPDATE_SMOKE_ARCHIVE_ONLY === "1") {
+    await archiveAdmission(zip, installed);
+    return;
+  }
   const debugPort = await freePort(), agentPort = await freePort();
-  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
+  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs()], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
-    BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
+    BUTLER_APP_UPDATE_MANIFEST: discovery ? "" : process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
+    ...(discovery ? { BUTLER_UPDATE_MANIFEST: "", BUTLER_UPDATE_RELEASES_API: "" } : {}),
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
+    ...(mode === "background-quit" ? { BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP: "1" } : {}),
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));
   console.log(`LAUNCH ${from}: ${installed}`);
+  if (discovery) console.log(`DISCOVERY ${from}: fresh process, default published release API, no manifest override`);
   let connected = await connect(debugPort); browser = connected.browser;
   const page = connected.page;
   const completedAt = new Date().toISOString();
@@ -163,6 +221,21 @@ async function smoke() {
   const created = await page.evaluate(async () => (window.butlerApp!.createSession as (v: unknown) => Promise<{ session: { id: string } }>)({ kind: "chat", title: "Update keeps this chat" }));
   const session = created.session;
   assert.ok(session?.id, "Created chat ID is missing.");
+  if (mode === "background-quit") {
+    // Real background bootstrap is held by the existing stub-tier hook.
+    assert.ok(await Bun.file(join(data, "cognition/memory/fresh-initialization.json")).exists());
+    assert.equal(await Bun.file(join(data, "cognition/memory/active-generation.json")).exists(), false);
+    // An enabled future schedule is configuration, not running user work.
+    const scheduled = await page.expression<{ ok: boolean }>(`window.butlerApp.createAutomation(${JSON.stringify({
+      title: "Future schedule", promptBody: "Scheduled stub", targetSessionId: session.id,
+      scheduleType: "once", runAt: "2099-10-03T00:00:00Z", accessMode: "ask_first",
+    })})`);
+    assert.equal(scheduled.ok, true, "future schedule was accepted");
+    await page.expression("window.butlerApp.quitApp()");
+    await waitForOldExit();
+    console.log("PASS background-only quit: no warning, native service stopped");
+    return;
+  }
   await page.waitForFunction(() => Array.from(document.querySelectorAll('button, [role="button"]')).some(e => e.getAttribute("aria-label") === "Settings" || e.textContent?.trim() === "Settings"));
   await clickNamed(page, "Settings");
   await clickNamed(page, "Updates");
@@ -173,10 +246,30 @@ async function smoke() {
   console.log(`OFF: ${await rowText()} (preview hidden)`);
   await page.waitForFunction(() => !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
   await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").click()`);
+  if (discovery) {
+    await page.waitForFunction(() => document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.getAttribute("aria-checked") === "true" && !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
+    console.log(`BEFORE SETTINGS CHECK: ${JSON.stringify(await page.expression("window.butlerApp.getUpdates()"))}`);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some(button => button.textContent?.trim() === "Check" && !button.hasAttribute("disabled")));
+    await clickNamed(page, "Check");
+    console.log("REFRESH: Settings Check, default published feed");
+  }
   await page.waitForFunction(() => !document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
   assert.ok((await rowText()).includes(to), "Settings shows the exact candidate version");
   console.log(`ON: ${await rowText()}`);
+  if (mode === "now" || mode === "defer") await work.start(page, session.id);
   await page.expression(`document.querySelector("[data-test-id='update-component-app'] button").click()`);
+  if (mode === "now" || mode === "defer") await work.choose(page);
+  await waitForOldExit();
+  await browser.close(); browser = null;
+  console.log(`RELAUNCH ${to}: ${installed}`);
+  connected = await connect(debugPort); browser = connected.browser;
+  await proof(connected.page, to, session.id);
+  if (mode === "now" || mode === "defer") await work.verify(connected.page);
+  await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
+  console.log(`PASS packaged App ${from} -> ${to}: UI update, checksum/signature, relaunch, healthy Agent, same DATA/chat`);
+}
+
+async function waitForOldExit() {
   await new Promise<void>((done, fail) => {
     const exited = (code: number | null) => {
       clearTimeout(timer);
@@ -190,15 +283,23 @@ async function smoke() {
     child!.once("exit", exited);
     if (child!.exitCode !== null) { child!.removeListener("exit", exited); exited(child!.exitCode); }
   });
-  await browser.close(); browser = null;
-  console.log(`RELAUNCH ${to}: ${installed}`);
-  connected = await connect(debugPort); browser = connected.browser;
-  await proof(connected.page, to, session.id);
-  await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
-  console.log(`PASS packaged App ${from} -> ${to}: UI update, checksum/signature, relaunch, healthy Agent, same DATA/chat`);
+}
+
+function seedBackgroundOwners() {
+  const now = new Date().toISOString();
+  mkdirSync(join(data, "state/scheduler"), { recursive: true });
+  for (const id of ["session-sync", "consolidation-cycle"]) {
+    writeFileSync(join(data, `state/scheduler/${id}.json`), JSON.stringify({ lastRunDate: now.slice(0, 10), lastRunAt: now, status: "ok" }));
+  }
+  mkdirSync(join(data, "personalization"), { recursive: true });
+  writeFileSync(join(data, "personalization/onboarding.json"), JSON.stringify({
+    schema: "butler.first_chat_onboarding.v1", status: "complete", gateway: "any",
+    fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now,
+  }));
 }
 
 async function cleanup() {
+  work.release();
   browser?.close();
   try {
     const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
@@ -211,6 +312,10 @@ async function cleanup() {
   server?.stop(true);
   // Allow the App's confirmed graceful quit to finish before removing its DATA.
   await new Promise(done => setTimeout(done, 1500));
+  if (child && child.exitCode === null) child.kill("SIGKILL");
+  for (const pid of ownedPids) {
+    try { process.kill(pid, "SIGKILL"); } catch { /* Already exited. */ }
+  }
   makeWritable(dir);
   rmSync(dir, { recursive: true, force: true });
 }
@@ -222,7 +327,36 @@ function makeWritable(path: string) {
   }
 }
 
+async function logUpdateStatus() {
+  if (browser) console.error(`UPDATE STATUS: ${JSON.stringify(await browser.expression("window.butlerApp.getUpdates()"))}`);
+}
+
+async function logPublicFeedStatus() {
+  const urls = [
+    "https://api.github.com/repos/Hexpy-Games/butler/releases?per_page=20&page=1",
+    "https://api.github.com/repos/Hexpy-Games/butler/releases?per_page=20&page=2",
+    `https://github.com/Hexpy-Games/butler/releases/download/v${to}/app-update-manifest.json`,
+  ];
+  for (const url of urls) {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Butler updater" }, signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.text();
+    console.error(`PUBLIC FEED: ${JSON.stringify({
+      url, status: response.status,
+      remaining: response.headers.get("x-ratelimit-remaining"),
+      reset: response.headers.get("x-ratelimit-reset"),
+      bytes: body.length,
+      body: response.ok ? undefined : body.slice(0, 1000),
+    })}`);
+  }
+}
+
 try { await smoke(); } catch (error) {
+  try { await logUpdateStatus(); } catch { /* Renderer unavailable. */ }
+  if (discovery) {
+    try { await logPublicFeedStatus(); } catch (feedError) { console.error("PUBLIC FEED:", feedError); }
+  }
   try { console.error(readFileSync(join(data, "updates/app-install.log"), "utf8")); } catch { /* Helper not started. */ }
   console.error("Electron main-process log:\n" + logs.join(""));
   for (const name of ["startup-progress.json", "startup-failure.json", "last-exit.json"]) {

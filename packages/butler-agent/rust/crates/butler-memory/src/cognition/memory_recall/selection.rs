@@ -1,5 +1,6 @@
 //! One pinned-read candidate pass; source corpus audit follows raw retrieval.
 
+mod fallback;
 mod rank;
 mod seeds;
 
@@ -73,6 +74,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         parse_date,
         compare_locale,
     } = request;
+    let (fts, fts_partial) = fallback::candidates(&request)?;
     let raw = lexical_sources(&request)?;
     let inventory: CanonicalInventory = read_canonical_inventory(
         canonical,
@@ -107,7 +109,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         data_root,
         memory_root,
         input,
-        semantic,
+        fallback::coverage(semantic, fts_partial),
         temporal,
         &raw,
         vector_current.as_ref(),
@@ -118,7 +120,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     let mut selected = rank::rank(
         graph,
         input,
-        seeds,
+        fallback::merge(&request, seeds, fts)?,
         raw,
         coverage,
         overall_deadline,

@@ -31,7 +31,7 @@ export function Notice({
     <Stack
       align="row"
       gap="sm"
-      cross="center"
+      cross="start"
       className={dsClass(styles.notice, styles[`tone-${tone}`], className)}
     >
       <Stack align="row" cross="start" gap="sm" grow minWidth="0">

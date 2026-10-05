@@ -5,12 +5,16 @@ use rusqlite::types::Value as SqlValue;
 use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallScope, RecallTimeBasis};
 
 /// A SQL condition and its bound parameters.
-pub(super) struct Predicate {
+pub(in crate::cognition::graph) struct Predicate {
     pub sql: String,
     pub args: Vec<SqlValue>,
 }
 
-pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predicate {
+pub(in crate::cognition::graph) fn source(
+    input: &RecallRequest,
+    source: &str,
+    chunk: &str,
+) -> Predicate {
     let conversation = if input.include_internal {
         format!(
             "{source}.source_kind='conversation' AND {source}.origin_kind IN ('user_input','assistant_public','unknown','internal_control')"
@@ -114,7 +118,10 @@ pub(super) fn placeholders(count: usize) -> String {
         .join(",")
 }
 
-pub(super) fn event_episode(input: &RecallRequest, episode: &str) -> Predicate {
+pub(in crate::cognition::graph) fn event_episode(
+    input: &RecallRequest,
+    episode: &str,
+) -> Predicate {
     let Some(time) = input
         .time
         .as_ref()

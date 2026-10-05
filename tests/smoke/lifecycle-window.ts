@@ -60,6 +60,12 @@ try {
       cases++;
     }
   }
+  await page.goto(`${pathToFileURL(join(directory, "lifecycle.html"))}?kind=startup&stage=service&theme=dark&locale=ko&motion=auto`);
+  await page.locator("html[data-painted=true]").waitFor();
+  assert.equal(await page.evaluate(() => {
+    const classes = JSON.parse(document.documentElement.dataset.classes!);
+    return Array.from(document.querySelectorAll("[aria-hidden=true]")).some((element) => element.className === classes.outgoing);
+  }), false, "Initial copy must not roll a placeholder above the first painted line");
   assert.deepEqual(errors, []);
   console.log(`PASS: ${cases} static lifecycle cases, desktop sizes, stacking, accessibility, no network or app bundle.`);
 } finally { await browser.close(); }

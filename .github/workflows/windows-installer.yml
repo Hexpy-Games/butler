@@ -40,7 +40,7 @@ jobs:
       - uses: ./.github/actions/windows-owner-setup
         if: ${{ !inputs.hosted-only }}
         with:
-          workflow: ${{ inputs.native-cache || 'win-installer' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
           owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
@@ -71,14 +71,13 @@ jobs:
       - name: Compile existing public update E2Es without running them
         shell: pwsh
         run: ./deploy/windows-installer-contracts.ps1 -Mode Build
+      - name: Pack every installer fixture with complete checksums
+        shell: pwsh
+        run: python .github/scripts/isolated.py python deploy/windows-installer-transport.py pack dist/release dist/release/installer-transport
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer-preview
-          path: |
-            dist/release/app-windows-first/
-            dist/release/app-windows/
-            dist/release/agent-first/
-            dist/release/installer-contracts/
+          path: dist/release/installer-transport/
           if-no-files-found: error
           compression-level: 0
       - name: Verify owner registration and clean job profile
@@ -106,7 +105,10 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.reuse-run || github.run_id }}
           name: windows-installer-preview
-          path: dist/release
+          path: dist/release/installer-transport
+      - name: Reconstruct and verify every original fixture byte
+        shell: pwsh
+        run: python .github/scripts/isolated.py python deploy/windows-installer-transport.py restore dist/release dist/release/installer-transport
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:

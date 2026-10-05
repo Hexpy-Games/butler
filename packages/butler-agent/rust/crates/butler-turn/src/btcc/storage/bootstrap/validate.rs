@@ -42,12 +42,14 @@ pub(super) fn canonical_schema(db: &Connection) -> StorageResult<()> {
 }
 
 pub(super) fn integrity(db: &Connection) -> StorageResult<()> {
+    let started = std::time::Instant::now();
     let quick: String = db
         .query_row("PRAGMA quick_check", [], |row| row.get(0))
         .map_err(StorageError::sqlite)?;
     if quick != "ok" {
         return Err(error(StorageCode::AgentBtccStorageQuickCheckFailed));
     }
+    activated::trace("quick_check_validated", started);
     let foreign: Option<i64> = db
         .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
         .optional()
@@ -55,6 +57,7 @@ pub(super) fn integrity(db: &Connection) -> StorageResult<()> {
     if foreign.is_some() {
         return Err(error(StorageCode::AgentBtccStorageForeignKeyCheckFailed));
     }
+    activated::trace("foreign_keys_validated", started);
     Ok(())
 }
 

@@ -61,7 +61,7 @@ fn render(root: &std::path::Path, stream: &Value) -> Result<String, BtccError> {
         lines.push(format!("Status Note: {note}"));
     }
     if let Some(list_id) = string(stream, "todo_list_id")
-        && let Some(todo) = read_object(&root.join("todos").join(format!("{list_id}.json")))?
+        && let Some(todo) = read_object(&root.join("todos").join(record_name(&list_id)))?
     {
         let items = todo
             .get("items")

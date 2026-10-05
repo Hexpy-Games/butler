@@ -18,7 +18,11 @@ test("BTCC phase operations do not create duplicate legacy work blocks", () => {
     bridge_phase: "btcc_operation",
   };
 
-  expect(projectSharedWorkBlocks([operation])).toEqual({
+  expect(projectSharedWorkBlocks([{
+    id: "phase", kind: "message", state: "completed", safe_label: "Inspect",
+    semantic_block_id: "conception_deliberation", work_decision_source: "model-authored",
+    work_decision_summary: "Inspect",
+  }, operation])).toEqual({
     blocks: [],
     issues: [],
   });

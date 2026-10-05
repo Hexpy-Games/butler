@@ -7,6 +7,12 @@ description: >-
   Shared by release and install smoke.
 
 inputs:
+  agent-artifact:
+    description: Optional same-run compatible release Agent artifact.
+    default: ""
+  reuse-pr-agent:
+    description: Look for a compatible successful exact-commit PR build on tags.
+    default: "false"
   cache-key:
     description: The rust-cache shared key for this platform.
     required: true
@@ -33,14 +39,28 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Look for an exact-commit release Agent
+      id: reuse
+      if: inputs.reuse-pr-agent == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ORT_MODE: ${{ inputs.ort-mode }}
+        RUSTFLAGS: ${{ runner.os == 'Linux' && '-C link-arg=-fuse-ld=mold' || '' }}
+      run: |
+        platform="$(node -p 'process.platform + "-" + process.arch')"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" reuse "$RUNNER_TEMP/reused-agent" "$platform" "$ORT_MODE" release "${GITHUB_REF_NAME#v}"
     - name: Set up Rust and ONNX Runtime
+      if: inputs.agent-artifact == '' && steps.reuse.outputs.reused != 'true'
       uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: ${{ inputs.ort-mode }}
         cache-key: ${{ inputs.cache-key }}
+        cache-workspace-crates: 'true'
+        artifact-cache-platform: ${{ inputs.reuse-pr-agent == 'true' && (runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64') || '' }}
 
     - name: Set up Bun
-      uses: oven-sh/setup-bun@v2
+      uses: ./.github/actions/bun-setup
       with:
         bun-version: 1.3.11
 
@@ -56,22 +76,26 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        bun install --frozen-lockfile --ignore-scripts
-        npm --prefix packages/butler-app/client/ui run build
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun install --frozen-lockfile --ignore-scripts
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" npm --prefix packages/butler-app/client/ui run build
 
     - name: Build the native Agent
+      if: inputs.agent-artifact == '' && steps.reuse.outputs.reused != 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
         ORT_MODE: ${{ inputs.ort-mode }}
+        BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+        BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
+        export GITHUB_REF_NAME="$BUILD_VERSION_REF"
         case "$ORT_MODE" in
           static-ort)
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
             ;;
           prebuilt-ort)
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
             ;;
           *)
             printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2
@@ -80,14 +104,28 @@ runs:
         esac
         echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+    - uses: actions/download-artifact@v4
+      if: inputs.agent-artifact != ''
+      with:
+        name: ${{ inputs.agent-artifact }}
+        path: ${{ runner.temp }}/shared-agent
+    - name: Use the shared release Agent
+      if: inputs.agent-artifact != ''
+      shell: bash
+      run: |
+        chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+        echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
+
     - name: Package and smoke the archive
       id: package
       shell: bash
       env:
         OUT: ${{ inputs.out }}
         BASE_URL: ${{ inputs.artifact-base-url }}
+        BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
+        export GITHUB_REF_NAME="$BUILD_VERSION_REF"
         platform="$(node -p 'process.platform + "-" + process.arch')"
         payload="$RUNNER_TEMP/butler-native-agent-payload"
         scripts=packages/butler-agent/rust/scripts
@@ -98,6 +136,6 @@ runs:
         mkdir -p "$OUT"
         python3 "$scripts/release-standalone-agent.py" gate --payload "$payload"
         python3 "$scripts/package-standalone-agent.py" --payload "$payload" --output "$archive" --artifact-url "$url"
-        python3 "$scripts/release-standalone-agent.py" smoke --archive "$archive" --artifact-url "$url"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$scripts/release-standalone-agent.py" smoke --archive "$archive" --artifact-url "$url"
         echo "platform=$platform" >> "$GITHUB_OUTPUT"
         echo "archive=$archive" >> "$GITHUB_OUTPUT"

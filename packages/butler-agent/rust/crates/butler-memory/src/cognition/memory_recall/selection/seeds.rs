@@ -31,6 +31,8 @@ pub(super) struct SeedGraph {
     pub temporal_episode_ids: Vec<String>,
     pub vector_episodes: Vec<RecallVectorMatch>,
     pub vector_searched: bool,
+    pub fts_episodes: Vec<String>,
+    pub fts_searched: bool,
     pub mentions: Vec<RecallMention>,
     pub raw_episode_ids: HashSet<String>,
 }
@@ -141,6 +143,8 @@ pub(super) fn expand(
         temporal_episode_ids: temporal.episode_ids,
         vector_episodes: vector.map_or_else(Vec::new, |current| current.episodes.clone()),
         vector_searched: vector.is_some(),
+        fts_episodes: Vec::new(),
+        fts_searched: false,
         mentions,
         raw_episode_ids,
     })

@@ -30,19 +30,20 @@
   width: 100%;
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.48;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--selection);
 }
 
 /* Press feedback: a quick press-in, released on --motion-fast. The scale
    token is 1 under reduced motion. The `scale` property composes with the
    transform a caller positions the button with (transform would replace it). */
-.button:active:not(:disabled) {
+.button:active:not(:disabled, [aria-disabled="true"]) {
   scale: var(--motion-scale-press);
   transition-duration: var(--motion-instant);
 }
@@ -52,7 +53,7 @@
   box-shadow: var(--focus-ring);
 }
 
-.variantDefault:hover:not(:disabled) {
+.variantDefault:hover:not(:disabled, [aria-disabled="true"]) {
   background: color-mix(in srgb, var(--primary) 88%, var(--color-mix-light));
 }
 
@@ -153,7 +154,7 @@
   color: var(--text-secondary);
 }
 
-.button.variantInline:hover:not(:disabled) {
+.button.variantInline:hover:not(:disabled, [aria-disabled="true"]) {
   background: transparent;
   text-decoration: underline;
   text-underline-offset: 3px;

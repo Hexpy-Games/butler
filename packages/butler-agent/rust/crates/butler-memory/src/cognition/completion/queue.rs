@@ -8,7 +8,6 @@ use std::path::Path;
 
 use rusqlite::{ErrorCode, params};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use super::TypedMemorySourceNotice;
 use super::observation::PublishedObservation;
@@ -58,10 +57,7 @@ pub(super) fn append(
             return Ok(());
         }
         let existed = path.exists();
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&path).map_err(io_error)?;
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(io_error)?;
         write_entry(&mut file, &request.to_string()).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
@@ -84,33 +80,6 @@ pub(super) fn append_typed(
 ) -> CognitionResult<String> {
     let job_id = notice.job_id()?;
     let source = notice.source_json()?;
-    let entry = format!(
-        "{{\"schema_version\":\"butler.memory-sync-request.v3\",\"job_id\":{},\"source\":{},\"created_at\":{}}}",
-        json_string(&job_id)?,
-        source,
-        json_string(created_at)?,
-    );
-    append_idempotent(root, &job_id, &entry, created_at)?;
-    Ok(job_id)
-}
-
-pub(super) fn append_feedback_quality(
-    root: &Path,
-    feedback_id: &str,
-    operation_id: &str,
-    revision: &str,
-    created_at: &str,
-) -> CognitionResult<String> {
-    let job_id = format!(
-        "{:x}",
-        Sha256::digest(format!("feedback-quality:{operation_id}").as_bytes())
-    );
-    let source = format!(
-        "{{\"kind\":\"explicit_record\",\"record_kind\":\"feedback\",\"record_id\":{},\"revision\":{},\"operation_id\":{}}}",
-        json_string(feedback_id)?,
-        json_string(revision)?,
-        json_string(operation_id)?,
-    );
     let entry = format!(
         "{{\"schema_version\":\"butler.memory-sync-request.v3\",\"job_id\":{},\"source\":{},\"created_at\":{}}}",
         json_string(&job_id)?,
@@ -158,10 +127,7 @@ fn append_idempotent(
             return Ok(());
         }
         let existed = path.exists();
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&path).map_err(io_error)?;
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(io_error)?;
         write_entry(&mut file, entry).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {

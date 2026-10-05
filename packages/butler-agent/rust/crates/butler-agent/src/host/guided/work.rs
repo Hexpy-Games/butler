@@ -3,6 +3,7 @@
 //! Work state always comes from the bound durable service. A tool's `ok` bit
 //! only triggers a re-read; it never grants report authority by itself.
 
+mod capability_recovery;
 mod closeout;
 mod decision;
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub(crate) struct GuidedWorkAdapter {
     tracking_mode: String,
     response_language: String,
     original_request: String,
+    capability_recovery: Option<capability_recovery::CapabilityRecovery>,
 }
 
 impl GuidedWorkAdapter {
@@ -41,7 +43,27 @@ impl GuidedWorkAdapter {
             tracking_mode,
             response_language,
             original_request,
+            capability_recovery: None,
         })
+    }
+
+    pub(crate) fn with_capability_recovery(
+        mut self,
+        granted: &[String],
+        journal: Arc<butler_turn::btcc::ToolJournalRepository>,
+    ) -> Self {
+        self.capability_recovery =
+            capability_recovery::CapabilityRecovery::new(&self.original_request, granted, journal);
+        self
+    }
+
+    async fn recovery_instruction(&self) -> Result<Option<String>, BtccError> {
+        if let Some(recovery) = &self.capability_recovery
+            && recovery.pending(&self.scope.turn_id).await?
+        {
+            return Ok(Some(recovery.instruction()));
+        }
+        Ok(None)
     }
 
     async fn bound(&self) -> Result<Option<WorkView>, BtccError> {
@@ -64,12 +86,15 @@ impl GuidedWorkAdapter {
     }
 
     async fn candidate(&self, text: &str) -> Result<CandidateDisposition, BtccError> {
+        if let Some(instruction) = self.recovery_instruction().await? {
+            return Ok(CandidateDisposition::Continue(instruction));
+        }
         if self.tracking_mode == "none" {
             return Ok(CandidateDisposition::Accepted(None));
         }
         let bound = self.bound().await?;
         if let decision::ReportDecision::Continue(observation) =
-            decision::decide(bound.as_ref(), &self.scope.turn_id, false)?
+            decision::decide(bound.as_ref(), &self.scope.turn_id, bound.is_some())?
         {
             let Some(bound) = bound.as_ref() else {
                 return Ok(CandidateDisposition::Accepted(None));
@@ -151,10 +176,13 @@ impl WorkPort for GuidedWorkAdapter {
             if !final_disposition {
                 return Ok(BatchDisposition::Continue);
             }
+            if self.recovery_instruction().await?.is_some() {
+                return Ok(BatchDisposition::Continue);
+            }
             let bound = self.bound().await?;
             Ok(
                 if matches!(
-                    decision::decide(bound.as_ref(), &self.scope.turn_id, false)?,
+                    decision::decide(bound.as_ref(), &self.scope.turn_id, bound.is_some())?,
                     decision::ReportDecision::Report(_)
                 ) && bound.is_some()
                 {

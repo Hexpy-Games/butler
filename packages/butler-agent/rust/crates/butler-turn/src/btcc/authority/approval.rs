@@ -1,11 +1,12 @@
 //! What a pending authority request would do, as structured data (#235):
 //! the kind of action, its targets, how many, a few examples and a risk
-//! level. The App composes the sentence in the user's language; nothing
-//! here is display text, and no absolute path leaves the machine: a folder
-//! is named by its label (the folder name, as projects show it), a file by
-//! its path inside the workspace.
+//! level. The App composes the sentence in the user's language. Legacy
+//! summaries use workspace labels; the local decision projection also carries
+//! exact operation paths, without tool contents or credentials.
 
 mod command_risk;
+mod operation;
+pub(super) use operation::exact_operation;
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -28,6 +29,9 @@ const FALLBACK_LABEL: &str = "workspace";
 /// The structured summary of a pending request (`approval` in its JSON).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorityApproval {
+    /// Exact decision facts for the local approval UI, never raw tool payloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<operation::ApprovalOperation>,
     pub action_kind: ApprovalActionKind,
     /// What the action touches, the folder first where there is one.
     pub targets: Vec<ApprovalTarget>,
@@ -39,6 +43,9 @@ pub struct AuthorityApproval {
     #[serde(default, skip_serializing_if = "no_truncation")]
     pub examples_truncated: Vec<bool>,
     pub risk: ApprovalRisk,
+    /// Declared observation intent; OS isolation is unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_access: Option<String>,
 }
 
 /// What kind of action waits for the user.
@@ -72,8 +79,8 @@ pub enum ApprovalActionKind {
 pub struct ApprovalTarget {
     pub kind: ApprovalTargetKind,
     /// A folder label (`garden`, `garden/app`), a path inside the
-    /// workspace, `server/tool` for a connector, or the operation's own
-    /// target name. Never an absolute path.
+    /// workspace, an exact absolute path, `server/tool` for a connector,
+    /// or the operation's own target name.
     pub path: String,
 }
 
@@ -82,7 +89,7 @@ pub struct ApprovalTarget {
 pub enum ApprovalTargetKind {
     Folder,
     File,
-    /// A target outside the workspace; path contains only its file name.
+    /// A target outside the workspace; path retains the exact requested path.
     Outside,
     Connector,
     Schedule,
@@ -145,6 +152,9 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
 fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApproval {
     let (kind, target, risk) = match tool {
         Some(ToolName::WriteFile | ToolName::EditFile) => return file_edits(facts),
+        Some(ToolName::ReadFile | ToolName::ListFiles | ToolName::GrepFiles) => {
+            return file_reads(facts);
+        }
         Some(ToolName::DeleteAutomation) => (
             ApprovalActionKind::ManageSchedule,
             ApprovalTargetKind::Schedule,
@@ -200,7 +210,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
                     } else {
                         ApprovalTargetKind::Outside
                     },
-                    path: relative.unwrap_or_else(|| file_name(Path::new(path))),
+                    path: relative.unwrap_or_else(|| path.to_owned()),
                 });
             }
         }
@@ -217,6 +227,8 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     let mut targets = vec![folder(workspace_label(facts.workspace))];
     targets.extend(files);
     AuthorityApproval {
+        operation: None,
+        command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
         count,
@@ -227,6 +239,38 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         } else {
             ApprovalRisk::Medium
         },
+    }
+}
+
+/// Exact observation paths are shown before reading, including paths outside the workspace.
+fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
+    let paths: Vec<String> = if let Some(requests) = facts.input["requests"].as_array() {
+        requests
+            .iter()
+            .filter_map(|r| r["path"].as_str().map(str::to_owned))
+            .collect()
+    } else {
+        vec![facts.input["root"].as_str().unwrap_or(".").to_owned()]
+    };
+    AuthorityApproval {
+        operation: None,
+        action_kind: ApprovalActionKind::Other,
+        targets: paths
+            .iter()
+            .map(|path| ApprovalTarget {
+                kind: if facts.capability == "read_file" {
+                    ApprovalTargetKind::File
+                } else {
+                    ApprovalTargetKind::Folder
+                },
+                path: path.clone(),
+            })
+            .collect(),
+        count: saturating_count(paths.len()),
+        examples_truncated: vec![false; paths.len()],
+        examples: paths,
+        risk: ApprovalRisk::Low,
+        command_access: None,
     }
 }
 
@@ -265,6 +309,13 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .into_iter()
         .unzip();
     AuthorityApproval {
+        operation: None,
+        command_access: (!butler_platform::command_sandbox::READ_ONLY_SANDBOX
+            && matches!(
+                facts.input.get("state_effect").and_then(Value::as_str),
+                Some("read_only" | "validation")
+            ))
+        .then(|| "read_only_unisolated".into()),
         action_kind: kind,
         targets: vec![target],
         count: 1,
@@ -293,6 +344,8 @@ fn single(
     risk: ApprovalRisk,
 ) -> AuthorityApproval {
     AuthorityApproval {
+        operation: None,
+        command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {
             kind,
@@ -334,7 +387,8 @@ fn workspace_label(workspace: &str) -> String {
 /// that is absolute outside the workspace, or climbs out of it, returns None.
 fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     let path = Path::new(path);
-    let relative = if path.is_absolute() {
+    // Persisted approval paths may use a rooted spelling without this host's drive prefix.
+    let relative = if path.has_root() {
         match path.strip_prefix(workspace) {
             Ok(inner) => inner,
             Err(_) => return None,

@@ -84,6 +84,7 @@ pub(super) fn test_context_facts() -> AppContextReadFacts {
         compaction_summary: None,
         session_usage: None,
         auth_mode: butler_models::models::UsageAuthMode::Unknown,
+        configuration: None,
         budget: AppContextBudgetFacts {
             context_window_tokens: 200_000,
             reserved_output_tokens: 8_000,
@@ -421,6 +422,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         runtime_info: Arc::new(RuntimeInfo),
         model_catalog: Arc::new(ModelCatalog),
         personalization: Arc::new(Personalization),
+        memory_management: Arc::new(Personalization),
         monitoring: Arc::new(UnprovidedMonitoring),
         project_dashboard_ledger: Arc::new(crate::gateway::TestProjectDashboardLedger),
         plan_decision_ledger: Arc::new(TestAppPlanDecisionLedger),
@@ -483,4 +485,15 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
         std::process::id(),
         Clock(AtomicU64::new(1)).new_uuid()
     ))
+}
+
+impl AppMemoryPort for Personalization {
+    fn execute(
+        &self,
+        _: AppMemoryCommand,
+        _: MemoryEventSink,
+        _: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<Value> {
+        Box::pin(async { Ok(Value::Null) })
+    }
 }

@@ -6,10 +6,12 @@
 mod access;
 pub mod agent_loop;
 mod authority;
+mod capability_handoff;
 pub use authority::questions::{
     AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions,
 };
+pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 mod continuation_budget;
 mod contracts;
 pub mod effects;
@@ -105,12 +107,12 @@ pub use effects::contracts::{
     EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedEdit, PreparedEditEntry,
     PreparedWrite, RecoveryHint, RegisteredEditPort, RegisteredWritePort,
 };
+pub use effects::effect_input_sha256;
 pub use effects::workspace_edit::{
     WorkspaceFileEditEffectAdapter, batch_target as workspace_edit_batch_target,
 };
 pub use effects::workspace_file::{WorkspaceFileEffectAdapter, normalized_workspace_effect_path};
 pub use effects::{EffectService, accepted_plan_effect_id};
-pub use effects::{effect_input_sha256, reviewed_effect_action_key};
 pub use execution_controls::{
     ControlResolution, ControlSource, ExecutionControls, ModelFallback, SubsessionResultContext,
     VerifiedExecutionControls,

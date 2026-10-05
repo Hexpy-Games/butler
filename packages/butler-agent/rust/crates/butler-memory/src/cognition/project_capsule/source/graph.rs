@@ -20,6 +20,16 @@ pub(super) fn list(
     deadline: i64,
 ) -> CognitionResult<Vec<ProjectGraphEvidence>> {
     check_active(cancellation, deadline)?;
+    if super::super::reset::was_reset(
+        data_root,
+        &crate::cognition::CognitionPathEnvironment {
+            memory_home: Some(memory_root.to_string_lossy().into_owned()),
+            ..Default::default()
+        },
+        project_id,
+    )? {
+        return Ok(Vec::new());
+    }
     let path = memory_root.join("db/graph.sqlite");
     ensure_data_authority(data_root, &[&path])?;
     if !path.exists() {
@@ -46,6 +56,16 @@ pub(super) fn are_current(
         return Ok(true);
     }
     check_active(cancellation, deadline)?;
+    if super::super::reset::was_reset(
+        data_root,
+        &crate::cognition::CognitionPathEnvironment {
+            memory_home: Some(memory_root.to_string_lossy().into_owned()),
+            ..Default::default()
+        },
+        project_id,
+    )? {
+        return Ok(false);
+    }
     let path = memory_root.join("db/graph.sqlite");
     ensure_data_authority(data_root, &[&path])?;
     if !path.exists() {

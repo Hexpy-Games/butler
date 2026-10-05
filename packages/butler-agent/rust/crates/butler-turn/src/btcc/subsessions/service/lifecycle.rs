@@ -5,6 +5,11 @@ use super::*;
 impl SubsessionService {
     /// Makes sure a child turn is bound to its relation's root Work.
     pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
+        self.bind_child_work(session, turn).await?;
+        self.notify_execution_changed(session).await
+    }
+
+    async fn bind_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
         let stored = self
             .repository
             .by_child(session.into())
@@ -71,17 +76,23 @@ impl SubsessionService {
         status: &str,
         summary: String,
     ) -> Result<(), BtccError> {
-        self.ensure_child_work(session, turn).await?;
+        self.bind_child_work(session, turn).await?;
         if status == "cancelled" {
             self.work
                 .abandon_bound_work_for_turn(turn.to_owned())
                 .await?;
         }
-        let mut evidence_refs = self
+        let disposition = self
             .work
             .bound_work_for_turn(turn.to_owned())
             .await?
-            .and_then(|work| work.latest_disposition)
+            .and_then(|work| work.latest_disposition);
+        let handoff = disposition
+            .as_ref()
+            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
+            .and_then(|value| value.next_condition.as_deref())
+            .and_then(crate::btcc::CapabilityHandoff::from_condition);
+        let mut evidence_refs = disposition
             .map(|disposition| disposition.evidence_snapshot)
             .unwrap_or_default();
         evidence_refs.extend(
@@ -94,15 +105,19 @@ impl SubsessionService {
         evidence_refs.dedup();
         self.repository
             .commit_result(
-                session.into(),
-                turn.into(),
-                status.into(),
-                summary,
-                evidence_refs,
+                crate::btcc::storage::ChildCompletion {
+                    session: session.into(),
+                    turn: turn.into(),
+                    status: status.into(),
+                    summary,
+                    evidence_refs,
+                    handoff,
+                },
                 (self.now)(),
             )
             .await
             .map_err(BtccError::from)?;
+        self.notify_execution_changed(session).await?;
         self.deliver_worker_results().await
     }
     /// Re-dispatches pending children, directions and worker results after a restart.

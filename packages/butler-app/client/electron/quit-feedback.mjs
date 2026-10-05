@@ -8,8 +8,19 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
   let started;
   let timer;
   let hideTimer;
+  let stageTimer;
+  let shown = false;
+  let displayedAt = 0;
+  let displayedStage = "saving";
   const pending = new Map();
   let state = { kind: "quit", stage: "saving", state: "working", forceQuit: false };
+  const publish = () => {
+    clearTimeout(stageTimer);
+    if (!shown || displayedStage === state.stage) { surface.update(state); return; }
+    const update = () => { surface.update(state); displayedStage = state.stage; displayedAt = performance.now(); };
+    const remaining = 600 - (performance.now() - displayedAt);
+    if (remaining > 0) stageTimer = setTimeout(update, remaining); else update();
+  };
   return {
     begin(mainWindow) {
       if (started !== undefined) return;
@@ -17,11 +28,13 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
       const hideMain = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); trace("main_hidden", started); };
       surface = createLifecycleWindow({ BrowserWindow, kind: "quit", locale: language,
         bounds: mainWindow?.getBounds(), timing: startupTiming,
-        onPainted() { clearTimeout(hideTimer); trace("window_shown", started); startupTiming("quit_shown"); hideMain(); },
+        onPainted() { shown = true; displayedAt = performance.now(); displayedStage = state.stage;
+          clearTimeout(hideTimer); trace("window_shown", started); startupTiming("quit_shown"); hideMain(); },
         onAction(action) { if (action === "log") return openLifecycleLog(state, startupTimings(), diagnostics()); },
       });
       hideTimer = setTimeout(hideMain, 300);
-      timer = setTimeout(() => { state.state = "timeout"; surface.update(state); trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
+      timer = setTimeout(() => { clearTimeout(stageTimer); state.state = "timeout"; surface.update(state);
+        displayedAt = performance.now(); displayedStage = state.stage; trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
     },
     phase(phase, edge = "event") {
       if (!surface) return;
@@ -37,10 +50,10 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
       else if (active.includes("runtime_close")) state.stage = "services";
       else if (active.some((item) => item.startsWith("app_") || item === "control_close")) state.stage = "connections";
       else if (phase === "port_release") state.stage = "finishing";
-      surface.update(state);
+      publish();
     },
-    failed() { clearTimeout(timer); state.state = "failed"; surface?.update(state); },
-    destroy() { clearTimeout(timer); clearTimeout(hideTimer); surface?.destroy(); startupTiming("quit_end"); },
+    failed() { clearTimeout(timer); clearTimeout(stageTimer); state.state = "failed"; surface?.update(state); },
+    destroy() { clearTimeout(timer); clearTimeout(hideTimer); clearTimeout(stageTimer); surface?.destroy(); startupTiming("quit_end"); },
   };
 }
 function trace(phase, started) {

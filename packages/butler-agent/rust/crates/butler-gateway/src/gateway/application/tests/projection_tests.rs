@@ -115,6 +115,7 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+// test-category: race
 #[tokio::test]
 async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
     let native = Arc::new(Native(Mutex::new(Vec::new())));
@@ -199,7 +200,7 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
         Some(crate::gateway::DeliveryState::DeliveredWithLimitations)
     ));
     assert_eq!(message.work_blocks.as_ref().map(Vec::len), Some(1));
-    app.close().await.unwrap();
+    cancelled_reader_joins_on_close(app).await;
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -321,4 +322,56 @@ async fn staged_and_receipt(app: &AppApplication) -> (i64, Option<String>) {
         })
         .await
         .unwrap()
+}
+
+// A cancelled caller must not release its reader or shutdown gate before the
+// admitted query finishes. Another reader must remain usable in the meantime.
+async fn cancelled_reader_joins_on_close(app: AppApplication) {
+    let app = Arc::new(app);
+    let storage = app.storage.clone();
+    let (started, ready) = tokio::sync::oneshot::channel();
+    let (release, blocked) = std::sync::mpsc::channel();
+    let query = tokio::spawn(async move {
+        storage
+            .read(move |db| {
+                started.send(()).unwrap();
+                blocked.recv().unwrap();
+                assert_eq!(
+                    db.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))
+                        .unwrap(),
+                    1
+                );
+                Ok(())
+            })
+            .await
+    });
+    ready.await.unwrap();
+    query.abort();
+    assert!(query.await.unwrap_err().is_cancelled());
+    assert_eq!(
+        app.storage
+            .read(|db| {
+                db.query_row(
+                    "SELECT COUNT(*) FROM app_terminal_turn_projections",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .unwrap(),
+        1
+    );
+    let (started, ready) = tokio::sync::oneshot::channel();
+    let closing = tokio::spawn(async move {
+        started.send(()).unwrap();
+        app.close().await
+    });
+    ready.await.unwrap();
+    assert!(
+        !closing.is_finished(),
+        "close must wait for the cancelled query"
+    );
+    release.send(()).unwrap();
+    closing.await.unwrap().unwrap();
 }

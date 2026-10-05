@@ -3,6 +3,7 @@ import type { TimelineEvent } from "@/app/types.ts";
 const SESSION_VIEW_REFRESH_INTERVAL_MS = 1_000;
 
 const SESSION_VIEW_REFRESH_EVENT_TYPES = new Set([
+  "subsession.changed",
   "question.answered",
   "message.created",
   "message.updated",
@@ -36,7 +37,7 @@ interface ReconciliationStore {
 }
 
 export interface LiveSessionReconciliation {
-  requestRefresh(): void;
+  requestRefresh(immediate?: boolean): void;
   dispose(): void;
 }
 
@@ -50,6 +51,7 @@ export function createLiveSessionReconciliation(
   let refreshDirty = false;
   let lastRefreshStartedAt = Number.NEGATIVE_INFINITY;
   let refreshRequestToken = 0;
+  let urgent = false;
 
   const isCurrentSession = () => {
     const state = store.getState();
@@ -71,7 +73,7 @@ export function createLiveSessionReconciliation(
     }
     const remainingMs = Math.max(
       0,
-      lastRefreshStartedAt + SESSION_VIEW_REFRESH_INTERVAL_MS - Date.now(),
+      urgent ? 0 : lastRefreshStartedAt + SESSION_VIEW_REFRESH_INTERVAL_MS - Date.now(),
     );
     if (remainingMs > 0) {
       refreshTimer = setTimeout(refreshWhenDue, remainingMs);
@@ -80,6 +82,7 @@ export function createLiveSessionReconciliation(
 
     const currentSessionId = sessionId();
     refreshDirty = false;
+    urgent = false;
     const startedRefreshToken = ++refreshRequestToken;
     refreshInFlight = true;
     lastRefreshStartedAt = Date.now();
@@ -110,9 +113,14 @@ export function createLiveSessionReconciliation(
       });
   };
 
-  const requestRefresh = () => {
+  const requestRefresh = (immediate = false) => {
     if (!isCurrentSession()) return;
     refreshDirty = true;
+    urgent ||= immediate;
+    if (immediate && refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = undefined;
+    }
     if (refreshInFlight || refreshTimer) return;
     refreshWhenDue();
   };

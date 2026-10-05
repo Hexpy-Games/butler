@@ -1,0 +1,72 @@
+name: Changed CI inputs
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        description: Calling workflow whose successful inputs can be reused
+        type: string
+        required: true
+    outputs:
+      rust:
+        description: Selected rust inputs
+        value: ${{ jobs.paths.outputs.rust }}
+      ui:
+        description: Selected ui inputs
+        value: ${{ jobs.paths.outputs.ui }}
+      site:
+        description: Selected site inputs
+        value: ${{ jobs.paths.outputs.site }}
+      ds:
+        description: Selected ds inputs
+        value: ${{ jobs.paths.outputs.ds }}
+      package:
+        description: Selected package inputs
+        value: ${{ jobs.paths.outputs.package }}
+      install:
+        description: Selected install inputs
+        value: ${{ jobs.paths.outputs.install }}
+      linux-package:
+        description: Selected linux-package inputs
+        value: ${{ jobs.paths.outputs.linux-package }}
+      workflows:
+        description: Selected workflows inputs
+        value: ${{ jobs.paths.outputs.workflows }}
+      docs-only:
+        description: Selected docs-only inputs
+        value: ${{ jobs.paths.outputs.docs-only }}
+      electron:
+        description: Selected electron inputs
+        value: ${{ jobs.paths.outputs.electron }}
+      licenses:
+        description: Selected licenses inputs
+        value: ${{ jobs.paths.outputs.licenses }}
+      selection:
+        description: Selected selection inputs
+        value: ${{ jobs.paths.outputs.selection }}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.paths.outputs.rust }}
+      ui: ${{ steps.paths.outputs.ui }}
+      site: ${{ steps.paths.outputs.site }}
+      ds: ${{ steps.paths.outputs.ds }}
+      package: ${{ steps.paths.outputs.package }}
+      install: ${{ steps.paths.outputs.install }}
+      linux-package: ${{ steps.paths.outputs.linux-package }}
+      workflows: ${{ steps.paths.outputs.workflows }}
+      docs-only: ${{ steps.paths.outputs.docs-only }}
+      electron: ${{ steps.paths.outputs.electron }}
+      licenses: ${{ steps.paths.outputs.licenses }}
+      selection: ${{ steps.paths.outputs.selection }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/changes
+        id: paths
+        with:
+          workflow: ${{ inputs.workflow }}

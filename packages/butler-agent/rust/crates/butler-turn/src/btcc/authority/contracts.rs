@@ -299,6 +299,9 @@ pub(crate) struct AuthorityRecord {
 
 #[derive(Clone, Debug)]
 pub struct ConversationPermission {
+    pub capability: String,
+    pub target: String,
+    pub cwd: Option<String>,
     pub grant_ref: String,
     pub(crate) owner_session_id: String,
     pub(crate) workspace_path: String,
@@ -434,12 +437,18 @@ pub(crate) trait AuthorityRepository {
     fn retains_approval_claim(&mut self, turn_id: &str) -> AuthorityResult<bool>;
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool>;
     fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>>;
+    fn permission_records(&mut self, _owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
+        Ok(Vec::new())
+    }
     fn revoke_permission(&mut self, owner: &str, grant_ref: &str, now: &str)
     -> AuthorityResult<()>;
     fn resume_source(
         &mut self,
         request_ref: &str,
     ) -> AuthorityResult<Option<AuthorityResumeSource>>;
+    fn attention_owners(&mut self, _owners: &[String]) -> AuthorityResult<Vec<String>> {
+        Ok(Vec::new())
+    }
     fn waiting_source_sessions(&mut self) -> AuthorityResult<Vec<String>>;
     fn find_identity(&mut self, sha: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn find_slot(
@@ -450,13 +459,7 @@ pub(crate) trait AuthorityRepository {
     fn insert(&mut self, record: &AuthorityRecord) -> AuthorityResult<()>;
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>>;
-    fn question_history(
-        &mut self,
-        owner: &str,
-        turns: &[String],
-    ) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>>;
-    fn source_work_eligible(&mut self, session: &str, work: &str) -> AuthorityResult<bool>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()>;
     fn record_question_followup(

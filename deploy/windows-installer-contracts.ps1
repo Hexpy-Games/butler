@@ -15,7 +15,7 @@ try {
         try {
             cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -- -D warnings
             if ($LASTEXITCODE) { throw 'Windows platform clippy failed' }
-            cargo test --locked --profile ci-fast --target x86_64-pc-windows-msvc -p butler-e2e --test updates --test update_channels --test process_names --no-run --message-format=json > "$root/compile.jsonl"
+            cargo test --locked --profile ci-fast --target x86_64-pc-windows-msvc -p butler-e2e --test e2e --no-run --message-format=json > "$root/compile.jsonl"
             if ($LASTEXITCODE) { throw 'Update harness build failed' }
         } finally { Pop-Location }
         foreach ($line in Get-Content "$root/compile.jsonl") {
@@ -37,7 +37,9 @@ try {
             $env:HOME = Join-Path $root ([guid]::NewGuid())
             $env:BUTLER_DATA = Join-Path $root ([guid]::NewGuid())
             New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-            & "$out/$test.exe" --nocapture
+            $listed = & "$out/e2e.exe" "$test`::" --list
+            if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty update E2E selection: $test" }
+            & "$out/e2e.exe" "$test`::" --nocapture --test-threads=8
             if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
         }
     }

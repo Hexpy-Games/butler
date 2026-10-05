@@ -8,15 +8,12 @@ on:
       - "CONTRIBUTING.md"
       - "assets/readme/**"
   pull_request:
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -32,138 +29,21 @@ defaults:
     working-directory: packages/butler-agent/rust
 
 jobs:
-  platform-paths:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      macos: ${{ steps.paths.outputs.macos }}
-      windows: ${{ steps.paths.outputs.windows }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Detect platform-specific PR checks
-        id: paths
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            macos:
-              - 'packages/butler-agent/rust/crates/butler-platform/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/install_cmd.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/uninstall_cmd.rs'
-              - 'packages/butler-agent/rust/Cargo.lock'
-              - 'packages/butler-app/client/electron/**'
-              - 'deploy/macos/**'
-              - 'deploy/install.sh'
-              - 'deploy/install-smoke.sh'
-              - 'deploy/app/**'
-              - 'packages/butler-agent/rust/scripts/package-standalone-agent.py'
-              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
-              - 'packages/butler-agent/rust/scripts/release-standalone-agent.py'
-              - 'packages/butler-app/scripts/release/**'
-              - 'packages/butler-npm/**'
-              - '.github/actions/build-agent-archive/**'
-              - '.github/actions/e2e-stub/**'
-              - '.github/actions/rust-agent-setup/**'
-              - '.github/workflows/**'
-            windows:
-              - 'packages/butler-agent/rust/crates/butler-platform/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/main.rs'
-              - 'packages/butler-agent/rust/Cargo.lock'
-              - '.github/workflows/rust-quality.yml'
-              - '.github/workflows/windows.yml'
-
-  macos-arm64:
-    name: Rust checks (macOS arm64)
-    needs: platform-paths
-    if: >-
-      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.macos == 'true')
-    runs-on: macos-15
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: pr-macos-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Run doctests when present
-        run: |
-          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
-          fi
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-      - name: Run E2E stub tier
-        uses: ./.github/actions/e2e-stub
-        with:
-          partition: 1/1
-          filterset: "not test(/^perf_/)"
-          run-idle-disk: "true"
-      - name: Assert runner home untouched
-        if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
-
-  linux-arm64:
-    name: Rust checks (Linux arm64)
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: full-linux-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Assert runner home untouched
-        if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: post-merge-ci.yml
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
     # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
-    needs: platform-paths
+    needs: changes
     outputs:
       compile: ${{ steps.check.outcome }}
     if: >-
-      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.windows == 'true')
+      needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -183,7 +63,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
             --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
       - name: Summarize
         if: always()
@@ -222,18 +102,13 @@ jobs:
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
 
-  install-full:
-    name: Full install smoke
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/install-smoke.yml
-
   nightly-issue:
     name: Report main or nightly failure
     if: >-
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [platform-paths, macos-arm64, linux-arm64, windows-check, install-full]
+    needs: [changes, windows-check]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}
@@ -258,3 +133,24 @@ jobs:
           else
             gh issue create --title "$title" --body "$body"
           fi
+
+  gate:
+    name: post-merge-ci gate
+    if: always()
+    needs: [changes, windows-check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"rust": ["windows-check"]}'
+          workflow: post-merge-ci.yml
+      - name: Require selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"windows-check": ["rust"]}'
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py

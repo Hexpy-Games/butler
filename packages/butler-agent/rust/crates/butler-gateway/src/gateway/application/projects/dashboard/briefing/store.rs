@@ -43,7 +43,7 @@ pub(super) async fn request(
     }
     let preferences_revision = application
         .storage
-        .execute({
+        .read({
             let project_id = project_id.to_owned();
             move |db| {
                 db.query_row(
@@ -147,7 +147,7 @@ async fn view_for_pack(
     let language = pack.language.clone();
     let cached = application
         .storage
-        .execute(move |db| {
+        .read(move |db| {
             db.query_row(
                 "SELECT content_json,generated_at,source_digest FROM project_dashboard_briefing_cache \
                  WHERE project_id=?1 AND response_language=?2 AND generator_version=?3",
@@ -292,7 +292,7 @@ async fn finish_generation(
         .execute(move |db| {
             owner_for_write
                 .with_open(|| {
-                    let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                    let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                     transaction
                         .execute(
                             "INSERT INTO project_dashboard_briefing_cache \

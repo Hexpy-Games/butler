@@ -2,6 +2,8 @@
 
 mod artifact;
 mod bound;
+mod changed_files;
+pub(super) use changed_files::without_details;
 mod exact;
 mod retained;
 mod work;
@@ -17,6 +19,8 @@ const MAX_BYTES: usize = 50 * 1024;
 /// The same tool-specific structured view used for provider results, before
 /// either caller applies its own byte budget.
 pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, BtccError> {
+    let filtered = changed_files::without_details(raw)?;
+    let raw = filtered.as_str();
     let candidate = tool_payload(raw, keys(name), 0)?.unwrap_or(raw);
     if work::supports(name) && candidate.trim().starts_with('{') {
         work::project_raw(name, candidate)

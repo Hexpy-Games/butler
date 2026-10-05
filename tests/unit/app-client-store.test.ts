@@ -90,7 +90,6 @@ afterEach(() => {
         mode: "off",
         extractorModel: "default",
         extractorReasoningEffort: "medium",
-        clearProfile: false,
       },
     },
     activeSection: "general",
@@ -579,7 +578,6 @@ test("persona preset selection updates only the personalization draft until appl
         mode: "off",
         extractorModel: "default",
         extractorReasoningEffort: "medium",
-        clearProfile: false,
       },
     },
   });
@@ -744,7 +742,6 @@ test("profiling controls are saved only through the personalization apply path",
         mode: "deep",
         extractorModel: "default",
         extractorReasoningEffort: "medium",
-        clearProfile: true,
       },
     },
   });
@@ -761,14 +758,12 @@ test("profiling controls are saved only through the personalization apply path",
   expect(JSON.parse(String(fetchCalls[0].init?.body))).toEqual({
     profiling: {
       mode: "deep",
-      clear_profile: true,
     },
   });
   expect(useSettingsUIStore.getState().personalizationDraft.profiling).toEqual({
     mode: "deep",
     extractorModel: "default",
     extractorReasoningEffort: "medium",
-    clearProfile: false,
   });
 });
 
@@ -825,7 +820,6 @@ test("response language is saved through the personalization apply path", async 
         mode: "off",
         extractorModel: "default",
         extractorReasoningEffort: "medium",
-        clearProfile: false,
       },
     },
   });
@@ -902,7 +896,6 @@ test("profile migration import reports immediate profile application result", as
         mode: "deep",
         extractorModel: "default",
         extractorReasoningEffort: "medium",
-        clearProfile: false,
       },
     },
   });

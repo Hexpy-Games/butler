@@ -42,7 +42,7 @@ function apply(next: Partial<State>) {
   };
   for (const [name, value] of Object.entries(values)) {
     const element = slots[name]!;
-    if (name === "line" && element.textContent !== value && !reduced) {
+    if (name === "line" && element.textContent !== value && !reduced && document.documentElement.dataset.painted === "true") {
       const outgoing = lineFrame.cloneNode(true) as HTMLElement;
       outgoing.removeAttribute("data-slot");
       outgoing.querySelector("[data-slot]")?.removeAttribute("data-slot");

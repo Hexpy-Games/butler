@@ -1,0 +1,379 @@
+//! Schedules (예약 작업) run with their own access mode (#237), whatever the
+//! access mode of the conversation they post into.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test assertions"
+)]
+
+use butler_platform::sqlite;
+use std::time::Duration;
+
+use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
+use butler_e2e::e2e::scenario::{Scenario, Setup, turn_timeout};
+use butler_e2e::e2e::{HarnessError, nonce};
+use serde_json::{Value, json};
+
+async fn new_chat(s: &Scenario, title: &str) -> Result<String, HarnessError> {
+    let reply =
+        s.gw.post("/sessions", json!({"kind": "chat", "title": title}))
+            .await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    Ok(reply.data()["session"]["id"].as_str().unwrap().to_owned())
+}
+
+async fn set_chat_access(s: &Scenario, chat: &str, access: &str) -> Result<(), HarnessError> {
+    let reply =
+        s.gw.patch(
+            &format!("/sessions/{chat}/controls"),
+            json!({"access_mode": access}),
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    Ok(())
+}
+
+/// Creates an hourly schedule; `access` is left out when `None`.
+async fn create(
+    s: &Scenario,
+    chat: &str,
+    prompt: &str,
+    access: Option<&str>,
+) -> Result<Value, HarnessError> {
+    let mut body = json!({"title": "E2E schedule", "prompt_body": prompt,
+        "target_session_id": chat, "interval_seconds": 3600});
+    if let Some(access) = access {
+        body["access_mode"] = access.into();
+    }
+    let reply = s.gw.post("/automations", body).await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    Ok(reply.data()["automation"].clone())
+}
+
+/// Runs the schedule now and waits until its turn waits for an approval or ends.
+async fn run(s: &Scenario, chat: &str, schedule: &Value) -> Result<(String, Value), HarnessError> {
+    let id = schedule["id"].as_str().unwrap();
+    let reply =
+        s.gw.post(&format!("/automations/{id}/run"), json!({}))
+            .await?;
+    assert_eq!(reply.status, 202, "{}", reply.text);
+    let turn_id = reply.data()["run"]["turn_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no turn for the run: {}", reply.text))
+        .to_owned();
+    let states: Vec<&str> = TERMINAL
+        .iter()
+        .copied()
+        .chain(["waiting_for_form"])
+        .collect();
+    let turn =
+        s.gw.wait_turn(chat, &turn_id, &states, Duration::from_secs(turn_timeout()))
+            .await?;
+    Ok((turn_id, turn))
+}
+
+fn make_file(name: &str) -> String {
+    format!("Create a file named {name} in your workspace containing exactly the text: scheduled")
+}
+
+/// ACC-06 (#235) — the pending request says what it would do as data the
+/// App phrases in the user's language: edit one file, named inside the
+/// workspace, in the folder named by its label (never an absolute path),
+/// medium risk.
+fn assert_file_edit_approval(
+    request: &Value,
+    workspace_label: &str,
+    file: &str,
+    workspace: &std::path::Path,
+) {
+    assert_eq!(
+        request["approval"],
+        json!({"operation":{"tool":"write_file","access":"change","targets":[workspace.join(file)]},"action_kind": "edit_files", "count": 1, "examples": [file], "risk": "medium",
+               "targets": [{"kind": "folder", "path": workspace_label},
+                           {"kind": "file", "path": file}]}),
+        "{request}"
+    );
+}
+
+/// SCHED-01 — An ask-first schedule posting into a full-access conversation
+/// asks before its effect; a full-access schedule posting into an ask-first
+/// conversation runs without asking.
+#[tokio::test]
+async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let token = nonce();
+    let s = Setup::new("SCHED-01")?
+        .cassette("SCHED-01")
+        .placeholder("NONCE", &token)
+        .start()
+        .await?;
+    assert_eq!(s.gw.settings().await?["access_mode"], "full_access");
+
+    let asked = format!("ask-{token}.txt");
+    let schedule = create(&s, "general", &make_file(&asked), Some("ask_first")).await?;
+    assert_eq!(schedule["access_mode"], "ask_first", "{schedule}");
+    let (turn_id, turn) = run(&s, "general", &schedule).await?;
+    assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+    let requests = s.gw.approval_requests("general").await?;
+    let request = requests
+        .iter()
+        .find(|request| request["source_turn_id"] == turn_id.as_str())
+        .unwrap_or_else(|| panic!("no approval request for the ask-first schedule: {requests:?}"));
+    let label = s.sandbox.data.file_name().unwrap().to_str().unwrap();
+    assert_file_edit_approval(request, label, &asked, &s.sandbox.data);
+    assert!(
+        !s.sandbox.data.join(&asked).exists(),
+        "the ask-first schedule wrote before approval"
+    );
+
+    let strict = new_chat(&s, "strict").await?;
+    set_chat_access(&s, &strict, "ask_first").await?;
+    let written = format!("full-{token}.txt");
+    let schedule = create(&s, &strict, &make_file(&written), Some("full_access")).await?;
+    assert_eq!(schedule["access_mode"], "full_access", "{schedule}");
+    let (_, turn) = run(&s, &strict, &schedule).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let requests = s.gw.approval_requests(&strict).await?;
+    assert!(
+        requests.is_empty(),
+        "the full-access schedule asked: {requests:?}"
+    );
+    let content = std::fs::read_to_string(s.sandbox.data.join(&written))?;
+    assert_eq!(content.trim(), "scheduled");
+    let controls = s.gw.get(&format!("/sessions/{strict}/controls")).await?;
+    assert!(
+        controls.text.contains("ask_first"),
+        "the run changed the conversation's mode: {}",
+        controls.text
+    );
+    s.finish().await
+}
+
+/// SCHED-02 — The schedule API carries `access_mode`: create takes it (or the
+/// target conversation's current mode), update replaces it, reads return it,
+/// and an unknown mode is refused.
+#[tokio::test]
+async fn sched_02_schedule_api_carries_access_mode() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("SCHED-02")?.start().await?;
+    let inherited = create(&s, "general", "Summarize my day.", None).await?;
+    assert_eq!(inherited["access_mode"], "full_access", "{inherited}");
+
+    let strict = new_chat(&s, "strict").await?;
+    set_chat_access(&s, &strict, "ask_first").await?;
+    let inherited = create(&s, &strict, "Summarize my day.", None).await?;
+    assert_eq!(inherited["access_mode"], "ask_first", "{inherited}");
+
+    let id = inherited["id"].as_str().unwrap();
+    let updated =
+        s.gw.patch(
+            &format!("/automations/{id}"),
+            json!({"access_mode": "full_access"}),
+        )
+        .await?;
+    assert_eq!(updated.status, 200, "{}", updated.text);
+    assert_eq!(updated.data()["automation"]["access_mode"], "full_access");
+    let read = s.gw.get(&format!("/automations/{id}")).await?;
+    assert_eq!(read.data()["automation"]["access_mode"], "full_access");
+    let listed = s.gw.get("/automations").await?;
+    assert!(
+        listed.data()["automations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|schedule| schedule["access_mode"].is_string()),
+        "{}",
+        listed.text
+    );
+
+    let refused =
+        s.gw.post(
+            "/automations",
+            json!({"title": "E2E schedule", "prompt_body": "Summarize my day.",
+                "target_session_id": "general", "interval_seconds": 3600,
+                "access_mode": "sometimes"}),
+        )
+        .await?;
+    assert_eq!(refused.status, 400, "{}", refused.text);
+    s.finish().await
+}
+
+/// SCHED-03 — The CLI command is `butler schedule`; `butler automation` still
+/// works, hidden from help, with one deprecation line on stderr.
+#[tokio::test]
+async fn sched_03_cli_is_schedule_with_a_deprecated_alias() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("SCHED-03")?.start().await?;
+    let current = s.agent.cli(&["schedule", "list", "--json"])?;
+    assert_eq!(current.code, Some(0), "{}", current.stderr);
+    assert_eq!(current.json()?["command"], "butler schedule list");
+    assert!(!current.stderr.contains("deprecated"), "{}", current.stderr);
+    let alias = s.agent.cli(&["automation", "list", "--json"])?;
+    assert_eq!(alias.code, Some(0), "{}", alias.stderr);
+    assert_eq!(alias.json()?, current.json()?);
+    assert_eq!(
+        alias
+            .stderr
+            .matches("butler automation is deprecated; use butler schedule.")
+            .count(),
+        1,
+        "{}",
+        alias.stderr
+    );
+    let help = s.agent.cli(&["help", "--json"])?;
+    assert!(
+        help.stdout.contains("butler schedule list"),
+        "{}",
+        help.stdout
+    );
+    assert!(
+        !help.stdout.contains("butler automation"),
+        "{}",
+        help.stdout
+    );
+    s.finish().await
+}
+
+/// SCHED-04 — API and CLI share App storage; legacy JSON imports once and stays on disk.
+#[tokio::test]
+async fn sched_04_one_store_imports_and_shares_schedules() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("SCHED-04")?;
+    let legacy_dir = setup.sandbox.data.join("automations");
+    std::fs::create_dir_all(&legacy_dir)?;
+    let raw = json!({
+        "version":1,"id":"legacy-e2e","title":"Legacy","prompt":"Keep this prompt",
+        "session_id":"general","status":"active",
+        "schedule":{"type":"once","run_at":"2099-01-01T00:00:00.000Z"},
+        "next_run_at":"2099-01-01T00:00:00.000Z","last_run_at":null,
+        "run_count":2,"created_at":"2025-01-01T00:00:00.000Z",
+        "updated_at":"2025-01-01T00:00:00.000Z","extra_field":"retained"
+    })
+    .to_string();
+    let legacy_file = legacy_dir.join("legacy-e2e.json");
+    std::fs::write(&legacy_file, &raw)?;
+    let mut s = setup.start().await?;
+    let imported = s.gw.get("/automations/legacy-e2e").await?;
+    assert_eq!(imported.status, 200, "{}", imported.text);
+    assert_eq!(imported.data()["automation"]["schedule_type"], "once");
+    let api_created =
+        s.gw.post(
+            "/automations",
+            json!({
+                "title":"API schedule", "prompt_body":"API prompt",
+                "target_session_id":"general", "interval_seconds":3600
+            }),
+        )
+        .await?;
+    assert_eq!(api_created.status, 201, "{}", api_created.text);
+    let api_id = api_created.data()["automation"]["id"].as_str().unwrap();
+    let cli = s.agent.cli(&["schedule", "list", "--json"])?;
+    assert_eq!(cli.code, Some(0), "{}", cli.stderr);
+    assert!(
+        cli.json()?["data"]["automations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == "legacy-e2e")
+    );
+    assert!(
+        cli.json()?["data"]["automations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == api_id)
+    );
+    let retimed = s.agent.cli(&[
+        "schedule",
+        "update",
+        api_id,
+        "--schedule-type",
+        "once",
+        "--run-at",
+        "2099-01-02T00:00:00Z",
+        "--json",
+    ])?;
+    assert_eq!(retimed.code, Some(0), "{}", retimed.stderr);
+    assert_eq!(
+        s.gw.get(&format!("/automations/{api_id}")).await?.data()["automation"]["schedule_type"],
+        "once"
+    );
+    let edited = s.agent.cli(&[
+        "schedule",
+        "update",
+        "legacy-e2e",
+        "--title",
+        "Edited",
+        "--json",
+    ])?;
+    assert_eq!(edited.code, Some(0), "{}", edited.stderr);
+    assert_eq!(
+        s.gw.get("/automations/legacy-e2e").await?.data()["automation"]["title"],
+        "Edited"
+    );
+    let created = s.agent.cli(&[
+        "schedule",
+        "create",
+        "--session",
+        "general",
+        "--prompt",
+        "CLI prompt",
+        "--interval-seconds",
+        "3600",
+        "--json",
+    ])?;
+    assert_eq!(created.code, Some(0), "{}", created.stderr);
+    let id = created.json()?["data"]["automation"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(s.gw.get(&format!("/automations/{id}")).await?.status, 200);
+    let api_edited =
+        s.gw.patch(
+            &format!("/automations/{id}"),
+            json!({"title":"API edited CLI schedule"}),
+        )
+        .await?;
+    assert_eq!(api_edited.status, 200, "{}", api_edited.text);
+    let cli_read = s.agent.cli(&["schedule", "show", &id, "--json"])?;
+    assert_eq!(
+        cli_read.json()?["data"]["automation"]["title"],
+        "API edited CLI schedule"
+    );
+    s.restart().await?;
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+        .map_err(|error| HarnessError(error.to_string()))?;
+    let count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM app_automations WHERE id='legacy-e2e'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(count, 1);
+    let retained: String = db
+        .query_row(
+            "SELECT legacy_record_json FROM app_automations WHERE id='legacy-e2e'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(retained, raw);
+    let marker: String = db
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key='schedule_json_import_v1'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(marker, "1");
+    let plan: String = db.query_row(
+        "EXPLAIN QUERY PLAN SELECT id FROM app_automation_runs WHERE state='queued' ORDER BY rowid LIMIT 20",
+        [], |row| row.get(3),
+    ).map_err(|error| HarnessError(error.to_string()))?;
+    assert!(plan.contains("app_automation_runs_queued_idx"), "{plan}");
+    assert_eq!(std::fs::read_to_string(legacy_file)?, raw);
+    drop(db);
+    s.finish().await
+}

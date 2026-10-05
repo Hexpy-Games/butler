@@ -240,7 +240,7 @@ pub struct AnsweredQuestion {
     pub response: UserQuestionResponse,
 }
 impl PrincipalAuthority {
-    /// A fresh session projection, read in one SQLite lane operation. Only pending
+    /// A fresh session projection, read in one WAL snapshot. Only pending
     /// requests and answers belonging to visible turns are hydrated and decoded.
     pub async fn session_requests(
         &self,
@@ -248,20 +248,20 @@ impl PrincipalAuthority {
         turns: Vec<String>,
     ) -> AuthorityResult<(Vec<AuthorityRequestProjection>, Vec<AnsweredQuestion>)> {
         let collation = self.collation.clone();
-        self.in_lane(move |repo| {
-            let pending = repo
-                .list_pending(&owner)?
-                .iter()
-                .map(|record| projection::request(record, &collation))
-                .collect::<AuthorityResult<Vec<_>>>()?;
-            let answers = repo
-                .question_history(&owner, &turns)?
-                .into_iter()
-                .map(answered_question)
-                .collect::<AuthorityResult<Vec<_>>>()?;
-            Ok((pending, answers))
-        })
-        .await
+        let (pending, answers) = self
+            .storage
+            .authority_session_requests(owner, turns)
+            .await
+            .map_err(|error| AuthorityError::storage(error.code(), error.message()))??;
+        let pending = pending
+            .iter()
+            .map(|record| projection::request(record, &collation))
+            .collect::<AuthorityResult<Vec<_>>>()?;
+        let answers = answers
+            .into_iter()
+            .map(answered_question)
+            .collect::<AuthorityResult<Vec<_>>>()?;
+        Ok((pending, answers))
     }
 }
 

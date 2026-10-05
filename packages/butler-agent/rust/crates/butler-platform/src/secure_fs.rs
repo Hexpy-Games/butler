@@ -53,6 +53,10 @@ pub const DIRECTORY_SYNC: bool = sys::DIRECTORY_SYNC;
 /// its place with two [`rename`]s, and journal the step between them.
 pub const ATOMIC_EXCHANGE: bool = sys::ATOMIC_EXCHANGE;
 
+/// Whether tempfile's native persist APIs support long filenames without host
+/// settings changes. Windows callers must use the standard filesystem writer.
+pub const TEMPFILE_LONG_PATH_PERSISTENCE: bool = !cfg!(windows);
+
 /// A permission mode on hosts with [`PERMISSION_MODES`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileMode(#[cfg_attr(not(unix), allow(dead_code))] u32);
@@ -149,6 +153,12 @@ pub fn file_mode(metadata: &Metadata) -> Option<FileMode> {
     sys::file_mode(metadata)
 }
 
+/// Current file or directory attributes, queried independently of directory
+/// enumeration caches. Does not follow links, read contents or modify the entry.
+pub fn current_metadata(path: &Path) -> io::Result<Metadata> {
+    sys::current_metadata(path)
+}
+
 /// Sets the permission mode of the file at `path`; `None` without
 /// [`PERMISSION_MODES`].
 pub fn set_file_mode(path: &Path, mode: FileMode) -> Option<io::Result<()>> {
@@ -180,6 +190,26 @@ pub fn restrict_file(path: &Path) -> Option<io::Result<()>> {
 /// without [`OWNER_ONLY`].
 pub fn restrict_open_file(file: &File) -> Option<io::Result<()>> {
     sys::restrict_open_file(file)
+}
+
+/// Opens a private append stream, refusing a final symlink where supported
+/// and repairing broad legacy modes on the opened inode. Callers choose the
+/// stream's flush/durability policy and establish its private parent.
+pub fn append_private(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    owner_only(&mut options);
+    no_follow(&mut options);
+    let file = options.open(path)?;
+    restrict_open_file(&file).unwrap_or(Ok(()))?;
+    Ok(file)
+}
+
+/// Advises the kernel to discard this fixture file's cached pages, for cold
+/// performance measurements. Never changes the host's global cache policy.
+#[cfg(feature = "test-support")]
+pub fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
+    sys::discard_cached_pages(file)
 }
 
 /// Restricts an existing directory to its owner; `None` without
@@ -274,6 +304,13 @@ pub fn replace_private<E>(
 /// is retried for up to a second there before the error is returned.
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     sys::rename(from, to)
+}
+
+/// A logical record key as a regular filename component. Unix keeps its
+/// existing spelling; Windows encodes names with reserved characters or
+/// device names. The logical key stored inside the record does not change.
+pub fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
+    sys::record_key(key)
 }
 
 /// `.<name>.<pid>.<sequence>.<nanos>.tmp` next to `path`, unique within this
@@ -426,14 +463,28 @@ pub fn hard_link_unsupported(error: &io::Error) -> bool {
 /// Windows comparisons ignore case and normalize a needless verbatim prefix;
 /// Unix comparisons retain case. A sibling with a shared string prefix is out.
 pub fn path_is_within(target: &Path, root: &Path) -> bool {
+    path_compare::is_within(target, root)
+}
+
+mod path_compare;
+pub use path_compare::relative_path;
+
+/// An equivalent native path spelling for public-path regression scenarios.
+#[cfg(feature = "test-support")]
+pub fn workspace_test_alias(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
-        let key =
-            |path: &Path| PathBuf::from(dunce::simplified(path).to_string_lossy().to_lowercase());
-        key(target).starts_with(key(root))
+        let text = path.to_string_lossy().to_uppercase();
+        PathBuf::from(format!(r"\\?\{text}"))
     }
     #[cfg(not(windows))]
     {
-        target.starts_with(root)
+        path.parent()
+            .unwrap_or(path)
+            .join(".")
+            .join(path.file_name().unwrap_or_default())
     }
 }
+
+#[cfg(feature = "test-support")]
+pub mod fixture_links;

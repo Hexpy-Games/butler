@@ -229,7 +229,9 @@ impl TurnRuntime {
             let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
             let attempt = async {
                 let claim = self.store.acquire_state_claim(&turn).await?;
+                hold_stub_delivery("before", &turn.turn_id).await?;
                 let message_id = self.messages.insert(&turn).await?;
+                hold_stub_delivery("after", &turn.turn_id).await?;
                 permit.assert_active()?;
                 self.store
                     .commit_transition(
@@ -446,4 +448,31 @@ fn explain_runtime_failure(turn: &TurnRecord, result: &mut super::contracts::Age
         .get_or_insert(crate::btcc::AcceptedWorkResult {
             status: crate::btcc::AcceptedWorkStatus::Failed,
         });
+}
+
+/// Stub-only crash windows around the durable canonical insert transaction.
+async fn hold_stub_delivery(phase: &str, turn_id: &str) -> Result<(), BtccError> {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
+        || std::env::var("BUTLER_E2E_HOLD_DELIVERY").as_deref() != Ok(phase)
+    {
+        return Ok(());
+    }
+    let Some(data) = std::env::var_os("BUTLER_DATA") else {
+        return Ok(());
+    };
+    let data = std::path::PathBuf::from(data);
+    let io_error = |error: std::io::Error| {
+        BtccError::detected(BtccCode::BtccTaskFailed, "stub delivery barrier failed")
+            .with_source(error)
+    };
+    tokio::fs::write(data.join("e2e-delivery-held"), turn_id)
+        .await
+        .map_err(io_error)?;
+    while !tokio::fs::try_exists(data.join("e2e-delivery-release"))
+        .await
+        .map_err(io_error)?
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    Ok(())
 }

@@ -9,8 +9,13 @@ use super::{AppStorageError, StorageResult};
 
 /// Compiled statements the lane keeps for `prepare_cached`.
 const CACHED_STATEMENTS: usize = 256;
-/// Bound resident pages to 8 MiB; indexed foreground reads need no large cache.
-const PAGE_CACHE_KIB: i64 = -8_192;
+/// Reserve room for reader schemas and compiled statements as well as pages.
+/// The writer and both indexed readers share 3 MiB of page-cache allowance,
+/// below the previous 8 MiB writer allocation; responses retain every field.
+const PAGE_CACHE_KIB: i64 = -1_024;
+/// Concurrent views need two indexed 1 MiB caches; bounded coalesced writes
+/// use the remaining 1 MiB without increasing the combined allowance.
+const READ_PAGE_CACHE_KIB: i64 = -1_024;
 /// Startup sweeps otherwise leave mapped database pages resident indefinitely.
 /// Use the bounded page cache for reads instead.
 const MMAP_BYTES: i64 = 0;
@@ -62,6 +67,24 @@ pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
     connection
         .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
         .map_err(AppStorageError::sqlite)
+}
+
+pub(super) fn configure_read(connection: &Connection) -> StorageResult<()> {
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(AppStorageError::sqlite)?;
+    connection.set_prepared_statement_cache_capacity(CACHED_STATEMENTS);
+    for (name, value) in [
+        ("query_only", "ON".to_owned()),
+        ("cache_size", READ_PAGE_CACHE_KIB.to_string()),
+        ("mmap_size", MMAP_BYTES.to_string()),
+        ("temp_store", "MEMORY".to_owned()),
+    ] {
+        connection
+            .pragma_update(None, name, value)
+            .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
 }
 
 /// NORMAL commits need a WAL sync before a completed close promises durability.

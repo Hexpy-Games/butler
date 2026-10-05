@@ -13,16 +13,18 @@ pub(super) async fn before_wait(data_root: &Path, shutdown: &CancellationToken) 
     if order != "cancel-before-wait" {
         return;
     }
+    // The marker can be observed while the blocking write's completion is
+    // still awaiting a Tokio poll. Cover that publication with the guard too.
+    let mut held = HeldBeforeWait {
+        shutdown,
+        observed: false,
+    };
     if tokio::fs::write(data_root.join("e2e-control-accepted"), b"accepted")
         .await
         .is_err()
     {
         return;
     }
-    let mut held = HeldBeforeWait {
-        shutdown,
-        observed: false,
-    };
     shutdown.cancelled().await;
     held.observed = true;
     crate::host::service::shutdown_trace::event("control_cancelled_before_wait");
