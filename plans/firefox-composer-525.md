@@ -9,9 +9,9 @@ The final fetch advanced main to `eed5aacf1201732e434b6b55572e7f48414ddfb4`
 paths were rechecked. Upstream already limits Composer's subscription to the
 empty/nonempty text boundary; this investigation did not implement that change.
 
-## Result
+## Initial Mac result
 
-**Reproduction blocked; root cause unconfirmed.** No product or frozen DS files
+**Mac reproduction blocked; root cause unconfirmed.** No product or frozen DS files
 were changed. No regression smoke was added: there is no demonstrated failing
 app signal to assert yet. The Firefox launch failure is an environment failure,
 not evidence of the owner's Windows UI flicker.
@@ -62,7 +62,7 @@ All paths below are relative to `packages/butler-app/client/ui/src/`.
 | Glass repaint | `libs/design-system/components/TintedGlass/TintedGlass.module.css:22-23` owns backdrop filtering; ComposerCard composes that surface. | Gecko repaint/rasterization remains a hypothesis, not a demonstrated root cause. |
 | Containment/compositing | `libs/design-system/blocks/ComposerCard/ComposerCard.module.css:4,21,41` uses inline-size containment, transform and translate. The reviewed ComposerCard, ConversationShell, TintedGlass and Collapsible CSS contains no `will-change`. | A/B diagnostics need actual Firefox frames. |
 
-## Remaining acceptance work
+## Original acceptance work (Windows follow-up below)
 
 1. Run the isolated app preview with Playwright Firefox on a host where Firefox
    can connect and render, preferably Windows matching the reported builds.
@@ -95,3 +95,151 @@ node --input-type=module -e '
   await browser.close();
 '
 ```
+
+
+## Native Windows follow-up (2026-10-05)
+
+**Firefox renders on Windows, but the reported flicker is not reproduced in
+captured headless frames. Root cause remains unconfirmed.** Product and frozen
+DS files are unchanged. No regression smoke is claimed: there is still no
+observed failing app signal with which to demonstrate before-fail/after-pass.
+
+### Method and scope
+
+- Started from `codex/ff-flicker-525` at `b4b059460`, with preview.10 main
+  `eed5aacf1`. Used the dedicated `ff-flicker-525-win` Windows worktree.
+- Built the Vite production UI preview natively. Used the existing
+  `?visual=components` fixture, which mounts the actual `Conversation`,
+  virtualized `MessageList`, Lexical editor, Composer and frozen DS surfaces.
+  Temporary fixture edits selected `draft:chat`, empty messages/summary/progress
+  for new-chat, and temporarily allowed disabling the entire draft persistence
+  function. All temporary product edits were restored after each run.
+- A Node server bound an ephemeral `127.0.0.1` port. Non-static gateway calls
+  returned a null stub response; new-chat used its normal fallback suggestions.
+  There was no Agent/Electron/installer execution and no model call. This is a
+  renderer fixture experiment, not gateway integration or owner-scale data proof.
+- Playwright 1.59.1: Firefox 148.0.2 (1511) and Chromium 147.0.7727.15 (1217).
+  Browsers were downloaded into a task-owned temp `PLAYWRIGHT_BROWSERS_PATH`.
+  Headed Firefox launched but closed before `newPage`; the SSH session could
+  not provide a usable headed page. Headless Firefox and Chromium rendered.
+- Desktop 1280×900, light/dark, populated conversation and actual new-chat.
+  Each case typed the complete 26-character suffix after `D`, then reset to `D`
+  and typed ten lines (230 edits), then idled for 2.5 seconds. Animation frames
+  recorded all target rectangles, scroll offsets, editor identity/focus;
+  ResizeObserver notifications, root React commits, draft writes and supported
+  layout-shift entries were recorded independently. Screenshots were saved at
+  four short-draft checkpoints and after lines 4 and 10, and visually inspected.
+  No pixel sampling or screenshot-difference gate was used.
+- Each phase asserted the complete draft and unchanged ordered body content.
+  The new-chat moment label was excluded from the invariant text comparison
+  because it legitimately changes on a minute boundary; suggestion content
+  remained included. Every sampled frame retained editor identity and focus.
+- Light-theme A/B changed only one suspect per fresh browser context: glass
+  filtering, floating transform/translate (position preserved), inline-size
+  containment, reserve observer delivery, or the entire draft persistence path.
+  Dark-theme baselines were measured separately. Diagnostic CSS overrides only
+  existed in the browser page; no frozen DS source was edited.
+- An initial diagnostic used exact class-marker selectors instead of token
+  selectors and timed out after rendering. An intermediate new-chat fixture
+  retained prior task progress and its clock-text invariant crossed a minute;
+  those diagnostic runs are excluded from the final matrix. Component counts
+  were corrected to compare current/alternate Fiber snapshots; raw Fiber flags
+  alone persist across commits and overcount reused components.
+
+### Measurements
+
+- Final typing matrix: **28 cases, 84 phases, 18,625 animation-frame samples,
+  168 screenshots, zero page errors**. All complete-draft/body/identity/focus
+  assertions passed. Persisted summaries and 16 representative baseline images
+  are in [the evidence directory](../tests/smoke/evidence/firefox-525/README.md).
+- Both engines, both screens and themes: short typing had **0px rectangle and
+  scroll drift, 0 composer ResizeObserver notifications, 26 root commits,
+  0 Composer-shell renders**. These are editor commits, not a per-key shell
+  rerender. Every idle phase had **0 commits, 0 observer notifications, 0 draft
+  writes and 0px drift**.
+- Baseline multiline: **147px** monotonic composer growth, **7** composer size
+  notifications/shell renders. Root commits: **258** in the populated fixture,
+  **237** in new-chat, in both engines/themes. The transcript bottom-following
+  scroll moved **147px**; the editor scroll moved **51px Firefox / 48px
+  Chromium** after reaching its eight-line cap. This is expected growth and
+  scrolling, not oscillation. No downward composer-height step was sampled.
+- Reserve-delivery A/B retained seven actual size notifications but suppressed
+  the app callback: multiline root commits fell to **230** and shell renders to
+  **0** in both engines/screens. It also prevented the needed bottom-reserve
+  update, so this is a diagnostic intervention, not an acceptable fix.
+- Draft-off A/B: **0 writes**, unchanged baseline layout/commit behavior.
+  Baseline short/multiline writes were **26 / 230**. Largest observed individual
+  storage write: **1ms** (fresh isolated cache; not owner-scale storage proof).
+  Transform/translate and inline-size containment A/B did not produce or remove
+  an observed layout failure.
+- Firefox did **not support** `layout-shift`. Chromium supported it: **0**
+  short/idle shifts, **7** baseline multiline entries corresponding to growth.
+- Separate same-page glass A/B/A, with no screenshot in the timed 2.5s interval:
+
+  | Engine / screen / theme | Original median interval | Glass off | Restored |
+  | --- | --- | --- | --- |
+  | Firefox conversation light | 37ms | 28ms | 35ms |
+  | Firefox conversation dark | 36ms | 28ms | 35ms |
+  | Firefox new-chat light | 18ms | 18ms | 18ms |
+  | Firefox new-chat dark | 31ms | 31ms | 30ms |
+  | Chromium conversation light | 18.1ms | 16.6ms | 16.7ms |
+  | Chromium conversation dark | 16.6ms | 16.7ms | 16.6ms |
+  | Chromium new-chat light | 17ms | 16.6ms | 17ms |
+  | Chromium new-chat dark | 16.6ms | 16.6ms | 16.6ms |
+
+  All **24 idle windows** had zero commits/observer notifications/writes and
+  retained the complete draft. This is descriptive headless scheduling evidence,
+  not a latency budget or flicker gate. Chromium reported ANGLE/SwiftShader;
+  Firefox's WebGL string was privacy-sanitized (`GTX 980 ... or similar`), so it
+  cannot establish the host's actual GPU. These are not matched interactive
+  hardware-acceleration measurements. The new-chat bloom canvas was present,
+  visible and 1278×900. There is no consistent new-chat improvement to explain
+  the reported symptom on both screens.
+
+### Interpretation and next acceptance
+
+1. Stable nonempty typing does not reproduce a layout/reserve or Composer-shell
+   churn problem. Multiline size/scroll changes track legitimate editor growth;
+   observer activity stops at the height cap and during idle. This evidence does
+   not rule out an intermittent GPU paint failure between saved screenshots.
+2. Disabling draft persistence removes all draft writes without demonstrating
+   a flicker fix. No timer-driven writes were seen during the idle interval.
+3. The glass A/B is a rendering-cost clue, not proof of a DS-owned flicker.
+   Frozen `TintedGlass/TintedGlass.module.css:22-23` owns the filter;
+   `ComposerCard/ComposerCard.module.css:4,21,41` owns containment/transform.
+   No appearance-reducing production change is justified by these observations.
+4. Remaining: reproduce the owner's visible symptom in an interactive Windows
+   Firefox session, ideally compare the originally reported win-fixes build
+   with preview.10; correlate the paint failure with these signals. Then either
+   implement an evidenced screen fix plus a failing/passing app-signal smoke,
+   or request a specific evidence-backed DS change on #525. Full visual
+   before/after mobile/plain/wallpaper/onboarding matrices apply when a product
+   fix exists; none was made here.
+5. GitHub Windows confirmation belongs to the coordinator's combined PR/CI run;
+   this task intentionally opens no PR and triggers no separate CI campaign.
+
+### Checks and isolation
+
+- Windows frozen dependency install and native Vite preview build: passed
+  (final diagnostic build retained all normal UI features unless one A/B flag
+  was selected). Full typing matrix and separate glass A/B/A: passed their
+  draft/content/focus assertions; visual flicker remains unconfirmed.
+- Mac isolated frozen dependency install and `bun run check`: passed.
+  `cargo +1.91.0 fmt --all` and Rust-workspace
+  `cargo +1.91.0 run -p butler-source-check -- .`: passed, architecture/E2E
+  violations **0**. No Rust crate changed, so touched-crate clippy is not
+  applicable; Windows ORT/Agent builds were unnecessary for this renderer slice.
+- Every build/check/browser run used fresh temp HOME/BUTLER_DATA; Windows also
+  redirected LOCALAPPDATA/APPDATA. Each PowerShell run compared
+  `reg query HKCU\Software\Classes\butler /s` before/after: unchanged. No
+  protocol/login-item/shortcut/service/installer path was executed. Browser
+  servers and Node runners recorded exact PIDs and closed in `finally` blocks.
+- Final fetch advanced main to `cecaaccdb` (macOS ad-hoc signing policy only).
+  It is merged before delivery; measured UI/DS sources are unchanged.
+  Final merged frozen install, `bun run check`, fmt and source-check all
+  passed again (architecture/E2E violations 0). `git diff --check` passed.
+- Windows final audit: **owned processes 0**, original clone and task worktree
+  tracked status clean, registry sentinel unchanged. Removed the task worktree,
+  temp Playwright browser tree and all task profiles. No software or system
+  settings were installed/changed. Removed the Mac task Cargo target after
+  final checks. No PR, tag, deployment or merge into main was performed.
