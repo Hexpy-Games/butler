@@ -1,11 +1,10 @@
 import type { WallpaperSource } from "@/butler-ds";
-import type { ProposalLocale, Scenario, Variant } from "./copy";
+import type { ProposalLocale, Scenario } from "./copy";
 
 export type StageWidth = "desktop" | "768" | "375";
 export type StageWallpaper = "clouds" | "daisies" | "bloom" | "none";
 
 export interface StageState {
-  variant: Variant;
   scenario: Scenario;
   theme: "light" | "dark";
   wallpaper: StageWallpaper;
@@ -14,7 +13,7 @@ export interface StageState {
 }
 
 export const DEFAULT_STATE: StageState = {
-  variant: "stacked", scenario: "many", theme: "light", wallpaper: "clouds", locale: "ko-KR", motion: "full",
+  scenario: "many", theme: "light", wallpaper: "clouds", locale: "ko-KR", motion: "full",
 };
 
 export const STAGE_MESSAGE = "butler-task-graph-proposal";
@@ -38,7 +37,6 @@ const pick = <T extends string>(value: string | null, allowed: readonly T[], fal
 
 export function stateFromQuery(params: URLSearchParams): StageState {
   return {
-    variant: pick(params.get("variant"), ["stacked", "picker", "combined"], DEFAULT_STATE.variant),
     scenario: pick(params.get("scenario"), SCENARIOS, DEFAULT_STATE.scenario),
     theme: pick(params.get("theme"), ["light", "dark"], DEFAULT_STATE.theme),
     wallpaper: pick(params.get("wallpaper"), ["clouds", "daisies", "bloom", "none"], DEFAULT_STATE.wallpaper),

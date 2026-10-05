@@ -5,7 +5,7 @@ import type { TaskEdge, TaskNode } from "./fixture";
 // Screen-level SVG edges, drawn inside the DS surface that hosts the graph. Colors are DS tokens;
 // there is no motion here (the running emphasis lives in DS components on the card).
 
-export interface Rect { left: number; top: number; right: number; bottom: number; midY: number }
+export interface Rect { left: number; top: number; right: number; bottom: number; midY: number; firstLineY: number }
 
 /** Card rects relative to the SVG origin, re-measured when the host resizes. */
 export function useCardRects(host: RefObject<HTMLElement | null>, origin: RefObject<SVGSVGElement | null>, deps: unknown[]) {
@@ -20,9 +20,11 @@ export function useCardRects(host: RefObject<HTMLElement | null>, origin: RefObj
       const next = new Map<string, Rect>();
       element.querySelectorAll<HTMLElement>("[data-task-id]").forEach((card) => {
         const box = card.getBoundingClientRect();
+        const glyph = card.querySelector('[data-slot="icon-slot"]')?.getBoundingClientRect();
         next.set(card.dataset.taskId!, {
           left: box.left - base.left, right: box.right - base.left,
           top: box.top - base.top, bottom: box.bottom - base.top, midY: box.top - base.top + box.height / 2,
+          firstLineY: glyph ? glyph.top - base.top + glyph.height / 2 : box.top - base.top + 18,
         });
       });
       setRects(next);

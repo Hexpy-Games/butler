@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, NativeSelect, NativeSelectOption, PageContainer, ScrollArea, SegmentedControl, Stack, Tag, Typo } from "@/butler-ds";
-import { PAGE_COPY, type Scenario, type Variant } from "./copy";
+import { PAGE_COPY, type Scenario } from "./copy";
 import { FINDINGS } from "./findings";
-import { DEFAULT_STATE, SCENARIOS, STAGE_MESSAGE, STAGE_SIZE, stateFromQuery, stateToQuery, type StageState, type StageWidth } from "./state";
+import { SCENARIOS, STAGE_MESSAGE, STAGE_SIZE, stateFromQuery, stateToQuery, type StageState, type StageWidth } from "./state";
 
 function Control({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -72,9 +72,6 @@ export function TaskGraphProposalPage() {
                       {SCENARIOS.map((value) => <NativeSelectOption key={value} value={value}>{copy.scenarios[value]}</NativeSelectOption>)}
                     </NativeSelect>
                   </Control>
-                  <Control label={copy.variant}>
-                    <SegmentedControl ariaLabel={copy.variant} size="sm" value={state.variant} options={option(copy.variants)} onValueChange={(value) => update({ variant: value as Variant })} />
-                  </Control>
                   <Control label={copy.width}>
                     <SegmentedControl ariaLabel={copy.width} size="sm" value={width} options={option(copy.widths)} onValueChange={(value) => setWidth(value as StageWidth)} />
                   </Control>
@@ -108,18 +105,17 @@ export function TaskGraphProposalPage() {
               </div>
 
               <Stack gap="md">
-                <Typo.H2>{copy.notesTitle}</Typo.H2>
-                {(["stacked", "picker", "combined"] as const).map((variant) => (
-                  <Box key={variant} surface="raised" border="hairline" radius="panel" padding="lg">
-                    <Stack gap="sm">
-                      <Stack align="row" gap="sm" cross="center">
-                        <Typo.Label>{copy.variants[variant]}</Typo.Label>
-                        {variant === DEFAULT_STATE.variant ? <Tag>{copy.recommended}</Tag> : null}
-                      </Stack>
-                      <Typo.Body>{copy.notes[variant]}</Typo.Body>
+                <Box surface="raised" border="hairline" radius="panel" padding="lg">
+                  <Stack gap="sm">
+                    <Stack align="row" gap="sm" cross="center">
+                      <Typo.Label>{copy.notesTitle}</Typo.Label>
+                      <Tag>{copy.chosen}</Tag>
                     </Stack>
-                  </Box>
-                ))}
+                    <Stack as="ul" gap="sm">
+                      {copy.notes.map((note) => <Stack as="li" key={note} gap="none"><Typo.Body>{note}</Typo.Body></Stack>)}
+                    </Stack>
+                  </Stack>
+                </Box>
               </Stack>
 
               {findings.map((group) => (
