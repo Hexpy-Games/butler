@@ -65,9 +65,16 @@ jobs:
         with:
           components: clippy
           native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-clippy
-      - name: Clippy production targets
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+          cache-key: archive-linux-x64
+          artifact-cache-platform: linux-x64
+          artifact-cache-kind: dev
+          save-cargo-cache: 'false'
+      # These four libraries allow panic/unwrap/expect and dead-code lints
+      # under test-support. --all-targets enables it through dev dependencies;
+      # retain their feature-free production check. Other ordinary libraries
+      # and binaries are covered by the workspace all-targets invocation.
+      - name: Clippy production libraries with stricter cfg lints
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
 
