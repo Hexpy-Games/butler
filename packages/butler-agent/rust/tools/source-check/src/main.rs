@@ -1,5 +1,3 @@
-//! Standalone source rules for Rust CI; no Agent build is required.
-
 mod architecture;
 mod e2e_gate;
 mod function_length;

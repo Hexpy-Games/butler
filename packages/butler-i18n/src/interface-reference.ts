@@ -2,7 +2,7 @@ import type { InterfaceContentReferences, InterfaceTextReference } from "./copy-
 
 const keys = new Set(["toolTitle", "checkingPrevious", "checkingRequest", "toolWorking", "checkingInformation", "commandExecuting", "conceptionTitle", "planningNext", "reportTitle", "conceptionSummary", "workInProgress", "toolsSummary", "workerStatus"]);
 
-/** Decode public templates with validated, bounded parameters; discard arbitrary event arguments. */
+/** Decode only the public template contract; never retain arbitrary event arguments. */
 export function readInterfaceContent(value: unknown): InterfaceContentReferences | undefined {
   if (!value || typeof value !== "object") return undefined;
   const result: InterfaceContentReferences = {};

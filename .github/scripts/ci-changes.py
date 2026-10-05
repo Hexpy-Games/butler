@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from urllib.parse import urlencode
 
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
@@ -42,7 +43,7 @@ def categories(path):
     if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
         return set()
     result = set()
-    rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', 'rust-toolchain*'))
+    rust = path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
     package = matches(path, PACKAGING)
     shared = matches(path, SHARED)
     ui = path.startswith(('packages/butler-app/client/', 'packages/butler-i18n/'))
@@ -98,8 +99,11 @@ def trusted_run(run, repository, pr, workflow):
             and any(p['number'] == pr for p in run['pull_requests']))
 
 
-def previous(repository, pr, workflow):
-    runs = json.loads(command('gh', 'api', f'repos/{repository}/actions/workflows/{workflow}/runs?event=pull_request&per_page=100'))['workflow_runs']
+def previous(repository, pr, workflow, branch=None):
+    query = dict(event='pull_request', per_page=100)
+    if branch:
+        query['branch'] = branch
+    runs = json.loads(command('gh', 'api', f'repos/{repository}/actions/workflows/{workflow}/runs?{urlencode(query)}'))['workflow_runs']
     for run in runs:
         if not trusted_run(run, repository, pr, workflow):
             continue
@@ -134,7 +138,7 @@ def select(event, workflow):
     repository = os.environ['GITHUB_REPOSITORY']
     if pr:
         try:
-            for receipt in previous(repository, pr['number'], workflow):
+            for receipt in previous(repository, pr['number'], workflow, pr.get('head', {}).get('ref')):
                 if previous_paths is None and receipt.get('head') and pr.get('head'):
                     try:
                         previous_paths = changed(receipt['head'], pr['head']['sha'])

@@ -30,6 +30,8 @@ class Paths(unittest.TestCase):
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
+            'new-crate/Cargo.toml': {'rust', 'package', 'install', 'linux-package', 'licenses'},
+            'new-crate/Cargo.lock': {'rust', 'package', 'install', 'linux-package', 'licenses'},
             'packages/butler-app/client/electron/src/main.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
@@ -106,6 +108,13 @@ class Paths(unittest.TestCase):
 
 
 class Trust(unittest.TestCase):
+    # test-category: security
+    def test_receipt_history_is_scoped_to_the_pr_branch(self):
+        with patch.object(changes, 'command', return_value='{"workflow_runs":[]}') as api:
+            self.assertEqual(list(changes.previous('owner/repo', 12, 'rust-quality.yml', 'codex/a&b')), [])
+        url = api.call_args.args[2]
+        self.assertTrue(url.endswith('event=pull_request&per_page=100&branch=codex%2Fa%26b'), url)
+
     # test-category: pure-logic
     def test_non_pr_events_keep_existing_full_coverage(self):
         for event_name in ['push', 'merge_group', 'schedule', 'workflow_dispatch']:
