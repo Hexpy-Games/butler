@@ -26,20 +26,24 @@ mkdir -p "$app/Contents/MacOS" "$helper/Contents/MacOS" "$fw/Versions/A/Librarie
 plist "$app/Contents/Info.plist" test.fake Fake APPL
 plist "$helper/Contents/Info.plist" test.fake.helper "Fake Helper" APPL
 plist "$fw/Versions/A/Resources/Info.plist" test.fake.lib Lib FMWK
-exe "$app/Contents/MacOS/Fake"
+ln -s A "$fw/Versions/Current"
+ln -s Versions/Current/Lib "$fw/Lib"
+ln -s Versions/Current/Resources "$fw/Resources"
+# Like Electron, the main executable loads the nested framework at launch, so
+# running it exercises dyld library validation against the nested signatures.
+clang -dynamiclib -install_name @rpath/Lib.framework/Lib -x c - -o "$fw/Versions/A/Lib" <<< 'int lib(void){return 0;}'
+clang -x c - -o "$app/Contents/MacOS/Fake" -F "$app/Contents/Frameworks" -framework Lib \
+  -Wl,-rpath,@executable_path/../Frameworks <<< 'int lib(void); int main(void){return lib();}'
 exe "$helper/Contents/MacOS/Fake Helper"
-exe "$fw/Versions/A/Lib"
 exe "$app/Contents/Resources/bundled-agent/bin/butler-agent"
 agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
 for role in memory restart update; do ln "$agent" "$agent ($role)"; done
 clang -dynamiclib -x c - -o "$fw/Versions/A/Libraries/libx.dylib" <<< 'int x(void){return 1;}'
-ln -s A "$fw/Versions/Current"
-ln -s Versions/Current/Lib "$fw/Lib"
-ln -s Versions/Current/Resources "$fw/Resources"
 chmod 555 "$app/Contents/Resources/bundled-agent/bin/butler-agent" "$app/Contents/Resources/bundled-agent/bin"
 
 BUTLER_SIGN_IDENTITY=- "$script" sign-app "$app"
 codesign --verify --strict --deep "$app"
+"$app/Contents/MacOS/Fake" || { echo "ad-hoc app failed to load its nested framework" >&2; exit 1; }
 agent_signature=$(codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1)
 grep -q 'Identifier=com.hexpy.butler.agent' <<< "$agent_signature" || { echo "agent identifier missing" >&2; exit 1; }
 app_entitlements=$(codesign -d --entitlements - "$app" 2>&1)
