@@ -51,6 +51,7 @@ pub(super) async fn operation(
     call: &super::contracts::ModelRoundToolCall,
     status: Status,
     output: Option<&butler_core::json::JsonDocument>,
+    operation_call_id: Option<&str>,
 ) {
     let call_id = &call.id;
     let tool_name = &call.name;
@@ -81,8 +82,9 @@ pub(super) async fn operation(
             .filter(|_| pending)
             .and_then(|output| output.field("request_ref").ok().flatten())
             .unwrap_or_default();
+        let result_call_id = operation_call_id.unwrap_or(call_id);
         let id = super::super::identity::digest(&format!(
-            "btcc-guided-tool-result.v2\0{call_id}\0{phase}\0{request_ref}"
+            "btcc-guided-tool-result.v2\0{result_call_id}\0{phase}\0{request_ref}"
         ));
         payload.insert("resultId".into(), Value::String(id.clone()));
         payload.insert("resultByteLength".into(), Value::from(body.len()));

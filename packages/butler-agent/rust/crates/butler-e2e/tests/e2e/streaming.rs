@@ -28,10 +28,16 @@ const INSIDE: &str =
 const CASSETTE: &str = "TOOL-05-symlink";
 
 /// The TOOL-05-symlink turn, with that scenario's symlink and the fault that
-/// points the model's first write outside the workspace.
+/// points the first write at a directory, forcing a real filesystem error.
 async fn rejected_candidate_turn(id: &str) -> Result<Scenario, HarnessError> {
-    let setup = Setup::new(id)?.cassette(CASSETTE);
-    butler_platform::secure_fs::symlink(&setup.sandbox.home, &setup.sandbox.data.join("link"))?;
+    let setup = Setup::new(id)?
+        .stub_cassette(streaming_cassette()?)
+        .replay_only();
+    butler_platform::secure_fs::fixture_links::directory_alias(
+        &setup.sandbox.home,
+        &setup.sandbox.data.join("link"),
+    )?;
+    std::fs::create_dir_all(setup.sandbox.home.join("escaped.txt"))?;
     let s = setup.start().await?;
     s.provider()?.inject(Fault::first_call(
         "inside.txt",
@@ -46,10 +52,32 @@ async fn rejected_candidate_turn(id: &str) -> Result<Scenario, HarnessError> {
     Ok(s)
 }
 
+fn streaming_cassette() -> Result<Cassette, HarnessError> {
+    let mut cassette = Cassette::load(CASSETTE)?;
+    // The owner-tested continuation loop must continue open Work. This
+    // fixture reports the rejected filesystem effect as blocked instead.
+    let mutation = ArgsMutation::OnlyTool {
+        tool: "record_work_disposition".into(),
+        mutation: Box::new(ArgsMutation::Replace {
+            from: "open".into(),
+            to: "blocked".into(),
+        }),
+    };
+    for chunk in &mut cassette.exchanges[9].response.chunks {
+        chunk.text = butler_e2e::e2e::faults::mutate_chunk(&chunk.text, &mutation);
+    }
+    let final_exchange = cassette.exchanges.last_mut().unwrap();
+    let open = regex::Regex::new(r"\bopen\b").unwrap();
+    for chunk in &mut final_exchange.response.chunks {
+        chunk.text = open.replace_all(&chunk.text, "blocked").into_owned();
+    }
+    Ok(cassette)
+}
+
 /// The answer texts of the recording, in order: the candidate that is sent
 /// back, then the final one.
 fn recorded_answers() -> Result<Vec<String>, HarnessError> {
-    let answers: Vec<String> = Cassette::load(CASSETTE)?
+    let answers: Vec<String> = streaming_cassette()?
         .exchanges
         .iter()
         .map(|exchange| exchange.response.output_text())
@@ -69,7 +97,12 @@ async fn turn_01_next_round_replaces_a_rejected_candidates_text() -> Result<(), 
     let s = rejected_candidate_turn("TURN-01-ROUNDS").await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let (turn_id, turn) = s.turn("general", INSIDE).await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert_eq!(
+        turn_state(&turn),
+        "delivered",
+        "{turn}; replay misses: {:?}",
+        s.provider()?.misses()
+    );
     let streamed: Vec<String> = live
         .snapshot()
         .iter()
@@ -95,6 +128,11 @@ async fn turn_01_next_round_replaces_a_rejected_candidates_text() -> Result<(), 
         streamed.last(),
         Some(&answers[1]),
         "the final round did not replace the candidate: {streamed:?}"
+    );
+    assert!(s.sandbox.home.join("escaped.txt").is_dir());
+    assert_eq!(
+        std::fs::read(s.sandbox.data.join("inside.txt"))?,
+        b"hello-e2e"
     );
     s.finish().await
 }

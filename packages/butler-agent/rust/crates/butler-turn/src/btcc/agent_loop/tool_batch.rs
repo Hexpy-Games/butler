@@ -74,7 +74,14 @@ pub(super) async fn execute<'a>(
     invocation: GuidedInvocation<'a>,
     prepared: &'a PreparedCall<'a>,
 ) -> Result<ToolResult, BtccError> {
-    operation(invocation.progress, &prepared.call, Status::Started, None).await;
+    operation(
+        invocation.progress,
+        &prepared.call,
+        Status::Started,
+        None,
+        None,
+    )
+    .await;
     if let Some(error) = &prepared.validation {
         let result = ToolResult {
             tool_call_id: prepared.call.id.clone(),
@@ -83,7 +90,14 @@ pub(super) async fn execute<'a>(
             error: Some(error.clone()),
             output: None,
         };
-        operation(invocation.progress, &prepared.call, Status::Failed, None).await;
+        operation(
+            invocation.progress,
+            &prepared.call,
+            Status::Failed,
+            None,
+            None,
+        )
+        .await;
         return Ok(result);
     }
     let result = match policy
@@ -114,11 +128,13 @@ pub(super) async fn execute<'a>(
                     Status::Failed
                 },
                 None,
+                None,
             )
             .await;
             return Err(error);
         }
     };
+    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
     operation(
         invocation.progress,
         &prepared.call,
@@ -128,6 +144,7 @@ pub(super) async fn execute<'a>(
             Status::Failed
         },
         result.output.as_ref(),
+        operation_call_id.as_deref(),
     )
     .await;
     Ok(result)

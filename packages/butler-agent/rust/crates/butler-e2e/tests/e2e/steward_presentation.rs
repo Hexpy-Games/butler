@@ -407,7 +407,13 @@ fn diagnostic(script: &stub::Script) -> String {
 
 fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
-    Ok(Setup::new(id)?
+    let setup = Setup::new(id)?;
+    // Holding/interruption fixtures need the debug-only tool hooks. The
+    // original navigation/event budgets still apply to this slower binary.
+    if let Some(binary) = std::env::var_os("BUTLER_E2E_FAULT_BIN") {
+        butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
+    }
+    Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
         .env("BUTLER_APP_SERVER_PORT", "0"))

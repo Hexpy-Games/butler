@@ -237,7 +237,7 @@ pub(super) async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    operation(input.progress, call, Status::Cancelled, None).await;
+    operation(input.progress, call, Status::Cancelled, None, None).await;
     Ok(result)
 }
 

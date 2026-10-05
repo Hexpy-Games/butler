@@ -42,7 +42,7 @@ pub(super) async fn reject_tools(
             .record_unexecuted(GuidedInvocation::from(input), call, &result)
             .await
             .map_err(propagated)?;
-        operation(input.progress, call, Status::Cancelled, None).await;
+        operation(input.progress, call, Status::Cancelled, None, None).await;
         record_result(
             input,
             state,

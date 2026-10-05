@@ -7926,7 +7926,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "After Plan Review, delegate the full request verbatim. Runtime derives identity, Composer access, grants, workspace, EOL, bounded parent context, budget and provenance; immutable project context, no Butler persona, canonical terminal result. safe_title optional; default privacy-safe. Children use only granted tools. Schedule CRUD is direct Tier 0, even for future research. Closed delegation follow-up: create/review a fresh Work this Turn; previous_relation_id attaches prior request/results. Never ask for restart.",
+      "description": "After Plan Review, delegate full request verbatim. Runtime derives identity, Composer access, grants, workspace, EOL, bounded parent context, budget and provenance; immutable project context, no Butler persona, canonical terminal result. safe_title optional; default privacy-safe. Children use only granted tools. Schedule CRUD is direct Tier 0, even for future research. Closed delegation follow-up: create/review fresh Work this Turn; previous_relation_id attaches prior request/results. Never ask for restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
