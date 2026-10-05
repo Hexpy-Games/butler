@@ -87,8 +87,8 @@ try {
   await page.goto(server.url, { waitUntil: "domcontentloaded" });
   await page.locator('[data-test-class~="app-boot"]').waitFor();
   release();
-  await page.unroute("**/settings");
   await page.locator('[data-test-class~="composer-card"]').waitFor();
+  await page.unroute("**/settings", undefined);
   await appearance();
   await probe();
   const toggle = page.getByRole("switch", { name: "동작 줄이기", exact: true });

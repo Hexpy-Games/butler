@@ -101,7 +101,7 @@ export async function navigateAppearance(page: Page) {
 
 /** Settings is mounted and ready before timing the Appearance interaction. */
 export async function settingsReady(page: Page) {
-  await page.locator('[data-setting-id="language"]').waitFor();
+  await page.locator('[data-setting-id="language"]').waitFor({ state: "attached" });
   await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
 }
 
