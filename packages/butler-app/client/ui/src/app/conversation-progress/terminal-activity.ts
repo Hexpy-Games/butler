@@ -54,7 +54,9 @@ export function freezeMessageActivity(
     snapshot,
     terminalStateFromMessageStatus(message.status),
   );
-  if (blocks.length === 0) return clean;
+  if (blocks.length === 0) {
+    return snapshot && clean.work_blocks?.length ? { ...clean, work_blocks: [] } : clean;
+  }
   if (clean.work_blocks && workBlocksEqual(clean.work_blocks, blocks)) return clean;
   return { ...clean, work_blocks: blocks };
 }

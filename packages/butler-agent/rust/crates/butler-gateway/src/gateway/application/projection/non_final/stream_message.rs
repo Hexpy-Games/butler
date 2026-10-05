@@ -195,7 +195,6 @@ pub(super) fn settle_suspended(
     chat: &str,
     turn: &str,
     now: &str,
-    authority_pending: bool,
 ) -> Result<(), AppStorageError> {
     let target = StreamTarget {
         db,
@@ -206,10 +205,9 @@ pub(super) fn settle_suspended(
     };
     let (id, status) = match latest(db, chat, turn)? {
         Some(message) => message,
-        None if !authority_pending => return Ok(()),
         None => {
-            // Tool-only question rounds still own an assistant segment and its
-            // activity. The App adds the public question summary from authority.
+            // Tool-only questions and delegation still own an assistant segment
+            // for their activity and the public question/delegation card.
             let id = format!("message-{}", uuid::Uuid::new_v4());
             db.execute(
                 "INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) \

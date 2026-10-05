@@ -1,10 +1,12 @@
 import type { NativeAppServerOptions, StubModelRequest } from "./native-app-server";
 
-export function liveDelegationStub(): { options: NativeAppServerOptions; advance: () => void; release: () => void } {
+export function liveDelegationStub(): { options: NativeAppServerOptions; whenHeld: () => Promise<void>; advance: () => void; release: () => void } {
   let parent = 0;
   let child = 0;
   let resume: (() => void) | undefined;
   let released = false;
+  let held = false;
+  let onHeld: (() => void) | undefined;
   const steps = new WeakMap<StubModelRequest, { child: boolean; step: number }>();
   const objective = "Delegate a three step progress check.";
   const plan = (mode: string) => ({ start_new: false, objective, execution_mode: mode, governing_refs: [],
@@ -15,17 +17,21 @@ export function liveDelegationStub(): { options: NativeAppServerOptions; advance
     { action_key: step === 2 ? "second" : "third", status: "active" },
   ] });
   return {
-    advance: () => { resume?.(); resume = undefined; },
+    whenHeld: () => held ? Promise.resolve() : new Promise<void>(done => { onHeld = done; }),
+    advance: () => { held = false; resume?.(); resume = undefined; },
     release: () => { released = true; resume?.(); },
     options: {
       config: { user: { name: "Smoke", language: "en" } },
       stubReply: async request => {
-        const input = JSON.stringify(request.messages);
+        const input = JSON.stringify([...request.messages].reverse().find(message =>
+          typeof message === "object" && message !== null && (message as { role?: string }).role === "user"));
         const isChild = input.includes("role: steward");
         if (!request.stream || (!isChild && !input.includes(objective))) return "{}";
         const step = isChild ? child++ : parent++;
         steps.set(request, { child: isChild, step });
-        if (isChild && step >= 2 && !released) await new Promise<void>(done => { resume = done; });
+        if (isChild && step >= 2 && !released) await new Promise<void>(done => {
+          resume = done; held = true; onHeld?.(); onHeld = undefined;
+        });
         return isChild ? "" : step >= 4 ? "Delegated work started." : "";
       },
       stubToolCall: request => {

@@ -32,6 +32,24 @@ async function transcript(page: import("playwright").Page, expected: string[]): 
   assert(indexes.every((index, position) => index >= 0 && (position === 0 || index > indexes[position - 1])),
     `chronological distinct rows: ${JSON.stringify({ expected, content })}`);
   for (const text of expected) assert.equal(content.filter(row => row.includes(text)).length, 1, `retained once: ${text}`);
+  if (expected.includes(texts[3])) {
+    for (const question of [1, 2, 3]) {
+      assert(content.find(row => row.includes(`Question ${question}?`))?.includes("1 record"), "each question owns its activity");
+    }
+    assert(!content.find(row => row.includes(texts[3]))?.includes("records"), "final segment does not repeat earlier question activity");
+  }
+}
+
+async function captureLayouts(page: import("playwright").Page, name: string, expected: string[], ready: string) {
+  if (!screenshots) return;
+  for (const width of [375, 1280]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
+    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
+    await page.setViewportSize({ width, height: 1600 });
+    await page.reload();
+    await page.getByText(ready, { exact: true }).first().waitFor();
+    await transcript(page, expected);
+    await page.screenshot({ path: resolve(screenshots, `${name}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}.png`) });
+  }
 }
 
 try {
@@ -48,6 +66,7 @@ try {
     expected.push(`Question ${question}?`);
     await transcript(page, expected);
     if (screenshots) await page.screenshot({ path: resolve(screenshots, `question-${question}-pending.png`) });
+    await captureLayouts(page, `question-${question}-pending`, expected, `Question ${question}?`);
     await page.reload();
     await panel.getByText(`Question ${question}?`, { exact: true }).waitFor();
     await transcript(page, expected);
@@ -62,14 +81,7 @@ try {
   await page.getByText(texts[3], { exact: true }).waitFor();
   await transcript(page, expected);
   assert.equal(round, 4, "exactly four stub rounds");
-  if (screenshots) for (const width of [375, 1280]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
-    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
-    await page.setViewportSize({ width, height: 1600 });
-    await page.reload();
-    await page.getByText(texts[3], { exact: true }).waitFor();
-    await transcript(page, expected);
-    await page.screenshot({ path: resolve(screenshots, `answered-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}.png`) });
-  }
+  await captureLayouts(page, "answered", expected, texts[3]);
   console.log(JSON.stringify({ ok: true, service: "question-continuation", rounds: round, rows: expected.length, liveAndReload: true }));
 } finally {
   await browser.close();
