@@ -276,9 +276,9 @@ async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, H
         let child = &view.data()["steward_children"][0];
         let messages = s.gw.messages("general").await?;
         if child["result"].is_object()
-            && messages
-                .iter()
-                .any(|message| message["text"] == "Approach B verified.")
+            && messages.iter().any(|message| {
+                message["text"] == "Approach B verified." && message["status"] == "delivered"
+            })
         {
             return Ok(child.clone());
         }

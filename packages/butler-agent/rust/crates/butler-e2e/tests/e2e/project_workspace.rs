@@ -63,7 +63,37 @@ async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, Harness
 
 async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, HarnessError> {
     let before = s.provider()?.requests().len();
-    let (id, turn) = s.turn(chat, prompt).await?;
+    let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let request = loop {
+        let requests = s.gw.approval_requests(chat).await?;
+        if let Some(request) = requests.iter().find(|r| r["source_turn_id"] == id) {
+            break request.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no observation approval: {requests:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert_eq!(request["category"], "reviewed_effect", "{request}");
+    assert_eq!(request["approval"]["operation"]["access"], "read_only");
+    assert_eq!(
+        s.provider()?.requests().len(),
+        before + 1,
+        "observation waits for approval"
+    );
+    let reference = request["request_ref"].as_str().unwrap();
+    let allowed =
+        s.gw.post(
+            &format!("/authority-requests/{reference}/allow?session_id={chat}"),
+            json!({"scope":"once"}),
+        )
+        .await?;
+    assert_eq!(allowed.status, 202, "{allowed:?}");
+    let turn =
+        s.gw.wait_terminal(chat, &id, Duration::from_secs(60))
+            .await?;
     assert_eq!(
         turn_state(&turn),
         "delivered",
@@ -201,16 +231,15 @@ async fn workspace_case(long: bool) -> Result<(), HarnessError> {
         "approved project write",
     )
     .await?;
-    let denied = result(&s, &chat, stub::DATA).await?;
-    assert_eq!(denied["files"][0]["ok"], false, "{denied}");
-    let root = butler_platform::secure_fs::canonicalize(&workspace)?;
-    assert_eq!(denied["files_read"], 0, "{denied}");
-    assert!(denied["files"][0]["content"].is_null(), "{denied}");
+    // The data directory follows ordinary exact-operation approval too.
+    let data = result(&s, &chat, stub::DATA).await?;
+    assert_eq!(data["files"][0]["ok"], true, "{data}");
+    assert_eq!(data["files_read"], 1, "{data}");
     assert_eq!(
-        denied["files"][0]["workspace_root"],
-        json!(root),
-        "{denied}"
+        data["files"][0]["content"],
+        fs::read_to_string(s.sandbox.data.join("butler.config.json"))?
     );
+    let root = butler_platform::secure_fs::canonicalize(&workspace)?;
     let scope = serde_json::to_string(&format!("- workspace: {}", root.display()))?;
     for request in s.provider()?.requests() {
         let text = request.to_string();
