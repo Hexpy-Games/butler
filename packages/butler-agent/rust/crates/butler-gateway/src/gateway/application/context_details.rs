@@ -58,10 +58,12 @@ impl AppApplication {
             host.await
         };
 
-        let data_root = self.butler_data.clone();
-        let storage = self.storage.clone();
-        let configured = async move {
-            let _measurement = storage.measure_view("context_configured");
+        let host = host.await?;
+        let (persona_configured, eol_configured) = if let Some(facts) = &host.configuration {
+            (facts.persona_configured, facts.eol_configured)
+        } else {
+            let data_root = self.butler_data.clone();
+            let _measurement = self.storage.measure_view("context_configured");
             tokio::task::spawn_blocking(move || {
                 (
                     configured_text(&data_root.join("personas/active.md")),
@@ -69,9 +71,8 @@ impl AppApplication {
                 )
             })
             .await
-            .map_err(GatewayApplicationError::internal_from)
+            .map_err(GatewayApplicationError::internal_from)?
         };
-        let (host, (persona_configured, eol_configured)) = tokio::try_join!(host, configured)?;
         let counts = derive_tokens(
             &session,
             &records,

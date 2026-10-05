@@ -320,6 +320,12 @@ pub struct AppContextBudgetFacts {
 }
 
 #[derive(Clone, Debug)]
+pub struct AppContextConfigurationFacts {
+    pub persona_configured: bool,
+    pub eol_configured: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct AppContextReadFacts {
     pub usage: Option<AppContextUsage>,
     pub compaction_summary: Option<String>,
@@ -327,6 +333,8 @@ pub struct AppContextReadFacts {
     pub session_usage: Option<butler_runtime::operations::SessionUsageView>,
     /// How the session's model is billed (`ContextDetailsView.auth_mode`).
     pub auth_mode: butler_models::models::UsageAuthMode,
+    /// Fresh host file facts; absent ports retain the App's direct fallback.
+    pub configuration: Option<AppContextConfigurationFacts>,
     pub budget: AppContextBudgetFacts,
 }
 

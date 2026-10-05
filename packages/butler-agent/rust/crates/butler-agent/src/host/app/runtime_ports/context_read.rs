@@ -8,8 +8,8 @@ use std::{
 use serde_json::Value;
 
 use butler_gateway::gateway::{
-    AppContextBudgetFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
-    AppContextUsage, ApplicationFuture, GatewayApplicationError,
+    AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort,
+    AppContextReadQuery, AppContextUsage, ApplicationFuture, GatewayApplicationError,
 };
 use butler_models::models::{
     ModelCatalog, ModelCatalogSnapshot, ProviderAuthMethod, ProviderAuthMode, UsageAuthMode,
@@ -92,102 +92,118 @@ impl AppContextReadPort for AppContextRead {
         let budget = self.budget.clone();
         let compactions = self.compactions.clone();
         let usage = self.usage.clone();
-        let telemetry_index = self.telemetry.clone();
+        let telemetry = self.telemetry.clone();
+        let turn = query.turn_id.clone();
         Box::pin(async move {
-            let (snapshot, (telemetry, session), native_summary) = tokio::try_join!(
+            let (mut facts, native_summary) = tokio::try_join!(
                 async {
-                    budget
-                        .snapshot()
-                        .await
-                        .map_err(GatewayApplicationError::internal_from)
+                    tokio::task::spawn_blocking(move || {
+                        read_facts(&root, &budget, &usage, &telemetry, &query)
+                    })
+                    .await
+                    .map_err(GatewayApplicationError::internal_from)?
                 },
-                read_telemetry(
-                    root,
-                    usage,
-                    telemetry_index,
-                    query.clone(),
-                    budget.catalog().clone()
-                ),
-                read_native_summary(compactions, query.turn_id.as_deref()),
+                read_native_summary(compactions, turn.as_deref()),
             )?;
-            let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
-                model_ref: Some(query.model_ref.clone()),
-                working_context_tokens: 0.0,
-                static_context_tokens: Some(0.0),
-                live_configuration_tokens: Some(0.0),
-                runtime_state_tokens: Some(0.0),
-                compaction_prompt_reserve_tokens: None,
-                overrides: ContextBudgetOverrides {
-                    context_window_tokens: query.context_window_tokens.map(Value::from),
-                    ..Default::default()
-                },
-            });
-            let config = &evaluated.config;
-            let metadata = snapshot
-                .models
-                .resolve_model_metadata(Some(&query.model_ref));
-            let max_output = metadata
-                .max_output_tokens
-                .filter(|value| value.is_finite() && *value > 0.0)
-                .map(|value| butler_core::json::saturating_u64(value.trunc()));
-            let auth_mode = session
-                .auth_modes
-                .get(&query.model_ref)
-                .copied()
-                .unwrap_or_else(|| {
-                    configured_auth_mode(&query.model_ref, &snapshot.models, budget.catalog())
-                });
-            let summary = native_summary.or(telemetry.compaction_summary);
-            Ok(AppContextReadFacts {
-                usage: telemetry.usage,
-                compaction_summary: summary,
-                session_usage: Some(session.view),
-                auth_mode,
-                budget: AppContextBudgetFacts {
-                    context_window_tokens: butler_core::json::saturating_u64(
-                        config.context_window_tokens.max(0.0).trunc(),
-                    ),
-                    reserved_output_tokens: butler_core::json::saturating_u64(
-                        config.reserved_output_tokens.max(0.0).trunc(),
-                    ),
-                    reserved_tool_tokens: butler_core::json::saturating_u64(
-                        config.reserved_tool_tokens.max(0.0).trunc(),
-                    ),
-                    compaction_prompt_reserve_tokens: butler_core::json::saturating_u64(
-                        evaluated.compaction_prompt_reserve_tokens.max(0.0).trunc(),
-                    ),
-                    max_output_tokens: max_output,
-                },
-            })
+            facts.compaction_summary = native_summary.or(facts.compaction_summary);
+            Ok(facts)
         })
     }
 }
 
-async fn read_telemetry(
-    root: PathBuf,
-    usage: Arc<Mutex<SessionUsageIndex>>,
-    telemetry: Arc<Mutex<telemetry::Index>>,
-    query: AppContextReadQuery,
-    catalog: Arc<ModelCatalog>,
-) -> Result<(Telemetry, SessionUsage), GatewayApplicationError> {
-    tokio::task::spawn_blocking(move || {
-        let pricing = |model: &str| catalog.pricing(model);
-        let mut usage = usage.lock();
-        let mut telemetry = telemetry.lock();
-        let session = usage.read_with_rows(
-            &root,
-            &query.runtime_session_id,
-            &pricing,
-            &mut *telemetry,
-            (
-                telemetry::Index::reset_prompt,
-                telemetry::Index::fold_prompt_row,
+/// Read every mutable file afresh in one owned blocking operation.
+fn read_facts(
+    root: &Path,
+    budget: &ContextBudgetOwner,
+    usage: &Mutex<SessionUsageIndex>,
+    telemetry: &Mutex<telemetry::Index>,
+    query: &AppContextReadQuery,
+) -> Result<AppContextReadFacts, GatewayApplicationError> {
+    let snapshot = budget
+        .snapshot_blocking()
+        .map_err(GatewayApplicationError::internal_from)?;
+    let (telemetry, session) = read_telemetry(root, usage, telemetry, query, budget.catalog());
+    let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
+        model_ref: Some(query.model_ref.clone()),
+        working_context_tokens: 0.0,
+        static_context_tokens: Some(0.0),
+        live_configuration_tokens: Some(0.0),
+        runtime_state_tokens: Some(0.0),
+        compaction_prompt_reserve_tokens: None,
+        overrides: ContextBudgetOverrides {
+            context_window_tokens: query.context_window_tokens.map(Value::from),
+            ..Default::default()
+        },
+    });
+    let config = &evaluated.config;
+    let metadata = snapshot
+        .models
+        .resolve_model_metadata(Some(&query.model_ref));
+    let max_output = metadata
+        .max_output_tokens
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| butler_core::json::saturating_u64(value.trunc()));
+    let auth_mode = session
+        .auth_modes
+        .get(&query.model_ref)
+        .copied()
+        .unwrap_or_else(|| {
+            configured_auth_mode(&query.model_ref, &snapshot.models, budget.catalog())
+        });
+    Ok(AppContextReadFacts {
+        usage: telemetry.usage,
+        compaction_summary: telemetry.compaction_summary,
+        session_usage: Some(session.view),
+        auth_mode,
+        configuration: Some(AppContextConfigurationFacts {
+            persona_configured: configured_text(&root.join("personas/active.md")),
+            eol_configured: configured_text(&root.join("eol.md")),
+        }),
+        budget: AppContextBudgetFacts {
+            context_window_tokens: butler_core::json::saturating_u64(
+                config.context_window_tokens.max(0.0).trunc(),
             ),
-        );
-        (telemetry.read_shared_prompt(&root, &query), session)
+            reserved_output_tokens: butler_core::json::saturating_u64(
+                config.reserved_output_tokens.max(0.0).trunc(),
+            ),
+            reserved_tool_tokens: butler_core::json::saturating_u64(
+                config.reserved_tool_tokens.max(0.0).trunc(),
+            ),
+            compaction_prompt_reserve_tokens: butler_core::json::saturating_u64(
+                evaluated.compaction_prompt_reserve_tokens.max(0.0).trunc(),
+            ),
+            max_output_tokens: max_output,
+        },
     })
-    .await
-    .map_err(GatewayApplicationError::internal_from)
+}
+
+fn configured_text(path: &Path) -> bool {
+    std::fs::read_to_string(path)
+        .ok()
+        .is_some_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
+}
+
+fn read_telemetry(
+    root: &Path,
+    usage: &Mutex<SessionUsageIndex>,
+    telemetry: &Mutex<telemetry::Index>,
+    query: &AppContextReadQuery,
+    catalog: &ModelCatalog,
+) -> (Telemetry, SessionUsage) {
+    let pricing = |model: &str| catalog.pricing(model);
+    let mut usage = usage.lock();
+    let mut telemetry = telemetry.lock();
+    let session = usage.read_with_rows(
+        root,
+        &query.runtime_session_id,
+        &pricing,
+        &mut *telemetry,
+        (
+            telemetry::Index::reset_prompt,
+            telemetry::Index::fold_prompt_row,
+        ),
+    );
+    (telemetry.read_shared_prompt(root, query), session)
 }
 
 async fn read_native_summary(

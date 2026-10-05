@@ -187,6 +187,7 @@ impl AppContextReadPort for TestContextRead {
                 compaction_summary: None,
                 session_usage: None,
                 auth_mode: butler_models::models::UsageAuthMode::Unknown,
+                configuration: None,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: 200_000,
                     reserved_output_tokens: 8_000,

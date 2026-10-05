@@ -54,6 +54,7 @@ async fn session_context_tracks_appends_partial_rows_and_same_prefix_rotation()
     let path = s.sandbox.data.join("metrics/prompt-cache-usage.jsonl");
     append(&path, &row(&turn, 321), true);
     let complete = context(&s, 321, "provider_prompt_usage").await?;
+    configuration_freshness(&s).await?;
     let usage = complete["usage"].clone();
     let requests = usage["request_count"].as_u64().unwrap();
     let input = usage["input_tokens"].as_u64().unwrap();
@@ -117,4 +118,54 @@ async fn session_context_tracks_appends_partial_rows_and_same_prefix_rotation()
     let view = context(&s, 777, "provider_prompt_usage").await?;
     assert_usage(&view, 3, 444 + 999 + 777);
     s.finish().await
+}
+
+async fn configuration_freshness(s: &Scenario) -> Result<(), HarnessError> {
+    let persona = s.sandbox.data.join("personas/active.md");
+    let eol = s.sandbox.data.join("eol.md");
+    fs::create_dir_all(persona.parent().unwrap())?;
+    let mut observed = Vec::new();
+    for (persona_text, eol_text) in [
+        ("", ""),
+        ("Current persona", ""),
+        ("\u{feff}\u{a0}\n", "Current end of life instructions"),
+        ("Current persona", "Current end of life instructions"),
+    ] {
+        fs::write(&persona, persona_text)?;
+        fs::write(&eol, eol_text)?;
+        let view = context(s, 321, "provider_prompt_usage").await?;
+        observed.push(live_configuration_tokens(&view));
+    }
+    assert!(
+        observed[1] > observed[0],
+        "added persona must be current: {observed:?}"
+    );
+    assert_eq!(
+        observed[2], observed[1],
+        "Unicode whitespace is empty; fresh end-of-life text contributes"
+    );
+    assert!(
+        observed[3] > observed[2],
+        "both current files contribute: {observed:?}"
+    );
+    fs::remove_file(persona)?;
+    fs::remove_file(eol)?;
+    let deleted = context(s, 321, "provider_prompt_usage").await?;
+    assert_eq!(
+        live_configuration_tokens(&deleted),
+        observed[0],
+        "deleted files must disappear on the next read"
+    );
+    Ok(())
+}
+
+fn live_configuration_tokens(view: &Value) -> u64 {
+    view["context"]["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["source_kind"] == "live_configuration")
+        .unwrap()["used_tokens"]
+        .as_u64()
+        .unwrap()
 }

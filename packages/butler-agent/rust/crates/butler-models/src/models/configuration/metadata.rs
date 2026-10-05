@@ -33,13 +33,31 @@ impl ModelConfiguration {
             message: "Model metadata could not be read.",
             source: error.into(),
         })?;
+        self.context_metadata_from(config, &credentials)
+    }
+
+    /// Fresh file facts for a caller already inside tracked blocking work.
+    pub fn read_context_metadata_blocking(
+        &self,
+    ) -> Result<ModelContextMetadataRead, ModelCatalogError> {
+        self.context_metadata_from(
+            read_object_sync(&self.data_root.join("butler.config.json")),
+            &read_object_sync(&self.data_root.join(CREDENTIALS_FILE)),
+        )
+    }
+
+    fn context_metadata_from(
+        &self,
+        config: Value,
+        credentials: &Value,
+    ) -> Result<ModelContextMetadataRead, ModelCatalogError> {
         let local = self.local_models(&config);
         let catalog = if local.is_empty() {
             self.registration_catalog.clone()
         } else {
             let default = configured_default(&config)
                 .map(str::to_owned)
-                .unwrap_or_else(|| self.catalog.default_preset(&config, &credentials).model);
+                .unwrap_or_else(|| self.catalog.default_preset(&config, credentials).model);
             Arc::new(self.catalog.snapshot(
                 ModelCatalogSnapshotInput {
                     configured_local: local.iter().map(ModelProviderMetadata::from).collect(),

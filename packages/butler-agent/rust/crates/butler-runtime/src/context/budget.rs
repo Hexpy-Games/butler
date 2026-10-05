@@ -11,7 +11,8 @@ use serde_json::{Map, Value};
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 use butler_models::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelConfiguration, TokenEstimate, TokenEstimateInput,
+    ModelCatalog, ModelCatalogError, ModelCatalogSnapshot, ModelConfiguration,
+    ModelContextMetadataRead, TokenEstimate, TokenEstimateInput,
 };
 
 pub const WORKING_CONTEXT_AUTO_COMPACT_RATIO: f64 = 0.94;
@@ -119,14 +120,22 @@ impl ContextBudgetOwner {
     }
 
     pub async fn snapshot(&self) -> ContextResult<ContextBudgetSnapshot<'_>> {
-        let metadata = self
-            .configuration
-            .read_context_metadata()
-            .await
-            .map_err(|error| {
-                ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
-                    .with_source(error)
-            })?;
+        self.snapshot_from(self.configuration.read_context_metadata().await)
+    }
+
+    /// Fresh snapshot for a caller already inside tracked blocking work.
+    pub fn snapshot_blocking(&self) -> ContextResult<ContextBudgetSnapshot<'_>> {
+        self.snapshot_from(self.configuration.read_context_metadata_blocking())
+    }
+
+    fn snapshot_from(
+        &self,
+        metadata: Result<ModelContextMetadataRead, ModelCatalogError>,
+    ) -> ContextResult<ContextBudgetSnapshot<'_>> {
+        let metadata = metadata.map_err(|error| {
+            ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
+                .with_source(error)
+        })?;
         Ok(ContextBudgetSnapshot {
             config: metadata.config,
             models: metadata.catalog,
