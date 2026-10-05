@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
@@ -8,14 +9,17 @@ import { useWallpaperAssets } from "./hooks/useWallpaperAssets";
 import { useWallpaperModules } from "./hooks/useWallpaperModules";
 import { useWallpaperSourceSave } from "./hooks/useWallpaperSourceSave";
 import { SettingsSwitch } from "./SettingsFormComponents";
+import { useSystemReducedMotion } from "./useSystemReducedMotion";
 import { wallpaperPickerLabels } from "./wallpaperPickerLabels";
 
 type Wallpaper = SettingsData["wallpaper"];
 
 /** Settings > Appearance > Home screen: the wallpaper picker, then motion and battery. */
-export function MainScreenThemeSettings() {
+export const MainScreenThemeSettings = memo(function MainScreenThemeSettings() {
   const locale = useAppLocale();
-  const draft = useSettingsUIStore((state) => state.draft);
+  const system = useSystemReducedMotion();
+  const reduced = useButlerStore((state) => state.settings.reduce_motion) || system;
+  const wallpaper = useSettingsUIStore((state) => state.draft?.wallpaper);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   const saveSource = useWallpaperSourceSave();
@@ -23,9 +27,9 @@ export function MainScreenThemeSettings() {
   const modules = useWallpaperModules();
   const copy = appCopy.settings;
 
-  if (!draft) return null;
+  if (!wallpaper) return null;
 
-  const { source, motion, pauseOnBattery } = draft.wallpaper;
+  const { source, motion, pauseOnBattery } = wallpaper;
   const save = (wallpaper: Partial<Wallpaper>) => void update({ wallpaper }, setSettings);
   const upload = async (file: File) => {
     const asset = await images.upload(file);
@@ -67,11 +71,12 @@ export function MainScreenThemeSettings() {
           settingId="main-screen-motion"
           label={copy.fields.wallpaperMotion}
           description={copy.descriptions.wallpaperMotion}
-          checked={motion === "auto"}
+          checked={!reduced && motion === "auto"}
+          disabledReason={reduced ? copy.descriptions.wallpaperStill : undefined}
           onChange={(on) => save({ motion: on ? "auto" : "paused" })}
         />
       )}
-      {source.kind !== "none" && motion === "auto" ? (
+      {source.kind !== "none" && motion === "auto" && !reduced ? (
         <SettingsSwitch
           settingId="main-screen-battery"
           label={copy.fields.wallpaperPauseOnBattery}
@@ -82,4 +87,4 @@ export function MainScreenThemeSettings() {
       ) : null}
     </>
   );
-}
+});

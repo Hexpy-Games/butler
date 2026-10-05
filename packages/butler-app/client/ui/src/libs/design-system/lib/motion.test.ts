@@ -163,7 +163,8 @@ test("subscribeReducedMotion reports the media query and the data-motion scope",
   reduce = false;
   body.dataset.motion = "reduced";
   observers.forEach((callback) => callback());
-  expect(seen).toEqual([true, true]);
+  // Moving between two reduced sources keeps the same effective state.
+  expect(seen).toEqual([true]);
   unsubscribe();
   expect(listeners).toHaveLength(0);
   expect(observers).toHaveLength(0);

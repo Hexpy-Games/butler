@@ -732,8 +732,9 @@
   }
 }
 
-/* The same overrides as a scope: the DS Viewer's reduced-motion toggle sets
-   data-motion="reduced" (lib/motion.ts reads it too). */
+/* Shell tokens also reach body portals; component overrides stay shell-scoped.
+   The DS Viewer keeps its local reduced-motion scope. */
+:root:has(#root[data-motion="reduced"]),
 [data-motion="reduced"] {
   --motion-distance-xs: 0px;
   --motion-distance-sm: 0px;

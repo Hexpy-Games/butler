@@ -1159,6 +1159,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "Nothing to show yet.",
     },
     pageSections: {
+      accessibility: "Accessibility",
       languageRegion: "Language & region",
       conversationInput: "Conversation input",
       notifications: "Notifications",
@@ -1407,6 +1408,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaperMotion: "Animate the background.",
       wallpaperPauseOnBattery: "Hold still when unplugged.",
       reduceMotion: "When off, follows your system setting.",
+      reduceMotionSystem: "On in your system settings",
+      wallpaperStill: "Paused by Reduce motion",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,

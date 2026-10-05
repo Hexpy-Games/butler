@@ -1,4 +1,4 @@
-import { instrument, navigateAppearance } from "./appearance-perf-support";
+import { instrument, navigateAppearance, settingsReady, toggleMotion, interactionLongTasks } from "./appearance-perf-support";
 // Public Settings switch + native persistence; browser DS self-check (stub only).
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -21,6 +21,7 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 900 
 const page = await context.newPage();
 const results: unknown[] = [];
 const appearanceMs: number[] = [];
+const toggles: Awaited<ReturnType<typeof toggleMotion>>[] = [];
 await instrument(page);
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
@@ -31,8 +32,18 @@ async function appearance() {
   const menu = page.getByRole("button", { name: "사이드바 보기", exact: true });
   if (await menu.count()) await menu.click();
   await page.getByRole("button", { name: "설정", exact: true }).click();
+  await settingsReady(page);
   appearanceMs.push(await navigateAppearance(page));
+  const interval = await page.evaluate(() => ({ start: (window as any).__appearance.start, end: performance.now() }));
+  assert((await interactionLongTasks(page, interval.start, interval.end)).length === 0, "Appearance has a task over 50ms");
   await page.getByRole("switch", { name: "동작 줄이기", exact: true }).waitFor();
+}
+
+async function timedToggle() {
+  const result = await toggleMotion(page);
+  toggles.push(result);
+  assert(result.ms <= 150, `Toggle exceeded 150ms: ${result.ms}`);
+  assert((await interactionLongTasks(page, result.start, result.end)).length === 0, "Toggle has a task over 50ms");
 }
 
 async function probe() {
@@ -68,12 +79,22 @@ try {
     const listed = new Set(navigation.chats.map((chat: any) => chat.id));
     assert(ids.every((id) => listed.has(id)), "Owner-scale navigation lost chats");
   }
+  // The cached shell must render even when the authoritative request is held.
+  await server.signIn(context);
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  await page.route("**/settings", async (route) => { await held; await route.continue(); });
+  await page.goto(server.url, { waitUntil: "domcontentloaded" });
+  await page.locator('[data-test-class~="app-boot"]').waitFor();
+  release();
+  await page.unroute("**/settings");
+  await page.locator('[data-test-class~="composer-card"]').waitFor();
   await appearance();
   await probe();
   const toggle = page.getByRole("switch", { name: "동작 줄이기", exact: true });
   assert(await toggle.getAttribute("aria-checked") === "false", "Default must follow OS");
   await verify(false);
-  await toggle.click();
+  await timedToggle();
   await verify(true);
   assert((await server.api<any>("/settings")).reduce_motion === true, "Switch was not persisted");
   await page.evaluate(() => (window as any).__motionProbe.dispose());
@@ -85,24 +106,27 @@ try {
     localStorage.clear();
     const observer = new MutationObserver(() => {
       if (!document.querySelector("#root")?.childElementCount) return;
-      (window as any).__firstAppMotion = document.documentElement.dataset.motion;
+      (window as any).__firstAppMotion = document.getElementById("root")?.dataset.motion;
       observer.disconnect();
     });
     observer.observe(document, { childList: true, subtree: true });
   });
   await appearance();
   assert(await toggle.getAttribute("aria-checked") === "true", "Restart lost switch");
-  assert(await page.evaluate(() => (window as any).__firstAppMotion) === "reduced", "First render animated before settings arrived");
+  assert(await page.evaluate(() => document.getElementById("root")?.dataset.motion) === "reduced", "Server settings were not reconciled before the workspace");
   await probe();
   await verify(true);
-  await toggle.click();
+  await timedToggle();
   await verify(false);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await verify(true);
-  assert(await toggle.getAttribute("aria-checked") === "false", "OS preference must not rewrite the switch");
+  assert(await toggle.getAttribute("aria-checked") === "true" && await toggle.isDisabled(), "OS preference must show on and disabled");
+  await toggle.hover();
+  await page.getByRole("tooltip").filter({ hasText: "시스템 설정에서 켜져 있습니다" }).waitFor();
+  assert((await server.api<any>("/settings")).reduce_motion === false, "OS preference must not rewrite the saved setting");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await verify(false);
-  await toggle.click();
+  await timedToggle();
   await verify(true);
   await page.evaluate(() => (window as any).__motionProbe.dispose());
   for (const width of [375, 1280]) {
@@ -129,7 +153,7 @@ try {
   assert(JSON.stringify(ordered) === JSON.stringify(expected), "Wallpaper count/order changed");
   assert(await toggle.getAttribute("aria-checked") === "true", "Latest motion setting was lost");
   assert(appearanceMs.every((ms) => ms < 150), `Appearance exceeded 150ms: ${appearanceMs}`);
-  writeFileSync(join(out, "appearance-timing.json"), JSON.stringify({ ownerScale: Bun.argv.includes("--owner-scale"), chats: Bun.argv.includes("--owner-scale") ? 600 : null, options, appearanceMs, maxMs: Math.max(...appearanceMs) }, null, 2));
+  writeFileSync(join(out, "appearance-timing.json"), JSON.stringify({ ownerScale: Bun.argv.includes("--owner-scale"), chats: Bun.argv.includes("--owner-scale") ? 600 : null, options, appearanceMs, toggles, maxMs: Math.max(...appearanceMs) }, null, 2));
   assert(server.stubModelCalls.length === 0, "Appearance called a model");
   writeFileSync(join(out, "self-check.json"), JSON.stringify(results, null, 2));
   console.log(`PASS: ${results.length} DS motion states; four KO screenshots; restart persistence; no model calls`);

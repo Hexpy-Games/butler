@@ -1025,7 +1025,7 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1242,6 +1242,8 @@ export interface AppCopy {
       wallpaperPauseOnBattery: string;
       /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
       reduceMotion: string;
+      reduceMotionSystem: string;
+      wallpaperStill: string;
       themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;

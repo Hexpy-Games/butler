@@ -95,6 +95,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   });
 
   const update = (patch: Partial<WallpaperScheduleState>) => {
+    if (patch.reducedMotion !== undefined && patch.reducedMotion !== state.reducedMotion) dirty = true;
     state = { ...state, ...patch };
     schedule();
   };

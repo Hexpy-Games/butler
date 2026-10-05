@@ -24,7 +24,7 @@ const server = await createServer({
 });
 await server.listen();
 const address = server.httpServer!.address() as { port: number };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: JSON.parse(process.env.BUTLER_SMOKE_BROWSER_ARGS ?? "[]") as string[] });
 mkdirSync(directory, { recursive: true });
 const entries: Record<string, string> = {};
 try {

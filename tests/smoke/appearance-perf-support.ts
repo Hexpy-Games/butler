@@ -46,8 +46,11 @@ export function traceStats(events: TraceEvent[]) {
 /** Observe React fibers without changing the production bundle. No private content is exported. */
 export async function instrument(page: Page) {
   await page.addInitScript(() => {
-    const state = { components: 0, commits: 0, bitmaps: [] as number[][], glDraws: 0, start: 0, interactive: 0 };
+    const state = { components: 0, commits: 0, bitmaps: [] as number[][], glDraws: 0, start: 0, interactive: 0, longTasks: [] as { start: number; duration: number }[] };
     (window as any).__appearance = state;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) state.longTasks.push({ start: entry.startTime, duration: entry.duration });
+    }).observe({ type: "longtask", buffered: true });
     (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
       supportsFiber: true, inject: () => 1, onCommitFiberUnmount: () => {},
       onCommitFiberRoot: (_id: number, root: any) => {
@@ -94,4 +97,36 @@ export async function navigateAppearance(page: Page) {
     state.interactive = performance.now() - state.start;
     return state.interactive;
   });
+}
+
+/** Settings is mounted and ready before timing the Appearance interaction. */
+export async function settingsReady(page: Page) {
+  await page.locator('[data-setting-id="language"]').waitFor();
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+}
+
+/** Includes immediate control commit, deferred shell scope, and the following paint. */
+export async function toggleMotion(page: Page) {
+  const persisted = page.waitForResponse((response) => response.url().endsWith("/settings") && response.request().method() === "PATCH");
+  const result = await page.getByRole("switch", { name: "동작 줄이기", exact: true }).evaluate(async (node: HTMLElement) => {
+    const start = performance.now();
+    const next = node.getAttribute("aria-checked") !== "true";
+    node.click();
+    while ((node.getAttribute("aria-checked") === "true") !== next ||
+      (document.getElementById("root")?.dataset.motion === "reduced") !== next) {
+      await new Promise(requestAnimationFrame);
+    }
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    return { ms: performance.now() - start, start, end: performance.now(), checked: next };
+  });
+  if (!(await persisted).ok()) throw new Error("Motion persistence failed");
+  return result;
+}
+
+export async function interactionLongTasks(page: Page, start: number, end: number) {
+  // Give the observer its delivery turn; the measured interval stays unchanged.
+  await page.waitForTimeout(60);
+  return page.evaluate(({ start, end }) => (window as any).__appearance.longTasks
+    .filter((task: { start: number; duration: number }) => task.start < end && task.start + task.duration > start), { start, end });
 }

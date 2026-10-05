@@ -5,9 +5,11 @@ import { useButlerStore } from "./store";
 export function bindAppMotion(): void {
   let reduced = useButlerStore.getState().settings.reduce_motion;
   setReducedMotionOverride(reduced);
+  let frame = 0;
   useButlerStore.subscribe((state) => {
     if (state.settings.reduce_motion === reduced) return;
     reduced = state.settings.reduce_motion;
-    setReducedMotionOverride(reduced);
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => setReducedMotionOverride(reduced));
   });
 }

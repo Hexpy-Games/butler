@@ -30,7 +30,7 @@ with `motionDuration()` and `easeProgress()` and follow reduced motion with
 `subscribeReducedMotion()`; canvas engines and their
 intrinsic simulation constants are allowlisted in `lint:motion`
 (`CANVAS_MOTION_ENGINES`). App and viewer force reduction with
-`setReducedMotionOverride(true)` on the document root; `false` follows the OS.
+`setReducedMotionOverride(true)` on the app shell; `false` follows the OS.
 Vite's `reduced-motion-css` PostCSS plugin generates `@scope` counterparts
 from the existing OS media rules, so lazy CSS modules also honour the override.
 This is shared by Electron and browser builds (CSS `@scope` support required);
