@@ -202,6 +202,32 @@ async fn owner_downloads_six_real_chats() -> Result<(), HarnessError> {
     Ok(())
 }
 
+/// Post-release acceptance uses the downloaded binary and a disposable folder.
+#[tokio::test]
+async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let Ok(version) = std::env::var("BUTLER_E2E_RELEASED_VERSION") else {
+        return Ok(());
+    };
+    assert!(version.starts_with("0.1.0-preview."));
+    let setup = Setup::new("RELEASED-FOLDER-LIVE")?;
+    let downloads = setup.sandbox.home.join("Downloads");
+    std::fs::create_dir_all(downloads.join("reports"))?;
+    for (name, content) in [
+        ("alpha.txt", "alpha"),
+        ("beta.txt", "beta"),
+        ("summary.csv", "id,value"),
+    ] {
+        std::fs::write(downloads.join(name), content)?;
+    }
+    let profile = setup.sandbox.home.to_str().unwrap();
+    assert!(
+        run(Access::AskFirst, 1, profile, &downloads).await?,
+        "Released real chat must list the complete folder and request approval before moving files"
+    );
+    Ok(())
+}
+
 fn timings(data: &Path) -> Result<Vec<String>, HarnessError> {
     let db = butler_platform::sqlite::open_with_flags(
         data.join("agent-runtime/btcc.sqlite"),
