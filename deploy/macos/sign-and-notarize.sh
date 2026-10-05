@@ -28,7 +28,7 @@ key_dir=$tmp_dir/butler-signing-keys
 log() { printf 'sign: %s\n' "$*"; }
 die() { printf 'sign: error: %s\n' "$*" >&2; exit 1; }
 enabled() { [ -n "${BUTLER_SIGN_IDENTITY:-}" ]; }
-preview() { [[ ${GITHUB_REF_NAME:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; }
+preview() { [[ ${GITHUB_REF_NAME:-} == *-preview.* ]]; }
 adhoc() { [ "${BUTLER_SIGN_IDENTITY:-}" = "-" ]; }
 
 # Credential tools must share the profile that created the temporary keychain.
@@ -123,17 +123,13 @@ setup_certificate() {
 }
 
 setup_preview() {
-  if ! "$here/sign-and-notarize.sh" setup-certificate; then
-    cleanup
-    {
-      echo "BUTLER_SIGN_IDENTITY=-"
-      echo "BUTLER_SIGN_KEYCHAIN="
-      echo "BUTLER_SIGN_TEAM_ID="
-      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
-    } >> "$GITHUB_ENV"
-    log "certificate setup failed; unofficial preview uses ad-hoc signing"
-  fi
-  log "unofficial preview: notarization disabled"
+  # Unofficial previews must not depend on production credentials or keychains.
+  {
+    echo "BUTLER_SIGN_IDENTITY=-"
+    echo "BUTLER_SIGN_KEYCHAIN="
+    echo "BUTLER_SIGN_TEAM_ID="
+  } >> "$GITHUB_ENV"
+  log "unofficial preview: ad-hoc signing; notarization disabled"
 }
 
 cleanup() {
