@@ -231,7 +231,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     std::fs::write(setup.sandbox.home.join("Documents/보고서.txt"), "문서 내용")?;
     let home = setup.sandbox.home.clone();
     let installation = setup.sandbox.install.clone();
-    butler_platform::secure_fs::symlink(&home.join("Desktop"), &setup.sandbox.data.join("link"))?;
+    butler_platform::secure_fs::fixture_links::directory_alias(
+        &home.join("Desktop"),
+        &setup.sandbox.data.join("link"),
+    )?;
     let (url, script, server) = provider::start(cases(&home, &installation)[0].clone()).await?;
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)

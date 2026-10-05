@@ -485,3 +485,6 @@ pub fn workspace_test_alias(path: &Path) -> PathBuf {
             .join(path.file_name().unwrap_or_default())
     }
 }
+
+#[cfg(feature = "test-support")]
+pub mod fixture_links;
