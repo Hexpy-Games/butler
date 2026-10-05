@@ -1,3 +1,4 @@
+import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser.ts";
 // Bundled fonts render in the served UI (DS spec Typeface Contract).
 //
 // Web mode: Playwright Chromium against an isolated native gateway serving the
@@ -14,7 +15,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer, freePort } from "../support/native-app-server.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
@@ -43,7 +43,9 @@ const LOAD_PROBE = `(async () => {
     bytes: fonts.reduce((total, entry) => total + (entry.encodedBodySize || entry.transferSize || 0), 0),
     family: getComputedStyle(document.body).fontFamily,
     pretendardLoaded: [...document.fonts].filter((face) => face.family.includes("Pretendard Variable") && face.status === "loaded").length,
-    check: document.fonts.check('14px "Pretendard Variable"', "Butler 버틀러"),
+    // Initial English UI intentionally fetches no Hangul subset; the probes below
+    // load and verify Hangul rendering for both locales.
+    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "Butler 버틀러" : "Butler"),
   };
 })()`;
 
@@ -86,15 +88,15 @@ async function renderedFaces(send: Send): Promise<Rendered> {
 function assertFonts(mode: string, load: FontLoad, rendered: Rendered): void {
   assert.match(load.family, /^"Pretendard Variable"/u, `${mode}: body font-family`);
   assert.ok(load.check && load.pretendardLoaded > 0, `${mode}: Pretendard Variable is not loaded: ${JSON.stringify(load)}`);
-  assert.deepEqual(rendered.text, ["Pretendard Variable"], `${mode}: UI text face`);
-  assert.deepEqual(rendered.code, ["IBM Plex Mono"], `${mode}: code face`);
-  assert.deepEqual(rendered.codeHangul, ["Pretendard Variable"], `${mode}: Hangul code face`);
+  assert.deepEqual([...new Set(rendered.text)], ["Pretendard Variable"], `${mode}: UI text face`);
+  assert.deepEqual([...new Set(rendered.code)], ["IBM Plex Mono"], `${mode}: code face`);
+  assert.deepEqual([...new Set(rendered.codeHangul)], ["Pretendard Variable"], `${mode}: Hangul code face`);
 }
 
 const report: Record<string, unknown> = {};
 
 async function webMode(): Promise<void> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchSmokeBrowser();
   try {
     for (const locale of ["en", "ko"] as const) {
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale }) });
@@ -144,7 +146,7 @@ async function electronMode(): Promise<void> {
   });
   const electronPath = createRequire(resolve(root, "packages/butler-app/client/electron/package.json"))("electron") as unknown as string;
   const debugPort = await freePort();
-  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, resolve(root, "packages/butler-app/client/electron")], {
+  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs(), resolve(root, "packages/butler-app/client/electron")], {
     cwd: dir,
     stdio: "ignore",
     env: {

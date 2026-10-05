@@ -75,6 +75,9 @@ pub(super) async fn dispatch(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if call.name == ToolName::ProjectArtifacts {
+        return super::project_artifacts::execute(owner, invocation, call).await;
+    }
     if call.name == ToolName::AskUser {
         return execute(owner, call, call_id).await;
     }

@@ -47,7 +47,8 @@ pub(super) fn migrate(
     connection
         .execute_batch(
             "CREATE INDEX IF NOT EXISTS events_turn_id_idx \
-             ON events(turn_id,id DESC) WHERE turn_id<>''",
+             ON events(turn_id,id DESC) WHERE turn_id<>''; \
+             CREATE INDEX IF NOT EXISTS projects_ledger_id_idx ON projects(ledger_project_id)",
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
@@ -84,7 +85,7 @@ fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
 pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageError> {
     connection.execute(
         "INSERT OR IGNORE INTO chats(id,title,kind,project_id,pinned,archived,created_at,updated_at) \
-         VALUES('general','Onboarding','chat',NULL,0,0,?1,?1)",
+         VALUES('general','General','chat',NULL,0,0,?1,?1)",
         [now],
     ).map_err(AppStorageError::sqlite)?;
     connection
@@ -93,10 +94,13 @@ pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageE
             [],
         )
         .map_err(AppStorageError::sqlite)?;
-    connection.execute(
-        "UPDATE chats SET title='Onboarding',updated_at=?1 WHERE id='general' AND title='New chat' \
-         AND NOT EXISTS(SELECT 1 FROM messages WHERE messages.chat_id=chats.id)", [now],
-    ).map_err(AppStorageError::sqlite)?;
+    connection
+        .execute(
+            "UPDATE chats SET title='General',updated_at=?1 WHERE id='general' \
+         AND title IN ('Onboarding','onboarding','New chat')",
+            [now],
+        )
+        .map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 

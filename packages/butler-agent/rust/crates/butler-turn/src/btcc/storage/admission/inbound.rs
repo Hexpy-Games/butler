@@ -21,11 +21,17 @@ pub(super) fn record_inbound(
     let session_id = text(fresh.session_id, "sessionId")?;
     let trigger_key = text(fresh.trigger_key, "triggerKey")?;
     if let Some(existing) = find_inbox(&transaction, session_id, trigger_key)? {
-        if existing.admission_input_hash != hash {
+        if existing.turn_id != text(fresh.turn_id, "turnId")? {
             return Err(error(
                 StorageCode::AdmissionKeyConflict,
-                "BTCC admission key conflict",
+                "BTCC admission turn identity conflict",
             ));
+        }
+        if existing.admission_input_hash != hash {
+            butler_core::diagnostic!(
+                "warning: inbound replay content hash mismatch for {}",
+                existing.inbox_id
+            );
         }
         transaction.commit().map_err(StorageError::sqlite)?;
         return Ok(existing);
@@ -86,19 +92,33 @@ fn insert_user_message(connection: &Connection, command: &Fresh<'_>) -> StorageR
     let content = command.content()?;
     let existing = connection
         .query_row(
-            "SELECT content FROM btcc_messages WHERE message_id = ?1",
+            "SELECT session_id,turn_id,role,content FROM btcc_messages WHERE message_id = ?1",
             [message_id],
-            |row| row.get::<_, String>(0),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
         )
         .optional()
         .map_err(StorageError::sqlite)?;
     if let Some(existing) = existing {
-        return (existing == content).then_some(()).ok_or_else(|| {
-            error(
-                StorageCode::CanonicalUserConflict,
-                "BTCC canonical user message identity conflict",
-            )
-        });
+        if existing.3 != content {
+            butler_core::diagnostic!("warning: inbound message content mismatch for {message_id}");
+        }
+        return (existing.0 == command.session_id
+            && existing.1 == command.turn_id
+            && existing.2 == "user")
+            .then_some(())
+            .ok_or_else(|| {
+                error(
+                    StorageCode::CanonicalUserConflict,
+                    "BTCC canonical user message identity conflict",
+                )
+            });
     }
     let session_id = text(command.session_id, "sessionId")?;
     let turn_id = text(command.turn_id, "turnId")?;
@@ -121,13 +141,21 @@ fn insert_wake(
     let content = text(&trigger.content, "content")?;
     let existing = connection
         .query_row(
-            "SELECT content FROM btcc_continuation_triggers WHERE trigger_id = ?1",
+            "SELECT session_id,turn_id,source_turn_id,authorization_ref,content FROM btcc_continuation_triggers WHERE trigger_id = ?1",
             [trigger_id],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?)),
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    if existing.as_deref().is_some_and(|value| value != content) {
+    if existing.as_ref().is_some_and(|value| value.4 != content) {
+        butler_core::diagnostic!("warning: wake content mismatch for {trigger_id}");
+    }
+    if existing.as_ref().is_some_and(|value| {
+        value.0 != command.session_id
+            || value.1 != command.turn_id
+            || value.2 != trigger.source_turn_id
+            || value.3 != trigger.authorization_ref
+    }) {
         return Err(error(
             StorageCode::ContinuationTriggerConflict,
             "BTCC continuation trigger identity conflict",
@@ -181,11 +209,13 @@ fn insert_wake_fact(
         .optional()
         .map_err(StorageError::sqlite)?;
     if let Some(existing) = existing {
+        if existing.4 != identity.4 {
+            butler_core::diagnostic!("warning: wake fact content mismatch for {turn_id}");
+        }
         if existing.0 != identity.0
             || existing.1 != identity.1
             || existing.2 != identity.2
             || existing.3 != identity.3
-            || existing.4 != identity.4
         {
             return Err(error(
                 StorageCode::WakeRequestConflict,

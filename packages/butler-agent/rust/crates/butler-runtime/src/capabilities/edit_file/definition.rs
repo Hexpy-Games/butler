@@ -7,7 +7,7 @@ pub(in crate::capabilities) fn definition() -> Value {
         "parameters":{
             "type":"object","additionalProperties":false,
             "properties":{
-                "path":{"type":"string","description":"File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted."},
+                "path":{"type":"string","description":"Absolute file path or a path resolved against the session workspace."},
                 "start_line":{"type":"integer","minimum":1,"description":"Optional one-based location hint for old_text. It may be stale after earlier edits; the exact text remains authoritative."},
                 "old_text":{"type":"string","minLength":1,"description":"Exact existing text copied from the current file. Include indentation and line breaks exactly as they appear."},
                 "new_text":{"type":"string","description":"Exact replacement text. An empty string removes old_text."},

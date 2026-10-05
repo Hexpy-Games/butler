@@ -40,7 +40,7 @@ impl Store {
             }
             let now = now_iso();
             if let Some(list_id) = string(&record, "todo_list_id") {
-                let path = self.root.join("todos").join(format!("{list_id}.json"));
+                let path = self.root.join("todos").join(record_name(&list_id));
                 if let Some(mut todo) = read_object(&path)? {
                     update_todo(&mut todo, &outcome.outcome, &now)?;
                     write_atomic(&path, &todo)?;
@@ -70,7 +70,7 @@ impl Store {
                 + 1;
             map.insert("record_generation".into(), json!(generation));
             write_atomic(
-                &self.root.join("work-streams").join(format!("{id}.json")),
+                &self.root.join("work-streams").join(record_name(id)),
                 &record,
             )
         })

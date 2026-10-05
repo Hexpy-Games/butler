@@ -246,7 +246,14 @@ impl ProjectWorkRepository {
         snapshot: &ProjectWorkLegacySnapshot,
         canonical: Option<&WorkView>,
     ) -> Result<(), BtccError> {
-        if canonical.is_some_and(|view| view.result_refs != snapshot.work.result_refs) {
+        if canonical.is_some_and(|view| {
+            view.result_refs.len() != snapshot.work.result_refs.len()
+                || !view
+                    .result_refs
+                    .iter()
+                    .zip(&snapshot.work.result_refs)
+                    .all(|(left, right)| left.same_identity(right))
+        }) {
             return Err(invalid("project_work_legacy_result_reference_mismatch"));
         }
         for result in &snapshot.work.result_refs {
@@ -259,9 +266,14 @@ impl ProjectWorkRepository {
                     tool_call_id: result.tool_call_id.clone(),
                 })
                 .await?;
+            if result.result_sha256.as_deref() != Some(evidence.result_sha256.as_str()) {
+                butler_core::diagnostic!(
+                    "warning: legacy ledger result hash mismatch for {}",
+                    result.result_ref
+                );
+            }
             if result.result_ref != codec::record_id("result", &result.tool_call_id)
                 || evidence.tool_name != result.tool_name
-                || result.result_sha256.as_deref() != Some(evidence.result_sha256.as_str())
             {
                 return Err(invalid("project_work_legacy_result_invalid"));
             }

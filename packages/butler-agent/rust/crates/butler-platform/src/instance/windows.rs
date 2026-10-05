@@ -37,7 +37,7 @@ pub(super) fn system_time_zone() -> io::Result<SystemTimeZone> {
 }
 
 pub(super) fn process_started_at_ms(pid: u32) -> Option<i64> {
-    let started = ProcessView::read(pid)?.started_at_seconds();
+    let started = ProcessView::read(pid).ok()??.started_at_seconds().ok()?;
     i64::try_from(started)
         .ok()
         .filter(|seconds| *seconds > 0)?
@@ -45,7 +45,7 @@ pub(super) fn process_started_at_ms(pid: u32) -> Option<i64> {
 }
 
 pub(super) fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
-    let Some(view) = read(pid) else {
+    let Some(view) = read(pid)? else {
         return Ok(None);
     };
     start_of(&view).map(Some)
@@ -53,27 +53,30 @@ pub(super) fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
 
 /// `windows:<seconds>`, or unavailable for a process this user may not open.
 fn start_of(view: &ProcessView) -> Result<String, IdentityError> {
-    match view.started_at_seconds() {
-        0 => Err(IdentityError::Unavailable(None)),
-        seconds => Ok(format!("windows:{seconds}")),
-    }
+    view.started_at_seconds()
+        .map(|seconds| format!("windows:{seconds}"))
+        .map_err(unavailable)
 }
 
 pub(super) fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
-    let Some(view) = read(pid) else {
+    let Some(view) = read(pid)? else {
         return Ok(None);
     };
     view.executable()
-        .map(|path| Some(path.to_string_lossy().into_owned()))
-        .ok_or(IdentityError::Unavailable(None))
+        .map(|path| path.map(|path| path.to_string_lossy().into_owned()))
+        .map_err(unavailable)
 }
 
 /// The process with id `pid`; the idle process (0) is no process of ours.
-fn read(pid: u32) -> Option<ProcessView> {
+fn read(pid: u32) -> Result<Option<ProcessView>, IdentityError> {
     if pid == 0 {
-        return None;
+        return Ok(None);
     }
-    ProcessView::read(pid)
+    ProcessView::read(pid).map_err(unavailable)
+}
+
+fn unavailable(error: io::Error) -> IdentityError {
+    IdentityError::Unavailable(Some(error))
 }
 
 /// Both paths resolve to the same file: Windows paths differ in case, in
@@ -95,7 +98,7 @@ pub(super) fn terminate(pid: u32, started: &str) -> Result<(), StopError> {
     if pid == 0 || i32::try_from(pid).is_err() {
         return Err(StopError::InvalidPid(pid));
     }
-    let Some(view) = read(pid) else {
+    let Some(view) = read(pid).map_err(StopError::Identity)? else {
         return Err(StopError::Gone);
     };
     match start_of(&view) {
@@ -103,11 +106,9 @@ pub(super) fn terminate(pid: u32, started: &str) -> Result<(), StopError> {
         Ok(_) => return Err(StopError::Gone),
         Err(error) => return Err(StopError::Identity(error)),
     }
-    if view.kill() {
-        Ok(())
-    } else {
-        Err(StopError::Delivery(
-            "the process could not be ended".to_owned(),
-        ))
+    match view.kill() {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(StopError::Gone),
+        Err(error) => Err(StopError::Identity(unavailable(error))),
     }
 }

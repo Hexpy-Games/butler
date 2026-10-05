@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 // Every DS Viewer item page: no example or states-matrix cell lets its content
@@ -40,7 +41,7 @@ function viewerUrl(baseUrl: string, params: Record<string, string>): string {
 async function itemIds(page: Page, baseUrl: string): Promise<Map<string, string>> {
   const items = new Map<string, string>();
   for (const gallery of ["components", "blocks"]) {
-    await page.goto(viewerUrl(baseUrl, { page: gallery }), { waitUntil: "networkidle" });
+    await page.goto(viewerUrl(baseUrl, { page: gallery }), { waitUntil: "load" });
     await page.locator(`[data-ds-gallery="${gallery}"]`).waitFor({ state: "attached" });
     const cards = await page.locator("[data-ds-component][data-ds-item]").evaluateAll((elements) =>
       elements.map((element) => [element.getAttribute("data-ds-component")!, element.getAttribute("data-ds-item")!]));
@@ -173,9 +174,9 @@ async function waitForLayout(page: Page): Promise<void> {
 
 if (!existsSync(join(uiRoot, "index.html"))) throw new Error("UI dist is missing. Run `bun run app:ui:build` first.");
 
-const only = new Set(Bun.argv.slice(2).filter((arg) => arg && arg !== "--"));
+const only = new Set(process.argv.slice(2).filter((arg) => arg && arg !== "--"));
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const offenders: Offender[] = [];
 let checkedPages = 0;
 try {
@@ -186,7 +187,8 @@ try {
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
       if (only.size && !only.has(name)) continue;
-      await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "networkidle" });
+      console.log(`overflow: ${runLabel} ${name}`);
+      await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "load" });
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
       await waitForLayout(page);
       for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: name, run: runLabel, ...found });
@@ -200,7 +202,8 @@ try {
       await page.setViewportSize({ width, height: 1000 });
       for (const chapter of FOUNDATION_PAGES) {
         if (only.size && !only.has(chapter)) continue;
-        await page.goto(viewerUrl(server.url, { page: chapter, motion: "reduced", locale: width === 375 ? "ko" : "en" }), { waitUntil: "networkidle" });
+        console.log(`overflow: ${runLabel} @${width} ${chapter}`);
+        await page.goto(viewerUrl(server.url, { page: chapter, motion: "reduced", locale: width === 375 ? "ko" : "en" }), { waitUntil: "load" });
         await page.locator("[data-ds-chapter-head]").first().waitFor({ state: "visible" });
         await waitForLayout(page);
         for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: chapter, run: `${runLabel} @${width}`, ...found });

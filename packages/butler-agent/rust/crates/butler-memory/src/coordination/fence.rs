@@ -48,15 +48,6 @@ pub(super) fn coordinator_path(path: &Path) -> PathBuf {
     PathBuf::from(value)
 }
 
-pub(super) fn open_readonly(path: &Path) -> CoordinationResult<Connection> {
-    let connection =
-        sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(sqlite_error)?;
-    connection
-        .busy_timeout(Duration::ZERO)
-        .map_err(sqlite_error)?;
-    Ok(connection)
-}
-
 pub(super) fn open_readwrite(path: &Path) -> CoordinationResult<Connection> {
     let connection =
         sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(sqlite_error)?;
@@ -106,14 +97,15 @@ pub(super) fn read_coordinator_meta(
     ))
 }
 
-pub(super) fn read_known_coordinator(
+/// Gate inspection and acquisition recover a hot journal left by a killed lease owner.
+pub(super) fn read_known_coordinator_for_acquire(
     lock_path: &Path,
 ) -> CoordinationResult<Option<CoordinatorMeta>> {
     let path = coordinator_path(lock_path);
     if !path.exists() {
         return Ok(None);
     }
-    let connection = open_readonly(&path)?;
+    let connection = open_readwrite(&path)?;
     let journal: String = connection
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .map_err(sqlite_error)?;

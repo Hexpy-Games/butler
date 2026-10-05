@@ -15,7 +15,7 @@ impl AppApplication {
             return Ok(());
         }
         match fault.as_str() {
-            "lane" => self.storage.execute(panic_lane).await.map_err(app_error),
+            "lane" => self.storage.exclusive(panic_lane).await.map_err(app_error),
             "owner" => self.automation_runs.inject_panic().await,
             "closing" => self.storage.close().await.map_err(app_error),
             _ => Ok(()),

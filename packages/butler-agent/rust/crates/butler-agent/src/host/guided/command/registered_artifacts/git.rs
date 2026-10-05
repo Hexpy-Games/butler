@@ -43,6 +43,7 @@ pub(in crate::host::guided::command) async fn snapshot(
     host_environment: Arc<HashMap<String, String>>,
     abort: CancellationToken,
 ) -> Option<GitSnapshot> {
+    let _timing = super::super::timing::CommandTiming::new("git_snapshot");
     let result = commands
         .submit_structured(StructuredCommandInput {
             steps: vec![CommandStep {

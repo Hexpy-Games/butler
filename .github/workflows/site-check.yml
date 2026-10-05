@@ -1,0 +1,54 @@
+name: Site checks
+on:
+  workflow_call:
+    inputs:
+      upload-pages:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    name: Check and build the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'butler.hexpy.games' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/butler-app/client/ui/package-lock.json
+
+      - name: Install dependencies
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun install --frozen-lockfile --ignore-scripts
+
+      - name: Check the manual
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run site:check
+
+      - name: Build /, /help/ and /ds/
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run site:build
+
+      - name: Leak check (/ds/)
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/ds-site-leak-check.ts packages/butler-site/dist/ds
+
+      - name: Font assets (/ds/)
+        env:
+          DS_SITE_BASE: /ds/
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/font-assets-check.ts packages/butler-site/dist/ds
+
+      - name: Upload Pages artifact
+        if: inputs.upload-pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/butler-site/dist

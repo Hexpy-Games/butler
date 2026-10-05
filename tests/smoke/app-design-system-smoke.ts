@@ -1,8 +1,8 @@
-import { smokeBrowserArgs } from "./browser-launch";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -454,7 +454,7 @@ assert(
 );
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
+const browser = await launchSmokeBrowser();
 
 try {
   const page = await browser.newPage({ deviceScaleFactor: 1 });

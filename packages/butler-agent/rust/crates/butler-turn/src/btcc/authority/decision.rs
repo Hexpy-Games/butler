@@ -48,11 +48,6 @@ pub(super) fn decide(
             },
         ));
     }
-    if current.capability != "ask_user"
-        && !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)?
-    {
-        return Err(AuthorityError::policy("authority_request_not_found"));
-    }
     let permission = if action == AuthorityAction::Allow
         && input.allow_scope.as_deref() == Some("conversation")
     {

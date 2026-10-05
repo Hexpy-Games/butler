@@ -48,11 +48,13 @@ pub(super) async fn model_waiting(
 
 pub(super) async fn operation(
     progress: &dyn AgentLoopProgress,
-    call_id: &str,
-    tool_name: &str,
+    call: &super::contracts::ModelRoundToolCall,
     status: Status,
     output: Option<&butler_core::json::JsonDocument>,
+    operation_call_id: Option<&str>,
 ) {
+    let call_id = &call.id;
+    let tool_name = &call.name;
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
     let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
@@ -63,10 +65,27 @@ pub(super) async fn operation(
         "semanticBlockId": format!("tool-{call_id}"),
         "operationStatus": status.as_str(),
     });
+    if let Some(target) = operation_target(call) {
+        payload.insert("inputLabel".into(), Value::String(target));
+    }
     let encoded = output.map(butler_core::json::JsonDocument::as_str);
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
-        let id = super::super::identity::digest(&format!("btcc-guided-tool-result.v1\0{sha256}"));
+        let pending = output
+            .is_some_and(|output| output.field("authority_pending").ok().flatten() == Some("true"));
+        let phase = if pending {
+            "authority_pending"
+        } else {
+            "terminal"
+        };
+        let request_ref = output
+            .filter(|_| pending)
+            .and_then(|output| output.field("request_ref").ok().flatten())
+            .unwrap_or_default();
+        let result_call_id = operation_call_id.unwrap_or(call_id);
+        let id = super::super::identity::digest(&format!(
+            "btcc-guided-tool-result.v2\0{result_call_id}\0{phase}\0{request_ref}"
+        ));
         payload.insert("resultId".into(), Value::String(id.clone()));
         payload.insert("resultByteLength".into(), Value::from(body.len()));
         (id, sha256)
@@ -138,4 +157,31 @@ impl Status {
             Self::Cancelled => "cancelled",
         }
     }
+}
+
+fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<String> {
+    let keys: &[&str] = match call.name.as_str() {
+        "run_command" => &["command"],
+        "write_file" | "edit_file" | "read_file" => &["path"],
+        "list_files" | "grep_files" => &["path", "directory", "root"],
+        _ => return None,
+    };
+    keys.iter()
+        .find_map(|key| call.arguments.get(*key).and_then(Value::as_str))
+        .map(str::to_owned)
+        .or_else(|| {
+            call.arguments
+                .get("requests")
+                .or_else(|| call.arguments.get("edits"))
+                .and_then(Value::as_array)
+                .map(|requests| {
+                    requests
+                        .iter()
+                        .filter_map(|request| request.get("path").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| (call.name == "list_files").then(|| ".".into()))
 }

@@ -66,6 +66,22 @@ fn fresh_schema_has_full_support_and_functional_message_fts() {
     assert!(table_exists(&connection, "app_space_nodes"));
     assert!(table_exists(&connection, "app_wallpaper_assets"));
     assert!(table_exists(&connection, "app_wallpaper_module_status"));
+    // A deployed General conversation keeps its messages while the internal seed title is repaired.
+    super::seed(&connection, "later").unwrap();
+    let title: String = connection
+        .query_row("SELECT title FROM chats WHERE id='general'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(title, "General");
+    let messages: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE chat_id='general'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(messages, 1);
 }
 
 fn deployed_events_gain_actual_turn_index_without_rewriting_payloads() {

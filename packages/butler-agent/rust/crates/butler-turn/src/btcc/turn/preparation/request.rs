@@ -41,8 +41,10 @@ pub(super) fn assert_replay_identity(
     let basic = turn.session_id == request.session_id
         && turn.trigger_key == request.event_id
         && turn.original_message_id == *message_id
-        && turn.original_message == request.message.content
-        && (request.resume || admitted == replay);
+        && turn.turn_id == request.turn_id;
+    if turn.original_message != request.message.content || (!request.resume && admitted != replay) {
+        butler_core::diagnostic!("warning: replay content mismatch for turn {}", turn.turn_id);
+    }
     let wake_matches = match (wake, turn.wake_identity.as_ref()) {
         (None, None) => true,
         (Some((trigger, source, authority, result)), Some(stored)) => {

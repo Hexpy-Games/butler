@@ -39,7 +39,7 @@ impl ContextCompactionRepository {
     ) -> Result<Arc<[Arc<ContextCompactionRecord>]>, BtccError> {
         let turn_id = turn_id.to_owned();
         self.storage
-            .execute(move |connection| load(connection, &turn_id))
+            .read(move |connection| load(connection, &turn_id))
             .await
             .map(Arc::from)
             .map_err(BtccError::from)
@@ -64,7 +64,9 @@ fn load(
     connection: &Connection,
     turn_id: &str,
 ) -> StorageResult<Vec<Arc<ContextCompactionRecord>>> {
-    let mut statement = connection.prepare(LOAD).map_err(StorageError::sqlite)?;
+    let mut statement = connection
+        .prepare_cached(LOAD)
+        .map_err(StorageError::sqlite)?;
     let rows = statement
         .query_map([turn_id], |row| {
             Ok((

@@ -150,6 +150,7 @@ impl PartialEq for GenerationEmbedding {
 /// A resolved memory generation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MemoryGenerationHandle {
+    pub(crate) reader_pin: Option<super::pins::GenerationPin>,
     /// Generation id.
     pub generation_id: String,
     /// Graph database.

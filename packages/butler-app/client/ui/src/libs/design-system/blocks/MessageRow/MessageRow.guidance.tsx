@@ -4,7 +4,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { CheckCircle2 } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { MarkdownContent } from "../MarkdownContent";
-import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "./index";
+import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow, MessageTurnGroup } from "./index";
 
 // #region recipe: Assistant answer with footer and status
 function AssistantAnswer() {
@@ -23,6 +23,17 @@ function AssistantAnswer() {
 }
 // #endregion
 
+// #region recipe: Transcript rows with attached activity
+function TranscriptGroup() {
+  return <MessageTurnGroup>
+    <MessageRow role="assistant"><Typo.Body as="p">Here is the reply.</Typo.Body></MessageRow>
+    <MessageRow role="assistant"><MessageStatusLabel mark={<CheckCircle2 size="sm" />}>
+      <Typo.Caption as="span">Response completed</Typo.Caption>
+    </MessageStatusLabel></MessageRow>
+  </MessageTurnGroup>;
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "One message in the timeline: user bubble or full-width assistant document, with footer, status line and insert motion.",
   whenToUse: ["Render a user, assistant or system message"],
@@ -30,7 +41,8 @@ export const guidance: ShowcaseGuidance = {
     { when: "A message waiting in the queue", use: "QueuedMessage" },
     { when: "Tool calls and work progress", use: "WorkActivityBlock" },
   ],
-  recipes: [{ name: "Assistant answer with footer and status", description: "MessageFooter holds actions and time; MessageStatusRow holds the terminal status.", render: () => <AssistantAnswer /> }],
+  recipes: [{ name: "Assistant answer with footer and status", description: "MessageFooter holds actions and time; MessageStatusRow holds the terminal status.", render: () => <AssistantAnswer /> },
+    { name: "Transcript rows with attached activity", description: "Chronological rows share the assistant body gap without adding row padding.", render: () => <TranscriptGroup /> }],
   doDont: [
     {
       do: { caption: "Assistant text uses the full readable width, no avatar gutter.", render: () => <AssistantAnswer /> },
@@ -39,5 +51,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Virtualized rows position themselves with offsetY (translateY); nothing else styles a row.", "Status labels are short (Response completed / 응답 완료); times are local clock times."],
   accessibility: ["Messages are articles in reading order; footers are toolbars of labelled buttons; shimmer is decorative."],
-  tokens: ["--user-message-bg", "--page-max-width-reading", "--motion-base", "--motion-distance-sm", "--shimmer-duration"],
+  tokens: ["--space-lg", "--user-message-bg", "--page-max-width-reading", "--motion-base", "--motion-distance-sm", "--shimmer-duration"],
 };

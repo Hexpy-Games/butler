@@ -1,11 +1,7 @@
 //! Legacy indexing receipts written after the vector rows, even if graph extraction warns.
 
 use crate::cognition::CognitionCode;
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::{fs, io::Write, path::Path};
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -187,31 +183,22 @@ fn extract_graph(input: LegacyReceiptInput<'_>, codes: Codes) -> CognitionResult
     Ok(())
 }
 
-/// Replaces `vector-stats.json` through `temp`, keeping its permissions.
+/// Replaces `vector-stats.json` with a durable owner-only snapshot.
 fn replace_stats(
-    temp: &Path,
+    _temp: &Path,
     stats: &Path,
     serialized: &[u8],
     codes: Codes,
 ) -> CognitionResult<()> {
-    let failed = |source| error(codes.receipt).with_source(source);
-    let result: CognitionResult<()> = (|| {
-        let mut output = create_private(temp)?;
-        if let Ok(metadata) = fs::metadata(stats) {
-            fs::set_permissions(temp, metadata.permissions()).map_err(failed)?;
-        }
-        output
-            .write_all(serialized)
-            .and_then(|()| output.write_all(b"\n"))
-            .and_then(|()| output.sync_all())
-            .map_err(failed)?;
-        fs::rename(temp, stats).map_err(failed)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temp);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        stats,
+        |file| {
+            file.write_all(serialized)?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
+    .map_err(|source| error(codes.receipt).with_source(source))
 }
 
 #[derive(Clone, Copy)]
@@ -235,19 +222,6 @@ fn error(code: CognitionCode) -> CognitionError {
 }
 
 fn append_private(path: &Path) -> CognitionResult<std::fs::File> {
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    options
-        .open(path)
-        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))
-}
-
-fn create_private(path: &Path) -> CognitionResult<std::fs::File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    options
-        .open(path)
+    butler_platform::secure_fs::append_private(path)
         .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))
 }

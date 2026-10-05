@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
  * reply inline images and attachments, checked on DS Viewer showcase stories
@@ -14,7 +15,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -28,7 +29,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function openStory(page: Page, baseUrl: string, entry: string, story: string, width = "app"): Promise<Locator> {
   const params = new URLSearchParams({ visual: "design-system", page: entry, theme: "light", locale: "en", width });
-  await page.goto(`${baseUrl}?${params.toString()}`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}?${params.toString()}`, { waitUntil: "load" });
   const scope = page.locator(`[data-ds-story="${story}"]`).first();
   await scope.waitFor({ state: "visible" });
   await scope.scrollIntoViewIfNeeded();
@@ -195,11 +196,29 @@ async function checkAttachments(page: Page, baseUrl: string): Promise<void> {
   await chips.screenshot({ path: join(screenshotDir, "attachment-chips-375.png"), animations: "disabled" });
 }
 
+async function checkActivityTurns(page: Page, baseUrl: string): Promise<void> {
+  const running = await openStory(page, baseUrl, "blocks/MessageRow", "Running activity", "375");
+  const live = running.locator("[data-ds-theme]").first();
+  assert(await live.locator('[data-test-class="assistant-footer"]').count() === 0, "live turn defers footer");
+  assert(await live.getByRole("button", { name: /Activity/ }).count() === 0, "no completed summary while running");
+  const completed = await openStory(page, baseUrl, "blocks/MessageRow", "Completed activity", "375");
+  const frame = completed.locator("[data-ds-theme]").first();
+  const summary = frame.getByRole("button", { name: /Activity/ });
+  assert(await summary.getAttribute("aria-expanded") === "false", "completed summary starts collapsed");
+  assert(await frame.locator('[data-test-class="assistant-footer"]').count() === 1, "one completed footer");
+  await summary.click();
+  await frame.getByText("Review the activity surface", { exact: true }).waitFor();
+  const list = await openStory(page, baseUrl, "blocks/MessageRow", "Completed turns");
+  assert(await list.locator("[data-ds-theme]").first().locator('[data-test-class="assistant-footer"]').count() === 4,
+    "each completed turn keeps one footer");
+}
+
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);
+  await checkActivityTurns(page, server.url);
   await checkWorkActivity(page, server.url);
   await checkInlineDisclosure(page, server.url);
   await checkCurrentStatusLine(page, server.url);
@@ -209,6 +228,7 @@ try {
     ok: true,
     service: "butler-ds-conversation-stories-smoke",
     checks: [
+      "running-activity-order", "completed-activity-expand", "completed-turn-list",
       "work-block-plain-surface", "work-title-weight-wrap-tone", "work-dot-marker", "work-content-starts-align",
       "tool-row-outlined-capped-pointer", "tool-group-counted-summary", "tool-row-operation-label", "tool-rows-keyboard-expand", "tool-details-muted", "inline-disclosure-unpadded-underline-hover",
       "current-status-one-clipped-line", "markdown-inline-image-bounded", "message-attachments-thumbnail",

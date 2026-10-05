@@ -387,8 +387,7 @@ export function personalizationDraftHasChanges(
       profilingDraftFromPersonalization(personalization).extractorModel ||
     draftProfiling.extractorReasoningEffort !==
       profilingDraftFromPersonalization(personalization)
-        .extractorReasoningEffort ||
-    draftProfiling.clearProfile
+        .extractorReasoningEffort
   );
 }
 
@@ -428,8 +427,7 @@ function personalizationUpdatePayload(
       profilingDraftFromPersonalization(personalization).extractorModel ||
     draftProfiling.extractorReasoningEffort !==
       profilingDraftFromPersonalization(personalization)
-        .extractorReasoningEffort ||
-    draftProfiling.clearProfile
+        .extractorReasoningEffort
   ) {
     const baseline = profilingDraftFromPersonalization(personalization);
     payload.profiling = {};
@@ -450,7 +448,6 @@ function personalizationUpdatePayload(
       payload.profiling.extractor_reasoning_effort =
         draftProfiling.extractorReasoningEffort;
     }
-    if (draftProfiling.clearProfile) payload.profiling.clear_profile = true;
   }
   return payload;
 }
@@ -583,7 +580,6 @@ function profilingDraftFromPersonalization(
       extractorReasoningEffort === "max"
         ? extractorReasoningEffort
         : "medium",
-    clearProfile: false,
   };
 }
 
@@ -592,7 +588,6 @@ function emptyProfilingDraft(): PersonalizationDraft["profiling"] {
     mode: "off",
     extractorModel: "default",
     extractorReasoningEffort: "medium",
-    clearProfile: false,
   };
 }
 

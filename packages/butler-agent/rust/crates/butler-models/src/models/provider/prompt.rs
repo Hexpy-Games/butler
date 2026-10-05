@@ -47,7 +47,6 @@ async fn run(
     let (carrier, mode, api) = crate::models::provider::client::carrier(&config);
     let serialize::PromptWire {
         body,
-        cache_key,
         cache_retention,
     } = serialize::body(&request, &config, carrier)?;
     let serialized = butler_core::json::stringify(&body).map_err(|error| {
@@ -57,45 +56,15 @@ async fn run(
         }
     })?;
     let serialized = Bytes::from(serialized);
-    let physical = crate::models::request_admission::PreparedRequestAdmission::new(
-        &crate::models::request_admission::PrepareAdmissionInput {
-            catalog: &provider.catalog,
-            config: provider.config.as_ref(),
-            provider: &config.metadata.provider_id,
-            model_ref: &config.metadata.model_ref,
-            butler_data: None,
-            requested_output_tokens: super::serialize::requested_output_tokens(
-                &body,
-                carrier,
-                matches!(
-                    config.auth.mode(),
-                    super::ProviderAuthMode::CodexOauth
-                        | super::ProviderAuthMode::CodexSubscription
-                )
-                .then(|| {
-                    request
-                        .usage_attribution
-                        .and_then(|value| value.requested_output_tokens)
-                })
-                .flatten(),
-            ),
-            context_window_tokens: (config.metadata.provider_id == "local")
-                .then_some(config.metadata.context_window_tokens)
-                .flatten(),
-            max_output_tokens: (config.metadata.provider_id == "local")
-                .then_some(config.metadata.max_output_tokens)
-                .flatten(),
-            body: &body,
-            serialized: serialized.clone(),
-        },
+    let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
+    let physical = admission(
+        provider,
+        &request,
+        &config,
+        &body,
+        serialized.clone(),
+        carrier,
     )?;
-    drop(body);
-    let request_bytes = serialized.len();
-    let observe = || {
-        provider
-            .observations
-            .request(ProviderObservation { request_bytes });
-    };
     let mut http = provider
         .client
         .post(config.endpoint.clone())
@@ -109,6 +78,23 @@ async fn run(
         &config.metadata.provider_id,
         carrier,
     );
+    let http = super::route::cache_affinity(http, &config.auth, body);
+    let trace = super::request_trace::RequestTrace::new(
+        provider,
+        prefix,
+        request.cache_scope,
+        request.usage_attribution.and_then(|a| a.phase),
+        request.usage_attribution.and_then(|a| a.round_index),
+        "background",
+        request.butler_data,
+    )
+    .await?;
+    let request_bytes = serialized.len();
+    let observe = || {
+        provider
+            .observations
+            .request(ProviderObservation { request_bytes });
+    };
     let attempts = retry_attempts(request.provider_retry_attempts, config.retry_attempts);
     let response = crate::models::transport::execute(crate::models::transport::RequestExecution {
         request: http,
@@ -128,10 +114,19 @@ async fn run(
             crate::models::transport::GuardStart::BeforeAdmission
         },
         request_observer: &observe,
+        trace: &trace,
         clock: provider.clock.as_ref(),
         quota: provider.quota.as_deref(),
     })
     .await;
+    let observation = UsageObservation {
+        carrier,
+        cache_retention,
+        prefix: trace.latest().unwrap_or(serde_json::Value::Null),
+    };
+    if response.is_err() && !observation.prefix.is_null() {
+        observe_usage(provider, &request, &config, &observation, None)?;
+    }
     let response = match response {
         Ok(value) => value,
         Err(ModelRoundError::Provider(mut error)) => {
@@ -144,23 +139,68 @@ async fn run(
         }
         Err(error) => return Err(error),
     };
+    complete(provider, &request, &config, observation, &response)
+}
+
+fn admission<'a>(
+    provider: &'a ModelProvider,
+    request: &ProviderPromptRequest<'_>,
+    config: &'a super::ProviderRequestConfig,
+    body: &serde_json::Value,
+    serialized: Bytes,
+    carrier: Carrier,
+) -> Result<crate::models::request_admission::PreparedRequestAdmission<'a>, ModelRoundError> {
+    crate::models::request_admission::PreparedRequestAdmission::new(
+        &crate::models::request_admission::PrepareAdmissionInput {
+            catalog: &provider.catalog,
+            config: provider.config.as_ref(),
+            provider: &config.metadata.provider_id,
+            model_ref: &config.metadata.model_ref,
+            butler_data: None,
+            requested_output_tokens: super::serialize::requested_output_tokens(
+                body,
+                carrier,
+                matches!(
+                    config.auth.mode(),
+                    super::ProviderAuthMode::CodexOauth
+                        | super::ProviderAuthMode::CodexSubscription
+                )
+                .then(|| {
+                    request
+                        .usage_attribution
+                        .and_then(|value| value.requested_output_tokens)
+                })
+                .flatten(),
+            ),
+            context_window_tokens: (config.metadata.provider_id == "local")
+                .then_some(config.metadata.context_window_tokens)
+                .flatten(),
+            max_output_tokens: (config.metadata.provider_id == "local")
+                .then_some(config.metadata.max_output_tokens)
+                .flatten(),
+            body,
+            serialized,
+        },
+    )
+}
+
+fn complete(
+    provider: &ModelProvider,
+    request: &ProviderPromptRequest<'_>,
+    config: &super::ProviderRequestConfig,
+    mut observation: UsageObservation,
+    response: &serde_json::Value,
+) -> Result<ProviderPromptResult, ModelRoundError> {
+    let carrier = observation.carrier;
     let reported_model = if config.metadata.provider_id == "openai" {
         config.wire_model.as_str()
     } else {
         config.metadata.model_ref.as_str()
     };
-    let decoded = result::decode(&response, reported_model, carrier);
-    observe_usage(
-        provider,
-        &request,
-        &config,
-        UsageObservation {
-            carrier,
-            cache_key: cache_key.as_deref(),
-            cache_retention,
-        },
-        &decoded,
-    )?;
+    let decoded = result::decode(response, reported_model, carrier);
+    super::prefix_diagnostics::reported_usage(&mut observation.prefix, response);
+    observe_usage(provider, request, config, &observation, Some(&decoded))?;
+    let (_, _, api) = super::client::carrier(config);
     let text = decoded.text.ok_or_else(|| {
         ModelRoundError::Provider(Box::new(crate::models::diagnostics::empty(
             &config.metadata.provider_id,
@@ -192,23 +232,20 @@ fn retry_attempts(requested: Option<f64>, configured: f64) -> f64 {
         .unwrap_or(configured)
 }
 
-#[derive(Clone, Copy)]
-struct UsageObservation<'a> {
+struct UsageObservation {
     carrier: Carrier,
-    cache_key: Option<&'a str>,
     cache_retention: Option<crate::models::PromptCacheRetention>,
+    prefix: serde_json::Value,
 }
 
 fn observe_usage(
     provider: &ModelProvider,
     request: &ProviderPromptRequest<'_>,
     config: &super::ProviderRequestConfig,
-    observation: UsageObservation<'_>,
-    decoded: &result::PromptDecoded,
+    observation: &UsageObservation,
+    decoded: Option<&result::PromptDecoded>,
 ) -> Result<(), ModelRoundError> {
-    let Some(usage) = decoded.usage.as_ref() else {
-        return Ok(());
-    };
+    let usage = decoded.and_then(|decoded| decoded.usage.as_ref());
     let resolved_reasoning = request
         .reasoning_effort
         .copied()
@@ -236,18 +273,19 @@ fn observe_usage(
             request.cache_scope.unwrap_or("btcc-agent-loop")
         };
         provider.prompt_metrics.append(PromptUsageMetricInput {
-            model: &usage.model,
+            model: usage.map_or(config.metadata.model_ref.as_str(), |usage| &usage.model),
             scope,
-            prompt_tokens: usage.prompt_tokens,
-            cached_tokens: usage.cached_tokens,
-            total_tokens: usage.total_tokens,
-            cache_write_tokens: decoded.cache_write_tokens,
-            prompt_cache_key: observation.cache_key,
+            prompt_tokens: usage.and_then(|usage| usage.prompt_tokens),
+            cached_tokens: usage.map_or(0.0, |usage| usage.cached_tokens),
+            total_tokens: usage.and_then(|usage| usage.total_tokens),
+            cache_write_tokens: decoded.and_then(|decoded| decoded.cache_write_tokens),
+            prompt_cache_key: None,
             prompt_cache_retention: observation.cache_retention,
             butler_data: request.butler_data,
             usage_attribution: openai_attribution.as_ref().or(request.usage_attribution),
-            reasoning_tokens: decoded.reasoning_tokens,
-            cache_write_1h_tokens: decoded.cache_write_1h_tokens,
+            reasoning_tokens: decoded.and_then(|decoded| decoded.reasoning_tokens),
+            cache_write_1h_tokens: decoded.and_then(|decoded| decoded.cache_write_1h_tokens),
+            prefix_diagnostics: Some(&observation.prefix),
             auth_mode: Some(
                 provider
                     .catalog
@@ -255,17 +293,7 @@ fn observe_usage(
             ),
         })
     };
-    if config.metadata.provider_id == "openai" {
-        metric()?;
-    } else if !matches!(observation.carrier, Carrier::Responses) {
-        let metric_context = matches!(observation.carrier, Carrier::Chat { .. })
-            || request.butler_data.is_some()
-            || request.cache_scope.is_some();
-        if metric_context {
-            metric()?;
-        }
-    }
-    Ok(())
+    metric()
 }
 
 fn cancelled(request: &ProviderPromptRequest<'_>) -> Result<(), ModelRoundError> {

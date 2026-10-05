@@ -99,3 +99,50 @@ The initial AppImage E2E used an unsupported `--version` setup command; correcte
 Measured behavior: `ask_user` kept one complete pending form and one stub model request across a 60.073648s idle window, with zero App/BTCC commits. Native logs measured 10s idle with zero modified files, log bytes, or disk-write bytes. Supervision restored readiness and drained the full queue in 2.083–5.064s across unmanaged/managed stand-ins and SIGKILL/replacement-required cases. `GET /updates` took 2.685ms while the manifest deliberately waited 3s; the forced check took 3.011s and verified the complete updated status. The 16-way pairing probes left zero devices after invalidation and exactly one after concurrent redemption. Wall-clock measurements are recorded, rather than enforced, in this stub tier; response/state assertions remain active.
 
 Remaining environment check failure: `tests/unit/project-ledger-cli.test.ts:687` (#418). Native platform and product-policy investigations are listed above with source locations. No PR, tag, merge or CI rerun is part of this branch delivery.
+
+
+## macOS follow-up — 2026-10-03
+
+Implemented on `codex/mac-update-hardening`, based on `94973ff092ba` from `origin/codex/review-security`; publication is pending the runner's Git write permission.
+
+- Archive admission now validates every entry and link graph before extraction. Absolute/traversing/ambiguous paths, special files, hard-link metadata, oversized entries and writes through symlink ancestors are refused. A canonical regular-file/directory ZIP is passed to `ditto` to retain AppleDouble signing metadata; links are created only after all writes and their canonical destinations must stay within the staged bundle. Strict/deep code signing, the installed signing team, restored role hard links and launch permission are checked before readiness or activation.
+- Bundle replacement uses atomic directory exchange and a durable, bounded journal with old/new inode identities. Startup recovery holds the same exclusive lease and settles the recorded exchange or preserves the old bundle. The two-rename gap is removed. Unsupported atomic exchange fails before moving either bundle.
+- CLI supervision retains the ownership pipe outside Tokio's `Child::wait` (which otherwise closes stdin). SIGTERM releases ownership and gives the Agent its six-second graceful deadline, then forces/reaps the group only after eight seconds. Worker EOF is observed independently of CPU initialization.
+- Support export and developer/model-turn logging share one redactor. Cookies, quoted cookie headers, v2 credentials, pairing/link codes, home-directory usernames and complete bearer tokens containing `+`, `/`, `=` are covered; JSON shape, unrelated fields, event codes and API-key labels are retained.
+
+Native Mac evidence, all in fresh temporary HOME/DATA with stub/replay providers:
+
+| Check | Result |
+| --- | --- |
+| Hostile locally built ZIPs | Eight rejected: traversal, absolute path, escaping symlink, hard-link metadata, >1 GiB entry, FIFO, write through a link, and case-alias escape. Installed old bundle stayed runnable; no escaped file or journal. |
+| Signed temporary bundle fault injection | Helper killed after journal, exchange, parent sync, launch and cleanup. Installed pathname always runnable; ordinary native Agent startup completed recovery at all five checkpoints. Valid signed symlinks survived extraction. |
+| Signed but non-executable candidate | Rejected before readiness/exchange; old bundle remained runnable. |
+| Real native Worker owner EOF | Exited during held CPU initialization in 13.073 ms; no survivor. |
+| Supervisor death and SIGTERM | SIGKILL: 113.542 ms; SIGTERM: 6.035 s, including the Agent forced-stop deadline. Eight-second budget enforced, no Agent/Worker survivors, active turn and queued follow-up recovered. |
+| Shared redaction and support export | 17 runtime operation tests and two native diagnostics E2Es passed. Ten-second idle: zero changed files, log bytes or disk-write bytes. |
+| Actual packaged .90/.91 ZIP | Native helper admitted the staged .91 bundle; strict/deep signatures, framework symlinks, role hard links, manifests and modes passed. EOF cancellation preserved installed .90 and removed staging. This is archive admission proof, not GUI A→B activation proof. |
+
+The source concerns above are addressed and native crash/ownership regressions pass. Qualification remains incomplete: packaged Electron aborts with SIGABRT before its CDP page, even with `--single-process`; `hdiutil create` fails with `Device not configured`, so the DMG mount/install smoke cannot complete. Developer ID/notarization, actual power loss, candidate crashes after successful spawn, and Windows execution remain unvalidated. Ad-hoc signed process-kill fixtures do not establish those claims. No owner installation or real owner DATA was accessed.
+
+
+UI/check follow-up (same working copy; `codex/ui-smokes` publication remains pending):
+
+- #389 is a fixture correction: the public permission menu starts with Ask first, and Full access is selected through its current accessible menu item. #390's 2 px Wallpaper/WallpaperPicker overflow is the browser's default horizontal fieldset margin on Slider; reset that margin only. Navigation fixtures now await the rendered gallery/page and fonts instead of network idleness on a gateway with persistent streams. #391's vector guide/outline reveal now uses transform/opacity clipping windows, preserving its geometry and timeline beats.
+- #418: record CLI operations resolve the ledger root once per synchronous operation. A 37-command profile reduced existence probes from 22,620 to 4,287 and reads from 3,863 to 1,244. Timings (429/377 ms) were noisy and are not a latency claim. The CRUD fixture runs independent read-only phases concurrently while mutations remain ordered and all 131 assertions and the 5 s budget remain; focused time 3.59 s versus 6.47 s before.
+- The previously failing repository privacy audit reads every tracked text file through 16 bounded readers; no path filter, result loss or budget change. Existing #452 has evidence linked in its issue.
+- Restricted Chromium flags are explicit through `BUTLER_SMOKE_BROWSER_ARGS`. Each single-process context owns its browser, teardown is idempotent, and complete CDP ReportEvents traces preserve the renderer PID/thread boundary. Native smoke servers retain an ownership pipe. Node 22 was used for repeated-context runs after Bun's Playwright transport hung; assertions stayed intact.
+
+| Follow-up check | Result |
+| --- | --- |
+| fmt; touched-crate all-target Clippy `-D warnings`; diff whitespace | Passed. |
+| Source-check ratchet | Passed: 2,195 files, 502 non-E2E tests, 405 unmarked, zero violations. |
+| Existing native CLI/install/update/supervision/shutdown E2Es | 34 harness cases passed across 11 targets; Linux AppImage execution explicitly unavailable on this Mac. The redirect fixture now uses a bindable local listener and an actually reachable untrusted destination instead of unavailable `127.0.0.2`. |
+| Frozen dependency install; full Bun check; packaging unit gate | Passed on the final working copy. Earlier full verbose check: 959 passed, 22 existing skips, 106 files, 3,125,680 assertions. Generated target traversal failed in an overlapping run; removing the task target before the final check resolved it. |
+| DS bundle/font assets/navigation/mobile, app DS, conversation stories, question panel | Passed; mobile evidence is Chromium in this restricted runner. |
+| App boot/reload, ask-user, branch actions, Steward pill, screen contracts, pairing, composer caret | Passed. |
+| Layout, consent, reply language | Passed. Consent: 40 cases, 598 text nodes, minimum contrast 4.9498. Reply fixture now starts at Welcome and uses the current consent copy; all persistence/language assertions remain. |
+| DS overflow and standalone DS site | Passed: 308 pages; site root and `/ds/` builds, deep links, navigation, phone layouts and zero foreign requests. Wallpaper cells: scroll width 371 -> 369 px, client width 369 px. |
+| Full motion trace | Failed: Color passes the transform/opacity property contract, but 5.83 ms/frame exceeds 0.5 ms. Isolated hero profiling showed 60 fps, zero layouts/paints/long tasks, 486 animations and 120 style recalculations per two-second window (6.15 ms/frame). A compositor-hint experiment still exceeded the budget (3.90 ms) and was reverted. Other hero performance is descriptive, not accepted. No budget or assertion was changed. |
+| Font rendering / Electron first-run | Web English/Korean face assertions passed after correcting initial locale-subset checks and comparing unique families while retaining raw font-face arrays. Electron font rendering could not open its window. After installing the correct local Electron binary, first-run still failed with SIGABRT before CDP, matching the packaged GUI limitation. |
+
+Twenty-four before/after PNGs are retained under `.tmp/ui-smokes/`. No UI motion-performance acceptance, packaged GUI A→B, DMG mount/install, Safari qualification or remote publication is claimed. The 22 GiB task target and isolated HOME/DATA directories were removed; inventory found no running executable under this task's temporary installation roots. Git fetch/staging are denied at `FETCH_HEAD`/`index.lock`; no commit, push, PR, tag or merge was performed.

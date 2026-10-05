@@ -4,7 +4,7 @@
 //! projection row, once. Drain then removes the events the projection
 //! retained, a bounded batch per step, and clears the markers that follow.
 
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Savepoint, params};
 use serde_json::Value;
 
 use super::super::{CachedSql, internal_continuation, storage::AppStorageError};
@@ -57,7 +57,7 @@ enum Finalized {
 }
 
 pub(super) fn compact(db: &mut Connection, turn: &str) -> Result<Step, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let Some((state, chat)) = terminal_turn(&tx, turn)? else {
         return Ok(Step::of(CompactResult::Complete));
     };
@@ -86,7 +86,7 @@ impl Step {
 /// Whether the projection of a turn is out of date: a snapshot is unfinished,
 /// the turn ended in another state, or events arrived that it does not cover.
 fn needs_finalize(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     state: &str,
     projection: &Retained,
@@ -111,7 +111,7 @@ fn needs_finalize(
 /// Folds the turn's events into its projection: one snapshot page per step,
 /// the projection row written once, when the last page is in.
 fn finalize(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     chat: &str,
     state: &str,
@@ -136,7 +136,7 @@ fn finalize(
 }
 
 fn terminal_turn(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     tx.query_row_cached(TURN_SQL, [turn], |row| Ok((row.get(0)?, row.get(1)?)))
@@ -145,7 +145,7 @@ fn terminal_turn(
 }
 
 fn retained_projection(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
 ) -> Result<Option<Retained>, AppStorageError> {
     tx.query_row_cached(RETAINED_SQL, [turn], |row| {
@@ -156,7 +156,7 @@ fn retained_projection(
 }
 
 fn snapshot_bounds(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     existing: Option<&Retained>,
 ) -> Result<(i64, i64), AppStorageError> {
@@ -181,7 +181,7 @@ fn snapshot_bounds(
 }
 
 fn snapshot_rows(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     cursor: i64,
     target: i64,
@@ -199,7 +199,7 @@ fn snapshot_rows(
 }
 
 fn retain_rows(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     rows: &[(i64, String, String)],
 ) -> Result<(), AppStorageError> {
@@ -234,7 +234,7 @@ fn retain_rows(
     Ok(())
 }
 
-fn update_cursor(tx: &Transaction<'_>, turn: &str, cursor: i64) -> Result<(), AppStorageError> {
+fn update_cursor(tx: &Savepoint<'_>, turn: &str, cursor: i64) -> Result<(), AppStorageError> {
     tx.execute_cached(
         "UPDATE app_terminal_turn_snapshot_state SET cursor_event_id=?1 WHERE turn_id=?2",
         params![cursor, turn],
@@ -244,7 +244,7 @@ fn update_cursor(tx: &Transaction<'_>, turn: &str, cursor: i64) -> Result<(), Ap
 }
 
 fn upsert_projection(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     chat: &str,
     state: &str,

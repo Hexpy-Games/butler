@@ -1,9 +1,10 @@
-import type { ReactElement } from "react";
 import { type WorkActivityToolItem } from "@/butler-ds";
-import { appCopy, getAppLocale, interfaceProgressLabel, interfaceArgumentLabel } from "@/app/copy.ts";
+import { appCopy, getAppCopy, getAppLocale, interfaceProgressLabel } from "@/app/copy.ts";
 import { isVisibleToolActivity } from "@/app/conversation-progress";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
-import { OperationOutputDetails } from "./OperationOutputDetails";
+import { toolDetails, toolchainDetailLabel } from "./toolchainDetails";
+export { toolchainDetailLabel } from "./toolchainDetails";
+import { commandProgram, uniqueFileTargets } from "../../../../../../butler-i18n/src/index.ts";
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
@@ -18,6 +19,10 @@ const WORK_BOOKKEEPING_TOOL_NAMES = new Set([
   "record_work_checkpoint",
   "record_work_review",
   "record_work_disposition",
+  "plan_review",
+  "completion_review",
+  "work_tool",
+  "tool_work",
 ]);
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
@@ -37,7 +42,8 @@ export function workActivityToolsFromRows(
 ): WorkActivityToolItem[] {
   return rows
     .filter((row) => !(
-      row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name)
+      ["work", "work_block", "plan", "checkpoint", "disposition"].includes(row.kind?.toLowerCase() ?? "") ||
+      (row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name))
     ))
     .map((row, rowIndex) => ({
     id: `${row.id}:${rowIndex}`,
@@ -51,22 +57,6 @@ export function workActivityToolsFromRows(
     }));
 }
 
-function toolDetails(row: ProgressRow, turnId?: string): ReactElement | string | undefined {
-  if (turnId && row.tool_call_id && row.tool_result_id) {
-    return (
-      <OperationOutputDetails
-        requestId={row.tool_call_id}
-        resultId={row.tool_result_id}
-        toolName={row.safe_tool_name}
-        turnId={turnId}
-      />
-    );
-  }
-  return row.safe_detail_rows
-    ?.map((detail) => toolchainDetailLabel(detail, row))
-    .join(" ");
-}
-
 export function isVisibleToolchainRow(
   row: ProgressRow,
   blockLabel: string,
@@ -78,17 +68,38 @@ export function isTerminalActivityState(state: string): boolean {
   return ["delivered", "failed", "cancelled"].includes(state);
 }
 
+function publicToolLabel(row: ProgressRow): string {
+  const name = row.safe_tool_name ?? "";
+  if (["Bun", "Bash", "Web search", "Read", "Edit", "Write"].includes(name)) return name;
+  return appCopy.guided.tools[name] ?? appCopy.guided.tools.fallback;
+}
+
 export function toolchainLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name && row.safe_input_label) {
-    return `${row.safe_tool_name}: ${row.safe_input_label}`;
+    const target = row.safe_tool_name === "run_command" ? commandProgram(row.safe_input_label)
+      : ["read_file", "write_file", "edit_file"].includes(row.safe_tool_name)
+        ? uniqueFileTargets(row.safe_input_label) : row.safe_input_label;
+    return `${publicToolLabel(row)}: ${target}`;
   }
-  return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool;
+  return row.safe_tool_name
+    ? publicToolLabel(row)
+    : row.safe_input_label ?? appCopy.interfaceDetails.tool;
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
-    return interfaceProgressLabel(row) || publicOperationTitle(row.safe_tool_name, getAppLocale());
+    if (row.safe_input_label) return toolchainLabel(row);
+    const label = interfaceProgressLabel(row);
+    const name = row.safe_tool_name ?? "";
+    const knownTitle = ["en-US", "ko-KR"] as const;
+    if (knownTitle.some(locale => [getAppCopy(locale).guided.tools[name], publicOperationTitle(name, locale), getAppCopy(locale).guided.tools.fallback, getAppCopy(locale).progress.fallback].includes(label))) {
+      return publicToolLabel(row);
+    }
+    return label && ![row.safe_tool_name, appCopy.guided.tools.fallback, appCopy.progress.fallback].includes(label)
+      ? label : toolchainLabel(row);
   }
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
@@ -100,7 +111,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
   }
   if (row.safe_tool_name && detailCount > 1) {
     return appCopy.conversation.work.toolStepsSummary(
-      row.safe_tool_name,
+      appCopy.guided.tools[row.safe_tool_name] ?? appCopy.guided.tools.fallback,
       detailCount,
     );
   }
@@ -108,7 +119,8 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
-  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.work;
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
+  if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
     if (row.safe_tool_name === "web_search") return appCopy.interfaceStatus.search;
     if (
@@ -123,7 +135,7 @@ export function toolchainGroupLabel(row: ProgressRow): string {
       return appCopy.interfaceStatus.edit;
     }
     if (row.safe_tool_name === "run_command") return appCopy.interfaceStatus.command;
-    return appCopy.interfaceStatus.work;
+    return publicToolLabel(row);
   }
   const toolName = row.safe_tool_name?.trim();
   if (
@@ -132,27 +144,13 @@ export function toolchainGroupLabel(row: ProgressRow): string {
   ) {
     return appCopy.interfaceStatus.search;
   }
-  if (row.kind === "ran_command" || toolName === "Bash") return "Bash";
-  if (row.kind === "read") return toolName || appCopy.interfaceStatus.read;
+  if (toolName === "Bash") return "Bash";
+  if (row.kind === "ran_command") return appCopy.interfaceStatus.command;
+  if (row.kind === "read") return appCopy.interfaceStatus.read;
   if (row.kind === "edited") return appCopy.interfaceStatus.edit;
-  if (row.kind === "dispatch") return appCopy.interfaceStatus.work;
-  if (toolName && !["Tool", "Used tool", "도구"].includes(toolName)) return toolName;
+  if (toolName) return publicToolLabel(row);
+  if (row.kind === "dispatch") return appCopy.guided.tools.fallback;
   return appCopy.interfaceStatus.review;
-}
-
-export function toolchainDetailLabel(
-  detail: NonNullable<ProgressRow["safe_detail_rows"]>[number],
-  row: ProgressRow,
-): string {
-  const value = detail.safe_value?.trim();
-  const label =
-    row.kind === "todo" && detail.safe_label.trim().toLowerCase() === "phase"
-      ? appCopy.interfaceStatus.phase
-      : interfaceArgumentLabel(detail.kind, detail.safe_label);
-  if (!value) return label;
-  if (row.safe_tool_name === "Web search")
-    return appCopy.conversation.work.webSearchDetail(value);
-  return appCopy.conversation.work.detailRow(label, value);
 }
 
 export function activityDetailId(rowId: string): string {

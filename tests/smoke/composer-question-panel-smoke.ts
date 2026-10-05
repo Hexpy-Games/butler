@@ -1,6 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { assertFieldTones, auditGrowth, auditQuestionSwap, underlineFocus } from "./question-input-geometry";
 import { resolve } from "node:path";
-import { chromium, type Locator } from "playwright";
+import { type Locator } from "playwright";
 
 // DS Viewer behavior/layout smoke; static presenter only, no provider or owner data.
 const root = resolve("packages/butler-app/client/ui/dist-ds-site");
@@ -8,7 +9,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   const path = new URL(request.url).pathname;
   return new Response(Bun.file(resolve(root, path === "/" ? "index.html" : `.${path}`)));
 } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 let focused = 0;
 
 async function assertFocus(target: Locator) {

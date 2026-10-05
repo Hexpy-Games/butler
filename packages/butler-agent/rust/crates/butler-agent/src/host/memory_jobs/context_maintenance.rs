@@ -2,7 +2,7 @@
 
 use parking_lot::Mutex;
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::PathBuf,
     sync::Arc,
@@ -35,6 +35,22 @@ pub(crate) struct ContextMaintenance {
 }
 
 impl ContextMaintenance {
+    pub(in crate::host) fn for_cognition(
+        data: &std::path::Path,
+        output: &ToolOutput,
+        metrics: &Arc<MetricFiles>,
+        timezone: &Arc<DateParser>,
+        daily: &Arc<DailyCognitionJobs>,
+    ) -> Arc<Self> {
+        Arc::new(Self::new(
+            data.to_owned(),
+            output.clone(),
+            metrics.clone(),
+            timezone.clone(),
+            daily.clone(),
+        ))
+    }
+
     pub(in crate::host) fn new(
         data_root: PathBuf,
         tool_output: ToolOutput,
@@ -121,7 +137,7 @@ impl ContextMaintenance {
                 }
                 tokio::select! {
                     () = cancellation.cancelled() => break,
-                    () = tokio::time::sleep(INTERVAL) => {}
+                    () = tokio::time::sleep(next_tick_delay(&timezone, current_epoch_millis())) => {}
                 }
             }
         }));
@@ -144,7 +160,12 @@ pub(crate) async fn run_tick(
     day: &str,
     minute: u16,
 ) -> Result<bool, crate::host::HostError> {
-    if !should_run(data_root, day, minute) {
+    let root = data_root.to_path_buf();
+    let local_day = day.to_owned();
+    let due = tokio::task::spawn_blocking(move || should_run(&root, &local_day, minute))
+        .await
+        .map_err(crate::host::HostError::from_error)?;
+    if !due {
         return Ok(false);
     }
     let state_path = state_path(data_root);
@@ -178,7 +199,10 @@ pub(crate) async fn run_tick(
     if let Err(error) = &result {
         state["message"] = Value::String(error.message().chars().take(500).collect());
     }
-    write_state(&state_path, &state).map_err(crate::host::HostError::from_error)?;
+    tokio::task::spawn_blocking(move || write_state(&state_path, &state))
+        .await
+        .map_err(crate::host::HostError::from_error)?
+        .map_err(crate::host::HostError::from_error)?;
     result.map(|(artifacts, retained)| {
         butler_core::diagnostic!(
             "[context-maintenance] artifacts scanned={} deleted={} bytesDeleted={} remainingBytes={} metrics scanned={} kept={} deleted={} parseErrors={}",
@@ -220,24 +244,14 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
     let parent = path.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "state path has no parent")
     })?;
-    fs::create_dir_all(parent)?;
-    let temporary = parent.join(format!(".context-maintenance-{}.tmp", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut bytes = serde_json::to_vec_pretty(state).map_err(std::io::Error::other)?;
-        bytes.push(b'\n');
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        let _ = butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    butler_platform::secure_fs::create_private_dir_all(parent)?;
+    let mut bytes = serde_json::to_vec_pretty(state).map_err(std::io::Error::other)?;
+    bytes.push(b'\n');
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
 }
 
 fn current_epoch_millis() -> i64 {
@@ -261,4 +275,26 @@ fn iso_at(now_ms: i64) -> String {
         || "1970-01-01T00:00:00.000Z".to_owned(),
         |date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     )
+}
+
+/// The three daily jobs have only two due boundaries. No database or marker
+/// probes are needed between them. Searching minute boundaries retains the
+/// existing one-minute resolution through skipped or repeated DST wall times.
+pub(in crate::host) fn next_tick_delay(timezone: &DateParser, now_ms: i64) -> Duration {
+    let Ok((day, minute)) = timezone.local_day_and_minute(now_ms) else {
+        return INTERVAL;
+    };
+    for offset in 1_i64..=2_880 {
+        let next = (now_ms.div_euclid(60_000) + offset) * 60_000;
+        let Ok((next_day, next_minute)) = timezone.local_day_and_minute(next) else {
+            return INTERVAL;
+        };
+        if next_day != day
+            || (minute < DUE_MINUTE && next_minute >= DUE_MINUTE)
+            || (minute < 4 * 60 && next_minute >= 4 * 60)
+        {
+            return Duration::from_millis(u64::try_from(next - now_ms).unwrap_or_default());
+        }
+    }
+    INTERVAL
 }

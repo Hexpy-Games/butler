@@ -37,6 +37,21 @@ Agents building chat timelines, transcript previews, or message fixtures.
 Keep markdown rendering, copy actions, retries, and domain records in the
 container. Use `MessageFooter` for footer controls and metadata.
 
+Assistant turns keep one body: streaming answer, then live activity. Hide the
+assistant footer until the turn settles, as in "Send and stream" and "Running
+activity". Never put a completed activity summary above a running answer.
+On completion, replace live activity with a collapsed summary above the answer;
+keep its expandable steps and render the footer once at the end. Existing DS
+stream reveal and activity motion own animations and honor reduced motion.
+
+Assistant body sections use a column gap of `--space-lg` (16px), including the
+answer, attached activity/status and footer. The same gap separates a live
+answer from its activity and a completed summary from its answer; completion
+does not change the spacing token. Do not add section margins in containers.
+Use `MessageTurnGroup` for chronological transcript rows (including delegated
+work): its `Stack gap="lg"` replaces individual row padding with the same 16px
+gap. See "Running activity", "Completed activity" and "Completed turns".
+
 The optional `footer` slot renders metadata outside the message bubble. User
 messages use this slot for their sent date/time and full-text copy action.
 Long user text is folded by the conversation container at five rendered lines;

@@ -172,8 +172,16 @@ impl AppApplication {
         let runtime_session_id = crate::gateway::app_session_hint(session_id);
         self.dependencies
             .authority_handoff
-            .close_self_session(runtime_session_id, reason.to_owned())
-            .await
+            .close_self_session(runtime_session_id.clone(), reason.to_owned())
+            .await?;
+        self.memory_owned(
+            super::super::AppMemoryCommand::EndSession {
+                session_id: runtime_session_id,
+            },
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -185,7 +193,7 @@ fn mutate_session(
     archived: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let current = read::session(&tx, session_id)?;
     if session_id == "general" && archived == Some(true) {
         return Err(AppStorageError::new(
@@ -220,7 +228,7 @@ fn delete_permanently(
     session_id: &str,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let session = read::session(&tx, session_id)?;
     if session_id == "general" {
         return Err(AppStorageError::new(

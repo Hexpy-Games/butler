@@ -283,8 +283,7 @@ pub struct ModelCatalogSnapshotInput {
 
 pub struct ModelCatalogSnapshot {
     static_catalog: Arc<StaticCatalog>,
-    configured_local: Arc<[ModelProviderMetadata]>,
-    extra_models: Arc<[ModelProviderMetadata]>,
+    lookup_models: Arc<[ModelProviderMetadata]>,
     view: ModelCatalogView,
 }
 
@@ -295,12 +294,34 @@ impl ModelCatalogSnapshot {
         collation: &LocaleCollation,
     ) -> Result<Self, ModelCatalogError> {
         let view = lookup::build_view(&static_catalog, &input, collation)?;
+        let ModelCatalogSnapshotInput {
+            configured_local,
+            extra_models,
+            ..
+        } = input;
+        let lookup_models = lookup::overwrite_by_ref(
+            static_catalog
+                .models
+                .iter()
+                .chain(configured_local.iter())
+                .chain(extra_models.iter()),
+        )
+        .into();
         Ok(Self {
             static_catalog,
-            configured_local: input.configured_local.into(),
-            extra_models: input.extra_models.into(),
+            lookup_models,
             view,
         })
+    }
+    /// The complete immutable snapshot with a request-owned observation time.
+    pub(crate) fn with_generated_at(&self, generated_at: String) -> Self {
+        let mut view = self.view.clone();
+        view.generated_at = generated_at;
+        Self {
+            static_catalog: self.static_catalog.clone(),
+            lookup_models: self.lookup_models.clone(),
+            view,
+        }
     }
     pub fn view(&self) -> &ModelCatalogView {
         &self.view
@@ -319,7 +340,7 @@ impl ModelCatalogSnapshot {
             model_ref
                 .filter(|value| !value.trim().is_empty())
                 .or(Some(&self.view.default_model_ref)),
-            &self.lookup_models(),
+            &self.lookup_models,
         )
     }
     /// The provider's static routine preset (`presets.routine`).
@@ -340,9 +361,9 @@ impl ModelCatalogSnapshot {
         let Some(refreshed) = refreshed else {
             return Some(preset.clone());
         };
-        let lookup = self.lookup_models();
+        let lookup = &self.lookup_models;
         let runs = |model_ref: &str, effort: ReasoningEffort| {
-            lookup::find_model_metadata(Some(model_ref), &lookup).is_some_and(|model| {
+            lookup::find_model_metadata(Some(model_ref), lookup).is_some_and(|model| {
                 model.runtime_supported && model.reasoning_efforts.contains(&effort)
             })
         };
@@ -352,16 +373,6 @@ impl ModelCatalogSnapshot {
             refreshed,
             &runs,
         ))
-    }
-
-    fn lookup_models(&self) -> Vec<ModelProviderMetadata> {
-        lookup::overwrite_by_ref(
-            self.static_catalog
-                .models
-                .iter()
-                .chain(self.configured_local.iter())
-                .chain(self.extra_models.iter()),
-        )
     }
 }
 

@@ -16,8 +16,14 @@ if ($Mode -eq 'Export') {
         $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-        & "$artifacts/$test.exe" --test-threads=8 --nocapture
-        if ($LASTEXITCODE -ne 0) { throw "E2E failed: $test ($LASTEXITCODE)" }
+        $listed = & "$artifacts/e2e.exe" "$test`::" --list
+        if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty E2E selection: $test" }
+        $savedPerf = $env:BUTLER_E2E_PERF
+        $threads = if ($test -eq 'windows_commands') { $env:BUTLER_E2E_PERF = '1'; 1 } else { 8 }
+        & "$artifacts/e2e.exe" "$test`::" --test-threads=$threads --nocapture
+        $testCode = $LASTEXITCODE
+        $env:BUTLER_E2E_PERF = $savedPerf
+        if ($testCode -ne 0) { throw "E2E failed: $test ($testCode)" }
         Add-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt" $test
     }
 }

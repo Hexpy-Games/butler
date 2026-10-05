@@ -144,6 +144,16 @@ try {
       await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await page.screenshot({ path: join(out, `appearance-${width}-${theme}-ko.png`), fullPage: true });
       assert(await toggle.isVisible(), "Motion row missing at viewport");
+      const sections = await page.locator('[data-settings-section-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-settings-section-id")));
+      assert(JSON.stringify(sections) === JSON.stringify(["theme", "sidebar", "home-screen", "accessibility"]), "Appearance section order changed");
+      await toggle.scrollIntoViewIfNeeded();
+      const fits = await toggle.evaluate((node) => {
+        const section = node.closest('[data-settings-section-id="accessibility"]')!.getBoundingClientRect();
+        const rect = node.getBoundingClientRect();
+        return rect.left >= section.left && rect.right <= section.right && rect.top >= section.top && rect.bottom <= section.bottom;
+      });
+      assert(fits, "Accessibility switch is outside its section");
+      await page.screenshot({ path: join(out, `accessibility-${width}-${theme}-ko.png`), fullPage: true });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Horizontal overflow");
     }
   }

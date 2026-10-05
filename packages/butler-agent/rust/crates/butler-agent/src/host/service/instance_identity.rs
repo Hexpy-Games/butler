@@ -36,8 +36,10 @@ pub(crate) fn process_is_alive(pid: u32) -> Result<bool, crate::host::HostError>
 
 /// When process `pid` started (see `butler_platform::instance::process_start`).
 pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    platform::process_start(pid)
-        .map_err(|error| identity_error(error, "native_service_process_identity_unavailable"))
+    platform::process_start(pid).map_err(|error| {
+        eprintln!("[service-identity] pid={pid} error={error:?}");
+        identity_error(error, "native_service_process_identity_unavailable")
+    })
 }
 
 /// The executable process `pid` runs.

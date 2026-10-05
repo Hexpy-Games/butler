@@ -1,0 +1,4 @@
+# Startup integrity validation may map the complete owner-scale BTCC file.
+# Runtime writer/read pools explicitly keep mmap_size=0.
+[env]
+LIBSQLITE3_FLAGS = "-DSQLITE_MAX_MMAP_SIZE=8589934592LL"

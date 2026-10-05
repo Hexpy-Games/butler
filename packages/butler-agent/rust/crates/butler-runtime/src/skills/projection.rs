@@ -3,7 +3,6 @@ use std::{
     collections::HashSet,
     fs::File,
     io::{Read, Seek, SeekFrom},
-    path::Path,
     sync::OnceLock,
 };
 
@@ -15,60 +14,91 @@ use butler_core::public_text::trim_js_whitespace;
 
 const MAX_SKILL_NAMES: usize = 48;
 
-pub(super) fn loaded_names(data: &Path, session: &str, turn: Option<&str>) -> Option<Vec<String>> {
-    let safe: String = session
-        .encode_utf16()
-        .map(|unit| match u8::try_from(unit) {
-            Ok(byte) if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') => {
-                char::from(byte)
-            }
-            _ => '_',
-        })
-        .collect();
-    let path = data.join("transcripts").join(format!("{safe}.jsonl"));
-    latest_names(&path, turn)
-}
-
-fn latest_names(path: &Path, turn: Option<&str>) -> Option<Vec<String>> {
-    let mut file = File::open(path).ok()?;
-    let mut remaining = file.metadata().ok()?.len();
-    let mut reversed = Vec::new();
-    let mut oversize = false;
+pub(super) fn latest_names_since(
+    file: &mut File,
+    length: u64,
+    turn: Option<&str>,
+    cutoff: u64,
+) -> Option<(Option<Vec<String>>, u64)> {
+    let mut remaining = length;
+    let mut boundary = cutoff;
+    let mut fragments = Fragments::default();
     let mut ended_with_newline = false;
-    let mut chunk = vec![0_u8; 32 * 1024];
-    while remaining > 0 {
-        let count = usize::try_from(remaining.min(chunk.len() as u64)).unwrap_or(usize::MAX);
+    let capacity = length.saturating_sub(cutoff).clamp(1, 32 * 1024) as usize;
+    let mut chunk = vec![0_u8; capacity];
+    while remaining > cutoff {
+        let count =
+            usize::try_from((remaining - cutoff).min(chunk.len() as u64)).unwrap_or(usize::MAX);
         remaining -= count as u64;
         file.seek(SeekFrom::Start(remaining)).ok()?;
         file.read_exact(&mut chunk[..count]).ok()?;
-        for byte in chunk[..count].iter().rev() {
-            if *byte == b'\n' {
-                if !oversize && let Some(names) = names_from_reversed(&reversed, turn) {
-                    return Some(names);
-                }
-                reversed.clear();
-                oversize = false;
-                ended_with_newline = true;
-            } else if !oversize {
-                let limit = MAX_JSON_LINE_BYTES - usize::from(ended_with_newline);
-                if reversed.len() < limit {
-                    reversed.push(*byte);
-                } else {
-                    reversed.clear();
-                    oversize = true;
-                }
+        let mut end = count;
+        while let Some(newline) = memchr::memrchr(b'\n', &chunk[..end]) {
+            boundary = boundary.max(remaining + newline as u64 + 1);
+            let limit = MAX_JSON_LINE_BYTES - usize::from(ended_with_newline);
+            if let Some(names) = fragments.names(&chunk[newline + 1..end], limit, turn) {
+                return Some((Some(names), boundary));
             }
+            fragments = Fragments::default();
+            ended_with_newline = true;
+            end = newline;
         }
+        fragments.push(
+            &chunk[..end],
+            MAX_JSON_LINE_BYTES - usize::from(ended_with_newline),
+        );
     }
-    (!oversize)
-        .then(|| names_from_reversed(&reversed, turn))
-        .flatten()
+    let names = fragments.names(
+        &[],
+        MAX_JSON_LINE_BYTES - usize::from(ended_with_newline),
+        turn,
+    );
+    Some((names, boundary))
 }
 
-fn names_from_reversed(reversed: &[u8], turn: Option<&str>) -> Option<Vec<String>> {
-    let value =
-        serde_json::from_slice::<Value>(&reversed.iter().rev().copied().collect::<Vec<_>>())
-            .ok()?;
+#[derive(Default)]
+struct Fragments {
+    segments: Vec<Vec<u8>>,
+    length: usize,
+    oversize: bool,
+}
+impl Fragments {
+    fn push(&mut self, bytes: &[u8], limit: usize) {
+        self.length = self.length.saturating_add(bytes.len());
+        if self.length > limit {
+            self.oversize = true;
+            self.segments.clear();
+        } else if !self.oversize && !bytes.is_empty() {
+            self.segments.push(bytes.to_vec());
+        }
+    }
+    fn names(&mut self, prefix: &[u8], limit: usize, turn: Option<&str>) -> Option<Vec<String>> {
+        if self.oversize || self.length.saturating_add(prefix.len()) > limit {
+            return None;
+        }
+        // Most records fit inside the read block. Borrow them directly rather
+        // than reversing and allocating every byte of every unrelated record.
+        if self.segments.is_empty() {
+            return names_from_record(prefix, turn);
+        }
+        let mut record = Vec::with_capacity(self.length + prefix.len());
+        record.extend_from_slice(prefix);
+        for segment in self.segments.iter().rev() {
+            record.extend_from_slice(segment);
+        }
+        names_from_record(&record, turn)
+    }
+}
+
+fn names_from_record(record: &[u8], turn: Option<&str>) -> Option<Vec<String>> {
+    // Escaped category names must still take the complete JSON path.
+    if memchr::memmem::find(record, b"skills").is_none()
+        && memchr::memmem::find(record, b"final_result").is_none()
+        && memchr::memmem::find(record, b"\\u").is_none()
+    {
+        return None;
+    }
+    let value = serde_json::from_slice::<Value>(record).ok()?;
     event_names(&value, turn)
 }
 

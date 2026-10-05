@@ -34,7 +34,9 @@ export function Conversation() {
   const storedMessages = useButlerStore((state) => state.messages);
   const questionAnswers = useButlerStore(state => state.sessionViews[activeChatId]?.question_answers
     ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.question_answers : undefined));
-  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? []), [storedMessages, questionAnswers]);
+  const pendingQuestions = useButlerStore(state => state.sessionViews[activeChatId]?.pending_questions
+    ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.pending_questions : undefined));
+  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? [], pendingQuestions ?? []), [storedMessages, questionAnswers, pendingQuestions]);
   const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const messageLoadPending = useButlerStore(

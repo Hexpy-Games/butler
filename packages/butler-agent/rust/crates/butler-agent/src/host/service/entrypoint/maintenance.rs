@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::{sync::oneshot, time::MissedTickBehavior};
+use tokio::sync::oneshot;
 
 use super::support::{deliver_parent_results, failure};
 use crate::host::ProgressPublisher;
@@ -20,18 +20,16 @@ pub(super) async fn run_service_maintenance(
     app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,
 ) -> Result<(), BtccError> {
-    let mut interval = tokio::time::interval(SERVICE_MAINTENANCE_INTERVAL);
-    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut storage_changes = progress.subscribe_changes();
+    let mut endpoint_changes = app_endpoint.subscribe_changes();
     loop {
-        tokio::select! {
-            biased;
-            _ = &mut stop => return Ok(()),
-            _ = interval.tick() => {},
-        }
+        storage_changes.borrow_and_update();
+        endpoint_changes.borrow_and_update();
         let pass = async {
-            progress.reconcile().await?;
+            let summary = progress.reconcile().await?;
+            let mut retry_pending = summary.attempted > summary.published;
             if let Some(active) = app_endpoint.snapshot() {
-                deliver_parent_results(
+                retry_pending |= deliver_parent_results(
                     &parent_client,
                     &subsessions,
                     &active.base_url,
@@ -39,12 +37,19 @@ pub(super) async fn run_service_maintenance(
                 )
                 .await?;
             }
-            Ok::<(), BtccError>(())
+            Ok::<bool, BtccError>(retry_pending)
+        };
+        let retry_pending = tokio::select! {
+            biased;
+            _ = &mut stop => return Ok(()),
+            result = pass => result?,
         };
         tokio::select! {
             biased;
             _ = &mut stop => return Ok(()),
-            result = pass => result?,
+            _ = storage_changes.changed() => {},
+            _ = endpoint_changes.changed() => {},
+            () = tokio::time::sleep(SERVICE_MAINTENANCE_INTERVAL), if retry_pending => {},
         }
     }
 }

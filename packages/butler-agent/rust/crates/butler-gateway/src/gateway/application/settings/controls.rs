@@ -40,6 +40,9 @@ pub(super) fn global_settings(
     facts: &AppSettingsFacts,
     now: &str,
 ) -> Result<GlobalSettings, AppStorageError> {
+    if db.is_readonly("main").map_err(AppStorageError::sqlite)? {
+        return global_settings_readonly(db, facts);
+    }
     let mut stored = read_json(db, SETTINGS_KEY)?
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
@@ -69,8 +72,29 @@ pub(super) fn global_settings(
     if worker_profiles::canonicalize(&mut stored, facts, &metadata.model_ref, &reasoning) {
         write_json(db, SETTINGS_KEY, &Value::Object(stored.clone()), now)?;
     }
+    project_global(db, &stored, metadata.model_ref.clone(), reasoning)
+}
+
+pub(super) fn global_settings_readonly(
+    db: &Connection,
+    facts: &AppSettingsFacts,
+) -> Result<GlobalSettings, AppStorageError> {
+    let stored = read_json(db, SETTINGS_KEY)?
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let routine = super::default_model::uses_routine_preset(db)?;
+    let (metadata, reasoning) = super::default_model::resolve(&stored, facts, routine);
+    project_global(db, &stored, metadata.model_ref.clone(), reasoning)
+}
+
+fn project_global(
+    db: &Connection,
+    stored: &Map<String, Value>,
+    model: String,
+    reasoning: ReasoningEffort,
+) -> Result<GlobalSettings, AppStorageError> {
     Ok(GlobalSettings {
-        model: metadata.model_ref.clone(),
+        model,
         reasoning,
         access: match stored
             .get("access_mode")

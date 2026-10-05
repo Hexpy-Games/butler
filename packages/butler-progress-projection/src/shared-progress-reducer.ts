@@ -71,7 +71,6 @@ export class SharedProgressReducer<Row extends SharedProgressRow> {
       block.rows = [...block.rowMap.values()];
       return;
     }
-    if (row.bridge_phase === "btcc_operation") return;
     if (!isToolActivityRow(row)) return;
     this.#appendToolRow(row);
   }
@@ -230,6 +229,12 @@ export function projectSharedWorkBlocks<Row extends SharedProgressRow>(
   options: { completedOnly?: boolean } = {},
 ): SharedProgressProjection<Row> {
   const reducer = new SharedProgressReducer<Row>();
-  for (const row of sortProjectionRows(rows)) reducer.append(row);
+  const phases = new Set(rows.filter((row) => row.kind === "message" &&
+    row.work_decision_source === "model-authored" && row.work_decision_summary &&
+    !row.work_block_id).map((row) => row.semantic_block_id).filter(Boolean));
+  for (const row of sortProjectionRows(rows)) {
+    if (row.bridge_phase === "btcc_operation" && row.semantic_block_id && phases.has(row.semantic_block_id)) continue;
+    reducer.append(row);
+  }
   return reducer.snapshot(options);
 }

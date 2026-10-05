@@ -1647,7 +1647,7 @@ One message in the timeline: user bubble or full-width assistant document, with 
 - Use for: Render a user, assistant or system message
 - Not for: A message waiting in the queue → `QueuedMessage`
 - Not for: Tool calls and work progress → `WorkActivityBlock`
-- Tokens: `--user-message-bg`, `--page-max-width-reading`, `--motion-base`, `--motion-distance-sm`, `--shimmer-duration`
+- Tokens: `--space-lg`, `--user-message-bg`, `--page-max-width-reading`, `--motion-base`, `--motion-distance-sm`, `--shimmer-duration`
 
 ### QuestionAnswerCard
 

@@ -1,3 +1,5 @@
+import { installDrawnFrameCapture } from "../support/drawn-webgl-frame.ts";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,7 +24,7 @@ const STUB_MODEL_LABEL = /^Stub\b/u;
 // The stub Custom model advertises a single reasoning level.
 const STUB_REASONING_LABEL = "Instant";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
-const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
+const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
@@ -365,13 +367,14 @@ await server.api("/settings", {
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
 await server.signIn(page);
 const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
+await page.addInitScript(installDrawnFrameCapture);
 await page.addInitScript(
   ({ key, value }) => {
     window.localStorage.setItem(key, value);
@@ -1007,9 +1010,14 @@ try {
     (node) => getComputedStyle(node).backgroundColor,
   );
   await searchButton.hover();
-  await page.waitForTimeout(80);
   const searchBgAfter = await searchButton.evaluate(
-    (node) => getComputedStyle(node).backgroundColor,
+    async (node) => {
+      // Reading style starts the hover transition. Sample its settled value;
+      // an 80ms wall-clock delay can precede the first paint on a busy runner.
+      void getComputedStyle(node).backgroundColor;
+      await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {})));
+      return getComputedStyle(node).backgroundColor;
+    },
   );
   assert(
     searchBgBefore !== searchBgAfter,
@@ -1529,7 +1537,7 @@ try {
   );
   screenshots.push(await screenshot(page, "narrow-conversation.png"));
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(240);
+  await waitForMotionToSettle(page);
   const narrowSidebarBox = await page
     .locator(testClass("sidebar-slot"))
     .boundingBox();
@@ -1887,6 +1895,7 @@ try {
     name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
   }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const permissionMenuLayout = await page
     .locator(testClass("composer-menu"))
     .evaluate((menu) => {
@@ -3071,36 +3080,14 @@ try {
       const fluidStyle = fluid ? getComputedStyle(fluid) : null;
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
-      const measureFluidFrame = () => {
-        if (!(fluid instanceof HTMLCanvasElement)) {
-          return {
-            activeCells: 0,
-            averageTone: 0,
-            grayCoverage: 1,
-            minTone: 0,
-            visibleCoverage: 0,
-          };
-        }
+      const measureFluidFrame = async (budgetMs: number) => {
+        if (!(fluid instanceof HTMLCanvasElement)) return null;
         const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
         const canvas2d = webgl ? null : fluid.getContext("2d");
-        const width = webgl?.drawingBufferWidth ?? fluid.width;
-        const height = webgl?.drawingBufferHeight ?? fluid.height;
-        let pixels: Uint8Array | Uint8ClampedArray | undefined;
-        if (webgl) {
-          const buffer = new Uint8Array(width * height * 4);
-          webgl.readPixels(
-            0,
-            0,
-            width,
-            height,
-            webgl.RGBA,
-            webgl.UNSIGNED_BYTE,
-            buffer,
-          );
-          pixels = buffer;
-        } else {
-          pixels = canvas2d?.getImageData(0, 0, width, height).data;
-        }
+        const frame = webgl ? await window.butlerCaptureDrawnFrame(fluid, budgetMs) : null;
+        const width = frame?.width ?? fluid.width;
+        const height = frame?.height ?? fluid.height;
+        const pixels = frame?.pixels ?? canvas2d?.getImageData(0, 0, width, height).data;
         if (!pixels?.length || !width || !height) {
           return {
             activeCells: 0,
@@ -3165,8 +3152,14 @@ try {
       // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
       // window and assert on its peak liquid and mean tone instead.
       for (let index = 0; index < 8; index += 1) {
-        fluidSamples.push(measureFluidFrame());
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        // Capture the next screen draw inside each existing 1s window.
+        // alpha:false makes even a discarded buffer opaque, so RAF/alpha
+        // polling cannot establish that its pixels belong to a shader draw.
+        const deadline = performance.now() + 1_000;
+        const sample = await measureFluidFrame(Math.max(0, deadline - performance.now()));
+        if (!sample) throw new Error(`No drawn bloom frame in sample ${index + 1}/8`);
+        fluidSamples.push(sample);
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
       }
       const fluidMean = (key: "averageTone" | "grayCoverage") =>
         fluidSamples.reduce((total, sample) => total + sample[key], 0) /
@@ -3606,21 +3599,12 @@ try {
         return { changedCoverageMax: 0, spreadMax: 0 };
       }
       const webgl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-      const width = webgl?.drawingBufferWidth ?? canvas.width;
-      const height = webgl?.drawingBufferHeight ?? canvas.height;
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
       for (let sample = 0; sample < 5; sample += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        const pixels = new Uint8Array(width * height * 4);
-        webgl?.readPixels(
-          0,
-          0,
-          width,
-          height,
-          webgl.RGBA,
-          webgl.UNSIGNED_BYTE,
-          pixels,
-        );
+        const deadline = performance.now() + 80;
+        const frame = webgl ? await window.butlerCaptureDrawnFrame(canvas, Math.max(0, deadline - performance.now())) : null;
+        const pixels = frame?.pixels ?? null;
+        if (!pixels) throw new Error(`No drawn silk frame in sample ${sample + 1}/5`);
         let changedPixels = 0;
         let minTone = 255;
         let maxTone = 0;
@@ -3638,6 +3622,7 @@ try {
           changedCoverage: changedPixels / total,
           spread: maxTone - minTone,
         });
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
       }
       return {
         changedCoverageMax: Math.max(

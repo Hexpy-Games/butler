@@ -51,7 +51,7 @@ fn legacy_stores(root: &Path, now: i64) {
     )
     .unwrap();
     let summary = json!({"phase":"summary","ts":butler_core::js_date::format_iso_millis(now).unwrap(),
-        "status":"error","metrics":{"failed_phases":["box_index"]}});
+        "status":"error","metrics":{"failed_phases":["memory_metadata_integrity"]}});
     fs::write(
         root.join("cognition/consolidation/run-summary.jsonl"),
         format!("{summary}\n"),

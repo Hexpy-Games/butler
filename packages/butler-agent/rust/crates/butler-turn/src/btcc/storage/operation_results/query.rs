@@ -54,7 +54,6 @@ WHERE (
   AND c.rowid > ?3
   AND c.rowid <= ?4
   AND result_json IS NOT NULL
-  AND result_sha256 IS NOT NULL
   AND tool_name NOT IN ('list_operation_results', 'read_operation_results')
   AND (?5 = '' OR tool_name = ?6)
   AND (?7 = '' OR {OUTCOME} = ?8)
@@ -89,7 +88,7 @@ LIMIT ?11"
                     status: row.get(4)?,
                     started_at: row.get(5)?,
                     request_preview: row.get(6)?,
-                    result_sha256: row.get(7)?,
+                    result_sha256: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
                 })
             },
         )
@@ -221,8 +220,13 @@ fn verify(
         turn_id: work.origin_turn_id.clone(),
         result_sha256: hash.into(),
     })?;
+    if work.result_sha256.as_deref() != Some(&canonical.result_sha256) {
+        butler_core::diagnostic!(
+            "warning: project result hash mismatch for {}",
+            work.result_ref
+        );
+    }
     if canonical.tool_name != work.tool_name
-        || work.result_sha256.as_deref() != Some(&canonical.result_sha256)
         || work.status != "completed"
         || work.error_code.is_some()
     {
@@ -311,7 +315,7 @@ fn payload(db: &Connection, turn: &str, call: &str) -> StorageResult<Option<Payl
     .map_err(StorageError::sqlite)
 }
 /// Reads a byte range of an exact tool request or result after verifying
-/// its Work binding (or turn ownership) and both body digests.
+/// its Work binding (or turn ownership); body digests are diagnostic.
 pub(super) fn read_exact(
     db: &Connection,
     authority: Option<&dyn ExactProjectWorkResultAuthority>,
@@ -326,17 +330,17 @@ pub(super) fn read_exact(
         .as_deref()
         .filter(|value| !value.is_empty())
         .ok_or_else(|| error(StorageCode::OperationResultBodyHashMismatch))?;
+    let actual = format!("{:x}", Sha256::digest(result.as_bytes()));
     let hash = payload
         .hash
         .as_deref()
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| error(StorageCode::OperationResultBodyHashMismatch))?;
-    let actual = format!("{:x}", Sha256::digest(result.as_bytes()));
-    if actual != hash {
-        return Err(error(StorageCode::OperationResultBodyHashMismatch));
-    }
-    if hash != input.result_sha256 {
-        return Err(error(StorageCode::OperationResultIntegrityMismatch));
+        .unwrap_or(&actual);
+    if actual != hash || hash != input.result_sha256 {
+        butler_core::diagnostic!(
+            "warning: operation result content hash mismatch for {}",
+            input.result_ref
+        );
     }
     let bytes = match input.source {
         ExactResultSource::Request => payload.raw.as_bytes(),

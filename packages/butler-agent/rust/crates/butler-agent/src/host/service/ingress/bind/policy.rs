@@ -150,9 +150,9 @@ pub(super) async fn upsert_app_binding(
         "thinFirstResponse":true,"thin_first_response":true,
         "requiredNativeTools":[],"required_tools":[],"requiredNativeToolProfiles":profiles,
     });
-    let selected = approval_free_tools(
+    let selected = required_action_tools(
         &access.turn,
-        &ApprovalFreeFacts {
+        &ActionToolFacts {
             envelope,
             data_root,
             butler_role,
@@ -262,7 +262,7 @@ impl BindingAccess {
 }
 
 /// What decides which approval-free tools an App turn is offered.
-struct ApprovalFreeFacts<'a> {
+struct ActionToolFacts<'a> {
     envelope: &'a Envelope,
     data_root: &'a Path,
     /// The session is a Butler session (only it runs onboarding).
@@ -271,11 +271,13 @@ struct ApprovalFreeFacts<'a> {
     selected_memory_write: bool,
 }
 
-/// The required tools of the approval-free actions this turn may take:
+/// Required memory actions and existing approval-free actions for this turn.
+/// Forget remains a reviewed persistent effect; it has no approval exemption.
+/// The approval-free actions are:
 /// first-conversation onboarding (or the selected memory-write profile, which
 /// includes it), memory save in a Butler session, and analysis of an admitted
 /// attached image. Full access and ask-first offer them; read-only does not.
-fn approval_free_tools(mode: &AccessMode, facts: &ApprovalFreeFacts<'_>) -> Vec<&'static str> {
+fn required_action_tools(mode: &AccessMode, facts: &ActionToolFacts<'_>) -> Vec<&'static str> {
     let onboarding = mode
         .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
         && (facts.selected_memory_write
@@ -309,6 +311,10 @@ fn approval_free_tools(mode: &AccessMode, facts: &ApprovalFreeFacts<'_>) -> Vec<
         .map(ToolName::as_str)
         .filter(|name| mode.exempts_tool(name))
         .collect();
+    if matches!(mode, AccessMode::FullAccess) && (facts.butler_role || facts.selected_memory_write)
+    {
+        tools.push(ToolName::ForgetExplicitMemory.as_str());
+    }
     #[cfg(debug_assertions)]
     if matches!(mode, AccessMode::FullAccess)
         && std::env::var_os("BUTLER_E2E_ENABLE_SCHEDULE_CREATE_TOOL").is_some()

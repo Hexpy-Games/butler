@@ -1,6 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -8,14 +9,15 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const server = await createNativeAppServer({ onboardingComplete: false, config: { user: { language: "ko", responseLanguage: "en", responseLanguageDefaultSource: "installer" } } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const context = await browser.newContext({ locale: "ko-KR" });
   await server.signIn(context);
   const page = await context.newPage();
   await page.goto(server.url);
   await page.getByLabel("인터페이스 언어").waitFor();
-  await page.getByRole("button", { name: "동의하고 계속", exact: true }).click();
+  await page.locator("#first-run-start").click();
+  await page.getByRole("button", { name: firstRunCopy.ko.agree, exact: true }).click();
   await page.getByRole("button", { name: "다른 서비스 8개", exact: true }).click();
   await page.locator('[data-card-id="other"]').click();
   const config = JSON.parse(readFileSync(join(server.butlerData, "butler.config.json"), "utf8"));

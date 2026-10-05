@@ -41,6 +41,7 @@ test("run_command output shows status and output without its private JSON envelo
 
   expect(presentOperationOutput("run_command", raw, true)).toEqual({
     kind: "command",
+    command: "git status --short",
     summary: "명령 완료 · 종료 코드 0",
     content: "M src/game.ts",
   });

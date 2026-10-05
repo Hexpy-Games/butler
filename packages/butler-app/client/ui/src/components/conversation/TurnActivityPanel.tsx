@@ -72,6 +72,7 @@ export function TurnActivityPanel({
       <CurrentTurnStatus
         markKey={markKey}
         state={state}
+        waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}
         modelRoundWait={modelRoundWait}
         operation={operation}
         publicActivity={publicActivity}

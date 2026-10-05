@@ -49,6 +49,7 @@ pub(super) struct RequestExecution<'a> {
     pub serialized_bytes: usize,
     pub guard_start: GuardStart,
     pub request_observer: &'a (dyn Fn() + Sync),
+    pub trace: &'a super::provider::request_trace::RequestTrace,
     pub clock: &'a dyn ProviderClock,
     /// Receives subscription quota parsed from a successful response.
     pub quota: Option<&'a dyn super::ProviderQuotaSink>,
@@ -69,6 +70,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         serialized_bytes,
         guard_start,
         request_observer,
+        trace,
         clock,
         quota,
     } = input;
@@ -82,11 +84,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
             if matches!(guard_start, GuardStart::BeforeAdmission) {
                 progress.start();
             }
-            let attempts = if attempts.is_nan() {
-                0.0
-            } else {
-                attempts.trunc().max(1.0)
-            };
+            let attempts = retry_attempts(attempts);
             let mut observed = false;
             let mut attempt = 0_u32;
             while f64::from(attempt) < attempts {
@@ -110,24 +108,22 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 let current = request.try_clone().ok_or_else(|| {
                     diagnostics::protocol(provider, api, "provider_request_not_replayable")
                 })?;
-                let result = async {
-                    let response = current
-                        .send()
-                        .await
-                        .map_err(|error| diagnostics::network(provider, api, &error.to_string()))?;
-                    progress.record_progress();
-                    let response = checked(response, provider, api, (quota, clock)).await?;
-                    let reading = Reading {
-                        provider,
-                        api,
-                        progress: progress.clone(),
-                        stream_observer,
-                        clock,
-                    };
-                    reading.read(response, mode).await
-                }
+                trace.start().await.map_err(TransportError::Admission)?;
+                let result = send_attempt(
+                    current,
+                    provider,
+                    api,
+                    (quota, clock),
+                    &progress,
+                    stream_observer,
+                    mode,
+                )
                 .await
                 .map_err(|error| TransportError::Provider(with_receipt(error, receipt)));
+                trace
+                    .finish_attempt(result.as_ref().ok())
+                    .await
+                    .map_err(TransportError::Admission)?;
                 match result {
                     Ok(value) => return Ok(value),
                     Err(TransportError::Provider(error))
@@ -154,6 +150,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         },
     )
     .await;
+    if guarded.is_err() {
+        trace.finish(None, "failed").await?;
+    }
     match guarded {
         Ok(value) => Ok(value),
         Err(GuardError::Operation(TransportError::Admission(error))) => Err(error),
@@ -174,6 +173,40 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
             ))))
         }
     }
+}
+
+fn retry_attempts(value: f64) -> f64 {
+    if value.is_nan() {
+        0.0
+    } else {
+        value.trunc().max(1.0)
+    }
+}
+
+async fn send_attempt(
+    current: RequestBuilder,
+    provider: &str,
+    api: &str,
+    quota: QuotaObserver<'_>,
+    progress: &super::request_guard::RequestProgress,
+    stream_observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+    mode: ResponseMode,
+) -> Result<Value, Box<ProviderRequestError>> {
+    let response = current
+        .send()
+        .await
+        .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
+    progress.record_progress();
+    let response = checked(response, provider, api, quota).await?;
+    Reading {
+        provider,
+        api,
+        progress: progress.clone(),
+        stream_observer,
+        clock: quota.1,
+    }
+    .read(response, mode)
+    .await
 }
 
 /// Where a response's quota headers go, and the clock that dates them.

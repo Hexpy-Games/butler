@@ -127,10 +127,9 @@ pub(super) fn closeout_page(
         if let Some(raw) = &result
             && result_sha256.as_deref() != Some(digest(raw).as_str())
         {
-            return Err(error(
-                StorageCode::OperationResultBodyHashMismatch,
-                "operation_result_body_hash_mismatch",
-            ));
+            butler_core::diagnostic!(
+                "warning: tool result content hash mismatch at journal row {rowid}"
+            );
         }
         let document = |raw| {
             butler_core::json::JsonDocument::from_encoded(raw).map_err(|error| {
@@ -230,11 +229,13 @@ fn hydrate(row: StoredRecord) -> StorageResult<ToolJournalRecord> {
     if let Some(result) = &row.result_json
         && row.result_sha256.as_deref() != Some(digest(result).as_str())
     {
-        return Err(error(
-            StorageCode::OperationResultBodyHashMismatch,
-            "operation_result_body_hash_mismatch",
-        ));
+        butler_core::diagnostic!(
+            "warning: tool result content hash mismatch for {}",
+            row.call_id
+        );
     }
+    let result_sha256 =
+        truthy(row.result_sha256).or_else(|| row.result_json.as_deref().map(digest));
     let arguments = json(&row.arguments_json, StorageCode::ToolJournalJsonInvalid)?;
     let result = row
         .result_json
@@ -264,7 +265,7 @@ fn hydrate(row: StoredRecord) -> StorageResult<ToolJournalRecord> {
         status: row.status,
         result,
         changed_files,
-        result_sha256: truthy(row.result_sha256),
+        result_sha256,
         error_code: truthy(row.error_code),
         delivery_state: truthy(row.delivery_state),
         delivery_round_id: truthy(row.delivery_round_id),

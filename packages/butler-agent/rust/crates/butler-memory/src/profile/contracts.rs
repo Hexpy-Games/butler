@@ -293,7 +293,7 @@ pub struct RuntimeProfileProjection {
 }
 
 /// What clearing the profile removed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClearProfilingResult {
     /// Candidates removed.
     pub removed_candidates: usize,

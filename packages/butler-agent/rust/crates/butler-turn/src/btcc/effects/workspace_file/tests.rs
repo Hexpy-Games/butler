@@ -13,12 +13,12 @@ impl RegisteredWritePort for WritesThenReject {
     }
 }
 
-/// Security boundary: write-effect inputs and targets (`..`, mixed
-/// separators, absolute paths) normalize inside the workspace or are refused.
+/// Security contract: exact write identities retain OS-accessible paths and reject malformed input.
 // test-category: security
 #[test]
 fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
-    let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
+    let workspace_path = std::env::temp_dir().join("butler-workspace-fixture");
+    let workspace = workspace_path.as_path();
     for (input, expected) in [
         (
             json!({"path":"a\\b","content":"x"}),
@@ -29,7 +29,7 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
             Ok(json!({"path":"a/b","content":"x","create_parents":true})),
         ),
         (
-            json!({"path":"/tmp/butler-workspace-fixture/a","content":"x"}),
+            json!({"path":workspace.join("a"),"content":"x"}),
             Ok(json!({"path":"a","content":"x","create_parents":false})),
         ),
         (
@@ -38,7 +38,7 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
         ),
         (
             json!({"path":"../a","content":"x"}),
-            Err("write_file effect path cannot traverse a parent directory"),
+            Ok(json!({"path":"../a","content":"x","create_parents":false})),
         ),
         (
             json!({"path":"a","content":"x","create_parents":null}),
@@ -62,18 +62,19 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
             ),
         }
     }
+    let outside = std::env::temp_dir()
+        .join("outside.txt")
+        .to_string_lossy()
+        .replace('\\', "/");
+    assert_eq!(
+        path::target(&format!("workspace:{outside}")).unwrap(),
+        format!("workspace:{outside}")
+    );
     for (target, expected) in [
         ("workspace:a\\b", Ok("workspace:a/b")),
         ("workspace:a//b", Ok("workspace:a/b")),
         ("workspace:a/", Ok("workspace:a/")),
-        (
-            "workspace:../a",
-            Err("write_file effect path cannot traverse a parent directory"),
-        ),
-        (
-            "workspace:/a",
-            Err("write_file effect path must be workspace-relative"),
-        ),
+        ("workspace:../a", Ok("workspace:../a")),
         (
             "bad:a",
             Err("write_file effect target must use workspace:<relative-path>"),
@@ -139,7 +140,8 @@ async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservat
 
 /// KEEP: the journaled write_file input (identity-hashed) is byte-stable.
 pub(crate) fn write_effect_normalized_input_is_byte_stable() {
-    let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
+    let workspace_path = std::env::temp_dir().join("butler-workspace-fixture");
+    let workspace = workspace_path.as_path();
     let input = json!({"expected_sha256":"A".repeat(64),"overwrite":true,"content":"x",
         "create_parents":true,"path":"a/b"});
     let normalized = serde_json::to_value(path::input(&input, workspace).unwrap()).unwrap();

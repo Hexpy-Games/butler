@@ -1,49 +1,31 @@
 //! Queue authority, registration, then one pending semantic quantum.
 
 use crate::cognition::CognitionCode;
-use parking_lot::Mutex;
-use std::sync::atomic::AtomicBool;
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
-use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
 mod cache;
 mod index_retirement;
 mod projection;
+mod reset_suppression;
 mod typed;
 pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
-    CognitionConversationSourceNotice, CognitionEmbeddingPort, CognitionError,
-    CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
+    CognitionConversationSourceNotice, CognitionError, CognitionResult,
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
 };
-use crate::coordination::{CognitionWaitClass, CognitionWriteCoordinator};
+use crate::coordination::CognitionWaitClass;
 use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
-#[derive(Clone)]
-pub(super) struct Input {
-    pub data_root: PathBuf,
-    pub environment: CognitionPathEnvironment,
-    pub registration: Arc<CognitionRegistrationService>,
-    pub embedding: Option<Arc<dyn CognitionEmbeddingPort>>,
-    pub target: Option<MemoryGenerationTarget>,
-    pub coordinator: Arc<CognitionWriteCoordinator>,
-    pub clock: Arc<dyn Fn() -> String + Send + Sync>,
-    pub catchup_at: Arc<Mutex<Option<Instant>>>,
-    pub unclean_start: Arc<AtomicBool>,
-    pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
-    pub probe: Arc<super::probe::ProbeReader>,
-    pub vector_batch: Arc<AtomicBool>,
-    pub daily_batch: bool,
-    pub shutdown: CancellationToken,
-}
+mod input;
+pub(super) use input::Input;
 
 /// The head of `queue/sync.jsonl`, read leniently: every field keeps what
 /// was sent so mismatches and dead letters behave as on the raw request.
@@ -144,6 +126,12 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         Ok(None) => {}
         Err(error) => queue_error = Some(error),
     }
+    // A durable completion notice follows its canonical outcome commit. Native
+    // filesystem events may have preceded COMMIT or been coalesced; the queue
+    // itself must invalidate the interval before the consumer can park again.
+    if queued {
+        input.catchup_at.lock().take();
+    }
     let caught_up = match catchup::run_if_due(&input).await {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
@@ -238,6 +226,9 @@ async fn register_turn(
         resolve_active_generation(&owned.data_root, &owned.environment)
     })
     .await?;
+    if reset_suppression::ack(input, root, job_id, turn).await? {
+        return Ok(true);
+    }
     let registered = input
         .registration
         .register_conversation_source(RegisterConversationSourceInput {
@@ -260,6 +251,9 @@ async fn register_turn(
     let registered = match registered {
         Ok(outcome) => outcome,
         Err(error) if error.code() == "memory_source_ineligible" => {
+            if reset_suppression::ack(input, root, job_id, turn).await? {
+                return Ok(true);
+            }
             return super::blocking::ack(root, job_id).await;
         }
         Err(error) => {
@@ -313,20 +307,13 @@ fn dead_letter_sync(
     reason: &str,
     now: &str,
 ) -> CognitionResult<()> {
-    use std::{
-        fs::{self, OpenOptions},
-        io::Write,
-    };
+    use std::io::Write;
     let dlq = |e: std::io::Error| {
         CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
     };
     let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(root.join("queue")).map_err(dlq)?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(dlq)?;
+    butler_platform::secure_fs::create_private_dir_all(&root.join("queue")).map_err(dlq)?;
+    let mut file = butler_platform::secure_fs::append_private(&path).map_err(dlq)?;
     let record = DeadLetter {
         timestamp: now,
         session_id: &request.source().session_id,

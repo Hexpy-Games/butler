@@ -28,12 +28,12 @@ export function interfaceText(reference: import("../../../../../butler-i18n/src/
 export function interfaceProgressLabel(row: { safe_label: string; work_decision_summary?: string; interface_content?: InterfaceContentReferences; interface_label_key?: string; interface_label_parameters?: { attempt: number; maxAttempts: number } }): string {
   const reference = row.interface_content?.summary ?? (!row.work_decision_summary ? row.interface_content?.title : undefined);
   if (reference) return formatInterfaceText(reference, activeAppLocale);
-  return getInterfaceProgressLabel(row.interface_label_key, activeAppLocale, row.interface_label_parameters) ?? row.safe_label;
+  return getInterfaceProgressLabel(row.interface_label_key, activeAppLocale, row.interface_label_parameters) ?? getAppCopy(activeAppLocale).guided.tools[row.safe_label] ?? row.safe_label;
 }
 
 export function localizeProgressRow(row: ProgressRow): ProgressRow {
   const content = row.interface_content;
-  if (!content && !row.interface_label_key) return row;
+  if (!content && !row.interface_label_key && interfaceProgressLabel(row) === row.safe_label) return row;
   return { ...row, safe_label: interfaceProgressLabel(row),
     ...(content?.title ? { work_decision_title: formatInterfaceText(content.title, activeAppLocale), work_block_label: formatInterfaceText(content.title, activeAppLocale) } : {}),
     ...(content?.summary ? { work_decision_summary: formatInterfaceText(content.summary, activeAppLocale) } : {}),

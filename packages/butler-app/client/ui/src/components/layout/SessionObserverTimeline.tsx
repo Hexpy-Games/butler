@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import type { MessageRecord, SessionView } from "@/app/types.ts";
-import { MessageRow } from "@/butler-ds";
+import { MessageRow, MessageTurnGroup } from "@/butler-ds";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import { SessionObserverActivityGroup, type ObserverPhaseActivity } from "./SessionObserverActivityGroup.tsx";
@@ -9,25 +9,18 @@ export function SessionObserverTimeline({
   messages,
   activityHistory = [],
   activeTurn,
+  latestTurn,
   children,
+  delegatedGoal,
 }: {
   messages: MessageRecord[];
+  delegatedGoal?: string;
   activityHistory?: SessionView["activity_history"];
   activeTurn?: SessionView["active_turn"];
+  latestTurn?: SessionView["latest_turn"];
   children?: ReactNode;
 }) {
-  const sources = new Map<string, { turn_id: string; created_at?: string; rows: NonNullable<MessageRecord["turn_activity_rows"]> }>(
-    activityHistory.map((source) => [source.turn_id, source]),
-  );
-  for (const message of messages) {
-    if (message.role === "assistant" && message.turn_id && message.turn_activity_rows?.length) {
-      sources.set(message.turn_id, { turn_id: message.turn_id,
-        created_at: message.turn_activity_rows.find((row) => row.created_at)?.created_at ?? message.created_at,
-        rows: message.turn_activity_rows });
-    }
-  }
-  if (activeTurn) sources.set(activeTurn.id, { turn_id: activeTurn.id,
-    created_at: activeTurn.created_at, rows: activeTurn.progress?.safe_progress_rows ?? [] });
+  const sources = observerActivitySources(messages, activityHistory, activeTurn, latestTurn);
   const ordered = [
     ...[...sources.values()].flatMap((source) =>
       projectTurnActivity(source.rows, source.turn_id).phaseActivities.map((activity) => ({
@@ -45,8 +38,13 @@ export function SessionObserverTimeline({
     { kind: "activity"; id: string; activities: ObserverPhaseActivity[]; active?: SessionView["active_turn"] }> = [];
   for (const entry of ordered) {
     if (entry.kind === "message") {
+      const source = sources.get(entry.message.turn_id ?? "");
+      const activity = source ? projectTurnActivity(source.rows, source.turn_id) : undefined;
       entries.push({ kind: "message", id: entry.message.id,
-        message: { ...entry.message, turn_activity_rows: undefined } });
+        message: { ...entry.message, turn_activity_rows: undefined,
+          work_blocks: activity
+            ? activity.phaseActivities.length ? undefined : activity.workBlocks
+            : entry.message.work_blocks } });
     } else {
       const previous = entries.at(-1);
       if (previous?.kind === "activity") previous.activities.push(entry.activity);
@@ -60,8 +58,9 @@ export function SessionObserverTimeline({
     else entries.push({ kind: "activity", id: `active:${activeTurn.id}`, activities: [], active: activeTurn });
   }
 
+  const firstActivityId = entries.find((entry) => entry.kind === "activity")?.id;
   return (
-    <>
+    <MessageTurnGroup>
       {entries.map((entry) => (
         <Fragment key={entry.id}>
           <MessageRow
@@ -70,11 +69,39 @@ export function SessionObserverTimeline({
           >
             {entry.kind === "message"
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
-              : <SessionObserverActivityGroup activities={entry.activities} active={entry.active} />}
+              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active}
+                  state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
           </MessageRow>
         </Fragment>
       ))}
       {children}
-    </>
+    </MessageTurnGroup>
   );
+}
+
+function observerActivitySources(
+  messages: MessageRecord[],
+  activityHistory: NonNullable<SessionView["activity_history"]>,
+  activeTurn?: SessionView["active_turn"],
+  latestTurn?: SessionView["latest_turn"],
+) {
+  const sources = new Map<string, { turn_id: string; created_at?: string; rows: NonNullable<MessageRecord["turn_activity_rows"]> }>(
+    activityHistory.map((source) => [source.turn_id, source]),
+  );
+  for (const message of messages) {
+    if (message.role === "assistant" && message.turn_id && message.turn_activity_rows?.length) {
+      sources.set(message.turn_id, { turn_id: message.turn_id,
+        created_at: message.turn_activity_rows.find((row) => row.created_at)?.created_at ?? message.created_at,
+        rows: message.turn_activity_rows });
+    }
+  }
+  // Child session messages do not carry turn_activity_rows. The gateway keeps
+  // their public record on latest_turn.progress even after active_turn clears.
+  if (latestTurn && !sources.has(latestTurn.id)) sources.set(latestTurn.id, {
+    turn_id: latestTurn.id, created_at: latestTurn.created_at,
+    rows: latestTurn.progress?.safe_progress_rows ?? [],
+  });
+  if (activeTurn) sources.set(activeTurn.id, { turn_id: activeTurn.id,
+    created_at: activeTurn.created_at, rows: activeTurn.progress?.safe_progress_rows ?? [] });
+  return sources;
 }

@@ -13,7 +13,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
-        | "secure_fs" | "stdio" | "time_zone" | "user_dirs" => &[],
+        | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_dirs" => &[],
         // SQLite file synchronization consumes the durable filesystem facade.
         "sqlite" => &["secure_fs"],
         "process_control" => &["process_table"],
@@ -61,6 +61,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "lenient",
             "js_json",
         ],
+        // Request-driven management reads stable cognition APIs and shares its writer lease.
+        "management" => &["cognition", "coordination"],
         "profile" => &["coordination", "lenient"],
         "work_records" => &["lenient", "js_json"],
         "coordination" | "lenient" | "js_json" => &[],

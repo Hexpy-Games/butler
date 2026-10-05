@@ -1248,6 +1248,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   );
   const messageList = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
   );
   const conversation = read(
     "packages/butler-app/client/ui/src/components/conversation/Conversation.tsx",
@@ -1712,6 +1714,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
 
   const messageContent = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/AssistantMessageBody.tsx",
   );
   expect(messageContent.indexOf("<MessageArtifacts")).toBeLessThan(
     messageContent.indexOf("<MessageChangedFiles"),
@@ -1747,12 +1751,12 @@ test("conversation message context menu provides copy action", () => {
   expect(
     read(
       "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageList.ts",
-    ),
+    ) + read("packages/butler-app/client/ui/src/components/conversation/hooks/useMessageCopy.ts"),
   ).toContain("window.getSelection");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageList.ts",
-    ),
+    ) + read("packages/butler-app/client/ui/src/components/conversation/hooks/useMessageCopy.ts"),
   ).toContain("navigator.clipboard.writeText");
   expect(
     read(
@@ -1917,7 +1921,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(appCopySource()).not.toContain(
     "프로필 후보",
   );
-  expect(renderer).toContain("copy.actions.clearProfile");
+  expect(renderer).not.toContain("copy.actions.clearProfile");
+  expect(renderer).toContain("/memory/reset/");
   expect(renderer).toContain("SystemEventsSettings");
   expect(renderer).toContain(
     "`/system-events?limit=${PAGE_SIZE}&offset=${offset}`",
@@ -2335,7 +2340,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainLabel");
   expect(renderer).toContain("function toolchainSummaryLabel");
   expect(renderer).toContain("function toolchainGroupLabel");
-  expect(renderer).toContain("return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool");
+  expect(renderer).toContain("appCopy.guided.tools[name] ?? appCopy.guided.tools.fallback");
+  expect(renderer).not.toContain("return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool");
   expect(renderer).not.toContain('label.includes("검증")');
   expect(renderer).not.toContain('label.includes("review")');
   expect(renderer).not.toContain("Using web search:");
@@ -3909,13 +3915,13 @@ describe("app-client design system foundation", () => {
     expect(workerActivityRowStyles).toContain("worker-phase-pulse");
     expect(workerActivityRowStyles).toContain(".noIcon");
     expect(automationRunList).toContain("ActivityFeed");
-    expect(disclosureRow).toContain("className={cn(styles.labelRegion");
+    expect(disclosureRow).toContain("className={dsClass(cn(styles.trigger, !icon && styles.noIcon))}");
     expect(disclosureRow).toContain("stretch");
     expect(disclosureRow).toContain("onClick={onToggle}");
     expect(disclosureRow).toContain('surface?: "selection" | "plain"');
     expect(disclosureRow).toContain("data-surface={surface}");
-    expect(disclosureRowStyles).toContain(
-      "grid-template-columns: minmax(0, 1fr) auto",
+    expect(disclosureRowStyles).toMatch(
+      /grid-template-columns:\s*var\(--disclosure-line\) var\(--disclosure-line\) minmax\(0, 1fr\)\s*fit-content\(50%\);/u,
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");
@@ -3935,7 +3941,7 @@ describe("app-client design system foundation", () => {
     expect(turnActivityTimeline).toContain('variant="inline"');
     expect(turnActivityTimeline).not.toContain("paddingInlineStart");
     expect(buttonStyles).toContain(".button.variantInline");
-    expect(buttonStyles).toContain(".button.variantInline:hover:not(:disabled)");
+    expect(buttonStyles).toContain('.button.variantInline:hover:not(:disabled, [aria-disabled="true"])');
     expect(buttonStyles).toContain('.button.variantInline[data-has-icon-text="true"]');
     expect(buttonStyles).toContain("text-decoration: underline");
     const workActivityStyles = read(
@@ -4035,10 +4041,9 @@ describe("app-client design system foundation", () => {
         "packages/butler-app/client/ui/src/components/inspector/WorkersPanel.tsx",
       ),
     ).toContain("workActivityToolsForBlock(block)");
-    expect(messageRowStyles).toContain(
-      '+ [data-test-class~="turn-result-section"]',
-    );
-    expect(messageRowStyles).toContain("margin-top: var(--space-4)");
+    expect(messageRowStyles).toContain("flex-direction: column");
+    expect(messageRowStyles).toContain("gap: var(--space-lg)");
+    expect(messageRowStyles).toContain(".turnGroup > .row");
     expect(filteredSelectStyles).toContain("color: var(--text-primary)");
     expect(filteredSelectStyles).toContain("color: var(--text-secondary)");
     expect(filteredSelectStyles).toContain('[data-selected="true"]');
@@ -4860,12 +4865,16 @@ describe("app-client design system foundation", () => {
 test("message virtualization isolates virtual row updates from message content", () => {
   const messageList = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
   );
   const messageItem = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageItem.tsx",
   );
   const messageContent = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/AssistantMessageBody.tsx",
   );
   const workBlocks = read(
     "packages/butler-app/client/ui/src/components/conversation/CompletedWorkBlocks.tsx",

@@ -12,6 +12,7 @@
 
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use butler_platform::instance::{self as platform, StopError};
@@ -71,7 +72,13 @@ fn write_shutdown_flag(data_root: &Path, nonce: &str) -> Result<(), crate::host:
     let written = path
         .parent()
         .map_or(Ok(()), butler_platform::secure_fs::create_private_dir_all)
-        .and_then(|()| fs::write(&path, format!("stop {nonce}\n")));
+        .and_then(|()| {
+            butler_platform::secure_fs::replace_private(
+                &path,
+                |file| writeln!(file, "stop {nonce}"),
+                std::convert::identity,
+            )
+        });
     written.map_err(|source| {
         crate::host::HostError::new("native_service_shutdown_flag_unavailable").with_source(source)
     })

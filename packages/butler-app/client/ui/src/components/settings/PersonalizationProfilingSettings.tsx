@@ -1,3 +1,5 @@
+import { Button, SettingsField } from "@/butler-ds";
+import { useButlerStore } from "@/app/store.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { reasoningOptionLabel } from "@/app/utils.ts";
@@ -106,6 +108,10 @@ export function PersonalizationProfilingSettings({
         }))}
         disabled={disabled}
       />
+      <SettingsField settingId="memory-link" label={settingsCopy.memory.linkLabel}
+        description={settingsCopy.memory.linkDescription}
+        control={<Button type="button" size="sm" variant="outline" aria-label={settingsCopy.memory.linkOpenLabel}
+          onClick={() => useButlerStore.getState().openSettings("memory")}>{settingsCopy.memory.linkOpen}</Button>} />
     </>
   );
 }

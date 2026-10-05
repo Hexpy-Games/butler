@@ -14,8 +14,7 @@ fn summary(capability: &str, target: &str, input: &Value) -> Value {
     .unwrap()
 }
 
-/// One summary per action kind, as the App reads them, with no absolute
-/// path; then the command-risk table.
+/// One summary per action kind, with exact outside paths; then the command-risk table.
 pub(in crate::btcc::authority) fn assert_approval_summaries() {
     let edits = json!({"edits": [
         {"path": "/Users/someone/work/garden/a.txt"}, {"path": "b.txt"}, {"path": "./a.txt"},
@@ -31,7 +30,7 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
             json!({"action_kind": "edit_files", "count": 4, "examples": ["a.txt", "b.txt", "c.txt"], "risk": "high",
                 "targets": [{"kind": "folder", "path": "garden"}, {"kind": "file", "path": "a.txt"},
                             {"kind": "file", "path": "b.txt"}, {"kind": "file", "path": "c.txt"},
-                            {"kind": "outside", "path": "passwd"}]}),
+                            {"kind": "outside", "path": "/etc/passwd"}]}),
         ),
         (
             summary(
@@ -116,9 +115,9 @@ fn assert_path_and_example_bounds() {
         assert_eq!(actual["risk"], "high");
         assert_eq!(
             actual["targets"][1],
-            json!({"kind": "outside", "path": "hosts"})
+            json!({"kind": "outside", "path": path})
         );
-        assert!(!actual.to_string().contains("/etc/"));
+        assert_eq!(actual["examples"][0], path);
         let command = summary("run_command", "x", &json!({"command": "ls", "cwd": path}));
         assert_eq!(command["risk"], "high");
         assert_eq!(command["targets"][0]["kind"], "outside");

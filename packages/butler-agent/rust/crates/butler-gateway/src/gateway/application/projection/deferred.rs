@@ -19,7 +19,7 @@ pub(super) async fn sync_deferred_step(
     let cursor = after.clone();
     let row = context
         .storage
-        .execute(move |db| staging::deferred_batch(db, &cursor, 1))
+        .read(move |db| staging::deferred_batch(db, &cursor, 1))
         .await
         .map_err(app_error)?
         .into_iter()
@@ -45,7 +45,7 @@ pub(super) async fn sync_deferred_step(
                 .storage
                 .execute(move |db| {
                     let tx = db
-                        .transaction()
+                        .savepoint()
                         .map_err(super::super::storage::AppStorageError::sqlite)?;
                     staging::delete(&tx, &action)?;
                     staging::mark(&tx, &action, &event.event_id, &chat, &now)?;

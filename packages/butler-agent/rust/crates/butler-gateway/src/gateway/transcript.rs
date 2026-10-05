@@ -18,6 +18,7 @@ use super::AppIdentityClock;
 const CAPACITY: usize = 64;
 
 type TranscriptResult<T> = Result<T, TranscriptError>;
+pub type TranscriptAppendListener = Arc<dyn Fn(&str) + Send + Sync>;
 
 struct Job {
     session_id: String,
@@ -32,26 +33,42 @@ struct State {
 pub struct TranscriptWriter {
     clock: Arc<dyn AppIdentityClock>,
     state: Mutex<State>,
+    listener: Arc<parking_lot::RwLock<Option<TranscriptAppendListener>>>,
 }
 
 impl TranscriptWriter {
     pub fn new(data_root: PathBuf, clock: Arc<dyn AppIdentityClock>) -> std::io::Result<Self> {
         let (sender, mut receiver) = mpsc::channel::<Job>(CAPACITY);
+        let listener = Arc::new(parking_lot::RwLock::new(None::<TranscriptAppendListener>));
+        let written = listener.clone();
         let worker = std::thread::Builder::new()
             .name("butler-transcript-append".into())
             .spawn(move || {
                 while let Some(job) = receiver.blocking_recv() {
                     let outcome = file::append(&data_root, &job.session_id, &job.events);
-                    let _ = job.result.send(outcome);
+                    if let Ok(file) = &outcome {
+                        let listener = written.read().clone();
+                        if let Some(listener) = listener {
+                            listener(file);
+                        }
+                    }
+                    let _ = job.result.send(outcome.map(|_| ()));
                 }
             })?;
         Ok(Self {
             clock,
+            listener,
             state: Mutex::new(State {
                 sender: Some(sender),
                 worker: Some(worker),
             }),
         })
+    }
+
+    /// The current App generation observes successful appends without relying
+    /// on OS file events. The listener only queues existing projection work.
+    pub fn observe_appends(&self, listener: TranscriptAppendListener) {
+        *self.listener.write() = Some(listener);
     }
 
     pub async fn append_outbound(

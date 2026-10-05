@@ -49,7 +49,7 @@ pub(super) fn runtime(
         skills.extend(load(&project_dir(data, project))?);
     }
     skills.extend(load(&user_dir(data))?);
-    skills.extend(load(&core_dir(home))?);
+    skills.extend(load_core(home)?);
     // First scope wins: project > user > built-in.
     let mut seen = HashSet::new();
     skills.retain(|skill| seen.insert(skill.name.clone()));
@@ -113,7 +113,7 @@ pub(super) fn settings(
     data: &Path,
     projects: Vec<(String, String)>,
 ) -> Result<SkillSettingsView, SkillError> {
-    let core = summaries(load(&core_dir(home))?, "core", None);
+    let core = summaries(load_core(home)?, "core", None);
     let user = summaries(load(&user_dir(data))?, "user", None);
     let mut views = Vec::with_capacity(projects.len());
     for (id, display_name) in projects {
@@ -151,7 +151,7 @@ pub(super) fn validation(
     data: &Path,
     project_ids: Option<Vec<String>>,
 ) -> Result<SkillValidationView, SkillError> {
-    let core = load(&core_dir(resources))?;
+    let core = load_core(resources)?;
     let user = load(&user_dir(data))?;
     let project_ids = project_ids
         .map(Ok)
@@ -206,6 +206,19 @@ fn scoped_issues(
             project_id: project_id.map(str::to_owned),
         })
         .collect()
+}
+
+fn load_core(resources: &Path) -> Result<Vec<SkillDefinition>, SkillError> {
+    // Older immutable resource bundles may remain present during an update.
+    // Retirement affects only shipped core skills, preserving custom scopes.
+    let mut skills = load(&core_dir(resources))?;
+    skills.retain(|skill| {
+        !matches!(
+            skill.name.as_str(),
+            "butler-model" | "project" | "project-ledger" | "butler-ship-feature" | "save-feedback"
+        )
+    });
+    Ok(skills)
 }
 
 pub(super) fn load(root: &Path) -> Result<Vec<SkillDefinition>, SkillError> {

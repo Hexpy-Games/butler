@@ -94,9 +94,9 @@ pub use configuration::{
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, OpenAiAuthProfile, ProviderCredentialMutation, ProviderKeyCheck,
-    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
-    generate_pkce_verifier, pkce_challenge,
+    ModelConfigurationRead, ModelContextMetadataRead, OpenAiAuthProfile,
+    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
+    SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

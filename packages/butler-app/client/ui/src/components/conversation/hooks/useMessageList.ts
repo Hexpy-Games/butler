@@ -1,6 +1,6 @@
-import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { notifyError } from "@/app/notifications.ts";
+import { useAppLocale } from "@/app/copy.ts";
+import { useMemo } from "react";
+import { useMessageCopy } from "./useMessageCopy";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import {
   activeTurnProgressSnapshot,
@@ -24,8 +24,7 @@ export function useMessageList(
   turnProgress: Record<string, TurnProgressSnapshot>,
   isSending: boolean,
 ) {
-  const copyResetRef = useRef<number | null>(null);
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const copy = useMessageCopy();
 
   const visibleMessages = useMemo(
     () => collapseAssistantAttempts(messages),
@@ -77,37 +76,10 @@ export function useMessageList(
     turnState,
   });
 
-  const itemCount = visibleMessages.length + (showTurnActivity ? 1 : 0);
-
-  useEffect(() => {
-    return () => {
-      if (copyResetRef.current) window.clearTimeout(copyResetRef.current);
-    };
-  }, []);
-
-  const copyAssistantMessage = useCallback(async (message: MessageRecord) => {
-    try {
-      await navigator.clipboard.writeText(message.text);
-      setCopiedMessageId(message.id);
-      if (copyResetRef.current) window.clearTimeout(copyResetRef.current);
-      copyResetRef.current = window.setTimeout(
-        () => setCopiedMessageId(null),
-        2000,
-      );
-    } catch (error) {
-      notifyError(error, appCopy.interfacePanels.copyFailed, { id: `copy-${message.id}` });
-    }
-  }, []);
-
-  const copyContextMenuText = useCallback(async (message: MessageRecord) => {
-    try {
-      const selectedText = window.getSelection()?.toString();
-      const textToCopy = selectedText || message.text;
-      await navigator.clipboard.writeText(textToCopy);
-    } catch (error) {
-      notifyError(error, appCopy.interfacePanels.copyFailed, { id: `copy-context-${message.id}` });
-    }
-  }, []);
+  const turnId = activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id;
+  const liveMessageId = showTurnActivity ? lastLiveMessageId(visibleMessages, turnId) : undefined;
+  const separateTurnActivity = showTurnActivity && !liveMessageId;
+  const itemCount = visibleMessages.length + (separateTurnActivity ? 1 : 0);
 
   return {
     visibleMessages,
@@ -116,16 +88,20 @@ export function useMessageList(
     activeTurn,
     progressRows,
     turnState,
-    turnStartedAt:
-      activeSnapshot?.started_at,
-    turnId:
-      activeSnapshot?.turn_id ??
-      summary?.latest_progress?.turn_id,
+    turnStartedAt: activeSnapshot?.started_at,
+    turnId,
     anchoredStewardProgress,
-    showTurnActivity,
+    showTurnActivity: separateTurnActivity,
+    liveMessageId,
     itemCount,
-    copiedMessageId,
-    copyAssistantMessage,
-    copyContextMenuText,
+    ...copy,
   };
+}
+
+function lastLiveMessageId(messages: MessageRecord[], turnId?: string): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    if (message.role === "assistant" && (turnId ? message.turn_id === turnId : message.status === "streaming")) return message.id;
+  }
+  return undefined;
 }

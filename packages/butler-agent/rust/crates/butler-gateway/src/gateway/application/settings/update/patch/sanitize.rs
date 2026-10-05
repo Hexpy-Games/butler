@@ -26,16 +26,7 @@ pub(super) fn sanitize(
     {
         output.insert("reasoning_effort".into(), json!(value));
     }
-    if let Some(value) = input.get("consolidation_model").and_then(Value::as_str) {
-        let value = trim_js_whitespace(value);
-        if value == "default" {
-            output.insert("consolidation_model".into(), json!(value));
-        } else {
-            let value = super::super::available_model_ref(value, facts)
-                .ok_or_else(|| super::super::model_unavailable("consolidation_model"))?;
-            output.insert("consolidation_model".into(), json!(value));
-        }
-    }
+    sanitize_recall(input, facts, &mut output)?;
     if input
         .get("consolidation_reasoning_effort")
         .and_then(Value::as_str)
@@ -197,7 +188,6 @@ pub(super) fn sanitize(
     }
     Ok(Value::Object(output))
 }
-
 fn valid_server_url(value: &str) -> bool {
     ["http://", "https://"].iter().any(|prefix| {
         value
@@ -281,4 +271,35 @@ fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>)
             output.insert(key.into(), value.clone());
         }
     }
+}
+
+fn sanitize_recall(
+    input: &Map<String, Value>,
+    facts: &AppSettingsFacts,
+    output: &mut Map<String, Value>,
+) -> Result<(), GatewayApplicationError> {
+    if let Some(value @ ("faster" | "accurate")) = input.get("recall_mode").and_then(Value::as_str)
+    {
+        output.insert("recall_mode".into(), json!(value));
+    }
+    if let Some(value) = input.get("consolidation_model").and_then(Value::as_str) {
+        let value = trim_js_whitespace(value);
+        if value == "default" {
+            output.insert("consolidation_model".into(), json!(value));
+        } else {
+            let value = super::super::available_model_ref(value, facts)
+                .ok_or_else(|| super::super::model_unavailable("consolidation_model"))?;
+            output.insert("consolidation_model".into(), json!(value));
+        }
+    }
+    if let Some(value) = input.get("recall_judge_model").and_then(Value::as_str) {
+        let value = if value == "default" {
+            value.to_owned()
+        } else {
+            super::super::available_model_ref(value, facts)
+                .ok_or_else(|| super::super::model_unavailable("recall_judge_model"))?
+        };
+        output.insert("recall_judge_model".into(), json!(value));
+    }
+    Ok(())
 }

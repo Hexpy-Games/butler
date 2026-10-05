@@ -203,6 +203,26 @@ impl Replay {
         request: &MessageSendRequest,
         prepared: &PreparedAppAdmission,
     ) -> Result<bool, GatewayApplicationError> {
+        if let Some(result) = &request.subsession_result {
+            let stored = self
+                .controls_json
+                .as_deref()
+                .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+            let identity_matches = stored
+                .as_ref()
+                .and_then(|value| value.get("subsession_result"))
+                .is_some_and(|value| {
+                    value["relation_id"] == result.relation_id
+                        && value["result_id"] == result.result_id
+                });
+            if identity_matches && self.digest != input_digest(request, prepared)? {
+                butler_core::diagnostic!(
+                    "warning: delegated result replay content mismatch for {}",
+                    result.result_id
+                );
+            }
+            return Ok(identity_matches);
+        }
         if self.digest == input_digest(request, prepared)? {
             return Ok(true);
         }

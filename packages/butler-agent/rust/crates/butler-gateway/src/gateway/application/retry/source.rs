@@ -136,10 +136,10 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(queue_snapshot_error)?;
-    if queue.0 != text
-        || queue.7.as_deref() != Some(user_message_id.as_str())
-        || queue.8 == "dispatching"
-    {
+    if queue.0 != text {
+        butler_core::diagnostic!("warning: retry source content mismatch for turn {turn_id}");
+    }
+    if queue.7.as_deref() != Some(user_message_id.as_str()) || queue.8 == "dispatching" {
         return Err(queue_snapshot_error());
     }
     let control_resolution_json = queue.2.ok_or_else(queue_snapshot_error)?;

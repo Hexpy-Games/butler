@@ -2,39 +2,22 @@
 
 use serde_json::Value;
 
-use butler_gateway::gateway::LocalAuthConfig;
 use butler_turn::btcc::{BtccError, PortFuture, WorkerProfile, WorkerProfileReader};
 
-use crate::host::service::configuration::AppServiceConfiguration;
+use crate::host::ActiveAppEndpoint;
 
 pub(crate) struct AppWorkerProfileReader {
-    url: String,
-    auth: LocalAuthConfig,
+    endpoint: std::sync::Arc<ActiveAppEndpoint>,
     client: reqwest::Client,
 }
 
 impl AppWorkerProfileReader {
-    pub(crate) fn new(
-        config: &AppServiceConfiguration,
-        auth: LocalAuthConfig,
-    ) -> Result<Self, BtccError> {
-        if !matches!(config.host.as_str(), "127.0.0.1" | "localhost" | "::1") {
-            return Err(error("worker_profile_app_endpoint_not_local"));
-        }
-        let host = if config.host == "::1" {
-            "[::1]"
-        } else {
-            config.host.as_str()
-        };
+    pub(crate) fn new(endpoint: std::sync::Arc<ActiveAppEndpoint>) -> Result<Self, BtccError> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|source| error("worker_profile_reader_unavailable").with_source(source))?;
-        Ok(Self {
-            url: format!("http://{host}:{}/settings", config.port),
-            auth,
-            client,
-        })
+        Ok(Self { endpoint, client })
     }
 }
 
@@ -65,10 +48,20 @@ impl WorkerProfileReader for AppWorkerProfileReader {
 
 impl AppWorkerProfileReader {
     async fn fetch(&self) -> Result<Vec<Value>, BtccError> {
-        let mut request = self.client.get(&self.url);
-        if self.auth.required {
-            let token = self
-                .auth
+        let endpoint = self
+            .endpoint
+            .snapshot()
+            .ok_or_else(|| error("worker_profile_settings_unavailable"))?;
+        if !matches!(
+            endpoint.configured_host.as_str(),
+            "127.0.0.1" | "localhost" | "::1"
+        ) {
+            return Err(error("worker_profile_app_endpoint_not_local"));
+        }
+        let mut request = self.client.get(format!("{}/settings", endpoint.base_url));
+        if endpoint.local_auth.required {
+            let token = endpoint
+                .local_auth
                 .token()
                 .ok_or_else(|| error("app_local_auth_unconfigured"))?;
             request = request.bearer_auth(token);

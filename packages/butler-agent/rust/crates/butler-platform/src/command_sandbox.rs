@@ -6,6 +6,14 @@
 //! report write protection as [`Protection::Unavailable`]. Linux gets a
 //! Landlock wrapper in a later stage.
 
+mod environment;
+pub use environment::tool_environment;
+mod operators;
+mod output;
+pub use output::CommandOutputDecoder;
+mod path_candidates;
+pub use path_candidates::path_tokens;
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -106,6 +114,12 @@ pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocatio
     shell::add_arguments(command, invocation);
 }
 
+/// The same admitted directory in a form the native process launcher accepts.
+/// Call off async workers: Windows may query short names for long directories.
+pub fn working_directory(path: &Path) -> std::io::Result<std::path::PathBuf> {
+    shell::working_directory(path)
+}
+
 /// The shell of legacy compatibility commands: `/bin/bash [-o pipefail] -lc`
 /// on Unix and PowerShell on Windows (`BUTLER_POWERSHELL` in `environment`
 /// overrides `powershell.exe`).
@@ -121,4 +135,22 @@ pub fn legacy_shell(
 /// by its real path. `root` must be absolute and lexically normalized.
 pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Protection, ProtectError> {
     sandbox::protect_writes(invocation, root)
+}
+
+/// Whether an unquoted shell operator could detach work. Interpreter script
+/// arguments remain quoted data; shell escape syntax is host-specific.
+pub fn has_background_operator(command: &str) -> bool {
+    operators::has_background(command, shell::ESCAPE)
+}
+
+/// Whether a shell path names the registry instead of the filesystem.
+/// Used by lexical command guards; this does not authorize registry writes.
+pub fn is_registry_path(path: &str) -> bool {
+    shell::is_registry_path(path)
+}
+
+/// Normalize host path separators without interpreting POSIX shell escapes
+/// such as a quoted `printf` newline as a filesystem separator.
+pub fn normalize_path_token(path: &str) -> String {
+    shell::normalize_path_token(path)
 }

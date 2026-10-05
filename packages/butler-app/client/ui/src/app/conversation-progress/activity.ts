@@ -1,5 +1,5 @@
 import { appCopy } from "../copy.ts";
-import { projectSharedWorkBlocks } from "../../../../../../butler-progress-projection/src/index.ts";
+import { projectSharedWorkBlocks, mergeToolRows } from "../../../../../../butler-progress-projection/src/index.ts";
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
 import { compactLegacyDisplayTitle } from "./compact-display-title.ts";
@@ -41,10 +41,11 @@ export function projectTurnActivity(
   rows: ProgressRow[],
   turnId?: string,
 ): TurnActivityProjection {
-  const visibleRows = orderedProgressRows(visibleProgressRows(rows));
+  const visibleRows = mergeToolRows(orderedProgressRows(visibleProgressRows(rows)));
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);
+  const workBlocks = projectWorkBlocks(activityRows);
   const projectedActivities = phaseActivities.length > 0
     ? phaseActivities
     : fallbackOrdinaryActivity(activityRows, turnId);
@@ -52,7 +53,7 @@ export function projectTurnActivity(
     visibleRows,
     readModels,
     decisions: readModels.filter(isDecisionReadModel),
-    workBlocks: projectWorkBlocks(activityRows),
+    workBlocks,
     phaseActivities: projectedActivities,
     publicActivity: latestPublicActivity(activityRows, projectedActivities.length > 0),
     semanticState: currentSemanticState(activityRows, projectedActivities),
@@ -146,6 +147,7 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
 
 function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   const activities: PhaseActivity[] = [];
+  const authoredBlocks = new Set(rows.filter(isPhaseActivityRow).map((row) => row.semantic_block_id));
   const currentByBlock = new Map<string, PhaseActivity>();
   const operationsBeforeActivity = new Map<string, ProgressRow[]>();
   for (const row of rows) {
@@ -167,7 +169,8 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
       continue;
     }
     if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
-    const activity = currentByBlock.get(row.semantic_block_id);
+    const activity = currentByBlock.get(row.semantic_block_id) ??
+      (!authoredBlocks.has(row.semantic_block_id) ? activities.at(-1) : undefined);
     if (activity) {
       activity.operations.push(row);
     } else {

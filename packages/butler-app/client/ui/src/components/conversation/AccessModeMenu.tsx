@@ -1,12 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
 import {
-  OptionMenu,
-  OptionMenuItem,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Typo,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -22,8 +18,6 @@ import {
 
 export function AccessModeMenu() {
   useAppLocale();
-  const [revoking, setRevoking] = useState<string>();
-  const [revokeFailed, setRevokeFailed] = useState(false);
   const accessMode = useComposerStore((store) => store.accessMode);
   const accessMenuOpen = useComposerStore((store) => store.accessMenuOpen);
   const setAccessMenuOpen = useComposerStore(
@@ -33,24 +27,19 @@ export function AccessModeMenu() {
     (store) => store.handleAccessModeChange,
   );
   const settings = useButlerStore((store) => store.settings);
-  const sessionId = useButlerStore((store) => store.activeChatId);
-  const projection = useButlerStore((store) => store.authorityApprovals);
-  const permissions = projection?.sessionId === sessionId ? projection.permissions ?? [] : [];
-  const revoke = useButlerStore((store) => store.revokeConversationPermission);
 
   return (
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
       <PopoverTrigger asChild>
         <ComposerControlButton
-          aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}`}
-          compact={permissions.length ? "label" : "icon"}
+          aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}`}
+          compact="icon"
           data-test-class="access-button"
           icon={accessModeIcon(accessMode)}
           permissionTone={accessPermissionTone(accessMode)}
         >
           <span data-test-class="composer-control-label">
             {accessLabel(accessMode)}
-            {permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}
           </span>
         </ComposerControlButton>
       </PopoverTrigger>
@@ -68,21 +57,6 @@ export function AccessModeMenu() {
             setAccessMenuOpen(false);
           }}
         />
-        {permissions.length ? <OptionMenu title={appCopy.interfaceDetails.allowedConversation}>
-          {permissions.map((permission) => <OptionMenuItem
-            key={permission.grant_ref}
-            label={appCopy.interfaceTemplates.revoke(permission.title)}
-            description={permission.description}
-            descriptionPlacement="block"
-            disabled={revoking !== undefined}
-            onClick={async () => {
-              setRevoking(permission.grant_ref); setRevokeFailed(false);
-              const applied = await revoke(permission.grant_ref, sessionId);
-              setRevoking(undefined); setRevokeFailed(!applied);
-            }}
-          />)}
-        </OptionMenu> : null}
-        {revokeFailed ? <Typo.Caption role="alert">{appCopy.interfaceDetails.revokeFailed}</Typo.Caption> : null}
       </PopoverContent>
     </Popover>
   );

@@ -23,15 +23,13 @@ pub(super) async fn run(
         let began = Instant::now();
         let (mut child, stdout, stderr, nonce) = spawn()?;
         let pid = child.id().unwrap_or_default();
+        // Child::wait closes its stdin. Keep the ownership lease outside Child
+        // so merely waiting cannot stop the newly spawned Agent.
+        let mut owner = child.stdin.take();
         let status = tokio::select! {
             status = child.wait() => status.map_err(io)?,
             _ = signals.recv() => {
-                // Only the child we started is targeted; kill also closes relay pipes.
-                child.kill().await.map_err(io)?;
-                butler_core::diagnostic!("[service-lifecycle] event=exit version={version} pid={pid} code=supervisor_stop Service was terminated because its CLI supervisor was stopped.");
-                let _ = stdout.await;
-                let _ = stderr.await;
-                return Ok(ExitCode::SUCCESS);
+                return stop_child(&mut child, owner.take(), pid, stdout, stderr, &version).await;
             }
         };
         stdout
@@ -80,6 +78,38 @@ pub(super) async fn run(
     }
 }
 
+async fn stop_child(
+    child: &mut tokio::process::Child,
+    owner: Option<tokio::process::ChildStdin>,
+    pid: u32,
+    stdout: Relay,
+    stderr: Relay,
+    version: &str,
+) -> Result<ExitCode, crate::host::HostError> {
+    // Releasing stdin also works during initialization. Preserve the
+    // Agent's six-second shutdown deadline before forcing its tree.
+    drop(owner);
+    match tokio::time::timeout(Duration::from_secs(8), child.wait()).await {
+        Ok(status) => {
+            status.map_err(io)?;
+        }
+        Err(_) => {
+            butler_platform::process_control::signal_group(
+                pid,
+                butler_platform::process_control::GroupSignal::Kill,
+            )
+            .map_err(|e| e.to_string())?;
+            child.wait().await.map_err(io)?;
+        }
+    }
+    butler_core::diagnostic!(
+        "[service-lifecycle] event=exit version={version} pid={pid} code=supervisor_stop Service was terminated because its CLI supervisor was stopped."
+    );
+    let _ = stdout.await;
+    let _ = stderr.await;
+    Ok(ExitCode::SUCCESS)
+}
+
 fn requested_stop(root: &std::path::Path, pid: u32, nonce: &str) -> bool {
     let intent = std::fs::read(root.join("state/agent-stop-intent.json"))
         .ok()
@@ -102,12 +132,14 @@ fn spawn() -> Result<(tokio::process::Child, Relay, Relay, String), crate::host:
         .env_remove(VARIABLE)
         .env("BUTLER_CLI_SUPERVISOR_PID", std::process::id().to_string())
         .env(CLI_SUPERVISOR_NONCE, &nonce)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     butler_platform::process_control::hide_console(command.as_std_mut());
+    butler_platform::process_control::isolate_group(command.as_std_mut());
     let mut child = command.spawn().map_err(io)?;
+    butler_platform::process_control::contain(&child).map_err(io)?;
     let stdout = child.stdout.take().ok_or("native_log_pipe_unavailable")?;
     let stderr = child.stderr.take().ok_or("native_log_pipe_unavailable")?;
     Ok((

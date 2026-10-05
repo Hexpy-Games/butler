@@ -3,42 +3,11 @@ use std::path::Path;
 
 use super::CommandError;
 
-const TOOL_ALLOWLIST: &[&str] = &[
-    "PATH",
-    "HOME",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "PROGRAMDATA",
-    "SYSTEMROOT",
-    "WINDIR",
-    "COMSPEC",
-    "PATHEXT",
-    "USERNAME",
-    "HOMEDRIVE",
-    "HOMEPATH",
-    "LANG",
-    "LC_ALL",
-    "LC_CTYPE",
-    "LC_MESSAGES",
-    "SHELL",
-    "BUTLER_BUN",
-    "BUTLER_WINDOWS_PROCESS_HOST",
-];
-
 pub(super) fn guided_environment(
     host: &HashMap<String, String>,
     butler_data: &Path,
 ) -> Result<HashMap<String, String>, CommandError> {
-    let mut env = HashMap::with_capacity(TOOL_ALLOWLIST.len() + 7);
-    for key in TOOL_ALLOWLIST {
-        if let Some(value) = host.get(*key) {
-            env.insert((*key).to_owned(), value.clone());
-        }
-    }
+    let mut env = butler_platform::command_sandbox::tool_environment(host);
     let temporary = butler_data.join("tmp");
     let cache = butler_data.join("cache/tools");
     let artifacts = butler_data.join("artifacts/generated");

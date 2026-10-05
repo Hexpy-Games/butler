@@ -63,7 +63,7 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
             let (message, hint) = if failure.guard.is_some() {
                 (
                     "The requested workspace path was rejected.",
-                    "Retry with a regular workspace-relative file path.",
+                    "Retry with a regular absolute or workspace-relative file path.",
                 )
             } else {
                 (failure_message(failure.error), failure_hint(failure.error))
@@ -279,7 +279,7 @@ fn failure_hint(error: &str) -> &str {
             "Retry with exact text and, when needed, a correct start_line hint."
         }
         "target_not_regular_file" => "Choose an existing regular file.",
-        "not_found" => "Check the workspace-relative path and retry.",
+        "not_found" => "Check the absolute or workspace-relative path and retry.",
         "file_exists" => {
             "Retry with overwrite=true and the current expected_sha256, or choose a new path."
         }

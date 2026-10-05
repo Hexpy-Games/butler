@@ -11,7 +11,7 @@ use std::{
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, sync::Mutex};
 
-use butler_gateway::gateway::InboundQueue;
+use butler_gateway::gateway::{InboundQueue, TranscriptWriter};
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
@@ -39,6 +39,7 @@ pub(crate) struct AppGatewayLifecycle {
     runtime: Arc<AgentRuntime>,
     data_root: PathBuf,
     queue: Arc<InboundQueue>,
+    writer: Arc<TranscriptWriter>,
     readiness: Arc<ServiceReadiness>,
     endpoint: Arc<ActiveAppEndpoint>,
     installation: ResolvedInstallation,
@@ -66,6 +67,7 @@ impl AppGatewayLifecycle {
         runtime: Arc<AgentRuntime>,
         service: &ServiceConfiguration,
         queue: Arc<InboundQueue>,
+        writer: Arc<TranscriptWriter>,
         readiness: Arc<ServiceReadiness>,
         endpoint: Arc<ActiveAppEndpoint>,
         nonce: String,
@@ -76,6 +78,7 @@ impl AppGatewayLifecycle {
             captured_dependencies: AppCapturedDependencies::capture(&service.app),
             runtime,
             queue,
+            writer,
             readiness,
             endpoint,
             nonce,
@@ -197,6 +200,7 @@ impl AppGatewayLifecycle {
             app_config,
             AppServerOwners {
                 queue: self.queue.clone(),
+                writer: self.writer.clone(),
                 receipt: self.readiness.clone(),
                 local_auth: local_auth.clone(),
             },

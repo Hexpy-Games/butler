@@ -2,27 +2,42 @@ name: macOS App package
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/macos-app-package.yml"
-      - ".github/workflows/release.yml"
-      - ".github/actions/rust-agent-setup/**"
-      - "packages/butler-app/client/electron/**"
-      - "packages/butler-app/scripts/release/**"
-      - "deploy/**"
-      - "tests/smoke/packaged-app-update.ts"
-      - "tests/support/electron-page-cdp.ts"
-      - "packages/butler-app/client/ui/src/components/settings/Update*"
-      - "packages/butler-agent/rust/crates/butler-platform/src/app_update.rs"
-      - "packages/butler-agent/rust/crates/butler-agent/build.rs"
-      - "packages/butler-agent/rust/crates/butler-agent/src/host/cli/app_update.rs"
-      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update.rs"
-      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**"
-      - "bun.lock"
-      - "**/package.json"
+    inputs:
+      candidate-version:
+        description: Exact preview candidate (empty keeps preview.99 packaging)
+        required: false
+        type: string
+      baseline-tag:
+        description: Published preview to update through the published candidate feed (post-tag only)
+        required: false
+        type: string
+      published-candidate:
+        description: Verify the published candidate instead of rebuilding it (post-tag only)
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      candidate-version:
+        type: string
+        default: ''
+      baseline-tag:
+        type: string
+        default: ''
+      published-candidate:
+        type: boolean
+        default: false
+      agent-artifact:
+        type: string
+        required: false
+        default: ""
+      update-agent-artifact:
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: macos-app-package-${{ github.ref }}
@@ -38,17 +53,37 @@ jobs:
       BUTLER_SIGN_IDENTITY: "-"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate the published-update mode
+        env:
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          if [ -n "$BASELINE_TAG" ] && [ "$PUBLISHED_CANDIDATE" != true ]; then
+            echo 'Published baseline updates require published-candidate=true after the release tag is published.' >&2
+            echo 'The deploy signing environment permits v* release tags; branch packaging uses ad-hoc signatures.' >&2
+            exit 1
+          fi
+          if [ "$PUBLISHED_CANDIDATE" = true ] && [ -z "$BASELINE_TAG" ]; then
+            echo 'A published update requires baseline-tag.' >&2
+            exit 1
+          fi
 
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
 
       - name: Set up Rust and static ONNX Runtime
+        if: ${{ !inputs.published-candidate && inputs.agent-artifact == '' }}
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: static-ort
           cache-key: macos-app-package
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/bun-setup
         with:
           bun-version: latest
 
@@ -65,22 +100,76 @@ jobs:
           npm --prefix packages/butler-app/client/ui run build
 
       - name: Build the native Agent payload binary
+        if: ${{ !inputs.published-candidate && inputs.agent-artifact == '' }}
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          export GITHUB_REF_NAME=v0.1.0-preview.99
+          export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+      - uses: actions/download-artifact@v4
+        if: inputs.agent-artifact != ''
+        with:
+          name: ${{ inputs.agent-artifact }}
+          path: ${{ runner.temp }}/shared-agent
+      - name: Use the shared native Agent
+        if: inputs.agent-artifact != ''
+        run: |
+          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        if: inputs.update-agent-artifact != ''
+        with:
+          name: ${{ inputs.update-agent-artifact }}
+          path: ${{ runner.temp }}/update-agent-builds
+      - name: Use the real prebuilt update-fixture versions
+        if: inputs.update-agent-artifact != ''
+        run: |
+          chmod +x "$RUNNER_TEMP"/update-agent-builds/*/butler-agent
+          echo "BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds" >> "$GITHUB_ENV"
+      - name: Compare new-chat surfaces with preview.6 and prove onboarding
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          isolate=packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh
+          "$isolate" bunx playwright install chromium
+          "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
+          BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
+          "$isolate" bun tests/smoke/app-update-choice-smoke.ts
+          "$isolate" bun tests/smoke/app-update-work-stream.ts
+          "$isolate" bun tests/smoke/quick-fixes-smoke.ts
+          "$isolate" bun tests/smoke/quick-fixes-compare.ts
+          "$isolate" bun tests/smoke/app-memory-smoke.ts
+          "$isolate" bun build tests/smoke/settings-release-compare.ts --target node --packages external --outdir .tmp/node-smokes
+          "$isolate" node .tmp/node-smokes/settings-release-compare.js
+
+      - name: Preserve new-chat visual evidence
+        if: ${{ always() && !inputs.published-candidate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: newchat-preview6-comparison
+          path: |
+            .tmp/newchat-regression/
+            .tmp/update-choice-smoke/
+            .tmp/quick-fixes/
+            .tmp/quick-fixes-comparison/
+            .tmp/memory-shots/
+            .tmp/settings-release-comparison/
+          if-no-files-found: error
+
       - name: Package and smoke the native App release
+        if: ${{ !inputs.published-candidate }}
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          export GITHUB_REF_NAME=v0.1.0-preview.99
+          export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run release:app:package -- \
             --platform=darwin-arm64 --out dist/release/app \
@@ -88,9 +177,27 @@ jobs:
           bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Packaged preview App update through Settings
+        if: ${{ !inputs.published-candidate }}
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          bun run app:update:smoke
+          export BUTLER_UPDATE_SMOKE_BUNDLE_CACHE=$(mktemp -d "$RUNNER_TEMP/butler-update-bundles.XXXXXX")
+          trap 'chmod -R u+w "$BUTLER_UPDATE_SMOKE_BUNDLE_CACHE"; rm -rf "$HOME" "$BUTLER_DATA" "$BUTLER_UPDATE_SMOKE_BUNDLE_CACHE"' EXIT
+          for scenario in idle now defer background-quit; do
+            BUTLER_UPDATE_SMOKE_WORK="$scenario" bun run app:update:smoke
+          done
+      - name: Existing App layout smoke
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-layout-smoke.ts
+      - name: Update the published baseline through Settings to the published candidate
+        if: inputs.baseline-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          CANDIDATE_VERSION: ${{ inputs.candidate-version }}
+          PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
+        run: bash deploy/macos/preview-update-smoke.sh

@@ -1,10 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useCallback } from "react";
+import { memo, useCallback, type ReactNode } from "react";
 import type { MessageRecord } from "@/app/types.ts";
-import { appCopy } from "@/app/copy.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
-import { Stack, Tag } from "@/butler-ds";
+import { AssistantMessageBody } from "./AssistantMessageBody";
 import {
   canRetryWithCurrentControls,
   isAssistantFailureNoticeMessage,
@@ -13,24 +12,18 @@ import {
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import { AssistantBranchActions } from "./AssistantBranchActions";
 import {
-  AssistantFailureNotice,
   MessageRetryActionsContainer,
 } from "./FailureNoticeContainer";
-import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
-import { CompletedTurnActivity } from "./CompletedTurnActivity";
 import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
-import { MessageMarkdown } from "./MessageMarkdown";
-import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
-import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
-import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 interface MessageContentProps {
   message: MessageRecord;
+  liveActivity?: ReactNode;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage?: (message: MessageRecord) => void;
@@ -43,64 +36,19 @@ function MessageContentComponent({
   footerMeta,
   onCopyAssistantMessage,
   stewardProgress,
+  liveActivity,
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
   const { chat_id: sessionId = "", cursor } = message;
   const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
+  const running = Boolean(liveActivity) || message.status === "streaming" || message.status === "pending";
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
       {message.role === "assistant" ? (
-        <>
-          <CompletedTurnActivity
-            rows={message.turn_activity_rows}
-            turnId={message.turn_id}
-            turnState={message.status}
-          />
-          <CompletedWorkBlocks
-            blocks={message.work_blocks}
-            turnId={message.turn_id}
-          />
-          {stewardProgress ? (
-            <Stack data-test-class="steward-message-content" gap="md">
-              {failureNotice ? (
-                <AssistantFailureNotice message={message} />
-              ) : (
-                <MessageMarkdown
-                  artifacts={message.artifacts}
-                  attachments={message.attachments}
-                  refreshFileUrls={refreshFileUrls}
-                  streaming={message.status === "streaming"}
-                  text={message.text}
-                />
-              )}
-              <ErrorBoundary fallback={null}>
-                <StewardParentProgress progress={stewardProgress} />
-              </ErrorBoundary>
-            </Stack>
-          ) : failureNotice ? (
-            <AssistantFailureNotice message={message} />
-          ) : (
-            <MessageMarkdown
-              artifacts={message.artifacts}
-              attachments={message.attachments}
-              refreshFileUrls={refreshFileUrls}
-              streaming={message.status === "streaming"}
-              text={message.text}
-            />
-          )}
-          {message.plan_document ? (
-            <PlanDocumentMessage plan={message.plan_document} />
-          ) : null}
-          {message.status === "cancelled" && (
-            <div role="status">
-              <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
-                {appCopy.conversation.stoppedStatus}
-              </Tag>
-            </div>
-          )}
-        </>
+        <AssistantMessageBody message={message} running={running} failureNotice={failureNotice}
+          stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
       ) : message.role === "user" ? (
         <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
       ) : (
@@ -118,7 +66,8 @@ function MessageContentComponent({
       {message.role === "assistant" && (
         <MessageChangedFiles files={message.changed_files ?? []} />
       )}
-      {message.role === "assistant" && onCopyAssistantMessage && (
+      {liveActivity}
+      {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter
           copied={copied}
           meta={footerMeta}
@@ -145,6 +94,7 @@ export const MessageContent = memo(
   MessageContentComponent,
   (previous, next) =>
     previous.message === next.message &&
+    previous.liveActivity === next.liveActivity &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
     previous.stewardProgress === next.stewardProgress &&

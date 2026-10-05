@@ -28,7 +28,7 @@ export async function endTrace(cdp: CDPSession): Promise<TraceEvent[]> {
 }
 
 export function traceStats(events: TraceEvent[]) {
-  const thread = events.find((e) => e.name === "thread_name" && e.args?.name === "CrRendererMain");
+  const thread = events.find((e) => e.name === "thread_name" && ["CrRendererMain", "Chrome_InProcRendererThread"].includes(e.args?.name ?? ""));
   if (!thread) throw new Error("Missing renderer main thread");
   const main = events.filter((e) => e.pid === thread.pid && e.tid === thread.tid && e.ph === "X");
   const sum = (names: string[]) => main.filter((e) => names.includes(e.name)).reduce((n, e) => n + (e.dur ?? 0) / 1000, 0);

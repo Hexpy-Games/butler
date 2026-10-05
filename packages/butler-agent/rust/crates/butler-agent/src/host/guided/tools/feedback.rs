@@ -79,10 +79,6 @@ pub(super) const SOLVABLE: &[&str] = &[
     "invalid_arguments",
     "question_input_invalid",
     "effect_request_invalid",
-    "effect_action_not_found",
-    "effect_action_ambiguous",
-    "effect_work_plan_missing",
-    "effect_plan_review_required",
 ];
 
 pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionError> {
@@ -103,14 +99,17 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             "Each todo requires a unique id. Correct the duplicate ids, then retry."
         }
         "steward_relation_not_found" | "active_steward_relation_not_found" => {
-            "Use an existing active delegation relation from this parent session. No child was steered or cancelled."
+            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, start and review a fresh Work, then delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
         }
         _ => error.message(),
     };
-    JsonDocument::from_value(&json!({"ok":false,"error":{
+    let mut value = json!({"ok":false,"error":{
         "code":error.code(),"message":message,"recoverable":true
-    }}))
-    .map_err(|source| {
+    }});
+    if error.code().starts_with("effect_") {
+        value["error"]["next_action"] = repair(error.code()).into();
+    }
+    JsonDocument::from_value(&value).map_err(|source| {
         ToolExecutionError::Integrity(
             BtccError::relayed(
                 "guided_tool_result_json",
@@ -119,4 +118,9 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             .with_source(source),
         )
     })
+}
+
+/// Invalid adapter input is corrected in place, independently of Work tracking.
+pub(super) fn repair(_code: &str) -> &'static str {
+    "Correct the tool arguments using the returned error and tool schema, then retry the exact operation in this turn. Permission mode and operation approval govern execution; no Work or Plan effect declaration is required."
 }

@@ -48,6 +48,19 @@ pub(super) const SYSTEM_ENVIRONMENT: &[&str] = &[
     "SystemDrive",
     "SystemRoot",
     "windir",
+    // .NET/PowerShell module discovery needs the same runtime roots as a
+    // normally launched App. Profile variables remain sandbox-owned.
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "CommonProgramFiles",
+    "CommonProgramFiles(x86)",
+    "CommonProgramW6432",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "OS",
+    "PSModulePath",
 ];
 
 pub(super) const BASELINE_ENVIRONMENT: &[&str] = &[
@@ -126,10 +139,11 @@ pub(super) fn liveness(pid: u32) -> Liveness {
     if pid == 0 || i32::try_from(pid).is_err() {
         return Liveness::Gone;
     }
-    if ProcessView::read(pid).is_some() {
-        Liveness::Running
-    } else {
-        Liveness::Gone
+    match ProcessView::read(pid) {
+        Ok(Some(_)) => Liveness::Running,
+        Ok(None) => Liveness::Gone,
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Liveness::OtherOwner,
+        Err(_) => Liveness::Unknown,
     }
 }
 

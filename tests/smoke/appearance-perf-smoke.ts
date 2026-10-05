@@ -1,8 +1,8 @@
-import { smokeBrowserArgs } from "./browser-launch";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // App smoke: complete shipped wallpaper list, cold/reopen navigation, real CDP trace, stub model only.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { endTrace, instrument, navigateAppearance, startTrace, traceStats, settingsReady, toggleMotion } from "./appearance-perf-support.ts";
 
@@ -12,7 +12,7 @@ const widths = Bun.argv.includes("--mobile-only") ? [375] : [1280, 375];
 const custom = Bun.argv.includes("--custom-only");
 mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
-const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
+const browser = await launchSmokeBrowser();
 writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
 const context = await browser.newContext({ reducedMotion: "no-preference" });
 const page = await context.newPage();

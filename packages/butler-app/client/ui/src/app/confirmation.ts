@@ -4,6 +4,8 @@ interface ConfirmationOptions {
   title?: string;
   confirmLabel?: string;
   destructive?: boolean;
+  details?: Array<{ label?: string; text: string; caption?: string }>;
+  note?: string;
 }
 
 interface ConfirmationRequest extends ConfirmationOptions {

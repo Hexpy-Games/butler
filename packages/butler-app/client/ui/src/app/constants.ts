@@ -31,6 +31,8 @@ export const EMPTY_SETTINGS: SettingsView = {
   timezone: "UTC",
   model: "",
   reasoning_effort: "medium",
+  recall_mode: "accurate",
+  recall_judge_model: "default",
   consolidation_model: "default",
   consolidation_reasoning_effort: "xhigh",
   effective_consolidation_model: "",

@@ -6,8 +6,10 @@ mod evidence;
 mod jobs;
 mod ledger_guard;
 mod output;
+mod path_guard;
 mod registered_artifacts;
 mod structured_stdout;
+mod timing;
 mod validation;
 
 use std::collections::HashMap;
@@ -26,6 +28,7 @@ use butler_turn::workspace::{
 };
 use jobs::CommandJobs;
 
+#[derive(Clone)]
 pub(crate) struct GuidedCommand {
     commands: Commands,
     output: ToolOutput,
@@ -33,6 +36,7 @@ pub(crate) struct GuidedCommand {
     jobs: CommandJobs,
 }
 
+#[derive(Clone)]
 pub(crate) struct CommandScope<'a> {
     pub workspace_reference: Option<&'a WorkspaceReference>,
     pub workspace_path: &'a Path,
@@ -125,36 +129,8 @@ impl GuidedCommand {
                 .run(move || Commands::guarded_directory(&guarded_root, requested.as_deref()))
                 .await?
                 .map_err(BtccError::from)?;
-            let guard_command = command.to_owned();
-            let guard_cwd = resolved_cwd.clone();
-            let guard_root = root.clone();
-            let guard_data = scope.butler_data.to_path_buf();
-            let guard_installation_root = scope.installation_root.map(Path::to_path_buf);
-            let guard_home = self.host_environment.get("HOME").map(PathBuf::from);
-            let denied = self
-                .jobs
-                .run(move || {
-                    ledger_guard::guard(
-                        &guard_command,
-                        &guard_cwd,
-                        &guard_root,
-                        &guard_data,
-                        guard_installation_root.as_deref(),
-                        guard_home.as_deref(),
-                    )
-                })
-                .await?;
-            if let Some(denied) = denied {
-                let rejected = serde_json::json!({
-                    "ok":false,"command":command,"cwd":resolved_cwd.to_string_lossy(),
-                    "exit_code":1,"timed_out":false,"stdout":"",
-                    "stderr":denied["message"],"error":denied["error"],
-                    "protected_path":denied["protected_path"],"next":denied["next"],
-                    "evidence_receipts":evidence::receipts(false,&[]),
-                    "evidence_capability_receipts":evidence::capability_receipts(Some(1),false,false,false,&[])
-                });
-                return JsonDocument::from_value(&rejected)
-                    .map_err(|source| error("command_result_encoding_failed").with_source(source));
+            if let Some(rejected) = self.check_paths(args, &scope).await? {
+                return Ok(rejected);
             }
             let before_git = registered_artifacts::snapshot(
                 &self.commands,

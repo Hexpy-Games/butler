@@ -14,7 +14,7 @@ pub(crate) fn check(root: &Path, sources: &[PathBuf]) -> Result<bool, String> {
         .filter(|source| source.starts_with(&directory))
     {
         // This harness-only inventory/security suite never accesses an Agent.
-        if source == &directory.join("cassette_lint.rs") {
+        if source == &directory.join("e2e/cassette_lint.rs") {
             continue;
         }
         let contents = fs::read_to_string(source).map_err(|error| error.to_string())?;

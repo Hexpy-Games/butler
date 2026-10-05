@@ -1,0 +1,24 @@
+name: Set up cached Bun
+description: Keep the package cache outside disposable check profiles
+inputs:
+  bun-version:
+    default: '1.3.11'
+    description: Bun version to install
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}
+    - name: Select the package cache
+      id: version
+      shell: bash
+      run: |
+        echo "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP/bun-package-cache" >> "$GITHUB_ENV"
+        echo "version=$(bun --version)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/bun-package-cache
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          bun-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}-

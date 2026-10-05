@@ -43,7 +43,15 @@ export type SessionFolderLaunchResult =
       recoverable: true;
     };
 
+export interface AppUpdateState {
+  status: "idle" | "choice_required" | "deferred" | "preparing" | "restarting" | "failed";
+  request_id: string | null;
+}
+
 interface ButlerAppBridge {
+  getAppUpdateState?: () => Promise<AppUpdateState>;
+  chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
+  onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;
   startupIssue?: "legacy-data" | null;
   recoverLegacyData?: (action: "open-folder" | "restart") => Promise<{ ok: boolean }>;
   protocolVersion?: string;
@@ -515,6 +523,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       displayName: body.display_name,
       folderSelectionToken: body.folder_selection_token,
       idempotencyKey: body.idempotency_key,
+    });
+  }
+  if (url.pathname.startsWith("/memory/")) {
+    return await callBridge<T>(bridge, "memoryRequest", {
+      path: url.pathname, method, body: parseBody(options.body),
     });
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);

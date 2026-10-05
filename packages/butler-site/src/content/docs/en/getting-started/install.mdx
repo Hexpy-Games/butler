@@ -13,10 +13,10 @@ The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is
 - Apple silicon (M-series) Mac, macOS 12 or later
 - Linux x64 / arm64: DEB package
 - Arch Linux x64: Arch package
-- Windows x64 preview: unsigned Agent and browser UI
+- Windows x64 source preview: no downloadable installer in this release
 
 <Notice tone="info">
-  On macOS and Linux, Butler Agent is included in the app. The bundled Agent runs only while Butler is open. Windows previews ship an unsigned Agent with a browser UI.
+  The macOS and Linux apps include Butler Agent, which runs while the app is open. Windows has a source preview, but this release has no downloadable installer.
 </Notice>
 
 ## Download
@@ -34,11 +34,15 @@ The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is
       1. Open the [0.1.0 preview.5 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5).
       2. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg).
       3. Open the DMG and drag `Butler.app` into the Applications folder.
+      4. On first open, if Gatekeeper blocks Butler, right-click it and choose **Open**. If it still does not open, choose **Open Anyway** in **System Settings → Privacy & Security**.
     </Steps>
+    <Notice tone="info" title="Verify the download (optional)">
+      Download the DMG and its `.sha256` file into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
+    </Notice>
   </TabPanel>
   <TabPanel value="windows">
-    <Notice tone="info" title="Agent preview">
-      Windows x64 previews use an unsigned Agent and browser UI. Follow the Windows Agent instructions below.
+    <Notice tone="info" title="Source preview">
+      The published `0.1.0-preview.5` release has no downloadable Windows installer. Check [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) for a later Windows package.
     </Notice>
   </TabPanel>
   <TabPanel value="linux">
@@ -63,26 +67,6 @@ The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is
 
 After you install the `0.1.0-preview.5` app, turn on **Receive preview versions** to get later previews from **Settings → Updates**. Run `butler --version` to see the exact version.
 
-### Verify the download (optional)
-
-Each release file comes with a SHA-256 checksum (`.sha256`). Download the DMG and its checksum file into the same folder, then verify the DMG.
-
-```bash
-cd ~/Downloads
-shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256
-```
-
-`OK` means the file you downloaded matches the published file.
-
-## First open
-
-macOS preview builds are signed but not notarized by Apple. Gatekeeper shows a prompt the first time you open the app.
-
-<Steps>
-  1. In the Applications folder, right-click Butler and choose **Open**.
-  2. If the app does not open, choose **Open Anyway** in **System Settings → Privacy & Security**.
-</Steps>
-
 ## First-run setup
 
 The first time you run Butler, first-run setup starts in the app. On the welcome screen, choose the interface language, agree, then connect an AI. In the last step of the AI connection, choose the response language. For each step, see [First run](/en/help/getting-started/first-run/).
@@ -91,33 +75,38 @@ After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K"
 
 ## Use the Agent without the app
 
-The headless Agent supports Apple silicon macOS and glibc-based Linux x64 / arm64.
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    The headless Agent supports Apple silicon macOS.
 
-```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
-# With Node.js
-npx @hexpygames/butler install
-```
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # With Node.js
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+  <TabPanel value="windows">
+    The published release has no downloadable Windows Agent installer. Windows builds are in source preview.
+  </TabPanel>
+  <TabPanel value="linux">
+    The headless Agent supports glibc-based Linux x64 / arm64.
+
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # With Node.js
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+</Tabs>
 
 For the management commands, see [Butler Agent CLI](/en/help/advanced/agent-cli/).
-
-## Windows x64 Agent preview
-
-Windows previews are unsigned and agent-only. Use the Windows ZIP and `install.ps1` from the same preview release that lists `windows-x64` in its Agent manifest. In PowerShell, replace `0.1.0-preview.N` with that release version:
-
-```powershell
-$env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
-butler open
-# With Node.js
-npx @hexpygames/butler install
-```
-
-The installer verifies SHA-256 checksums, installs under `%LOCALAPPDATA%\Butler`, adds `butler` to your user PATH, and starts the Agent. Open a new terminal if `butler` is not found. The UI runs in your browser. Use `butler start`, `stop`, `restart`, and `status` to manage the background process.
-
-- Agent-only installs support autostart through Task Scheduler: `butler startup enable`. Use `butler startup status` to check it and `butler startup disable` to remove it.
-- LAN remote access and pairing are supported.
-- No command write sandbox; commands still require approval.
-- SmartScreen may warn about the unsigned preview. Choose **More info → Run anyway**.
 
 ## Related pages
 

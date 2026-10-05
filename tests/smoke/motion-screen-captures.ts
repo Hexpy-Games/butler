@@ -24,6 +24,7 @@ try {
           await server.signIn(context);
           await page.goto(server.url);
           await page.locator(completed ? '[data-test-class~="composer-card"]' : '[data-test-class~="first-run-setup"]').waitFor();
+          if (!completed) await page.locator('[data-test-class="memory-model-status"]').getByRole("button").waitFor();
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(750);
           const prefix = `${completed ? "completed" : "pending"}-${width}-${theme}-${wallpaper}`;
@@ -38,10 +39,12 @@ try {
             await page.getByRole("switch", { name: "동작 줄이기", exact: true }).waitFor();
             await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('[data-slot="wallpaper-picker"] img')].every((img) => img.complete && img.naturalWidth));
             await page.screenshot({ path: `${out}/${prefix}-appearance.png`, fullPage: true });
+            await page.getByRole("switch", { name: "동작 줄이기", exact: true }).scrollIntoViewIfNeeded();
+            await page.screenshot({ path: `${out}/${prefix}-accessibility.png`, fullPage: true });
           }
         }
       }
     } finally { await server.stop(); }
   }
 } finally { await browser.close(); }
-console.log("PASS: 24 screen captures (375/1280, light/dark, wallpaper/plain, pending/completed)");
+console.log("PASS: 32 screen captures (375/1280, light/dark, wallpaper/plain, pending/completed)");

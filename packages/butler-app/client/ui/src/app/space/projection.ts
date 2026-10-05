@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "../sessionTitle.ts";
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import type {
   NavigationView,
@@ -47,7 +48,7 @@ export function projectSpace(
   const nodes = new Map(navigation.space.nodes.map((n) => [n.key, n]));
   const title = (n: SpaceNode) =>
     n.kind === "session"
-      ? sessions.get(n.entityId)?.title
+      ? sessions.has(n.entityId) ? sessionDisplayTitle(sessions.get(n.entityId)!) : undefined
       : n.kind === "project"
         ? projects.get(n.entityId)?.display_name
         : groups.get(n.entityId)?.title;
@@ -65,7 +66,7 @@ export function projectSpace(
         manualPlacement: false,
         scopeProjectId: null,
       },
-      title: appCopy.space.general,
+      title: sessionDisplayTitle(general),
       session: general,
       pinned: false,
       smart: false,

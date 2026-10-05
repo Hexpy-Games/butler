@@ -2,14 +2,15 @@
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
+import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -17,20 +18,36 @@ if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || pro
 }
 const release = resolve(process.argv[2]);
 const second = resolve(process.argv[3]);
-const from = "0.1.0-preview.90", to = "0.1.0-preview.91";
-const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
+const from = process.env.BUTLER_WINDOWS_SMOKE_FROM ?? "0.1.0-preview.90";
+const to = process.env.BUTLER_WINDOWS_SMOKE_TO ?? "0.1.0-preview.91";
+assert.match(from, /^0\.1\.0-preview\.\d+$/u);
+assert.match(to, /^0\.1\.0-preview\.\d+$/u);
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-installer-e2e-")));
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
 const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
+const downloads: DownloadsProof = { requests: 0 };
+const downloadsCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
-const packageName = manifest.artifacts[0].artifact_url.split("/").at(-1);
+const artifact = manifest.artifacts.find((item: any) => item.platform === "windows-x64");
+assert.equal(artifact?.version, to, "Candidate manifest must describe the exact update version");
+const packageName = artifact.artifact_url.split("/").at(-1);
+const packageBytes = readFileSync(join(second, packageName));
+assert.equal(createHash("sha256").update(packageBytes).digest("hex"), artifact.sha256);
+const feed = readFileSync(join(second, "RELEASES"), "utf8").trim().split(/\s+/u);
+assert.equal(feed.length, 3, "Expected one complete RELEASES entry");
+assert.equal(feed[0].toLowerCase(), createHash("sha1").update(packageBytes).digest("hex"));
+assert.equal(feed[1], packageName);
+assert.equal(Number(feed[2]), packageBytes.length);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
     const body = await request.json();
+    const listing = releasedDownloadsReply(body, downloads, downloadsCalls);
+    if (listing) return listing;
     return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls, input => {
       assert.ok(["user", "assistant"].includes(input.speaker), "Unexpected memory speaker");
       assert.ok(!calls.memorySpeakers.has(input.speaker), "Repeated extraction of the same chat speaker");
@@ -47,18 +64,19 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const debugPort = await freePort();
 const agentPort = await freePort();
-const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
-  BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${server.port}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+  BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_WINDOWS_SMOKE_MANIFEST ?? `http://127.0.0.1:${server.port}/manifest.json`,
+  BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
 const stub = join(installed, "Butler.exe");
 const updater = join(installed, "Update.exe");
-const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths()[1]!];
+const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
 const started = Date.now();
 try {
   prepare();
@@ -103,6 +121,8 @@ try {
   assert.ok((await bridge(page, "listSessions")).sessions.some((item: any) => item.id === session.id));
   const messages = (await bridge(page, "listMessages", { chatId: session.id })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[1].text, "Windows update ready.");
+  phase = "candidate Downloads command";
+  await proveReleasedDownloads(page, env.HOME, downloads);
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
@@ -126,6 +146,7 @@ try {
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
     providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
     memoryState: memoryState(),
+    shortcutState: shortcuts.map(path => ({ path, exists: existsSync(path) })),
     instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
     lastExit: readJson(join(data, "app/runtime/foreground/last-exit.json")),
     packages: [from, to].map(version => ({ version,
@@ -142,7 +163,7 @@ try {
   await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
-  rmSync(root, { recursive: true, force: true });
+  removeProfile(root, env);
 }
 
 function memoryState() {
@@ -185,7 +206,7 @@ async function oneClickLaunch() {
 }
 
 function prepare() {
-  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA]) mkdirSync(folder, { recursive: true });
+  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "retained");
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
     metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
@@ -196,6 +217,10 @@ function prepare() {
 }
 
 function run(command: string, args: string[]) {
+  if (command === join(release, `ButlerSetup-${from}-x64.exe`)) {
+    const expected = readFileSync(command + ".sha256", "utf8").trim().split(/\s+/u)[0];
+    assert.equal(digest(command), expected, "Baseline installer checksum");
+  }
   const child = spawnSync(command, args, { env, stdio: "ignore" });
   assert.equal(child.status, 0, `${command}: exit ${child.status}`);
 }
@@ -230,7 +255,7 @@ async function stubChat(chatId: string) {
 
 function shellProof() {
   const command = powershell("(Get-Item 'HKCU:\\Software\\Classes\\butler\\shell\\open\\command').GetValue('')", env);
-  assert.ok(command.includes(stub), "Protocol does not target the version-independent stub");
+  assert.ok(command.includes(stub), `Protocol does not target the version-independent stub: ${JSON.stringify({ command, stub })}`);
   for (const path of shortcuts) {
     const facts = JSON.parse(powershell(`$shell = New-Object -ComObject Shell.Application
       $folder = $shell.NameSpace([IO.Path]::GetDirectoryName($env:BUTLER_SHORTCUT))

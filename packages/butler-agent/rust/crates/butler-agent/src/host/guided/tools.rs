@@ -8,12 +8,14 @@ mod execute;
 mod feedback;
 mod image;
 mod memory_write;
+pub(crate) use memory_write::MemoryWriteServices;
 mod message;
 mod monitoring;
 mod occurrence;
 mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
+mod project_artifacts;
 mod project_source;
 mod resume;
 mod wallpaper;
@@ -99,8 +101,7 @@ pub(crate) struct GuidedTools {
     file_effects: crate::host::GuidedFileEffects,
     query: Arc<ExactMemoryQuery>,
     recall: Arc<MemoryRecall>,
-    memory_paths: butler_memory::cognition::CognitionPathEnvironment,
-    memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
+    memory_writes: MemoryWriteServices,
     conversations: Arc<ConversationSessionReference>,
     conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -168,8 +169,7 @@ impl GuidedTools {
         file_effects: crate::host::GuidedFileEffects,
         query: Arc<ExactMemoryQuery>,
         recall: Arc<MemoryRecall>,
-        memory_paths: butler_memory::cognition::CognitionPathEnvironment,
-        memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
+        memory_writes: MemoryWriteServices,
         conversations: Arc<ConversationSessionReference>,
         conversation_tools: Arc<butler_runtime::context::ConversationTools>,
         project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -229,8 +229,7 @@ impl GuidedTools {
             file_effects,
             query,
             recall,
-            memory_paths,
-            memory_publisher,
+            memory_writes,
             conversations,
             conversation_tools,
             project,
@@ -280,6 +279,7 @@ impl GuidedTools {
                     | ToolName::RecallMemory
                     | ToolName::IngestTaskMemory
                     | ToolName::UpdateExplicitMemory
+                    | ToolName::ForgetExplicitMemory
                     | ToolName::AnalyzeAttachedImage
                     | ToolName::ReadConversationSession
                     | ToolName::ListConversationSessions
@@ -291,6 +291,7 @@ impl GuidedTools {
                     | ToolName::SummarizeUserProfile
                     | ToolName::UpdateOnboardingProfile
                     | ToolName::ReadProjectSource
+                    | ToolName::ProjectArtifacts
                     | ToolName::BindSessionGitWorktree
                     | ToolName::StartTopicConversation
                     | ToolName::RequestServiceRestart
@@ -344,7 +345,7 @@ impl ToolPort for GuidedTools {
         &'a self,
         invocation: GuidedInvocation<'a>,
         _: &'a [ModelRoundTool],
-        phase: LoopPhase,
+        _: LoopPhase,
     ) -> PortFuture<'a, ToolSurface> {
         Box::pin(async move {
             self.same_turn(invocation)?;
@@ -361,10 +362,7 @@ impl ToolPort for GuidedTools {
                 ));
             }
             self.resume_pool().await?;
-            let tools = match phase {
-                LoopPhase::Working => self.binding.surface.clone(),
-                LoopPhase::FinalReport => Vec::new(),
-            };
+            let tools = self.binding.surface.clone();
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

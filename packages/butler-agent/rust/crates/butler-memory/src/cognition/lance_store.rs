@@ -13,6 +13,8 @@ use lance::session::Session;
 use lancedb::{Table, connection::Connection};
 use parking_lot::Mutex;
 
+mod portable_file;
+
 // Session capacities are weighted bytes, not entry counts. The separate table
 // index cache is a count of entries.
 const INDEX_CACHE_BYTES: usize = 16 * 1024 * 1024;
@@ -25,10 +27,14 @@ pub(super) async fn connect(uri: &Path) -> lancedb::Result<Connection> {
     let uri = uri.to_str().ok_or_else(|| lancedb::Error::InvalidInput {
         message: "Lance URI is not UTF-8".to_owned(),
     })?;
+    let registry = Arc::new(Default::default());
+    if portable_file_required() {
+        portable_file::configure(&registry)?;
+    }
     let session = Arc::new(Session::new(
         INDEX_CACHE_BYTES,
         METADATA_CACHE_BYTES,
-        Arc::new(Default::default()),
+        registry,
     ));
     lancedb::connect(uri)
         // Another handle (an optimize run, a rebuild) may have written since
@@ -37,6 +43,14 @@ pub(super) async fn connect(uri: &Path) -> lancedb::Result<Connection> {
         .session(session)
         .execute()
         .await
+}
+
+fn portable_file_required() -> bool {
+    !butler_platform::secure_fs::TEMPFILE_LONG_PATH_PERSISTENCE
+        || matches!(
+            std::env::var("BUTLER_E2E_TIER").as_deref(),
+            Ok("stub" | "perf")
+        ) && std::env::var("BUTLER_E2E_PORTABLE_LANCE").as_deref() == Ok("1")
 }
 
 pub(super) async fn open(connection: &Connection, name: &str) -> lancedb::Result<Table> {
