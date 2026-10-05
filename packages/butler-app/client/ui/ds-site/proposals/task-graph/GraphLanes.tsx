@@ -7,8 +7,6 @@ import type { TaskStatus } from "./copy";
 
 const LANE = 14;
 const PAD = 7;
-/** Dot on the card's first text line: card padding (8) + half the body line (10). */
-const FIRST_LINE = 18;
 
 const DOT_FILL: Partial<Record<TaskStatus, string>> = {
   running: "var(--worker-active)", completed: "var(--line-strong)", failed: "var(--danger)",
@@ -22,7 +20,8 @@ export function GraphLanes({ graph, index, columns, label, renderCard, onSelect 
   const lanes = useMemo(() => laneLayout(columns, index), [columns, index]);
   const { rects, size } = useCardRects(host, origin, [graph, columns]);
   const x = (lane: number) => PAD + lane * LANE;
-  const y = (id: string) => (rects.get(id)?.top ?? 0) + FIRST_LINE;
+  // Dots sit on the centre of the card's status glyph, i.e. its first text line.
+  const y = (id: string) => rects.get(id)?.firstLineY ?? 0;
   const width = PAD * 2 + (lanes.laneCount - 1) * LANE;
   const ready = rects.size === graph.nodes.length;
 

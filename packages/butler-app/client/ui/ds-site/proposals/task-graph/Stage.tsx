@@ -123,7 +123,7 @@ export function TaskGraphStage() {
           <InspectorShell id="butler-right-inspector" activeTab={tab} tabs={tabs} onTabChange={setTab}>
             {tab === "summary" ? <SummaryPanel status={{ label: "", tone: "neutral" } as never} summary={summary} /> : null}
             {tab === "tasks" ? (
-              <TaskGraphSection key={`${state.scenario}:${state.locale}`} graphs={graphs} locale={state.locale} variant={state.variant} />
+              <TaskGraphSection key={`${state.scenario}:${state.locale}`} graphs={graphs} locale={state.locale} />
             ) : null}
           </InspectorShell>
         </AdaptiveShellInspector>

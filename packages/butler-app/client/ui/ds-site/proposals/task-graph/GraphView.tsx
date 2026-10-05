@@ -23,17 +23,15 @@ export interface OneGraphProps {
   selected: string | null;
   renderCard: (id: string) => ReactNode;
   onSelect: (id: string) => void;
-  /** Combined layout on desktop: no own ScrollArea. */
-  bare?: boolean;
 }
 
 /** One graph: a left-to-right canvas on desktop, inset top-to-bottom lanes on a phone. */
-export function GraphView({ graph, label, selected, renderCard, onSelect, bare }: OneGraphProps) {
+export function GraphView({ graph, label, selected, renderCard, onSelect }: OneGraphProps) {
   const phone = usePhone();
   const index = useMemo(() => indexGraph(graph), [graph]);
   const columns = useMemo(() => layeredColumns(graph, index), [graph, index]);
   const view = { graph, index, columns, label, selected, renderCard, onSelect };
   return phone
     ? <InspectorInset><GraphLanes {...view} /></InspectorInset>
-    : <GraphCanvas {...view} bare={bare} />;
+    : <GraphCanvas {...view} />;
 }

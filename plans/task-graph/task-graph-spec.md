@@ -1,6 +1,6 @@
 # Task graph: implementation spec
 
-Status: owner-approved design (rounds 1–3, 2026-10-05/06). Implementation by Codex.
+Status: owner-approved design (rounds 1–4, 2026-10-05/06; multi-graph variant A chosen). Implementation by Codex.
 Design proposal: branch `design/task-graph`, DS site route `?proposal=task-graph`
 (`packages/butler-app/client/ui/ds-site/proposals/task-graph/`). The proposal's fixtures, layout code and copy
 are the reference; move them into product code as described here.
@@ -40,12 +40,36 @@ is read-only, §5 UI read model and events).
   - dashed `--danger` from a failed or cancelled task;
   - 2px `--worker-active` into a running task.
 
-### 2.2 Several graphs: recommended option A, stacked sections
+### 2.2 Several graphs: variant A, stacked sections (chosen)
 
-- Under the header, each graph gets one `DisclosureRow surface="plain"` with:
+The owner chose variant A in round 4.
+
+- **Row component:** under the header, each graph gets one `DisclosureRow` with the **default
+  `surface="selection"`**, rendered **without children**. Do not use `surface="plain"` here.
   - `title` = the plan's goal;
-  - `icon` = the graph's state glyph;
+  - `icon` = the graph's state glyph (`statusIcon`);
   - `meta` = its counts.
+- **Required DisclosureRow version:** the current DS block, which includes `e8be31c66` "fix(ds): preserve
+  disclosure titles beside long metadata" (on `origin/main` and `batch/preview-10`). No newer
+  DisclosureRow change exists on any branch. With it:
+  - the trigger keeps its `--disclosure-inset` (8px) inside the row box;
+  - chevron, icon, title and meta share the first-line box, so the glyph is centred on the title line;
+  - hover fills the row box, and an open row keeps the flat `--selection` fill;
+  - long meta wraps within half the row, so the title is never pushed out.
+- **The graph renders below the row, outside its panel.** Passing it as children would indent the cards to
+  the panel's title column (inset + 2 × (line + sm) ≈ 64px), and the fill would cover the whole canvas.
+- **One inset:** the row box, the header, the first card column and the detail panel all start at the
+  inspector inline padding (18px).
+  - The canvas reaches 18px through ScrollArea's 14px edge padding plus `Box paddingX="xs"`.
+  - When the selected card is off-screen, the canvas scrolls so that card's column starts at 18px. It does
+    not centre the card.
+- **Spacing:**
+  - header to first row: the Section's own header-to-content gap (lg, 16px); the outer stack uses gap
+    `none`;
+  - folded rows: 4px apart (the DS row rhythm);
+  - an open graph: `Box paddingY="sm"` (8px) above and below its canvas;
+  - canvas to detail: gap md.
+- **Row heights:** 36px on desktop, 39px at 375 (the DS body line plus the 8px inset).
 - **Open by default:** running and failed graphs. Finished and cancelled graphs are folded to one line. If
   no graph is running or failed, the first graph is open.
 - **Order:** running, failed, waiting, done, cancelled. Order is stable within each state. Graph state
@@ -55,9 +79,11 @@ is read-only, §5 UI read model and events).
   header shows that graph's counts. With several graphs, the header shows "그래프 N개 · 진행 중 M" /
   "N graphs · M running".
 - The user's open/fold choice is kept in memory for the conversation only and is never written to disk.
-- **Rejected options** (still on the proposal page for reference):
+- **Phone lanes:** each lane dot is centred on the card's status glyph, which is measured. This keeps the
+  dot on the card's first text line at the phone type scale.
+- **Not chosen:**
   - B, a graph picker (`Select`): it hides other graphs' failures behind a menu.
-  - C, one combined canvas: it leaves empty bands and gives finished graphs the same space as running ones.
+  - C, one combined canvas: it leaves empty bands, and the band labels scroll away with the canvas.
 
 ## 3. Card (DS primitives only)
 
@@ -194,7 +220,7 @@ Add:
 - New container `src/components/inspector/TasksPanel.tsx`. It selects from the store and maps to props.
   Presenters move from the proposal, each ≤ 160 lines:
   - `TaskGraphSection` → `TasksPanel`;
-  - `MultiGraph` (stacked only);
+  - `MultiGraph` (`StackedGraphs`);
   - `GraphView`, `GraphCanvas`, `GraphLanes`, `TaskCard`, `TaskDetail`, `edges`.
 - New `src/app/taskGraphLayout.ts` (from `layout.ts`) and `src/app/taskGraphs.ts` (from `graphs.ts`).
 - Store: `taskGraphs[sessionId]` holds the list plus per-graph snapshots, fed by the endpoints and events

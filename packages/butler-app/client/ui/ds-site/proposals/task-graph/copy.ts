@@ -118,16 +118,12 @@ export const TASK_GRAPH_COPY: Record<ProposalLocale, TaskGraphCopy> = {
 };
 
 export type Scenario = "empty" | "one" | "chain" | "fanout" | "failed" | "cancelled" | "long" | "two" | "many";
-/** How several graphs share the Tasks tab. */
-export type Variant = "stacked" | "picker" | "combined";
 
 interface PageCopy {
   eyebrow: string;
   title: string;
   intro: string;
-  variant: string;
-  variants: Record<Variant, string>;
-  recommended: string;
+  chosen: string;
   scenario: string;
   scenarios: Record<Scenario, string>;
   width: string;
@@ -141,17 +137,15 @@ interface PageCopy {
   language: string;
   frameLabel: string;
   notesTitle: string;
-  notes: Record<Variant, string>;
+  notes: string[];
 }
 
 export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "en-US": {
     eyebrow: "Proposal · task graph",
     title: "Task graph",
-    intro: "A read-only task graph for the conversation, in its own Tasks tab of the inspector (Summary is unchanged). Cards show title, status, worker and model, and time; lines are prerequisites. A card opens the worker's conversation in the existing session dialog; the detail opens the task document in the existing document dialog. Drag the inspector edge to resize it; the width is kept. A conversation can run several graphs at once (one per plan); the variants show how the tab holds them.",
-    variant: "Several graphs",
-    variants: { stacked: "A · Stacked sections", picker: "B · Graph picker", combined: "C · One canvas" },
-    recommended: "Recommended",
+    intro: "A read-only task graph for the conversation, in its own Tasks tab of the inspector (Summary is unchanged). Cards show title, status, worker and model, and time; lines are prerequisites. A card opens the worker's conversation in the existing session dialog; the detail opens the task document in the existing document dialog. Drag the inspector edge to resize it; the width is kept. A conversation can run several graphs at once (one per plan); each graph is one collapsible section (variant A, chosen).",
+    chosen: "Chosen",
     scenario: "State",
     scenarios: {
       empty: "Empty", one: "One task", chain: "Chain", fanout: "Fan-out + join",
@@ -167,20 +161,20 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     motions: { full: "Full", reduced: "Reduced" },
     language: "Language",
     frameLabel: "Tasks tab preview",
-    notesTitle: "Several graphs",
-    notes: {
-      stacked: "One collapsible row per graph with its goal, status glyph and counts. Running and failed graphs are open; finished and cancelled ones fold to one line. Order: running, failed, waiting, done, cancelled. The task detail opens under the graph that owns it. Every graph's state is visible at once on desktop and 375 with no extra control. With one graph the row is hidden.",
-      picker: "A Select at the top lists every graph with its counts; one graph shows at a time. Compact and quiet with many graphs, but the other graphs' state hides behind the menu, so a failure elsewhere is easy to miss.",
-      combined: "All graphs in one horizontal canvas, one labelled band per graph, scrolled together; on 375 the bands stack. Shows everything, but bands of very different lengths leave wide empty space and finished graphs take as much room as running ones; band labels scroll away with the canvas.",
-    },
+    notesTitle: "Several graphs · A · Stacked sections",
+    notes: [
+      "One DisclosureRow per graph (default selection surface: trigger inset inside the row box, hover fill, open rows keep the flat selection fill) with the goal, a status glyph on the first text line and the counts.",
+      "Running and failed graphs open; finished and cancelled ones fold to one line. Order: running, failed, waiting, done, cancelled. Folded rows sit 4px apart (DS row rhythm); an open graph gets 8px above and below its canvas.",
+      "The graph is rendered below its row, not in the row's panel, so cards start on the same 18px inspector inset as the row box, the header and the detail panel.",
+      "The task detail opens under the graph that owns it. With one graph the row is hidden and the goal becomes the header description.",
+      "Not chosen: B, a graph picker (hides other graphs' failures behind a menu); C, one combined canvas (empty bands, labels scroll away).",
+    ],
   },
   "ko-KR": {
     eyebrow: "제안 · 작업 그래프",
     title: "작업 그래프",
-    intro: "대화의 작업 그래프를 인스펙터의 별도 '작업' 탭에 읽기 전용으로 보여 줍니다(요약 탭은 그대로). 카드에는 제목, 상태, 작업자와 모델, 걸린 시간이 있고 선은 선행 관계입니다. 카드를 누르면 작업자의 대화가 기존 대화 창에 열리고, 상세에서 작업 문서를 기존 문서 창으로 엽니다. 인스펙터 가장자리를 끌어 너비를 바꿀 수 있고 너비는 기억됩니다. 한 대화에서 그래프 여러 개(계획마다 하나)가 동시에 돌 수 있어, 탭에 담는 방식을 안별로 비교합니다.",
-    variant: "그래프 여러 개",
-    variants: { stacked: "A · 접는 섹션", picker: "B · 그래프 고르기", combined: "C · 한 캔버스" },
-    recommended: "추천",
+    intro: "대화의 작업 그래프를 인스펙터의 별도 '작업' 탭에 읽기 전용으로 보여 줍니다(요약 탭은 그대로). 카드에는 제목, 상태, 작업자와 모델, 걸린 시간이 있고 선은 선행 관계입니다. 카드를 누르면 작업자의 대화가 기존 대화 창에 열리고, 상세에서 작업 문서를 기존 문서 창으로 엽니다. 인스펙터 가장자리를 끌어 너비를 바꿀 수 있고 너비는 기억됩니다. 한 대화에서 그래프 여러 개(계획마다 하나)가 동시에 돌 수 있어, 그래프마다 접는 섹션 하나로 담습니다(A안, 채택).",
+    chosen: "채택",
     scenario: "상태",
     scenarios: {
       empty: "없음", one: "작업 1개", chain: "순차", fanout: "병렬 3 + 합류",
@@ -196,11 +190,13 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     motions: { full: "기본", reduced: "줄이기" },
     language: "언어",
     frameLabel: "작업 탭 미리보기",
-    notesTitle: "그래프 여러 개",
-    notes: {
-      stacked: "그래프마다 접을 수 있는 줄 하나에 목표, 상태 아이콘, 개수를 둡니다. 진행 중과 실패한 그래프는 펼치고, 끝났거나 취소된 그래프는 한 줄로 접습니다. 순서는 진행 중, 실패, 대기, 완료, 취소입니다. 작업 상세는 그 작업이 속한 그래프 바로 아래에 열립니다. 컨트롤을 더하지 않고도 데스크톱과 375 모두에서 모든 그래프의 상태가 한눈에 보입니다. 그래프가 하나면 줄을 숨깁니다.",
-      picker: "탭 위 Select에 그래프와 개수를 모두 나열하고 한 번에 하나만 보여 줍니다. 그래프가 많아도 작고 조용하지만 다른 그래프의 상태가 메뉴 뒤에 숨어 다른 곳의 실패를 놓치기 쉽습니다.",
-      combined: "모든 그래프를 가로 캔버스 하나에 그래프별 띠로 쌓아 함께 스크롤합니다. 375에서는 띠가 세로로 쌓입니다. 전부 보이지만 길이가 크게 다른 띠 사이에 빈 공간이 넓고, 끝난 그래프도 진행 중 그래프만큼 자리를 차지하며, 띠 이름이 캔버스와 함께 스크롤되어 사라집니다.",
-    },
+    notesTitle: "그래프 여러 개 · A · 접는 섹션",
+    notes: [
+      "그래프마다 DisclosureRow 하나(기본 selection 표면: 줄 상자 안쪽 여백, 마우스 올림 채움, 펼친 줄은 평평한 선택 채움)에 목표, 첫 줄에 맞춘 상태 아이콘, 개수를 둡니다.",
+      "진행 중과 실패한 그래프는 펼치고 끝났거나 취소된 그래프는 한 줄로 접습니다. 순서는 진행 중, 실패, 대기, 완료, 취소입니다. 접힌 줄 사이는 4px(DS 줄 간격), 펼친 그래프는 캔버스 위아래로 8px입니다.",
+      "그래프는 줄의 패널 안이 아니라 줄 아래에 그려서, 카드가 줄 상자·머리글·상세 패널과 같은 18px 인스펙터 여백에서 시작합니다.",
+      "작업 상세는 그 작업이 속한 그래프 아래에 열립니다. 그래프가 하나면 줄을 숨기고 목표를 머리글 설명으로 씁니다.",
+      "채택하지 않은 안: B 그래프 고르기(다른 그래프의 실패가 메뉴 뒤에 숨음), C 한 캔버스(빈 띠가 생기고 이름이 스크롤로 사라짐).",
+    ],
   },
 };

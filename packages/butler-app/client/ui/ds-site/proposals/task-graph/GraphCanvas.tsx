@@ -14,8 +14,6 @@ export interface GraphViewProps {
   selected: string | null;
   renderCard: (id: string) => ReactNode;
   onSelect: (id: string) => void;
-  /** Combined layout: the caller owns one shared horizontal ScrollArea for every band. */
-  bare?: boolean;
 }
 
 /** Focus moves with the arrows: right/left follow edges, up/down stay in the column. */
@@ -39,19 +37,22 @@ export function moveFocus(event: KeyboardEvent<HTMLElement>, next: (id: string) 
 }
 
 /** Desktop: ranks left to right inside a horizontal DS ScrollArea (edge fades follow the scroll). */
-export function GraphCanvas({ graph, index, columns, label, selected, renderCard, onSelect, bare = false }: GraphViewProps) {
+export function GraphCanvas({ graph, index, columns, label, selected, renderCard, onSelect }: GraphViewProps) {
   const host = useRef<HTMLDivElement>(null);
   const origin = useRef<SVGSVGElement>(null);
   const { rects, size } = useCardRects(host, origin, [graph, columns]);
-  // Keep the selected card (the running task by default) in view without scrolling the page.
+  // Bring the selected card (the running task by default) into view by snapping its column's left
+  // edge to the canvas's resting inset, so cards always start where the section content starts.
   useLayoutEffect(() => {
     const scroller = host.current?.closest<HTMLElement>('[data-test-class="task-graph-canvas"]');
     const card = selected ? host.current?.querySelector<HTMLElement>(`[data-task-id="${selected}"]`) : null;
-    if (!scroller || !card) return;
+    const first = host.current?.querySelector<HTMLElement>("[data-task-id]");
+    if (!scroller || !card || !first) return;
     const view = scroller.getBoundingClientRect();
     const box = card.getBoundingClientRect();
     if (box.left >= view.left && box.right <= view.right) return;
-    scroller.scrollLeft += box.left + box.width / 2 - (view.left + view.width / 2);
+    const inset = first.getBoundingClientRect().left + scroller.scrollLeft - view.left;
+    scroller.scrollLeft = box.left + scroller.scrollLeft - view.left - inset;
   }, [selected, rects.size > 0]);
   const paths = graph.edges.flatMap((edge) => {
     const from = rects.get(edge.from);
@@ -84,5 +85,5 @@ export function GraphCanvas({ graph, index, columns, label, selected, renderCard
         </Stack>
       </div>
   );
-  return bare ? body : <ScrollArea orientation="x" dataTestClass="task-graph-canvas">{body}</ScrollArea>;
+  return <ScrollArea orientation="x" dataTestClass="task-graph-canvas">{body}</ScrollArea>;
 }
