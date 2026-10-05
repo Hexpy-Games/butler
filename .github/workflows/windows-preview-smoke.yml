@@ -20,6 +20,7 @@ on:
         default: false
 
 permissions:
+  actions: read
   contents: read
 
 defaults:
@@ -32,9 +33,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: windows-preview-smoke.yml
+
   build:
+    needs: changes
     name: Build unsigned Windows preview
-    if: ${{ !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -59,8 +66,9 @@ jobs:
         run: ./deploy/windows-owner-cleanup.ps1
 
   stub:
+    needs: changes
     name: Platform contracts and debug stub chat
-    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
@@ -427,46 +435,29 @@ jobs:
   gate:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    needs: [build, stub, release, hosted]
+    needs: [changes, build, stub, release, hosted]
     runs-on: windows-latest
     defaults:
       run:
         working-directory: .
     steps:
-      - name: Isolate completion checks
-        run: |
-          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory -Force "$root/home","$root/data" | Out-Null
-          "WINDOWS_GATE_ROOT=$root" >> $env:GITHUB_ENV
-          "HOME=$root/home" >> $env:GITHUB_ENV
-          "BUTLER_DATA=$root/data" >> $env:GITHUB_ENV
-      - name: Require all producer and verification jobs
+      - uses: actions/checkout@v4
+      - name: Require selected preview checks
         env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
-          foreach ($job in $needs.GetEnumerator()) {
-            if ($job.Value.result -ne 'success') { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
-          }
-      - uses: actions/download-artifact@v4
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"build":["package"],"stub":["package"],"release":["package"],"hosted":["package"]}'
+        run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
+      - uses: ./.github/actions/windows-preview-gate
+        if: needs.changes.outputs.package == 'true'
         with:
-          pattern: windows-completed-*
-          path: ${{ runner.temp }}/windows-completion
-      - name: Require every hosted verification harness
-        run: |
-          # Native and hosted command matrices each retain their completion record.
-          $expected = @('windows_commands','windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'windows_commands','projection_settlement','project_workspace','queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
-          $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
-            ForEach-Object { Get-Content $_.FullName })
-          if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
-            throw "Incomplete verification: completed=$($actual -join ',')"
-          }
-          "Verified all 15 required harnesses in 16 invocations: $($actual -join ',')"
-      - name: Remove completion check directories
-        if: always()
-        run: |
-          Remove-Item $env:WINDOWS_GATE_ROOT,"$env:RUNNER_TEMP/windows-completion" -Recurse -Force -ErrorAction SilentlyContinue
+          results: ${{ toJSON(needs) }}
+      - name: Publish successful inputs
+        if: success() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"package": ["build", "stub", "release", "hosted"]}'
+          workflow: windows-preview-smoke.yml
 
   diagnose-native:
     name: Isolated native PowerShell startup probe
