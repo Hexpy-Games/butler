@@ -157,7 +157,16 @@ async fn poll(
             changed = changes.changed() => {
                 idle_polls = 0;
                 match changed {
-                    Ok(true) => { trace("source_changed"); consumer.source_changed(); },
+                    Ok(true) => {
+                        trace("source_changed");
+                        // Stub-only race gate: the durable completion queue must
+                        // suffice when filesystem notifications are coalesced.
+                        if !(std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+                            && std::env::var("BUTLER_E2E_HOLD_CANONICAL_WAKE").as_deref() == Ok("1"))
+                        {
+                            consumer.source_changed();
+                        }
+                    },
                     Ok(false) => { trace("root_changed"); },
                     Err(_) => {
                         let Some(observer) = recover_observer(&data_root, &paths, &shutdown).await else { return };

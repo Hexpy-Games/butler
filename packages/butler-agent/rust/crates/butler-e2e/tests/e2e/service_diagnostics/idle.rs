@@ -28,10 +28,16 @@ pub(super) async fn memory_initialized(data: &Path) -> Result<(), HarnessError> 
     until(|| graph(data).is_some_and(|path| path.is_file())).await
 }
 
+pub(super) async fn canonical_initialized(data: &Path) -> Result<(), HarnessError> {
+    until(|| catchup::checkpoint_current(data)).await
+}
+
 async fn until(mut ready: impl FnMut() -> bool) -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(30), async {
         while !ready() {
-            tokio::task::yield_now().await;
+            // Each predicate opens fresh SQLite snapshots. Give the producer
+            // CPU between observations without extending the 30s watchdog.
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
@@ -106,6 +112,16 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
             settled(&s.sandbox.data, turn),
             catchup::status(&s.sandbox.data, turn)
         );
+        let log = s.sandbox.data.join("logs/butler-agent-service.stderr.log");
+        if let Ok(text) = fs::read_to_string(log) {
+            for line in text.lines().filter(|line| {
+                line.contains("[memory-catchup-trace]")
+                    || line.contains("[memory-sync-trace]")
+                    || line.contains("[native-memory-sync]")
+            }) {
+                eprintln!("service: {line}");
+            }
+        }
     }
     readiness?;
     eprintln!("idle barrier: waited_for_canonical_catchup={waited_for_catchup}");

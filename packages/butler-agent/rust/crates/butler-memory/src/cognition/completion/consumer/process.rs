@@ -126,6 +126,12 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         Ok(None) => {}
         Err(error) => queue_error = Some(error),
     }
+    // A durable completion notice follows its canonical outcome commit. Native
+    // filesystem events may have preceded COMMIT or been coalesced; the queue
+    // itself must invalidate the interval before the consumer can park again.
+    if queued {
+        input.catchup_at.lock().take();
+    }
     let caught_up = match catchup::run_if_due(&input).await {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {

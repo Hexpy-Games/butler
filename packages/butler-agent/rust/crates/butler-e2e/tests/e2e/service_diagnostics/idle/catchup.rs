@@ -48,3 +48,30 @@ pub(super) fn status(data: &Path, turn: &str) -> Option<[bool; 5]> {
     ).unwrap();
     Some(reconciled)
 }
+
+/// Require the initial canonical pass before the test's new completion notice.
+pub(super) fn checkpoint_current(data: &Path) -> bool {
+    let result = (|| -> rusqlite::Result<bool> {
+        let source = sqlite::open_with_flags(
+            data.join("runtime/conversation-store.sqlite"),
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        let (revision, identity): (String, String) = source.query_row(
+            "SELECT CAST(s.revision AS TEXT),i.identity FROM conversation_public_source_state s,
+             conversation_source_identity i WHERE s.singleton=1 AND i.singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let Some(path) = super::graph(data) else {
+            return Ok(false);
+        };
+        let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_revision' AND value=?1)
+             AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_source_identity' AND value=?2)
+             AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_done' AND value='1')",
+            rusqlite::params![revision,identity], |row| row.get(0),
+        )
+    })();
+    result.unwrap_or(false)
+}
