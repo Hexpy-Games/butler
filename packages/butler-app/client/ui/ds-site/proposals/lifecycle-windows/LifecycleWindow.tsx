@@ -14,31 +14,37 @@ export interface LifecycleContent {
   /** The slow hint under the stage line. */
   caption?: string;
   /** `hint` is the destructive action's consequence (its tooltip and accessible description). */
-  actions?: { secondary: string; primary: string; destructive: boolean; hint?: string };
+  actions?: { secondary: string; primary?: string; destructive?: boolean; hint?: string };
   working: boolean;
   /** Failure titles are announced at once; stage lines politely. */
   alert: boolean;
 }
 
 /** Window copy for one state: the single source both the page and the static build read. */
-export function lifecycleContent(kind: LifecycleKind, state: StartupState | QuitState, copy: WindowCopy): LifecycleContent {
+export function lifecycleContent(kind: LifecycleKind, state: StartupState | QuitState, copy: WindowCopy, forceQuit = false): LifecycleContent {
   const working = markWorking(kind, state);
   if (kind === "startup") {
     const startup = state as StartupState;
     if (startup === "error") {
-      return { title: copy.startupFailed, detail: copy.startupReasons.engine, working, alert: true,
+      return { title: copy.startupFailed, detail: copy.startupReasons.service, working, alert: true,
         actions: { secondary: copy.openLog, primary: copy.retry, destructive: false } };
     }
-    const stage = startup === "slow" ? "engine" : startup;
+    const stage = startup === "slow" ? "service" : startup;
     return { title: copy.startupTitle, line: { text: copy.startupStages[stage], key: stage }, working, alert: false,
       caption: startup === "slow" ? copy.slow : undefined };
   }
   const quit = state as QuitState;
-  const force = { secondary: copy.openLog, primary: copy.forceQuit, destructive: true, hint: copy.forceHint };
-  if (quit === "failed") return { title: copy.quitFailed, detail: copy.forceHint, working, alert: true, actions: force };
+  // Force quit only behind the flag (needs a supervisor forceStop); without it the user can only open the log.
+  const actions = forceQuit
+    ? { secondary: copy.openLog, primary: copy.forceQuit, destructive: true, hint: copy.forceHint }
+    : { secondary: copy.openLog };
+  if (quit === "failed") {
+    return { title: copy.quitFailed, detail: forceQuit ? copy.forceHint : undefined, working, alert: true, actions };
+  }
   const stage = quit === "timeout" ? "storage" : quit;
   return { title: copy.quitTitle, line: { text: copy.quitStages[stage], key: stage }, working, alert: false,
-    actions: quit === "timeout" ? force : undefined };
+    caption: quit === "timeout" && !forceQuit ? copy.slow : undefined,
+    actions: quit === "timeout" ? actions : undefined };
 }
 
 function Mark({ size, working, reducedMotion, theme }: { size: "card" | "strip"; working: boolean; reducedMotion: boolean; theme: "light" | "dark" }) {
@@ -75,7 +81,7 @@ function Text({ content, align }: { content: LifecycleContent; align: "center" |
 function Actions({ content, justify, onAction }: { content: LifecycleContent; justify: "center" | "start"; onAction?: (action: string) => void }) {
   if (!content.actions) return null;
   const { secondary, primary, destructive, hint } = content.actions;
-  const button = (
+  const button = primary === undefined ? null : (
     <Button size="sm" variant={destructive ? "destructive" : "default"} aria-description={hint}
       onClick={() => onAction?.(destructive ? "force" : "retry")}>{primary}</Button>
   );
@@ -89,7 +95,7 @@ function Actions({ content, justify, onAction }: { content: LifecycleContent; ju
 
 /**
  * One lifecycle window's content at its real size: the backdrop (passed in) fills the window and every
- * word sits on a TintedGlass card. Variant A centres a 264px card; B fills the window with a row card.
+ * word sits on a TintedGlass card. Variant A centres a 296px card; B fills the window with a row card.
  */
 export function LifecycleWindow({ variant, content, reducedMotion, theme, backdrop, onAction, cardRef }: {
   variant: LifecycleVariant;
@@ -107,7 +113,7 @@ export function LifecycleWindow({ variant, content, reducedMotion, theme, backdr
     <Box surface="base" grow>
       {backdrop}
       <Stack windowDrag="drag" justify="center" cross="center" gap="none" UNSAFE_style={{ height: "100%" }}>
-        <Stack gap="none" UNSAFE_style={{ width: card ? 296 : "100%" }}>
+        <Stack gap="none" UNSAFE_style={{ width: card ? 328 : "100%" }}>
         <div ref={cardRef}>
         <Box padding="lg">
           <TintedGlass radius="panel" padding="lg">

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  BUILTIN_WALLPAPERS, Box, Button, ButtonContainer, NativeSelect, NativeSelectOption, SegmentedControl, Stack, Typo,
+  BUILTIN_WALLPAPERS, Box, Button, ButtonContainer, NativeSelect, NativeSelectOption, SegmentedControl, Stack, Switch, Typo,
   wallpaperLabelText,
 } from "@/butler-ds";
 import { PAGE_COPY } from "./copy";
@@ -72,6 +72,9 @@ export function Controls({ state, width, update, setWidth }: {
         <Control label={copy.motion}>
           <SegmentedControl ariaLabel={copy.motion} size="sm" value={state.motion} options={options(copy.motions)}
             onValueChange={(value) => update({ motion: value as LifecycleState["motion"] })} />
+        </Control>
+        <Control label={copy.forceFlag}>
+          <Switch aria-label={copy.forceFlag} checked={state.forceQuit} onCheckedChange={(value) => update({ forceQuit: value === true })} />
         </Control>
         <Control label={copy.language}>
           <SegmentedControl ariaLabel={copy.language} size="sm" value={state.locale}
