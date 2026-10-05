@@ -112,7 +112,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                     {
                         return Ok::<_, HarnessError>(row["turn_id"].as_str().unwrap().to_owned());
                     }
-                    tokio::task::yield_now().await;
+                    tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             })
             .await
@@ -133,7 +133,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                     if view.data()["active_turn"].is_null() {
                         return Ok::<_, HarnessError>(());
                     }
-                    tokio::task::yield_now().await;
+                    tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             })
             .await

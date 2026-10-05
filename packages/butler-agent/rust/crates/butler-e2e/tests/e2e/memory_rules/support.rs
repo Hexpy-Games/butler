@@ -90,7 +90,8 @@ pub(crate) fn read_json(path: &Path) -> Option<Value> {
 pub(crate) async fn until(mut ready: impl FnMut() -> bool) {
     tokio::time::timeout(std::time::Duration::from_secs(90), async {
         while !ready() {
-            tokio::task::yield_now().await;
+            // Poll durable publication without continuously rereading files.
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     })
     .await
