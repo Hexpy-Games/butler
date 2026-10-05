@@ -1,4 +1,4 @@
-import type { NativeAppServerOptions, StubModelRequest } from "./native-app-server";
+import type { NativeAppServerOptions, StubModelRequest } from "./native-app-server.ts";
 
 export function liveDelegationStub(): { options: NativeAppServerOptions; whenHeld: () => Promise<void>; advance: () => void; release: () => void } {
   let parent = 0;

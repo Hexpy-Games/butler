@@ -1,9 +1,10 @@
 // Stubbed native child -> committed BTCC progress -> SSE -> all mounted App surfaces.
+// Run Electron with Node --experimental-strip-types for its inspector transport.
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
-import { createNativeAppServer } from "../support/native-app-server";
-import { liveDelegationStub } from "../support/live-delegation-stub";
-import { liveDelegationBrowser } from "../support/live-delegation-browser";
+import { createNativeAppServer } from "../support/native-app-server.ts";
+import { liveDelegationStub } from "../support/live-delegation-stub.ts";
+import { liveDelegationBrowser } from "../support/live-delegation-browser.ts";
 
 const stub = liveDelegationStub();
 const server = await createNativeAppServer(stub.options);
