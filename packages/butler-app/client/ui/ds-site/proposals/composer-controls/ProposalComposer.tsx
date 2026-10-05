@@ -1,4 +1,4 @@
-import type { ReactNode, Ref, RefObject } from "react";
+import type { Ref, RefObject } from "react";
 import { useState } from "react";
 import { agentNoticeLabel } from "@/app/agentRuntime.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -27,7 +27,7 @@ import composerStyles from "@/butler-ds/blocks/ComposerCard/ComposerCard.module.
 import { AccessPill, AttachmentPill, ContextPill, ModelPill, PlanPill, WorkspacePill } from "./controls";
 import { proposalAttachment } from "./fixture";
 
-export type ComposerVariant = "split" | "cluster" | "row";
+export type ComposerVariant = "split" | "cluster";
 
 /** ComposerToolbar's send/stop branch, unchanged: the same DS button and the same conditions. */
 function SendSlot() {
@@ -61,38 +61,34 @@ function SendSlot() {
  * The relocated control row: the same six controls in the same order and grouping (left group,
  * spacer, context + model), each a glass pill, on one line. A DS horizontal ScrollArea keeps it on
  * one line at narrow widths; its edge fades follow the scroll position.
+ *
+ * Edge alignment: ScrollArea pads its content by the fade size (14px) on both inline sides. The
+ * frame is made wider than the card by exactly that padding on each side (centered overflow), so at
+ * rest the first pill starts on the card's start edge and the last pill ends on its end edge, and
+ * the fades sit just outside the card. The implementation is a DS ScrollArea option (see spec).
  */
 function ControlRow({ variant, label }: { variant: ComposerVariant; label: string }) {
   useAppLocale();
   return (
-    <ScrollArea orientation="x" dataSlot="composer-controls" dataTestClass="composer-controls">
-      {/* xs above keeps focus rings and shadows inside the scroller; the extra sm below keeps the
-          pills above ScrollArea's 10px unmasked scrollbar lane, so clipped pills fade fully. */}
-      <Box paddingY="xs" grow>
-        <Stack gap="none">
-          <ButtonContainer size="sm" wrap={false} grow role="group" aria-label={label}>
-            <AttachmentPill />
-            <AccessPill />
-            <WorkspacePill />
-            <PlanPill />
-            {variant === "cluster" ? null : <Box grow aria-hidden="true" />}
-            <ContextPill />
-            <ModelPill />
-          </ButtonContainer>
-          <Space size="sm" />
-        </Stack>
-      </Box>
-    </ScrollArea>
-  );
-}
-
-function InlineSendBody({ expanded, children }: { expanded: boolean; children: ReactNode }) {
-  // Send sits at the inline end of the input, bottom-aligned with the last text line. Folded, the
-  // one-line preview keeps ComposerCardToolbar's folded geometry (hit target + 8px) and send centers on it.
-  return (
-    <Stack align="row" cross={expanded ? "end" : "center"} gap="none">
-      <Stack grow minWidth="0" gap="none">{children}</Stack>
-      <Box padding={expanded ? "sm" : "xs"} shrink={false}><SendSlot /></Box>
+    <Stack gap="none" UNSAFE_style={{ width: "calc(100% + 2 * var(--scroll-fade-size))" }}>
+      <ScrollArea orientation="x" dataSlot="composer-controls" dataTestClass="composer-controls">
+        {/* xs above keeps focus rings and shadows inside the scroller; the extra sm below keeps the
+            pills above ScrollArea's 10px unmasked scrollbar lane, so clipped pills fade fully. */}
+        <Box paddingY="xs" grow>
+          <Stack gap="none">
+            <ButtonContainer size="sm" wrap={false} grow role="group" aria-label={label}>
+              <AttachmentPill />
+              <AccessPill />
+              <WorkspacePill />
+              <PlanPill />
+              {variant === "cluster" ? null : <Box grow aria-hidden="true" />}
+              <ContextPill />
+              <ModelPill />
+            </ButtonContainer>
+            <Space size="sm" />
+          </Stack>
+        </Box>
+      </ScrollArea>
     </Stack>
   );
 }
@@ -108,30 +104,28 @@ export interface ProposalComposerCopy {
 export interface ProposalComposerProps {
   variant: ComposerVariant;
   copy: ProposalComposerCopy;
-  expanded: boolean;
   question: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   /** The whole block (card + row): the wallpaper's content rect, like the real composer's containerRef. */
   blockRef?: Ref<HTMLDivElement>;
 }
 
-export function ProposalComposer({ variant, copy, expanded, question, fileInputRef, blockRef }: ProposalComposerProps) {
+/**
+ * The card is the product composer card unchanged: ComposerCard large, the editor body, and the
+ * same ComposerCardToolbar row (padding, min-height, divider), which now holds only the compact
+ * preview slot, the spacer and send/stop at the same place. Only the controls move out.
+ */
+export function ProposalComposer({ variant, copy, question, fileInputRef, blockRef }: ProposalComposerProps) {
   useAppLocale();
   const submit = useComposerStore((state) => state.submit);
   const [questionState, setQuestionState] = useState<"open" | "collapsed">("open");
   const collapse = () => setQuestionState("collapsed");
-  const editor = (
-    <ComposerCardExpandedBody>
-      <ComposerTextArea />
-      <ComposerAttachments />
-    </ComposerCardExpandedBody>
-  );
   return (
-    // The block shares ComposerCard's own `wrap` geometry (centered conversation width and the
-    // `composer` container), which is what the DS `controls` slot gives the row in the implementation.
-    <div className={composerStyles.wrap} data-proposal-variant={variant} ref={blockRef}>
-      <Stack gap="xs">
-        <ComposerCard large expanded={expanded || question} onSubmit={submit}>
+    // ComposerCard's own `wrap` + `large` geometry (centered conversation width, `composer`
+    // container) around card + row: what the DS `controls` slot gives the row in the implementation.
+    <div className={`${composerStyles.wrap} ${composerStyles.large}`} data-proposal-variant={variant} ref={blockRef}>
+      <Stack gap="xs" cross="center">
+        <ComposerCard large expanded onSubmit={submit}>
           {question ? (
             <ComposerQuestionPanel
               key="proposal-question"
@@ -147,21 +141,15 @@ export function ProposalComposer({ variant, copy, expanded, question, fileInputR
               onExpand={() => setQuestionState("open")}
             />
           ) : null}
-          {variant === "row" ? (
-            <>
-              {editor}
-              <ComposerCardToolbar>
-                <ComposerCompactPreview />
-                <ComposerCardToolbarSpacer />
-                <SendSlot />
-              </ComposerCardToolbar>
-            </>
-          ) : (
-            <InlineSendBody expanded={expanded || question}>
-              {editor}
-              {expanded || question ? null : <ComposerCardToolbar><ComposerCompactPreview /></ComposerCardToolbar>}
-            </InlineSendBody>
-          )}
+          <ComposerCardExpandedBody>
+            <ComposerTextArea />
+            <ComposerAttachments />
+          </ComposerCardExpandedBody>
+          <ComposerCardToolbar>
+            <ComposerCompactPreview />
+            <ComposerCardToolbarSpacer />
+            <SendSlot />
+          </ComposerCardToolbar>
           <ComposerFileInput inputRef={fileInputRef}
             onFiles={(files) => { if (files?.length) useComposerStore.setState({ attachments: [proposalAttachment] }); }} />
         </ComposerCard>

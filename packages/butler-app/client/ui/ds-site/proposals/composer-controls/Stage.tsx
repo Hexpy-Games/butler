@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { setAppCopyLanguage } from "@/app/copy";
-import { Box, Stack, Wallpaper, type WallpaperContentRect } from "@/butler-ds";
+import { Stack, Wallpaper, type WallpaperContentRect } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore";
 import { PAGE_COPY } from "./copy";
 import { installComposerProposal, proposalAttachment, TYPING_TEXT } from "./fixture";
@@ -59,6 +59,10 @@ export function ComposerControlsStage() {
     // The fixture is installed once; later changes go through the store below.
   }, []);
 
+  // The preview is an app window: like the app shell it never scrolls, and the row's fade bleed
+  // (see ControlRow) must not widen the layout viewport on phones.
+  useEffect(() => { document.documentElement.style.overflow = "hidden"; }, []);
+
   useEffect(() => {
     document.body.classList.remove("theme-light", "theme-dark");
     document.body.classList.add(`theme-${state.theme}`);
@@ -76,22 +80,31 @@ export function ComposerControlsStage() {
   useEffect(() => { useComposerStore.setState({ attachments: state.attachment ? [proposalAttachment] : [] }); }, [state.attachment]);
 
   return (
-    <Stack UNSAFE_style={{ height: "100dvh", "--workspace-left-radius": "0px" }} justify="end" gap="none">
+    <Stack UNSAFE_style={{ height: "100dvh", "--workspace-left-radius": "0px" }} gap="none" cross="center">
       <Wallpaper source={WALLPAPERS[state.wallpaper]} scope="viewport" contentRect={contentRect} />
-      {/* Bottom and side insets of the floating composer (ComposerCard `.floating`): 22px + safe area, --adaptive-composer-inset. */}
-      <Box paddingX={phone ? "md" : "2xl"} paddingY={phone ? "lg" : "xl"}>
+      {/* The product's floating large composer geometry (ComposerCard.module.css `.floating.large`):
+          width = pane - 2 x --adaptive-composer-inset, bottom edge 34px above the viewport bottom
+          (18px + safe area on phones). The whole block (card + row) takes that bottom edge, so the
+          card itself is unchanged and only lifted by the row. */}
+      <Stack justify="end" gap="none" UNSAFE_style={{
+        width: "calc(100% - var(--adaptive-composer-inset) * 2)",
+        // The row's scroller adds xs + sm of invisible room under the pills (shadow + scrollbar lane);
+        // it is taken back so the pills' visible bottom edge sits on the composer's bottom line.
+        height: phone
+          ? "calc(100dvh - 18px - var(--safe-area-bottom) - var(--keyboard-inset-bottom) + var(--space-xs) + var(--space-sm))"
+          : "calc(100dvh - 34px + var(--space-xs) + var(--space-sm))",
+      }}>
         {ready ? (
           <ProposalComposer
             key={state.locale}
             variant={state.variant}
             copy={PAGE_COPY[state.locale].composer}
-            expanded={state.mode !== "folded"}
             question={state.question}
             fileInputRef={fileInputRef}
             blockRef={setBlock}
           />
         ) : null}
-      </Box>
+      </Stack>
     </Stack>
   );
 }

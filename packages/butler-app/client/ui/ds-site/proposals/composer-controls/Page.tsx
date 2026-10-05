@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Box, PageContainer, SegmentedControl, Stack, Switch, Tag, Typo } from "@/butler-ds";
+import { Box, PageContainer, ScrollArea, SegmentedControl, Stack, Switch, Tag, Typo } from "@/butler-ds";
 import { PAGE_COPY } from "./copy";
 import {
   DEFAULT_STATE, STAGE_MESSAGE, STAGE_SIZE, stateFromQuery, stateToQuery,
@@ -65,9 +65,13 @@ export function ComposerControlsProposalPage() {
     (Object.keys(values) as T[]).map((value) => ({ value, label: values[value] }));
 
   return (
+    // The DS tokens lock html/body/#root to the viewport (body overflow: hidden, as in the app), so the
+    // page scrolls inside its own DS ScrollArea.
+    <Stack gap="none" UNSAFE_style={{ height: "100dvh" }}>
+    <ScrollArea fill dataSlot="proposal-page-scroll">
     <Box surface="base" paddingY="xl">
     <PageContainer width="full">
-      <Stack gap="xl" UNSAFE_style={{ minHeight: "100dvh" }}>
+      <Stack gap="xl">
         <Stack gap="sm">
           <Typo.Caption>{copy.eyebrow}</Typo.Caption>
           <Typo.H1>{copy.title}</Typo.H1>
@@ -121,7 +125,7 @@ export function ComposerControlsProposalPage() {
 
         <Stack gap="md">
           <Typo.H2>{copy.notesTitle}</Typo.H2>
-          {(["split", "cluster", "row"] as const).map((variant) => (
+          {(["split", "cluster"] as const).map((variant) => (
             <Box key={variant} surface="raised" border="hairline" radius="panel" padding="lg">
               <Stack gap="sm">
                 <Stack align="row" gap="sm" cross="center">
@@ -136,5 +140,7 @@ export function ComposerControlsProposalPage() {
       </Stack>
     </PageContainer>
     </Box>
+    </ScrollArea>
+    </Stack>
   );
 }

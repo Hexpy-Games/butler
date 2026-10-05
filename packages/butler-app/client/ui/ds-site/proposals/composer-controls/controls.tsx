@@ -53,17 +53,21 @@ import pillStyles from "@/butler-ds/components/PillButton/PillButton.module.css"
 // DS gap: ComposerControl / ComposerSelectControl take no `surface` prop. Both already forward their
 // remaining props to PillButton (directly, or through Radix Slot), so the proposal passes
 // `surface="glass"` through that spread. The implementation adds the typed prop instead.
-const GLASS = { surface: "glass" } as object;
+//
+// DS gap: the glass surface has a 32px floor (PillButton.module.css `.glass` min-height) but Button
+// has no 32px icon size, so an icon-only glass pill can't be a circle at 32 (it renders 30x32).
+// The row therefore uses Button's `lg` height (34px) for text pills and `icon-lg` (34x34) for the
+// icon-only pills: one height, true circles. Touch widths: every pill is 44px, circles 44x44.
+const GLASS = { surface: "glass", size: "lg" } as object;
 
 // DS gap: ComposerControl's touch rule (`.control[data-slot="button"][data-compact]`, which keeps the
 // pill at 30px) only matches when nothing overwrites Button's data-slot. Inside a PopoverTrigger it
 // becomes "popover-trigger" (44px pill); inside a Select trigger it stays "button" (30px pill). The
 // select pill gets the same data-slot override so every pill in the row has one height (44px touch).
-const GLASS_SELECT = { surface: "glass", "data-slot": "select-trigger" } as object;
+const GLASS_SELECT = { surface: "glass", size: "lg", "data-slot": "select-trigger" } as object;
 
-// DS gap: PillButton has no icon-only size. Button's `size="icon"` (passed through PillButton's
-// spread) makes icon-only glass pills round: 30px desktop (32px glass floor), 44px touch.
-const ICON_ONLY = { size: "icon" } as object;
+// Icon-only glass pill: Button's `icon-lg` through PillButton's spread (see the gap note above).
+const ICON_ONLY = { size: "icon-lg" } as object;
 
 /** ComposerAttachmentMenu: IconButton trigger -> glass PillButton (icon only). */
 export function AttachmentPill() {
@@ -185,7 +189,7 @@ export function PlanPill() {
   const setPlanMode = useComposerStore((store) => store.handlePlanModeChange);
   if (!planMode) return null;
   return (
-    <PillButton surface="glass" data-test-class="composer-plan-mode-badge"
+    <PillButton surface="glass" {...GLASS} data-test-class="composer-plan-mode-badge"
       icon={<ListChecks aria-hidden="true" size="xs" />}
       onClick={() => setPlanMode(false)}
       aria-label={`${appCopy.composer.plan} ${appCopy.common.cancel}`}>
@@ -202,9 +206,9 @@ export function PlanPill() {
 // No proposal CSS: both class sets come from the DS modules. The implementation replaces this with
 // `<ContextDonutButton surface="glass" />`.
 const CONTEXT_GLASS = {
-  className: [buttonStyles.button, buttonStyles.variantBorderless, buttonStyles.sizeIcon, buttonStyles.shapePill, pillStyles.glass].join(" "),
+  className: [buttonStyles.button, buttonStyles.variantBorderless, buttonStyles.sizeIconLg, buttonStyles.shapePill, pillStyles.glass].join(" "),
   "data-slot": "button",
-  "data-size": "icon",
+  "data-size": "icon-lg",
   "data-shape": "pill",
   "data-surface": "glass-pill",
 } as object;

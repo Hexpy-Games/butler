@@ -2,7 +2,7 @@ import type { WallpaperSource } from "@/butler-ds";
 import type { ComposerVariant } from "./ProposalComposer";
 import type { ProposalLocale } from "./fixture";
 
-export type StageMode = "idle" | "typing" | "streaming" | "folded";
+export type StageMode = "idle" | "typing" | "streaming";
 export type StageWidth = "desktop" | "768" | "375";
 export type StageWallpaper = "clouds" | "daisies" | "bloom" | "none";
 
@@ -43,8 +43,8 @@ const pick = <T extends string>(value: string | null, allowed: readonly T[], fal
 export function stateFromQuery(params: URLSearchParams): StageState {
   const flag = (key: string, fallback: boolean) => (params.has(key) ? params.get(key) === "1" : fallback);
   return {
-    variant: pick(params.get("variant"), ["split", "cluster", "row"], DEFAULT_STATE.variant),
-    mode: pick(params.get("mode"), ["idle", "typing", "streaming", "folded"], DEFAULT_STATE.mode),
+    variant: pick(params.get("variant"), ["split", "cluster"], DEFAULT_STATE.variant),
+    mode: pick(params.get("mode"), ["idle", "typing", "streaming"], DEFAULT_STATE.mode),
     plan: flag("plan", DEFAULT_STATE.plan),
     question: flag("question", DEFAULT_STATE.question),
     attachment: flag("attachment", DEFAULT_STATE.attachment),
