@@ -1,53 +1,124 @@
-//! Bounded, read-only WAL connections; SQLite never runs on a Tokio worker.
+//! Two owned WAL readers; fresh transactions never run on Tokio workers.
 use super::{AppStorageError, StorageResult};
 use parking_lot::{Condvar, Mutex};
 use rusqlite::{Connection, OpenFlags};
 use std::{
-    path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    collections::VecDeque,
+    path::Path,
+    sync::Arc,
+    thread::JoinHandle,
     time::{Duration, Instant},
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-// Two readers bound aggregate page-cache memory while writes remain independent.
 const CONNECTIONS: usize = 2;
-
+const SPARE_RETENTION: Duration = Duration::from_secs(10);
 type ReadOperation = Box<dyn FnOnce(&Connection) -> StorageResult<()> + Send>;
 
-struct CachedReader {
-    connection: Connection,
-    last_used: Instant,
+struct Job {
+    operation: ReadOperation,
+    completed: tokio::sync::oneshot::Sender<StorageResult<()>>,
+    permit: OwnedSemaphorePermit,
+    guard: tokio::sync::OwnedRwLockReadGuard<()>,
 }
-const SPARE_RETENTION: Duration = Duration::from_secs(10);
+#[derive(Default)]
+struct Queue {
+    jobs: VecDeque<Job>,
+    stopped: bool,
+}
+#[derive(Default)]
+struct WorkQueue {
+    state: Mutex<Queue>,
+    changed: Condvar,
+    #[cfg(test)]
+    cached_readers: std::sync::atomic::AtomicUsize,
+}
+enum Work {
+    Read(Job),
+    Retire,
+    Stop,
+}
+impl WorkQueue {
+    fn reader_opened(&self) {
+        #[cfg(test)]
+        {
+            self.cached_readers
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        }
+    }
+    fn reader_closed(&self) {
+        #[cfg(test)]
+        {
+            self.cached_readers
+                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        }
+    }
+    fn next(&self, retire_at: Option<Instant>) -> Work {
+        let mut state = self.state.lock();
+        loop {
+            if let Some(job) = state.jobs.pop_front() {
+                return Work::Read(job);
+            }
+            if state.stopped {
+                return Work::Stop;
+            }
+            match retire_at {
+                Some(deadline) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return Work::Retire;
+                    }
+                    self.changed.wait_for(&mut state, remaining);
+                }
+                None => self.changed.wait(&mut state),
+            }
+        }
+    }
+    fn stop(&self) {
+        self.state.lock().stopped = true;
+        self.changed.notify_all();
+    }
+}
 
 pub(super) struct ReadPool {
-    path: PathBuf,
-    available: Mutex<Vec<CachedReader>>,
+    work: Arc<WorkQueue>,
+    workers: Mutex<Vec<JoinHandle<()>>>,
     permits: Arc<Semaphore>,
     gate: Arc<tokio::sync::RwLock<()>>,
-    retiring: AtomicBool,
-    retirement_stop: Arc<(Mutex<bool>, Condvar)>,
-    retirement_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
-        let mut available = Vec::with_capacity(CONNECTIONS);
-        // Validate one reader now; opening an unused spare retains its schema.
-        available.push(CachedReader {
-            connection: Self::connection(path)?,
-            last_used: Instant::now(),
-        });
+        // Validate one reader now; the spare opens only when it receives work.
+        let mut first = Some(Self::connection(path)?);
+        let work = Arc::new(WorkQueue::default());
+        work.reader_opened();
+        let mut workers: Vec<JoinHandle<()>> = Vec::with_capacity(CONNECTIONS);
+        for slot in 0..CONNECTIONS {
+            let queue = work.clone();
+            let path = path.to_owned();
+            let reader = first.take();
+            match std::thread::Builder::new()
+                .name(format!("app-sqlite-reader-{slot}"))
+                .spawn(move || Self::run_worker(&path, &queue, reader))
+            {
+                Ok(worker) => workers.push(worker),
+                Err(error) => {
+                    work.stop();
+                    for worker in workers {
+                        let _joined = worker.join();
+                    }
+                    return Err(AppStorageError::new(
+                        super::AppStorageCode::AppSqliteJoinFailed,
+                        error.to_string(),
+                    ));
+                }
+            }
+        }
         Ok(Self {
-            path: path.to_owned(),
-            available: Mutex::new(available),
+            work,
+            workers: Mutex::new(workers),
             permits: Arc::new(Semaphore::new(CONNECTIONS)),
             gate: Arc::default(),
-            retiring: AtomicBool::new(false),
-            retirement_stop: Arc::new((Mutex::new(false), Condvar::new())),
-            retirement_thread: Mutex::new(None),
         })
     }
     fn connection(path: &Path) -> StorageResult<Connection> {
@@ -86,8 +157,6 @@ impl ReadPool {
             )
         })
     }
-    // Erase the query type before the async/blocking boundary. Every query shares
-    // one admission, transaction and panic-isolation implementation.
     async fn dispatch(self: &Arc<Self>, operation: ReadOperation) -> StorageResult<()> {
         let guard = self.gate.clone().read_owned().await;
         let permit = self
@@ -101,121 +170,105 @@ impl ReadPool {
                     error.to_string(),
                 )
             })?;
-        let pool = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let cached = pool.available.lock().pop();
-            let connection = match cached {
-                Some(reader) => reader.connection,
-                None => Self::connection(&pool.path)?,
-            };
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let transaction = connection
-                    .unchecked_transaction()
-                    .map_err(AppStorageError::sqlite)?;
-                operation(&transaction)?;
-                transaction.commit().map_err(AppStorageError::sqlite)?;
-                Ok(())
-            }));
-            // Returning a reader starts one change-driven retirement task. It
-            // also runs when the pool goes completely quiet after a burst.
-            let mut readers = pool.available.lock();
-            readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
-            readers.push(CachedReader {
-                connection,
-                last_used: Instant::now(),
-            });
-            drop(readers);
-            pool.schedule_retirement()?;
-            drop(permit);
-            drop(guard);
-            match result {
-                Ok(result) => result,
-                Err(payload) => std::panic::resume_unwind(payload),
-            }
-        })
-        .await
-        .map_err(|error| {
+        let (completed, completion) = tokio::sync::oneshot::channel();
+        self.work.state.lock().jobs.push_back(Job {
+            operation,
+            completed,
+            permit,
+            guard,
+        });
+        self.work.changed.notify_one();
+        completion.await.map_err(|error| {
             AppStorageError::new(
                 super::AppStorageCode::AppSqliteJoinFailed,
                 error.to_string(),
             )
         })?
     }
-    fn schedule_retirement(self: &Arc<Self>) -> StorageResult<()> {
-        if self.retiring.swap(true, Ordering::AcqRel) {
-            return Ok(());
-        }
-        let mut thread = self.retirement_thread.lock();
-        if let Some(previous) = thread.take() {
-            let _ = previous.join();
-        }
-        let pool = Arc::downgrade(self);
-        let stop = self.retirement_stop.clone();
-        match std::thread::Builder::new()
-            .name("sqlite-reader-retirement".into())
-            .spawn(move || {
-                let mut wait = SPARE_RETENTION;
-                loop {
-                    let mut stopped = stop.0.lock();
-                    if *stopped {
-                        break;
+    fn run_worker(path: &Path, work: &WorkQueue, mut connection: Option<Connection>) {
+        let mut last_used = Instant::now();
+        loop {
+            let deadline = connection.as_ref().map(|_| last_used + SPARE_RETENTION);
+            match work.next(deadline) {
+                Work::Stop => {
+                    if connection.take().is_some() {
+                        work.reader_closed();
                     }
-                    stop.1.wait_for(&mut stopped, wait);
-                    if *stopped {
-                        break;
-                    }
-                    drop(stopped);
-                    let Some(pool) = pool.upgrade() else { break };
-                    let mut readers = pool.available.lock();
-                    if pool.permits.is_closed() {
-                        break;
-                    }
-                    readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
-                    match readers
-                        .iter()
-                        .map(|reader| SPARE_RETENTION.saturating_sub(reader.last_used.elapsed()))
-                        .min()
-                    {
-                        Some(next) => wait = next,
-                        None => {
-                            pool.retiring.store(false, Ordering::Release);
-                            break;
-                        }
-                    }
+                    return;
                 }
-            }) {
-            Ok(started) => {
-                *thread = Some(started);
-                Ok(())
-            }
-            Err(source) => {
-                self.retiring.store(false, Ordering::Release);
-                Err(AppStorageError::new(
-                    super::AppStorageCode::AppSqliteJoinFailed,
-                    source.to_string(),
-                ))
+                Work::Retire => {
+                    connection = None;
+                    work.reader_closed();
+                }
+                Work::Read(Job {
+                    operation,
+                    completed,
+                    permit,
+                    guard,
+                }) => {
+                    let result = Self::run_read(path, work, &mut connection, operation);
+                    last_used = Instant::now();
+                    // Admission belongs to the queued job even if its caller
+                    // disappears. Close waits for all transactions to finish.
+                    drop(permit);
+                    drop(guard);
+                    let _completed = completed.send(result);
+                }
             }
         }
+    }
+    fn run_read(
+        path: &Path,
+        work: &WorkQueue,
+        connection: &mut Option<Connection>,
+        operation: ReadOperation,
+    ) -> StorageResult<()> {
+        if connection.is_none() {
+            *connection = Some(Self::connection(path)?);
+            work.reader_opened();
+        }
+        let Some(connection) = connection.as_ref() else {
+            return Err(AppStorageError::new(
+                super::AppStorageCode::AppSqliteOwnerClosed,
+                "Reader unavailable",
+            ));
+        };
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Every request still starts a fresh WAL snapshot. Reuse only the
+            // owned thread/descriptor, never a transaction or response value.
+            let transaction = connection
+                .unchecked_transaction()
+                .map_err(AppStorageError::sqlite)?;
+            operation(&transaction)?;
+            transaction.commit().map_err(AppStorageError::sqlite)
+        }))
+        .unwrap_or_else(|payload| {
+            let message = payload
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| payload.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown panic");
+            Err(AppStorageError::new(
+                super::AppStorageCode::AppSqliteJoinFailed,
+                format!("SQLite reader panicked: {message}"),
+            ))
+        })
     }
     pub(super) async fn close(self: &Arc<Self>) {
         let _guard = self.gate.write().await;
         self.permits.close();
         let pool = self.clone();
         let _closed = tokio::task::spawn_blocking(move || {
-            *pool.retirement_stop.0.lock() = true;
-            pool.retirement_stop.1.notify_all();
-            if let Some(thread) = pool.retirement_thread.lock().take() {
-                let _ = thread.join();
+            pool.work.stop();
+            for worker in pool.workers.lock().drain(..) {
+                let _joined = worker.join();
             }
-            pool.available.lock().clear();
         })
         .await;
     }
 }
-
 impl Drop for ReadPool {
     fn drop(&mut self) {
-        *self.retirement_stop.0.lock() = true;
-        self.retirement_stop.1.notify_all();
+        self.work.stop();
     }
 }
