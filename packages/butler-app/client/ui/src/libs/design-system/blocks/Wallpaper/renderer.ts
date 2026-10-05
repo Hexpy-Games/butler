@@ -21,6 +21,19 @@ const CONTEXT_ATTRIBUTES: WebGLContextAttributes = {
   powerPreference: "low-power",
 };
 
+/**
+ * A transparent canvas (modules with `transparent: true`): see-through where
+ * the module draws nothing. Premultiplied like the page compositor, so the
+ * module's premultiplied `fragColor` composites as is; every frame starts
+ * cleared to 0.
+ */
+const TRANSPARENT_CONTEXT_ATTRIBUTES: WebGLContextAttributes = { ...CONTEXT_ATTRIBUTES, alpha: true, premultipliedAlpha: true };
+
+/** Context attributes of a wallpaper canvas; opaque canvases keep the engine's original ones. */
+export function wallpaperContextAttributes(transparent: boolean): WebGLContextAttributes {
+  return transparent ? TRANSPARENT_CONTEXT_ATTRIBUTES : CONTEXT_ATTRIBUTES;
+}
+
 export interface WallpaperRenderer {
   /** Picks the scene's programs (linked once per module source) and its uniform values. */
   setScene(scene: WallpaperScene): void;
@@ -45,11 +58,22 @@ export interface WallpaperRenderer {
   dispose(): void;
 }
 
+export interface WallpaperRendererOptions {
+  onError: (error: WallpaperError) => void;
+  fallback?: WallpaperModule;
+  /**
+   * A see-through canvas for `transparent` modules, fixed for the canvas's
+   * life (context attributes cannot change). A module that fails to link
+   * there draws nothing instead of the opaque fallback.
+   */
+  transparent?: boolean;
+}
+
 export function createWallpaperRenderer(
   canvas: HTMLCanvasElement,
-  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS) }: { onError: (error: WallpaperError) => void; fallback?: WallpaperModule },
+  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS), transparent = false }: WallpaperRendererOptions,
 ): WallpaperRenderer | null {
-  const gl = canvas.getContext("webgl2", CONTEXT_ATTRIBUTES) as WebGL2RenderingContext | null;
+  const gl = canvas.getContext("webgl2", wallpaperContextAttributes(transparent)) as WebGL2RenderingContext | null;
   if (!gl) return null;
   let resources = createWallpaperResources(gl);
   let scene: WallpaperScene | null = null;
@@ -69,6 +93,12 @@ export function createWallpaperRenderer(
     let result = first.result;
     if (!result.ok) {
       if (first.fresh) onError({ reason: result.stage, module: module.manifest.id, message: result.log });
+      // A see-through canvas never shows an opaque stand-in: it stays empty.
+      if (transparent) {
+        revision += 1;
+        active = null;
+        return;
+      }
       // A broken filter falls back to the plain image; a broken live module to the default.
       module = image ? WALLPAPER_IMAGE_MODULE : fallback;
       values = resolveWallpaperValues(module.manifest, {}, tone);
@@ -90,16 +120,18 @@ export function createWallpaperRenderer(
     setImage: (asset, variant, bitmap) => resources.images.upload(asset, variant, bitmap),
     imageVariant: (asset) => resources.images.get(asset)?.variant ?? null,
     retainImages: (assets) => resources.images.retain(assets),
-    motion: () => active?.module.manifest.motion ?? scene?.module.manifest.motion ?? "static",
+    // An empty transparent canvas (its module failed) holds still rather than clearing 20 times a second.
+    motion: () => active?.module.manifest.motion ?? (transparent ? "static" : scene?.module.manifest.motion ?? "static"),
     pixelRatio: () => active?.module.manifest.pixelRatio ?? "default",
     drawnModule: () => active?.module.manifest.id ?? null,
     usesDayPhase: () => uses("usesDayPhase"),
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {
-      if (!active) return;
+      if (!active && !transparent) return;
       if (canvas.width !== frame.width) canvas.width = frame.width;
       if (canvas.height !== frame.height) canvas.height = frame.height;
-      drawWallpaperScene(gl, resources, active, frame);
+      if (transparent) clearTransparent(gl, frame);
+      if (active) drawWallpaperScene(gl, resources, active, frame);
     },
     restore() {
       resources = createWallpaperResources(gl);
@@ -118,4 +150,11 @@ export function createWallpaperRenderer(
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };
+}
+
+/** Starts a transparent frame from nothing, so whatever the module leaves at alpha 0 shows what is behind. */
+function clearTransparent(gl: WebGL2RenderingContext, frame: WallpaperDrawFrame) {
+  gl.viewport(0, 0, frame.width, frame.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
 }

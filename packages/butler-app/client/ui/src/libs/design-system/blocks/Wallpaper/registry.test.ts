@@ -16,10 +16,10 @@ import { defineWallpaperModule } from "./manifest";
 
 const MONOCHROME = ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"];
 
-test("the built-in registry holds bloom, silk, the analog collection and the grain filter; bloom is the default", () => {
+test("the built-in registry holds bloom, silk, the analog collection, the grain filter and the cherry decoration; bloom is the default", () => {
   expect(BUILTIN_WALLPAPERS.list().map((module) => module.manifest.id)).toEqual([
     "butler.bloom", "butler.silk", "butler.riso-flow", "butler.lamina", "butler.diatom", "butler.dusk", "butler.shoreline",
-    "butler.photo-clouds", "butler.photo-daisies", "butler.stipple", "butler.grain",
+    "butler.photo-clouds", "butler.photo-daisies", "butler.stipple", "butler.grain", "butler.cherry-blossom",
   ]);
   expect(DEFAULT_WALLPAPER_MODULE_ID).toBe("butler.bloom");
   expect(BUILTIN_WALLPAPERS.get("butler.silk")).toBe(SILK_WALLPAPER);

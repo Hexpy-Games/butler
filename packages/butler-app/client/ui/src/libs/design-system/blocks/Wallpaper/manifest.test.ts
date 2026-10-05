@@ -175,3 +175,9 @@ test("a two-pass module needs its overlay.frag, and a single-pass one takes none
   expect(() => defineWallpaperModule({ manifest: manifest({ overlay: true }), fragment, overlay: `uniform sampler2D u_base;\n${overlay}` }))
     .toThrow("overlay.frag: u_base is an engine uniform");
 });
+
+test("transparent needs image none; transparent and decoration are booleans", () => {
+  expect(errorsOf(manifest({ transparent: true, decoration: true }))).toEqual([]);
+  expect(errorsOf(manifest({ transparent: true, image: "optional" }))).toEqual(["transparent: needs image none"]);
+  expect(errorsOf(manifest({ transparent: "yes", decoration: 1 }))).toEqual(["transparent: must be a boolean", "decoration: must be a boolean"]);
+});

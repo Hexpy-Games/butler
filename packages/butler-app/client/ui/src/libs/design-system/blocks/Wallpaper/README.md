@@ -11,7 +11,8 @@ engine 1) and runs under the same performance and motion policy.
 ## When to use this component
 
 Use it for screen and area backgrounds: the new chat, the setup wizard, and
-the project dashboard. Product code passes the stored source; it never draws
+the project dashboard, and (with a transparent decoration module) for art on a
+card such as the composer. Product code passes the stored source; it never draws
 its own canvas. To let the user choose a source, use `WallpaperPicker`.
 
 ## Where to use this component
@@ -155,6 +156,23 @@ More manifest fields (all optional, still `engine: 1`):
   (and the pure `wallpaperSceneTone`) reads it on the local clock, re-checking
   every 15 s and when the document shows again; the app lets it set its
   appearance (`crossfadeDocumentChange` fades the switch).
+- `"transparent": true` (needs `image: none`) — the module draws only its own
+  content and the canvas is see-through everywhere else, e.g. art on a
+  TintedGlass card. The canvas is created with `alpha: true` and
+  `premultipliedAlpha: true` and cleared to 0 every frame; `fragColor` must be
+  premultiplied (`rgb` already multiplied by `a`), so the browser composites it
+  as is. There is no background colour and no opaque fallback: a transparent
+  module that fails to link leaves the canvas empty (and reports through
+  `onError`). `Wallpaper` picks the canvas mode from the source's module;
+  context attributes are fixed per canvas, so switching between a transparent
+  and an opaque module remounts the canvas (no crossfade). Stills draw on a
+  second shared, see-through context and encode PNGs with alpha. The frame
+  cap, pixel-ratio limits, pauses, watchdog and context-loss recovery are the
+  same as for opaque modules; opaque modules keep their original context.
+- `"decoration": true` — a scene for a component surface (e.g. the composer
+  card), not an app wallpaper: `WallpaperPicker` (live tiles and image
+  filters) and the picker posters leave it out. It still resolves as a `live`
+  source.
 
 Stills: `renderWallpaperStill(moduleOrLiveSource, { width, height }, tone,
 registry?)` draws one frame (the module's `stillTime` clock, midday, fixed
@@ -179,7 +197,10 @@ two-pass, `butler.dusk`, `butler.shoreline` with a real-time `sceneTone`), the
 living photos `butler.photo-clouds` and `butler.photo-daisies` (on their bundled
 photos, `imageDim: noDarkStep`), `butler.stipple` (an image filter, two-pass,
 `pixelRatio: device`, `imageDim: none`, with a sample photo) and the image
-filter `butler.grain` (film grain, `amount` and black-and-white `mono`); register
+filter `butler.grain` (film grain, `amount` and black-and-white `mono`), and
+the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`: a
+cherry branch along a card's top-right padding frame with petals drifting
+across; boolean `lush`, on by default, fills the top-right corner); register
 more with `createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), module])`
 and pass the registry (image filters resolve against it too). Built-ins
 cannot be shadowed.
@@ -218,7 +239,8 @@ in the container (settings, project preferences, agent tools).
 ## Wrong use cases
 
 - Do not draw canvases or shaders in product code; add a module.
-- Do not use it as a decorative panel fill inside content; use `TintedGlass`.
+- Do not use it as a decorative panel fill inside content; use `TintedGlass`
+  (a transparent decoration module drawn on that glass is the exception).
 - Do not pass raw CSS colors or gradients; wallpapers are modules or images.
 
 ## Tags

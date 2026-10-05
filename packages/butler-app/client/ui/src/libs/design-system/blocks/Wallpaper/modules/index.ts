@@ -5,6 +5,8 @@ import { bundledWallpaperImage } from "../imageCache";
 import { defineWallpaperModule } from "../manifest";
 import bloomManifest from "./butler.bloom/wallpaper.json";
 import bloomFragment from "./butler.bloom/shader.frag?raw";
+import cherryFragment from "./butler.cherry-blossom/shader.frag?raw";
+import cherryManifest from "./butler.cherry-blossom/wallpaper.json";
 import diatomManifest from "./butler.diatom/wallpaper.json";
 import diatomOverlay from "./butler.diatom/overlay.frag?raw";
 import diatomFragment from "./butler.diatom/shader.frag?raw";
@@ -69,6 +71,13 @@ export const STIPPLE_WALLPAPER = defineWallpaperModule({
 export const GRAIN_WALLPAPER = defineWallpaperModule({ manifest: grainManifest, fragment: grainFragment });
 
 /**
+ * Decoration (transparent, `decoration`: not offered as an app wallpaper): a
+ * cherry branch along a card's top-right padding frame, petals drifting
+ * across it; everything else see-through. `lush` (default on) fills the corner.
+ */
+export const CHERRY_BLOSSOM_WALLPAPER = defineWallpaperModule({ manifest: cherryManifest, fragment: cherryFragment, stillTime: 37 });
+
+/**
  * Draws `image` sources: fit, blur and the theme's neutral field (dim is an
  * engine pass after it). Also pre-fits the image for filter modules. Not
  * user-selectable.
@@ -77,7 +86,8 @@ export const WALLPAPER_IMAGE_MODULE = defineWallpaperModule({ manifest: imageMan
 
 /**
  * Built-ins in picker order: live modules first (the default, then the analog
- * collection and the living photos), then image filters (modules that take an image).
+ * collection and the living photos), then image filters (modules that take an image),
+ * then decorations (registered so `live` sources resolve, never listed by pickers).
  */
 export const BUILTIN_WALLPAPER_MODULES = [
   BLOOM_WALLPAPER,
@@ -91,4 +101,5 @@ export const BUILTIN_WALLPAPER_MODULES = [
   PHOTO_DAISIES_WALLPAPER,
   STIPPLE_WALLPAPER,
   GRAIN_WALLPAPER,
+  CHERRY_BLOSSOM_WALLPAPER,
 ] as const;

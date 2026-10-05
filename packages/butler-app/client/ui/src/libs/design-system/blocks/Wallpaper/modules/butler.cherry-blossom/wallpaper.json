@@ -1,0 +1,26 @@
+{
+  "id": "butler.cherry-blossom",
+  "name": {
+    "en": "Cherry blossom",
+    "ko": "벚꽃"
+  },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 240,
+  "pixelRatio": "device",
+  "transparent": true,
+  "decoration": true,
+  "params": [
+    {
+      "key": "lush",
+      "type": "boolean",
+      "label": {
+        "en": "Lush corner",
+        "ko": "풍성한 모서리"
+      },
+      "default": true
+    }
+  ]
+}

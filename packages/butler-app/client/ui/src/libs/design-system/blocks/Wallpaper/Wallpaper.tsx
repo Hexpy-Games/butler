@@ -1,55 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { cn } from "../../lib/utils";
 import { createWallpaperEngine, type WallpaperEngine } from "./engine";
 import { useWallpaperImageLoader } from "./imageLoaderContext";
 import { WALLPAPER_IMAGE_MODULE } from "./modules";
-import { resolveWallpaperScene, wallpaperSourceKey, type WallpaperRegistry } from "./registry";
+import { resolveWallpaperScene, wallpaperSourceKey, wallpaperSourceTransparent } from "./registry";
 import { useWallpaperErrorReporter, useWallpaperRegistry } from "./registryContext";
-import type {
-  WallpaperContentRect,
-  WallpaperError,
-  WallpaperImageLoader,
-  WallpaperMotion,
-  WallpaperScope,
-  WallpaperSource,
-  WallpaperTone,
-} from "./types";
+import type { WallpaperSource } from "./types";
+import type { WallpaperProps } from "./wallpaperProps";
 import { useWallpaperTone } from "./wallpaperTone";
 import styles from "./Wallpaper.module.css";
 
-export interface WallpaperProps extends DsPrivateStyleProps {
-  /** What to draw; `none` renders nothing. */
-  source: WallpaperSource;
-  /** `paused` holds a still frame (the user's pause). */
-  motion?: WallpaperMotion;
-  /** Hold a still frame while the device runs on battery. */
-  pauseOnBattery?: boolean;
-  /** Omit to follow the nearest theme scope, live. */
-  tone?: WallpaperTone;
-  /** `viewport`: fixed full-screen layer. `container`: fills the nearest positioned parent. */
-  scope?: WallpaperScope;
-  /**
-   * The main text/content area in client CSS px (e.g. its `getBoundingClientRect()`),
-   * exposed to modules as `u_contentRect` so they can compose around the text.
-   */
-  contentRect?: WallpaperContentRect;
-  /**
-   * Modules for `source.module` and image filters; defaults to the nearest `WallpaperRegistryProvider`'s,
-   * else the built-ins. A new registry re-resolves: a module's new shader crossfades in.
-   */
-  registry?: WallpaperRegistry;
-  /** Loads `image` sources' bytes (the engine decodes, caches, uploads); defaults to the nearest `WallpaperImageLoaderProvider`. */
-  imageLoader?: WallpaperImageLoader;
-  /**
-   * Unknown module, compile/link failure (the default module is shown instead),
-   * image load failure (default module), filter without image input (plain image), no WebGL2,
-   * a watchdog degrade or a lost context. The provider's `onError` hears them too.
-   */
-  onError?: (error: WallpaperError) => void;
-  /** Added to the `wallpaper` test class. */
-  dataTestClass?: string;
-}
+export type { WallpaperProps } from "./wallpaperProps";
 
 function moduleId(source: WallpaperSource): string {
   if (source.kind === "none") return "none";
@@ -70,7 +31,8 @@ function WallpaperCanvas({
   dataTestClass,
   className,
   style,
-}: WallpaperProps) {
+  transparent,
+}: WallpaperProps & { transparent: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<WallpaperEngine | null>(null);
@@ -101,13 +63,14 @@ function WallpaperCanvas({
       // Read at load time, so a new loader function never rebuilds the engine.
       imageLoader: (asset, variant) => (loaderRef.current ? loaderRef.current(asset, variant) : Promise.reject(new Error("No imageLoader"))),
       overlay: overlayRef.current,
+      transparent,
     });
     engineRef.current = engine;
     return () => {
       engine?.dispose();
       engineRef.current = null;
     };
-  }, []);
+  }, [transparent]);
 
   useEffect(() => {
     engineRef.current?.setScene(resolveWallpaperScene(JSON.parse(sourceKey) as WallpaperSource, registry, tone));
@@ -134,6 +97,7 @@ function WallpaperCanvas({
         data-scope={scope}
         data-test-class={dataTestClass ? `wallpaper ${dataTestClass}` : "wallpaper"}
         data-tone={tone}
+        data-transparent={transparent ? "" : undefined}
         ref={canvasRef}
         style={style}
       />
@@ -152,7 +116,13 @@ function WallpaperCanvas({
  */
 export function Wallpaper(props: WallpaperProps) {
   const [shown, setShown] = useState(props.source.kind !== "none");
+  const registry = useWallpaperRegistry(props.registry);
+  // A `transparent` module needs a see-through canvas, and a canvas keeps its context attributes, so the mode keys
+  // the canvas (switching mode remounts it, without a crossfade). `none` keeps the last mode so its frame fades out.
+  const wanted = props.source.kind === "none" ? null : wallpaperSourceTransparent(props.source, registry);
+  const [transparent, setTransparent] = useState(wanted === true);
   if (props.source.kind !== "none" && !shown) setShown(true);
+  if (wanted !== null && wanted !== transparent) setTransparent(wanted);
   if (!shown) return null;
-  return <WallpaperCanvas {...props} />;
+  return <WallpaperCanvas key={transparent ? "transparent" : "opaque"} {...props} transparent={transparent} />;
 }

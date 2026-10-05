@@ -29,13 +29,15 @@ function fakeCanvas({ failSource }: { failSource?: string } = {}) {
     drawArrays: (...args: unknown[]) => calls.push(["drawArrays", ...args]),
     viewport: (...args: unknown[]) => calls.push(["viewport", ...args]),
   };
-  for (const name of ["deleteProgram", "texImage2D", "texParameteri", "generateMipmap", "deleteTexture", "bindFramebuffer", "enable", "disable", "blendFuncSeparate"]) {
+  for (const name of ["deleteProgram", "texImage2D", "texParameteri", "generateMipmap", "deleteTexture", "bindFramebuffer", "enable", "disable", "blendFuncSeparate", "clearColor", "clear"]) {
     gl[name] = (...args: unknown[]) => calls.push([name, ...args]);
   }
   // GL enums read as their names so calls stay legible.
   const context = new Proxy(gl, { get: (target, key) => target[key as string] ?? (/^[A-Z0-9_]+$/u.test(String(key)) ? key : () => ({})) });
-  const canvas = { width: 0, height: 0, getContext: (kind: string) => (kind === "webgl2" ? context : null) } as unknown as HTMLCanvasElement;
-  return { calls, canvas };
+  const attributes: Array<WebGLContextAttributes | undefined> = [];
+  const getContext = (kind: string, options?: WebGLContextAttributes) => (attributes.push(options), kind === "webgl2" ? context : null);
+  const canvas = { width: 0, height: 0, getContext } as unknown as HTMLCanvasElement;
+  return { calls, canvas, attributes };
 }
 
 function sceneOf(source: WallpaperSource, tone: "light" | "dark" = "light") {
@@ -119,6 +121,32 @@ test("a module that fails to compile falls back to the default module and report
   // The failure is cached: re-rendering the same scene does not recompile or re-report.
   renderer.setScene({ key: "broken", module: broken, values: {}, dark: false, image: null, error: null });
   expect(errors).toHaveLength(1);
+});
+
+test("opaque canvases keep alpha off; a transparent one is premultiplied, cleared to 0 each frame and empty when its module fails", () => {
+  const opaque = fakeCanvas();
+  createWallpaperRenderer(opaque.canvas, { onError: () => undefined })!.setScene(sceneOf({ kind: "live", module: "butler.bloom" }));
+  expect(opaque.attributes[0]).toMatchObject({ alpha: false });
+  expect(opaque.attributes[0]).not.toHaveProperty("premultipliedAlpha");
+
+  const broken = defineWallpaperModule({
+    manifest: { id: "me.petal", name: { en: "Petal", ko: "꽃잎" }, version: "0.1.0", engine: 1, motion: "animated", image: "none", transparent: true, params: [] },
+    fragment: "void main(){fragColor=vec4(BROKEN);}",
+  });
+  const { calls, canvas, attributes } = fakeCanvas({ failSource: "BROKEN" });
+  const renderer = createWallpaperRenderer(canvas, { onError: () => undefined, transparent: true })!;
+  expect(attributes[0]).toMatchObject({ alpha: true, premultipliedAlpha: true });
+  renderer.setScene(sceneOf({ kind: "live", module: "butler.cherry-blossom" }));
+  renderer.draw(FRAME);
+  expect(calls.filter(([name]) => name === "clearColor" || name === "clear" || name === "drawArrays").map(([name]) => name))
+    .toEqual(["clearColor", "clear", "drawArrays"]);
+  expect(calls.find(([name]) => name === "clearColor")?.slice(1)).toEqual([0, 0, 0, 0]);
+  calls.length = 0;
+  renderer.setScene({ key: "petal", module: broken, values: {}, dark: false, image: null, error: null });
+  expect(renderer.drawnModule()).toBeNull();
+  renderer.draw(FRAME);
+  expect(calls.some(([name]) => name === "clear")).toBe(true);
+  expect(calls.some(([name]) => name === "drawArrays")).toBe(false);
 });
 
 test("a new shader for a module replaces its program; the old one is deleted", () => {
