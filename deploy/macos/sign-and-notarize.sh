@@ -122,18 +122,14 @@ setup_certificate() {
   log "signing identity ready for team $APPLE_TEAM_ID"
 }
 
+# Unofficial previews never use the Developer ID: ad-hoc signing, no notarization.
 setup_preview() {
-  if ! "$here/sign-and-notarize.sh" setup-certificate; then
-    cleanup
-    {
-      echo "BUTLER_SIGN_IDENTITY=-"
-      echo "BUTLER_SIGN_KEYCHAIN="
-      echo "BUTLER_SIGN_TEAM_ID="
-      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
-    } >> "$GITHUB_ENV"
-    log "certificate setup failed; unofficial preview uses ad-hoc signing"
-  fi
-  log "unofficial preview: notarization disabled"
+  {
+    echo "BUTLER_SIGN_IDENTITY=-"
+    echo "BUTLER_SIGN_KEYCHAIN="
+    echo "BUTLER_SIGN_TEAM_ID="
+  } >> "$GITHUB_ENV"
+  log "unofficial preview: ad-hoc signing, notarization disabled"
 }
 
 cleanup() {
