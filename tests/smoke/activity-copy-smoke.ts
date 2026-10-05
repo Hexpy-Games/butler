@@ -30,7 +30,14 @@ const fixture = process.env.BUTLER_SMOKE_ACTIVITY_CAPTURE
     }))),
   ] } } };
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
-  const file = Bun.file(join(root, new URL(request.url).pathname));
+  const path = new URL(request.url).pathname;
+  if (path.endsWith("/output")) {
+    const content = JSON.stringify(path.includes("run_command")
+      ? { command: "node --check index.html", stdout: "", stderr: "", exit_code: 0 }
+      : { files: [{ path: "index.html", content: "<title>Butler</title>" }] });
+    return Response.json({ ok: true, data: { content, complete: true, byte_start: 0, byte_end: content.length, total_bytes: content.length } });
+  }
+  const file = Bun.file(join(root, path));
   return new Response(await file.exists() ? file : Bun.file(join(root, "index.html")));
 } });
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
@@ -55,6 +62,14 @@ try {
       const group = activity.locator('[data-test-class~="turn-work-tool-group"] > button');
       if (await group.count()) await group.click();
       if (stage === "after") {
+        // Exact inputs live in each call's disclosure, alongside its output.
+        for (const row of await activity.locator('[data-test-class="turn-work-tool-detail-row"]').all()) {
+          const disclosure = row.locator('button[aria-expanded="false"]').first();
+          if (await disclosure.count()) await disclosure.click();
+        }
+        if (!process.env.BUTLER_SMOKE_ACTIVITY_CAPTURE) {
+          await activity.getByText(/node --check index\.html/u).first().waitFor();
+        }
         const text = await activity.innerText();
         assert(!/\bWork\b|work_tool|이번 수행은|내부 위임 지시/u.test(text), "internal bookkeeping and brief stay hidden");
         if (!process.env.BUTLER_SMOKE_ACTIVITY_CAPTURE) {
