@@ -8,7 +8,8 @@ import {
 } from "@/butler-ds";
 import { CherryCanvas } from "./CherryCanvas";
 import type { ProposalCopy } from "./copy";
-import { CHERRY_BLOSSOM_MODULE, SHORELINE_SOURCE, type DecorationTheme, type ShoreOption } from "./decorationScenes";
+import { CHERRY_BLOSSOM_MODULE, SHORELINE_SOURCE, type DecorationTheme } from "./decorationScenes";
+import { SHORE_PRESETS, shoreStyle, type ShoreParams } from "./shoreTuning";
 import { CharacterHead, CharacterPaws, characterFor } from "./EdgeCharacter";
 import styles from "./ComposerDecorations.module.css";
 
@@ -25,25 +26,28 @@ const COMPOSER_RESERVE = 120;
  * card radius. Nothing else sits behind the text or the controls: readability comes from how
  * the art is composed. It never reacts to typing.
  * - Shoreline: DS Wallpaper (container scope; the module's own day/night grade follows the theme)
- *   on a canvas centred on the card, so
- *   the waterline stays at the card's vertical middle at any height.
+ *   on a canvas whose middle (the waterline) sits where ShoreParams put it, plus whole-scene
+ *   grades (exposure, sand highlight, a vertical tone gradient); see shoreTuning.ts.
  * - Cherry blossom: a transparent canvas; the card's own glass shows through.
  */
 function DecorationBackground({ theme, tone, shore, lush }: {
   theme: Exclude<DecorationTheme, "none">;
   tone: "light" | "dark";
-  shore: ShoreOption;
+  shore: ShoreParams;
   lush: boolean;
 }) {
   return (
-    <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}>
-      <div className={styles.art} data-scene={theme} data-tone={tone} data-option={shore}>
+    <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}
+      style={theme === "shoreline" ? shoreStyle(shore) : undefined}>
+      <div className={styles.art} data-scene={theme} data-tone={tone}>
         {theme === "shoreline" ? (
           <Wallpaper source={SHORELINE_SOURCE} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
         ) : (
           <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} lush={lush} key={String(lush)} />
         )}
       </div>
+      {theme === "shoreline" ? <div className={styles.shoreHighlight} data-tone={tone} /> : null}
+      {theme === "shoreline" ? <div className={styles.shoreGradient} /> : null}
     </div>
   );
 }
@@ -53,13 +57,13 @@ function DecorationBackground({ theme, tone, shore, lush }: {
  * the page wallpaper, and Composer.tsx's ComposerCard (floating, large) with ComposerInputSurface
  * and ComposerToolbar's DS parts and props. Only the decoration layer and the character are new.
  */
-export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = "a", lush = true, engagedAtStart }: {
+export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = SHORE_PRESETS.b, lush = true, engagedAtStart }: {
   copy: ProposalCopy;
   theme: DecorationTheme;
   character: boolean;
   wallpaper: WallpaperSource;
   tone: "light" | "dark";
-  shore?: ShoreOption;
+  shore?: ShoreParams;
   lush?: boolean;
   engagedAtStart?: boolean;
 }) {

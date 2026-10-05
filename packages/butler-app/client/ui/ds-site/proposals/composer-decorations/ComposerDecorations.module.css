@@ -96,54 +96,65 @@
   inset: 0;
 }
 
-/* Shoreline: a canvas centred on the card and at least 360px tall, so the waterline (at the
-   canvas's vertical middle) tracks the card's middle at any height and the scale stays put. */
+/* Shoreline: a canvas at least 360px tall whose vertical middle (the waterline) sits at
+   --shore-top: the card's middle for (a), a fixed distance above the bottom edge for (b)/(d).
+   The scale never changes as the card grows. All values come from shoreTuning.ts. */
 .art[data-scene="shoreline"] {
-  top: 50%;
+  top: var(--shore-top, 50%);
   bottom: auto;
   height: max(100%, 360px);
   transform: translateY(-50%);
 }
 
-/* Light mode: the day grade lifted to a high-key midday beach (pale sand, bright shallow
-   water). A grade of the scene itself, static, applied by the compositor. */
+/* Light mode: a natural daylight exposure of the day grade (no blown highlights). */
 .art[data-scene="shoreline"][data-tone="light"] {
-  filter: brightness(1.28) saturate(1.06);
+  filter: brightness(var(--shore-exp, 1));
 }
 
-/* (b) waterline off the text row: 6px above the card's bottom edge, sand behind all text. */
-.art[data-scene="shoreline"][data-option="b"] {
-  top: calc(100% - 6px);
-}
-
-/* (d) the subtlest treatment: one soft vertical tone gradient across the whole scene (edge to
-   edge, top to bottom, never shaped around text). Light: the water half eases toward white.
-   Dark: the sand half eases toward the night tint. */
-.background:has(> .art[data-scene="shoreline"][data-option="d"])::after {
+/* Light mode: the sand above the waterline toned down (multiply, whole width, fading out
+   toward the waterline). */
+.shoreHighlight {
   position: absolute;
   inset: 0;
-  content: "";
+  background: linear-gradient(
+    180deg,
+    color-mix(
+        in srgb,
+        var(--grayscale-12) var(--shore-hl, 0%),
+        var(--neutral-white)
+      )
+      0,
+    color-mix(
+        in srgb,
+        var(--grayscale-12) var(--shore-hl, 0%),
+        var(--neutral-white)
+      )
+      calc(var(--shore-top, 50%) - 16px),
+    var(--neutral-white) var(--shore-top, 50%)
+  );
+  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
-.background:has(
-    > .art[data-scene="shoreline"][data-option="d"][data-tone="light"]
-  )::after {
-  background: linear-gradient(
-    180deg,
-    transparent 30%,
-    color-mix(in srgb, var(--neutral-white) 62%, transparent) 100%
-  );
+.shoreHighlight[data-tone="dark"] {
+  display: none;
 }
 
-.background:has(
-    > .art[data-scene="shoreline"][data-option="d"][data-tone="dark"]
-  )::after {
+/* A soft vertical tone gradient across the whole scene toward the theme's glass tint. */
+.shoreGradient {
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--grayscale-12) 66%, transparent) 0,
-    transparent 70%
+    transparent var(--shore-g0, 50%),
+    color-mix(
+        in srgb,
+        var(--tinted-glass-tint) var(--shore-gs, 0%),
+        transparent
+      )
+      var(--shore-g1, 100%)
   );
+  pointer-events: none;
 }
 
 .cherryCanvas {
