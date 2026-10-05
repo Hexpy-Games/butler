@@ -14,9 +14,6 @@ mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
 const browser = await launchSmokeBrowser();
 writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
-const context = await browser.newContext({ reducedMotion: "no-preference" });
-const page = await context.newPage();
-await instrument(page);
 const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -45,7 +42,9 @@ async function measure(width: number, module: string, tone: string) {
   console.error(`measure ${width} ${module} ${tone}`);
   const params = custom ? (module === "butler.silk" ? { base: "#c9d2c6" } : { billow: 0.5 }) : undefined;
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: tone, wallpaper: { source: { kind: "live", module, params, paramsDark: params }, motion: "auto", pauseOnBattery: false } }) });
-  await page.setViewportSize({ width, height: 900 });
+  const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "no-preference" });
+  const page = await context.newPage();
+  await instrument(page);
   await server.signIn(context);
 
   await page.goto(server.url, { waitUntil: "load" });
@@ -108,7 +107,7 @@ async function measure(width: number, module: string, tone: string) {
     if (width === 375) await page.getByRole("button", { name: "돌아가기", exact: true }).filter({ visible: true }).click();
     await page.getByRole("button", { name: "일반", exact: true }).evaluate((e: HTMLElement) => e.click());
   }
-  await cdp.detach();
+  await context.close();
   return rounds;
 }
 

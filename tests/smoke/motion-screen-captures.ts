@@ -1,14 +1,13 @@
 // Compare the same public screens before/after the shell motion boundary change.
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server";
-import { smokeBrowserArgs } from "./browser-launch";
+import { launchSmokeBrowser } from "../support/smoke-browser";
 
 const out = resolve(Bun.argv.find((arg) => arg.startsWith("--out="))?.slice(6) ?? ".tmp/motion/screens");
 const uiRoot = resolve(Bun.argv.find((arg) => arg.startsWith("--ui="))?.slice(5) ?? "packages/butler-app/client/ui/dist");
 mkdirSync(out, { recursive: true });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 const context = await browser.newContext({ reducedMotion: "no-preference" });
 const page = await context.newPage();
 try {

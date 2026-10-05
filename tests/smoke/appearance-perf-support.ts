@@ -2,29 +2,30 @@ import type { CDPSession, Page } from "playwright";
 
 export type TraceEvent = { name: string; ph: string; ts: number; dur?: number; pid: number; tid: number; args?: { name?: string; data?: { used_bytes?: number } } };
 
-/** Capture real renderer work, including GPU readbacks and image decodes. */
+type TracePacket = { value: Record<string, string>[] };
+const traces = new WeakMap<CDPSession, { events: TraceEvent[]; collect: (chunk: TracePacket) => void }>();
+
+/** Capture complete trace packets; single-process Chromium can stall IO.read streams. */
 export async function startTrace(cdp: CDPSession) {
+  const events: TraceEvent[] = [];
+  const collect = (chunk: TracePacket) => { for (const event of chunk.value) events.push(event as unknown as TraceEvent); };
+  traces.set(cdp, { events, collect });
+  cdp.on("Tracing.dataCollected", collect);
   await cdp.send("Tracing.start", {
     categories: "devtools.timeline,disabled-by-default-devtools.timeline,blink.user_timing,toplevel",
-    transferMode: "ReturnAsStream",
+    transferMode: "ReportEvents",
   });
 }
 
 export async function endTrace(cdp: CDPSession): Promise<TraceEvent[]> {
-  const completed = new Promise<string>((resolve, reject) => cdp.once("Tracing.tracingComplete", (event) => {
-    if (event.stream) resolve(event.stream);
-    else reject(new Error("Missing trace stream"));
-  }));
+  const trace = traces.get(cdp);
+  if (!trace) throw new Error("No appearance trace started");
+  const completed = new Promise<void>((done) => cdp.once("Tracing.tracingComplete", () => done()));
   await cdp.send("Tracing.end");
-  const handle = await completed;
-  let json = "";
-  for (;;) {
-    const chunk = await cdp.send("IO.read", { handle });
-    json += chunk.data;
-    if (chunk.eof) break;
-  }
-  await cdp.send("IO.close", { handle });
-  return JSON.parse(json).traceEvents;
+  await completed;
+  cdp.off("Tracing.dataCollected", trace.collect);
+  traces.delete(cdp);
+  return trace.events;
 }
 
 export function traceStats(events: TraceEvent[]) {
@@ -114,6 +115,10 @@ export async function toggleMotion(page: Page) {
     node.click();
     while ((node.getAttribute("aria-checked") === "true") !== next ||
       (document.getElementById("root")?.dataset.motion === "reduced") !== next) {
+      if (performance.now() - start > 150) throw new Error(JSON.stringify({
+        message: "Motion toggle did not commit within 150ms", checked: node.getAttribute("aria-checked"),
+        disabled: node.hasAttribute("disabled"), connected: node.isConnected, motion: document.getElementById("root")?.dataset.motion,
+      }));
       await new Promise(requestAnimationFrame);
     }
     await new Promise(requestAnimationFrame);

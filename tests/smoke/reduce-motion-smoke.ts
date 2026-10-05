@@ -1,11 +1,10 @@
-import { instrument, navigateAppearance, settingsReady, toggleMotion, interactionLongTasks } from "./appearance-perf-support";
+import { instrument, navigateAppearance, settingsReady, toggleMotion, interactionLongTasks, startTrace, endTrace, traceStats } from "./appearance-perf-support";
 // Public Settings switch + native persistence; browser DS self-check (stub only).
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server";
-import { smokeBrowserArgs } from "./browser-launch";
+import { launchSmokeBrowser } from "../support/smoke-browser";
 
 const out = resolve(Bun.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? ".tmp/reduce-motion");
 const scratch = mkdtempSync(join(tmpdir(), "butler-reduce-motion-"));
@@ -16,9 +15,10 @@ mkdirSync(out, { recursive: true });
 const build = await Bun.build({ entrypoints: ["tests/smoke/reduce-motion-probe.ts"], outdir: uiRoot, target: "browser", naming: "probe.js" });
 if (!build.success) throw new Error(`Probe build failed: ${build.logs}`);
 let server = await createNativeAppServer({ uiRoot, butlerData });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "no-preference" });
 const page = await context.newPage();
+const cdp = await context.newCDPSession(page);
 const results: unknown[] = [];
 const appearanceMs: number[] = [];
 const toggles: Awaited<ReturnType<typeof toggleMotion>>[] = [];
@@ -33,9 +33,14 @@ async function appearance() {
   if (await menu.count()) await menu.click();
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await settingsReady(page);
+  await startTrace(cdp);
   appearanceMs.push(await navigateAppearance(page));
   const interval = await page.evaluate(() => ({ start: (window as any).__appearance.start, end: performance.now() }));
-  assert((await interactionLongTasks(page, interval.start, interval.end)).length === 0, "Appearance has a task over 50ms");
+  const longTasks = await interactionLongTasks(page, interval.start, interval.end);
+  const events = await endTrace(cdp);
+  writeFileSync(join(out, `open-${appearanceMs.length}.trace.json`), JSON.stringify({ traceEvents: events }));
+  writeFileSync(join(out, `open-${appearanceMs.length}.json`), JSON.stringify({ ...interval, ms: appearanceMs.at(-1), longTasks, trace: traceStats(events) }, null, 2));
+  assert(longTasks.length === 0, `Appearance has a task over 50ms: ${JSON.stringify(longTasks)}`);
   await page.getByRole("switch", { name: "동작 줄이기", exact: true }).waitFor();
 }
 
