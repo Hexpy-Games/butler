@@ -26,6 +26,19 @@ const PERMISSION_BITS: u32 = 0o7777;
 const ACCESS_BITS: u32 = 0o777;
 
 #[cfg(feature = "test-support")]
+pub(super) fn fixture_file_cache(file: &File, enabled: bool) -> Option<io::Result<()>> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(rustix::fs::fcntl_global_nocache(file, !enabled).map_err(Into::into))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (file, enabled);
+        None
+    }
+}
+
+#[cfg(feature = "test-support")]
 pub(super) fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
     #[cfg(target_os = "linux")]
     {

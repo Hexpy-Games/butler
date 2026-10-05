@@ -8,6 +8,11 @@ use std::io;
 use std::os::windows::fs::OpenOptionsExt;
 
 #[cfg(feature = "test-support")]
+pub(super) fn fixture_file_cache(_: &File, _: bool) -> Option<io::Result<()>> {
+    None
+}
+
+#[cfg(feature = "test-support")]
 pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
     None
 }

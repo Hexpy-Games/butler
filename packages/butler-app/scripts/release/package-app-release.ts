@@ -350,6 +350,7 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
     rmSync(input.artifactPath, { force: true });
     const result = spawnSync("hdiutil", [
       "create",
+      "-verbose",
       "-volname",
       "Butler",
       "-srcfolder",
@@ -358,9 +359,20 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
       "-format",
       "UDZO",
       input.artifactPath,
-    ], { encoding: "utf8" });
+    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    if (result.stdout) console.log(result.stdout.trimEnd());
+    if (result.stderr) console.error(result.stderr.trimEnd());
     if (result.status !== 0) {
-      throw new Error(`mac app DMG creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
+      // Read-only diagnostics establish the failed phase and open-image state;
+      // never retry creation, detach unrelated images or stop host services.
+      for (const [command, args] of [
+        ["hdiutil", ["info"]],
+        ["lsof", ["-nP", "+D", workDir, input.artifactPath]],
+      ] as const) {
+        const state = spawnSync(command, [...args], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+        console.error(`DMG failure ${command} status=${state.status}\n${state.stdout}${state.stderr}`);
+      }
+      throw new Error(`mac app DMG creation failed: status=${result.status} signal=${result.signal} ${result.error?.message || result.stderr.trim() || result.stdout.trim()}`);
     }
   } finally {
     makeTreeRemovable(workDir);

@@ -212,6 +212,14 @@ pub fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
     sys::discard_cached_pages(file)
 }
 
+/// Compare kernel caching only on a newly created, private performance fixture.
+/// Restore caching before the independent startup gate. This changes this
+/// file's policy, never the host's global cache policy.
+#[cfg(feature = "test-support")]
+pub fn fixture_file_cache(file: &File, enabled: bool) -> Option<io::Result<()>> {
+    sys::fixture_file_cache(file, enabled)
+}
+
 /// Restricts an existing directory to its owner; `None` without
 /// [`OWNER_ONLY`].
 pub fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
