@@ -88,6 +88,7 @@ async fn run(
     let s = setup
         .live(provider)
         .access(access)
+        .env("HOME", profile)
         .env("USERPROFILE", profile)
         .env("LOCALAPPDATA", local.display().to_string())
         .env("APPDATA", roaming.display().to_string())
