@@ -26,11 +26,11 @@ export const UPDATE_COPY: readonly CopyEntry[] = [
   { key: "settings.updateProgress.applying", ko: "적용 중", en: "Applying", surface: "row" },
   { key: "settings.updateProgress.restarting", ko: "다시 시작하는 중", en: "Restarting", surface: "row" },
   { key: "settings.updateProgress.cancelled", ko: "다운로드를 취소했습니다.", en: "Download cancelled.", codes: ["update_cancelled"], surface: "toast" },
+  { key: "shell.footerNav", ko: "업데이트와 설정", en: "Updates and settings", surface: "label" },
   { key: "shell.update.downloading", ko: "업데이트 받는 중", en: "Downloading update", surface: "row" },
   { key: "shell.update.working", ko: "업데이트 준비 중", en: "Preparing update", surface: "row" },
   { key: "shell.update.ready", ko: "업데이트 준비됨", en: "Update ready", surface: "row" },
   { key: "shell.update.failed", ko: "업데이트 실패", en: "Update failed", surface: "row" },
-  { key: "shell.update.ring", ko: "업데이트 {percent}% · 열기", en: "Update {percent}% · Open", surface: "label" },
   { key: "settings.updateErrors.download", ko: "업데이트를 받지 못했습니다. 연결을 확인해 주세요.", en: "Couldn't download the update. Check your connection.", codes: ["update_http_unavailable", "update_artifact_unavailable", "update_manifest_unavailable"], surface: "notice" },
   { key: "settings.updateErrors.damaged", ko: "받은 파일을 확인하지 못했습니다. 다시 받아 주세요.", en: "The download didn't verify. Try again.", codes: ["update_artifact_sha256_mismatch", "update_manifest_sha256_mismatch", "update_signature_unsupported"], surface: "notice" },
   { key: "settings.updateErrors.incompatible", ko: "이 기기용 업데이트가 아직 없습니다.", en: "No update for this device yet.", codes: ["update_manifest_incompatible", "update_manifest_app_platform_missing", "update_manifest_agent_platform_missing"], surface: "notice" },
@@ -106,6 +106,7 @@ export const GRANT_COPY: readonly CopyEntry[] = [
   { key: "settings.grants.empty", ko: "허용한 작업이 없습니다.", en: "No approved actions.", surface: "row" },
   { key: "settings.grants.noMatch", ko: "검색 결과가 없습니다.", en: "No matches.", surface: "row" },
   { key: "settings.grants.targetUnknown", ko: "대상 정보 없음", en: "Target not recorded", surface: "row" },
+  { key: "settings.grants.deletedChat", ko: "삭제된 대화", en: "Deleted chat", surface: "row" },
 ];
 
 const ALL = [...UPDATE_COPY, ...MOTION_COPY, ...ERROR_COPY, ...GRANT_COPY];

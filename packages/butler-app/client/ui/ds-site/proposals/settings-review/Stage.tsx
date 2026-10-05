@@ -26,7 +26,7 @@ import { ShellProposal } from "./shell/ShellProposal";
 function pageSection(state: StageState): SettingsSectionId {
   if (state.section === "updates") return "updates";
   if (state.section === "motion") return "appearance";
-  if (state.section === "approvals") return "security";
+  if (state.section === "approvals") return state.reorgPage;
   return ({ mcp: "mcp", skills: "skills", hosts: "security", wallpaper: "appearance", toasts: "general" } as const)[state.errorScreen];
 }
 
@@ -40,7 +40,6 @@ export function SettingsReviewStage() {
   const [state, setState] = useState<StageState>(() => stateFromQuery(new URLSearchParams(location.search)));
   const [ready, setReady] = useState(false);
   const [compactPane, setCompactPane] = useState<"master" | "detail">("detail");
-  const [phone] = useState(() => window.matchMedia("(width <= 640px)").matches);
   useAppLocale();
 
   useEffect(() => {
@@ -94,7 +93,7 @@ export function SettingsReviewStage() {
     return (
       <WallpaperModulesProvider>
         <Wallpaper source={WALLPAPERS[state.wallpaper]} scope="viewport" />
-        <ShellProposal state={state} phone={phone} />
+        <ShellProposal state={state} />
         <AppToaster />
       </WallpaperModulesProvider>
     );

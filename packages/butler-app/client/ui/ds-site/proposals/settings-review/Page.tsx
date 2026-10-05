@@ -97,7 +97,10 @@ export function SettingsReviewPage() {
                       {segment("errorScreen", copy.controls.screen, copy.errorScreen)}
                       {state.errorScreen === "mcp" ? segment("mcpError", copy.controls.error, copy.mcpError) : null}
                     </> : null}
-                    {state.section === "approvals" ? segment("approvals", copy.controls.state, copy.approvals) : null}
+                    {state.section === "approvals" ? <>
+                      {segment("reorgPage", copy.controls.screen, copy.reorgPage)}
+                      {state.reorgPage === "security" ? segment("approvals", copy.controls.state, copy.approvals) : null}
+                    </> : null}
                   </Stack>
                   <Stack align="row" wrap gap="lg" rowGap="md">
                     <Control label={copy.controls.width}>

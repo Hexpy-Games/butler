@@ -27,6 +27,7 @@ export interface PageCopy {
   mcpError: Options<"mcpError">;
   approvals: Options<"approvals">;
   updatePlace: Options<"updatePlace">;
+  reorgPage: Options<"reorgPage">;
   recommended: string;
   frameLabel: string;
   copyTable: string;
@@ -37,12 +38,12 @@ export interface PageCopy {
 
 const NOTES_EN: Record<ReviewSection, Note[]> = {
   updates: [
-    { title: "Outside Settings: A · Sidebar row", points: [
+    { title: "Outside Settings: sidebar row (chosen)", points: [
       "What the shell has: the sidebar footer holds one row, Settings (SpaceSidebar footer). There is no version or account area, no app menu (Menu.setApplicationMenu(null)), and the titlebar's trailing buttons are … and the right-panel toggle. The tray menu exists only when the tray is on.",
-      "A (recommended): a row above Settings, only while an update is running, ready or failed. Label + % badge + a bare ProgressMeter as its second line; Ready shows Restart in the row; tapping opens Settings › Updates. Room for words and the one action, no new chrome.",
-      "B: a progress ring first in the titlebar buttons (tooltip with %). Visible with the sidebar closed, but tiny, no room for Restart, and crowds the 375 titlebar.",
-      "C: a % badge on the existing Settings row. Smallest change, but a badge on Settings doesn't say what it is.",
-      "With A, the window also shows native dock/taskbar progress (BrowserWindow.setProgressBar) so a collapsed sidebar or hidden window still shows it; no renderer UI.",
+      "A row above 설정, only while an update is running, ready or failed. One line: ring + \"Downloading update\" + percent (badge slot). Ready: full ring + \"Update ready\" + Restart in the row. Checking or verifying: spinner. Failed: alert icon. Tapping opens Settings › Updates.",
+      "Spacing: the footer becomes one group; the update row and 설정 are --sidebar-row-spacing (4px desktop, 8px phone) apart, like rows in every other sidebar group, instead of touching.",
+      "The ring is a stand-in: ContextDonutButton's ring without its button. The DS has no non-interactive ring (gap: ProgressRing).",
+      "The window also shows native dock/taskbar progress (BrowserWindow.setProgressBar), so a collapsed sidebar or hidden window still shows it.",
     ] },
     { title: "Row", points: [
       "Same row as main: name, version, one action button. The button only ever shows the action you can take now (Update, Cancel, Restart, Retry); the stage is never a button label.",
@@ -90,7 +91,7 @@ const NOTES_EN: Record<ReviewSection, Note[]> = {
   approvals: [
     { title: "Security, reorganised", points: [
       "Order: Remote access · Device pairing · Paired devices (as today) → Permissions → Approved actions (new) → Saved keys → Diagnostics → Advanced · Allowed hosts (as today, last).",
-      "Models › Permissions (access mode, plan mode default) → Security. Whole section, PermissionsFields unchanged.",
+      "Models › Permissions: access mode → Security › 권한; Plan mode default → General › Conversation input (last field). Both components unchanged.",
       "Models › Saved keys (SavedKeysRows, its states and replace/delete) → Security. Model add/edit still reads the same keys.",
       "Privacy › Diagnostics (its only section) → Security. The Privacy page leaves the sidebar; 'privacy' and 'diagnostics' become Security search aliases.",
       "Stay where they are: General › search API key (paired with the provider choice), MCP env/header secrets (part of each server's form), Server › connection URL, About › developer mode, Developer logs.",
@@ -113,12 +114,12 @@ const NOTES_EN: Record<ReviewSection, Note[]> = {
 
 const NOTES_KO: Record<ReviewSection, Note[]> = {
   updates: [
-    { title: "설정 밖: A · 사이드바 줄", points: [
+    { title: "설정 밖: 사이드바 줄(선택됨)", points: [
       "현재 셸: 사이드바 아래에는 '설정' 한 줄만 있습니다(SpaceSidebar footer). 버전·계정 영역과 앱 메뉴는 없고(Menu.setApplicationMenu(null)), 제목줄 오른쪽 버튼은 …와 오른쪽 패널 토글입니다. 트레이 메뉴는 트레이를 켰을 때만 있습니다.",
-      "A(추천): 업데이트가 진행 중·준비됨·실패일 때만 '설정' 위에 한 줄. 이름 + % 배지 + 둘째 줄 얇은 ProgressMeter, 준비되면 줄 안에 '다시 시작', 누르면 설정 › 업데이트. 말과 동작 하나를 둘 자리가 있고 새 크롬이 없습니다.",
-      "B: 제목줄 버튼 맨 앞의 진행 링(툴팁에 %). 사이드바를 닫아도 보이지만 작고 '다시 시작'을 둘 자리가 없으며 375에서 제목줄이 좁아집니다.",
-      "C: 기존 '설정' 줄에 % 배지. 변경이 가장 작지만 배지가 무엇인지 알 수 없습니다.",
-      "A와 함께 창 자체에 네이티브 독·작업 표시줄 진행률(BrowserWindow.setProgressBar)을 표시합니다. 사이드바를 접거나 창을 숨겨도 보이며 화면 UI는 없습니다.",
+      "업데이트가 진행 중·준비됨·실패일 때만 '설정' 위에 한 줄. 링 + '업데이트 받는 중' + 퍼센트(배지 자리). 준비되면 가득 찬 링 + '업데이트 준비됨' + 줄 안의 '다시 시작'. 확인 중에는 스피너, 실패는 경고 아이콘. 누르면 설정 › 업데이트.",
+      "간격: 아래 영역을 한 그룹으로 보고 업데이트 줄과 '설정' 사이를 --sidebar-row-spacing(4px desktop, 8px phone)으로 둡니다. 사이드바의 다른 그룹 안 줄 간격과 같습니다.",
+      "링은 대체 구현입니다: 버튼을 뺀 ContextDonutButton의 링. DS에 상호작용 없는 링이 없습니다(gap: ProgressRing).",
+      "창 자체에도 네이티브 독·작업 표시줄 진행률(BrowserWindow.setProgressBar)을 표시해 사이드바를 접거나 창을 숨겨도 보입니다.",
     ] },
     { title: "행", points: [
       "main과 같은 행입니다: 이름, 버전, 동작 버튼 하나. 버튼에는 지금 할 수 있는 동작(업데이트, 취소, 다시 시작, 다시 시도)만 표시하고 단계 이름은 표시하지 않습니다.",
@@ -166,7 +167,7 @@ const NOTES_KO: Record<ReviewSection, Note[]> = {
   approvals: [
     { title: "보안 페이지 재구성", points: [
       "순서: 원격 접속 · 기기 연결 · 연결된 기기(지금 그대로) → 권한 → 허용한 작업(새로) → 저장된 키 → 진단 → 고급 · 허용 호스트(지금 그대로, 맨 끝).",
-      "모델 › 권한(접근 권한, 계획 모드 기본값) → 보안. 섹션 전체, PermissionsFields 그대로.",
+      "모델 › 권한: 접근 권한 → 보안 › 권한, 계획 모드 기본값 → 일반 › 대화 입력(마지막 필드). 두 컴포넌트 모두 그대로.",
       "모델 › 저장된 키(SavedKeysRows, 상태와 교체·삭제) → 보안. 모델 추가·편집은 같은 키를 계속 씁니다.",
       "개인정보 › 진단(유일한 섹션) → 보안. 개인정보 페이지는 사이드바에서 빠지고 '개인정보', '진단'은 보안 검색어가 됩니다.",
       "그대로 두는 것: 일반 › 검색 API 키(검색 제공자와 한 쌍), MCP 환경 변수·헤더 비밀값(서버 양식의 일부), 서버 › 연결 URL, 정보 › 개발자 모드, 개발자 로그.",
@@ -205,7 +206,8 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     errorScreen: { mcp: "MCP form", skills: "Skill import", hosts: "Hosts (main)", wallpaper: "Wallpaper", toasts: "Toasts" },
     mcpError: { none: "None", idRequired: "ID empty", idInvalid: "ID invalid", commandRequired: "No command", urlRequired: "No URL", saveFailed: "Save failed" },
     approvals: { list: "List", long: "Long", empty: "Empty", loading: "Loading", error: "Error" },
-    updatePlace: { settings: "Settings page", sidebarRow: "A · Sidebar row", titlebar: "B · Titlebar ring", settingsBadge: "C · Settings badge" },
+    updatePlace: { settings: "Settings page", sidebarRow: "Sidebar row" },
+    reorgPage: { security: "Security", general: "General (plan mode)" },
     recommended: "Recommended",
     frameLabel: "Settings preview",
     copyTable: "Copy (i18n keys)",
@@ -230,7 +232,8 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     errorScreen: { mcp: "MCP 양식", skills: "스킬 가져오기", hosts: "호스트(main)", wallpaper: "월페이퍼", toasts: "토스트" },
     mcpError: { none: "없음", idRequired: "ID 비어 있음", idInvalid: "ID 형식", commandRequired: "명령 없음", urlRequired: "URL 없음", saveFailed: "저장 실패" },
     approvals: { list: "목록", long: "긴 목록", empty: "비어 있음", loading: "불러오는 중", error: "오류" },
-    updatePlace: { settings: "설정 화면", sidebarRow: "A · 사이드바 줄", titlebar: "B · 제목줄 링", settingsBadge: "C · 설정 배지" },
+    updatePlace: { settings: "설정 화면", sidebarRow: "사이드바 줄" },
+    reorgPage: { security: "보안", general: "일반(계획 모드)" },
     recommended: "추천",
     frameLabel: "설정 미리보기",
     copyTable: "문구(i18n 키)",

@@ -4,6 +4,7 @@ import { confirmAction } from "@/app/confirmation";
 import { notifyStatus } from "@/app/notifications";
 import { CardList, EmptyLine, Input, Inline, NativeSelect, NativeSelectOption, Stack } from "@/butler-ds";
 import { SettingsSection } from "@/components/settings/SettingsFormComponents";
+import { GeneralPageProposal } from "./GeneralPageProposal";
 import { SecurityPageProposal } from "./SecurityPageProposal";
 import { t } from "../proposedCopy";
 import type { StageState } from "../state";
@@ -82,5 +83,6 @@ function EmptyMatch({ locale }: { locale: StageState["locale"] }) {
 
 export function ApprovalsProposal({ state }: { state: StageState }) {
   useAppLocale();
+  if (state.reorgPage === "general") return <GeneralPageProposal />;
   return <SecurityPageProposal grants={<GrantList state={state} />} />;
 }
