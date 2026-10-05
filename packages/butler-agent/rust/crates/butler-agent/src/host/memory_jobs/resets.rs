@@ -51,6 +51,12 @@ pub(crate) async fn reset_profile(
     let result = profile
         .reset_profiling_data(id.clone(), token.clone())
         .await;
+    if let Err(error) = &result {
+        butler_core::diagnostic!(
+            "[memory-profile-reset] operation_id={id} error={error} cause={:?}",
+            std::error::Error::source(error).map(ToString::to_string)
+        );
+    }
     let phase = if result.is_ok() {
         "complete"
     } else if token.is_cancelled() {
