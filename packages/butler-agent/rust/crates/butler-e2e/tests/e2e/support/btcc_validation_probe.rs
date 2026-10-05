@@ -15,6 +15,7 @@ pub(super) fn run(data: &Path) -> Result<(), HarnessError> {
         (8_589_934_592, 2_000),
         (0, 65_536),
         (8_589_934_592, 65_536),
+        (2_147_483_648, 65_536),
     ] {
         let db = sqlite::open_with_flags(
             data.join("agent-runtime/btcc.sqlite"),
