@@ -25,7 +25,7 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
 # The locked inventory declares the non-manifest inputs it fingerprints too.
 # Read the checkout, never an owner's runtime data directory.
 LICENSE_INPUTS = set(json.loads((Path(__file__).resolve().parents[2] /
-                                'deploy/licenses/catalog.json').read_text())['inputs'])
+                                'deploy/licenses/catalog.json').read_text(encoding='utf-8'))['inputs'])
 
 
 def matches(path, patterns):
