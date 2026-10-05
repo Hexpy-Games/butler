@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { smokeBrowserArgs } from "../../../../../tests/support/smoke-browser.ts";
 import { wallpaperPosterInputs } from "./wallpaper-poster-inputs";
 
 const root = resolve(import.meta.dir, "..");
@@ -24,7 +25,7 @@ const server = await createServer({
 });
 await server.listen();
 const address = server.httpServer!.address() as { port: number };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 mkdirSync(directory, { recursive: true });
 const entries: Record<string, string> = {};
 try {

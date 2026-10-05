@@ -1,3 +1,4 @@
+import { resetWallpaperPaint, signalWallpaperPaint } from "./paintSignal";
 import type { WallpaperDrawFrame } from "./glDraw";
 import { linkWallpaperModule } from "./glModule";
 import { createWallpaperResources } from "./glResources";
@@ -84,6 +85,7 @@ export function createWallpaperRenderer(
 
   return {
     setScene(next) {
+      resetWallpaperPaint(canvas, "pending");
       scene = next;
       select();
     },
@@ -100,6 +102,7 @@ export function createWallpaperRenderer(
       if (canvas.width !== frame.width) canvas.width = frame.width;
       if (canvas.height !== frame.height) canvas.height = frame.height;
       drawWallpaperScene(gl, resources, active, frame);
+      signalWallpaperPaint(canvas, active.module.manifest.id, active.dark ? "dark" : "light");
     },
     restore() {
       resources = createWallpaperResources(gl);

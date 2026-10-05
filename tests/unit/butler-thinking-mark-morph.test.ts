@@ -278,7 +278,7 @@ test("no discontinuity at the loop hand-off: as the morph lands, dot motion per 
 });
 
 function recorder(log: string[], name: string) {
-  const canvas = { width: 0, height: 0, name };
+  const canvas = { width: 0, height: 0, name, dataset: {} };
   const target: Record<string, unknown> = { canvas };
   return new Proxy(target, {
     get(obj, prop) {

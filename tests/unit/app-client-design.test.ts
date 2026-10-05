@@ -2707,7 +2707,7 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("settings-main-theme-silk-option");
   expect(smoke).toContain("settings-silk-theme-detail-absent");
   expect(smoke).toContain("settings-bloom-colors-circular");
-  expect(smoke).toContain("new-chat-silk-fluid-visible");
+  expect(smoke).toContain("new-chat-silk-first-frame-painted");
   expect(smoke).toContain("new-chat-vertical-scroll-absent");
   expect(smoke).toContain("new-chat-start-position-high");
   expect(smoke).toContain("new-chat-moment-time-visible");

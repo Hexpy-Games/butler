@@ -140,4 +140,6 @@ export function drawFrame(s: MarkSurface, sim: MorphSim, reduced: boolean) {
   // Reduced motion draws the still logo; the breathe is a CSS opacity loop on the canvas.
   if (mode === "reduced" || mode === "rest") drawRest(s);
   else renderHalftone(s, sim);
+  const canvas = s.ctx.canvas as HTMLCanvasElement;
+  if (canvas.dataset.markState !== "painted") canvas.dataset.markState = "painted";
 }

@@ -9,7 +9,7 @@ The native gateway uses isolated data and completed onboarding with a stub
 provider. The published preview.7 macOS Agent served all three UI builds
 for the original comparison; the gateway was kept constant to isolate UI changes.
 The only intercepted field is the briefing clock label (`오후 3:25`).
-The browser clock, timezone, reduced motion, viewport height (900), and paused
+The Date clock (native performance marks retained), timezone, reduced motion, viewport height (900), and paused
 `butler.shoreline` scene are fixed. No content is omitted.
 
 The eight cases cover 1280 / 375, light / dark, coastal / no wallpaper.
@@ -17,8 +17,7 @@ Each compares the hero and all four complete cards, plus the first card's
 hover/focus state: descendant structure, text, computed backgrounds (including
 pseudo elements), glass tint/filter, typography and borders must match exactly;
 positions/sizes may differ by at most 1 CSS pixel. Class hashes and asset URLs
-are excluded because builds can rename them. A composited coastal screenshot
-must contain the scene's varied pixels; `none` must remove or hide/release its
+are excluded because builds can rename them. A coastal canvas must signal a completed shoreline frame with matching tone; `none` must remove or hide/release its
 wallpaper canvas. Screenshots and `report.json` go to `.tmp/newchat-regression/fix`.
 `BUTLER_SMOKE_UI_ROOT` and `BUTLER_SMOKE_SCREENSHOTS` select a historical build
 and artifact directory without changing assertions. The smoke has no baseline
