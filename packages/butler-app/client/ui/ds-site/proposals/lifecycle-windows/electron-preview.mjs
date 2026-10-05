@@ -4,10 +4,10 @@
 //
 //   npm --prefix packages/butler-app/client/ui run build:ds-site      # once, or after edits
 //   node packages/butler-app/client/ui/ds-site/proposals/lifecycle-windows/electron-preview.mjs \
-//     [--window=both|startup|quit] [--build] [--theme=dark] [--wallpaper=butler.bloom] [--variant=strip]
+//     [--window=both|startup|quit] [--build] [--theme=dark] [--wallpaper=butler.bloom] [--surface=panel]
 //     [--startup=engine] [--quit=timeout] [--locale=en-US] [--motion=reduced] [--backdrop=poster] [--force=1]
 //
-// Keys in a window: arrows switch its state, F force-quit flag, T theme, W wallpaper, V variant, L language,
+// Keys in a window: arrows switch its state, F force-quit flag, T theme, W wallpaper, S surface, L language,
 // M motion, B backdrop, P play the stage sequence, Q quit. `--smoke=<dir>` captures each window hidden and exits.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";

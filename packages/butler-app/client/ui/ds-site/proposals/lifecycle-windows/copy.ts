@@ -116,8 +116,8 @@ interface PageCopy {
   eyebrow: string;
   title: string;
   intro: string;
-  variant: string;
-  variants: { card: string; strip: string };
+  surface: string;
+  surfaces: { box: string; panel: string };
   recommended: string;
   width: string;
   widths: { desktop: string; "768": string; "375": string };
@@ -139,7 +139,7 @@ interface PageCopy {
   realWindow: string;
   realWindowBody: string;
   notesTitle: string;
-  notes: { card: string; strip: string };
+  notes: { box: string; panel: string };
   rulesTitle: string;
   rules: string[];
   keysTitle: string;
@@ -155,9 +155,9 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "en-US": {
     eyebrow: "Proposal · #480 #481",
     title: "Lifecycle windows",
-    intro: "A tiny static window opens first on launch and again while Butler quits. The wallpaper still fills the window; the mark and the status sit on a tinted-glass card, never on the art.",
-    variant: "Variant",
-    variants: { card: "A · Card", strip: "B · Strip" },
+    intro: "A tiny static window opens first on launch and again while Butler quits. The wallpaper still fills the window; the mark and the status sit on one solid DS surface, never on the art.",
+    surface: "Card surface",
+    surfaces: { box: "Box · raised", panel: "SurfacePanel" },
     recommended: "Recommended",
     width: "Page width",
     widths: { desktop: "Desktop", "768": "768", "375": "375" },
@@ -177,11 +177,11 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     startupStates: { prepare: "Prepare", service: "Service", screen: "Screen", upgrade: "Upgrade", data: "Data", slow: "Slow", error: "Error" },
     quitStates: { saving: "Saving", search: "Search", storage: "Storage", connections: "Connections", services: "Services", finishing: "Finishing", timeout: "Timeout", failed: "Failed" },
     realWindow: "Open as a real window",
-    realWindowBody: "From the repo root, after building the DS site. Arrow keys switch states, F force-quit flag, T theme, W wallpaper, V variant, L language, M motion, P play, Q quit.",
-    notesTitle: "Variants",
+    realWindowBody: "From the repo root, after building the DS site. Arrow keys switch states, F force-quit flag, T theme, W wallpaper, S surface, L language, M motion, P play, Q quit.",
+    notesTitle: "Card surface",
     notes: {
-      card: "Centered card, 360×264. Shows the most wallpaper, so the handoff to the main window reads as one scene. Error actions fit without resizing the window.",
-      strip: "Row layout, 400×200. Closer to today's quit window and less intrusive, but only a frame of wallpaper shows and long Korean stage lines truncate sooner.",
+      box: "Box surface=\"raised\" border=\"hairline\" radius=\"panel\" padding=\"lg\": the DS single-surface primitive. Solid --surface-raised (96% opaque, so text contrast does not depend on the art), the panel radius that matches the window, one 16px inset. No new tokens.",
+      panel: "SurfacePanel elevation=\"medium\": the same --surface-raised plus --shadow-card, but its fixed --radius-control corners and 12px inset read as a list card, and its shadow doubles the native window shadow.",
     },
     rulesTitle: "Behaviour",
     rules: [
@@ -207,9 +207,9 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
   "ko-KR": {
     eyebrow: "제안 · #480 #481",
     title: "시작·종료 창",
-    intro: "앱을 켤 때 가장 먼저, 그리고 종료하는 동안 작은 정적 창을 띄웁니다. 배경화면 스틸이 창을 채우고, 마크와 상태 문구는 배경 위가 아니라 틴티드 글래스 카드 위에 둡니다.",
-    variant: "안",
-    variants: { card: "A · 카드", strip: "B · 스트립" },
+    intro: "앱을 켤 때 가장 먼저, 그리고 종료하는 동안 작은 정적 창을 띄웁니다. 배경화면 스틸이 창을 채우고, 마크와 상태 문구는 배경 위가 아니라 불투명한 DS 표면 하나 위에 둡니다.",
+    surface: "카드 표면",
+    surfaces: { box: "Box · raised", panel: "SurfacePanel" },
     recommended: "추천",
     width: "페이지 너비",
     widths: { desktop: "데스크톱", "768": "768", "375": "375" },
@@ -229,11 +229,11 @@ export const PAGE_COPY: Record<ProposalLocale, PageCopy> = {
     startupStates: { prepare: "준비", service: "서비스", screen: "화면", upgrade: "업데이트", data: "데이터", slow: "지연", error: "오류" },
     quitStates: { saving: "저장", search: "검색", storage: "저장소", connections: "연결", services: "서비스", finishing: "마무리", timeout: "시간 초과", failed: "실패" },
     realWindow: "실제 창으로 열기",
-    realWindowBody: "DS 사이트를 빌드한 뒤 저장소 루트에서 실행합니다. 화살표 키로 상태, F 강제 종료 플래그, T 테마, W 배경화면, V 안, L 언어, M 모션, P 재생, Q 종료.",
-    notesTitle: "안 비교",
+    realWindowBody: "DS 사이트를 빌드한 뒤 저장소 루트에서 실행합니다. 화살표 키로 상태, F 강제 종료 플래그, T 테마, W 배경화면, S 표면, L 언어, M 모션, P 재생, Q 종료.",
+    notesTitle: "카드 표면",
     notes: {
-      card: "가운데 카드, 360×264. 배경화면이 가장 많이 보여 메인 창으로 넘어갈 때 한 장면처럼 이어집니다. 오류 버튼이 들어가도 창 크기가 바뀌지 않습니다.",
-      strip: "가로 배치, 400×200. 지금의 종료 창과 비슷하고 덜 거슬리지만 배경화면은 테두리만 보이고 긴 한국어 문구가 더 빨리 잘립니다.",
+      box: "Box surface=\"raised\" border=\"hairline\" radius=\"panel\" padding=\"lg\": DS의 단일 표면 프리미티브입니다. 불투명도 96%의 --surface-raised라 글자 대비가 배경 그림에 좌우되지 않고, 창과 맞는 panel 반경과 16px 여백 하나만 씁니다. 새 토큰이 없습니다.",
+      panel: "SurfacePanel elevation=\"medium\": 같은 --surface-raised에 --shadow-card를 더하지만, 고정된 --radius-control 모서리와 12px 여백이 목록 카드처럼 보이고 그림자가 네이티브 창 그림자와 겹칩니다.",
     },
     rulesTitle: "동작",
     rules: [
