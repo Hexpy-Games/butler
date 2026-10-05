@@ -4,7 +4,7 @@ import {
 } from "@/butler-ds";
 import type { ProposalCopy } from "./copy";
 import { PAGE_WALLPAPERS, type DecorationTheme, type PageWallpaper } from "./decorationScenes";
-import type { ProposalState } from "./proposalState";
+import { effectiveDecor, type ProposalState } from "./proposalState";
 
 /** What ships: two fields in Settings → Appearance, right under Wallpaper / Motion / Pause on battery. */
 export function SettingsPreview({ copy, state, onChange }: {
@@ -16,10 +16,11 @@ export function SettingsPreview({ copy, state, onChange }: {
     <SettingsSection id="composer-decoration" kind="form">
       <SettingsField id="composer-decoration-theme" label={copy.label} description={copy.description}
         control={(
-          <SegmentedControl ariaLabel={copy.label} value={state.decor} onValueChange={(decor) => onChange({ decor: decor as DecorationTheme })}
+          <SegmentedControl ariaLabel={copy.label} value={effectiveDecor(state)} onValueChange={(decor) => onChange({ decor: decor as DecorationTheme })}
             options={[
               { value: "none", label: copy.none },
-              { value: "shoreline", label: copy.shoreline },
+              // option (c): the theme list without the shoreline
+              ...(state.shore === "c" ? [] : [{ value: "shoreline", label: copy.shoreline }]),
               { value: "cherry-blossom", label: copy.cherryBlossom },
             ]} />
         )} />
@@ -54,6 +55,19 @@ export function PreviewKnobs({ state, onChange }: { state: ProposalState; onChan
       <Knob label="Composer">
         <SegmentedControl ariaLabel="Composer" size="sm" value={state.composer} onValueChange={(composer) => onChange({ composer: composer as ProposalState["composer"] })}
           options={[{ value: "rest", label: "At rest" }, { value: "open", label: "Open" }]} />
+      </Knob>
+      <Knob label="Shoreline readability">
+        <NativeSelect aria-label="Shoreline readability" size="sm" stretch value={state.shore}
+          onChange={(event) => onChange({ shore: event.currentTarget.value as ProposalState["shore"] })}>
+          <NativeSelectOption value="a">(a) Accept low contrast</NativeSelectOption>
+          <NativeSelectOption value="b">(b) Waterline off the text row</NativeSelectOption>
+          <NativeSelectOption value="c">(c) No shoreline</NativeSelectOption>
+          <NativeSelectOption value="d">(d) Soft tone gradient</NativeSelectOption>
+        </NativeSelect>
+      </Knob>
+      <Knob label="Cherry corner">
+        <SegmentedControl ariaLabel="Cherry corner" size="sm" value={state.cherry} onValueChange={(cherry) => onChange({ cherry: cherry as ProposalState["cherry"] })}
+          options={[{ value: "lush", label: "Lush" }, { value: "frame", label: "Padding only" }]} />
       </Knob>
       <Knob label="Motion">
         <SegmentedControl ariaLabel="Motion" size="sm" value={state.motion} onValueChange={(motion) => onChange({ motion: motion as ProposalState["motion"] })}

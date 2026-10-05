@@ -4,10 +4,20 @@
     "en": "Cherry blossom",
     "ko": "벚꽃"
   },
-  "version": "0.1.0",
+  "version": "0.3.0",
   "engine": 1,
   "motion": "animated",
   "image": "none",
   "timePeriod": 240,
-  "params": []
+  "params": [
+    {
+      "key": "lush",
+      "type": "boolean",
+      "label": {
+        "en": "Lush corner",
+        "ko": "풍성한 모서리"
+      },
+      "default": true
+    }
+  ]
 }

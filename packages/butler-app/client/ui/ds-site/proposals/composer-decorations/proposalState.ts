@@ -1,4 +1,4 @@
-import { DECORATION_THEMES, PAGE_WALLPAPERS, type DecorationTheme, type PageWallpaper } from "./decorationScenes";
+import { DECORATION_THEMES, PAGE_WALLPAPERS, SHORE_OPTIONS, type DecorationTheme, type PageWallpaper, type ShoreOption } from "./decorationScenes";
 import type { ProposalLocale } from "./copy";
 
 export interface ProposalState {
@@ -11,11 +11,15 @@ export interface ProposalState {
   wallpaper: PageWallpaper;
   /** Composer at rest (the one-row pill) or open (focused: editor + toolbar). */
   composer: "rest" | "open";
+  /** Shoreline readability option under review: a accept, b waterline low, c no shoreline, d exposure grade. */
+  shore: ShoreOption;
+  /** Cherry blossom corner: lush (a thick mass that may reach the end of a long first line) or frame (padding only). */
+  cherry: "lush" | "frame";
 }
 
 export const DEFAULT_PROPOSAL_STATE: ProposalState = {
   decor: "cherry-blossom", character: true, theme: "both", width: "desktop", motion: "full", locale: "ko",
-  wallpaper: "butler.bloom", composer: "rest",
+  wallpaper: "butler.bloom", composer: "rest", shore: "b", cherry: "lush",
 };
 
 function pick<T extends string>(options: readonly T[], value: string | null, fallback: T): T {
@@ -35,7 +39,14 @@ export function readProposalState(search: string): ProposalState {
     locale: pick(["en", "ko"] as const, params.get("locale"), d.locale),
     wallpaper: pick(PAGE_WALLPAPERS, params.get("wallpaper"), d.wallpaper),
     composer: pick(["rest", "open"] as const, params.get("composer"), d.composer),
+    shore: pick(SHORE_OPTIONS, params.get("shore"), d.shore),
+    cherry: pick(["lush", "frame"] as const, params.get("cherry"), d.cherry),
   };
+}
+
+/** Option (c) removes the shoreline: the theme list and the preview fall back to none. */
+export function effectiveDecor(state: ProposalState): DecorationTheme {
+  return state.decor === "shoreline" && state.shore === "c" ? "none" : state.decor;
 }
 
 export function proposalSearch(state: ProposalState): string {
@@ -43,6 +54,7 @@ export function proposalSearch(state: ProposalState): string {
   const entries: Array<[string, string]> = [
     ["decor", state.decor], ["character", state.character ? "on" : "off"], ["theme", state.theme], ["width", state.width],
     ["motion", state.motion], ["locale", state.locale], ["wallpaper", state.wallpaper], ["composer", state.composer],
+    ["shore", state.shore], ["cherry", state.cherry],
   ];
   for (const [key, value] of entries) params.set(key, value);
   return params.toString();

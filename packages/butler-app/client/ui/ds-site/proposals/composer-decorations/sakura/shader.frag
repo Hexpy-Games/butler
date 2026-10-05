@@ -29,6 +29,17 @@ float AA;   // one device pixel in CSS px
 // ~15px at rest) and its right padding (16px) above the toolbar row. Nothing enters the text box.
 const float BAND_Y = 12.0;
 const float BAND_X = 16.0;
+// Lush corner (p_lush = 1): the thick mass at the top-right may grow past the padding frame into
+// this corner zone; only the far right end of a long first line can pass under it.
+float CX;   // corner zone width (px from the right edge)
+float CY;   // corner zone depth (px from the top edge)
+
+// 1 inside the corner zone (an organic quarter-ellipse), 0 outside
+float cornerZone(vec2 p) {
+  if (p_lush < 0.5) return 0.0;
+  float wob = 1.0 + 0.12 * sin(atan(p.y, p.x) * 7.0);
+  return 1.0 - smoothstep(0.92, 1.0, length(p / vec2(CX, CY)) / wob);
+}
 
 float branchY(float x) { return 1.8 + 0.006 * x + 1.0 * sin(x * 0.052 + 1.0) + 1.4 * (vn(vec2(x * 0.045, 5.0)) - 0.5); }
 float branchX(float y) { return 2.2 + 0.02 * y + 0.9 * sin(y * 0.09 + 0.3); }
@@ -74,16 +85,17 @@ vec4 flower(vec2 q, float r, vec4 h, vec4 g) {
   float a = 1.0 - smoothstep(edge - AA, edge + AA, d);
   if (a <= 0.0) return vec4(0.0);
   float age = g.b;
-  vec3 white = vec3(1.0, 0.985, 0.985);
-  vec3 flush = mix(vec3(0.985, 0.84, 0.88), vec3(0.96, 0.72, 0.80), age);
-  vec3 col = mix(white, flush, smoothstep(0.85 * r, 0.12 * r, d) * (0.6 + 0.4 * age));
+  // white petals that flush pink toward the centre (deeper with age), so they read on light glass
+  vec3 white = vec3(1.0, 0.965, 0.972);
+  vec3 flush = mix(vec3(0.97, 0.75, 0.82), vec3(0.93, 0.58, 0.71), age);
+  vec3 col = mix(white, flush, smoothstep(0.98 * r, 0.1 * r, d) * (0.72 + 0.28 * age));
   col *= 1.0 - 0.035 * sin(u * 11.0 + h.b * 9.0) * smoothstep(0.25 * r, 0.8 * r, d);   // veins
-  col *= 1.0 - 0.11 * smoothstep(0.62, 1.0, abs(u));                 // overlap seams
-  col *= 1.0 - 0.12 * smoothstep(edge - 1.4, edge, d);               // translucent rim
+  col *= 1.0 - 0.17 * smoothstep(0.6, 1.0, abs(u));                  // overlap seams
+  col = mix(col, col * vec3(0.86, 0.80, 0.84), smoothstep(edge - 1.6, edge, d));   // petal edge shading
   float lit = dot(normalize(q2 + 1e-4), vec2(-0.7071, -0.7071));
   col *= 0.95 + 0.06 * lit * smoothstep(0.1 * r, r, d);
   // centre: deep pink cup, stamens with pale-yellow anthers
-  col = mix(col, mix(vec3(0.86, 0.42, 0.52), vec3(0.72, 0.20, 0.32), age), 1.0 - smoothstep(0.17 * r, 0.24 * r, d));
+  col = mix(col, mix(vec3(0.84, 0.32, 0.46), vec3(0.64, 0.13, 0.27), age), 1.0 - smoothstep(0.19 * r, 0.27 * r, d));
   float fil = smoothstep(0.32, 0.0, abs(fract(ang * 18.0 / TAU) - 0.5)) * step(0.2 * r, d) * step(d, 0.48 * r);
   col = mix(col, vec3(0.97, 0.93, 0.86), 0.45 * fil);
   float anther = smoothstep(0.24, 0.0, abs(fract(ang * 18.0 / TAU + 0.5 * step(0.5, fract(ang * 9.0 / TAU))) - 0.5))
@@ -93,10 +105,10 @@ vec4 flower(vec2 q, float r, vec4 h, vec4 g) {
 }
 
 // A corymb at `node`: 2-5 flowers on short pedicels, mostly pointing away from the branch.
-void corymb(vec2 c, vec2 node, vec2 out_, float size, int id, inout vec4 back, inout vec4 front, inout float shade) {
+void corymb(vec2 c, vec2 node, vec2 out_, float size, float lush, int id, inout vec4 back, inout vec4 front, inout float shade) {
   if (length(c - node) > size * 2.4 + 8.0) return;
   vec4 hn = hash(id, 101);
-  int n = 2 + int(hn.r * 3.999);
+  int n = 2 + int(clamp(hn.r * (0.55 + 0.6 * lush) + 0.45 * lush, 0.0, 0.999) * 4.0);   // 2-5, fuller toward the corner
   float base = atan(out_.y, out_.x);
   for (int i = 0; i < 5; i++) {
     if (i >= n) break;
@@ -108,10 +120,12 @@ void corymb(vec2 c, vec2 node, vec2 out_, float size, int id, inout vec4 back, i
     vec2 ctr = node + vec2(cos(dir), sin(dir)) * (len + r * 0.55);
     // keep every flower inside the padding frame: the top band, or the right band above the toolbar
     bool rightBand = ctr.x + r < BAND_X - 0.5 && ctr.y < D;
-    if (!rightBand) ctr.y = min(ctr.y, BAND_Y - 0.5 - r - 3.0 * g.b);   // varied, not a ruled line
+    bool corner = p_lush > 0.5 && length(ctr / vec2(CX, CY)) < 0.78;
+    if (corner) ctr.y = min(ctr.y, CY * 0.82 - r);
+    else if (!rightBand) ctr.y = min(ctr.y, BAND_Y - 0.5 - r - 3.0 * g.b);   // varied, not a ruled line
     vec2 q = c - ctr;
     // soft contact shadow cast down-left onto the glass and the flowers behind
-    shade = max(shade, 0.13 * (1.0 - smoothstep(r * 0.4, r * 1.6, length(q - vec2(1.2, 1.8)))));
+    shade = max(shade, 0.24 * (1.0 - smoothstep(r * 0.3, r * 1.75, length(q - vec2(1.3, 2.0)))));
     // pedicel
     float hh;
     float sd = segment(c, node, ctr, hh);
@@ -123,7 +137,7 @@ void corymb(vec2 c, vec2 node, vec2 out_, float size, int id, inout vec4 back, i
   }
 }
 
-vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float density, int row, bool pollen) {
+vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float density, int row, bool pollen, float frame) {
   float vy = float(fall) * cell * 8.0 / T;
   float vx = float(fall / 2 + 1) * cell * 16.0 / T;
   vec2 p = px + vec2(vx * t, vy * t);
@@ -132,13 +146,15 @@ vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float den
   int hx = int(mod(id.x, 16.0)) + 16 * int(mod(id.y, 8.0));
   vec4 h = hash(hx, row);
   float near = mix(0.35, 1.0, 1.0 - smoothstep(E * 0.6, E * 2.6, c.x));
-  if (h.a > density * near) return vec4(0.0);
+  // over the text box: a third as many, half as opaque, so no glyph loses its contrast
+  if (h.a > density * near * mix(0.33, 1.0, frame)) return vec4(0.0);
+  float keep = mix(0.5, 1.0, frame);
   vec4 g = hash(hx + 128, row);
   float phase = h.b * TAU;
   vec2 ctr = cell * (0.3 + 0.4 * h.rg) + vec2(sin(t * TAU * 36.0 / T + phase), cos(t * TAU * 22.0 / T + phase)) * cell * 0.1;
   vec2 q = f - ctr;
   if (pollen) {
-    float a = (1.0 - smoothstep(size * 0.4, size + AA, length(q))) * 0.75;
+    float a = (1.0 - smoothstep(size * 0.4, size + AA, length(q))) * 0.75 * keep;
     return vec4(vec3(0.98, 0.90, 0.62) * a, a);
   }
   float spin = phase + t * TAU * (g.r < 0.5 ? -9.0 : 9.0) / T;
@@ -148,7 +164,7 @@ vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float den
   float s = size * (0.7 + 0.6 * g.b);
   float notch = length(q - vec2(0.0, s * 1.02)) - s * 0.28;
   float d = max(length(vec2(q.x / 0.68, q.y)) - s, -notch) * tumble;
-  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * 0.9;
+  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * 0.9 * keep;
   vec3 col = mix(vec3(0.96, 0.80, 0.86), vec3(1.0, 0.97, 0.97), tumble);
   return vec4(col * a, a);
 }
@@ -162,10 +178,12 @@ void main() {
   E = clamp(res.x * 0.42, 120.0, 300.0);
   // the right band runs down to just above the toolbar row (47-53px); none on the one-row pill
   D = max(0.0, res.y - 56.0);
+  CX = clamp(res.x * 0.12, 52.0, 96.0);
+  CY = min(34.0, max(res.y - 30.0, 18.0));
 
   vec4 back = vec4(0.0), front = vec4(0.0), wood = vec4(0.0);
   float shade = 0.0;
-  bool inArt = (c.x < E + 14.0 && c.y < BAND_Y + 4.0) || (c.x < BAND_X + 4.0 && c.y < D + 8.0);
+  bool inArt = (c.x < E + 14.0 && c.y < BAND_Y + 4.0) || (c.x < BAND_X + 4.0 && c.y < D + 8.0) || (c.x < CX + 8.0 && c.y < CY + 8.0);
   if (inArt) {
     // the branch hugs the top edge (half outside the card) and turns down the right edge
     float yb = branchY(c.x);
@@ -176,29 +194,43 @@ void main() {
       float tr = mix(3.0, 0.8, smoothstep(0.0, D, c.y)) * step(c.y, D);
       wood = over(wood, bark(abs(c.x - xb), (c.x - xb) / max(tr, 0.5), tr, c.y + 40.0));
     }
-    // corymbs set densely along the branch: denser and larger toward the corner
-    float ci = floor(c.x / 5.0);
-    for (int k = -3; k <= 3; k++) {
-      float i = ci + float(k);
-      float nx = (i + 0.5) * 5.0;
-      if (i < 0.0 || nx > E) continue;
-      vec4 h = hash(int(i), 163);
-      float dense = mix(1.0, 0.5, smoothstep(E * 0.45, E, nx));
-      if (h.a > dense) continue;
-      vec2 node = vec2(nx + (h.r - 0.5) * 3.0, branchY(nx) + (h.g - 0.5) * 2.0);
-      vec2 dir = normalize(vec2((h.b - 0.5) * 2.0, h.g < 0.3 ? -0.6 : 0.8));
-      corymb(c, node, dir, mix(5.4, 3.8, smoothstep(0.0, E, nx)), 100 + int(i), back, front, shade);
+    // corymbs along the branch: sparse and small at its far (left) end, a thick, lush mass at the
+    // corner. Two staggered rows near the corner so the blossoms all but hide the wood.
+    for (int row = 0; row < 2; row++) {
+      float off = row == 0 ? 0.0 : 2.0;
+      float ci = floor((c.x - off) / 4.0);
+      for (int k = -6; k <= 6; k++) {
+        float i = ci + float(k);
+        float nx = (i + 0.5) * 4.0 + off;
+        if (i < 0.0 || nx > E) continue;
+        float far = smoothstep(0.0, E, nx);
+        if (row == 1 && far > 0.45) continue;
+        vec4 h = hash(int(i) + 97 * row, 163 + row);
+        if (h.a > mix(1.0, 0.16, pow(far, 0.7))) continue;
+        vec2 node = vec2(nx + (h.r - 0.5) * 3.0, branchY(nx) + (h.g - 0.5) * 2.0 - float(row) * 2.0);
+        vec2 dir = normalize(vec2((h.b - 0.5) * 2.0, h.g < 0.3 ? -0.6 : 0.8));
+        corymb(c, node, dir, mix(6.8, 3.4, far), 1.0 - far, 100 + int(i) + 300 * row, back, front, shade);
+      }
+    }
+    // the lush corner: a ball of corymbs filling the corner zone
+    if (p_lush > 0.5 && c.x < CX + 14.0 && c.y < CY + 14.0) {
+      for (int k = 0; k < 22; k++) {
+        vec4 h = hash(k, 181);
+        vec2 node = vec2(CX * 0.9 * h.r * h.r, CY * 0.75 * h.g * (1.0 - 0.6 * h.r));
+        corymb(c, node, normalize(vec2(h.b - 0.4, 0.7)), mix(7.4, 5.6, h.a), 1.0, 400 + k, back, front, shade);
+      }
     }
     if (D > 0.0) {
-      float cj = floor(c.y / 7.0);
-      for (int k = -3; k <= 3; k++) {
+      float cj = floor(c.y / 3.5);
+      for (int k = -6; k <= 6; k++) {
         float j = cj + float(k);
-        float ny = (j + 0.5) * 7.0;
+        float ny = (j + 0.5) * 3.5;
         if (j < 0.0 || ny > D) continue;
+        float far = clamp(ny / max(D, 1.0), 0.0, 1.0);
         vec4 h = hash(int(j), 173);
-        if (h.a > 0.9) continue;
+        if (h.a > mix(1.0, 0.35, far)) continue;
         vec2 node = vec2(branchX(ny), ny);
-        corymb(c, node, normalize(vec2(0.6 + h.b, (h.g - 0.5) * 1.5)), mix(4.6, 3.8, ny / max(D, 1.0)), 200 + int(j), back, front, shade);
+        corymb(c, node, normalize(vec2(0.6 + h.b, (h.g - 0.5) * 1.5)), mix(6.2, 3.8, far), 1.0 - far, 200 + int(j), back, front, shade);
       }
     }
   }
@@ -208,13 +240,12 @@ void main() {
   col = over(col, front);
   // safety: nothing of the branch enters the text box
   float frame = max(1.0 - smoothstep(BAND_Y - 1.0, BAND_Y, c.y), (1.0 - smoothstep(BAND_X - 1.0, BAND_X, c.x)) * step(c.y, D + 6.0));
+  frame = max(frame, cornerZone(c));
   col *= frame;
 
   // fine petals and pollen drifting down-left across the card
-  // inside the text box they fade to a faint shimmer so no glyph ever loses its contrast
-  float faint = mix(0.28, 1.0, frame);
-  col = over(col, drift(px, c, t, 26.0, 1.3, 5, 0.45, 11, false) * faint);
-  col = over(col, drift(px + 11.0, c, t, 38.0, 2.0, 7, 0.32, 23, false) * faint);
-  col = over(col, drift(px + 5.0, c, t, 17.0, 0.7, 3, 0.3, 37, true) * faint);
+  col = over(col, drift(px, c, t, 26.0, 1.3, 5, 0.45, 11, false, frame));
+  col = over(col, drift(px + 11.0, c, t, 38.0, 2.0, 7, 0.32, 23, false, frame));
+  col = over(col, drift(px + 5.0, c, t, 17.0, 0.7, 3, 0.3, 37, true, frame));
   fragColor = col;
 }
