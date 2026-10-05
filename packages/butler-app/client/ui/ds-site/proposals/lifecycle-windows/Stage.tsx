@@ -10,7 +10,7 @@ import {
 
 /** A simulated run: each stage line stays long enough to read, like a typical warm launch / quit. */
 const PLAY: Record<LifecycleKind, Array<[string, number]>> = {
-  startup: [["prepare", 700], ["engine", 1500], ["screen", 700], ["data", 1100]],
+  startup: [["prepare", 700], ["service", 1500], ["screen", 700], ["data", 1100]],
   quit: [["saving", 900], ["search", 600], ["storage", 800], ["connections", 600], ["services", 600], ["finishing", 700]],
 };
 
@@ -40,6 +40,7 @@ function useKeyboard(kind: LifecycleKind, setState: (update: (state: LifecycleSt
         if (key === "l") return { ...state, locale: state.locale === "ko-KR" ? "en-US" : "ko-KR" };
         if (key === "m") return { ...state, motion: state.motion === "auto" ? "reduced" : "auto" };
         if (key === "b") return { ...state, backdrop: state.backdrop === "still" ? "poster" : "still" };
+        if (key === "f") return { ...state, forceQuit: !state.forceQuit };
         return state;
       });
       if (key === "p") play();
@@ -110,7 +111,7 @@ export function LifecycleStage({ kind }: { kind: LifecycleKind }) {
   return (
     <LifecycleWindow
       variant={state.variant}
-      content={lifecycleContent(kind, shown, WINDOW_COPY[state.locale])}
+      content={lifecycleContent(kind, shown, WINDOW_COPY[state.locale], state.forceQuit)}
       reducedMotion={state.motion === "reduced"}
       theme={state.theme}
       cardRef={setCard}

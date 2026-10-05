@@ -4,7 +4,7 @@ export type ProposalLocale = "ko-KR" | "en-US";
 export type LifecycleKind = "startup" | "quit";
 export type LifecycleVariant = "card" | "strip";
 
-export const STARTUP_STATES = ["prepare", "engine", "screen", "upgrade", "data", "slow", "error"] as const;
+export const STARTUP_STATES = ["prepare", "service", "screen", "upgrade", "data", "slow", "error"] as const;
 export const QUIT_STATES = ["saving", "search", "storage", "connections", "services", "finishing", "timeout", "failed"] as const;
 export type StartupState = (typeof STARTUP_STATES)[number];
 export type QuitState = (typeof QUIT_STATES)[number];
@@ -28,17 +28,19 @@ export interface LifecycleState {
   backdrop: Backdrop;
   locale: ProposalLocale;
   motion: "auto" | "reduced";
+  /** Force quit is hidden until the supervisor has a forceStop path (flag `lifecycle.forceQuit`). */
+  forceQuit: boolean;
 }
 
 export const DEFAULT_STATE: LifecycleState = {
-  variant: "card", startup: "engine", quit: "saving", theme: "light",
-  wallpaper: "butler.photo-clouds", backdrop: "still", locale: "ko-KR", motion: "auto",
+  variant: "card", startup: "service", quit: "saving", theme: "light",
+  wallpaper: "butler.photo-clouds", backdrop: "still", locale: "ko-KR", motion: "auto", forceQuit: false,
 };
 
 /** Real window content sizes in CSS px (= macOS points, Windows DIPs at 100%). */
 export const WINDOW_SIZE: Record<LifecycleVariant, { width: number; height: number }> = {
-  card: { width: 360, height: 240 },
-  strip: { width: 400, height: 176 },
+  card: { width: 360, height: 264 },
+  strip: { width: 400, height: 200 },
 };
 
 export const STAGE_MESSAGE = "butler-lifecycle-proposal";
@@ -68,9 +70,11 @@ export function stateFromQuery(params: URLSearchParams): LifecycleState {
     backdrop: pick(params.get("backdrop"), ["still", "poster"], DEFAULT_STATE.backdrop),
     locale: pick(params.get("locale"), ["ko-KR", "en-US"], DEFAULT_STATE.locale),
     motion: pick(params.get("motion"), ["auto", "reduced"], DEFAULT_STATE.motion),
+    forceQuit: params.get("force") === "1",
   };
 }
 
 export function stateToQuery(state: LifecycleState): Record<string, string> {
-  return { ...state };
+  const { forceQuit, ...rest } = state;
+  return { ...rest, force: forceQuit ? "1" : "0" };
 }

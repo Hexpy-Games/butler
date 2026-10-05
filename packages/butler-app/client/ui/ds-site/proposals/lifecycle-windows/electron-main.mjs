@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const option = (name, fallback) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const dist = option("dist");
 const which = option("window", "both");
-const SIZE = { card: [360, 240], strip: [400, 176] };
+const SIZE = { card: [360, 264], strip: [400, 200] };
 // DS --color-surface-base per theme: the native colour before the first paint (no white flash).
 const SURFACE = { light: "#f8f9fa", dark: "#1f2023" };
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".gif": "image/gif",
@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
   const theme = option("theme", nativeTheme.shouldUseDarkColors ? "dark" : "light");
   const variant = option("variant", "card");
   const query = { proposal: "lifecycle-windows", theme, variant };
-  for (const key of ["startup", "quit", "wallpaper", "locale", "motion", "backdrop"]) {
+  for (const key of ["startup", "quit", "wallpaper", "locale", "motion", "backdrop", "force"]) {
     const value = option(key);
     if (value) query[key] = value;
   }
@@ -69,7 +69,7 @@ app.whenReady().then(async () => {
     win.once("ready-to-show", () => setTimeout(() => win.show(), 120));
     void win.loadURL(`http://127.0.0.1:${port}/?${new URLSearchParams({ ...query, stage: kind })}`);
   });
-  console.log(`Lifecycle windows open (${kinds.join(", ")}, ${variant}, ${theme}). Keys: arrows state, T theme, W wallpaper, V variant, L language, M motion, B backdrop, P play, Q quit.`);
+  console.log(`Lifecycle windows open (${kinds.join(", ")}, ${variant}, ${theme}). Keys: arrows state, F force-quit flag, T theme, W wallpaper, V variant, L language, M motion, B backdrop, P play, Q quit.`);
 });
 
 ipcMain.on("lifecycle-preview:resize", (event, width, height) => {
