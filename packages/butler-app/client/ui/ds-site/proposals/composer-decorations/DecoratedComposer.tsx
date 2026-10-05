@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ComposerCard, ComposerCardCompactPreview, ComposerCardEditable, ComposerCardEditor, ComposerCardExpandedBody,
@@ -6,11 +6,10 @@ import {
   ComposerSendButton, ConversationScroll, ConversationShell, IconButton, Plus, Popover, PopoverTrigger, ShieldQuestion, Wallpaper,
   type WallpaperSource,
 } from "@/butler-ds";
+import { CherryCanvas } from "./CherryCanvas";
 import type { ProposalCopy } from "./copy";
-import { DECORATION_REGISTRY, DECORATION_SOURCES, type DecorationTheme } from "./decorationScenes";
+import { CHERRY_BLOSSOM_MODULE, SHORELINE_SOURCE, type DecorationTheme } from "./decorationScenes";
 import { CharacterHead, CharacterPaws, characterFor } from "./EdgeCharacter";
-import { SCRIM_POOL, useLocalScrim } from "./useLocalScrim";
-import { useTypingPulse, type PulseMeter } from "./useTypingPulse";
 import styles from "./ComposerDecorations.module.css";
 
 // Conversation.tsx passes these to ConversationShell on the new chat screen (empty state).
@@ -23,24 +22,22 @@ const COMPOSER_RESERVE = 120;
  * The card background: first child of the unchanged ComposerCard. Absolutely fills the form
  * (TintedGlass's backdrop-filter makes the form its containing block and stacking context),
  * paints above the glass fill and below every editor/toolbar node (z-index -1), clipped by the
- * card radius. Scene = DS Wallpaper (container scope, fixed light tone: the same art in both
- * themes). Scrim = local halos of the TintedGlass tint behind the text lines and controls only.
+ * card radius. Nothing else sits behind the text or the controls: readability comes from how
+ * the art is composed. It never reacts to typing.
+ * - Shoreline: DS Wallpaper (container scope; the module's own day/night grade follows the theme)
+ *   on a canvas centred on the card, so
+ *   the waterline stays at the card's vertical middle at any height.
+ * - Cherry blossom: a transparent canvas; the card's own glass shows through.
  */
-function DecorationBackground({ theme, artRef, meter }: {
-  theme: Exclude<DecorationTheme, "none">;
-  artRef: RefObject<HTMLDivElement | null>;
-  meter: RefObject<PulseMeter>;
-}) {
-  const halos = useRef<HTMLDivElement>(null);
-  useLocalScrim(halos, true, meter);
+function DecorationBackground({ theme, tone }: { theme: Exclude<DecorationTheme, "none">; tone: "light" | "dark" }) {
   return (
     <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}>
-      <div className={styles.art} data-scene={theme} ref={artRef}>
-        <Wallpaper source={DECORATION_SOURCES[theme]} registry={DECORATION_REGISTRY} scope="container" tone="light" pauseOnBattery
-          dataTestClass="composer-decoration-scene" />
-      </div>
-      <div className={styles.halos} ref={halos}>
-        {Array.from({ length: SCRIM_POOL }, (_, index) => <div className={styles.halo} key={index} />)}
+      <div className={styles.art} data-scene={theme}>
+        {theme === "shoreline" ? (
+          <Wallpaper source={SHORELINE_SOURCE} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
+        ) : (
+          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} />
+        )}
       </div>
     </div>
   );
@@ -51,13 +48,12 @@ function DecorationBackground({ theme, artRef, meter }: {
  * the page wallpaper, and Composer.tsx's ComposerCard (floating, large) with ComposerInputSurface
  * and ComposerToolbar's DS parts and props. Only the decoration layer and the character are new.
  */
-export function NewChatScreen({ copy, theme, character, wallpaper, tone, meter, engagedAtStart }: {
+export function NewChatScreen({ copy, theme, character, wallpaper, tone, engagedAtStart }: {
   copy: ProposalCopy;
   theme: DecorationTheme;
   character: boolean;
   wallpaper: WallpaperSource;
   tone: "light" | "dark";
-  meter: RefObject<PulseMeter>;
   engagedAtStart?: boolean;
 }) {
   const [draft, setDraft] = useState("");
@@ -65,9 +61,6 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, meter, 
   const [wrap, setWrap] = useState<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const editable = useRef<HTMLDivElement>(null);
-  const art = useRef<HTMLDivElement>(null);
-  const head = useRef<HTMLDivElement>(null);
-  useTypingPulse(wrapRef, { art, head }, theme !== "none" || character, meter);
   // useComposerPresentation: a pointer down outside the composer collapses it.
   useEffect(() => {
     const collapse = (event: PointerEvent) => {
@@ -88,7 +81,7 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, meter, 
       <ConversationScroll masked={false} scrollable={false}>{null}</ConversationScroll>
       <ComposerCard large floating expanded={engaged} containerRef={(node) => { wrapRef.current = node; setWrap(node); }}
         onFocusCapture={() => setEngaged(true)} onSubmit={(event) => event.preventDefault()}>
-        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} artRef={art} meter={meter} />}
+        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} />}
         <ComposerCardExpandedBody>
           <ComposerCardEditor>
             <ComposerCardEditable>
@@ -121,7 +114,7 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, meter, 
         </ComposerCardToolbar>
         <input hidden multiple type="file" tabIndex={-1} aria-hidden="true" />
       </ComposerCard>
-      {character && wrap ? createPortal(<CharacterHead kind={kind} headRef={head} />, wrap) : null}
+      {character && wrap ? createPortal(<CharacterHead kind={kind} />, wrap) : null}
       {character && wrap ? createPortal(<CharacterPaws kind={kind} />, wrap) : null}
     </ConversationShell>
   );

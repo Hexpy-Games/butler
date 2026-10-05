@@ -83,11 +83,6 @@
 /* ---- Card background (what a ComposerCard `decoration` slot would render) ---- */
 
 .background {
-  --decor-halo-alpha: 72%;
-  --decor-halo-blur: 8px;
-  --decor-halo-feather: 22px;
-  --decor-halo-feather-y: 10px;
-
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -99,67 +94,21 @@
 .art {
   position: absolute;
   inset: 0;
-  transform-origin: 100% 0;
 }
 
-/* Shoreline keeps one scale while the box grows: a fixed-height scene anchored at the bottom. */
+/* Shoreline: a canvas centred on the card and at least 360px tall, so the waterline (at the
+   canvas's vertical middle) tracks the card's middle at any height and the scale stays put. */
 .art[data-scene="shoreline"] {
-  top: auto;
-  height: max(100%, 140px);
-  transform-origin: 50% 100%;
+  top: 50%;
+  bottom: auto;
+  height: max(100%, 360px);
+  transform: translateY(-50%);
 }
 
-/* Local scrim (useLocalScrim): frosted halos behind the text block and the two control
-   groups only. TintedGlass's recipe (tint + blur) with feathered edges, nothing else. */
-.halos {
-  position: absolute;
-  inset: 0;
-  contain: strict;
-}
-
-.halo {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: none;
-  border-radius: var(--radius-pill);
-  background: color-mix(
-    in srgb,
-    var(--tinted-glass-tint) var(--decor-halo-alpha),
-    transparent
-  );
-  -webkit-backdrop-filter: blur(var(--decor-halo-blur));
-  backdrop-filter: blur(var(--decor-halo-blur));
-  mask-image:
-    linear-gradient(
-      90deg,
-      transparent,
-      var(--neutral-white) var(--decor-halo-feather),
-      var(--neutral-white) calc(100% - var(--decor-halo-feather)),
-      transparent
-    ),
-    linear-gradient(
-      180deg,
-      transparent,
-      var(--neutral-white) var(--decor-halo-feather-y),
-      var(--neutral-white) calc(100% - var(--decor-halo-feather-y)),
-      transparent
-    );
-  mask-composite: intersect;
-}
-
-/* Per scene and theme: the lowest alpha that keeps the measured floors (primary 4.5:1,
-   secondary/placeholder/icons 3:1) over that scene's busiest pixels. */
-.background[data-composer-decoration="shoreline"] {
-  --decor-halo-alpha: 80%;
-}
-
-:global(.theme-dark) .background {
-  --decor-halo-alpha: 84%;
-}
-
-:global(.theme-dark) .background[data-composer-decoration="shoreline"] {
-  --decor-halo-alpha: 76%;
+.cherryCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* ---- Edge character: head behind the card, paws in front on the top edge ---- */
