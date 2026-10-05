@@ -294,10 +294,6 @@ fn active_action_title(args: &serde_json::Map<String, Value>) -> Option<String> 
         })
 }
 
-#[expect(
-    clippy::match_same_arms,
-    reason = "explicit arms document the known values beside the default"
-)]
 fn tool_title(name: &str, args: &serde_json::Map<String, Value>) -> String {
     let label = match name {
         "start_work" => "Check request",
@@ -311,9 +307,18 @@ fn tool_title(name: &str, args: &serde_json::Map<String, Value>) -> String {
         },
         "record_work_disposition" => "Record completion",
         "read_file" => "Read file",
-        "query_memory" => "Use tool",
-        "read_conversation_session" => "Use tool",
-        _ => "Use tool",
+        "forget_explicit_memory" => "Remove an instruction",
+        "get_memory_health" => "Check memory status",
+        "ingest_task_memory" => "Remember this conversation",
+        "query_memory" => "Search saved memories",
+        "recall_memory" => "Find a saved memory",
+        "read_conversation_context" => "Review conversation context",
+        "list_conversation_sessions" => "Find a conversation",
+        "read_conversation_session" => "Review a conversation",
+        "summarize_user_profile" => "Get to know you",
+        "update_explicit_memory" => "Save an instruction",
+        "update_onboarding_profile" => "Update your profile",
+        _ => "Working",
     };
     if let Some(target) = safe_file_target(name, args) {
         format!("{label}: {target}")

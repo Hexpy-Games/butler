@@ -443,7 +443,7 @@ export interface AppCopy {
     branchSource: string;
     progressDetails: string;
     toolHistory: string;
-    toolUsage: string;
+    workerActivity: string;
     noHistory: string;
     tool: string;
     answerFailed: string;
