@@ -65,12 +65,12 @@ export function LifecycleWindowsProposalPage() {
                       </Box>
                       <Stack gap="md">
                         <Typo.H2>{copy.notesTitle}</Typo.H2>
-                        {(["card", "strip"] as const).map((variant) => (
+                        {(["box", "panel"] as const).map((variant) => (
                           <Box key={variant} surface="raised" border="hairline" radius="panel" padding="lg">
                             <Stack gap="sm">
                               <Stack align="row" gap="sm" cross="center">
-                                <Typo.Label>{copy.variants[variant]}</Typo.Label>
-                                {variant === DEFAULT_STATE.variant ? <Tag>{copy.recommended}</Tag> : null}
+                                <Typo.Label>{copy.surfaces[variant]}</Typo.Label>
+                                {variant === DEFAULT_STATE.surface ? <Tag>{copy.recommended}</Tag> : null}
                               </Stack>
                               <Typo.Body>{copy.notes[variant]}</Typo.Body>
                             </Stack>

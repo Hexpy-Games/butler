@@ -23,7 +23,7 @@ function useAvailableWidth() {
 export function WindowFrame({ kind, state, title, playSignal }: { kind: LifecycleKind; state: LifecycleState; title: string; playSignal: number }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [measureRef, available] = useAvailableWidth();
-  const size = WINDOW_SIZE[state.variant];
+  const size = WINDOW_SIZE;
   // Loaded once; later changes are posted in so the mark and the wallpaper keep their state.
   const src = useMemo(() => `?${new URLSearchParams({ proposal: "lifecycle-windows", stage: kind, ...stateToQuery(state) })}`, [kind]);
   const post = (data: object) => frameRef.current?.contentWindow?.postMessage({ type: STAGE_MESSAGE, ...data }, location.origin);

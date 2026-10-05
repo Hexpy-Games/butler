@@ -4,7 +4,7 @@ import { LifecycleBackdrop } from "./Backdrop";
 import { WINDOW_COPY } from "./copy";
 import { LifecycleWindow, lifecycleContent } from "./LifecycleWindow";
 import {
-  QUIT_STATES, STAGE_MESSAGE, STARTUP_STATES, WALLPAPER_IDS, WINDOW_SIZE, stateFromQuery,
+  QUIT_STATES, STAGE_MESSAGE, STARTUP_STATES, WALLPAPER_IDS, stateFromQuery,
   type LifecycleKind, type LifecycleState, type QuitState, type StartupState,
 } from "./state";
 
@@ -16,8 +16,8 @@ const PLAY: Record<LifecycleKind, Array<[string, number]>> = {
 
 declare global {
   interface Window {
-    /** Only in `electron-preview.mjs`: resizes the real BrowserWindow when the variant changes. */
-    lifecyclePreview?: { resize: (width: number, height: number) => void; action: (name: string) => void };
+    /** Only in `electron-preview.mjs`. */
+    lifecyclePreview?: { action: (name: string) => void };
   }
 }
 
@@ -36,7 +36,7 @@ function useKeyboard(kind: LifecycleKind, setState: (update: (state: LifecycleSt
         if (step) return { ...state, quit: cycle(QUIT_STATES, state.quit, step) };
         if (key === "t") return { ...state, theme: state.theme === "light" ? "dark" : "light" };
         if (key === "w") return { ...state, wallpaper: cycle(WALLPAPER_IDS, state.wallpaper, 1) };
-        if (key === "v") return { ...state, variant: state.variant === "card" ? "strip" : "card" };
+        if (key === "s") return { ...state, surface: state.surface === "box" ? "panel" : "box" };
         if (key === "l") return { ...state, locale: state.locale === "ko-KR" ? "en-US" : "ko-KR" };
         if (key === "m") return { ...state, motion: state.motion === "auto" ? "reduced" : "auto" };
         if (key === "b") return { ...state, backdrop: state.backdrop === "still" ? "poster" : "still" };
@@ -91,11 +91,6 @@ export function LifecycleStage({ kind }: { kind: LifecycleKind }) {
   }, [state.theme, state.locale, kind]);
 
   useEffect(() => {
-    const size = WINDOW_SIZE[state.variant];
-    window.lifecyclePreview?.resize(size.width, size.height);
-  }, [state.variant]);
-
-  useEffect(() => {
     if (!card) return undefined;
     const measure = () => {
       const rect = card.getBoundingClientRect();
@@ -110,7 +105,7 @@ export function LifecycleStage({ kind }: { kind: LifecycleKind }) {
   const shown = (playing ?? (kind === "startup" ? state.startup : state.quit)) as StartupState | QuitState;
   return (
     <LifecycleWindow
-      variant={state.variant}
+      surface={state.surface}
       content={lifecycleContent(kind, shown, WINDOW_COPY[state.locale], state.forceQuit)}
       reducedMotion={state.motion === "reduced"}
       theme={state.theme}

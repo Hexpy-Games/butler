@@ -51,9 +51,9 @@ export function Controls({ state, width, update, setWidth }: {
   return (
     <Box surface="raised" border="hairline" radius="panel" padding="lg">
       <Stack align="row" wrap gap="lg" rowGap="md">
-        <Control label={copy.variant}>
-          <SegmentedControl ariaLabel={copy.variant} size="sm" value={state.variant} options={options(copy.variants)}
-            onValueChange={(value) => update({ variant: value as LifecycleState["variant"] })} />
+        <Control label={copy.surface}>
+          <SegmentedControl ariaLabel={copy.surface} size="sm" value={state.surface} options={options(copy.surfaces)}
+            onValueChange={(value) => update({ surface: value as LifecycleState["surface"] })} />
         </Control>
         <Control label={copy.theme}>
           <SegmentedControl ariaLabel={copy.theme} size="sm" value={state.theme} options={options(copy.themes)}

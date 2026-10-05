@@ -2,7 +2,8 @@ import type { WallpaperSource } from "@/butler-ds";
 
 export type ProposalLocale = "ko-KR" | "en-US";
 export type LifecycleKind = "startup" | "quit";
-export type LifecycleVariant = "card" | "strip";
+/** The card surface: `box` = Box surface="raised" (recommended); `panel` = SurfacePanel elevation="medium". */
+export type LifecycleSurface = "box" | "panel";
 
 export const STARTUP_STATES = ["prepare", "service", "screen", "upgrade", "data", "slow", "error"] as const;
 export const QUIT_STATES = ["saving", "search", "storage", "connections", "services", "finishing", "timeout", "failed"] as const;
@@ -20,7 +21,7 @@ export type Backdrop = "still" | "poster";
 export type PageWidth = "desktop" | "768" | "375";
 
 export interface LifecycleState {
-  variant: LifecycleVariant;
+  surface: LifecycleSurface;
   startup: StartupState;
   quit: QuitState;
   theme: "light" | "dark";
@@ -33,15 +34,12 @@ export interface LifecycleState {
 }
 
 export const DEFAULT_STATE: LifecycleState = {
-  variant: "card", startup: "service", quit: "saving", theme: "light",
+  surface: "box", startup: "service", quit: "saving", theme: "light",
   wallpaper: "butler.photo-clouds", backdrop: "still", locale: "ko-KR", motion: "auto", forceQuit: false,
 };
 
 /** Real window content sizes in CSS px (= macOS points, Windows DIPs at 100%). */
-export const WINDOW_SIZE: Record<LifecycleVariant, { width: number; height: number }> = {
-  card: { width: 360, height: 264 },
-  strip: { width: 400, height: 200 },
-};
+export const WINDOW_SIZE = { width: 360, height: 264 } as const;
 
 export const STAGE_MESSAGE = "butler-lifecycle-proposal";
 
@@ -62,7 +60,7 @@ const pick = <T extends string>(value: string | null, allowed: readonly T[], fal
 
 export function stateFromQuery(params: URLSearchParams): LifecycleState {
   return {
-    variant: pick(params.get("variant"), ["card", "strip"], DEFAULT_STATE.variant),
+    surface: pick(params.get("surface"), ["box", "panel"], DEFAULT_STATE.surface),
     startup: pick(params.get("startup"), STARTUP_STATES, DEFAULT_STATE.startup),
     quit: pick(params.get("quit"), QUIT_STATES, DEFAULT_STATE.quit),
     theme: pick(params.get("theme"), ["light", "dark"], DEFAULT_STATE.theme),

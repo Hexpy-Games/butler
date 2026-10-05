@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const option = (name, fallback) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const dist = option("dist");
 const which = option("window", "both");
-const SIZE = { card: [360, 264], strip: [400, 200] };
+const [WIDTH, HEIGHT] = [360, 264];
 // DS --color-surface-base per theme: the native colour before the first paint (no white flash).
 const SURFACE = { light: "#f8f9fa", dark: "#1f2023" };
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".gif": "image/gif",
@@ -32,15 +32,14 @@ function serve() {
 app.whenReady().then(async () => {
   const port = await serve();
   const theme = option("theme", nativeTheme.shouldUseDarkColors ? "dark" : "light");
-  const variant = option("variant", "card");
-  const query = { proposal: "lifecycle-windows", theme, variant };
-  for (const key of ["startup", "quit", "wallpaper", "locale", "motion", "backdrop", "force"]) {
+  const query = { proposal: "lifecycle-windows", theme };
+  for (const key of ["startup", "quit", "wallpaper", "locale", "motion", "backdrop", "force", "surface"]) {
     const value = option(key);
     if (value) query[key] = value;
   }
   const kinds = which === "both" ? ["startup", "quit"] : [which];
   const area = screen.getPrimaryDisplay().workArea;
-  const [width, height] = SIZE[variant] ?? SIZE.card;
+  const [width, height] = [WIDTH, HEIGHT];
   kinds.forEach((kind, index) => {
     const offset = kinds.length === 1 ? 0 : (index === 0 ? -1 : 1) * (width / 2 + 24);
     const win = new BrowserWindow({
@@ -69,17 +68,7 @@ app.whenReady().then(async () => {
     win.once("ready-to-show", () => setTimeout(() => win.show(), 120));
     void win.loadURL(`http://127.0.0.1:${port}/?${new URLSearchParams({ ...query, stage: kind })}`);
   });
-  console.log(`Lifecycle windows open (${kinds.join(", ")}, ${variant}, ${theme}). Keys: arrows state, F force-quit flag, T theme, W wallpaper, V variant, L language, M motion, B backdrop, P play, Q quit.`);
-});
-
-ipcMain.on("lifecycle-preview:resize", (event, width, height) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || !Number.isFinite(width) || !Number.isFinite(height)) return;
-  const [oldWidth, oldHeight] = win.getContentSize();
-  if (oldWidth === width && oldHeight === height) return;
-  const [x, y] = win.getPosition();
-  win.setContentSize(width, height);
-  win.setPosition(Math.round(x + (oldWidth - width) / 2), Math.round(y + (oldHeight - height) / 2));
+  console.log(`Lifecycle windows open (${kinds.join(", ")}, ${theme}). Keys: arrows state, F force-quit flag, T theme, W wallpaper, S surface, L language, M motion, B backdrop, P play, Q quit.`);
 });
 
 ipcMain.on("lifecycle-preview:action", (_event, name) => {
