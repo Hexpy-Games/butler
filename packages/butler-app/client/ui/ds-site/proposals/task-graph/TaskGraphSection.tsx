@@ -5,14 +5,14 @@ import { Blocks, EmptyLine, InspectorInset, Section, Stack, Typo } from "@/butle
 import { ProjectDocumentDialog } from "@/components/management/ProjectDocumentDialog";
 import { TASK_GRAPH_COPY, type ProposalLocale, type Variant } from "./copy";
 import { sessionIdOf, type TaskGraph } from "./fixture";
-import { GraphCanvas } from "./GraphCanvas";
-import { GraphLanes } from "./GraphLanes";
-import { defaultSelection, indexGraph, layeredColumns } from "./layout";
+import { graphCounts, graphState, orderGraphs } from "./graphs";
+import { defaultSelection, indexGraph } from "./layout";
 import { taskDocument } from "./linked";
+import { CombinedGraphs, PickedGraph, StackedGraphs } from "./MultiGraph";
 import { elapsedSeconds, TaskCard } from "./TaskCard";
 import { TaskDetail } from "./TaskDetail";
 
-/** One clock per graph; ticks only while a task runs and the page is visible (no idle work). */
+/** One clock for the tab; ticks only while a task runs and the page is visible (no idle work). */
 function useNow(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -24,86 +24,74 @@ function useNow(active: boolean) {
   return now;
 }
 
-function usePhone() {
-  const query = "(width <= 640px)";
-  const [phone, setPhone] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const update = () => setPhone(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return phone;
-}
-
 export interface TaskGraphSectionProps {
-  graph: TaskGraph;
+  graphs: TaskGraph[];
   locale: ProposalLocale;
   variant: Variant;
 }
 
-/** The Tasks tab: header with counts, the graph (canvas or lanes), then the selected task. */
-export function TaskGraphSection({ graph, locale, variant }: TaskGraphSectionProps) {
+const LAYOUT = { stacked: StackedGraphs, picker: PickedGraph, combined: CombinedGraphs };
+
+/** The Tasks tab: header, every graph of the conversation (by variant), the selected task's detail. */
+export function TaskGraphSection({ graphs, locale, variant }: TaskGraphSectionProps) {
   const copy = TASK_GRAPH_COPY[locale];
-  const index = useMemo(() => indexGraph(graph), [graph]);
-  const columns = useMemo(() => layeredColumns(graph, index), [graph, index]);
-  const [selected, setSelected] = useState(() => defaultSelection(graph));
+  const ordered = useMemo(() => orderGraphs(graphs), [graphs]);
+  const indexes = useMemo(() => new Map(ordered.map((graph) => [graph.id, indexGraph(graph)])), [ordered]);
+  const owner = useMemo(() => new Map(ordered.flatMap((graph) => graph.nodes.map((node) => [node.id, graph.id] as const))), [ordered]);
+  const first = () => ordered.map((graph) => defaultSelection(graph)).find(Boolean) ?? null;
+  const [selected, setSelected] = useState<string | null>(first);
   const [loadedAt] = useState(() => Date.now());
-  const now = useNow(graph.nodes.some((node) => node.status === "running"));
-  const phone = usePhone();
+  const now = useNow(ordered.some((graph) => graph.nodes.some((node) => node.status === "running")));
   const openSession = useButlerStore((state) => state.openSessionObserver);
   const [taskDoc, setTaskDoc] = useState<ProjectDashboardDocument | null>(null);
-  useEffect(() => setSelected(defaultSelection(graph)), [graph]);
+  useEffect(() => setSelected(first()), [ordered]);
 
+  const selectedGraph = selected ? owner.get(selected) ?? null : null;
+  const graphOf = (id: string) => ordered.find((graph) => graph.id === owner.get(id))!;
+  const nodeOf = (id: string) => indexes.get(owner.get(id)!)!.byId.get(id)!;
   const openConversation = (id: string) => {
-    const session = sessionIdOf(index.byId.get(id)!);
+    const session = sessionIdOf(nodeOf(id));
     if (session) openSession(session);
   };
-  // Variant A: a card click selects and opens the worker's conversation; arrow keys only select.
-  const activate = (id: string) => {
-    setSelected(id);
-    if (variant === "open") openConversation(id);
-  };
-
-  const done = graph.nodes.filter((node) => node.status === "completed").length;
-  const failed = graph.nodes.filter((node) => node.status === "failed").length;
-  const cancelled = graph.nodes.filter((node) => node.status === "cancelled").length;
-  // Exact totals: cancelled tasks stay counted and reachable (work model §5).
-  const counts = [copy.doneCount(done, graph.nodes.length), failed ? copy.failedCount(failed) : null, cancelled ? copy.cancelledCount(cancelled) : null]
-    .filter(Boolean).join(" · ");
-  const selectedNode = selected ? index.byId.get(selected) : undefined;
+  // A card click selects and opens the worker's conversation; arrow keys only select.
+  const activate = (id: string) => { setSelected(id); openConversation(id); };
 
   const renderCard = (id: string) => {
-    const node = index.byId.get(id)!;
-    return (
-      <TaskCard node={node} copy={copy} locale={locale} selected={id === selected}
-        elapsed={elapsedSeconds(node, now, loadedAt)} onActivate={activate} />
-    );
+    const node = nodeOf(id);
+    return <TaskCard node={node} copy={copy} locale={locale} selected={id === selected} elapsed={elapsedSeconds(node, now, loadedAt)} onActivate={activate} />;
   };
-  const view = { graph, index, columns, label: copy.graphLabel, selected, renderCard, onSelect: setSelected };
+  const selectedNode = selected ? nodeOf(selected) : undefined;
+  const detail = selectedNode ? (
+    <TaskDetail node={selectedNode} index={indexes.get(selectedGraph!)!} copy={copy} locale={locale}
+      elapsed={elapsedSeconds(selectedNode, now, loadedAt)} onSelect={setSelected}
+      onOpenConversation={sessionIdOf(selectedNode) ? () => openConversation(selectedNode.id) : undefined}
+      onOpenDocument={() => setTaskDoc(taskDocument(selectedNode, graphOf(selectedNode.id), copy, locale))} />
+  ) : null;
 
+  const running = ordered.filter((graph) => graphState(graph) === "running").length;
+  const single = ordered.length === 1 ? ordered[0] : undefined;
+  const Layout = LAYOUT[variant];
   return (
-    <Stack gap="md" data-test-class="task-graph-section">
-      {/* Header and canvas touch: the canvas scrolls edge to edge, its cards line up with the header. */}
-      <Stack gap="none">
-        <InspectorInset>
-          <Section
-            title={copy.title}
-            icon={<Blocks size="md" />}
-            actions={graph.nodes.length ? <Typo.Caption tone="tertiary" numeric="tabular">{counts}</Typo.Caption> : null}
-            gap="sm"
-          >
-            {graph.nodes.length === 0 ? <EmptyLine message={copy.empty} /> : null}
-            {graph.nodes.length > 0 && phone ? <GraphLanes {...view} /> : null}
-          </Section>
-        </InspectorInset>
-        {graph.nodes.length > 0 && !phone ? <GraphCanvas {...view} /> : null}
-      </Stack>
-      {selectedNode ? (
-        <TaskDetail node={selectedNode} index={index} copy={copy} locale={locale}
-          elapsed={elapsedSeconds(selectedNode, now, loadedAt)} onSelect={setSelected}
-          onOpenConversation={sessionIdOf(selectedNode) ? () => openConversation(selectedNode.id) : undefined}
-          onOpenDocument={() => setTaskDoc(taskDocument(selectedNode, graph, copy, locale))} />
+    <Stack gap="md" data-test-class="task-graph-section" data-variant={variant}>
+      <InspectorInset>
+        <Section
+          title={copy.title}
+          icon={<Blocks size="md" />}
+          description={single ? single.title[locale] : undefined}
+          actions={ordered.length ? (
+            <Typo.Caption tone="tertiary" numeric="tabular">
+              {single ? graphCounts(single, copy) : copy.graphsSummary(ordered.length, running)}
+            </Typo.Caption>
+          ) : null}
+          gap="sm"
+        >
+          {ordered.length === 0 ? <EmptyLine message={copy.empty} /> : null}
+        </Section>
+      </InspectorInset>
+      {ordered.length ? (
+        <Layout graphs={ordered} copy={copy} locale={locale} selected={selected} selectedGraph={selectedGraph}
+          detail={detail} renderCard={renderCard} onSelect={setSelected}
+          onPickGraph={(graph) => setSelected(defaultSelection(graph))} />
       ) : null}
       <ProjectDocumentDialog document={taskDoc} onClose={() => setTaskDoc(null)} />
     </Stack>

@@ -7,7 +7,7 @@ export const FINDINGS: Record<ProposalLocale, { title: string; items: string[] }
       title: "Reused as they are",
       items: [
         "Inspector resize: AdaptiveShell + AdaptivePanelResizeHandle + usePanelResize already drag the inspector edge (min 292px, max = window − sidebar − 320px workspace, arrow keys ±16px, Home/End). The app keeps the width (right_panel_width via useAppBootstrap). No DS gap.",
-        "Conversation: SessionObserverDialog, the dialog that opens a delegated session's messages today (openSessionObserver(sessionId)).",
+        "Conversation: SessionObserverDialog, the dialog that opens a child session's messages today (openSessionObserver(sessionId)).",
         "Task document: DocumentTile in the detail, ProjectDocumentDialog + DocumentReader to read it.",
         "Summary tab: SummaryPanel unchanged. The graph is a new Tasks tab after Summary.",
       ],
@@ -45,7 +45,7 @@ export const FINDINGS: Record<ProposalLocale, { title: string; items: string[] }
       title: "그대로 다시 쓰는 것",
       items: [
         "인스펙터 너비: AdaptiveShell + AdaptivePanelResizeHandle + usePanelResize가 이미 가장자리 끌기를 지원합니다(최소 292px, 최대 = 창 − 사이드바 − 작업 영역 320px, 화살표 ±16px, Home/End). 앱은 너비를 기억합니다(useAppBootstrap의 right_panel_width). DS 공백 없음.",
-        "대화: 지금 위임 대화를 여는 SessionObserverDialog(openSessionObserver(sessionId)).",
+        "대화: 지금 하위 대화를 여는 SessionObserverDialog(openSessionObserver(sessionId)).",
         "작업 문서: 상세의 DocumentTile, 읽기는 ProjectDocumentDialog + DocumentReader.",
         "요약 탭: SummaryPanel 그대로. 그래프는 요약 다음의 새 '작업' 탭입니다.",
       ],
@@ -53,7 +53,7 @@ export const FINDINGS: Record<ProposalLocale, { title: string; items: string[] }
     {
       title: "지금 있는 데이터",
       items: [
-        "위임마다 부모 대화, 부모 턴, 자식 대화, 순번, 생성 시각이 저장됩니다.",
+        "하위 대화마다 부모 대화, 부모 턴, 자식 대화, 순번, 생성 시각이 저장됩니다.",
         "작업자 패킷에는 계획 항목 키, 선행 키, 모델, 추론 강도가 저장되지만 앱 프로젝션에는 나오지 않습니다.",
         "앱이 받는 worker_activity에는 단계, 상태 문구, 생성·갱신 시각, 부모 턴, session_id만 있습니다. 선행 관계, 모델, 시작·종료 시각, 작업 문서가 없습니다.",
         "실시간: subsession.changed {session_id, child_session_id} 뒤에 다시 받습니다.",

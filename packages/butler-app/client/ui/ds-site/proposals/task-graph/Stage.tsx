@@ -12,7 +12,7 @@ import { SummaryPanel } from "@/components/inspector/SummaryPanel";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog";
 import { usePanelResize } from "@/hooks/usePanelResize";
 import { TASK_GRAPH_COPY, type ProposalLocale, type Scenario } from "./copy";
-import { scenarioGraph, sessionIdOf } from "./fixture";
+import { scenarioGraphs, sessionIdOf } from "./fixture";
 import { taskSessionView } from "./linked";
 import { STAGE_MESSAGE, stateFromQuery, WALLPAPERS, type StageState } from "./state";
 import { TaskGraphSection } from "./TaskGraphSection";
@@ -74,14 +74,14 @@ export function TaskGraphStage() {
   }, [panel.rightPanelWidth]);
 
   setAppCopyLanguage(state.locale);
-  const graph = useMemo(() => scenarioGraph(state.scenario), [state.scenario]);
+  const graphs = useMemo(() => scenarioGraphs(state.scenario), [state.scenario]);
   const harness = new URLSearchParams(location.search).get("summary") === "harness";
   const summary = useMemo(() => (harness ? HARNESS_SUMMARY : summaryFixture(state.locale, state.scenario)), [harness, state.locale, state.scenario]);
 
   // Seed each worker's session view; the dialog's refresh is a no-op without a gateway.
   useEffect(() => {
     const views: Record<string, SessionView> = {};
-    for (const node of graph.nodes) {
+    for (const node of graphs.flatMap((graph) => graph.nodes)) {
       const view = taskSessionView(node, state.locale);
       if (view) views[sessionIdOf(node)!] = view;
     }
@@ -92,7 +92,7 @@ export function TaskGraphStage() {
       cancelObservedSteward: async () => true,
       resumeObservedSteward: async () => true,
     }));
-  }, [graph, state.locale, state.theme]);
+  }, [graphs, state.locale, state.theme]);
 
   // Proposal copy of Inspector's tab list (components/inspector/Inspector.tsx) with one new tab,
   // "tasks", after Summary. Every other tab keeps its id, label, icon and order.
@@ -123,7 +123,7 @@ export function TaskGraphStage() {
           <InspectorShell id="butler-right-inspector" activeTab={tab} tabs={tabs} onTabChange={setTab}>
             {tab === "summary" ? <SummaryPanel status={{ label: "", tone: "neutral" } as never} summary={summary} /> : null}
             {tab === "tasks" ? (
-              <TaskGraphSection key={`${state.scenario}:${state.locale}`} graph={graph} locale={state.locale} variant={state.variant} />
+              <TaskGraphSection key={`${state.scenario}:${state.locale}`} graphs={graphs} locale={state.locale} variant={state.variant} />
             ) : null}
           </InspectorShell>
         </AdaptiveShellInspector>
