@@ -167,6 +167,13 @@ The app release gate fails when the bundled agent version changes and the app ve
 
 Windows has compile-check coverage, but no release package.
 
+### Recovering a failed release
+
+Run `gh workflow run release.yml --ref main -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
+The optional tag must match that run; recovery verifies its commit and requires every platform artifact (including Windows for previews).
+It skips builds, signing and smoke checks, then repeats manifest merging, npm packing, checksums and publication with asset replacement.
+Stable npm publication skips an already published version; previews keep owner-controlled npm publication. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
+
 ## Reporting issues
 
 Open an issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues) and include:

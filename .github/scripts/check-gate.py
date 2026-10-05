@@ -25,6 +25,8 @@ selected = {
     'site': changes['site'] == 'true' and os.environ['EVENT'] != 'push',
     'ds': changes['ds'] == 'true' and os.environ['EVENT'] != 'push',
 }
+if 'lint' in jobs:
+    assert jobs['lint']['result'] == 'success', jobs['lint']
 for name, enabled in selected.items():
     expected = 'success' if enabled else 'skipped'
     assert jobs[name]['result'] == expected, f'{name}: {jobs[name]["result"]}, expected {expected}'

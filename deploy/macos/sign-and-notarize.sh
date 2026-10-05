@@ -13,7 +13,7 @@
 # cleanup logs one line and exits 0, so PR CI and local builds stay ad-hoc.
 #   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc preview or self-test)
 #   BUTLER_SIGN_KEYCHAIN  keychain holding the identity (optional)
-#   BUTLER_SIGN_HOME      job-private credential-tool profile (set by CI setup)
+#   BUTLER_SIGN_HOME      runner HOME whose keychain search list setup changed (set by CI setup)
 #   BUTLER_SIGN_TEAM_ID   expected Team ID on every signature (optional)
 #   BUTLER_NOTARY_KEY_PATH / BUTLER_NOTARY_KEY_ID / BUTLER_NOTARY_ISSUER_ID
 set -euo pipefail
@@ -31,8 +31,10 @@ enabled() { [ -n "${BUTLER_SIGN_IDENTITY:-}" ]; }
 preview() { [[ ${GITHUB_REF_NAME:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; }
 adhoc() { [ "${BUTLER_SIGN_IDENTITY:-}" = "-" ]; }
 
-# Credential tools must share the profile that created the temporary keychain.
-# App packaging still runs with its own fresh HOME and BUTLER_DATA.
+# codesign finds the Developer ID only under the runner HOME whose keychain
+# search list setup changed; a fresh HOME (isolated.py or a private profile)
+# fails with "The specified item could not be found in the keychain".
+# Credential tools run with that HOME; packaging keeps its isolated HOME/DATA.
 signing_tool() {
   if [ -n "${BUTLER_SIGN_HOME:-}" ]; then
     env HOME="$BUTLER_SIGN_HOME" "$@"
@@ -53,6 +55,7 @@ setup() {
   done
   if [ "$set_count" -eq 0 ] && [ "${BUTLER_SIGN_REQUIRED:-}" != 1 ]; then
     log "no signing secrets; release stays ad-hoc"
+    echo "::warning::macOS build is ad-hoc signed (no signing secrets); not Developer ID signed"
     return 0
   fi
   [ "$set_count" -eq 6 ] || die "signing secrets missing or partial ($set_count/6 set)"
@@ -83,8 +86,7 @@ setup_certificate() {
   fi
   local pw kc="$default_keychain" p12 g2 identity g2_note=""
   umask 077
-  export BUTLER_SIGN_HOME="$tmp_dir/butler-signing-home"
-  mkdir -p "$BUTLER_SIGN_HOME"
+  export BUTLER_SIGN_HOME="$HOME"
   pw=$(openssl rand -base64 24)
   echo "::add-mask::$pw"
   mkdir -p "$key_dir"
@@ -122,37 +124,42 @@ setup_certificate() {
   log "signing identity ready for team $APPLE_TEAM_ID"
 }
 
-# Unofficial previews never use the Developer ID: ad-hoc signing, no notarization.
 setup_preview() {
-  {
-    echo "BUTLER_SIGN_IDENTITY=-"
-    echo "BUTLER_SIGN_KEYCHAIN="
-    echo "BUTLER_SIGN_TEAM_ID="
-  } >> "$GITHUB_ENV"
-  log "unofficial preview: ad-hoc signing, notarization disabled"
+  if ! "$here/sign-and-notarize.sh" setup-certificate; then
+    cleanup
+    {
+      echo "BUTLER_SIGN_IDENTITY=-"
+      echo "BUTLER_SIGN_KEYCHAIN="
+      echo "BUTLER_SIGN_TEAM_ID="
+      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
+    } >> "$GITHUB_ENV"
+    log "certificate setup failed; unofficial preview uses ad-hoc signing"
+    echo "::warning::macOS build is ad-hoc signed (certificate setup failed); not Developer ID signed"
+  fi
+  log "unofficial preview: notarization disabled"
 }
 
 cleanup() {
   local kc=${BUTLER_SIGN_KEYCHAIN:-$default_keychain}
-  local profile=${BUTLER_SIGN_HOME:-$tmp_dir/butler-signing-home}
   if [ -e "$kc" ]; then
-    BUTLER_SIGN_HOME="$profile" signing_tool security delete-keychain "$kc" || log "warning: keychain delete failed"
+    signing_tool security delete-keychain "$kc" || log "warning: keychain delete failed"
   fi
   rm -rf "$key_dir"
-  if [ "$profile" = "$tmp_dir/butler-signing-home" ]; then rm -rf "$profile"; fi
   log "keychain and keys removed"
 }
 
 # ---- signing ----------------------------------------------------------------
 
 # sign_path <path> [extra codesign args]: secure timestamp; hardened runtime
-# unless BUTLER_SIGN_NO_RUNTIME=1 (disk images). A read-only payload file (and
-# its directory) is made writable just for the call.
+# unless BUTLER_SIGN_NO_RUNTIME=1 (disk images) or ad-hoc. Ad-hoc code has no
+# Team ID, so hardened-runtime library validation would make dyld reject every
+# nested ad-hoc framework at launch. A read-only payload file (and its
+# directory) is made writable just for the call.
 sign_path() {
   local path=$1 mode="" dmode="" dir="" links="" alias status=0
   shift
   local args=(--force --sign "$BUTLER_SIGN_IDENTITY")
-  if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ]; then args+=(--options runtime); fi
+  if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ] && ! adhoc; then args+=(--options runtime); fi
   if ! adhoc; then args+=(--timestamp); fi
   if [ -n "${BUTLER_SIGN_KEYCHAIN:-}" ]; then args+=(--keychain "$BUTLER_SIGN_KEYCHAIN"); fi
   if [ -f "$path" ]; then
