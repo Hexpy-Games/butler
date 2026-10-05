@@ -35,7 +35,12 @@ with tempfile.TemporaryDirectory(prefix='npm-release-', dir=os.environ.get('RUNN
     document['version'] = version
     manifest.write_text(json.dumps(document, indent=2) + '\n')
     result = subprocess.run(['npm', 'pack', '--json', '--pack-destination', str(output)], cwd=package, check=True, text=True, stdout=subprocess.PIPE)
-    records = json.loads(result.stdout)
+    # Lifecycle scripts (prepack) print to stdout before npm's --json array; parse from the array's first line.
+    lines = result.stdout.splitlines(keepends=True)
+    start = next((index for index, line in enumerate(lines) if line.startswith('[')), None)
+    if start is None:
+        raise SystemExit(f'npm pack --json printed no JSON array; stdout was:\n{result.stdout}')
+    records = json.loads(''.join(lines[start:]))
     assert len(records) == 1
     artifact = output / records[0]['filename']
     assert artifact.name == f'hexpygames-butler-{version}.tgz'
