@@ -1,0 +1,30 @@
+name: Successful CI input receipt
+description: Record only complete successful check groups and publish their hashes
+inputs:
+  results:
+    description: Full aggregate job results
+    required: true
+  groups:
+    description: Category to producer/consumer job mapping
+    required: true
+  workflow:
+    description: Calling workflow file
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Record successful inputs
+      shell: bash
+      env:
+        RESULTS: ${{ inputs.results }}
+        JOB_GROUPS: ${{ inputs.groups }}
+        CI_PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+      working-directory: ${{ github.workspace }}
+      run: '"$CI_PYTHON" .github/scripts/isolated.py "$CI_PYTHON" .github/scripts/ci-changes.py record'
+    - name: Upload receipt
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-inputs-${{ inputs.workflow }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/ci-inputs/inputs.json
+        if-no-files-found: error
+        retention-days: 30

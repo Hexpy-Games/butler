@@ -8,15 +8,12 @@ on:
       - "CONTRIBUTING.md"
       - "assets/readme/**"
   pull_request:
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -32,65 +29,21 @@ defaults:
     working-directory: packages/butler-agent/rust
 
 jobs:
-  platform-paths:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      macos: ${{ steps.paths.outputs.macos }}
-      windows: ${{ steps.paths.outputs.windows }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Detect platform-specific PR checks
-        id: paths
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            macos:
-              - 'packages/butler-agent/rust/crates/butler-platform/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/install_cmd.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/uninstall_cmd.rs'
-              - 'packages/butler-agent/rust/Cargo.lock'
-              - 'packages/butler-app/client/electron/**'
-              - 'deploy/macos/**'
-              - 'deploy/install.sh'
-              - 'deploy/install-smoke.sh'
-              - 'deploy/app/**'
-              - 'packages/butler-agent/rust/scripts/package-standalone-agent.py'
-              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
-              - 'packages/butler-agent/rust/scripts/release-standalone-agent.py'
-              - 'packages/butler-app/scripts/release/**'
-              - 'packages/butler-npm/**'
-              - '.github/actions/build-agent-archive/**'
-              - '.github/actions/e2e-stub/**'
-              - '.github/actions/rust-agent-setup/**'
-              - '.github/workflows/**'
-            windows:
-              - 'packages/butler-agent/rust/crates/butler-platform/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/**'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/main.rs'
-              - 'packages/butler-agent/rust/Cargo.lock'
-              - '.github/workflows/rust-quality.yml'
-              - '.github/workflows/windows.yml'
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: post-merge-ci.yml
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
     # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
-    needs: platform-paths
+    needs: changes
     outputs:
       compile: ${{ steps.check.outcome }}
     if: >-
-      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.windows == 'true')
+      needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -155,7 +108,7 @@ jobs:
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [platform-paths, windows-check]
+    needs: [changes, windows-check]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}
@@ -180,3 +133,24 @@ jobs:
           else
             gh issue create --title "$title" --body "$body"
           fi
+
+  gate:
+    name: post-merge-ci gate
+    if: always()
+    needs: [changes, windows-check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"rust": ["windows-check"]}'
+          workflow: post-merge-ci.yml
+      - name: Require selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"windows-check": ["rust"]}'
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py

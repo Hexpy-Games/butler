@@ -80,18 +80,25 @@ footer={
 
 `SidebarNav` is the same group container `SpaceHeader` uses for 새 대화 / 검색, so the two rows sit `--sidebar-row-spacing` apart (4px desktop/comfortable, 8px phone/touch, ½·xs compact) like every other group. `SidebarSettingsItem` is unchanged. When `SidebarUpdateItem` renders null the footer is pixel-identical to main.
 
-**`SidebarUpdateItem`**: one `NavRow` line (never two lines, no `meta`):
+**`SidebarUpdateItem`**: one `NavRow` line (never two lines, no `meta`). It uses the DS `ProgressRing` (`components/ProgressRing`, from `ds/progress-ring` b890192ab): `value` is a 0–1 fraction, always `size="sidebar"` and `aria-hidden` (the row carries the name).
 
 | Stage | `icon` | `label` | `badge` | `actions` |
 |---|---|---|---|---|
-| `downloading`, total known | `ProgressRing value={percent}` (§7.1) | 업데이트 받는 중 | `{percent}%` | – |
-| `downloading`, total unknown, `checking`, `verifying`, `applying`, `restarting` | `ProgressRing indeterminate` (until §7.1 ships: `Spinner size={14}` in `IconSlot size="sidebar"`) | 업데이트 받는 중 / 업데이트 준비 중 | – | – |
-| `ready` | `ProgressRing value={100}` | 업데이트 준비됨 | – | `Button size="xs" variant="outline"` 다시 시작 (`stopPropagation`; same handler as the Settings row's 다시 시작) |
-| `failed` | `CircleAlert` | 업데이트 실패 | – | – |
+| `downloading`, total known | `<ProgressRing size="sidebar" value={fraction} aria-hidden />` | 업데이트 받는 중 | `{percent}%` | – |
+| `downloading`, total unknown, `checking`, `verifying`, `applying`, `restarting` | `<ProgressRing size="sidebar" indeterminate aria-hidden />` | 업데이트 받는 중 / 업데이트 준비 중 | – | – |
+| `ready` (and deferred) | `<ProgressRing size="sidebar" value={1} tone="success" aria-hidden />` | 업데이트 준비됨 | – | `<ButtonContainer size="icon-sm" wrap={false} onPointerDown/onClick={stopPropagation}><IconButton label="다시 시작"><RotateCcw /></IconButton></ButtonContainer>` (only when ready, not deferred) |
+| `failed` | `<CircleAlert />` (status icon, no ring: there is no progress to show) | 업데이트 실패 | – | – |
 
+Row details (measured in the proposal, 1280 / 375, light and dark):
+
+- **Row background.** Unchanged NavRow behaviour: transparent at rest, the normal NavRow hover fill on hover (`--selection` at 60%: `rgba(32,35,39,.07)` light, `rgba(255,255,255,.08)` dark). The row is never `active`.
+- **Restart action = the DS NavRow action pattern, exactly.** The DS defines one kind of NavRow trailing action: icon-only `IconButton`s in a `ButtonContainer size="icon-sm"` that stop propagation (`NavRow.guidance.tsx` recipe with `OverflowActionMenu`; product: `SpaceRowActions.tsx`, `SidebarChatsSection.tsx`). `ListRow` has no trailing action slot. No DS showcase, guidance or product row puts a text button in a NavRow, so the round-3 outline button and a ghost text button would both be invented styles. Use the IconButton pattern with `RotateCcw`; its `label` ("다시 시작") is the accessible name and the tooltip. A labelled text action is DS gap §7.8.
+- **Measured, identical to the existing project-row action in the same sidebar:** `IconButton` = `Button variant="ghost" size="icon-sm"`, 30×30 desktop / 44×44 touch (= row height, vertical inset 0), radius 8px, no border, transparent fill at rest and on hover (the shell's `--icon-button` surface shows the hover), glyph 16px / 20px, colour `--text-secondary` → `--text-primary` on hover (light `rgb(105,109,115)` → `rgb(34,35,38)`; dark `rgb(181,184,189)` → `rgb(242,243,244)`). Inset: `SidebarShell` sets `--nav-action-edge-offset: -8px`, so the target's box ends at the row edge and the glyph ends 7px from the right (12px touch), mirroring the ring/gear start inset of 8px.
+- The action calls `stopPropagation` (pointerdown and click) and runs the same handler as the Settings row's 다시 시작.
+- **Ring vs gear.** Both are 16×16 desktop and 20×20 touch, at the same x. Ready uses `tone="success"` (green), not a full accent circle. Remaining difference: stroke weight; see §7.1.
+- **Group spacing.** The update row and 설정 are 4px apart desktop / 8px touch, identical to the 새 대화 / 검색 group gap. The footer's existing 10px top padding still separates the group from the list.
 - `onClick` opens Settings › 업데이트 (`openSettings("updates")`). `ariaLabel` = label + percent.
 - Data: `useUpdateProgressStore` (fed by `updates.progress` events, plus one `GET /updates` snapshot after the gateway connects so a download that survives a reload shows). Select `{ stage, percent }` with the percent rounded to an integer so the row re-renders at most once per percent. No timers, no polling.
-- Until §7.1 ships, the proposal's `RingStandIn` (ContextDonutButton's ring geometry, unstyled SVG) is NOT allowed in product code; ship with the Spinner fallback for every stage and switch to `ProgressRing` when it lands.
 
 **Native window progress** (so a collapsed sidebar or a hidden window still shows it; no renderer UI):
 
@@ -220,13 +227,14 @@ Perf: the list call ≤50 ms server-side at owner scale (BTCC DB 7 GB); it runs 
 
 DS primitives and components are frozen. Each item needs owner approval, then the DS process (spec in the ledger, tests, component + README + showcase + guidance, export, `bun run ds:skill-catalog`).
 
-1. **`ProgressRing` (new, blocks the final sidebar row icon):** non-interactive ring for progress, extracted from `blocks/ContextDonutButton/ContextDonutButton.tsx:10-41` (its ring exists only inside a 30px `<button>`). API: `value?: number` (0–100), `indeterminate?: boolean`, `size?: "sidebar" | "sm" | "md"` (`sidebar` follows `--sidebar-icon-size` like `IconSlot size="sidebar"`), `tone?: "accent" | "success" | "danger"`, `ariaLabel?`. Geometry as ContextDonutButton (r 8 / 20 box, round cap, track `--context-track-bg`, fill `--accent`); stroke weight per size so it matches 1.5px icon strokes at `sidebar`. Indeterminate: rotating arc on `--motion-*` tokens, a static 25% arc under reduced motion. `ContextDonutButton` then composes it.
+1. **`ProgressRing` sidebar stroke weight (amend `ds/progress-ring`, b890192ab):** the component exists (`components/ProgressRing/ProgressRing.tsx`; value 0–1, `indeterminate`, `size`, `tone`, aria). Measured against the 설정 gear at `size="sidebar"`, the box size and position match (16×16 desktop, 20×20 touch, same x), but the weight doesn't. The ring's stroke is 2.5 units in its 20-unit box (`ProgressRing.module.css` `:where(.ring)` default), which renders 2.0px at 16px and 2.5px at 20px. Hugeicons glyphs use stroke 1.5 in a 24-unit box: 1.0px at 16px, 1.25px at 20px. The ring's outer diameter is (16+2.5)/20 of the box (14.8px at 16) against the gear's ~13.3px. Proposal: `:where(.ring[data-size="sidebar"]) { --progress-ring-stroke: 1.875; }` (1.5px at 16, 1.875px at 20: 1.5× the icon line, which keeps a 42% arc readable), and optionally r 7.5 for `sidebar` so the outer diameter lands at ~13.5px. Owner approval needed (DS frozen); the spec's sidebar row uses whatever the DS ships.
 2. **`SettingsField` `error` prop:** `blocks/SettingsField/SettingsField.tsx:23`. `error?: ReactNode` renders `FieldError` under the control and wires `aria-describedby`; today callers put `FieldError` in the control slot.
 3. **`ProgressMeter` indeterminate:** `blocks/ProgressMeter/ProgressMeter.tsx:9`. Until then: Spinner status line (§1).
 4. **`Switch` `disabledReason`:** `shadcn/ui/switch.tsx:10`, matching `SettingsSelect`'s tooltip behaviour. Until then: wrap the disabled `Switch` in `Tooltip` (§3).
 5. **`WallpaperPicker` `importError`:** `blocks/WallpaperPicker/WallpaperPicker.tsx:45`, shown under the import tile (§4).
 6. **`IconSlot` caption line height:** `components/IconSlot/IconSlot.tsx:13`. `minHeight="line"` uses the body line, so a glyph beside a caption sits ~3px low; add a caption line option. Until then: `cross="center"` without `minHeight` for one-line caption status rows (§1).
-7. Observation (not a gap request): the 홈 화면 palette `SegmentedControl` clips its labels at 375.
+8. **NavRow labelled text action (not defined).** Need: a short verb ("다시 시작") as the row's trailing action where an icon alone is ambiguous. Proposal: `NavRow` `action={{ label, onSelect }}` rendering a DS-owned text action: `Button variant="ghost" size="xs"` height `min(--sidebar-action-size, row)`, radius `--radius-control`, hover fill `--selection`, text `--text-primary` at `--font-size-1`, and its own inset rule: the text box ends at the row's inline padding (8px), not at the edge, so it mirrors the icon's start inset. Until approved, use the icon pattern above.
+9. Observation (not a gap request): the 홈 화면 palette `SegmentedControl` clips its labels at 375.
 
 ## 8. Verification
 
