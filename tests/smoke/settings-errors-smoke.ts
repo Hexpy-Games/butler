@@ -53,7 +53,10 @@ async function rejectRequest(page: Page, path: string, action: () => Promise<unk
   assert.equal((await response.json()).error.code, expectedCode, "each requested code reaches the renderer");
 }
 async function capture(page: Page, name: string) {
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
   if (!baseline) assert.equal(await page.getByText(/RAW_GATEWAY_DETAIL|RAW_SECOND_LINE/u).count(), 0, "no server text");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, name);
   await page.screenshot({ path: join(output, `${name}.png`), fullPage: true });
