@@ -117,12 +117,7 @@ impl AppMemoryManagement {
             };
             let result = match result {
                 Ok(result) => Some(result),
-                Err(_) => self
-                    .owner
-                    .reset_status(operation_id.clone())
-                    .await
-                    .ok()
-                    .flatten(),
+                Err(error) => self.failed_reset(&operation_id, error).await,
             };
             if let Some(result) = result
                 && let Ok(value) = encode(result)
@@ -134,5 +129,14 @@ impl AppMemoryManagement {
             }
         });
         Ok(response)
+    }
+
+    async fn failed_reset(
+        &self,
+        id: &str,
+        error: std::io::Error,
+    ) -> Option<butler_memory::management::ResetResult> {
+        butler_core::diagnostic!("[memory-reset-job] operation_id={id} error={error}");
+        self.owner.reset_status(id.into()).await.ok().flatten()
     }
 }

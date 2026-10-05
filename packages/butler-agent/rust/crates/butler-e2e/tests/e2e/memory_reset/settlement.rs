@@ -54,9 +54,14 @@ async fn committed_reset_settles_after_external_writer_releases() -> Result<(), 
     assert_eq!(waiting.data()["phase"], "preparing");
     lease.execute_batch("ROLLBACK")?;
     drop(lease);
+    let mut last_receipt = serde_json::Value::Null;
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
             let receipt = s.gw.get(&format!("/memory/reset/{id}")).await?;
+            if receipt.data() != &last_receipt {
+                last_receipt = receipt.data().clone();
+                eprintln!("MEM-RESET-SETTLEMENT receipt={last_receipt}");
+            }
             assert_ne!(receipt.data()["phase"], "failed", "{}", receipt.text);
             if receipt.data()["phase"] == "complete" && receipt.data()["removal_pending"] == false {
                 return Ok::<(), HarnessError>(());
@@ -65,7 +70,9 @@ async fn committed_reset_settles_after_external_writer_releases() -> Result<(), 
         }
     })
     .await
-    .expect("external contention stranded accepted reset settlement")?;
+    .unwrap_or_else(|error| {
+        panic!("external contention stranded accepted reset settlement: {error:?}; receipt={last_receipt}")
+    })?;
     let latest: serde_json::Value = serde_json::from_slice(&std::fs::read(
         s.sandbox
             .data

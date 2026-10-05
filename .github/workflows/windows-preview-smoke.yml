@@ -245,12 +245,19 @@ jobs:
           name: windows-e2e
           path: ${{ env.PREVIEW_ROOT }}/artifacts
           if-no-files-found: error
+      - name: Preserve failed native fixtures before isolated cleanup
+        if: always()
+        run: |
+          $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
+          if (Test-Path $failures) {
+            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Preserve native regression evidence before isolated cleanup
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-native-regression-logs
-          path: ${{ env.PREVIEW_ROOT }}/logs/*.log
+          path: ${{ env.PREVIEW_ROOT }}/logs
           if-no-files-found: warn
           retention-days: 14
       - name: Check owner registration and remove job profile

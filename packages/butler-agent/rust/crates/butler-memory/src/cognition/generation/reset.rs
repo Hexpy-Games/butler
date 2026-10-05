@@ -134,10 +134,20 @@ async fn save_completion(
     coordinator: Arc<CognitionWriteCoordinator>,
     token: CancellationToken,
 ) -> io::Result<()> {
+    butler_core::diagnostic!(
+        "[memory-reset-settlement] operation_id={} phase=acquiring",
+        binding.2.operation_id
+    );
     let lease = acquire(&binding.0, &binding.1, &coordinator, &token).await?;
     tokio::task::spawn_blocking(move || {
         let saved = check(&token).and_then(|()| save(&binding.0, &binding.1, &binding.2));
         lease.release(saved.is_ok()).map_err(io::Error::other)?;
+        if saved.is_ok() {
+            butler_core::diagnostic!(
+                "[memory-reset-settlement] operation_id={} phase=saved",
+                binding.2.operation_id
+            );
+        }
         saved
     })
     .await
