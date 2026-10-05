@@ -21,7 +21,7 @@
   display: grid;
   grid-template-columns:
     var(--disclosure-line) var(--disclosure-line) minmax(0, 1fr)
-    auto;
+    fit-content(50%);
   gap: var(--space-xs) var(--space-sm);
   align-items: baseline;
   width: 100%;
@@ -30,7 +30,7 @@
 }
 
 .trigger.noIcon {
-  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) auto;
+  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) fit-content(50%);
 }
 
 .chevron,
@@ -62,6 +62,7 @@
 }
 
 .meta {
+  overflow-wrap: anywhere;
   grid-column: 4;
   grid-row: 1;
 }

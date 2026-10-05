@@ -32,3 +32,5 @@ Do not use it for sidebar hierarchy. Use `CollapsibleNavGroup`.
 
 ## Tags
 disclosure, row, activity, details
+
+Long meta wraps within half the row, preserving space for the title at phone widths. Meta is complete; it is never truncated.

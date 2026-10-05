@@ -75,7 +75,7 @@ export const stories: ShowcaseStory[] = [
             <KeyValueRow label={text(context).updated} value="2026-09-25" valueTextSize="caption" />
           </Stack>
         </Toggle>
-        <Toggle title={text(context).log} meta={text(context).logMeta}>
+        <Toggle title={text(context).log} description={text(context).files} meta={text(context).logMeta}>
           <Typo.Caption>{text(context).evidence}</Typo.Caption>
         </Toggle>
       </Stack>

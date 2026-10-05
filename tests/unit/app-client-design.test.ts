@@ -3920,7 +3920,7 @@ describe("app-client design system foundation", () => {
     expect(disclosureRow).toContain('surface?: "selection" | "plain"');
     expect(disclosureRow).toContain("data-surface={surface}");
     expect(disclosureRowStyles).toMatch(
-      /grid-template-columns:\s*var\(--disclosure-line\) var\(--disclosure-line\) minmax\(0, 1fr\)\s*auto;/u,
+      /grid-template-columns:\s*var\(--disclosure-line\) var\(--disclosure-line\) minmax\(0, 1fr\)\s*fit-content\(50%\);/u,
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");
