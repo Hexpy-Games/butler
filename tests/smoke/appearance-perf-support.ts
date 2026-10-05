@@ -108,24 +108,46 @@ export async function settingsReady(page: Page) {
 
 /** Includes immediate control commit, deferred shell scope, and the following paint. */
 export async function toggleMotion(page: Page) {
+  const control = page.getByRole("switch", { name: "동작 줄이기", exact: true });
+  await page.bringToFront();
+  await control.scrollIntoViewIfNeeded();
   const persisted = page.waitForResponse((response) => response.url().endsWith("/settings") && response.request().method() === "PATCH");
-  const result = await page.getByRole("switch", { name: "동작 줄이기", exact: true }).evaluate(async (node: HTMLElement) => {
+  const switched = control.evaluate(async (node: HTMLElement) => {
+    const rect = node.getBoundingClientRect();
+    if (rect.top < 0 || rect.bottom > innerHeight || document.visibilityState !== "visible") {
+      throw new Error("Motion interaction requires a visible switch");
+    }
     const start = performance.now();
     const next = node.getAttribute("aria-checked") !== "true";
-    node.click();
-    while ((node.getAttribute("aria-checked") === "true") !== next ||
-      (document.getElementById("root")?.dataset.motion === "reduced") !== next) {
-      if (performance.now() - start > 150) throw new Error(JSON.stringify({
-        message: "Motion toggle did not commit within 150ms", checked: node.getAttribute("aria-checked"),
-        disabled: node.hasAttribute("disabled"), connected: node.isConnected, motion: document.getElementById("root")?.dataset.motion,
-      }));
-      await new Promise(requestAnimationFrame);
-    }
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
-    return { ms: performance.now() - start, start, end: performance.now(), checked: next };
+    return new Promise<{ ms: number; start: number; end: number; checked: boolean }>((done, reject) => {
+      let frame = 0;
+      const deadline = setTimeout(() => {
+        cancelAnimationFrame(frame);
+        reject(new Error(JSON.stringify({ message: "Motion toggle exceeded 150ms",
+          checked: node.getAttribute("aria-checked"), disabled: node.hasAttribute("disabled"),
+          connected: node.isConnected, visibility: document.visibilityState,
+          motion: document.getElementById("root")?.dataset.motion,
+        })));
+      }, 150);
+      const check = () => {
+        if ((node.getAttribute("aria-checked") === "true") !== next ||
+          (document.getElementById("root")?.dataset.motion === "reduced") !== next) {
+          frame = requestAnimationFrame(check);
+          return;
+        }
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => {
+            clearTimeout(deadline);
+            done({ ms: performance.now() - start, start, end: performance.now(), checked: next });
+          });
+        });
+      };
+      node.click();
+      frame = requestAnimationFrame(check);
+    });
   });
-  if (!(await persisted).ok()) throw new Error("Motion persistence failed");
+  const [result, response] = await Promise.all([switched, persisted]);
+  if (!response.ok()) throw new Error("Motion persistence failed");
   return result;
 }
 
