@@ -240,6 +240,7 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
+  shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",

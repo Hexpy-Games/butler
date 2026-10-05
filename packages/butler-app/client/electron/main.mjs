@@ -2397,6 +2397,14 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
   },
 });
 
+ipcMain.handle("butler:update-progress", (event, value) => {
+  if (event.sender !== mainWindow?.webContents) return;
+  if (value !== null && value !== "indeterminate" &&
+      (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)) return;
+  if (!isMac && !isWindows) return;
+  mainWindow?.setProgressBar(value === null ? -1 : value === "indeterminate" ? (isMac ? -1 : 2) : value);
+});
+
 ipcMain.handle("butler:app-update-state", () => appUpdateCoordinator.state());
 ipcMain.handle("butler:app-update-choice", (event, input) => {
   if (event.sender !== mainWindow?.webContents) return { ok: false };
@@ -2700,6 +2708,7 @@ app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
+    mainWindow?.setProgressBar(-1);
     if (tray) {
       tray.destroy();
       tray = null;

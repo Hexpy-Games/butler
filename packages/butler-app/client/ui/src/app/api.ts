@@ -49,6 +49,7 @@ export interface AppUpdateState {
 }
 
 interface ButlerAppBridge {
+  setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
   onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;

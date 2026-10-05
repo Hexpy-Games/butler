@@ -1,3 +1,4 @@
+import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
@@ -32,6 +33,7 @@ const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
 
 export function useLiveSessionEvents(): void {
   useSessionAttentionNotifications();
+  useEffect(subscribeNativeUpdateProgress, []);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const projectedEventCursor = useButlerStore(
     (state) => state.sessionView?.cursors.events ?? 0,
@@ -161,7 +163,10 @@ export function useLiveSessionEvents(): void {
       cursor: () => eventCursorRef.current,
       onEvent: applyEvent,
       onLostChange: (liveConnectionLost) => {
-        if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) useButlerStore.setState({ liveConnectionLost });
+        if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) {
+          useButlerStore.setState({ liveConnectionLost });
+          if (!liveConnectionLost && !cancelled) void refreshUpdateProgress();
+        }
       },
       onRecovered: () => {
         // Module changes may have been missed while disconnected.
