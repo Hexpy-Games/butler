@@ -216,6 +216,13 @@ jobs:
       - name: Verify the native App release artifacts
         run: python3 .github/scripts/isolated.py bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
+      - name: Preserve validated native App files for publication recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-darwin-arm64
+          path: dist/release/app/*
+          if-no-files-found: error
+
       - name: Publish native App GitHub Release files
         env:
           GH_TOKEN: ${{ github.token }}

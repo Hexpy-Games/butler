@@ -20,6 +20,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "Unknown duration", use: "Spinner" },
     { when: "Context usage in the composer toolbar", use: "ContextDonutButton" },
+    { when: "Progress in an icon slot (sidebar row, status line)", use: "ProgressRing" },
   ],
   recipes: [{ name: "Labelled budget bar", description: "label and meta above the track; bare needs ariaLabel.", render: () => <ContextBudget /> }],
   doDont: [

@@ -1,0 +1,47 @@
+name: Windows preview completion evidence
+description: Require the unchanged complete installed harness inventory
+inputs:
+  results:
+    description: Producer and consumer job results
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Isolate completion checks
+      shell: pwsh
+      run: |
+        $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+        New-Item -ItemType Directory -Force "$root/home","$root/data" | Out-Null
+        "WINDOWS_GATE_ROOT=$root" >> $env:GITHUB_ENV
+        "HOME=$root/home" >> $env:GITHUB_ENV
+        "BUTLER_DATA=$root/data" >> $env:GITHUB_ENV
+    - name: Require all producer and verification jobs
+      env:
+        NEEDS_JSON: ${{ inputs.results }}
+      shell: pwsh
+      run: |
+        $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
+        foreach ($job in $needs.GetEnumerator() | Where-Object { $_.Key -ne 'changes' }) {
+          if ($job.Value.result -ne 'success') { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
+        }
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: windows-completed-*
+        path: ${{ runner.temp }}/windows-completion
+    - name: Require every hosted verification harness
+      shell: pwsh
+      run: |
+        # Native and hosted command matrices each retain their completion record.
+        $expected = @('windows_commands','windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
+          'windows_commands','projection_settlement','project_workspace','queue_notifications','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+        $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
+          ForEach-Object { Get-Content $_.FullName })
+        if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
+          throw "Incomplete verification: completed=$($actual -join ',')"
+        }
+        "Verified all 15 required harnesses in 16 invocations: $($actual -join ',')"
+    - name: Remove completion check directories
+      if: always()
+      shell: pwsh
+      run: |
+        Remove-Item $env:WINDOWS_GATE_ROOT,"$env:RUNNER_TEMP/windows-completion" -Recurse -Force -ErrorAction SilentlyContinue

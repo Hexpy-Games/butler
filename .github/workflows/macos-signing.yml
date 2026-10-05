@@ -7,13 +7,10 @@ name: macOS signing
 
 on:
   pull_request:
-    paths:
-      - "deploy/macos/**"
-      - "packages/butler-app/scripts/release/**"
-      - ".github/workflows/macos-signing.yml"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -21,26 +18,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: macos-signing.yml
+
   shellcheck:
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
     name: shellcheck
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          HOME=$(mktemp -d)
-          BUTLER_DATA=$(mktemp -d)
-          export HOME BUTLER_DATA
-          shellcheck deploy/macos/*.sh
-          deploy/macos/policy-selftest.sh
+      - run: python3 .github/scripts/isolated.py shellcheck deploy/macos/*.sh
+      - run: python3 .github/scripts/isolated.py deploy/macos/policy-selftest.sh
 
   selftest:
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
     name: no-identity and ad-hoc self-test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: |
-          HOME=$(mktemp -d)
-          BUTLER_DATA=$(mktemp -d)
-          export HOME BUTLER_DATA
-          deploy/macos/selftest.sh
+      - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
+
+  gate:
+    name: macos-signing gate
+    if: always()
+    needs: [changes, shellcheck, selftest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"package": ["shellcheck", "selftest"]}'
+          workflow: macos-signing.yml
+      - name: Require selected checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"shellcheck": ["package"], "selftest": ["package"]}'
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py

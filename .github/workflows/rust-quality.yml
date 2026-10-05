@@ -5,9 +5,7 @@ name: Rust quality
 on:
   push:
     branches: [main]
-    paths-ignore: [README.md, CONTRIBUTING.md, 'assets/readme/**']
   pull_request:
-    paths-ignore: [README.md, CONTRIBUTING.md, 'assets/readme/**']
   merge_group:
   schedule:
     - cron: "17 3 * * *"
@@ -32,96 +30,9 @@ defaults:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
-    outputs:
-      rust: 'true'
-      ui: ${{ steps.paths.outputs.ui }}
-      site: ${{ steps.paths.outputs.site }}
-      ds: ${{ steps.paths.outputs.ds }}
-      package: ${{ github.event_name == 'pull_request' && steps.paths.outputs.package || 'false' }}
-      install: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 'true' || steps.paths.outputs.install }}
-      linux-package: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 'true' || steps.paths.outputs.linux-package }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: paths
-        with:
-          base: ${{ github.event.merge_group.base_sha || github.event.before || github.event.repository.default_branch }}
-          filters: |
-            rust:
-              - 'packages/butler-agent/rust/**/!(*.md)'
-              - 'packages/butler-agent/resources/**/!(*.md)'
-              - 'VERSION'
-              - '.config/nextest.toml'
-              - '.github/scripts/**'
-              - '.github/actions/e2e-stub/**'
-              - '.github/actions/rust-agent-setup/**'
-              - '.github/workflows/rust-*.yml'
-            ui:
-              - 'packages/**/*.{ts,tsx,js,jsx,mjs}'
-              - 'packages/**/package.json'
-              - 'packages/butler-app/client/ui/**/*.css'
-              - 'tests/**'
-              - 'tools/**/*.{ts,js,mjs}'
-              - '{package.json,bun.lock,bunfig.toml,tsconfig*.json}'
-              - '.github/workflows/bun-unit.yml'
-              - '.github/actions/assert-home-untouched/**'
-            site:
-              - 'packages/butler-site/**'
-              - 'packages/butler-app/client/ui/**'
-              - 'tests/smoke/ds-site-*.ts'
-              - '{LICENSE,VERSION,package.json,bun.lock}'
-              - '.github/workflows/site*.yml'
-            ds:
-              - 'packages/butler-app/client/ui/**'
-              - 'tests/smoke/ds-site-*.ts'
-              - '{LICENSE,package.json,bun.lock}'
-              - '.github/workflows/ds-site.yml'
-            package:
-              - '.github/workflows/macos-app-package.yml'
-              - '.github/workflows/{native-agent,macos-update-fixtures,rust-quality}.yml'
-              - '.github/workflows/release*.yml'
-              - '.github/actions/rust-agent-setup/**'
-              - 'packages/butler-app/client/electron/**'
-              - 'packages/butler-app/scripts/release/**'
-              - 'deploy/**'
-              - 'tests/smoke/packaged-app-update.ts'
-              - 'tests/smoke/app-update-choice-smoke.ts'
-              - 'tests/smoke/app-update-work-stream.ts'
-              - 'tests/smoke/quick-fixes-smoke.ts'
-              - 'tests/smoke/quick-fixes-compare.ts'
-              - 'tests/support/quick-fixes-visual.ts'
-              - 'tests/smoke/settings-release-compare.ts'
-              - 'tests/support/native-app-server.ts'
-              - 'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx'
-              - 'tests/support/update-work-fixture.ts'
-              - 'tests/support/electron-page-cdp.ts'
-              - 'packages/butler-app/client/ui/src/components/settings/Update*'
-              - 'packages/butler-agent/rust/crates/butler-platform/src/app_update.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/build.rs'
-              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/app_update.rs'
-              - 'packages/butler-agent/rust/crates/butler-runtime/src/operations/update*'
-              - 'packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**'
-              - '{bun.lock,**/package.json}'
-            linux-package:
-              - '.github/workflows/{linux-packages,release}.yml'
-              - '.github/actions/rust-agent-setup/**'
-              - 'packages/butler-agent/rust/Cargo.lock'
-              - 'packages/butler-agent/rust/crates/{butler-agent,butler-gateway,butler-memory}/Cargo.toml'
-              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
-              - 'packages/butler-app/scripts/release/**'
-              - 'packages/butler-app/client/electron/**'
-              - 'deploy/**'
-              - '{bun.lock,**/package.json}'
-            install:
-              - '.github/workflows/install-smoke.yml'
-              - '.github/workflows/{release*,npm-publish,linux-packages}.yml'
-              - '.github/actions/build-agent-archive/**'
-              - 'packages/butler-app/scripts/release/**'
-              - 'deploy/**'
-              - 'packages/butler-npm/**'
-              - 'packages/butler-agent/rust/scripts/*standalone*'
-              - 'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs'
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: rust-quality.yml
 
   source:
     needs: changes
@@ -384,19 +295,51 @@ jobs:
     if: needs.changes.outputs.ds == 'true' && github.event_name != 'push'
     uses: ./.github/workflows/ds-site.yml
 
-  gate:
-    name: gate
-    if: always()
-    needs: [changes, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+  lint:
+    needs: changes
+    name: Repository and CI lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Whitespace lint
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py git diff --check "${BASE:-HEAD}" HEAD
+      - name: Validate workflow selection invariants
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+      - name: Lint GitHub workflows
+        working-directory: ${{ github.workspace }}
+        run: |
+          lint_dir=$(mktemp -d "$RUNNER_TEMP/actionlint.XXXXXX")
+          trap 'rm -rf "$lint_dir"' EXIT
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.11/actionlint_1.7.11_linux_amd64.tar.gz -o "$lint_dir/actionlint.tar.gz"
+          tar -xzf "$lint_dir/actionlint.tar.gz" -C "$lint_dir" actionlint
+          python3 .github/scripts/isolated.py "$lint_dir/actionlint" -shellcheck= -pyflakes=
+
+  gate:
+    name: gate
+    if: always()
+    needs: [changes, lint, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success'
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          workflow: rust-quality.yml
       - name: Require every selected check
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/check-gate.py
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
