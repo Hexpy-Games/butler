@@ -62,8 +62,15 @@ try {
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.isVisible()).length), 1);
   await splash.screenshot({ path: join(output, "splash.png") });
   releaseData();
-  await splash.waitForEvent("close", { timeout: 30_000 });
-  const main = application.windows().find((page) => !page.isClosed());
+  await expectHiddenStartup();
+  async function expectHiddenStartup() {
+    const deadline = performance.now() + 30_000;
+    while (await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.webContents.getURL().includes("lifecycle.html")))) {
+      assert.ok(performance.now() < deadline, "Startup card hands off to the main window");
+      await new Promise((done) => setTimeout(done, 20));
+    }
+  }
+  const main = application.windows().find((page) => page !== splash && !page.isClosed());
   assert.ok(main, "main window must replace splash");
   assert.deepEqual(await main.evaluate(() => {
     const bridge = window.butlerApp as any;
@@ -85,7 +92,7 @@ try {
   assert.ok(painted && typeof painted.elapsed_ms === "number" && painted.elapsed_ms - stages.find((event) => event.stage === "app_ready")!.elapsed_ms! <= 300, "Splash mark must paint within 300 ms of app_ready");
   const index = (stage: string) => { const value = stages.findIndex((event) => event.stage === stage); assert.ok(value >= 0, stage); return value; };
   assert.ok(index("splash_shown") < index("runtime_imported"), "splash shown before runtime imports complete");
-  assert.ok(index("main_window_ready") < index("splash_destroyed"), "main shown before splash destruction");
+  assert.ok(index("main_window_ready") < index("splash_hidden"), "main shown before the startup card is parked");
 } catch (error) {
   const main = application.windows().find((page) => !page.isClosed() && !page.url().includes("lifecycle.html"));
   console.log(JSON.stringify({ requestedPaths: [...requestedPaths], headings: await main?.getByRole("heading").allTextContents(), diagnostic: await main?.evaluate(async () => {

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { createLifecycleWindow } from "./lifecycle-window.mjs";
+import { createLifecycleWindow, parkLifecycleWindow } from "./lifecycle-window.mjs";
 import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
 
 const createdAt = process.getCreationTime();
@@ -65,8 +65,8 @@ export function completeStartup(win, show = true) {
   if (show) win.show();
   win.webContents.setBackgroundThrottling(true);
   startupTiming("main_window_ready");
-  surface?.destroy(); surface = null;
-  startupTiming("splash_destroyed");
+  parkLifecycleWindow(surface); surface = null;
+  startupTiming("splash_hidden");
   return true;
 }
 export function createStartupWindow() {

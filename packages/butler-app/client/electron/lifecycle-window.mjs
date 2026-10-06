@@ -3,11 +3,21 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRendererDistRoot } from "./app-renderer-protocol.mjs";
+import { traceLifecycleWindow } from "./lifecycle-tracing.mjs";
 import { readStartupAppearance, lifecycleAppearance } from "./startup-appearance.mjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const surfaces = new Map();
 let bridgesInstalled = false;
+let parkedWindow;
+export function isLifecycleWindow(window) { return window === parkedWindow || surfaces.has(window.webContents.id); }
+export function parkLifecycleWindow(surface) {
+  if (!surface || surface.window.isDestroyed()) return;
+  surface.window.hide();
+  surface.window.webContents.setBackgroundThrottling(true);
+  parkedWindow = surface.window;
+  surfaces.delete(parkedWindow.webContents.id);
+}
 function installBridges() {
   if (bridgesInstalled) return;
   bridgesInstalled = true;
@@ -40,7 +50,8 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     locale: locale ?? appearance.locale ?? app.getLocale(), forceQuit: false, copy };
   timing("appearance_read_end");
   timing(`${kind}_create_start`);
-  const window = new BrowserWindow({
+  const reused = kind === "quit" && parkedWindow && !parkedWindow.isDestroyed();
+  const window = reused ? parkedWindow : new BrowserWindow({
     width: 296, height: manifest.initialHeight, useContentSize: true, frame: false, resizable: false,
     maximizable: false, fullscreenable: false, show: false, hasShadow: true,
     roundedCorners: true, closable: kind !== "quit", title: "Butler",
@@ -48,6 +59,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
       contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, devTools: !app.isPackaged },
   });
+  if (reused) { parkedWindow = null; window.setClosable(false); window.setBackgroundColor(manifest.surface[appearance.theme]); window.webContents.setBackgroundThrottling(false); }
   timing(`${kind}_create_end`);
   window.webContents.once("dom-ready", () => timing(`${kind}_dom_ready`));
   window.webContents.once("did-finish-load", () => timing(`${kind}_load_end`));
@@ -58,13 +70,12 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   window.setMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
-  timing(`${kind}_show_start`);
-  window.show();
-  timing(`${kind}_show_end`);
+  let finishTrace = () => {};
   let completed = false;
   const reveal = () => {
     if (completed || window.isDestroyed()) return;
     completed = true;
+    void Promise.resolve(finishTrace()).catch(() => timing("trace_failed"));
     window.webContents.setBackgroundThrottling(true); onPainted?.(window);
   };
   const surface = { window, state: () => state, action: (action) => onAction?.(action, state),
@@ -77,10 +88,21 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   window.once("ready-to-show", () => {
     timing(kind === "startup" ? "splash_ready_to_show" : "quit_ready_to_show");
   });
-  timing(`${kind}_load_start`);
-  void window.loadFile(join(dist, "lifecycle/lifecycle.html"), { query: {
+  const load = () => {
+    timing(`${kind}_load_start`);
+    if (reused) { window.webContents.send("butler:lifecycle-state", { ...state, repaint: true }); return Promise.resolve(); }
+    return window.loadFile(join(dist, "lifecycle/lifecycle.html"), { query: {
     kind, stage: state.stage, locale: state.locale, theme: state.theme,
     motion: state.reducedMotion ? "reduced" : "auto",
   } }).catch(() => surface.update({ state: kind === "startup" ? "error" : "failed" }));
+  };
+  if (process.env.BUTLER_LIFECYCLE_TRACE === "1") {
+    timing("trace_start");
+    void traceLifecycleWindow(window).then((finish) => { timing("trace_end"); finishTrace = finish; void load(); })
+      .catch(() => { timing("trace_failed"); void load(); });
+  } else void load();
+  timing(`${kind}_show_start`);
+  window.show();
+  timing(`${kind}_show_end`);
   return surface;
 }

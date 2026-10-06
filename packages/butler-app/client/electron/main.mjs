@@ -1,3 +1,5 @@
+import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import {
   app,
@@ -2028,7 +2030,7 @@ async function setDeveloperMode(enabled) {
 
 function applyDeveloperModeToWindows(enabled = developerModeEnabled()) {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (isStartupWindow(win)) continue;
+    if (isStartupWindow(win) || isLifecycleWindow(win)) continue;
     if (enabled) {
       win.webContents.openDevTools({ mode: "detach" });
     } else if (win.webContents.isDevToolsOpened()) {
@@ -2283,8 +2285,7 @@ ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
   if (action === "restart") {
     // The preload endpoint is internal state, not an external-server override
     // for the next App. Keep only an override supplied at the original launch.
-    if (explicitServerUrl) process.env.BUTLER_APP_SERVER_URL = explicitServerUrl;
-    else delete process.env.BUTLER_APP_SERVER_URL;
+    restoreLaunchServerEnvironment(explicitServerUrl);
     app.relaunch();
     finalQuitAllowed = true;
     app.quit();
@@ -2506,6 +2507,7 @@ ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
   updateTrayIcon();
   if (isMac) {
     for (const win of BrowserWindow.getAllWindows()) {
+      if (isLifecycleWindow(win)) continue;
       win.setBackgroundColor(macTransparentBackground);
       win.setVibrancy(macVibrancy);
     }
@@ -2672,7 +2674,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
-      configureStartupActions({ retry: () => bundledAgentSupervisor.stop({ wait: true, preserveWork: true, reason: "startup_retry" }), diagnostics: () => bundledAgentSupervisor.diagnostics() });
+      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();

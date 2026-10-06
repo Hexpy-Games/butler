@@ -45,7 +45,6 @@ async function launch() {
   });
   application = app;
   applicationProcess = app.process();
-  await app.firstWindow({ timeout: 30_000 });
   await waitFor(async () => {
     try { return (await fixture.api("/runtime-readiness")).btcc_executor_ready === true; } catch { return false; }
   }, "Agent not ready", 30_000);
@@ -61,42 +60,50 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
   const lock = holdStorage ? new Database(resolve(fixture.data, "agent-runtime/btcc.sqlite")) : null;
   lock?.exec("BEGIN IMMEDIATE");
   let slowStatus = "";
-  const released = lock ? new Promise<void>((done, fail) => setTimeout(() => {
+  let slowFailure: unknown;
+  const released = lock ? new Promise<void>((done) => setTimeout(() => {
     void app.evaluate(async ({ BrowserWindow }) => {
       const surface = BrowserWindow.getAllWindows().find((window) => window.webContents.getURL().includes("/lifecycle/lifecycle.html"));
       return surface ? await surface.webContents.executeJavaScript("document.querySelector('[data-slot=caption]').textContent") as string : "";
-    }).then((status) => { slowStatus = status; }, fail).finally(() => {
+    }).then((status) => { slowStatus = status; }, (error: unknown) => { slowFailure = error; }).finally(() => {
       lock.exec("ROLLBACK"); lock.close(); done();
     });
   }, 15_500)) : Promise.resolve();
-  const timing = await app.evaluate(({ BrowserWindow, app, ipcMain }) => {
+  let measured: { hidden_ms: number; feedback_ms: number; status: string } | undefined;
+  let pending = "";
+  process.stderr?.on("data", (chunk) => {
+    const lines = (pending + String(chunk)).split("\n"); pending = lines.pop() ?? "";
+    for (const line of lines) { try { const value = JSON.parse(line); measured = value.quitSmoke ?? measured; } catch { /* structured evidence only */ } }
+  });
+  await app.evaluate(({ BrowserWindow, ipcMain }) => {
     const start = performance.now();
-    const main = BrowserWindow.getAllWindows().find((win) => win.isVisible())!;
-    return new Promise<{ hidden_ms: number; feedback_ms: number; status: string }>((done) => {
+    const main = BrowserWindow.getAllWindows().find((win) => win.isVisible() && !win.webContents.getURL().includes("/lifecycle/lifecycle.html"))!;
+    {
       let hidden = -1;
       let shown = -1;
       let status = "";
-      const complete = () => { if (hidden >= 0 && shown >= 0 && status) done({ hidden_ms: hidden, feedback_ms: shown, status }); };
+      const complete = () => { if (hidden >= 0 && shown >= 0 && status) console.error(JSON.stringify({ quitSmoke: { hidden_ms: hidden, feedback_ms: shown, status } })); };
       main.once("hide", () => { hidden = performance.now() - start; complete(); });
-      app.once("browser-window-created", (_event, feedback) => {
-        const painted = (event: { sender: unknown }, profile: { card?: { line?: string; fontReady?: boolean; markReady?: boolean; images?: number } }) => {
-          if (event.sender !== feedback.webContents) return;
-          ipcMain.removeListener("butler:lifecycle-painted", painted);
-          if (profile.card?.fontReady && profile.card.markReady && profile.card.images === 0) {
-            shown = performance.now() - start; status = profile.card.line ?? ""; complete();
-          }
-        };
-        ipcMain.on("butler:lifecycle-painted", painted);
-      });
+      const painted = (event: { sender: unknown }, profile: { card?: { line?: string; fontReady?: boolean; markReady?: boolean; images?: number } }) => {
+        if (event.sender === main.webContents || !(event.sender as { getURL(): string }).getURL().includes("/lifecycle/lifecycle.html")) return;
+        ipcMain.removeListener("butler:lifecycle-painted", painted);
+        if (profile.card?.fontReady && profile.card.markReady && profile.card.images === 0) {
+          shown = performance.now() - start; status = profile.card.line ?? ""; complete();
+        }
+      };
+      ipcMain.on("butler:lifecycle-painted", painted);
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");
-    });
+    }
   });
   await exited;
   await released;
+  console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
+  assert.ifError(slowFailure);
+  assert.ok(measured, "Quit first frame evidence unavailable");
+  const timing = measured;
   assert.equal(process.exitCode, 0);
   const total = performance.now() - started;
   console.log(JSON.stringify({ scenario: baseline ? "before" : "after", blocked: holdStorage, quit_to_exit_ms: total, ...timing }));
-  console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
   if (!baseline) {
     assert(timing.hidden_ms >= 0 && timing.hidden_ms <= 200, JSON.stringify(timing));
     assert(timing.feedback_ms >= 0 && timing.feedback_ms <= 200, JSON.stringify(timing));

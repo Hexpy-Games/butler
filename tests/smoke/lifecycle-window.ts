@@ -8,7 +8,7 @@ import { smokeBrowserArgs } from "../support/smoke-browser-args";
 
 const directory = resolve("packages/butler-app/client/ui/lifecycle-assets");
 const copy = JSON.parse(readFileSync(join(directory, "copy.json"), "utf8"));
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs(), executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 let cases = 0;
 mkdirSync(".tmp/lifecycle/static", { recursive: true });
 try {

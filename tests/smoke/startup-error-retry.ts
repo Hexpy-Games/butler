@@ -9,6 +9,7 @@ import { chromium, type Browser } from "playwright";
 import { quitFixture } from "./app-quit-fixture";
 import { freePort } from "../support/native-app-server";
 import { smokeBrowserArgs } from "../support/smoke-browser-args";
+import { nativeMainFacts } from "../support/native-main-facts";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
 const nativeExitCode = await nativeSmokeRuntime(import.meta.url);
 if (nativeExitCode !== null) process.exit(nativeExitCode);
@@ -23,6 +24,7 @@ const config = join(fixture.data, "butler.config.json");
 const validConfig = readFileSync(config);
 writeFileSync(config, "{invalid config");
 const debugPort = await freePort();
+const mainPort = await freePort();
 const env = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort) };
 let original: ChildProcess | undefined;
 let browser: Browser | undefined;
@@ -43,7 +45,7 @@ async function connect() {
   return chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
 }
 try {
-  original = spawn(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, stdio: "ignore" });
+  original = spawn(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, stdio: "ignore" });
   browser = await connect();
   const splash = await waitFor(() => browser!.contexts()[0]!.pages().find((page) => page.url().includes("lifecycle.html")), "Error surface unavailable");
   await splash.getByRole("alert").waitFor();
@@ -59,17 +61,32 @@ try {
   assert.ok(report.failedStage);
   assert.ok(Array.isArray(report.timings));
   writeFileSync(config, validConfig);
+  console.log(JSON.stringify({ originalFacts: await nativeMainFacts(mainPort, fixture.data) }));
+  await splash.bringToFront();
   await retry.click();
-  await waitFor(() => original!.exitCode !== null, "Retry did not exit the failed process");
+  await waitFor(() => original!.exitCode !== null || original!.signalCode !== null, "Retry did not exit the failed process");
   assert.equal(original.exitCode, 0);
   await browser.close(); browser = undefined;
-  successorPid = await waitFor(() => {
-    try {
-      const record = JSON.parse(readFileSync(join(diagnostics, "instance.json"), "utf8"));
-      return record.app_pid !== original!.pid ? record.app_pid as number : undefined;
-    } catch { return undefined; }
-  }, "Retry did not launch a new native process");
   browser = await connect();
+  const facts = await waitFor(async () => {
+    try { const value = await nativeMainFacts(mainPort, fixture.data); return value.pid !== original!.pid ? value : undefined; }
+    catch { return undefined; }
+  }, "Retried main inspector unavailable");
+  successorPid = facts.pid;
+  console.log(JSON.stringify({ retryProcess: facts }));
+  assert.equal(facts.dataIsolated, true, "Retry preserves its isolated data root");
+  assert.equal(facts.shellIsolated, true, "Retry preserves disabled shell registration");
+  try {
+    await waitFor(() => {
+      try { return JSON.parse(readFileSync(join(diagnostics, "instance.json"), "utf8")).app_pid === successorPid; }
+      catch { return false; }
+    }, "Retried process did not enter foreground Agent launch");
+  } catch (error) {
+    const retrySurface = browser.contexts()[0]!.pages().find((page) => page.url().includes("lifecycle.html"));
+    const state = await retrySurface?.evaluate(() => (window as any).butlerLifecycle.state());
+    console.log(JSON.stringify({ retryFailure: { pid: successorPid, kind: state?.kind, stage: state?.stage, state: state?.state, failedStage: state?.failedStage, pages: browser.contexts()[0]!.pages().map((page) => new URL(page.url()).protocol) } }));
+    throw error;
+  }
   const main = await waitFor(() => browser!.contexts()[0]!.pages().find((page) => page.url().startsWith("app://")), "Retry main renderer unavailable");
   await main.locator("[data-test-class=app-boot]").waitFor({ state: "hidden" });
   assert.ok((await main.locator("#root").innerText()).length > 0);
