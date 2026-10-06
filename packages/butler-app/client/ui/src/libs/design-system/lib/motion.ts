@@ -1,5 +1,3 @@
-import { createStore } from "zustand/vanilla";
-import { subscribeWithSelector } from "zustand/middleware";
 /**
  * The one WAAPI entry point (DS spec Motion Contract). Timing comes from the
  * --motion-* tokens and reduced motion turns every animation into an opacity
@@ -61,7 +59,10 @@ function tokenValue(name: string): string {
   }
 }
 
-/** The app shell is the CSS boundary; the viewer retains its local scope. */
+/**
+ * Forces reduced motion app-wide (`data-motion="reduced"` on the #root shell);
+ * `false` follows the OS again. The DS Viewer keeps its own body scope too.
+ */
 export function setReducedMotionOverride(reduced: boolean): void {
   if (typeof document === "undefined") return;
   const shell = document.getElementById?.("root") ?? document.documentElement;
@@ -70,6 +71,7 @@ export function setReducedMotionOverride(reduced: boolean): void {
   publishReducedMotion();
 }
 
+/** A `data-motion="reduced"` scope on the shell (#root), <html> or <body> (DS Viewer toggle). */
 function reducedMotionScope(): boolean {
   return typeof document !== "undefined" && (
     document.getElementById?.("root")?.dataset.motion === "reduced" ||
@@ -83,19 +85,28 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-const motionState = createStore(subscribeWithSelector(() => ({ reduced: false })));
+// A plain listener set: the DS stays free of app state libraries.
+const motionListeners = new Set<(reduced: boolean) => void>();
+let reducedNow = false;
 let stopMotionSignals: (() => void) | undefined;
-let motionSubscribers = 0;
 
+/** Recomputes the effective preference; listeners hear only real changes. */
 function publishReducedMotion(): void {
-  motionState.setState({ reduced: prefersReducedMotion() });
+  const next = prefersReducedMotion();
+  if (next === reducedNow) return;
+  reducedNow = next;
+  for (const listener of [...motionListeners]) listener(next);
 }
 
-/** One shared observer and OS listener; selector notifications only on a change. */
+/**
+ * Calls back whenever the effective reduced-motion preference changes (OS
+ * setting, the app override, or the DS Viewer scope). One shared media
+ * listener and observer serve every subscriber; returns the unsubscribe.
+ */
 export function subscribeReducedMotion(callback: (reduced: boolean) => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
-  if (!motionSubscribers++) {
-    publishReducedMotion();
+  if (motionListeners.size === 0) {
+    reducedNow = prefersReducedMotion();
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     media.addEventListener("change", publishReducedMotion);
     const observer = typeof MutationObserver === "function" ? new MutationObserver(publishReducedMotion) : null;
@@ -104,10 +115,12 @@ export function subscribeReducedMotion(callback: (reduced: boolean) => void): ()
     }
     stopMotionSignals = () => { media.removeEventListener("change", publishReducedMotion); observer?.disconnect(); };
   }
-  const unsubscribe = motionState.subscribe((state) => state.reduced, callback);
+  // A wrapper per subscription, so one callback subscribed twice unsubscribes independently.
+  const listener = (reduced: boolean) => callback(reduced);
+  motionListeners.add(listener);
   return () => {
-    unsubscribe();
-    if (!--motionSubscribers) { stopMotionSignals?.(); stopMotionSignals = undefined; }
+    if (!motionListeners.delete(listener)) return;
+    if (motionListeners.size === 0) { stopMotionSignals?.(); stopMotionSignals = undefined; }
   };
 }
 
