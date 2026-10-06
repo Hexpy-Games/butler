@@ -94,7 +94,10 @@ async fn hooks_allow_cannot_bypass_permission_and_resume_preserves_id() -> Resul
     guard["match"] = json!({"tools":["set_wallpaper"]});
     let mut post = observer(&setup, "PostToolUse");
     post["match"] = json!({"tools":["set_wallpaper"]});
-    configure(&setup, &[observed, guard, post])?;
+    let mut fresh = observer(&setup, "PreToolUse");
+    fresh["id"] = json!("fresh");
+    fresh["match"] = json!({"tools":["record_work_disposition"]});
+    configure(&setup, &[observed, guard, post, fresh])?;
     let s = setup.start().await?;
     s.provider()?.set_chat_responder(stub::wallpaper);
 
@@ -148,11 +151,13 @@ async fn hooks_allow_cannot_bypass_permission_and_resume_preserves_id() -> Resul
         .iter()
         .filter(|p| p["hook_event_name"] == "PreToolUse")
         .collect();
-    assert_eq!(captured.len(), 2);
+    assert_eq!(captured.len(), 3);
     assert_eq!(captured[0]["event_id"], captured[1]["event_id"]);
     assert_eq!(captured[0]["tool_use_id"], captured[1]["tool_use_id"]);
     assert_eq!(captured[0]["resumed"], false);
     assert_eq!(captured[1]["resumed"], true);
+    assert_eq!(captured[2]["tool_use_id"], "hook_close");
+    assert_eq!(captured[2]["resumed"], false);
     assert_eq!(
         s.gw.settings().await?["wallpaper"]["source"]["module"],
         "butler.silk"

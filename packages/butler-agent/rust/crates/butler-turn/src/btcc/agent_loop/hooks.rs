@@ -42,7 +42,12 @@ fn tool_payload(
         tool_name: Some(policy.hook_tool_name(call).into_owned()),
         tool_use_id: Some(call.id.clone()),
         tool_input: Some(policy.hook_tool_input(call).clone()),
-        resumed: Some(input.turn.authority_continuation.is_some()),
+        resumed: Some(input.turn.authority_continuation.as_ref().is_some_and(|c| {
+            c.batch
+                .calls
+                .get(c.batch.next_call_index)
+                .is_some_and(|pending| pending.id == call.id)
+        })),
         ..HookPayload::default()
     }
 }
