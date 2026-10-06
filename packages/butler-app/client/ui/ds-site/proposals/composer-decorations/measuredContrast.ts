@@ -11,12 +11,12 @@ export const MEASURED_ON = "2026-10-06";
 export const MEASURED: Array<{ id: string; label: string; theme: string; values: ContrastRow }> = [
   { id: "d-light", label: "Shoreline, owner setting (default)", theme: "Light", values: { primary: 9.87, placeholder: 2.96, secondary: 2.99, icons: 2.32 } },
   { id: "d-dark", label: "Shoreline, owner setting (default)", theme: "Dark", values: { primary: 5.86, placeholder: 2.87, secondary: 1.95, icons: 4.46 } },
-  { id: "c1-light", label: "Cherry canopy, 1-line draft", theme: "Light", values: { primary: 14.38, placeholder: 4.87, secondary: 4.8, icons: 5.06 } },
-  { id: "c1-dark", label: "Cherry canopy, 1-line draft", theme: "Dark", values: { primary: 15.3, placeholder: 6.17, secondary: 5.42, icons: 6.72 } },
-  { id: "c3-light", label: "Cherry canopy, 3-line draft (scrolls at 375)", theme: "Light", values: { primary: 6.84, placeholder: 4.87, secondary: 4.81, icons: 5.08 } },
-  { id: "c3-dark", label: "Cherry canopy, 3-line draft (scrolls at 375)", theme: "Dark", values: { primary: 6.68, placeholder: 6.17, secondary: 5.47, icons: 6.88 } },
-  { id: "c6-light", label: "Cherry canopy, 6-line draft (scrolls)", theme: "Light", values: { primary: 6.84, placeholder: 4.87, secondary: 4.76, icons: 5.07 } },
-  { id: "c6-dark", label: "Cherry canopy, 6-line draft (scrolls)", theme: "Dark", values: { primary: 6.94, placeholder: 6.17, secondary: 5.42, icons: 6.88 } },
+  { id: "c1-light", label: "Cherry canopy, 1-line draft", theme: "Light", values: { primary: 14.38, placeholder: 4.87, secondary: 4.77, icons: 5.06 } },
+  { id: "c1-dark", label: "Cherry canopy, 1-line draft", theme: "Dark", values: { primary: 15.55, placeholder: 6.2, secondary: 5.42, icons: 6.63 } },
+  { id: "c3-light", label: "Cherry canopy, 3-line draft (scrolls at 375)", theme: "Light", values: { primary: 4.88, placeholder: 4.87, secondary: 4.81, icons: 5.08 } },
+  { id: "c3-dark", label: "Cherry canopy, 3-line draft (scrolls at 375)", theme: "Dark", values: { primary: 7.45, placeholder: 6.2, secondary: 5.43, icons: 6.88 } },
+  { id: "c6-light", label: "Cherry canopy, 6-line draft (scrolls)", theme: "Light", values: { primary: 4.88, placeholder: 4.87, secondary: 4.81, icons: 5.08 } },
+  { id: "c6-dark", label: "Cherry canopy, 6-line draft (scrolls)", theme: "Dark", values: { primary: 7.3, placeholder: 6.2, secondary: 5.47, icons: 6.88 } },
   { id: "c-light", label: "No decoration: plain glass", theme: "Light", values: { primary: 14.4, placeholder: 4.87, secondary: 4.76, icons: 5.02 } },
   { id: "c-dark", label: "No decoration: plain glass", theme: "Dark", values: { primary: 15.5, placeholder: 6.21, secondary: 5.42, icons: 6.88 } },
 ];
