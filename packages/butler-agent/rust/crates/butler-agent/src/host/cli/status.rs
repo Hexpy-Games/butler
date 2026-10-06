@@ -107,7 +107,7 @@ pub(crate) async fn run_native_status_cli(
             let model = models.status_value(&metrics.model_telemetry());
             let services = service_health(&data_root);
             let previews = update_previews(&models.configuration).await;
-            let version = env!("BUTLER_RELEASE_VERSION");
+            let version = crate::host::build_info::current().version;
             let memory_model = super::status_memory::read(&data_root, &installation).await;
             let text = format!(
                 "Butler {version}\nupdate.previews: {previews}\n{}\n{}",

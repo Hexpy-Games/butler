@@ -7,8 +7,8 @@ pub(crate) fn version(installation: &ResolvedInstallation) -> String {
         "{}+{}",
         installation
             .agent_version()
-            .unwrap_or_else(|| env!("BUTLER_RELEASE_VERSION").into()),
-        env!("BUTLER_BUILD_ID")
+            .unwrap_or_else(|| crate::host::build_info::current().version.into()),
+        crate::host::build_info::current().build_id
     )
 }
 

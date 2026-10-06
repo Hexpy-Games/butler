@@ -23,7 +23,8 @@ The workspace in `packages/butler-agent/rust` uses Rust 1.91.0, pinned in `rust-
 
 | Crate | Role |
 | --- | --- |
-| `butler-agent` | The `butler-agent` executable: process composition, CLI, service and app server. It owns no domain logic. |
+| `butler-agent` | Thin executable and build provenance in `crates/butler-agent-cli`. |
+| `butler-host` | Process composition, CLI, service and app server in `crates/butler-agent`; the library target remains `butler_agent`. It owns no domain logic. |
 | `butler-core` | Leaf building blocks: JSON codecs, locale, text, the configuration file and the tool protocol. |
 | `butler-turn` | The turn engine: the model and tool loop, authority, durable Work, transcripts and workspaces. |
 | `butler-models` | Model providers, credentials and MCP clients. |
@@ -35,7 +36,7 @@ The workspace in `packages/butler-agent/rust` uses Rust 1.91.0, pinned in `rust-
 | `butler-e2e` | A dev-only harness that drives the real binary with stub or replay model traffic. |
 | `butler-test-support` | Shared test helpers. |
 
-Paths in this table are relative to `packages/butler-agent/rust`. `tools/source-check` enforces code-shape limits, the test ratchet, platform boundaries and domain dependency rules. To find your way around, start at `crates/butler-agent/src/main.rs` and `host::runtime`.
+Paths in this table are relative to `packages/butler-agent/rust`. `tools/source-check` enforces code-shape limits, the test ratchet, platform boundaries and domain dependency rules. To find your way around, start at `crates/butler-agent-cli/src/main.rs` and `host::runtime`.
 
 ## Prerequisites
 
@@ -121,7 +122,7 @@ export ORT_LIB_PATH="$(jq -r .ort_lib_path <<<"$prepared")"
 export PROTOC="$(jq -r .protoc <<<"$prepared")"
 export ORT_PREFER_DYNAMIC_LINK=0 ORT_SKIP_DOWNLOAD=1
 
-cargo clippy -p butler-agent --all-targets --locked --no-default-features --features static-ort -- -D warnings
+cargo clippy -p butler-host -p butler-agent --all-targets --locked --no-default-features --features static-ort -- -D warnings
 ```
 
 Run Clippy on the crates you changed; the example selects the Agent's static build. For default prebuilt builds, omit those feature flags. CI also runs the workspace with `cargo nextest run --workspace --locked`.
@@ -158,7 +159,7 @@ A release is a `vX.Y.Z` tag pushed from `main`.
    - `packages/butler-app/client/electron/package.json`: the app version
    - `packages/butler-progress-projection/package.json`
    - `packages/butler-npm/package.json`: the installer package version (the publish job sets it from the tag)
-   - `packages/butler-agent/rust/crates/butler-agent/Cargo.toml`
+   - `packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
 3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`, and their macOS builds are not notarized.
 4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 App and Agent, Linux x64 / arm64 Agent archives and DEBs, and an Arch x64 App package. It runs release gates and smoke checks, attaches the installer and consolidated checksums, then publishes the release after the required assets exist. Hyphenated tags are prereleases; stable tags feed `releases/latest`. The npm job then publishes `@hexpygames/butler` (`latest` for stable, `next` for previews).

@@ -99,7 +99,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-agent -p butler-e2e --tests -- -D warnings
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-host -p butler-agent -p butler-e2e --tests -- -D warnings
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
