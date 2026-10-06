@@ -111,6 +111,20 @@ test("animated modules loop at no more than 20fps", () => {
   expect(draws).toBeLessThanOrEqual(21);
 });
 
+test("content-rect changes every frame (a scrolling rail) keep the 20fps cap and never stall the loop afterwards", () => {
+  const engine = start();
+  let time = 0;
+  for (; time <= 1500; time += 1000 / 60) {
+    engine.setContentRect({ x: time % 40, y: 5, width: 40, height: 20 });
+    step(time);
+  }
+  expect(draws).toBeLessThanOrEqual(32);
+  draws = 0;
+  for (const end = time + 1000; time <= end; time += 1000 / 60) step(time);
+  expect(draws).toBeGreaterThanOrEqual(19);
+  expect(draws).toBeLessThanOrEqual(21);
+});
+
 test("the user's pause holds a still frame and stops the loop", () => {
   const engine = start();
   step(0);

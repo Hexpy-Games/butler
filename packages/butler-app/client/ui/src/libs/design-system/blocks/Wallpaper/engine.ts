@@ -81,8 +81,10 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     if (lastTick !== null) clock = advanceWallpaperClock(clock, now - lastTick);
     lastTick = now;
     const { maxFps } = wallpaperRenderPolicy(state.moduleMotion);
-    if (dirty || wallpaperFrameDue(now, slot, maxFps)) {
-      slot = nextWallpaperFrameSlot(now, slot, maxFps);
+    const due = wallpaperFrameDue(now, slot, maxFps);
+    if (dirty || due) {
+      // Only a due frame takes a slot: changes drawn between slots never push the cap's grid ahead of the clock.
+      if (due) slot = nextWallpaperFrameSlot(now, slot, maxFps);
       if (watchdog.time(() => draw(now))) return;
     }
     schedule();
@@ -142,8 +144,8 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     setContentRect(rect) {
       contentRect = rect;
       box = readWallpaperCanvasBox(canvas); // A layout change may have moved the canvas too.
-      // Only modules that read u_contentRect redraw; animated ones pick it up on the next frame.
-      if (renderer.usesContentRect()) redraw();
+      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame.
+      if (renderer.usesContentRect() && wallpaperFrameMode(state) !== "animate") redraw();
     },
     dispose() {
       window.cancelAnimationFrame(frame);
