@@ -59,6 +59,7 @@ mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
 mod perf_ask_user;
+mod perf_turn;
 mod personalization;
 mod personalization_defaults;
 mod process_names;

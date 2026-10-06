@@ -1,0 +1,36 @@
+name: Publish verified Cargo target
+description: Publish the existing build tree to GHCR without another Cargo build
+inputs:
+  platform:
+    required: true
+    description: Snapshot platform
+  mode:
+    required: true
+    description: Native dependency mode
+  kind:
+    required: true
+    description: Native, dev or perf lane
+  producer:
+    required: true
+    description: Exact GitHub build job name
+runs:
+  using: composite
+  steps:
+    - uses: oras-project/setup-oras@v1
+      with:
+        version: 1.2.3
+    - name: Commit complete snapshot and retain two generations
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OCI_ACTOR: ${{ github.actor }}
+        CACHE_PLATFORM: ${{ inputs.platform }}
+        CACHE_MODE: ${{ inputs.mode }}
+        CACHE_KIND: ${{ inputs.kind }}
+        TARGET_SNAPSHOT_PRODUCER: ${{ inputs.producer }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bash -eu -o pipefail -c '
+          printf "%s" "$GH_TOKEN" | oras login ghcr.io --username "$OCI_ACTOR" --password-stdin
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-target-release.py" publish-lane "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"
+        '

@@ -7,7 +7,7 @@
 | `macos-arm64` | `aarch64-apple-darwin` | macOS system `/usr/bin/curl`, Xcode command-line tools (`xcrun`/clang) | official prebuilt ORT for CI; custom static build for releases |
 | `linux-x64` | `x86_64-unknown-linux-gnu` | `/usr/bin/curl`, a C/C++ compiler (`CC`/`CXX`, default `cc`/`c++`) | official prebuilt ORT for CI; custom static build for packages |
 | `linux-arm64` | `aarch64-unknown-linux-gnu` | as `linux-x64` | official prebuilt ORT for nightly CI; custom static build for packages |
-| `windows-x64` | `x86_64-pc-windows-msvc` | `%SystemRoot%\System32\curl.exe`, Visual Studio with the x64 C++ tools; the full build runs in an x64 developer environment (`cl.exe` on `PATH`) with symlink rights and a short `CARGO_TARGET_DIR` | official prebuilt ORT for the compile check; no Windows release package |
+| `windows-x64` | `x86_64-pc-windows-msvc` | `%SystemRoot%\System32\curl.exe`, Visual Studio with the x64 C++ tools; the full build runs in an x64 developer environment (`cl.exe` on `PATH`) with symlink rights and a short `CARGO_TARGET_DIR` | official prebuilt ORT for the compile check; pinned static SDK for releases |
 
 The custom static recipe needs Python 3.9+, Rust 1.91.0 and more than 8 GiB free. CMake, Ninja and protoc come from pinned archives; they do not need a global installation. The script rejects other hosts and caps downloads, archive expansion, build time, parallel jobs and disk use. The `ort` crate's official prebuilt binaries cover all four CI targets; its Windows archive includes DirectML, and that job only type-checks without linking or running the agent.
 
@@ -21,7 +21,7 @@ Linux and Windows builds pass `--compile_no_warning_as_error`: the pinned ORT pr
 
 ## Cache
 
-The custom static cache lives under `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps/`, outside the packaged application. Its key (`--fingerprint`) covers the recipe, the target's projection of the lock (shared sources plus that target's tools and build settings, so pinning another target's tool does not invalidate it), the Python/Rust toolchain and the host build identity: macOS SDK and clang; Linux distribution, libc and C/C++ compiler; Windows version and MSVC toolset. A cache is adopted only with a matching completion manifest, archive digests, all static-library digests, the configured static/nonminimal build (and arm64 on macOS), the `ort-sys` dependency layout and no ORT dynamic library. Incomplete or changed caches fail closed. The build stage is renamed after completion; its `_deps` link is relative, and Cargo consumes the final libraries and protoc path. The retained CMake cache is not reused for incremental rebuilding. The producer forces static linking and checks the dependency closure before copying a payload: Mach-O on macOS, ELF `NEEDED` entries on Linux (glibc, libgcc and libstdc++ only). It never copies an ORT shared library. `packages/butler-app/scripts/release/package-linux-app.ts` bundles the Linux payload into the DEB and Arch App packages (`.github/workflows/linux-packages.yml`).
+The custom static cache lives under `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps/`, outside the packaged application. Its stable SHA-256 key (`--fingerprint`) covers the target's projected lock, all build flags and recipe modules, and the pinned Rust toolchain. Producer compiler/SDK and Python identities remain recorded as provenance; consumers verify the published bytes rather than rebuilding on runner-image changes. A cache is adopted only with a matching completion manifest, archive digests, all static-library digests, the configured static/nonminimal build (and arm64 on macOS), the `ort-sys` dependency layout and no ORT dynamic library. Incomplete or changed caches fail closed. The build stage is renamed after completion; its `_deps` link is relative, and Cargo consumes the final libraries and protoc path. The retained CMake cache is not reused for incremental rebuilding. The producer forces static linking and checks the dependency closure before copying a payload: Mach-O on macOS, ELF `NEEDED` entries on Linux (glibc, libgcc and libstdc++ only). It never copies an ORT shared library. `packages/butler-app/scripts/release/package-linux-app.ts` bundles the Linux payload into the DEB and Arch App packages (`.github/workflows/linux-packages.yml`).
 
 `--fingerprint` prints the static cache key without preparing anything, so a release cache keyed by it is reused exactly when the script would reuse the cache. `--protoc-only` prepares just the pinned protoc under the same root; CI/dev builds use that mode and let `ort` download its official prebuilt binary rather than running the custom ORT build.
 
@@ -39,3 +39,17 @@ python3 packages/butler-agent/rust/scripts/prepare-static-ort.py --protoc-only
 ```
 
 The previously isolated static ORT 1.21.0 build and API-21 link probe established the recipe inputs. A clean build through this repository-owned recipe and a full release package remain unverified until the combined release check.
+
+## Published native SDKs
+
+`native-deps.yml` builds all four native release targets with this same recipe. Each target publishes a dedicated prerelease `native-deps-<64-character key>` containing `native-deps-<target>-<key>.zip`. GitHub Releases avoids the 10 GB Actions cache quota and needs no OCI tooling or registry credentials. The publisher uploads to a draft, then publishes with `--latest=false`; it never modifies a published release or overwrites an asset. Enable GitHub release immutability in repository settings for server-enforced protection as well.
+
+The ZIP retains pinned source/tool archives, every static library, CMake settings, protoc and the complete digest manifest, without build intermediates or source trees. Consumers check the GitHub-recorded asset SHA-256 and size before safe extraction, reconstruct the relative `_deps` link, and run every existing archive, library, configuration and protoc digest check. A mismatch fails closed without rebuilding. A missing release falls back to the original build locally; GitHub Actions enforces download-only consumption, and setup also passes `--require-prebuilt` to prevent source builds and directs the coordinator to publish the pins first. `--build-only` is reserved for the publisher.
+
+After merging, publish the first set with:
+
+```sh
+gh workflow run native-deps.yml --repo Hexpy-Games/butler --ref main
+```
+
+Removing the static ORT Actions-cache restore/save steps stops new SDK cache entries. Existing `static-ort-*` entries can be removed by the coordinator with `gh cache delete <cache-id> --repo Hexpy-Games/butler` after listing them with `gh cache list`; Cargo caches should be retained.

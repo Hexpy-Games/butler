@@ -17,10 +17,14 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
 jobs:
   build:
     name: Build archives (${{ inputs.platform }})
     runs-on: ${{ inputs.runner }}
+    concurrency:
+      group: cargo-target-rust-archive-${{ inputs.platform }}-${{ github.event_name == 'push' && 'publisher' || github.run_id }}
+      cancel-in-progress: false
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
@@ -58,6 +62,7 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
@@ -65,14 +70,23 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rust-archive"
           # nextest builds test harnesses, not the Agent CLI. Build all targets
           # together so the ordinary Agent and every test share dependencies.
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8 "${args[@]}"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --workspace --all-targets --locked "${args[@]}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-rust-archive-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Archive tests and record every selection
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
           python3 "$isolate" cargo nextest list "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
@@ -87,12 +101,13 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked -j 8 "${args[@]}"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked "${args[@]}"
           fi
       - name: Record native Agent provenance
         env:
@@ -101,6 +116,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.1.0-preview.99' || github.ref_name }}
         run: |
           version="$RELEASE_VERSION"
+          if [[ "$version" == release/* ]]; then version="v${version#release/}"; fi
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
@@ -109,18 +125,12 @@ jobs:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
-      - name: Preserve successful Cargo outputs outside the shared cache quota
-        id: cargo-cache
-        env:
-          CACHE_PLATFORM: ${{ inputs.platform }}
-          CACHE_MODE: ${{ inputs.ort-mode }}
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" dev
-      - uses: actions/upload-artifact@v4
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
-          name: ${{ steps.cargo-cache.outputs.name }}
-          path: ${{ runner.temp }}/cargo-build-cache/*
-          retention-days: 2
-          compression-level: 0
-          if-no-files-found: error
+          platform: ${{ inputs.platform }}
+          mode: ${{ inputs.ort-mode }}
+          kind: dev
+          producer: Build archives (${{ inputs.platform }})

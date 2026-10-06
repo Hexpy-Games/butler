@@ -245,7 +245,7 @@ cycle. `idle_resources` additionally observes App and BTCC `data_version` over
 all three idle windows and requires zero commits. Its fixture contains 5,000
 turns, 200,000 App events, 30,000 native messages, 30,000 completed memory jobs
 and more than 300 MB of metrics. These fixtures do not model the full 7 GB BTCC
-DB or the 2,440-transcript corpus listed in `plans/README.md`; report the measured
+DB or the 2,440-transcript corpus listed in [AGENTS.md](../../../../../AGENTS.md); report the measured
 fixture scope with the results.
 
 ## Wall-clock budgets in CI
@@ -313,3 +313,124 @@ run `scripts/archive-relocation.sh /tmp/e2e.tar.zst` from the Rust workspace
 (with `BUTLER_E2E_TIER=stub` and `BUTLER_E2E_BIN` naming the built agent).
 It extracts to a new directory, verifies the fixture executable belongs to the
 archive, and runs the unchanged hung-MCP shutdown assertions there.
+
+## Turn overhead at owner scale (PERF-02)
+
+`perf_turn::perf_02_round_overhead_at_large_context` scripts 60 `read_file`
+rounds with distinct 22 KB prose files, then a final answer. It measures the gap
+from the end of each provider reply to arrival of the next complete request,
+excluding synthetic-provider matching and model time. Only samples whose next
+request transcript (`input`, excluding tools and instructions) is at least
+1.4 MB enter the owner-scale p95; it must be below 20 ms.
+Every request must contain the exact results so far, with their call IDs and
+order; the final request carries all 60 files. Final delivery is checked too.
+The diagnostic prefix hashes, token counts and longest common prefixes are
+checked against an independent reconstruction with the uncached tokenizer.
+
+This scenario uses the existing release-branch perf selector and
+`BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`. Run locally with a release agent:
+
+```sh
+BUTLER_E2E_TIER=stub BUTLER_E2E_PERF=1 BUTLER_E2E_SKIP_BUILD=1 \
+BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
+python3 ../../../.github/scripts/isolated.py cargo test -p butler-e2e \
+  --test e2e perf_02_ -- --nocapture --test-threads=1
+```
+
+Linux x86_64 release measurements on 2026-10-06, before at `ca0212d27`
+(the earlier SSE scan and message-facts cache), after with exact token-block
+reuse, fewer serialization passes, and shared catalog construction:
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Transcript bytes | 1,455,703 | 1,455,703 |
+| Final request bytes | 1,508,906 | 1,508,906 |
+| Owner-scale samples | 3 | 3 |
+| Per-round p50 | 145.1 ms | 19.2 ms |
+| Per-round p95 | 147.3 ms | 19.3 ms |
+
+Both runs passed the exact history and final-delivery assertions. The after
+run also passed the independent token assertions and the unchanged 20 ms gate.
+The measured tree includes `origin/main` at `3379b7a6f` (the thin CLI split);
+`98581771a` was subsequently merged with CI/docs changes only.
+The margin is small: the instrumented run measured 20.4 ms p95 and failed the
+gate. No assertion or budget was changed.
+
+Profiling used the same release agent and scenario, with
+`perf record -e cpu-clock:u -F 1999 -g --clockid mono --call-graph dwarf,32768`.
+Samply unwound the captured DWARF stacks; a flamegraph was generated from
+resolved stacks. `BUTLER_E2E_PROFILE=1` prints monotonic endpoints so analysis
+includes only the three owner-scale reply-to-request gaps. There were 918
+before and 138 after agent CPU samples; profiled p95 was 163.0 and 20.4 ms.
+Inclusive percentages overlap. These are the top ten named application/library
+frames, excluding generic Rust/Tokio/libc executor frames:
+
+| Before frame | CPU % | After frame | CPU % |
+| --- | ---: | --- | ---: |
+| `CoreBPE::encode_ordinary` | 81.26 | `driver::obtain_reply` | 44.20 |
+| `driver::obtain_reply` | 62.20 | `driver::run_iteration` | 42.03 |
+| `fancy_regex::Matches::next` | 59.15 | `ProductionAgentLoop::run` | 28.26 |
+| `fancy_regex::Regex::find_from_pos_with_option_flags` | 56.43 | `TurnContextProjection::project` | 22.46 |
+| `fancy_regex::vm::run` | 54.47 | `model_round::project_context` | 22.46 |
+| `catalog::estimate_tokens` | 52.83 | `RoutedRound::run` | 21.74 |
+| `CoreBPE::count_ordinary` | 52.72 | `ModelProvider::run` | 21.74 |
+| `RoutedRound::run` | 34.53 | `RoutedRound::run_round` | 21.01 |
+| `ModelProvider::run` | 34.42 | `TokenizerOwner::block` | 15.94 |
+| `RoutedRound::run_round` | 33.66 | `TurnContext::compacted` | 13.04 |
+
+Repeated full-history regex/BPE work was the main cause. The replacement caches
+exact source blocks only at proven o200k pre-tokenizer boundaries; counting
+reuses lengths and encoding retains every token. Entries are bounded by bytes
+and count, and changed bytes miss the cache. Context pressure and byte admission
+share one serialization, request encoding reuses serialized diagnostic input,
+unchanged diagnostic components reuse their bytes/hashes after ordered value
+comparison, and image admission walks the already parsed body once. Catalog
+construction reuses identical dynamic facts after fresh file reads, with fresh
+observation times and current secret resolution. Unrelated tool results
+are not parsed as work anchors. The earlier SSE scan and message-facts cache
+were reverted.
+
+Remaining after-profile work includes string escaping (11.59%), fresh-block BPE
+(10.14%), SQLite statement preparation (12.32%), and SHA-256 (7.97%). Catalog
+construction was 6.90% before its reuse; the final cache path is 0.72%. SQLite
+and catalog state still remain current on each round.
+
+Landing verification on the same Linux x86_64 host, with both agent and harness
+in release mode and fresh HOME/BUTLER_DATA per run, initially failed at
+20.1 ms p95. Subsequent serialization-only and diagnostic-hash changes still
+failed at 20.4 and 20.5 ms. Reprofiling identified remaining string escaping
+and SHA-256 work. Context sizing now reuses ordered serialized components;
+diagnostic prefixes extend an exact SHA state after comparing all old bytes;
+and the turn-owned request-digest cache reuses unchanged plain-message bytes
+and extends the digest before the final array/object delimiters. Passthrough
+JSON always uses the original request writer. All caches are bounded, and
+mutations/truncations restart digest computation.
+
+The first qualifying three consecutive unprofiled runs passed the unchanged
+20 ms gate before CI exposed the fragmented-stream scan:
+
+| Run | p95 per round | Transcript bytes | Final request bytes |
+| --- | ---: | ---: | ---: |
+| 1 | 18.6 ms | 1,455,703 | 1,508,906 |
+| 2 | 17.5 ms | 1,455,703 | 1,508,906 |
+| 3 | 18.1 ms | 1,455,703 | 1,508,906 |
+
+Each run passed exact history, order/call-ID, final-delivery and independently
+reconstructed prefix hash/token assertions. Existing format pins also compare
+cached request digests with fresh serialization after append, mutation,
+truncation and reordered passthrough JSON.
+
+CI then exposed the expanded 200 KB fragmented SSE test timing out on both
+Linux and macOS. Delimiter search now remembers its cursor and frame-size
+validation counts only new UTF-8 bytes, retaining incomplete sequences and
+exact lossy-decoder semantics. The local test fell from 1.33 to 0.68 seconds
+without changing its content or timeout. After that change, PERF-02 passed
+18.5/18.1 ms but failed its third run at 32.1 ms. A new profile identified
+unchanged-block hash-table lookups; bounded ordered token chains now compare
+complete bytes at the same position instead of rehashing unchanged blocks.
+
+Final-tree verification passed three consecutive unprofiled release runs at
+**19.5 / 18.5 / 17.5 ms p95**, each with the same 1,455,703-byte transcript,
+1,508,906-byte request and all correctness assertions above. Format, strict
+Clippy, source-check, touched-crate tests, runtime integration tests and the
+12 existing context/token/tool/branch stub E2Es passed on this tree.

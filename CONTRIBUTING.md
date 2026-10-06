@@ -79,7 +79,7 @@ bun run app:client:dev
 
 ## Checks
 
-Read [AGENTS.md](AGENTS.md) and [plans/README.md](plans/README.md) before changing code. Run every test or check with a fresh temporary `HOME` and `BUTLER_DATA`; never use the owner's real `~/.butler`. Before you open a pull request, run:
+Read [AGENTS.md](AGENTS.md) before changing code. Run every test or check with a fresh temporary `HOME` and `BUTLER_DATA`; never use the owner's real `~/.butler`. Before you open a pull request, run:
 
 ```sh
 export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
@@ -129,7 +129,7 @@ Run Clippy on the crates you changed; the example selects the Agent's static bui
 
 Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
-Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [plans/README.md](plans/README.md).
+Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
 
 ## Design system
 
@@ -147,11 +147,19 @@ The manual lives in `packages/butler-site`, with Korean pages in `src/content/do
 
 ## Project records
 
-Specs, plans, decisions, implementation reports and experiment evidence belong in the [Project Ledger](packages/project-ledger/README.md). Write them through its CLI (`packages/project-ledger/bin/pl`) or Butler's native tools. Don't add project-management records under `docs/`. Work and Task records reference canonical record IDs. Package READMEs remain the home for usage and API notes that belong to the source.
+Specs, plans, decisions, implementation reports and experiment evidence belong in the [Project Ledger](packages/project-ledger/README.md). Write them through its CLI (`packages/project-ledger/bin/project-ledger`) or Butler's native tools. Never add work documents anywhere in the repo; keep scratch in `$TMPDIR`. Work and Task records reference canonical record IDs. Package READMEs remain the home for usage and API notes that belong to the source.
+
+## Branches and CI
+
+Work branches use `<type>/<slug>` with type `feat`, `fix`, `perf`, `refactor`, `ci`, `build`, `docs`, `test`, `chore` or `research`. Tool-named prefixes (`codex/`, `claude/`) and `batch/` are forbidden. PRs target `main`; candidate fixes use `fix/<v>-<slug>` from `release/<v>` and target that release branch. Merge commits everywhere; the coordinator admin-merges after smoke gates pass. There is no merge queue. Fetch and merge the base before pushing; never rebase a pushed branch.
+
+PRs and main pushes run checks selected by changed paths, workspace tests, UI tests and packaging/install smoke checks, with **no E2E or perf**. Release pushes run integration: all groups, E2E, perf, live E2E (only `openai/gpt-6-luna`), Mac test packages and Windows smoke/installer builds. No nightly CI runs. After a release fix, only jobs with changed inputs or failed results run; successful unchanged jobs and matrix shards are reused through input receipts. Unchanged producer artifacts are restored for consumers. Integration receipts never reuse smoke results.
+
+Release branches are `release/X.Y.Z` or `release/X.Y.Z-preview.N`. New features stay on main. Nothing syncs automatically: when asked, cherry-pick a main change with `-x` onto a release fix branch. After tagging, merge the release branch back to main as a merge commit, then delete it. A published-preview hotfix ships as the next preview, cut from the last tag or ready main.
 
 ## Releases
 
-A release is a `vX.Y.Z` tag pushed from `main`.
+A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `release/<v>`.
 
 1. Set the new version in these files:
    - `VERSION`: the bundled agent version, also shown in the manual
@@ -162,15 +170,26 @@ A release is a `vX.Y.Z` tag pushed from `main`.
    - `packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
 3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`, and their macOS builds are not notarized.
-4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 App and Agent, Linux x64 / arm64 Agent archives and DEBs, and an Arch x64 App package. It runs release gates and smoke checks, attaches the installer and consolidated checksums, then publishes the release after the required assets exist. Hyphenated tags are prereleases; stable tags feed `releases/latest`. The npm job then publishes `@hexpygames/butler` (`latest` for stable, `next` for previews).
+4. Merge the notes/version changes into main, then cut `release/<v>` from `origin/main` (hotfixes may start from the last tag). The push starts integration and derives both test-build versions from the release branch.
+5. The owner installs the Mac and Windows test builds while integration runs. Fix failures through `fix/<v>-<slug>` PRs into the candidate. Do not rerun passing jobs with unchanged inputs or retry flaky tests to get green; search existing issues first and link an open issue.
+6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
+7. The tag builds all release platforms and publishes only after the assets and checksums exist. The owner publishes npm locally. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
+
+Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
+
+```json
+{"kind":"integration-waiver","candidate":"0.1.0-preview.11","sha":"<full commit SHA>","workflow":"rust-quality.yml","job":"linux-perf/perf-idle","issue":123,"reason":"Known flaky failure; evidence linked in this issue"}
+```
+
+The proof reads issue comments, checks the open linked issue, the comment author's repository write/maintain/admin permission and their membership in the comma-separated repository variable `BUTLER_RELEASE_COORDINATORS` (the owner is also allowed), and scopes approval to the exact candidate, SHA, workflow and failed job. Missing or cancelled evidence cannot be waived. For stable waivers, the repository variable `BUTLER_RELEASE_OWNER` must name the owner who posts the approval. The coordinator tells the owner afterwards, using the waiver links printed in the release run. The proof also requires the aggregate gate (including complete Windows evidence) to pass; an aggregate failure needs a separately named `gate` waiver.
 
 The app release gate fails when the bundled agent version changes and the app version doesn't. The gates are also available locally as the `release:*` scripts in `package.json`.
 
-Windows has compile-check coverage, but no release package.
+Windows preview releases include the unsigned Agent and Squirrel App installer.
 
 ### Recovering a failed release
 
-Run `gh workflow run release.yml --ref main -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
+Run `gh workflow run release.yml --ref release/<v> -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
 The optional tag must match that run; recovery verifies its commit and requires every platform artifact (including Windows for previews).
 It skips builds, signing and smoke checks, then repeats manifest merging, npm packing, checksums and publication with asset replacement.
 Stable npm publication skips an already published version; previews keep owner-controlled npm publication. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
@@ -185,3 +204,33 @@ Open an issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues) a
 - for the standalone agent, the output of `butler doctor`
 
 Leave API keys, personal data and private conversation content out of issues.
+
+### CI stores in GHCR
+
+CI SDKs use `ghcr.io/hexpy-games/butler-ci/native-deps:<target>-<recipe-hash>`.
+Cargo build trees use `ghcr.io/hexpy-games/butler-ci/cargo-target:<platform>-<compatibility-key>`;
+immutable generation tags append `--<run-id>-<attempt>`. Existing build jobs
+publish on main/release pushes after building; two Cargo generations per key
+survive. SDK keys are write once. Readers use `oras` 1.2.3 anonymously and verify
+OCI SHA-256, sizes and the inner SDK/Cargo digests before adopting any output.
+Missing public keys fall back to a build (CI static SDK consumers still require
+publication). These packages are build inputs, outside the product Releases feed.
+
+After the first publish, an organization package administrator must open each
+package's **Package settings → Danger Zone → Change visibility → Public**:
+
+- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fnative-deps/settings>
+- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fcargo-target/settings>
+
+The OCI `org.opencontainers.image.source` annotation links both packages to
+`Hexpy-Games/butler`. Keep inherited repository access enabled so workflows can
+publish/prune with `GITHUB_TOKEN` and `packages: write`; no PAT or added secret
+is needed. Public visibility requires this one-time settings action because
+GitHub's documented REST package API does not expose a visibility update.
+
+Dispatch `native-deps.yml` on main and verify all four public targets first.
+Then dispatch `ci-store-maintenance.yml` on main. It anonymously downloads every
+current SDK and checks its outer and inner digests before deleting the four
+original `native-deps-*` releases/tags and any `cargo-target-*` releases/orphan
+tags. Any missing, private or corrupt SDK stops cleanup before the first deletion.
+The maintenance job leaves model mirrors and product releases untouched.

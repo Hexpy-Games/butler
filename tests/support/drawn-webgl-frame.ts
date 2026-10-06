@@ -12,6 +12,11 @@ declare global {
 
 /** Read the actual screen draw before a non-preserved drawing buffer is cleared. */
 export function installDrawnFrameCapture() {
+  // Captures need live frames: opt out of the wallpaper engine's software-GL still-frame fallback
+  // (headless CI). Init scripts run before <html> exists, so mark it once parsing starts (before app scripts run).
+  const optOut = () => document.documentElement?.setAttribute("data-wallpaper-software-fallback", "off");
+  if (document.documentElement) optOut();
+  else document.addEventListener("readystatechange", optOut, { once: true });
   type Pending = { resolve: (frame: DrawnWebGLFrame) => void; timer: number; deadline: number };
   const waiting = new WeakMap<HTMLCanvasElement | OffscreenCanvas, Pending>();
   window.butlerCaptureDrawnFrame = (canvas, budgetMs) => new Promise((resolve, reject) => {

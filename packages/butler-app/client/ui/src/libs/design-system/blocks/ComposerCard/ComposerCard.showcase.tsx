@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { IconButton } from "../../components/IconButton";
 import { AiChip, Plus, ShieldQuestion } from "../../components/Icons";
@@ -19,6 +19,8 @@ import {
   ComposerCardToolbarSpacer,
   ComposerDecoration,
   ComposerEdgeCharacter,
+  type ComposerDecorationScene,
+  type ComposerEdgeCharacterKind,
   ComposerPlanToggle,
   ComposerSendButton,
 } from "./index";
@@ -53,20 +55,23 @@ function text({ locale }: ShowcaseRenderContext) {
 }
 
 // The shoreline scene with its crab on the top edge (composerDecorationEdge("shoreline") returns the same parts).
-const SHORELINE = <ComposerDecoration scene="shoreline" />;
-const CRAB = {
-  behind: <ComposerEdgeCharacter kind="crab" part="behind" />, front: <ComposerEdgeCharacter kind="crab" part="front" />, reserveTop: COMPOSER_EDGE_CHARACTER_RISE,
-};
+const SCENES = {
+  shoreline: { decoration: <ComposerDecoration scene="shoreline" />, character: "crab" },
+  cherry: { decoration: <ComposerDecoration scene="cherry" />, character: "cat" },
+} satisfies Record<ComposerDecorationScene, { decoration: ReactNode; character: ComposerEdgeCharacterKind }>;
+const edgeOf = (kind: ComposerEdgeCharacterKind) => ({
+  behind: <ComposerEdgeCharacter kind={kind} part="behind" />, front: <ComposerEdgeCharacter kind={kind} part="front" />, reserveTop: COMPOSER_EDGE_CHARACTER_RISE,
+});
 
 /** The product composer: editor, toolbar controls, context donut and send. */
-function Composer({ context, large, mode = "send", busy, blocked, decorated }: {
-  context: ShowcaseRenderContext; large?: boolean; mode?: "send" | "stop"; busy?: boolean; blocked?: boolean; decorated?: boolean;
+function Composer({ context, large, mode = "send", busy, blocked, scene }: {
+  context: ShowcaseRenderContext; large?: boolean; mode?: "send" | "stop"; busy?: boolean; blocked?: boolean; scene?: ComposerDecorationScene;
 }) {
   const copy = text(context);
   const [plan, setPlan] = useState(false);
   const [draft, setDraft] = useState("");
   return (
-    <ComposerCard decoration={decorated ? SHORELINE : undefined} edge={decorated ? CRAB : undefined} large={large}
+    <ComposerCard decoration={scene ? SCENES[scene].decoration : undefined} edge={scene ? edgeOf(SCENES[scene].character) : undefined} large={large}
       onSubmit={(event) => event.preventDefault()}>
       <ComposerCardExpandedBody>
         <ComposerCardEditor>
@@ -94,11 +99,11 @@ function Composer({ context, large, mode = "send", busy, blocked, decorated }: {
 }
 
 /** The decorated new-chat composer in both themes. */
-function DecoratedComposers({ context }: { context: ShowcaseRenderContext }) {
+function DecoratedComposers({ context, scene }: { context: ShowcaseRenderContext; scene: ComposerDecorationScene }) {
   return (
     <div className={styles.tones}>
       {(["light", "dark"] as const).map((tone) => (
-        <div className={`${styles.tone} theme-${tone}`} key={tone}><Composer context={context} decorated large /></div>
+        <div className={`${styles.tone} theme-${tone}`} key={tone}><Composer context={context} large scene={scene} /></div>
       ))}
     </div>
   );
@@ -106,7 +111,8 @@ function DecoratedComposers({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "New chat (large)", widths: ["375", "app", "wide"], render: (context) => <Composer context={context} large /> },
-  { name: "New chat with the shoreline decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} /> },
+  { name: "New chat with the shoreline decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="shoreline" /> },
+  { name: "New chat with the cherry decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="cherry" /> },
   { name: "Follow-up while a turn runs (stop)", states: ["busy"], render: (context) => <Composer context={context} mode="stop" /> },
   { name: "Reconnecting (busy send)", states: ["loading"], render: (context) => <Composer context={context} busy /> },
   // ComposerToolbar: an attached image the selected model refuses blocks send; the tooltip says why in a few words.

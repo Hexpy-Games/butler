@@ -38,6 +38,24 @@ permissions:
   actions: read
 
 jobs:
+  integration-proof:
+    if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require complete integration evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUTLER_RELEASE_OWNER: ${{ vars.BUTLER_RELEASE_OWNER }}
+          BUTLER_RELEASE_COORDINATORS: ${{ vars.BUTLER_RELEASE_COORDINATORS }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/integration-proof.py
+
   macos-process-contract:
     if: ${{ !inputs.reuse_run_id && inputs.macos-process-contract }}
     name: Verify macOS unreaped process identity
@@ -95,11 +113,13 @@ jobs:
           }
 
   native-release:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-macos.yml
     secrets: inherit
 
   agent-linux-x64:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-linux-agent.yml
     with:
@@ -107,6 +127,7 @@ jobs:
       runner: ubuntu-24.04
 
   agent-linux-arm64:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-linux-agent.yml
     with:
@@ -114,6 +135,7 @@ jobs:
       runner: ubuntu-24.04-arm
 
   agent-windows-build:
+    needs: integration-proof
     name: Build unsigned Windows x64 Agent preview
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}

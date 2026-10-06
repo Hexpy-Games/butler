@@ -100,13 +100,22 @@ jobs:
           export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
+          if [[ "$BUTLER_PACKAGE_REF_NAME" == release/* ]]; then export GITHUB_REF_NAME="v${BUTLER_PACKAGE_REF_NAME#release/}"; fi
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           else
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
           fi
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+      - name: Upload Cargo build timings
+        if: ${{ always() && inputs.shared-agents != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-linux-packages-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/download-artifact@v4
         if: inputs.shared-agents == true
         with:
@@ -124,6 +133,7 @@ jobs:
           export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
+          if [[ "$BUTLER_PACKAGE_REF_NAME" == release/* ]]; then export GITHUB_REF_NAME="v${BUTLER_PACKAGE_REF_NAME#release/}"; fi
           bun test tests/unit/package-versions.test.ts
           bun run deploy/app/linux-version-smoke.ts
           bun run packages/butler-app/scripts/release/package-linux-app.ts \

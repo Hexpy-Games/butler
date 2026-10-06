@@ -147,6 +147,18 @@
   overflow-wrap: anywhere;
 }
 
+/* Decorated cards (art in the top padding): the caret and scrollIntoView keep
+   a line inside the content box, and while the draft is scrolled the editor is
+   clipped at the top of its content box, so a scrolled line never passes
+   through the art. At scrollTop 0 nothing is in the padding: no visible change. */
+.card[data-decorated] .editor .textarea {
+  scroll-padding-top: var(--composer-inner-padding-block);
+}
+
+.card[data-draft-scrolled="true"] .editor .textarea {
+  clip-path: inset(var(--composer-inner-padding-block) 0 0 0);
+}
+
 .editor .textarea p {
   margin: 0;
 }
@@ -173,6 +185,13 @@
 
 .toolbar button {
   flex-shrink: 0;
+}
+
+/* The folded preview is the one toolbar button that gives way: it shrinks so
+   its ellipsis applies instead of running past the card edge. */
+.toolbar .compactPreview {
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .compactPreview {

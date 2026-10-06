@@ -34,8 +34,15 @@ per change (resize, theme, params, image, plus every 15 minutes when they read
 DPR 2 within 4MP. Nothing renders while the document is hidden (minimized,
 occluded, background tab) or the canvas is off-screen; `motion="paused"`,
 `pauseOnBattery` on battery, reduced motion, or the frame-time watchdog hold a
-still frame. Window focus is not a pause: a visible Butler window behind
-another app keeps animating. WebGL context loss is recovered (images are
+still frame. So does software GL (a renderer string naming SwiftShader,
+llvmpipe, softpipe, lavapipe, the basic render driver or "software": a VM, a
+blocklisted GPU, headless Chromium), where compositing would read every
+animated frame back on the main thread; the canvas then carries
+`data-wallpaper-fallback="software"` from before its first frame (a test
+harness that must see live frames opts out with
+`<html data-wallpaper-software-fallback="off">`). Window
+focus is not a pause: a visible Butler window behind another app keeps
+animating. WebGL context loss is recovered (images are
 re-uploaded from cached bytes), and a module that fails to compile or link
 falls back to the default (`butler.bloom`) and reports through `onError`.
 Unmounting frees every GPU object and gives the context back
@@ -204,10 +211,12 @@ living photos `butler.photo-clouds` and `butler.photo-daisies` (on their bundled
 photos, `imageDim: noDarkStep`), `butler.stipple` (an image filter, two-pass,
 `pixelRatio: device`, `imageDim: none`, with a sample photo) and the image
 filter `butler.grain` (film grain, `amount` and black-and-white `mono`), and
-the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`: a
-mass of blossom clusters at a card's top-right padding frame, the branch only
-glimpsed, petals drifting across; boolean `lush`, on by default, fills the
-top-right corner); register
+the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`, no
+params: a painterly cherry canopy drawn at its 375px reference size, never
+stretched; one mass swept into the top-right corner and a smaller one at the
+top-left, justified so wider cards leave the middle of the top edge empty;
+petals drifting down-left; dark mode paints the corner end in deeper roses so
+white text keeps 4.5:1); register
 more with `createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), module])`
 and pass the registry (image filters resolve against it too). Built-ins
 cannot be shadowed.

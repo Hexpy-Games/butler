@@ -6,33 +6,11 @@ import { wallpaperParamUniforms } from "./glsl";
 import { WALLPAPER_IMAGE_MODULE } from "./modules";
 import { BUILTIN_WALLPAPERS, defaultWallpaperModule, type WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
+import { clearTransparent, wallpaperContextAttributes } from "./glContext";
+import { isSoftwareWallpaperRenderer, wallpaperRendererName, wallpaperSoftwareFallbackAllowed } from "./softwareGl";
 import { resolveWallpaperValues } from "./values";
 
 export type { WallpaperDrawFrame } from "./glDraw";
-
-const CONTEXT_ATTRIBUTES: WebGLContextAttributes = {
-  alpha: false,
-  antialias: false,
-  depth: false,
-  stencil: false,
-  desynchronized: true,
-  // No copy per frame: the crossfade repaints the frame right before it snapshots it.
-  preserveDrawingBuffer: false,
-  powerPreference: "low-power",
-};
-
-/**
- * A transparent canvas (modules with `transparent: true`): see-through where
- * the module draws nothing. Premultiplied like the page compositor, so the
- * module's premultiplied `fragColor` composites as is; every frame starts
- * cleared to 0.
- */
-const TRANSPARENT_CONTEXT_ATTRIBUTES: WebGLContextAttributes = { ...CONTEXT_ATTRIBUTES, alpha: true, premultipliedAlpha: true };
-
-/** Context attributes of a wallpaper canvas; opaque canvases keep the engine's original ones. */
-export function wallpaperContextAttributes(transparent: boolean): WebGLContextAttributes {
-  return transparent ? TRANSPARENT_CONTEXT_ATTRIBUTES : CONTEXT_ATTRIBUTES;
-}
 
 export interface WallpaperRenderer {
   /** Picks the scene's programs (linked once per module source) and its uniform values. */
@@ -49,6 +27,11 @@ export interface WallpaperRenderer {
   pixelRatio(): WallpaperPixelRatioMode;
   /** Id of the module actually drawn; null before a scene. */
   drawnModule(): string | null;
+  /**
+   * The context renders in software (SwiftShader, llvmpipe, …): compositing then
+   * reads every frame back on the main thread, so the engine holds still frames.
+   */
+  softwareRendering(): boolean;
   usesDayPhase(): boolean;
   usesContentRect(): boolean;
   draw(frame: WallpaperDrawFrame): void;
@@ -75,6 +58,7 @@ export function createWallpaperRenderer(
 ): WallpaperRenderer | null {
   const gl = canvas.getContext("webgl2", wallpaperContextAttributes(transparent)) as WebGL2RenderingContext | null;
   if (!gl) return null;
+  const software = isSoftwareWallpaperRenderer(wallpaperRendererName(gl)) && wallpaperSoftwareFallbackAllowed();
   let resources = createWallpaperResources(gl);
   let scene: WallpaperScene | null = null;
   let active: WallpaperDrawScene | null = null;
@@ -124,6 +108,7 @@ export function createWallpaperRenderer(
     motion: () => active?.module.manifest.motion ?? (transparent ? "static" : scene?.module.manifest.motion ?? "static"),
     pixelRatio: () => active?.module.manifest.pixelRatio ?? "default",
     drawnModule: () => active?.module.manifest.id ?? null,
+    softwareRendering: () => software,
     usesDayPhase: () => uses("usesDayPhase"),
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {
@@ -150,11 +135,4 @@ export function createWallpaperRenderer(
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };
-}
-
-/** Starts a transparent frame from nothing, so whatever the module leaves at alpha 0 shows what is behind. */
-function clearTransparent(gl: WebGL2RenderingContext, frame: WallpaperDrawFrame) {
-  gl.viewport(0, 0, frame.width, frame.height);
-  gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
 }

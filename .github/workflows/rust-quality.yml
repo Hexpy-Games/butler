@@ -4,11 +4,9 @@ name: Rust quality
 # Windows ownership remains in the existing Windows workflows.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
   merge_group:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,8 +15,8 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: rust-quality-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ startsWith(github.ref, 'refs/heads/release/') && 'integration' || format('rust-quality-{0}', github.head_ref || github.ref_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/release/') }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,7 +34,7 @@ jobs:
 
   source:
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['source']
     name: Format and source rules
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -54,7 +52,7 @@ jobs:
 
   linux-clippy:
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy']
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -79,24 +77,36 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
 
   linux-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-native']
     uses: ./.github/workflows/native-agent.yml
     with:
       runner: ubuntu-24.04
       platform: linux-x64
-      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+      ort-mode: prebuilt-ort
 
   linux-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
       ort-mode: prebuilt-ort
 
   linux-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml
     with:
       runner: ubuntu-24.04
@@ -104,30 +114,46 @@ jobs:
 
   linux-perf:
     needs: [changes, linux-perf-archive, linux-native, linux-archive]
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-perf']
     uses: ./.github/workflows/rust-tests.yml
     with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['linux-perf'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-perf'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-perf'].perf) }}
       runner: ubuntu-24.04
       platform: linux-x64
       performance-only: true
 
   linux-tests:
     needs: [changes, linux-archive]
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-tests']
     uses: ./.github/workflows/rust-tests.yml
+    with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['linux-tests'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-tests'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-tests'].perf) }}
+      e2e: ${{ needs.changes.outputs.tier == 'integration' }}
 
   linux-arm64-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true' || (github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true')
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-native']
     uses: ./.github/workflows/native-agent.yml
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+      ort-mode: prebuilt-ort
 
   linux-arm64-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true' || (github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true')
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
       runner: ubuntu-24.04-arm
@@ -136,8 +162,12 @@ jobs:
       clippy: true
 
   linux-arm64-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml
     with:
       runner: ubuntu-24.04-arm
@@ -145,18 +175,24 @@ jobs:
 
   linux-arm64-perf:
     needs: [changes, linux-arm64-perf-archive, linux-arm64-native, linux-arm64-archive]
-    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-perf']
     uses: ./.github/workflows/rust-tests.yml
     with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['linux-arm64-perf'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-arm64-perf'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-arm64-perf'].perf) }}
       runner: ubuntu-24.04-arm
       platform: linux-arm64
       performance-only: true
 
   linux-arm64-tests:
     needs: [changes, linux-arm64-archive]
-    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-tests']
     uses: ./.github/workflows/rust-tests.yml
     with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['linux-arm64-tests'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-arm64-tests'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['linux-arm64-tests'].perf) }}
       runner: ubuntu-24.04-arm
       platform: linux-arm64
 
@@ -166,7 +202,7 @@ jobs:
       actions: read
       issues: write
     needs: [changes, linux-native]
-    if: needs.changes.outputs.linux-package == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-package-x64']
     uses: ./.github/workflows/linux-packages.yml
     with:
       shared-agents: true
@@ -180,7 +216,7 @@ jobs:
       actions: read
       issues: write
     needs: [changes, linux-arm64-native]
-    if: needs.changes.outputs.linux-package == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-package-arm64']
     uses: ./.github/workflows/linux-packages.yml
     with:
       shared-agents: true
@@ -190,8 +226,12 @@ jobs:
 
 
   macos-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.package == 'true' || needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-native']
     uses: ./.github/workflows/native-agent.yml
     with:
       runner: macos-15
@@ -200,12 +240,16 @@ jobs:
 
   macos-updates:
     needs: changes
-    if: needs.changes.outputs.package == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-updates']
     uses: ./.github/workflows/macos-update-fixtures.yml
 
   macos-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.package == 'true' || needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-archive']
     uses: ./.github/workflows/rust-archive.yml
     with:
       runner: macos-15
@@ -214,8 +258,12 @@ jobs:
       clippy: true
 
   macos-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml
     with:
       runner: macos-15
@@ -223,32 +271,40 @@ jobs:
 
   macos-perf:
     needs: [changes, macos-perf-archive, macos-native, macos-archive]
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf']
     uses: ./.github/workflows/rust-tests.yml
     with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['macos-perf'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['macos-perf'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['macos-perf'].perf) }}
       runner: macos-15
       platform: darwin-arm64
       performance-only: true
 
   macos-tests:
     needs: [changes, macos-archive]
-    if: needs.changes.outputs.rust == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-tests']
     uses: ./.github/workflows/rust-tests.yml
     with:
+      workspace: ${{ fromJSON(needs.changes.outputs.parts)['macos-tests'].workspace }}
+      e2e-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['macos-tests'].e2e) }}
+      perf-shards: ${{ toJSON(fromJSON(needs.changes.outputs.parts)['macos-tests'].perf) }}
+      e2e: ${{ needs.changes.outputs.tier == 'integration' }}
       runner: macos-15
       platform: darwin-arm64
 
   macos-package:
     needs: [changes, macos-native, macos-updates]
-    if: needs.changes.outputs.package == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-package']
     uses: ./.github/workflows/macos-app-package.yml
     with:
+      candidate-version: ${{ needs.changes.outputs.candidate }}
       agent-artifact: agent-payload-darwin-arm64
       update-agent-artifact: macos-update-agent-builds
 
   install-x64:
     needs: [changes, linux-native]
-    if: needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-x64']
     uses: ./.github/workflows/install-smoke.yml
     with:
       shared-agents: true
@@ -258,7 +314,7 @@ jobs:
 
   install-arm64:
     needs: [changes, linux-arm64-native]
-    if: needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['install-arm64']
     uses: ./.github/workflows/install-smoke.yml
     with:
       shared-agents: true
@@ -268,7 +324,7 @@ jobs:
 
   install-macos:
     needs: [changes, macos-native]
-    if: needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-macos']
     uses: ./.github/workflows/install-smoke.yml
     with:
       shared-agents: true
@@ -278,27 +334,28 @@ jobs:
 
   install-merge:
     needs: [changes, install-x64, install-arm64, install-macos]
-    if: needs.changes.outputs.install == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['install-merge']
     uses: ./.github/workflows/merge-agent-manifests.yml
 
 
   ui:
     needs: changes
-    if: needs.changes.outputs.ui == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['ui']
     uses: ./.github/workflows/bun-unit.yml
 
   site:
     needs: changes
-    if: needs.changes.outputs.site == 'true' && github.event_name != 'push'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['site']
     uses: ./.github/workflows/site-check.yml
 
   ds:
     needs: changes
-    if: needs.changes.outputs.ds == 'true' && github.event_name != 'push'
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['ds']
     uses: ./.github/workflows/ds-site.yml
 
   lint:
     needs: changes
+    if: needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).lint
     name: Repository and CI lint
     runs-on: ubuntu-latest
     steps:
@@ -309,10 +366,18 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py git diff --check "${BASE:-HEAD}" HEAD
+        run: |
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then BASE=HEAD; fi
+          python3 .github/scripts/isolated.py git diff --check "$BASE" HEAD
+      - name: Keep work documents in the Project Ledger
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/work-docs-lint.py
       - name: Validate workflow selection invariants
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+      - name: Validate integration proof and branch policy
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py
       - name: Lint GitHub workflows
         working-directory: ${{ github.workspace }}
         run: |
@@ -334,7 +399,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
           workflow: rust-quality.yml
       - name: Require every selected check
         env:
@@ -342,106 +407,25 @@ jobs:
           EVENT: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
-  windows-check:
-    # Windows is not ported: the host and CLI are unix-only and main.rs prints
-    # "not yet available". This compile check only reports how far the
-    # workspace is from building; its failures never fail the workflow.
-    name: Windows compile check (x86_64-pc-windows-msvc)
-    needs: source
-    outputs:
-      compile: ${{ steps.check.outcome }}
-    if: github.event_name != 'pull_request'
-    runs-on: windows-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-        working-directory: packages/butler-agent/rust
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
 
-      - name: Set up Rust and protoc
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: windows-check
-
-      - name: Check the workspace
-        id: check
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
-            --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
-
-      # Groups the errors by crate, file and code so the port can be planned
-      # from the run summary.
-      - name: Summarize
-        if: always()
-        env:
-          OUTCOME: ${{ steps.check.outcome }}
-        run: |
-          python - "$RUNNER_TEMP/windows-check.log" >> "$GITHUB_STEP_SUMMARY" <<'PY'
-          import collections, os, re, sys
-          pattern = re.compile(r"^(?P<file>[^:\s][^:]*):\d+:\d+: (?P<kind>error|warning)(?:\[(?P<code>\w+)\])?: (?P<text>.*)$")
-          errors, files, crates, codes = 0, collections.Counter(), collections.Counter(), collections.Counter()
-          failed = []
-          try:
-              lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
-          except OSError:
-              lines = []
-          for line in lines:
-              if line.startswith("error: could not compile"):
-                  failed.append(line.removeprefix("error: could not compile ").strip())
-              match = pattern.match(line)
-              if not match or match["kind"] != "error":
-                  continue
-              path = match["file"].replace("\\", "/")
-              errors += 1
-              files[path] += 1
-              parts = path.split("/")
-              crates[parts[1] if parts[0] == "crates" and len(parts) > 1 else parts[0]] += 1
-              codes[match["code"] or match["text"][:60]] += 1
-          print("### Windows compile check (x86_64-pc-windows-msvc)")
-          print(f"Outcome: **{os.environ.get('OUTCOME', 'unknown')}**, {errors} errors.")
-          if failed:
-              print("\nCould not compile (crates that depend on these were not checked):\n")
-              print("\n".join(f"- {item}" for item in failed))
-          for title, counter, limit in (("crate", crates, 20), ("file", files, 40), ("error", codes, 20)):
-              if counter:
-                  print(f"\n| Errors | By {title} |\n| ---: | --- |")
-                  print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
-          PY
-
-  nightly-issue:
-    name: Report nightly failure
-    if: >-
-      always() &&
-      (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
-      (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [gate, windows-check]
+  main-issue:
+    name: Report main failure
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'failure'
+    needs: gate
     runs-on: ubuntu-latest
-    concurrency:
-      group: ci-failure-report-${{ github.ref }}
-      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
     steps:
       - name: Open or update issue
-        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EVENT_LABEL: ${{ github.event_name == 'schedule' && 'nightly' || 'main push' }}
         run: |
-          title='Nightly Rust CI failure'
-          body="The $EVENT_LABEL Rust CI failed: $RUN_URL"
-          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly Rust CI failure") | .number' | head -1)"
+          number=$(gh issue list --state open --search '"Main Rust CI failure" in:title' --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
+            gh issue comment "$number" --body "Main Rust CI failed: $RUN_URL"
           else
-            gh issue create --title "$title" --body "$body"
+            gh issue create --title 'Main Rust CI failure' --body "Main Rust CI failed: $RUN_URL"
           fi

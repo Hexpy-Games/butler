@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore Cargo outputs when the shared Actions cache has been evicted.
+"""Record complete Cargo build inputs for persistent CI OCI snapshots.
 
 These are build inputs, not a reusable release payload. Cargo still rebuilds
 changed sources and the Agent's tracked revision/version inputs. Only successful
@@ -13,9 +13,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 import tarfile
-import tempfile
-from urllib.parse import urlencode
+
+# Build scripts watch the recipe directory; imports must not create new inputs.
+sys.dont_write_bytecode = True
 
 source_spec = importlib.util.spec_from_file_location('source_times', Path(__file__).with_name('cargo-source-times.py'))
 source_times = importlib.util.module_from_spec(source_spec)
@@ -31,14 +33,43 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def native_identity(platform, target):
+    path = Path('scripts/static_ort_host.py')
+    if not path.is_file():
+        return {}
+    spec = importlib.util.spec_from_file_location('native_host', path)
+    host = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(host)
+    native = host.host_identity('macos-arm64' if platform == 'darwin-arm64' else platform, target)
+    native.pop('python', None)
+    return native
+
+
 def identity(platform, mode, kind):
     runtime = os.environ.get('ORT_LIB_PATH', '')
-    return dict(schema=1, platform=platform, mode=mode, kind=kind,
-                compiler=output('rustc', '-vV'),
-                runtime=runtime,
-                lock=digest(Path('Cargo.lock')), manifest=digest(Path('Cargo.toml')),
+    compiler = output('rustc', '-vV')
+    target = os.environ.get('CARGO_BUILD_TARGET', compiler.split('host: ')[1].splitlines()[0])
+    native_compiler = native_identity(platform, compiler.split('host: ')[1].splitlines()[0])
+    profile = os.environ.get('TARGET_SNAPSHOT_PROFILE', 'debug' if kind == 'dev' else 'release')
+    features = os.environ.get('TARGET_SNAPSHOT_FEATURES',
+                              'workspace-defaults' if kind == 'dev' and mode != 'static-ort'
+                              else 'workspace-no-defaults,butler-agent/static-ort' if kind == 'dev'
+                              else 'butler-agent/' + mode if kind != 'perf' else 'butler-e2e/defaults')
+    configs = {str(path): digest(path) for path in [Path('Cargo.toml'), Path('rust-toolchain.toml'),
+               Path('.cargo/config.toml'), Path('../../../.cargo/config.toml')]
+               if path.is_file()}
+    return dict(schema=2, platform=platform, mode=mode, kind=kind, profile=profile,
+                features=features, target=target, compiler=compiler, native_compiler=native_compiler, runtime=runtime,
+                lock=digest(Path('Cargo.lock')), configs=configs,
+                native_recipe={path.name: digest(path) for path in Path('scripts').glob('*')
+                               if path.is_file() and (path.name.startswith('static_ort')
+                                                      or path.name == 'prepare-static-ort.py')},
                 flags={key: value for key, value in os.environ.items()
-                       if key.startswith('CARGO_PROFILE_') or key in ['RUSTFLAGS', 'CARGO_BUILD_TARGET']})
+                       if (key.startswith('CARGO_PROFILE_') or
+                           (key.startswith('CARGO_TARGET_') and key != 'CARGO_TARGET_DIR')) or key in
+                       ['RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET',
+                        'ORT_PREFER_DYNAMIC_LINK', 'ORT_SKIP_DOWNLOAD', 'LIBSQLITE3_FLAGS',
+                        'CC', 'CXX', 'CFLAGS', 'CXXFLAGS']})
 
 
 def artifact_name(expected):
@@ -51,10 +82,11 @@ def artifact_name(expected):
 def valid_producer(run, jobs, repository, platform, kind):
     if run['head_repository']['full_name'] != repository:
         return False
-    names = dict(dev=['Build archives'], perf=['Build perf harness'],
-                 native=['Build native Agent', 'Build Linux Agent archive'],
+    names = dict(dev=['Build archives', 'Build target snapshot'], perf=['Build perf harness'],
+                 native=['Build native Agent', 'Build Linux Agent archive', 'Build target snapshot'],
                  ort=['Build native Agent', 'Build Linux Agent archive'])[kind]
-    return any((any(job['name'].endswith(f'{name} ({platform})') for name in names)
+    return any(((kind in ['dev', 'native', 'perf'] and job['name'].startswith('Build target snapshot ') and job['name'].endswith(f'({platform})'))
+                or any(job['name'].endswith(f'{name} ({platform})') for name in names)
                 or (kind in ['native', 'ort'] and platform == 'darwin-arm64'
                     and job['name'] == 'Build and publish native macOS arm64 artifacts'))
                and job['status'] == 'completed' and job['conclusion'] == 'success'
@@ -65,6 +97,8 @@ def verify(directory, expected):
     metadata = json.loads((directory / 'cache.json').read_text())
     if metadata['identity'] != expected:
         raise ValueError('Cargo build-cache identity mismatch')
+    if expected.get('schema') == 2 and not metadata.get('sources_sha256'):
+        raise ValueError('Cargo snapshot has no source manifest digest')
     if digest(directory / 'cache.tar.zst') != metadata['sha256']:
         raise ValueError('Cargo build-cache digest mismatch')
     if metadata.get('sources_sha256') and digest(directory / 'sources.json') != metadata['sources_sha256']:
@@ -81,6 +115,8 @@ def extract(directory, root='target'):
     with subprocess.Popen(['zstd', '-d', '-c', str(archive)], stdout=subprocess.PIPE) as decompress:
         with tarfile.open(fileobj=decompress.stdout, mode='r|') as archive_tar:
             for member in archive_tar:
+                if member.mtime > time.time():
+                    raise ValueError('Cargo output has a future timestamp')
                 path = Path(member.name)
                 if member.name == f'._{root}' and member.isfile():
                     # BSD tar's legacy AppleDouble root attributes are data,
@@ -119,65 +155,22 @@ def extract(directory, root='target'):
             raise RuntimeError('Cargo build-cache decompression failed')
 
 
-def restore(expected, root='target'):
-    repository = os.environ['GITHUB_REPOSITORY']
-    query = urlencode(dict(name=artifact_name(expected), per_page=30))
-    artifacts = json.loads(output('gh', 'api', f'repos/{repository}/actions/artifacts?{query}'))['artifacts']
-    for artifact in artifacts:
-        if artifact['expired']:
-            continue
-        run_id = artifact['workflow_run']['id']
-        run = json.loads(output('gh', 'api', f'repos/{repository}/actions/runs/{run_id}'))
-        if run['id'] == int(os.environ['GITHUB_RUN_ID']):
-            continue
-        jobs = json.loads(output('gh', 'api', f'repos/{repository}/actions/runs/{run_id}/jobs?per_page=100'))['jobs']
-        if not valid_producer(run, jobs, repository, expected['platform'], expected['kind']):
-            continue
-        with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
-            subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', repository, '--name', artifact['name'], '--dir', temporary], check=True)
-            verify(Path(temporary), expected)
-            extract(Path(temporary), root)
-            metadata = json.loads((Path(temporary) / 'cache.json').read_text())
-            if root == 'target' and metadata.get('sources_sha256'):
-                source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
-                                     json.loads((Path(temporary) / 'sources.json').read_text()))
-        print(f'Restored compatible Cargo build inputs from native producer run {run_id}.')
-        return True
-    print('No compatible Cargo artifact snapshot; normal Cargo/cache build follows.')
-    return False
-
-
-def restore_local(directory, expected):
-    """A rust-cache hit qualifies only with the complete matching snapshot."""
-    if not (directory / 'cache.json').is_file():
-        return False
-    metadata = json.loads((directory / 'cache.json').read_text())
-    if metadata['identity'] != expected:
-        print('Restored cache has another identity; using the artifact fallback.')
-        return False
-    verify(directory, expected)
-    if not metadata.get('sources_sha256'):
-        return False
-    extract(directory)
-    source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
-                         json.loads((directory / 'sources.json').read_text()))
-    return True
-
-
-def record(directory, expected, root='target'):
+def record(directory, expected, root='target', target=None):
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / 'cache.tar.zst'
+    target = Path(target or root)
     with archive.open('wb') as destination:
-        tar = subprocess.Popen(['tar', '--exclude=target/debug/incremental',
-                                '--exclude=target/release/incremental', '-cf', '-', root], stdout=subprocess.PIPE,
-                               env=dict(os.environ, COPYFILE_DISABLE='1'))
-        try:
-            subprocess.run(['zstd', '-T2', '-3'], stdin=tar.stdout, stdout=destination, check=True)
-        finally:
-            tar.stdout.close()
-        if tar.wait() != 0:
-            raise RuntimeError('Cargo build-cache tar failed')
-    metadata = dict(identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
+        with subprocess.Popen(['zstd', '-T2', '-3'], stdin=subprocess.PIPE, stdout=destination) as compress:
+            with tarfile.open(fileobj=compress.stdin, mode='w|', format=tarfile.PAX_FORMAT) as packed:
+                def selected(member):
+                    if 'incremental' in Path(member.name).parts or 'cargo-timings' in Path(member.name).parts:
+                        return None
+                    return member
+                packed.add(target, arcname=root, filter=selected)
+            compress.stdin.close()
+            if compress.wait() != 0:
+                raise RuntimeError('Cargo snapshot compression failed')
+    metadata = dict(producer_name=os.environ.get('TARGET_SNAPSHOT_PRODUCER', ''), runner_kind=os.environ.get('TARGET_SNAPSHOT_RUNNER_KIND', 'hosted'), run_id=os.environ.get('GITHUB_RUN_ID', '0'), run_attempt=os.environ.get('GITHUB_RUN_ATTEMPT', '1'), identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
     if root == 'target':
         sources = directory / 'sources.json'
         sources.write_text(json.dumps(source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
@@ -194,13 +187,11 @@ if __name__ == '__main__':
         with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
             stream.write(f'name={artifact_name(expected)}\n')
             stream.write(f'sources={source_times.build_key(Path(os.environ["GITHUB_WORKSPACE"]))}\n')
-    elif command == 'restore-local':
-        restored = restore_local(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected)
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-            stream.write(f'restored={str(restored).lower()}\n')
     elif command == 'restore':
-        restore(expected)
+        import importlib
+        sys.path.insert(0, str(Path(__file__).parent))
+        importlib.import_module('cargo-target-release').restore(expected)
     elif command == 'record':
-        record(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected)
+        record(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'))
     else:
         raise SystemExit(f'Unknown command: {command}')

@@ -1,7 +1,8 @@
 name: Unsigned Windows preview smoke
 
 on:
-  pull_request:
+  push:
+    branches: ['release/**']
   workflow_dispatch:
     inputs:
       native-cache:
@@ -30,7 +31,7 @@ defaults:
 
 concurrency:
   group: windows-preview-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
 
 jobs:
   changes:
@@ -39,9 +40,13 @@ jobs:
       workflow: windows-preview-smoke.yml
 
   build:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     name: Build unsigned Windows preview
-    if: ${{ needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -60,15 +65,32 @@ jobs:
           name: agent-windows-x64
           path: dist/release/agent/*
           if-no-files-found: error
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+        env:
+          TARGET_SNAPSHOT_PROFILE: ci-fast
+          TARGET_SNAPSHOT_FEATURES: butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          RUSTFLAGS: -C target-feature=+crt-static
+          TARGET_SNAPSHOT_RUNNER_KIND: owner
+        with:
+          platform: windows-x64
+          mode: static-ort
+          kind: native
+          producer: Build unsigned Windows preview
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
         run: ./deploy/windows-owner-cleanup.ps1
 
   stub:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     name: Platform contracts and debug stub chat
-    if: ${{ needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
@@ -89,6 +111,13 @@ jobs:
           "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
           "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
           "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Restore main debug test snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
       - name: Windows formatting, clippy and source policy
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -145,9 +174,17 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo build --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
+          cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-windows-preview-smoke-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Existing stub chat E2E
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
@@ -268,6 +305,18 @@ jobs:
           path: ${{ env.PREVIEW_ROOT }}/logs
           if-no-files-found: warn
           retention-days: 14
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        env:
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          TARGET_SNAPSHOT_RUNNER_KIND: owner
+        with:
+          platform: windows-x64
+          mode: static-ort
+          kind: dev
+          producer: Platform contracts and debug stub chat
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
@@ -275,8 +324,8 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
-    if: ${{ !inputs.native-loop }}
-    needs: [build, stub]
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    needs: [changes, build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -360,7 +409,7 @@ jobs:
           name: windows-completed-installed
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
       - name: Remove temporary verification profiles
         if: always()
         run: |
@@ -371,20 +420,14 @@ jobs:
 
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: ${{ !inputs.native-loop }}
-    needs: stub
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
-          - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
-          - {shard: data, tests: 'cli_surface,migration,durable_configuration,project_workspace,queue_notifications'}
-          - {shard: basics, tests: 'windows_commands'}
-    env:
-      BUTLER_E2E_TIER: stub
+        include: ${{ fromJSON(needs.changes.outputs.parts).hosted }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -413,7 +456,7 @@ jobs:
           name: windows-completed-${{ matrix.shard }}
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
       - name: Preserve hosted failure fixtures
         if: failure()
         run: |
@@ -448,11 +491,11 @@ jobs:
           CHECK_GROUPS: '{"build":["package"],"stub":["package"],"release":["package"],"hosted":["package"]}'
         run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
-        if: needs.changes.outputs.package == 'true'
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
         with:
           results: ${{ toJSON(needs) }}
       - name: Publish successful inputs
-        if: success() && needs.changes.result == 'success'
+        if: always() && needs.changes.result == 'success'
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
