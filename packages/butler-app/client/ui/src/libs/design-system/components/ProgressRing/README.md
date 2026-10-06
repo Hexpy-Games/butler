@@ -2,15 +2,17 @@
 
 ## What is this component
 ProgressRing is a non-interactive ring that shows progress in an icon-sized
-square: a determinate fill from 0 to 1, or an indeterminate rotating quarter
-arc. It is the ring ContextDonutButton draws (r 8 in a 20-unit box, round cap,
-`--context-track-bg` track), without the button.
+square: a determinate fill from 0 to 1, or, while indeterminate, the DS
+`Spinner` itself in the same square (no layout shift when it switches). The
+ring is the one ContextDonutButton draws (r 8 in a 20-unit box, round cap,
+`--context-track-bg` track), without the button. Strokes land near 2px at the
+fixed sizes and 1.5px at 16px for `sidebar` (the row's line-icon weight).
 
 ## Props
 | Prop | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `value` | `number` | `0` | Completed fraction 0-1, clamped. Ignored while indeterminate. |
-| `indeterminate` | `boolean` | `false` | Rotating quarter arc; static under reduced motion. No `aria-valuenow`. |
+| `indeterminate` | `boolean` | `false` | Renders the DS `Spinner` (its motion and reduced-motion rules; `currentColor`, no track, tone not applied). No `aria-valuenow`. |
 | `size` | `"xs" \| "sm" \| "md" \| "lg" \| "sidebar"` | `"md"` | `--icon-size-*` (12/14/16/20px); `sidebar` follows `--sidebar-icon-size` like `IconSlot size="sidebar"`. |
 | `tone` | `"default" \| "success" \| "warning" \| "danger"` | `"default"` | Fill: `--accent`, `--color-success`, `--color-warning`, `--color-danger`. |
 | `aria-label`, `aria-valuetext` | `string` | – | Name of the progressbar. |

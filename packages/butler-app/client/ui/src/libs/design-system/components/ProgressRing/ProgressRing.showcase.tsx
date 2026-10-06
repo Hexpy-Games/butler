@@ -3,7 +3,8 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { NavRow } from "../../blocks/NavRow";
 import { Button } from "../Button";
 import { ButtonContainer } from "../ButtonContainer";
-import { CircleAlert, Settings } from "../Icons";
+import { CircleAlert, ICON_SIZE, Settings } from "../Icons";
+import { Spinner } from "../Spinner";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { ProgressRing, type ProgressRingSize, type ProgressRingTone } from "./ProgressRing";
@@ -96,10 +97,17 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Indeterminate",
     states: ["loading"],
+    // Indeterminate is the DS Spinner itself, in the ring's square.
     render: (context) => (
-      <Stack align="row" gap="sm" cross="center">
-        <ProgressRing size="md" indeterminate aria-label={text(context).preparing} />
-        <Typo.Body>{text(context).preparing}</Typo.Body>
+      <Stack gap="md">
+        <Stack align="row" gap="sm" cross="center">
+          <ProgressRing size="md" indeterminate aria-label={text(context).preparing} />
+          <Typo.Body>{text(context).preparing}</Typo.Body>
+        </Stack>
+        <Stack align="row" gap="sm" cross="center">
+          <Spinner size={ICON_SIZE.md} />
+          <Typo.Caption>Spinner</Typo.Caption>
+        </Stack>
       </Stack>
     ),
   },

@@ -305,14 +305,13 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
 
 /**
  * ProgressRing: value and indeterminate changes keep the ring's box (zero
- * layout shift), the value moves only through stroke-dashoffset, and the
- * indeterminate spin stops under the DS reduced-motion scope.
+ * layout shift), the value moves only through stroke-dashoffset, and
+ * indeterminate is the DS Spinner (running, and still under reduced motion).
  */
 async function measureProgressRing(page: Page, serverUrl: string, ids: Map<string, string>) {
   const scope = await openItem(page, serverUrl, ids.get("ProgressRing")!, "light", "Live");
   const probe = await scope.evaluate(async (story) => {
     const ring = story.querySelector('[data-slot="progress-ring"]') as HTMLElement;
-    const svg = ring.querySelector("svg") as SVGSVGElement;
     const box = () => { const rect = ring.getBoundingClientRect(); return `${rect.x},${rect.y},${rect.width},${rect.height}`; };
     const boxes = new Set([box()]);
     const sample = async (ms: number) => {
@@ -324,23 +323,28 @@ async function measureProgressRing(page: Page, serverUrl: string, ids: Map<strin
     (story.querySelector('[data-ds-motion="progress-ring-advance"]') as HTMLElement).click();
     await sample(300);
     const offsetAfter = getComputedStyle(fill).strokeDashoffset;
+    const transitionProperty = getComputedStyle(fill).transitionProperty;
     (story.querySelector('[data-ds-motion="progress-ring-indeterminate"]') as HTMLElement).click();
     await sample(300);
-    const spinning = getComputedStyle(svg).animationName;
+    const orbit = ring.querySelector('[data-slot="spinner"] [data-slot="spinner-orbit"]');
+    const spinning = orbit ? getComputedStyle(orbit).animationName : null;
     const valueNow = ring.getAttribute("aria-valuenow");
-    document.body.dataset.motion = "reduced";
-    const reduced = getComputedStyle(svg).animationName;
-    delete document.body.dataset.motion;
-    (story.querySelector('[data-ds-motion="progress-ring-indeterminate"]') as HTMLElement).click();
-    await sample(200);
-    return { boxes: [...boxes], offsetBefore, offsetAfter, transitionProperty: getComputedStyle(fill).transitionProperty, spinning, valueNow, reduced };
+    return { boxes: [...boxes], offsetBefore, offsetAfter, transitionProperty, spinning, valueNow };
   });
+  // Under reduced motion the indeterminate ring follows the Spinner: the orbit stops.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reduced = await scope.evaluate((story) => {
+    const orbit = story.querySelector('[data-slot="progress-ring"] [data-slot="spinner-orbit"]');
+    return orbit ? getComputedStyle(orbit).animationName : null;
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await scope.locator('[data-ds-motion="progress-ring-indeterminate"]').click();
   assert(probe.boxes.length === 1, `ProgressRing moved while its value changed: ${probe.boxes.join(" | ")}`);
   assert(probe.offsetBefore !== probe.offsetAfter, `ProgressRing value did not change the fill: ${JSON.stringify(probe)}`);
   assert(probe.transitionProperty === "stroke-dashoffset", `ProgressRing fill must transition stroke-dashoffset only: ${probe.transitionProperty}`);
-  assert(/progress-ring-spin/u.test(probe.spinning) && probe.valueNow === null, `indeterminate ProgressRing: ${JSON.stringify(probe)}`);
-  assert(probe.reduced === "none", `indeterminate ProgressRing must be static under reduced motion: ${probe.reduced}`);
-  return probe;
+  assert(/spinner-orbit/u.test(probe.spinning ?? "") && probe.valueNow === null, `indeterminate ProgressRing must be the running Spinner: ${JSON.stringify(probe)}`);
+  assert(reduced === "none", `indeterminate ProgressRing must follow the Spinner under reduced motion: ${reduced}`);
+  return { ...probe, reduced };
 }
 
 type EnterProbe = { name: string; durationMs: number; firstFrame60Hz: number; observedFirstFrame: { ms: number; progress: number } };
