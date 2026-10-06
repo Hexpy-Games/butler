@@ -9,6 +9,8 @@ from pathlib import Path
 
 
 RULES = {
+    'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
+    'unsafe Windows ORAS setup action': r'\buses:\s*[\x22\x27]?oras-project/setup-oras@',
     'absolute drive path': r'(?<![\w])[A-Za-z]:[\\/]',
     'fixed absolute temp path': r'(?<![\w])/(?:tmp|var/tmp|Users|home)/',
     'fixed port': (r'(?:localhost|127\.0\.0\.1):[1-9]\d*|'
@@ -87,6 +89,11 @@ def audit(root):
             job = block.split(':', 1)[0].strip()
             jobs.append(f'{workflow.name}/{job}')
             offset = source.index(block)
+            # Workflow defaults also apply to owner jobs with no step shell.
+            prefix = source.split('\njobs:', 1)[0]
+            for line, hazard in hazards(prefix):
+                if hazard == 'unavailable PowerShell 7 shell':
+                    findings.append(f'{workflow.relative_to(root)}:{line}: {hazard}')
             for path, text in local_sources(root, workflow, block, {workflow.resolve()}):
                 for line, hazard in hazards(text):
                     if path == workflow:

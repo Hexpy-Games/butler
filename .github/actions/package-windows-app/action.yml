@@ -19,7 +19,7 @@ runs:
       with:
         node-version: 24
     - name: Package the exact App and bundled Agent version
-      shell: pwsh
+      shell: powershell
       run: |
         $ErrorActionPreference = 'Stop'
         if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }

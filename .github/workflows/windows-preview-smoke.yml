@@ -26,7 +26,7 @@ permissions:
 
 defaults:
   run:
-    shell: pwsh
+    shell: powershell
     working-directory: packages/butler-agent/rust
 
 concurrency:
@@ -97,9 +97,9 @@ jobs:
           $root = $env:OWNER_JOB_ROOT
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
           # Keep toolchain/cache locations while every check gets a fresh HOME.
-          "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
-          "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+          "CARGO_HOME=$env:USERPROFILE/.cargo" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RUSTUP_HOME=$env:USERPROFILE/.rustup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Restore main debug test snapshot
         env:
           GH_TOKEN: ${{ github.token }}
@@ -325,8 +325,8 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
         run: ./deploy/windows-preview-smoke.ps1
@@ -419,9 +419,9 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
-          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" >> $env:GITHUB_ENV
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run every existing selected harness
         env:
           SELECTED_HARNESSES: ${{ matrix.tests }}

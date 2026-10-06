@@ -6,6 +6,7 @@ Optional argument: directory containing e2e-list.json, perf-list.json, shards/.
 import contextlib
 import importlib.util
 import io
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
@@ -31,6 +33,9 @@ INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 safety_spec = importlib.util.spec_from_file_location('windows_safety', ROOT / 'windows-ci-safety.py')
 windows_safety = importlib.util.module_from_spec(safety_spec)
 safety_spec.loader.exec_module(windows_safety)
+oras_spec = importlib.util.spec_from_file_location('oras_setup', ROOT / 'setup-oras.py')
+oras_setup = importlib.util.module_from_spec(oras_spec)
+oras_spec.loader.exec_module(oras_setup)
 
 
 class WindowsSafety(unittest.TestCase):
@@ -69,6 +74,64 @@ class WindowsSafety(unittest.TestCase):
             workflow.write_text(workflow.read_text().replace('[self-hosted, butler-win]', 'windows-latest'))
             probe.write_text('Stop-Process -Name node')
             self.assertEqual(windows_safety.audit(root)[0], [])
+
+    # test-category: security
+    def test_windows_oras_extracts_verified_zip_and_rejects_bad_checksum(self):
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as package:
+            package.writestr('oras.exe', b'official executable fixture')
+            package.writestr('../outside', b'must not extract')
+        payload = archive.getvalue()
+        checksum = hashlib.sha256(payload).hexdigest()
+        for expected in [checksum, '0' * 64]:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                path_file = root / 'github-path'
+                responses = [io.BytesIO(payload), io.BytesIO(
+                    f'{expected}  oras_1.2.3_windows_amd64.zip\n'.encode())]
+                with patch.dict(os.environ, RUNNER_TEMP=temporary, GITHUB_PATH=str(path_file)), \
+                     patch.object(oras_setup.platform, 'system', return_value='Windows'), \
+                     patch.object(oras_setup.platform, 'machine', return_value='AMD64'), \
+                     patch.object(oras_setup.urllib.request, 'urlopen', side_effect=responses), \
+                     patch.object(oras_setup.subprocess, 'run') as execute, \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if expected != checksum:
+                        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                            oras_setup.install()
+                        execute.assert_not_called()
+                        self.assertFalse(path_file.exists())
+                    else:
+                        oras_setup.install()
+                        installed = Path(path_file.read_text().strip()) / 'oras.exe'
+                        self.assertEqual(installed.read_bytes(), b'official executable fixture')
+                        self.assertEqual(execute.call_args.args[0], [str(installed), 'version'])
+                        self.assertFalse((root / 'outside').exists())
+
+    # test-category: security
+    def test_checker_rejects_windows_shell_and_oras_in_jobs_defaults_and_actions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / '.github/workflows').mkdir(parents=True)
+            action = root / '.github/actions/setup/action.yml'
+            action.parent.mkdir(parents=True)
+            workflow = root / '.github/workflows/fixture.yml'
+            job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+                   '    steps:\n      - uses: ./.github/actions/setup\n')
+            for unsafe in ['shell: pwsh', 'uses: oras-project/setup-oras@v1']:
+                action.write_text('runs:\n  using: composite\n  steps:\n    - ' + unsafe + '\n')
+                workflow.write_text(job)
+                self.assertTrue(windows_safety.audit(root)[1], unsafe)
+                action.write_text('runs:\n  using: composite\n  steps: []\n')
+                workflow.write_text(job + '      - ' + unsafe + '\n')
+                self.assertTrue(windows_safety.audit(root)[1], unsafe)
+            for prefix in ['', 'defaults:\n  run:\n    shell: pwsh\n']:
+                workflow.write_text(prefix + job.replace('    steps:',
+                    '    defaults:\n      run:\n        shell: pwsh\n    steps:'))
+                self.assertTrue(windows_safety.audit(root)[1])
+            workflow.write_text('defaults:\n  run:\n    shell: pwsh\n' + job)
+            self.assertTrue(windows_safety.audit(root)[1])
+            workflow.write_text(job + '      - shell: powershell\n        run: echo safe\n')
+            self.assertEqual(windows_safety.audit(root)[1], [])
 
 
 class ArtifactTrust(unittest.TestCase):
