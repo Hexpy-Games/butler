@@ -3,12 +3,18 @@ import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
-import { launchSmokeBrowser } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 import { installNotificationReplay } from "../support/notification-replay";
 import { ERROR_COPY } from "../support/settings-error-copy";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
 const baseline = process.argv.includes("--baseline");
+const matrix = [375, 1280].flatMap(width => ["light", "dark"].flatMap(theme => ["ko", "en"].flatMap(locale =>
+  (baseline ? ["http"] : ["http", "preload"]).map(transport => `${width}-${theme}-${locale}-${transport}`))));
+if (await runSmokeCases(matrix, "SETTINGS_SMOKE_CASE", import.meta.path)) {
+  console.log(JSON.stringify({ ok: true, matrixCells: matrix.length, modelCalls: 0 }));
+  process.exit(0);
+}
 const root = resolve(process.env.SETTINGS_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const output = resolve(`.tmp/settings-errors/${baseline ? "before" : "after"}`);
 mkdirSync(output, { recursive: true });

@@ -11,7 +11,7 @@ use crate::host::ResolvedInstallation;
 use butler_memory::coordination::CognitionCoordinationHost;
 use butler_turn::btcc::{
     BtccStorage, BtccStorageConfig, ProcessLiveness, RuntimeOwnerIdentity, StorageActivation,
-    StorageEffectJournal, StorageProfile, ToolJournalRepository, read_activated_storage_manifest,
+    StorageEffectJournal, StorageProfile, ToolJournalRepository, begin_storage_startup,
 };
 
 use crate::host::SystemIdentity;
@@ -77,6 +77,15 @@ pub(crate) async fn record_helper_terminal(
     }) {
         return Err("restart_handoff_owner_ambiguous".into());
     }
+    record_offline_terminal(data_root, installation, intent_id, state).await
+}
+
+async fn record_offline_terminal(
+    data_root: &Path,
+    installation: &ResolvedInstallation,
+    intent_id: &str,
+    state: &'static str,
+) -> Result<(), crate::host::HostError> {
     let path = data_root.join("agent-runtime/btcc.sqlite");
     for destination in [data_root.join("agent-runtime"), path.clone()] {
         if tokio::fs::symlink_metadata(&destination)
@@ -95,14 +104,12 @@ pub(crate) async fn record_helper_terminal(
     if !path.is_file() {
         return Err("restart_handoff_journal_unavailable".into());
     }
-    let manifest_id = read_activated_storage_manifest(&path).map_err(|source| {
-        crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)
-    })?;
+    let manifest_id = handoff_manifest(path.clone()).await?;
     let host_id = SystemIdentity.hostname().map_err(|source| {
         crate::host::HostError::new("restart_handoff_host_identity_unavailable").with_source(source)
     })?;
     let storage = BtccStorage::open(BtccStorageConfig {
-        path,
+        path: path.clone(),
         profile: StorageProfile::Durable,
         activation: StorageActivation { manifest_id },
         runtime_owner: RuntimeOwnerIdentity {
@@ -131,6 +138,17 @@ pub(crate) async fn record_helper_terminal(
         .await
         .map_err(|_| "restart_handoff_journal_close_failed".to_owned());
     result.and(closed).map_err(crate::host::HostError::from)
+}
+
+async fn handoff_manifest(path: PathBuf) -> Result<String, crate::host::HostError> {
+    tokio::task::spawn_blocking(move || begin_storage_startup(&path))
+        .await
+        .map_err(|source| {
+            crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)
+        })?
+        .map_err(|source| {
+            crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)
+        })
 }
 
 struct HandoffProcessLiveness {

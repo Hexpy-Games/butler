@@ -2,12 +2,17 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { launchSmokeBrowser } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 const output = process.env.HOOK_SCREENSHOTS ?? "/tmp/butler-hooks-screenshots";
 mkdirSync(output, { recursive: true });
 const root = process.env.HOOK_UI_ROOT ?? resolve("packages/butler-app/client/ui/dist");
 const baseline = process.env.HOOK_BASELINE === "1";
+const matrix = [1280, 375].flatMap(width => ["light", "dark"].flatMap(theme => ["en", "ko"].map(locale => `${width}-${theme}-${locale}`)));
+if (await runSmokeCases(matrix, "HOOK_SMOKE_CASE", import.meta.path)) {
+  console.log(`Hooks Settings: ${matrix.length} isolated viewport/theme/language cases passed; ${output}`);
+  process.exit(0);
+}
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const file = Bun.file(join(root, new URL(request.url).pathname));
   return new Response(await file.exists() ? file : Bun.file(join(root, "index.html")));
@@ -15,6 +20,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
 const browser = await launchSmokeBrowser();
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const locale of ["en", "ko"]) {
+    if (process.env.HOOK_SMOKE_CASE && process.env.HOOK_SMOKE_CASE !== `${width}-${theme}-${locale}`) continue;
     const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");
     const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
     let hooks: unknown[] = [], revision = 0;
@@ -105,5 +111,5 @@ try {
     }
     await page.close();
   }
-  console.log(`Hooks Settings: ${baseline ? "baseline" : "CRUD/test/log"}, 8 viewport/theme/language combinations passed; ${output}`);
+  console.log(`Hooks Settings: ${baseline ? "baseline" : "CRUD/test/log"}, ${process.env.HOOK_SMOKE_CASE ? 1 : matrix.length} viewport/theme/language combinations passed; ${output}`);
 } finally { await browser.close(); await server.stop(true); }

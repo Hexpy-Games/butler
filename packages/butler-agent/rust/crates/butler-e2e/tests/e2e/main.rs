@@ -133,6 +133,8 @@ mod memory_stubs;
 mod schedule_cassette;
 
 mod btcc_cutover;
+mod btcc_startup_integrity;
+mod btcc_startup_scale;
 mod data_perf;
 mod delegate_followup;
 mod mac_app_update;

@@ -1,7 +1,35 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Page } from "playwright";
+import { strict as assert } from "node:assert";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { smokeBrowserArgs } from "./smoke-browser-args";
 export { smokeBrowserArgs } from "./smoke-browser-args";
+
+/** Keep every matrix assertion, isolating Bun/CDP lifetimes on restricted runners. */
+export async function runSmokeCases(cases: string[], variable: string, entry: string): Promise<boolean> {
+  const selected = process.env[variable];
+  if (selected) { assert(cases.includes(selected), `Unknown smoke case: ${selected}`); return false; }
+  if (!smokeBrowserArgs().includes("--single-process")) return false;
+  assert.equal(new Set(cases).size, cases.length);
+  for (const cell of cases) {
+    const isolation = mkdtempSync(join(tmpdir(), "butler-smoke-case-"));
+    mkdirSync(join(isolation, "home")); mkdirSync(join(isolation, "data"));
+    try {
+      const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], {
+        env: { ...process.env, HOME: join(isolation, "home"), BUTLER_DATA: join(isolation, "data"), [variable]: cell },
+        stdio: "inherit",
+      });
+      const code = await new Promise<number | null>((resolve, reject) => {
+        child.once("error", reject); child.once("exit", resolve);
+      });
+      assert.equal(code, 0, `Smoke case ${cell} failed`);
+    } finally { rmSync(isolation, { recursive: true, force: true }); }
+  }
+  return true;
+}
 
 /** Electron needs its production process model; Chromium's restricted-runner
  * --single-process workaround crashes Electron 44 on macOS.

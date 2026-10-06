@@ -30,7 +30,7 @@ pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
     migrated.and(restored)
 }
 
-fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
+pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     authority::migrate(&transaction)?;
     subsession::migrate(&transaction)?;
