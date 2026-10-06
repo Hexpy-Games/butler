@@ -296,7 +296,7 @@ fn run_connection_lane(
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<(String, u64)>>,
 ) -> StorageResult<()> {
-    let setup: StorageResult<(Connection, RuntimeOwner)> = (|| {
+    let setup: StorageResult<(sqlite::Connection, RuntimeOwner)> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 StorageError::new(StorageCode::SqliteParentCreateFailed, error.to_string())
@@ -319,6 +319,9 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string()).with_source(error)
+    })?;
     if initialized
         .send(Ok((owner.owner_id().to_owned(), owner.generation())))
         .is_err()

@@ -105,7 +105,7 @@ pub(super) fn interrupt_on_stop(
 pub(super) mod tests {
     use super::*;
     pub(in crate::cognition::graph) fn assert_query_plan() {
-        let mut db = rusqlite::Connection::open_in_memory().unwrap();
+        let mut db = butler_platform::sqlite::Connection::open_in_memory().unwrap();
         super::super::schema::ensure(&mut db, "2026-10-02T00:00:00Z").unwrap();
         let mut graph = GraphRepository {
             _reader_pin: None,

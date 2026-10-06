@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rusqlite::Connection;
+use butler_platform::sqlite::Connection;
 use serde_json::json;
 
 use super::{ClaimProjectionWindowInput, PreviousWindowState, claim, pin_input};

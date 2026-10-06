@@ -305,6 +305,10 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        WorkspaceError::new(WorkspaceCode::SqliteWalSyncFailed, error.to_string())
+            .with_source(error)
+    })?;
     if initialized.send(Ok(())).is_err() {
         return Ok(());
     }

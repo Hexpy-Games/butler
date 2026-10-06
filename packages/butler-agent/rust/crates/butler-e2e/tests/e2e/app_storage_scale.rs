@@ -27,7 +27,7 @@ const NUMBERS: &str = "Write the numbers from one to twelve as English words, se
 pub(super) mod seed;
 use seed::{SEEDED_AT, UNCOMPACTED, seed_owner_scale};
 
-fn database(s: &Scenario) -> Connection {
+fn database(s: &Scenario) -> butler_platform::sqlite::Connection {
     sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap()
 }
 
