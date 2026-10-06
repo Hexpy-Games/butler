@@ -3,9 +3,11 @@
 // edges, a few thin dark branch strokes peeking through. Petals fall and flutter across the card
 // at varied sizes, spinning. No background: premultiplied alpha, the card's own glass shows through.
 //
-// Composition, FIXED size anchored to the top-right corner (never grows with the card's height):
-//   - along the top padding from the corner to 50% of the width, a lighter mass from the
-//     top-left to 20%;
+// Composition, FIXED size (the canopy as drawn on a 375 card, WREF = 349px), never stretched by the
+// card's width or height, justified: the left part to the left edge, the right part to the right
+// edge; on wider cards the middle of the top edge is empty.
+//   - along the top padding from the right corner to 174.5px, a lighter mass from the top-left
+//     to 70px;
 //   - a quarter-ellipse cluster tucked into the top-right corner: IX = 50px from the right edge,
 //     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest). Fixed in
 //     px, so it stays at the same outward position at every width and height. Its outer part is a
@@ -38,6 +40,7 @@ float IX;    // right-side mass width
 float IY;    // right-side mass depth (fixed)
 float TB;    // bottom of the text area (top of the toolbar row while open)
 bool DARK;
+const float WREF = 349.0;     // the canopy width on a 375px viewport (card 351px inside its 1px border): reference size
 const float TOP = 12.0;      // the editor content box starts 12px down
 const float SIDE = 15.0;     // text lines end 16px before the right edge
 
@@ -179,8 +182,8 @@ void main() {
   DARK = u_darkTheme > 0.5;
   float t = u_time;
   AA = 0.8 / u_pixelRatio;
-  ER = W * 0.5;
-  EL = W * 0.2;
+  ER = WREF * 0.5;                                      // fixed: the 375 reference, never stretched
+  EL = WREF * 0.2;
   IX = 50.0;                                            // fixed: tucked into the corner
   TB = H > 60.0 ? H - 50.0 : H;                         // the toolbar row starts ~47-53px from the bottom
   IY = min(56.0, TB);                                   // fixed depth; never deeper than 56px
@@ -188,9 +191,16 @@ void main() {
 
   vec4 col = vec4(0.0);
   if (p.y < IY + 10.0) {
-    vec4 back = dabs(p + vec2(1.7, 1.3), p, 4.5, 1.25, -0.25, 31);  // shaded mass behind
-    vec4 front = dabs(p, p, 3.5, 1.1, 0.3, 47);                      // lit dabs on top
-    vec4 wood = branches(p) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0) * (inTextZone(p) ? 0.0 : 1.0);
+    // Justified: the left part stays where it is; the right part (top-edge mass + corner cluster)
+    // is drawn exactly as on a 375 card and anchored to the right edge. The split sits in the middle
+    // of the empty gap between them; on a 375 card the shift is 0, so it renders unchanged.
+    float split = 0.5 * (EL + (W - ER));
+    vec2 q = p;
+    if (p.x >= split) { q.x -= W - WREF; W = WREF; }
+    vec4 back = dabs(q + vec2(1.7, 1.3), q, 4.5, 1.25, -0.25, 31);  // shaded mass behind
+    vec4 front = dabs(q, q, 3.5, 1.1, 0.3, 47);                      // lit dabs on top
+    vec4 wood = branches(q) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0) * (inTextZone(q) ? 0.0 : 1.0);
+    W = res.x;
     col = over(col, back);
     col = over(col, wood);
     col = over(col, front);
