@@ -46,7 +46,14 @@ async function connect() {
   return chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
 }
 try {
-  original = spawn(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, stdio: "ignore" });
+  original = spawn(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, stdio: ["ignore", "pipe", "pipe"] });
+  for (const stream of [original.stdout, original.stderr]) {
+    let pending = "";
+    stream?.on("data", (chunk) => {
+      const lines = (pending + String(chunk)).split("\n"); pending = lines.pop() ?? "";
+      for (const line of lines) { try { const event = JSON.parse(line).startup; if (event?.stage?.startsWith("retry_")) console.log(JSON.stringify({ startup: event })); } catch { /* selected timings only */ } }
+    });
+  }
   browser = await connect();
   const splash = await waitFor(() => browser!.contexts()[0]!.pages().find((page) => page.url().includes("lifecycle.html")), "Error surface unavailable");
   await splash.getByRole("alert").waitFor();
@@ -62,6 +69,7 @@ try {
   assert.ok(report.failedStage);
   assert.ok(Array.isArray(report.timings));
   writeFileSync(config, validConfig);
+  console.log(JSON.stringify({ failureSupervisor: report.supervisor }));
   console.log(JSON.stringify({ originalFacts: await nativeMainFacts(mainPort, fixture.data) }));
   await splash.bringToFront();
   phase = "retry-click";

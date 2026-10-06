@@ -75,7 +75,9 @@ export function createStartupWindow() {
     async onAction(action) {
       if (!state.failed) return;
       if (action === "retry") {
+        startupTiming("retry_requested");
         await actions.retry?.();
+        startupTiming("retry_stopped");
         app.relaunch(); app.exit(0);
       } else if (action === "log") await openLifecycleLog(state, events, actions.diagnostics?.());
       else if (action === "quit") app.quit();
