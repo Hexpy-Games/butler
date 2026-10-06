@@ -68,6 +68,19 @@ class WindowsSafety(unittest.TestCase):
         self.assertLess(initialization, setup.index('cargo-artifact-cache.py'))
 
     # test-category: security
+    def test_owner_native_publisher_uses_powershell_not_runner_bash_alias(self):
+        source = (ROOT.parents[1] / '.github/workflows/native-deps.yml').read_text()
+        owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]
+        self.assertIn('if: matrix.owner', owner)
+        self.assertIn('shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass', owner)
+        self.assertIn('native-deps $env:NATIVE_TARGET', owner)
+        self.assertIn('if ($LASTEXITCODE -ne 0)', owner)
+        hosted = source.split('name: Build once and publish verified SDK', 1)[1].split(
+            'name: Build and publish owner-toolset SDK', 1)[0]
+        self.assertIn('if: ${{ !matrix.owner }}', hosted)
+        self.assertIn('shell: bash', hosted)
+
+    # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

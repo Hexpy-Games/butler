@@ -65,6 +65,7 @@ jobs:
           arch: x64
       - uses: ./.github/actions/setup-oras
       - name: Build once and publish verified SDK
+        if: ${{ !matrix.owner }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,3 +76,15 @@ jobs:
           RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"
+      - name: Build and publish owner-toolset SDK
+        if: matrix.owner
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_TARGET: ${{ matrix.target }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-owner/native-deps
+          PYTHONDONTWRITEBYTECODE: '1'
+          RUSTC_WRAPPER: ''
+        run: |
+          python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps $env:NATIVE_TARGET
+          if ($LASTEXITCODE -ne 0) { throw 'Native SDK publication failed' }
