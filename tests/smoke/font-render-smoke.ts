@@ -1,4 +1,4 @@
-import { launchSmokeBrowser, smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, smokeElectronArgs } from "../support/smoke-browser.ts";
 // Bundled fonts render in the served UI (DS spec Typeface Contract).
 //
 // Web mode: Playwright Chromium against an isolated native gateway serving the
@@ -146,7 +146,7 @@ async function electronMode(): Promise<void> {
   });
   const electronPath = createRequire(resolve(root, "packages/butler-app/client/electron/package.json"))("electron") as unknown as string;
   const debugPort = await freePort();
-  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs(), resolve(root, "packages/butler-app/client/electron")], {
+  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
     cwd: dir,
     stdio: "ignore",
     env: {

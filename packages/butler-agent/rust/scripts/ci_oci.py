@@ -18,6 +18,17 @@ def digest(path):
         return 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def authenticate():
+    """Keep both login and publisher subprocesses in the same native profile."""
+    config = str(Path(os.environ['HOME']) / 'oras-auth.json')
+    os.environ['BUTLER_OCI_AUTH_CONFIG'] = config
+    result = subprocess.run(['oras', 'login', 'ghcr.io', '--registry-config', config,
+                             '--username', os.environ['GITHUB_ACTOR'], '--password-stdin'],
+                            input=os.environ['GH_TOKEN'], text=True, capture_output=True, timeout=60)
+    if result.returncode:
+        raise RuntimeError('OCI publisher login failed')
+
+
 def command(*args, anonymous=True, cwd=None):
     with tempfile.TemporaryDirectory() as temporary:
         credentials = Path(temporary) / 'config.json'
@@ -25,6 +36,11 @@ def command(*args, anonymous=True, cwd=None):
         options = ['--oci-layout'] if os.environ.get('BUTLER_OCI_LAYOUT') == '1' else []
         if anonymous:
             options += ['--registry-config', str(credentials)]
+        elif os.environ.get('BUTLER_OCI_LAYOUT') != '1':
+            config = os.environ.get('BUTLER_OCI_AUTH_CONFIG')
+            if not config:
+                raise RuntimeError('Publisher requires an isolated OCI credential file')
+            options += ['--registry-config', config]
         return subprocess.run(['oras', *args, *options], cwd=cwd, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1200)
 
@@ -43,7 +59,8 @@ def manifest(reference, *, anonymous=True):
     if result.returncode:
         if any(code in result.stderr.lower() for code in ['not found', 'manifest_unknown', 'name_unknown', '404']):
             return None
-        if anonymous and 'requested access to the resource is denied' in result.stderr:
+        if anonymous and any(message in result.stderr.lower() for message in
+                             ['requested access to the resource is denied', 'unauthorized: authentication required']):
             print('OCI package is absent or not public; cold build follows.')
             return None
         raise RuntimeError(f'OCI manifest lookup failed: {result.stderr.strip()}')

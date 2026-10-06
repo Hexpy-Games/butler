@@ -215,6 +215,54 @@ class NativeDeps(unittest.TestCase):
             self.assertNotIn('models-bge-m3', arguments)
 
     # test-category: security
+    def test_publisher_credentials_are_explicit_and_readers_ignore_them(self):
+        import os
+        import subprocess
+        config = str(self.root / 'disposable-auth.json')
+        completed = subprocess.CompletedProcess([], 0, stdout='', stderr='')
+        with patch.dict(os.environ, BUTLER_OCI_AUTH_CONFIG=config), \
+                patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
+            sdk.ci_oci.command('manifest', 'fetch', 'ghcr.io/owner/package:key', anonymous=False)
+            arguments = invoke.call_args.args[0]
+            self.assertEqual(arguments[arguments.index('--registry-config') + 1], config)
+            sdk.ci_oci.command('manifest', 'fetch', 'ghcr.io/owner/package:key')
+            self.assertNotIn(config, invoke.call_args.args[0])
+        with patch.dict(os.environ):
+            os.environ.pop('BUTLER_OCI_AUTH_CONFIG', None)
+            os.environ.pop('BUTLER_OCI_LAYOUT', None)
+            with self.assertRaisesRegex(RuntimeError, 'isolated OCI credential file'):
+                sdk.ci_oci.command('push', 'ghcr.io/owner/package:key', anonymous=False)
+
+    # test-category: security
+    def test_private_cache_is_unavailable_but_publisher_auth_errors_fail(self):
+        import subprocess
+        denied = subprocess.CompletedProcess([], 1, stdout='', stderr='unauthorized: authentication required')
+        with patch.object(sdk.ci_oci, 'command', return_value=denied):
+            self.assertIsNone(sdk.ci_oci.manifest('ghcr.io/owner/package:missing'))
+            with self.assertRaisesRegex(RuntimeError, 'OCI manifest lookup failed'):
+                sdk.ci_oci.manifest('ghcr.io/owner/package:missing', anonymous=False)
+        outage = subprocess.CompletedProcess([], 1, stdout='', stderr='HTTP 500 registry error')
+        with patch.object(sdk.ci_oci, 'command', return_value=outage):
+            with self.assertRaisesRegex(RuntimeError, 'OCI manifest lookup failed'):
+                sdk.ci_oci.manifest('ghcr.io/owner/package:missing')
+
+    # test-category: security
+    def test_login_uses_native_disposable_path_and_stdin_without_a_nested_shell(self):
+        import os
+        import subprocess
+        completed = subprocess.CompletedProcess([], 0, stdout='Login Succeeded', stderr='')
+        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token'), \
+                patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
+            sdk.ci_oci.authenticate()
+            arguments = invoke.call_args.args[0]
+            config = str(self.root / 'oras-auth.json')
+            self.assertEqual(arguments[arguments.index('--registry-config') + 1], config)
+            self.assertEqual(os.environ['BUTLER_OCI_AUTH_CONFIG'], config)
+            self.assertEqual(invoke.call_args.kwargs['input'], 'stub-token')
+            self.assertNotIn('stub-token', arguments)
+            self.assertEqual(arguments[0], 'oras')
+
+    # test-category: security
     def test_unsafe_archive_is_rejected(self):
         archive = self.root / 'unsafe.zip'
         with zipfile.ZipFile(archive, 'w') as output:

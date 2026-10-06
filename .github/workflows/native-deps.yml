@@ -51,12 +51,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          OCI_ACTOR: ${{ github.actor }}
           NATIVE_TARGET: ${{ matrix.target }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
         run: |
-          set -euo pipefail
-          export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
-          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          printf "%s" "$GH_TOKEN" | oras login ghcr.io --username "$OCI_ACTOR" --password-stdin
-          python packages/butler-agent/rust/scripts/static_ort_prebuilt.py publish "$NATIVE_TARGET"
+          python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"

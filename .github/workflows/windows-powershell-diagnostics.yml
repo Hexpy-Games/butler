@@ -1,0 +1,48 @@
+name: Windows PowerShell diagnostics
+on:
+  workflow_call:
+    inputs:
+      native-cache:
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: pwsh
+jobs:
+  diagnose-native:
+    name: Isolated native PowerShell startup probe
+    runs-on: [self-hosted, butler-win]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: ${{ inputs.native-cache || 'captain-p7' }}
+      - name: Probe cold module discovery without application writes
+        working-directory: .
+        run: ./deploy/windows-powershell-diagnosis.ps1
+      - name: Check owner registration and remove job profile
+        if: always()
+        working-directory: .
+        env:
+          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  diagnose-hosted:
+    name: Isolated hosted PowerShell startup probe
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe cold module discovery without application writes
+        working-directory: .
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = "$root/home"
+          $env:BUTLER_DATA = "$root/data"
+          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
+          try { ./deploy/windows-powershell-diagnosis.ps1 }
+          finally { Remove-Item $root -Recurse -Force }

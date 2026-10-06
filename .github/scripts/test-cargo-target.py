@@ -90,11 +90,14 @@ class TargetSnapshot(unittest.TestCase):
                 chunks = snapshots.split(archive, root, '42-1')
             self.assertEqual(b''.join((root / name).read_bytes() for name in chunks), archive.read_bytes())
             versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in [41,42,43]]
+            versions[0]['metadata']['container']['tags'].append('fixture')  # An older producer finished last.
             versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
             with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
                     patch.object(cache, 'output', return_value=json.dumps([versions])), \
+                    patch.object(snapshots.ci_oci, 'checked') as promote, \
                     patch.object(snapshots.subprocess, 'run') as delete:
-                snapshots.prune('fixture')
+                snapshots.prune('fixture', '41-1')
+                self.assertEqual(promote.call_args.args, ('tag', snapshots.ci_oci.REGISTRY + '/cargo-target:fixture--43-1', 'fixture'))
                 self.assertEqual(delete.call_count, 1)
                 self.assertTrue(delete.call_args.args[0][-1].endswith('/41'))
 
