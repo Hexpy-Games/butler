@@ -215,6 +215,25 @@ class NativeDeps(unittest.TestCase):
             self.assertNotIn('models-bge-m3', arguments)
 
     # test-category: security
+    def test_publisher_credentials_are_explicit_and_readers_ignore_them(self):
+        import os
+        import subprocess
+        config = str(self.root / 'disposable-auth.json')
+        completed = subprocess.CompletedProcess([], 0, stdout='', stderr='')
+        with patch.dict(os.environ, BUTLER_OCI_AUTH_CONFIG=config), \
+                patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
+            sdk.ci_oci.command('manifest', 'fetch', 'ghcr.io/owner/package:key', anonymous=False)
+            arguments = invoke.call_args.args[0]
+            self.assertEqual(arguments[arguments.index('--registry-config') + 1], config)
+            sdk.ci_oci.command('manifest', 'fetch', 'ghcr.io/owner/package:key')
+            self.assertNotIn(config, invoke.call_args.args[0])
+        with patch.dict(os.environ):
+            os.environ.pop('BUTLER_OCI_AUTH_CONFIG', None)
+            os.environ.pop('BUTLER_OCI_LAYOUT', None)
+            with self.assertRaisesRegex(RuntimeError, 'isolated OCI credential file'):
+                sdk.ci_oci.command('push', 'ghcr.io/owner/package:key', anonymous=False)
+
+    # test-category: security
     def test_unsafe_archive_is_rejected(self):
         archive = self.root / 'unsafe.zip'
         with zipfile.ZipFile(archive, 'w') as output:
