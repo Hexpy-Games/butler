@@ -24,7 +24,51 @@ spec.loader.exec_module(provenance)
 cache_spec = importlib.util.spec_from_file_location('cargo_cache', ROOT / 'cargo-artifact-cache.py')
 cargo_cache = importlib.util.module_from_spec(cache_spec)
 cache_spec.loader.exec_module(cargo_cache)
+WINDOWS_ONLY = '--windows-safety' in sys.argv
+if WINDOWS_ONLY:
+    sys.argv.remove('--windows-safety')
 INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
+safety_spec = importlib.util.spec_from_file_location('windows_safety', ROOT / 'windows-ci-safety.py')
+windows_safety = importlib.util.module_from_spec(safety_spec)
+safety_spec.loader.exec_module(windows_safety)
+
+
+class WindowsSafety(unittest.TestCase):
+    # test-category: security
+    def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
+        jobs, findings = windows_safety.audit(ROOT.parents[1])
+        self.assertGreaterEqual(len(jobs), 6, jobs)
+        self.assertEqual(findings, [], '\n'.join(findings))
+        print(f'Windows concurrency audit: {len(jobs)} owner jobs, no hazards')
+
+    # test-category: security
+    def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / '.github/workflows').mkdir(parents=True)
+            (root / '.github/actions/setup').mkdir(parents=True)
+            workflow = root / '.github/workflows/fixture.yml'
+            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+                                '    steps:\n      - uses: ./.github/actions/setup\n')
+            action = root / '.github/actions/setup/action.yml'
+            action.write_text('runs:\n  using: composite\n  steps:\n    - run: ../../../deploy/probe.ps1\n')
+            (root / 'deploy').mkdir()
+            probe = root / 'deploy/probe.ps1'
+            for unsafe in [r"$root = 'C:\butler-ci'", "$root = '/tmp/shared-ci'", '$env:BUTLER_APP_SERVER_PORT = 18765',
+                           'python -m http.server 8080', 'Stop-Process -Name butler-agent',
+                           'Stop-Process butler-agent', 'taskkill /F /IM node.exe',
+                           'bun run installer-smoke.ts', 'winget install Rust',
+                           r'$root = "$env:USERPROFILE/work/target"']:
+                probe.write_text(unsafe)
+                _, findings = windows_safety.audit(root)
+                self.assertTrue(findings, unsafe)
+                self.assertTrue(any('probe.ps1:1:' in item for item in findings), findings)
+            probe.write_text('$root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())\n'
+                             '$env:BUTLER_APP_SERVER_PORT = $port\nStop-Process -Id $child.Id')
+            self.assertEqual(windows_safety.audit(root)[1], [])
+            workflow.write_text(workflow.read_text().replace('[self-hosted, butler-win]', 'windows-latest'))
+            probe.write_text('Stop-Process -Name node')
+            self.assertEqual(windows_safety.audit(root)[0], [])
 
 
 class ArtifactTrust(unittest.TestCase):
@@ -373,4 +417,4 @@ class Coverage(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(argv=[sys.argv[0], 'WindowsSafety'] if WINDOWS_ONLY else None)
