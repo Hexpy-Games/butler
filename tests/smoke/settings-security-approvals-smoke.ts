@@ -72,6 +72,7 @@ try {
     const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
     const routeApi = async (route: Route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path.startsWith("/events")) { await route.continue(); return; }
       if (path === "/authority-permissions" && listState !== "ready") {
         if (listState === "loading") await new Promise<void>(done => { pendingLoads.add(done); });
         if (listState === "error") { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
@@ -95,7 +96,7 @@ try {
       await server.signIn(page);
       page.on("pageerror", error => console.error(`UI exception: ${error.message}`));
       page.on("response", response => { if (response.status() >= 400) console.log(`HTTP ${response.status()} ${new URL(response.url()).pathname}`); });
-      await page.route(url => url.origin === new URL(server.url).origin && !url.pathname.startsWith("/events"), routeApi);
+      await page.route(`${server.url}**`, routeApi);
     }
     await configurePage();
     // Each case has finished its assertions. Disarm canceled navigation callbacks before closing its context.
