@@ -40,6 +40,8 @@ float IX;    // right-side mass width
 float IY;    // right-side mass depth (fixed)
 float TB;    // bottom of the text area (top of the toolbar row while open)
 bool DARK;
+bool RIGHT_PART; // evaluating the right part (its own frame): the left part is not drawn there
+float TAIL;      // taper length of each part's inner end: 0 on a 375 card, up to 48px with a gap
 const float WREF = 349.0;     // the canopy width on a 375px viewport (card 351px inside its 1px border): reference size
 const float TOP = 12.0;      // the editor content box starts 12px down
 const float SIDE = 15.0;     // text lines end 16px before the right edge
@@ -50,10 +52,22 @@ float lobes(float x) { return pow(max(0.0, sin(x * 0.085 + 2.6 * vn(vec2(x * 0.0
 // Returns (inside 0/1, light 0 underside .. 1 top, fringe 0 core .. 1 outer edge).
 vec3 mass(float rc, float lc, float y) {
   float sway = 1.2 * (vn(vec2(rc * 0.06, 2.0)) - 0.5);
-  float right = (mix(TOP - 1.0, 3.0, smoothstep(IX * 0.5, ER, rc)) + 2.0 * lobes(rc) * (1.0 - smoothstep(ER * 0.5, ER, rc))) * step(rc, ER);
-  float left = (mix(TOP - 5.0, 1.0, smoothstep(0.0, EL, lc)) + 1.5 * lobes(lc + 40.0)) * step(lc, EL);
+  // Each part's inner end: on a 375 card it ends where it always did. With extra width (TAIL > 0,
+  // the gap the justified layout opens), it thins out over TAIL px past that end instead: a shrinking,
+  // scalloped edge with sparser, smaller dabs (fringe), never a straight cut.
+  float tR = 0.0, tL = 0.0;
+  float right = 0.0, left = 0.0;
+  if (rc <= ER) right = mix(TOP - 1.0, 3.0, smoothstep(IX * 0.5, ER, rc)) + 2.0 * lobes(rc) * (1.0 - smoothstep(ER * 0.5, ER, rc));
+  else if (rc < ER + TAIL) { tR = (rc - ER) / TAIL; right = 3.0 * (1.0 - smoothstep(0.0, 1.0, tR)) * (0.55 + 0.9 * lobes(rc * 1.7)); }
+  if (!RIGHT_PART) {
+    if (lc <= EL) left = mix(TOP - 5.0, 1.0, smoothstep(0.0, EL, lc)) + 1.5 * lobes(lc + 40.0);
+    else if (lc < EL + TAIL) { tL = (lc - EL) / TAIL; left = (1.0 + 1.5 * lobes(lc + 40.0)) * (1.0 - smoothstep(0.0, 1.0, tL)) * (0.7 + 0.6 * lobes(lc * 1.7)); }
+  }
   float depth = min(max(right, left), TOP) + sway;
-  if (y <= depth) return vec3(1.0, clamp(1.0 - y / max(depth, 1.0), 0.0, 1.0), 0.0);
+  float tail = right >= left ? tR : tL;
+  // with a gap, nothing between the two parts (on a 375 card the top edge is unchanged)
+  bool gap = TAIL > 0.0 && max(right, left) <= 0.0;
+  if (!gap && y <= depth) return vec3(1.0, clamp(1.0 - y / max(depth, 1.0), 0.0, 1.0), tail);
   float wob = 1.0 + 0.16 * (vn(vec2(atan(y, rc) * 4.0, 3.0)) - 0.5) + 0.06 * lobes(y * 3.0 + rc);
   float o = length(vec2(rc / IX, y / IY)) / wob;
   if (o < 1.0) return vec3(1.0, clamp(1.0 - y / IY + 0.25 * (1.0 - o), 0.0, 1.0), smoothstep(0.4, 1.0, o));
@@ -196,7 +210,9 @@ void main() {
     // of the empty gap between them; on a 375 card the shift is 0, so it renders unchanged.
     float split = 0.5 * (EL + (W - ER));
     vec2 q = p;
-    if (p.x >= split) { q.x -= W - WREF; W = WREF; }
+    TAIL = clamp(W - WREF, 0.0, 48.0);
+    RIGHT_PART = p.x >= split;
+    if (RIGHT_PART) { q.x -= W - WREF; W = WREF; }
     vec4 back = dabs(q + vec2(1.7, 1.3), q, 4.5, 1.25, -0.25, 31);  // shaded mass behind
     vec4 front = dabs(q, q, 3.5, 1.1, 0.3, 47);                      // lit dabs on top
     vec4 wood = branches(q) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0) * (inTextZone(q) ? 0.0 : 1.0);
