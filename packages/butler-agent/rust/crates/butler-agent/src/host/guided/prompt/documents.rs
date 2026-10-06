@@ -9,6 +9,8 @@ use butler_turn::btcc::{BtccError, BtccRepositories, ContextDocumentRead, TurnRe
 
 pub(super) struct DocumentProjection {
     pub context: String,
+    pub sections: Vec<DocumentSection>,
+    pub instruction_components: Value,
     pub response_language: String,
     pub governing: String,
     pub persona: String,
@@ -29,7 +31,7 @@ async fn group(
     refs: impl Iterator<Item = String>,
     limit: usize,
     projected: Option<&HashMap<String, String>>,
-) -> String {
+) -> Vec<DocumentSection> {
     let mut documents = Vec::new();
     for reference in refs {
         let Ok(document) = repo.read_context_document(reference.clone()).await else {
@@ -39,24 +41,28 @@ async fn group(
             Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
             None => document.content,
         };
-        documents.push((document.source_id, content));
+        documents.push((document.source_id, document.projection_class, content));
     }
-    documents.sort_by_key(|(source, _)| std::cmp::Reverse(super::excerpts::priority(source)));
+    documents.sort_by_key(|(source, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
     let count = documents.len();
     let mut remaining = limit;
     let mut contents = Vec::new();
-    for (index, (source, content)) in documents.into_iter().enumerate() {
+    for (index, (source, kind, content)) in documents.into_iter().enumerate() {
         // Keep room for a deterministic omission marker for every later source.
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
         let retrieval = format!("source {source}; use recall_memory or read_file to expand");
         let value = super::excerpts::text(&content, allowance, &retrieval);
         if !value.trim().is_empty() {
-            contents.push(value.clone());
+            contents.push(DocumentSection {
+                stage: stage(&kind, &source),
+                id: source,
+                text: value.clone(),
+            });
         }
         remaining = remaining.saturating_sub(value.len() + 2);
     }
-    contents.join("\n\n")
+    contents
 }
 
 fn language(candidate: &str) -> Option<String> {
@@ -144,19 +150,40 @@ pub(super) async fn read(
     )
     .await;
     let mut groups = Vec::new();
+    let mut sections = Vec::new();
     for (title, value) in [
         ("Recent conversation and feedback", recent),
         ("Required working context", mandatory),
         ("Optional working context", optional),
     ] {
         if !value.is_empty() {
-            groups.push(format!("## {title}\n\n{value}"));
+            let header = format!("## {title}");
+            groups.push(format!(
+                "{header}\n\n{}",
+                value
+                    .iter()
+                    .map(|section| section.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            ));
+            let stage = value
+                .iter()
+                .map(|section| section.stage)
+                .min()
+                .unwrap_or(Stage::Volatile);
+            sections.push(DocumentSection {
+                id: title.into(),
+                text: header,
+                stage,
+            });
+            sections.extend(value);
         }
     }
     project_profile(
         repo,
         turn,
         groups.join("\n\n"),
+        sections,
         response_language,
         profile_limit,
     )
@@ -167,6 +194,7 @@ async fn project_profile(
     repo: &BtccRepositories,
     turn: &TurnRecord,
     context: String,
+    sections: Vec<DocumentSection>,
     response_language: String,
     profile_limit: usize,
 ) -> Result<DocumentProjection, BtccError> {
@@ -226,6 +254,8 @@ async fn project_profile(
     };
     Ok(DocumentProjection {
         context,
+        sections,
+        instruction_components: super::diagnostics::instruction_components(&bounded),
         response_language,
         governing: join(&governing_sources),
         persona: join(&persona_sources),
@@ -249,4 +279,36 @@ fn exact_eol(admitted: &[ContextDocumentRead]) -> Result<String, BtccError> {
         ));
     }
     Ok(eol_content.unwrap_or_default())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Stage {
+    Stable,
+    History,
+    Volatile,
+}
+
+pub(super) struct DocumentSection {
+    pub id: String,
+    pub text: String,
+    pub stage: Stage,
+}
+
+fn stage(kind: &str, id: &str) -> Stage {
+    // Owner's cross-turn measurement: profile, rules (~11 KB), optional docs
+    // and feedback change <10%; the other mandatory/runtime docs change 30-100%.
+    // Classify by admitted kind/id after applying main's shared group budgets.
+    if id == "recent-conversation" {
+        Stage::History
+    } else if matches!(
+        id,
+        "runtime-state" | "inbound-message" | "current-attachments"
+    ) {
+        Stage::Volatile
+    } else if id == "rules" || matches!(kind, "profile" | "optional_hot_cache" | "recent_feedback")
+    {
+        Stage::Stable
+    } else {
+        Stage::Volatile
+    }
 }

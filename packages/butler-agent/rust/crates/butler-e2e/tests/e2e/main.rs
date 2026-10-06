@@ -67,6 +67,7 @@ mod project_git;
 mod projection_backlog;
 mod projection_settlement;
 mod projects;
+mod prompt_layout;
 mod queue_admission_shutdown;
 mod queue_notifications;
 mod queue_pause;

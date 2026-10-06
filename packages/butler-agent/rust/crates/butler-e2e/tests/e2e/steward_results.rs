@@ -117,6 +117,28 @@ async fn a_result_delivered_to_an_idle_parent_is_not_a_bubble() -> Result<(), Ha
     s.turn(CHAT, OWNER).await?;
     deliver_result(&s, "steward-result-1").await?;
     assert_result_is_hidden(&s, "steward-result-1").await?;
+    let starts: Vec<Value> = std::fs::read_to_string(
+        s.sandbox
+            .data
+            .join("metrics/request-prefix-diagnostics.jsonl"),
+    )?
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<_>, _>>()?;
+    let result = starts
+        .iter()
+        .rev()
+        .find(|row| row["requestStarted"] == true && row["sessionKind"] == "parent")
+        .unwrap();
+    assert_eq!(result["trigger"], "steward-result");
+    assert_eq!(
+        result["inputSections"].as_array().unwrap().last().unwrap()["id"],
+        "current-request"
+    );
+    eprintln!(
+        "DELEGATED_LAYOUT prefix_bytes={} byte_prefix_percent={} token_prefix_percent={}",
+        result["prefixBytes"], result["lcpPercent"], result["lcpTokenPercent"]
+    );
     s.finish().await
 }
 
