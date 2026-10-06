@@ -1,20 +1,90 @@
 name: Publish npm package for a release tag
+run-name: Publish npm package ${{ inputs.tag }} (${{ inputs.request_id || 'manual' }})
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to publish
+        required: true
+        type: string
+      skip_if_published:
+        description: Skip publication when this exact package version already exists
+        required: false
+        default: false
+        type: boolean
+      request_id:
+        description: Internal dispatch correlation ID
+        required: false
+        type: string
+      forward_dispatch:
+        description: Forward reusable calls through this trusted workflow's dispatch
+        required: true
+        type: boolean
   workflow_dispatch:
     inputs:
       tag:
         description: Published release tag (for example v0.1.0-preview.3)
         required: true
         type: string
+      skip_if_published:
+        description: Skip publication when this exact package version already exists
+        required: false
+        default: false
+        type: boolean
+      request_id:
+        description: Internal dispatch correlation ID
+        required: false
+        type: string
+      forward_dispatch:
+        description: Internal reusable workflow mode
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  dispatch-trusted-publisher:
+    name: Dispatch the trusted npm publisher
+    if: ${{ inputs.forward_dispatch }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Start and wait for the trusted workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SKIP_IF_PUBLISHED: ${{ inputs.skip_if_published }}
+          CALLER_RUN_ID: ${{ github.run_id }}
+          CALLER_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          request_id="${CALLER_RUN_ID}-${CALLER_ATTEMPT}-$(date +%s%N)"
+          gh workflow run npm-publish.yml --ref main \
+            --field "tag=$RELEASE_TAG" \
+            --field "skip_if_published=$SKIP_IF_PUBLISHED" \
+            --field "request_id=$request_id"
+          for attempt in $(seq 1 60); do
+            run_id="$(gh run list --workflow npm-publish.yml --event workflow_dispatch \
+              --branch main --json databaseId,displayTitle \
+              --jq "map(select(.displayTitle == \"Publish npm package $RELEASE_TAG ($request_id)\")) | map(.databaseId) | first // empty")"
+            if [ -n "$run_id" ]; then
+              gh run watch "$run_id" --exit-status
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Timed out waiting for the trusted npm publisher workflow.' >&2
+          exit 1
+
   npm-publish:
     name: Publish the npm package
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.forward_dispatch }}
     environment: deploy
     permissions:
       contents: read
@@ -43,11 +113,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.23.3
-          registry-url: https://registry.npmjs.org
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global 'npm@^11.5.1'
+
+      - name: Check whether this exact npm version is already published
+        id: npm-version
+        if: ${{ inputs.skip_if_published }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          if result=$(npm view "@hexpygames/butler@$version" version --json); then
+            test "$(jq -r . <<< "$result")" = "$version"
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          elif jq -e '.error.code == "E404"' <<< "$result" >/dev/null; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Could not determine npm registry state; refusing to publish.' >&2
+            exit 1
+          fi
 
       # npm publish invokes the same prepack hook as the tag release workflow.
       - name: Publish with provenance
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+        if: ${{ !inputs.skip_if_published || steps.npm-version.outputs.publish == 'true' }}
         run: bash publishing-tools/deploy/npm/publish.sh "$RELEASE_TAG" release-source/packages/butler-npm
