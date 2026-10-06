@@ -35,4 +35,3 @@ export interface TaskGraphCopy {
   graphsSummary: (total: number, running: number) => string;
   pickGraph: string;
 }
-

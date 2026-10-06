@@ -70,4 +70,3 @@ export const TASK_GRAPH_COPY: Record<"ko-KR" | "en-US", TaskGraphCopy> = {
     pickGraph: "Choose a graph",
   },
 };
-
