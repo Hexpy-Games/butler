@@ -111,3 +111,25 @@ separately and applies the unchanged exactly-two assertion to turn streams.
 The blocked smoke exited before the 15.5 s observation; Retry did not exit
 the failed process within 30 s. The owner protocol snapshot remained identical
 after final cleanup, which reaped four recorded task-owned PIDs.
+
+After the fixture correction, Windows normal Quit passed all assertions:
+main hidden 1.369 ms, feedback shown 98.097 ms, exit 220.843 ms; the recovered
+app's second Quit showed feedback at 94.639 ms and exited in 183.887 ms.
+There were eight total model requests and exactly two turn streams. Active
+input retryability, exactly-once follow-up delivery, unpaused queue, clean
+exit, released port and dead process tree all passed. See `quit-windows.json`.
+The corresponding corrected-fixture Mac run still failed: hidden 394.145 ms,
+feedback 342.364 ms, exit 5553.672 ms. See `quit-mac.json`.
+
+Final local validation: Mac UI build passed (5.01 s); lint passed with zero
+errors and 36 existing warnings; typecheck passed; 52 targeted existing tests
+passed with 792 assertions; cargo fmt and the Rust workspace source-check
+passed (all ratchets / architecture / E2E gates). No Rust crate was changed,
+so touched-crate clippy is not applicable. `bun install --frozen-lockfile
+--ignore-scripts` passed. Full `bun run check` remains failed at the still
+decode budget; its later steps were validated separately as stated above.
+Both task target directories, isolated profiles and task-owned native
+processes were removed. Windows cleanup confirmed clean clone/worktree status
+and identical before/after owner protocol registration. Shared ORT and build
+caches were retained. Hosted Windows CI was not run because native acceptance
+is not green; the coordinator retains its single final CI run.
