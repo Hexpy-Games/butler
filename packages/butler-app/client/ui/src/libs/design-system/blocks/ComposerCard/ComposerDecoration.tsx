@@ -3,7 +3,7 @@ import type { WallpaperMotion, WallpaperSource, WallpaperTone } from "../Wallpap
 import { Wallpaper } from "../Wallpaper/Wallpaper";
 import { useWallpaperTone } from "../Wallpaper/wallpaperTone";
 import type { ComposerCardEdge } from "./ComposerCard";
-import { ComposerEdgeCharacter, type ComposerEdgeCharacterKind } from "./ComposerEdgeCharacter";
+import { COMPOSER_EDGE_CHARACTER_RISE, ComposerEdgeCharacter, type ComposerEdgeCharacterKind } from "./ComposerEdgeCharacter";
 import styles from "./ComposerDecoration.module.css";
 
 /** Composer card scenes; product code picks one by name and passes no tuning. */
@@ -55,8 +55,16 @@ export function ComposerDecoration({ scene, motion = "auto", pauseOnBattery = tr
 
 const EDGE_CHARACTERS: Record<ComposerDecorationScene, ComposerEdgeCharacterKind> = { shoreline: "crab" };
 
-/** The scene's edge character for `ComposerCard edge` (shoreline: a crab peeking over the top edge). */
+/**
+ * The scene's edge character for `ComposerCard edge` (shoreline: a crab peeking
+ * over the top edge), with `reserveTop`: the px it rises above the card, which
+ * the card reserves on its wrap.
+ */
 export function composerDecorationEdge(scene: ComposerDecorationScene): ComposerCardEdge {
   const kind = EDGE_CHARACTERS[scene];
-  return { behind: <ComposerEdgeCharacter kind={kind} part="behind" />, front: <ComposerEdgeCharacter kind={kind} part="front" /> };
+  return {
+    behind: <ComposerEdgeCharacter kind={kind} part="behind" />,
+    front: <ComposerEdgeCharacter kind={kind} part="front" />,
+    reserveTop: COMPOSER_EDGE_CHARACTER_RISE,
+  };
 }

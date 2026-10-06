@@ -1,21 +1,14 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { createContext, forwardRef, useContext } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
+import type { ComposerCardEdge } from "./composerEdge";
 import styles from "./ComposerCard.module.css";
-import { dsClass } from "../../lib/internal";
 
-/**
- * An edge character on the card's top edge, anchored to the form's top (not the
- * wrap, so a notice above never moves it): `behind` paints under the card (it
- * hides the part below the edge), `front` over its top edge. Decorative only.
- */
-export interface ComposerCardEdge {
-  behind?: ReactNode;
-  front?: ReactNode;
-}
+export type { ComposerCardEdge } from "./composerEdge";
+import { dsClass } from "../../lib/internal";
 
 export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   large?: boolean;
@@ -51,11 +44,14 @@ export function ComposerCard({
   edge,
   ...props
 }: ComposerCardProps) {
+  const reserve = edge?.reserveTop && edge.reserveTop > 0 ? edge.reserveTop : undefined;
   return (
     <div
       className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
+      data-edge-reserve={reserve}
       data-test-class={`composer-wrap${large ? " large" : ""}`}
       ref={containerRef}
+      style={reserve ? ({ "--composer-edge-reserve": `${reserve}px` } as CSSProperties) : undefined}
     >
       {notice ? (
         <div className={styles.notice} data-test-class="composer-notice-slot">

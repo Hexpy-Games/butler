@@ -181,3 +181,10 @@ test("transparent needs image none; transparent and decoration are booleans", ()
   expect(errorsOf(manifest({ transparent: true, image: "optional" }))).toEqual(["transparent: needs image none"]);
   expect(errorsOf(manifest({ transparent: "yes", decoration: 1 }))).toEqual(["transparent: must be a boolean", "decoration: must be a boolean"]);
 });
+
+test("a param may be hidden (internal); hidden must be a boolean", () => {
+  const param = { key: "clouds", label: { en: "Clouds", ko: "구름" }, type: "number", min: 0, max: 1, step: 0.05, default: 1 };
+  const result = validateWallpaperManifest(manifest({ params: [{ ...param, hidden: true }] }));
+  expect(result.ok && result.manifest.params[0]?.hidden).toBe(true);
+  expect(errorsOf(manifest({ params: [{ ...param, hidden: "yes" }] }))).toEqual(["params[0].hidden: must be a boolean"]);
+});

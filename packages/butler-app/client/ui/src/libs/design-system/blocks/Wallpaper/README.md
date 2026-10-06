@@ -185,7 +185,11 @@ content revision (an edited shader renders again), tone and size; a failed
 render is not cached. Pickers use it for thumbnails; no wallpaper
 instance ever disposes the shared context.
 
-Controls: `WallpaperParamControls` renders a labeled control per manifest
+A param with `"hidden": true` is internal: it keeps its uniform and default,
+but `WallpaperParamControls` and pickers never list it; only code that knows
+the module (a DS preset) sets it.
+
+Controls: `WallpaperParamControls` renders a labeled control per listed manifest
 param (label above control): number → slider (or a shuffle button), boolean
 → switch, enum → segmented options with their manifest labels, color →
 swatch, palette → presets plus "Custom" swatches. Edits land where the tone
@@ -193,7 +197,9 @@ reads them (`withWallpaperParam`).
 
 Built-ins live in `modules/<id>/`: `butler.bloom` (the default), `butler.silk`,
 the analog collection (`butler.riso-flow`, `butler.lamina`, `butler.diatom`
-two-pass, `butler.dusk`, `butler.shoreline` with a real-time `sceneTone`), the
+two-pass, `butler.dusk`, `butler.shoreline` with a real-time `sceneTone` and
+the internal `dayClouds` (0..1, default 1: the day grade's cloud shadows; the
+night grade keeps them; `ComposerDecoration` sets 0)), the
 living photos `butler.photo-clouds` and `butler.photo-daisies` (on their bundled
 photos, `imageDim: noDarkStep`), `butler.stipple` (an image filter, two-pass,
 `pixelRatio: device`, `imageDim: none`, with a sample photo) and the image

@@ -2,6 +2,11 @@ import styles from "./ComposerDecoration.module.css";
 
 export type ComposerEdgeCharacterKind = "crab";
 
+/** The head: its height and how much of it the card covers (px). */
+const HEAD = { height: 34, tuck: 8 };
+/** Px an edge character rises above the card's top edge (`ComposerCardEdge.reserveTop`). */
+export const COMPOSER_EDGE_CHARACTER_RISE = HEAD.height - HEAD.tuck;
+
 export interface ComposerEdgeCharacterProps {
   kind: ComposerEdgeCharacterKind;
   /** `behind` (ComposerCard `edge.behind`): eyes and shell, the card hides the lower 8px; `front` (`edge.front`): claws on the top edge. */
@@ -12,7 +17,7 @@ export interface ComposerEdgeCharacterProps {
 export function ComposerEdgeCharacter({ kind, part }: ComposerEdgeCharacterProps) {
   if (part === "behind") {
     return (
-      <div aria-hidden="true" className={styles.head} data-character={kind}>
+      <div aria-hidden="true" className={styles.head} data-character={kind} style={{ height: HEAD.height, bottom: -HEAD.tuck }}>
         <svg focusable="false" viewBox="0 0 44 34">
           <path className={styles.stalk} d="M17 30 L15 12 M27 30 L29 12" />
           <circle className={styles.eyeWhite} cx="15" cy="10" r="3.6" />

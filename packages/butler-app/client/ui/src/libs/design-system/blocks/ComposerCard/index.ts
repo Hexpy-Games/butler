@@ -19,7 +19,7 @@ export {
   type ComposerDecorationProps,
   type ComposerDecorationScene,
 } from "./ComposerDecoration";
-export { ComposerEdgeCharacter, type ComposerEdgeCharacterKind, type ComposerEdgeCharacterProps } from "./ComposerEdgeCharacter";
+export { COMPOSER_EDGE_CHARACTER_RISE, ComposerEdgeCharacter, type ComposerEdgeCharacterKind, type ComposerEdgeCharacterProps } from "./ComposerEdgeCharacter";
 export type { ComposerSendButtonProps } from "./ComposerSendButton";
 export { ComposerPlanToggle } from "./ComposerPlanToggle";
 export { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } from "./ComposerCardEditor";

@@ -75,18 +75,14 @@
 }
 
 /* Edge character, inside ComposerCard's zero-height edge strips: the head rises
-   from 8px below the top edge (the card covers that part), the claws rest 5px
-   over it. */
+   from below the top edge (the card covers that part; its size is set in
+   ComposerEdgeCharacter, which also exports the rise), the claws rest 5px over
+   it. */
 .head,
 .paws {
   position: absolute;
   right: 14%;
   width: 44px;
-}
-
-.head {
-  bottom: -8px;
-  height: 34px;
 }
 
 .paws {

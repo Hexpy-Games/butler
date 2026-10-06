@@ -56,8 +56,8 @@ export const guidance: ShowcaseGuidance = {
     { name: "Follow-up composer", description: "Body, toolbar with a spacer, and the send button last.", render: () => <FollowUpComposer /> },
     {
       name: "Decorated new-chat composer",
-      description: "decoration takes a ComposerDecoration scene (art under the content, no scrim); edge takes its character, anchored to the card's top edge.",
-      render: () => <div style={{ paddingTop: 32 }}><DecoratedComposer /></div>,
+      description: "decoration takes a ComposerDecoration scene (art under the content, no scrim); edge takes its character, anchored to the card's top edge; its reserveTop pads the wrap so the measured height includes it.",
+      render: () => <DecoratedComposer />,
     },
   ],
   doDont: [

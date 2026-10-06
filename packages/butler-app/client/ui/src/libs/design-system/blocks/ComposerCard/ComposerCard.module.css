@@ -15,6 +15,13 @@
   transition: translate var(--motion-base) var(--motion-ease-standard);
 }
 
+/* An edge character rises above the card: the wrap reserves that room on top,
+   so whatever measures the wrap (the conversation's composer reserve) counts it.
+   A floating wrap grows upward; the card stays put. */
+.wrap[data-edge-reserve] {
+  padding-top: var(--composer-edge-reserve, 0);
+}
+
 .floating {
   position: absolute;
   z-index: 12;

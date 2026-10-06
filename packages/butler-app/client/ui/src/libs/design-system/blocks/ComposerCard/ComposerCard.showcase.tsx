@@ -6,6 +6,7 @@ import { ComposerControl } from "../ComposerControl";
 import { ContextDonutButton } from "../ContextDonutButton";
 import { Notice } from "../Notice";
 import {
+  COMPOSER_EDGE_CHARACTER_RISE,
   ComposerCard,
   ComposerCardCompactPreview,
   ComposerCardEditable,
@@ -53,7 +54,9 @@ function text({ locale }: ShowcaseRenderContext) {
 
 // The shoreline scene with its crab on the top edge (composerDecorationEdge("shoreline") returns the same parts).
 const SHORELINE = <ComposerDecoration scene="shoreline" />;
-const CRAB = { behind: <ComposerEdgeCharacter kind="crab" part="behind" />, front: <ComposerEdgeCharacter kind="crab" part="front" /> };
+const CRAB = {
+  behind: <ComposerEdgeCharacter kind="crab" part="behind" />, front: <ComposerEdgeCharacter kind="crab" part="front" />, reserveTop: COMPOSER_EDGE_CHARACTER_RISE,
+};
 
 /** The product composer: editor, toolbar controls, context donut and send. */
 function Composer({ context, large, mode = "send", busy, blocked, decorated }: {
