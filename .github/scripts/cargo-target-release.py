@@ -57,9 +57,10 @@ def trusted(metadata, publishing=False):
     branch = run['head_branch']
     if (run['head_repository']['full_name'] != repository or run['event'] != 'push'
             or not (branch == 'main' or branch.startswith('release/'))
-            or run['head_sha'] != metadata['sha']
-            or (not publishing and run['status'] != 'completed')):
+            or run['head_sha'] != metadata['sha']):
         raise ValueError('Cargo snapshot is not a same-repository main/release push')
+    if not publishing and run['status'] != 'completed':
+        raise UnsuccessfulProducer('Cargo snapshot producer is not complete yet')
     jobs = api(endpoint + '/jobs?per_page=100')['jobs']
     producer = metadata['producer_name']
     identity = metadata['identity']
@@ -114,7 +115,11 @@ def restore(expected):
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
-        fetch_snapshot(published, candidates[0], directory, expected)
+        try:
+            fetch_snapshot(published, candidates[0], directory, expected)
+        except UnsuccessfulProducer:
+            print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
+            return False
         restore_tree(directory, expected)
     return True
 

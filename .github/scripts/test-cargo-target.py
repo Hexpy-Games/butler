@@ -31,7 +31,7 @@ class TargetSnapshot(unittest.TestCase):
                 snapshots.trusted(metadata)
                 self.assertIn('/attempts/2/jobs?', lookup.call_args.args[0])
             for key, value in [('event', 'pull_request'), ('head_branch', 'feature/untrusted'),
-                               ('head_sha', 'b' * 40), ('status', 'in_progress'),
+                               ('head_sha', 'b' * 40),
                                ('head_repository', {'full_name': 'fork/repo'})]:
                 with patch.object(snapshots, 'api', return_value=dict(run, **{key: value})):
                     with self.assertRaisesRegex(ValueError, 'main/release push'):
@@ -50,6 +50,21 @@ class TargetSnapshot(unittest.TestCase):
             with patch.object(snapshots, 'api', side_effect=[run, failed]):
                 with self.assertRaisesRegex(ValueError, 'lane'):
                     snapshots.trusted(metadata)
+
+    # test-category: security
+    def test_restore_during_post_build_publish_falls_back_without_touching_target(self):
+        metadata = dict(run_id=42, run_attempt=1, sha='a' * 40)
+        run = dict(head_repository={'full_name': 'owner/repo'}, event='push', head_branch='main',
+                   head_sha=metadata['sha'], status='in_progress')
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), patch.object(snapshots, 'api', return_value=run):
+            with self.assertRaisesRegex(snapshots.UnsuccessfulProducer, 'not complete yet'):
+                snapshots.trusted(metadata)
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary), \
+                patch.object(snapshots, 'release', return_value={'assets': [{'name': '42-1.json'}]}), \
+                patch.object(snapshots, 'fetch_snapshot', side_effect=snapshots.UnsuccessfulProducer('pending')), \
+                patch.object(snapshots, 'restore_tree') as adopt:
+            self.assertFalse(snapshots.restore({'platform': 'linux-x64'}))
+            adopt.assert_not_called()
 
     # test-category: pure-logic
     def test_key_changes_for_each_compatibility_input(self):
