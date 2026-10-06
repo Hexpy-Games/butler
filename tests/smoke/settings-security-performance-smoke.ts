@@ -9,12 +9,14 @@ import { seedApprovalFixture } from "../support/authority-grant-fixture.ts";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 
 async function measure(locator: Locator, ready: string) {
-  return locator.evaluate(async (node, selector) => {
+  const pending = locator.evaluate(async (node, selector) => {
     const longTasks: number[] = [];
     const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration)));
     observer.observe({ type: "longtask" });
-    const start = performance.now();
+    let start = 0;
     const contentReady = await new Promise<boolean>(done => {
+      node.addEventListener("click", () => {
+      start = performance.now();
       const timeout = setTimeout(() => { mutations.disconnect(); done(false); }, 150);
       const check = () => {
         const content = document.querySelector(selector) as HTMLElement | null;
@@ -24,16 +26,21 @@ async function measure(locator: Locator, ready: string) {
       };
       const mutations = new MutationObserver(check);
       mutations.observe(document.body, { childList: true, attributes: true, subtree: true });
-      (node as HTMLElement).click();
       check();
+      }, { once: true, capture: true });
+      (node as HTMLElement).dataset.securityPerfArmed = "true";
     });
     const elapsedMs = performance.now() - start;
+    delete (node as HTMLElement).dataset.securityPerfArmed;
     // Deliver long-task records after the interaction task ends; no extra frame wait in latency.
     await new Promise<void>(done => setTimeout(done, 0));
     longTasks.push(...observer.takeRecords().map(entry => entry.duration));
     observer.disconnect();
     return { elapsedMs, longestTaskMs: Math.max(0, ...longTasks), ready: contentReady };
   }, ready);
+  await locator.locator("xpath=self::*[@data-security-perf-armed]").waitFor();
+  await locator.click();
+  return pending;
 }
 
 setAppCopyLanguage("ko");
@@ -56,7 +63,9 @@ try {
   }
   const toggle = page.getByRole("switch", { name: appCopy.settings.fields.planModeDefault, exact: true });
   const previous = await toggle.getAttribute("aria-checked");
-  const toggled = await measure(toggle, '[data-setting-id="plan-mode-default"]');
+  const changed = `[data-setting-id="plan-mode-default"] [role="switch"][aria-checked="${previous === "true" ? "false" : "true"}"]`;
+  const toggled = await measure(toggle, changed);
+  await page.locator(changed).waitFor();
   results.push({ interaction: "plan-mode-default", ...toggled });
   assert.notEqual(await toggle.getAttribute("aria-checked"), previous);
 

@@ -58,7 +58,7 @@ try {
     const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
-    let page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     let refusal = "";
     let listState = "ready";
     const pendingLoads = new Set<() => void>();
@@ -103,8 +103,9 @@ try {
       releaseLoading();
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await page.goto("about:blank", { waitUntil: "commit" });
-      await page.close();
-      page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setViewportSize({ width, height: 900 });
+      page.removeAllListeners("pageerror");
+      page.removeAllListeners("response");
       await configurePage();
     }
     try {
@@ -181,6 +182,8 @@ try {
           refusal = code;
           await open(page, server.url, appCopy.settings.sections.security, 375);
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
+          const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
+          await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
           assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys", "diagnostics"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
         }
