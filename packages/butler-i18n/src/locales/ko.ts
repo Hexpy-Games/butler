@@ -1179,6 +1179,20 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       about: ["버전", "앱 정보"],
     },
     updateComponents: { app: "버틀러", service: "버틀러 에이전트" },
+    updateProgress: {
+      idle: "업데이트 대기", checking: "확인 중", downloading: "다운로드 중", verifying: "파일 확인 중", ready: "다시 시작하면 적용됩니다.",
+      applying: "적용 중", restarting: "다시 시작하는 중", failed: "업데이트 실패", completed: "확인 완료",
+      retry: "다시 시도", cancel: "취소", restart: "다시 시작",
+      downloadMeta: "{percent}% · {done} / {total}", downloadedBytes: "{done} 받음", cancelled: "다운로드를 취소했습니다.",
+    },
+    updateErrors: {
+      download: "업데이트를 받지 못했습니다. 연결을 확인해 주세요.",
+      damaged: "받은 파일을 확인하지 못했습니다. 다시 받아 주세요.",
+      incompatible: "이 기기용 업데이트가 아직 없습니다.",
+      storage: "업데이트 파일을 저장하지 못했습니다.",
+      apply: "적용하지 못해 지금 버전을 유지합니다.",
+      generic: "업데이트하지 못했습니다.",
+    },
     sectionState: {
       loading: "불러오는 중",
       error: "이 섹션을 불러오지 못했습니다.",

@@ -39,22 +39,10 @@ impl GatewayApplication for AppApplication {
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            updates
-                .refresh(request)
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::check(self.dependencies.updates.clone(), request)
     }
     fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            updates
-                .current()
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::current(self.dependencies.updates.clone())
     }
     fn apply_app_update(
         &self,
@@ -62,7 +50,22 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<serde_json::Value> {
         super::updates::apply(self.dependencies.updates.clone(), request)
     }
-
+    fn report_app_update_progress(&self, stage: String) -> ApplicationFuture<Value> {
+        let updates = self.dependencies.updates.clone();
+        Box::pin(async move {
+            updates
+                .progress
+                .host_stage(&stage)
+                .await
+                .map_err(|error| super::updates::update_error(&error))
+        })
+    }
+    fn cancel_app_update(&self) -> ApplicationFuture<Value> {
+        let updates = self.dependencies.updates.clone();
+        Box::pin(
+            async move { Ok(serde_json::json!({"cancelled":updates.progress.cancel().await})) },
+        )
+    }
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
         let this = self.clone_handle();
         Box::pin(async move {

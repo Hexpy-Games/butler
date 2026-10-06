@@ -1171,6 +1171,20 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       about: ["version", "app info"],
     },
     updateComponents: { app: "Butler App", service: "Butler Agent" },
+    updateProgress: {
+      idle: "Update idle", checking: "Checking", downloading: "Downloading", verifying: "Verifying", ready: "Restart to finish.",
+      applying: "Applying", restarting: "Restarting", failed: "Update failed", completed: "Check complete",
+      retry: "Retry", cancel: "Cancel", restart: "Restart",
+      downloadMeta: "{percent}% · {done} of {total}", downloadedBytes: "{done} downloaded", cancelled: "Download cancelled.",
+    },
+    updateErrors: {
+      download: "Couldn't download the update. Check your connection.",
+      damaged: "The download didn't verify. Try again.",
+      incompatible: "No update for this device yet.",
+      storage: "Couldn't save the update file.",
+      apply: "Couldn't apply it. Your current version stays.",
+      generic: "Couldn't update.",
+    },
     sectionState: {
       loading: "Loading",
       error: "Could not load this section.",

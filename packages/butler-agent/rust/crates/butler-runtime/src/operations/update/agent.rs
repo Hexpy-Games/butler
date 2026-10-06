@@ -176,9 +176,12 @@ impl AgentArchiveUpdateService {
             &self.shutdown,
             &self.data,
             &self.installation,
-            url,
-            sha256,
-            &label,
+            stage::DownloadSource {
+                url,
+                sha256,
+                label: &label,
+            },
+            None,
         ))
         .await
     }
@@ -208,9 +211,12 @@ impl AgentArchiveUpdateService {
             &self.shutdown,
             directory,
             &self.installation,
-            source,
-            &sha256.to_ascii_lowercase(),
-            label,
+            stage::DownloadSource {
+                url: source,
+                sha256: &sha256.to_ascii_lowercase(),
+                label,
+            },
+            None,
         ))
         .await?;
         Ok(directory.join(label))

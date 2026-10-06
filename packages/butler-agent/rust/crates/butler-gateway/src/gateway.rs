@@ -114,7 +114,7 @@ pub use protocol::{
     SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
     TurnProgressSnapshotView, TurnRecord, TurnState,
 };
-pub use published_event::PublishedEvent;
+pub use published_event::{EventSubscription, PublishedEvent};
 pub use security_settings::{
     ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
     MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
@@ -229,6 +229,12 @@ pub trait GatewayApplication:
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
+    fn report_app_update_progress(&self, _stage: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn cancel_app_update(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn list_skills(&self) -> ApplicationFuture<butler_runtime::skills::SkillSettingsView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -482,9 +488,6 @@ pub trait GatewayApplication:
         listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError>;
 }
-
-/// Dropping the subscription must synchronously unregister its callback.
-pub trait EventSubscription: Send {}
 
 mod inbound_queue;
 mod message_file_store;

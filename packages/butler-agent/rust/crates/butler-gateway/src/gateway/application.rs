@@ -301,6 +301,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {
             let _ = self.close().await;
             return Err(error);

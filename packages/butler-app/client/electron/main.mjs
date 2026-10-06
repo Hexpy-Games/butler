@@ -2378,6 +2378,11 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
     onChange,
   }),
   stopForUpdate: async () => {
+    const snapshot = await (await appServerFetch("/updates")).json();
+    if (snapshot.progress?.stage === "ready") {
+      await reportAppUpdateStage("applying");
+      await reportAppUpdateStage("restarting");
+    }
     const result = await stopServerProcess({ reason: "app_update" });
     if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
     isQuitting = true;
@@ -2385,6 +2390,7 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
     return { update_ready: true };
   },
   onState: (state) => {
+    if (state.status === "failed") void reportAppUpdateStage("failed").catch(() => {});
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("butler:app-update-state", state);
       if (state.status === "choice_required") mainWindow.show();
@@ -2590,7 +2596,7 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const update = await appUpdateCoordinator.request(async () => {
     const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
       installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
-      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
+      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1), onStage: reportAppUpdateStage });
     return {
       cancel: helper.cancel,
       activate: () => {
@@ -2602,6 +2608,14 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   });
   return { opened: update.update_started, update };
 });
+
+async function reportAppUpdateStage(stage) {
+  const response = await appServerFetch("/updates/progress", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ stage }),
+  });
+  if (!response.ok) throw new Error("Update progress could not be delivered.");
+}
 
 function safeUpdateArtifactPath(value) {
   const requestedPath = typeof value === "string" ? value.trim() : "";

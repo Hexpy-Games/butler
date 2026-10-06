@@ -348,6 +348,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/settings") return await callBridge<T>(bridge, "getSettings");
   if (method === "GET" && url.pathname === "/app-info") return await callBridge<T>(bridge, "getAppInfo");
   if (method === "GET" && url.pathname === "/updates") return await callBridge<T>(bridge, "getUpdates");
+  if (method === "POST" && url.pathname === "/updates/cancel") return await callBridge<T>(bridge, "cancelUpdate");
   if (method === "POST" && url.pathname === "/updates/check") {
     return await callBridge<T>(bridge, "checkUpdates", parseBody(options.body));
   }

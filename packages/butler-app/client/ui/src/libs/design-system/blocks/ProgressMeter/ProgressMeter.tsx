@@ -1,5 +1,7 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { CSSProperties, ReactNode } from "react";
+import { Spinner } from "../../components/Spinner";
+import { IconSlot } from "../../components/IconSlot";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -9,7 +11,9 @@ import { dsClass } from "../../lib/internal";
 export interface ProgressMeterProps extends DsPrivateStyleProps {
   /** Visible label; omit only with `bare`. */
   label?: ReactNode;
-  value: number;
+  value?: number;
+  /** Unknown total: spinner caption only, without a fabricated track or percentage. */
+  indeterminate?: boolean;
   meta?: ReactNode;
   ariaLabel?: string;
   tone?: "default" | "success" | "warning" | "danger";
@@ -19,13 +23,21 @@ export interface ProgressMeterProps extends DsPrivateStyleProps {
 
 export function ProgressMeter({
   label,
-  value,
+  value = 0,
+  indeterminate = false,
   meta,
   ariaLabel,
   tone = "default",
   className,
   bare = false,
 }: ProgressMeterProps) {
+  if (indeterminate) return (
+    <Stack align="row" cross="center" gap="xs" role="status" aria-label={ariaLabel}
+      className={dsClass(styles.root, styles.indeterminate, className)} data-indeterminate="true">
+      <IconSlot size="sm" tone="secondary"><Spinner size={12} /></IconSlot>
+      <Typo.Caption tone="secondary">{label}{meta != null ? <> · {meta}</> : null}</Typo.Caption>
+    </Stack>
+  );
   const normalized = Math.max(0, Math.min(100, value));
   const track = (
     <div
