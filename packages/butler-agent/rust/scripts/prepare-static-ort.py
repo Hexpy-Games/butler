@@ -205,9 +205,7 @@ def verified_outputs(lib_path, target):
     if lib_path.name != "Release" or not lib_path.is_dir():
         fail(f"ORT Release directory is missing: {lib_path}")
     build_root = lib_path.parent
-    deps_link = build_root / "_deps"
-    if not deps_link.is_symlink() or deps_link.resolve() != (lib_path / "_deps").resolve():
-        fail("ort-sys _deps link does not point to Release/_deps")
+    prebuilt.verify_deps_alias(lib_path)
     required = [lib_path / spec["static_lib"].format(f"onnxruntime_{name}") for name in EXPECTED_ORT_LIBS]
     required.extend(lib_path / dep for dep in spec["deps"])
     for path in required:
@@ -287,7 +285,7 @@ def run_build(stage, source, cmake, ninja, eigen, target, lock):
             fail("Static ORT re2 dependency build timed out")
         if re2.returncode:
             fail(f"Static ORT re2 dependency build failed: {log.read_text(errors='replace')[-3000:]}")
-    (build_root / "_deps").symlink_to("Release/_deps", target_is_directory=True)
+    prebuilt.create_deps_alias(build_root)
     return build_root / "Release"
 
 

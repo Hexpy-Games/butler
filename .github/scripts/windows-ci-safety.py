@@ -4,6 +4,7 @@ Walk local composite actions and literal script entry points. This deliberately
 rejects absolute drive paths even for reads: installed tools use environment
 variables, while all CI-owned writes belong to the workspace or runner temp.
 """
+import ast
 import re
 from pathlib import Path
 
@@ -35,6 +36,75 @@ RULES = {
 SCRIPT = re.compile(r'(?:\$PSScriptRoot/|(?:\.\.?/)*)([\w./-]+\.(?:ps1|py|ts|mjs))\b')
 
 
+def windows_test(node):
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        return None
+    expression = ast.unparse(node.left)
+    value = node.comparators[0]
+    expected = {'sys.platform': 'win32', 'os.name': 'nt', 'platform.system()': 'Windows'}
+    if expression not in expected or not isinstance(value, ast.Constant) or value.value != expected[expression]:
+        return None
+    if isinstance(node.ops[0], ast.Eq):
+        return True
+    if isinstance(node.ops[0], ast.NotEq):
+        return False
+    return None
+
+
+def symlink_hazards(source):
+    """A symlink call must be unreachable on Windows, with a materializing branch."""
+    findings = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        tree = None  # PowerShell, shell and workflow snippets are checked below.
+    if tree is not None:
+        def walk(node, unix_only=False):
+            if isinstance(node, ast.If) and windows_test(node.test) is not None:
+                windows_body = node.body if windows_test(node.test) else node.orelse
+                fallback = any(isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                               and call.func.attr in ('copytree', 'copyfile', 'copy2', 'link')
+                               for statement in windows_body for call in ast.walk(statement))
+                for statement in node.body:
+                    walk(statement, unix_only or (fallback and not windows_test(node.test)))
+                for statement in node.orelse:
+                    walk(statement, unix_only or (fallback and windows_test(node.test)))
+                return
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in ('symlink', 'symlink_to') and not unix_only:
+                    findings.append((node.lineno, 'symlink creation without Windows fallback'))
+            for child in ast.iter_child_nodes(node):
+                walk(child, unix_only)
+        walk(tree)
+    for number, line in enumerate(source.splitlines(), 1):
+        if line.lstrip().startswith(('#', '//')):
+            continue
+        if (re.search(r'\bNew-Item\b[^\n]*-ItemType\s+["\']?SymbolicLink\b', line, re.I)
+                or re.search(r'\bmklink\b', line, re.I) and not re.search(r'\s/J\b', line, re.I)
+                or 'winsymlinks:nativestrict' in line):
+            findings.append((number, 'privileged Windows symlink creation'))
+    return findings
+
+
+def python_sources(path, seen):
+    """Follow local Python imports; imported modules get the link-privilege check."""
+    if path.suffix != '.py':
+        return
+    tree = ast.parse(path.read_text())
+    for node in ast.walk(tree):
+        names = []
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = [node.module]
+        for name in names:
+            candidate = path.with_name(name.split('.')[0] + '.py').resolve()
+            if candidate.is_file() and candidate not in seen:
+                seen.add(candidate)
+                yield candidate, candidate.read_text()
+                yield from python_sources(candidate, seen)
+
+
 def hazards(source):
     findings = []
     for number, line in enumerate(source.splitlines(), 1):
@@ -47,7 +117,7 @@ def hazards(source):
                 findings.append((number, kind))
         if re.search(r'\bStop-Process\b', line, re.I) and not re.search(r'-Id\b', line, re.I):
             findings.append((number, 'process kill without explicit PID'))
-    return findings
+    return findings + symlink_hazards(source)
 
 
 def local_sources(root, path, source, seen):
@@ -95,7 +165,11 @@ def audit(root):
             for line, hazard in hazards(prefix):
                 if hazard in ('unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
                     findings.append(f'{workflow.relative_to(root)}:{line}: {hazard}')
+            imported = set()
             for path, text in local_sources(root, workflow, block, {workflow.resolve()}):
+                for module, module_text in python_sources(path, imported):
+                    for line, hazard in symlink_hazards(module_text):
+                        findings.append(f'{module.relative_to(root)}:{line}: {hazard}')
                 for line, hazard in hazards(text):
                     if path == workflow:
                         line += source[:offset].count('\n')

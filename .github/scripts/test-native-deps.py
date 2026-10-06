@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import http.server
+import io
 import importlib.util
 import json
 from pathlib import Path
@@ -35,8 +36,8 @@ class NativeDeps(unittest.TestCase):
     def build(self, stage, lock, target):
         release = stage / 'build/Release'
         release.mkdir(parents=True)
-        (stage / 'build/_deps').symlink_to('Release/_deps', target_is_directory=True)
-        libraries = [f'libonnxruntime_{name}.a' for name in recipe.EXPECTED_ORT_LIBS]
+        libraries = [recipe.TARGETS[target]['static_lib'].format(f'onnxruntime_{name}')
+                     for name in recipe.EXPECTED_ORT_LIBS]
         libraries.extend(recipe.TARGETS[target]['deps'])
         for name in libraries:
             path = release / name
@@ -49,7 +50,8 @@ class NativeDeps(unittest.TestCase):
             path = stage / 'downloads' / filename
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(name.encode())
-        protoc = stage / 'tools/protoc/bin/protoc'
+        sdk.create_deps_alias(stage / 'build')
+        protoc = stage / f"tools/protoc/bin/protoc{recipe.TARGETS[target]['exe']}"
         protoc.parent.mkdir(parents=True)
         protoc.write_bytes(b'pinned protoc')
         protoc.chmod(0o755)
@@ -107,6 +109,51 @@ class NativeDeps(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'output digest mismatch'):
                 recipe.prepare_cache(consumer, self.fingerprint, self.lock, 'linux-x64', False, True)
         print(f'Fake asset: {entry["size"]} bytes; complete download/extract/verify {time.monotonic()-started:.3f}s')
+
+    # test-category: security
+    def test_windows_restore_copies_every_byte_without_symlink_privileges(self):
+        target = 'windows-x64'
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), target)
+        for name, entry in lock['sources'].items():
+            entry['sha256'] = hashlib.sha256(name.encode()).hexdigest()
+        fingerprint = sdk.key(recipe.SCRIPT, lock, target)
+        producer = self.root / 'producer'
+        producer.mkdir()
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(Path, 'symlink_to', side_effect=PermissionError('WinError 1314')) as link, \
+                patch.object(sdk, 'release', return_value=None), \
+                patch.object(recipe.host, 'host_identity', return_value={'producer': 'fixture'}), \
+                patch.object(recipe, 'prepare', side_effect=self.build):
+            complete = recipe.prepare_cache(producer, fingerprint, lock, target, False, False)
+            archive = self.root / 'windows.zip'
+            sdk.pack(complete, archive)
+            entry = {'url': 'https://fixture.invalid/sdk.zip', 'size': archive.stat().st_size,
+                     'digest': f'sha256:{recipe.sha256(archive)}'}
+            consumer = self.root / 'consumer'
+            consumer.mkdir()
+            with patch.object(sdk, 'release', return_value=entry), \
+                    patch.object(sdk, 'request', side_effect=lambda *args, **kwargs: io.BytesIO(archive.read_bytes())), \
+                    patch.object(recipe, 'prepare', side_effect=AssertionError('must not rebuild')):
+                restored = recipe.prepare_cache(consumer, fingerprint, lock, target, False, True)
+                recipe.adopt(restored, fingerprint, lock, target)
+            link.assert_not_called()
+            with zipfile.ZipFile(archive) as source:
+                expected = {item.filename: source.read(item) for item in source.infolist()}
+            actual = {path.relative_to(restored).as_posix(): path.read_bytes()
+                      for path in restored.rglob('*') if path.is_file()
+                      and not path.is_relative_to(restored / 'build/_deps')}
+            self.assertEqual(actual, expected)
+            self.assertEqual(sdk.deps_content(restored / 'build/_deps'),
+                             sdk.deps_content(restored / 'build/Release/_deps'))
+            self.assertFalse(any(path.is_symlink() for path in restored.rglob('*')))
+            alias = restored / 'build/_deps/onnx-build/onnx.lib'
+            alias.write_bytes(b'tampered alias')
+            with self.assertRaisesRegex(RuntimeError, 'copy content mismatch'):
+                recipe.adopt(restored, fingerprint, lock, target)
+            alias.write_bytes((restored / 'build/Release/_deps/onnx-build/onnx.lib').read_bytes())
+            (restored / 'build/_deps/extra').write_bytes(b'extra')
+            with self.assertRaisesRegex(RuntimeError, 'copy content mismatch'):
+                recipe.adopt(restored, fingerprint, lock, target)
 
     # test-category: security
     def test_asset_digest_mismatch_fails_without_build(self):

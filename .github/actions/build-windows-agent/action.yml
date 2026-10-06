@@ -45,7 +45,7 @@ runs:
         set -euo pipefail
         root="$(cygpath -u "$RUNNER_TEMP")"
         mkdir -p "$root/ort-cache/native-deps"
-        MSYS=winsymlinks:nativestrict tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
+        tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
           -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
     - uses: ./.github/actions/rust-agent-setup
       if: inputs.owner-runner != 'true'
