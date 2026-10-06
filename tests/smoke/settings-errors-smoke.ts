@@ -42,6 +42,9 @@ function text(key: string, locale: string) {
 }
 async function rejectRequest(page: Page, path: string, action: () => Promise<unknown>) {
   const expectedCode = code || "unrecognized_error";
+  if (path === "/wallpaper-modules/import") await page.evaluate(() => {
+    Object.assign(window, { settingsImportFocus: document.activeElement });
+  });
   const [response] = await Promise.all([
     page.waitForResponse(response => new URL(response.url()).pathname === path && response.status() === 400).catch(async cause => {
       throw new Error(JSON.stringify({ path, expectedCode, url: page.url(), requests: requests.slice(-5),
@@ -85,7 +88,11 @@ async function toast(page: Page, expected: string) {
 }
 async function tileField(page: Page, selector: string, expected: string) {
   const button = page.locator(selector);
-  await page.waitForFunction(selector => document.querySelector(selector)?.getAttribute("aria-invalid") === "true", selector).catch(async cause => {
+  const moduleImport = selector.includes('data-option="import-module"');
+  await page.waitForFunction(({ selector, moduleImport }) => {
+    const button = document.querySelector(selector);
+    return moduleImport ? Boolean(button?.getAttribute("aria-describedby")) : button?.getAttribute("aria-invalid") === "true";
+  }, { selector, moduleImport }).catch(async cause => {
     await page.screenshot({ path: join(output, "failure-import.png"), fullPage: true });
     const controls = await page.locator("button[aria-invalid]").evaluateAll(buttons => buttons.map(button => ({
       label: button.textContent, invalid: button.getAttribute("aria-invalid"), visible: button.getBoundingClientRect().height > 0,
@@ -102,7 +109,11 @@ async function tileField(page: Page, selector: string, expected: string) {
     await page.screenshot({ path: join(output, "failure.png"), fullPage: true });
     throw new Error(JSON.stringify({ selector, code, expected, actual: await error.textContent() }), { cause });
   });
-  assert.equal(await button.evaluate(element => element === document.activeElement), true, "invalid import focus");
+  if (moduleImport) {
+    assert.equal(await error.getAttribute("role"), "alert", "import error is announced");
+    assert.equal(await button.getAttribute("aria-invalid"), null, "buttons are not invalid fields");
+    assert(await page.evaluate(() => document.activeElement === (window as unknown as { settingsImportFocus: Element }).settingsImportFocus), "import feedback preserves focus");
+  } else assert.equal(await button.evaluate(element => element === document.activeElement), true, "invalid import focus");
   const a = await button.boundingBox(); const b = await error.boundingBox();
   assert(a && b && b.y >= a.y + a.height - 1, "import error under control");
   assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0);

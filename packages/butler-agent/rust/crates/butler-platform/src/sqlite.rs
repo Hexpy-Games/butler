@@ -106,3 +106,18 @@ pub fn sync_wal(connection: &Connection) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+/// Finish mapped WAL-index writeback with the mutation, rather than during idle.
+/// macOS can otherwise defer the shared-memory file's modification timestamp.
+pub fn sync_wal_index(connection: &Connection) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    if let Some(path) = connection.path().filter(|path| !path.is_empty()) {
+        match crate::secure_fs::sync_path(format!("{path}-shm")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            result => result?,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = connection;
+    Ok(())
+}

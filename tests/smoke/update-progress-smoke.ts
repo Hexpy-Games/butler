@@ -78,7 +78,13 @@ async function assertUnknownAndRecovery(page: Page, row: Locator, copy: Copy, na
   assert.equal(await row.getByRole("button").isDisabled(), false, "cancel stays available");
   const done = new Intl.NumberFormat(localeForCopy(copy), { style: "unit", unit: "megabyte", unitDisplay: "short", maximumFractionDigits: 0 }).format(44.102);
   assert.equal(await meter.textContent(), `${copy.updateProgress.downloading} · ${copy.updateProgress.downloadedBytes.replace("{done}", done)}`);
-  assert.equal(await meter.evaluate((element) => element.getAnimations({ subtree: true }).length), 0, "static under reduced motion");
+  assert(await meter.evaluate((element) => {
+    const animations = element.getAnimations({ subtree: true });
+    return animations.length > 0 && animations.every(animation => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return target instanceof Element && Boolean(target.closest('[data-slot="spinner"]'));
+    });
+  }), "only the DS Spinner breathes under reduced motion");
   await assertGeometry(page, row);
   await row.scrollIntoViewIfNeeded();
   await row.screenshot({ path: join(output, `unknown-row-${name}.png`) });
