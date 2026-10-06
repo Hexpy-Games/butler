@@ -168,7 +168,7 @@ async function pageSmoke(width: number, theme: string) {
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox").fill("security");
-  await dialog.getByRole("option").filter({ hasText: "Privacy" }).click();
+  await dialog.getByRole("option").filter({ hasText: "Security" }).click();
   const exportButton = page.getByRole("button", { name: "Copy diagnostics", exact: true });
   await exportButton.waitFor();
   await page.screenshot({ path: join(output, `${width}-${theme}-diagnostics-before.png`) });
