@@ -1,3 +1,6 @@
+import { readUiCrashLog } from "@/app/uiCrashReporting.ts";
+import { notifyStatus } from "@/app/notifications.ts";
+import { Button } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -18,6 +21,9 @@ export function PrivacySettings() {
   return (
     <SettingsPage>
       <SettingsSection id="diagnostics" kind="form" title={settingsCopy.pageSections.diagnostics}>
+        <Button size="sm" variant="outline" onClick={() => void copyDiagnostics()}>
+          {appCopy.interfacePanels.copyDiagnostics}
+        </Button>
         <SettingsSwitch
           settingId="diagnostics"
           label={settingsFields.diagnostics}
@@ -27,4 +33,13 @@ export function PrivacySettings() {
       </SettingsSection>
     </SettingsPage>
   );
+}
+
+async function copyDiagnostics(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({ ui_crashes: await readUiCrashLog() }, null, 2));
+    notifyStatus(appCopy.firstRun.reportCopied, { id: "ui-crash-export", tone: "ok" });
+  } catch {
+    notifyStatus(appCopy.firstRun.reportUnavailable, { id: "ui-crash-export", tone: "error" });
+  }
 }

@@ -49,6 +49,8 @@ export interface AppUpdateState {
 }
 
 interface ButlerAppBridge {
+  recordUiCrash?: (input: unknown) => Promise<unknown>;
+  readUiCrashLog?: () => Promise<import("../../../electron/ui-crash-log.mjs").UiCrashEntry[]>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
   onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;

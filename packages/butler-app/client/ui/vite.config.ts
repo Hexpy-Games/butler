@@ -82,6 +82,7 @@ export default defineConfig({
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
+  define: { "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
   plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
     name: "wallpaper-poster-inputs",
     apply: "build",

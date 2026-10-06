@@ -16,14 +16,17 @@ export function smokeBrowserArgs(): string[] {
  */
 export async function launchSmokeBrowser(): Promise<Browser> {
   const args = smokeBrowserArgs();
-  const base = await chromium.launch({ headless: true, args });
+  const channel = process.env.BUTLER_SMOKE_BROWSER_CHANNEL;
+  if (channel && channel !== "chromium") throw new Error("BUTLER_SMOKE_BROWSER_CHANNEL must be chromium");
+  const launch = { headless: true, args, ...(channel ? { channel } : {}) };
+  const base = await chromium.launch(launch);
   if (!args.includes("--single-process")) return base;
   await boundOwnedClose(base);
   const owned = new Set<Browser>();
   let unusedBase = true;
   let tracingBrowser: Browser | undefined;
   async function newContext(options?: BrowserContextOptions): Promise<BrowserContext> {
-    const browser = unusedBase ? base : await chromium.launch({ headless: true, args });
+    const browser = unusedBase ? base : await chromium.launch(launch);
     if (!unusedBase) await boundOwnedClose(browser);
     unusedBase = false;
     reportEventTracing(browser);

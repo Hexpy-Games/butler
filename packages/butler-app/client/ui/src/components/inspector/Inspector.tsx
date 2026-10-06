@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
@@ -61,33 +62,35 @@ export function Inspector({ id }: InspectorProps = {}) {
         .map(([id, label, icon]) => ({ id, label, icon }))}
       onTabChange={setRightTab}
     >
-      {activeTab === "summary" && (
-        <SummaryPanel
-          developerMode={developerMode}
-          status={status}
-          summary={summary}
-        />
-      )}
-      {activeTab === "context" && (
-        <ContextPanel context={summary?.context_details} />
-      )}
-      {activeTab === "artifacts" && (
-        <ArtifactsPanel artifacts={summary?.artifacts ?? []} />
-      )}
-      {activeTab === "automations" && (
-        <AutomationTargetsPanel
-          automations={summary?.automation_targets ?? []}
-          onOpenAutomation={(automationId) =>
-            setView({ kind: "automation-detail", automationId })
-          }
-        />
-      )}
-      {activeTab === "workers" && (
-        <WorkersPanel
-          workers={summary?.worker_activity ?? []}
-          onWorkerControl={controlWorker}
-        />
-      )}
+      <ErrorBoundary key={activeTab} scope={`inspector-${activeTab}`}>
+        {activeTab === "summary" && (
+          <SummaryPanel
+            developerMode={developerMode}
+            status={status}
+            summary={summary}
+          />
+        )}
+        {activeTab === "context" && (
+          <ContextPanel context={summary?.context_details} />
+        )}
+        {activeTab === "artifacts" && (
+          <ArtifactsPanel artifacts={summary?.artifacts ?? []} />
+        )}
+        {activeTab === "automations" && (
+          <AutomationTargetsPanel
+            automations={summary?.automation_targets ?? []}
+            onOpenAutomation={(automationId) =>
+              setView({ kind: "automation-detail", automationId })
+            }
+          />
+        )}
+        {activeTab === "workers" && (
+          <WorkersPanel
+            workers={summary?.worker_activity ?? []}
+            onWorkerControl={controlWorker}
+          />
+        )}
+      </ErrorBoundary>
     </InspectorShell>
   );
 }

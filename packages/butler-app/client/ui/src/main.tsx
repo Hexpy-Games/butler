@@ -1,3 +1,4 @@
+import { installUiCrashReporting } from "@/app/uiCrashReporting.ts";
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -17,10 +18,11 @@ const visualMode = typeof window !== "undefined"
 const DesignSystemViewer = lazy(() => import("@/butler-ds/viewer/DesignSystemViewer.tsx")
   .then((module) => ({ default: module.DesignSystemViewer })));
 
+installUiCrashReporting();
+
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
 
-// Every wallpaper (new chat, dashboards, picker thumbnails) loads images and user modules through the gateway.
 createRoot(rootElement).render(
   <ErrorBoundary>
     <WallpaperModulesProvider>

@@ -321,6 +321,9 @@ export interface AppCopy {
     noPlans: string;
     noSpecs: string;
     uiCrashed: string;
+    panelCrashed: string;
+    copyDiagnostics: string;
+    retry: string;
     reload: string;
     custom: string;
     freeContext: string;
