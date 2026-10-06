@@ -1,5 +1,5 @@
 import { renderWallpaperStill } from "@/butler-ds";
-import { SHORELINE_SOURCE } from "./decorationScenes";
+import { SHORELINE_REGISTRY, SHORELINE_SOURCE } from "./decorationScenes";
 import type { ContrastRow } from "./measuredContrast";
 import type { ShoreParams } from "./shoreTuning";
 
@@ -60,7 +60,7 @@ export async function measureShoreline(card: HTMLElement, tone: "light" | "dark"
   const width = Math.max(1, Math.round(box.width));
   const height = Math.max(1, Math.round(box.height));
   const artHeight = Math.max(height, 360);
-  const blob = await renderWallpaperStill(SHORELINE_SOURCE as Parameters<typeof renderWallpaperStill>[0], { width, height: artHeight }, tone);
+  const blob = await renderWallpaperStill(SHORELINE_SOURCE as Parameters<typeof renderWallpaperStill>[0], { width, height: artHeight }, tone, SHORELINE_REGISTRY);
   const still = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");
   canvas.width = width;

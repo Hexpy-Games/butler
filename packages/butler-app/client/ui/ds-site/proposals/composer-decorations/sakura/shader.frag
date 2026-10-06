@@ -1,9 +1,10 @@
-// Cherry blossom (Somei-yoshino), after the owner's reference photos: a mass of tight clusters
-// of 4-6 small flowers, clusters overlapping so densely that the branch shows only in short dark
-// glimpses. Pale pink to white notched petals, pink centres, yellow-tipped stamens. Three depths:
-// soft out-of-focus clusters behind, a shaded middle layer, a bright front layer. The mass sits
-// at the top-right, thickest in the corner, thinning along the top edge. Fine petals and pollen
-// drift down-left. No background: premultiplied alpha, the card's own glass shows through.
+// Cherry blossom (Somei-yoshino), drawn as an illustration from the owner's reference photos: a
+// mass of tight clusters of 4-6 small flowers overlapping so densely that the branch shows only
+// in short glimpses. Flat soft tones, no light and no shadow: pale pink to white notched petals,
+// a pink heart, yellow stamen dots, a faint paper grain; far clusters are paler, never darker.
+// The mass hangs along the top edge from the top-right corner (thickest) to 1/3 of the width.
+// p_style 0: illustrated; 1: pixel art (2px blocks, a 7-colour palette, 8fps steps). Fine petals
+// and pollen drift down-left. No background: premultiplied alpha, the card's glass shows through.
 //
 // Layout is in CSS px from the TOP-RIGHT corner (c.x leftward, c.y downward), so the mass stays
 // put as the message box grows. Every motion term is periodic in T = timePeriod.
@@ -26,6 +27,7 @@ vec4 over(vec4 dst, vec4 src) { return src + dst * (1.0 - src.a); }
 float E;    // reach of the mass along the top edge
 float D;    // reach down the right edge (above the toolbar row; none on the one-row pill)
 float AA;   // one device pixel in CSS px
+float PIX;  // 1 in pixel-art style
 // The padding frame (top 12px, right 16px) is always free for the art. With p_lush the corner
 // zone (CX x CY, an organic quarter-ellipse) holds the thick mass; only the far right end of a
 // long first line can pass under it.
@@ -42,7 +44,7 @@ float cornerZone(vec2 p) {
 
 // Where the mass may sit (0..1): the corner zone, the top band thinning to the left, the right band.
 float allowed(vec2 p) {
-  float top = (1.0 - smoothstep(BAND_Y - 3.0, BAND_Y, p.y)) * (1.0 - smoothstep(E * 0.7, E, p.x));
+  float top = (1.0 - smoothstep(BAND_Y - 3.0, BAND_Y, p.y)) * (1.0 - smoothstep(E * 0.88, E, p.x));
   float right = (1.0 - smoothstep(BAND_X - 3.0, BAND_X, p.x)) * (1.0 - smoothstep(D - 4.0, D, p.y));
   return max(max(top, right), cornerZone(p));
 }
@@ -50,42 +52,53 @@ float allowed(vec2 p) {
 // How thick the mass is at p: lush in the corner, thinning along the top edge.
 float density(vec2 p) {
   float corner = 1.0 - smoothstep(0.0, max(CX, 40.0) * 1.3, length(p / vec2(1.0, CY / max(CX, 1.0))));
-  float along = 1.0 - smoothstep(0.0, E, p.x);
-  return clamp(max(corner, pow(along, 1.4) * 0.9), 0.0, 1.0);
+  return clamp(max(corner, mix(0.95, 0.4, smoothstep(0.0, E, p.x)) * step(p.x, E)), 0.0, 1.0);   // tapers to the 1/3 point
 }
 
-// One small flower. q: pixel relative to the flower centre. Returns premultiplied colour.
-vec4 flower(vec2 q, float r, vec4 h, vec4 g, float shade) {
+// One small flower, illustrated: a few soft flat tones (no light, no shadow), simple notched
+// petals, a thin rosy line where petals meet and at the rim, a pink heart with a ring of
+// yellow stamen dots, a faint paper grain. `depth` 0 front .. 1 far: farther is paler and
+// more transparent (never darker). Returns premultiplied colour.
+vec4 flower(vec2 q, float r, vec4 h, vec4 g, float depth) {
   float ta = h.r * PI;
   vec2 axis = vec2(cos(ta), sin(ta));
-  vec2 q2 = vec2(dot(q, axis), dot(q, vec2(-axis.y, axis.x)) / (0.5 + 0.5 * g.r));   // facing every way
+  vec2 q2 = vec2(dot(q, axis), dot(q, vec2(-axis.y, axis.x)) / (0.62 + 0.38 * g.r));   // facing every way
   float d = length(q2);
   if (d > r * 1.1 + AA) return vec4(0.0);
   float sector = TAU / 5.0;
   float ang = atan(q2.y, q2.x) + h.g * TAU;
   float u = (mod(ang, sector) - sector * 0.5) / (sector * 0.5);
-  float edge = r * (0.9 + 0.1 * (1.0 - u * u)) - r * 0.16 * exp(-u * u / 0.014);   // broad notched petals
-  edge *= mix(1.0, 0.94, smoothstep(0.82, 1.0, abs(u)));
+  float edge = r * (0.92 + 0.08 * (1.0 - u * u)) - r * 0.12 * exp(-u * u / 0.02);   // simple notched petals
   float a = 1.0 - smoothstep(edge - AA, edge + AA, d);
   if (a <= 0.0) return vec4(0.0);
   float age = g.b;
-  // petal: white at the rim, pale pink toward the base, a pinker flush on older flowers
-  vec3 col = mix(vec3(1.0, 0.975, 0.98), mix(vec3(0.985, 0.82, 0.87), vec3(0.96, 0.70, 0.79), age), smoothstep(0.95 * r, 0.15 * r, d));
-  col *= 1.0 - 0.13 * smoothstep(0.65, 1.0, abs(u));                               // petal overlap seams
-  col = mix(col, vec3(0.94, 0.78, 0.84), smoothstep(edge - 1.0, edge, d) * 0.55);  // rim: a pink edge, not grey
-  col *= 0.94 + 0.08 * dot(normalize(q2 + 1e-4), vec2(-0.7071, -0.7071)) * smoothstep(0.1 * r, r, d);   // sun from top-right
-  // centre: pink star, stamens with yellow tips
-  col = mix(col, mix(vec3(0.95, 0.56, 0.67), vec3(0.86, 0.36, 0.50), age), 1.0 - smoothstep(0.13 * r, 0.22 * r, d));
-  float rays = smoothstep(0.35, 0.0, abs(fract(ang * 14.0 / TAU) - 0.5));
-  col = mix(col, vec3(0.97, 0.88, 0.86), 0.4 * rays * step(0.2 * r, d) * step(d, 0.5 * r));
-  float tip = smoothstep(0.3, 0.0, abs(fract(ang * 14.0 / TAU) - 0.5)) * (1.0 - smoothstep(0.0, 0.09 * r + AA, abs(d - 0.52 * r)));
-  col = mix(col, vec3(0.96, 0.78, 0.32), tip);
-  col *= mix(vec3(0.97, 0.90, 0.93), vec3(1.0), shade) * mix(1.0, shade, 0.6);   // deeper layers: rosier, darker
+  float rr = d / r;
+  if (PIX > 0.5) {
+    // pixel art: white petals, a one-block rosy outline (rim and petal splits), a magenta heart
+    vec3 pc = vec3(1.0, 0.95, 0.96);
+    if (d > edge - 2.0 || (abs(u) > 0.86 && d > 0.3 * r)) pc = vec3(0.95, 0.72, 0.80);
+    if (d < 0.22 * r) pc = vec3(0.88, 0.48, 0.62);
+    else if (d < 0.4 * r && g.a < 0.35) pc = vec3(0.98, 0.84, 0.46);
+    pc = mix(pc, vec3(0.98, 0.86, 0.90), 0.6 * depth);
+    return vec4(pc, 1.0) * a;
+  }
+  vec3 inner = mix(vec3(0.96, 0.74, 0.81), vec3(0.94, 0.66, 0.76), age);
+  vec3 col = mix(inner, vec3(0.99, 0.87, 0.91), smoothstep(0.24, 0.34, rr));            // tone 2
+  col = mix(col, vec3(1.0, 0.95, 0.96), smoothstep(0.6, 0.72, rr) * (0.75 - 0.4 * age));   // tone 1
+  float line = max(smoothstep(edge - 1.0, edge - 0.15, d), smoothstep(0.88, 1.0, abs(u)) * step(0.3 * r, d));
+  col = mix(col, vec3(0.94, 0.72, 0.80), 0.5 * line);
+  col = mix(col, vec3(0.90, 0.48, 0.62), 1.0 - smoothstep(0.12 * r, 0.19 * r, d));        // heart
+  float k = floor(ang * 6.0 / TAU + 0.5);
+  vec2 dot_ = vec2(cos(k * TAU / 6.0 - h.g * TAU), sin(k * TAU / 6.0 - h.g * TAU)) * 0.36 * r;
+  col = mix(col, vec3(0.97, 0.86, 0.58), 0.85 * (1.0 - smoothstep(0.045 * r, 0.045 * r + AA * 1.5, length(q2 - dot_))));   // stamen tips
+  col *= 1.0 + 0.035 * (vn(q2 * 0.7 + h.rg * 60.0) - 0.5);                               // paper grain
+  col = mix(col, vec3(1.0, 0.94, 0.96), 0.35 * depth);
+  a *= 1.0 - 0.3 * depth;
   return vec4(col * a, a);
 }
 
 // A tight cluster of 4-6 flowers at `ctr` (a corymb seen from below: overlapping, all ways).
-vec4 cluster(vec2 c, vec2 ctr, float size, float shade, int id) {
+vec4 cluster(vec2 c, vec2 ctr, float size, float depth, int id) {
   if (length(c - ctr) > size * 2.3 + 2.0) return vec4(0.0);
   vec4 hn = hash(id, 101);
   int n = 4 + int(hn.r * 2.999);
@@ -98,16 +111,15 @@ vec4 cluster(vec2 c, vec2 ctr, float size, float shade, int id) {
     float dist = i == 0 ? size * 0.15 : size * (0.75 + 0.35 * h.a);
     vec2 fc = ctr + vec2(cos(ang), sin(ang)) * dist;
     float r = size * (0.82 + 0.32 * g.g);
-    // flowers further from the viewer (odd ones) sit a touch darker, under their neighbours
-    vec4 f = flower(c - fc, r, h, g, shade * (i == 0 ? 1.0 : mix(0.92, 1.0, h.r)));
+    vec4 f = flower(c - fc, r, h, g, depth);
     col = i == 0 ? f : over(f, col);                                   // the centre flower on top
   }
   return col;
 }
 
 // One depth of clusters on a jittered grid. Clusters sit only where the mass may be, filling more
-// cells where it is thick. Returns premultiplied colour; `shadow` gathers soft contact shadow.
-vec4 layer(vec2 c, float cell, vec2 offset, float sizeBias, float shade, int row, inout float shadow) {
+// cells where it is thick. Returns premultiplied colour. No shadows anywhere.
+vec4 layer(vec2 c, float cell, vec2 offset, float sizeBias, float depth, int row) {
   vec2 p = c + offset;
   vec2 gi = floor(p / cell);
   vec4 col = vec4(0.0);
@@ -117,19 +129,18 @@ vec4 layer(vec2 c, float cell, vec2 offset, float sizeBias, float shade, int row
       vec4 h = hash2(g, row);
       vec2 ctr = (g + 0.25 + 0.5 * h.rg) * cell - offset;
       float dens = density(ctr) * allowed(ctr);
-      if (h.a > dens * 1.15) continue;
-      float size = mix(3.0, 4.2, dens) * sizeBias * (0.85 + 0.3 * h.b);
+      if (h.a > dens * mix(1.15, 0.55, PIX)) continue;   // pixel art: fewer, clearer clusters
+      float size = mix(3.0, 4.2, dens) * sizeBias * (0.85 + 0.3 * h.b) * mix(1.0, 1.9, PIX);   // pixel art: bigger flowers, ~8 blocks across
       // keep the cluster inside the frame it belongs to: pull it up toward the top edge
       float inZone = cornerZone(ctr);
       ctr.y = min(ctr.y, mix(BAND_Y - size * 1.6, CY * 0.8 - size * 1.4, inZone));
-      shadow = max(shadow, 0.22 * (1.0 - smoothstep(size * 0.6, size * 2.8, length(c - ctr - vec2(1.4, 2.2)))));
-      col = over(col, cluster(c, ctr, size, shade, int(g.x * 7.0 + g.y * 131.0) + row * 977));
+      col = over(col, cluster(c, ctr, size, depth, int(g.x * 7.0 + g.y * 131.0) + row * 977));
     }
   return col;
 }
 
-// Soft out-of-focus clusters behind the mass (depth, like the blurred blooms in the photos).
-vec4 bokeh(vec2 c) {
+// Far clusters: pale flat silhouettes behind the mass (depth without shadow or blur).
+vec4 farClusters(vec2 c) {
   vec4 col = vec4(0.0);
   vec2 gi = floor(c / 14.0);
   for (int y = -1; y <= 1; y++)
@@ -138,20 +149,20 @@ vec4 bokeh(vec2 c) {
       vec4 h = hash2(g, 211);
       vec2 ctr = (g + 0.2 + 0.6 * h.rg) * 14.0;
       float dens = density(ctr) * allowed(ctr);
-      if (h.a > dens * 0.8 || ctr.y > CY) continue;   // only behind the top mass
-      float r = 6.0 + 5.0 * h.b;
-      float d = length(c - ctr) - r;
-      float a = (1.0 - smoothstep(-5.0, 2.0, d)) * 0.42;
-      vec3 tint = mix(vec3(0.96, 0.78, 0.85), vec3(0.99, 0.90, 0.93), h.r);
-      col = over(col, vec4(tint * a, a));
+      if (h.a > dens * 0.8 || ctr.y > CY) continue;
+      float r = 5.0 + 4.0 * h.b;
+      float lobes = 1.0 + 0.12 * sin(atan(c.y - ctr.y, c.x - ctr.x) * 5.0 + h.r * TAU);
+      float d = length(c - ctr) - r * lobes;
+      float a = (1.0 - smoothstep(-1.0, 1.0, d)) * 0.3;
+      col = over(col, vec4(vec3(0.98, 0.88, 0.92) * a, a));
     }
   return col;
 }
 
-// Bark: blackish grey, glimpsed between clusters.
+// Bark: a soft warm grey-brown (low contrast), glimpsed between clusters.
 vec4 bark(float dist, float th, float along) {
   float a = 1.0 - smoothstep(th - AA, th + AA, dist);
-  vec3 col = vec3(0.20, 0.16, 0.15) * (0.85 + 0.3 * vn(vec2(along * 0.5, 3.0)));
+  vec3 col = vec3(0.46, 0.37, 0.36) * (0.94 + 0.12 * vn(vec2(along * 0.5, 3.0)));
   return vec4(col * a, a);
 }
 
@@ -163,7 +174,7 @@ vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float den
   vec2 f = p - id * cell;
   int hx = int(mod(id.x, 16.0)) + 16 * int(mod(id.y, 8.0));
   vec4 h = hash(hx, row);
-  float near = mix(0.35, 1.0, 1.0 - smoothstep(E * 0.6, E * 2.6, c.x));
+  float near = mix(0.35, 1.0, 1.0 - smoothstep(E * 0.8, E * 2.2, c.x));
   // over the text box: a third as many, half as opaque, so no glyph loses its contrast
   if (h.a > dens * near * mix(0.33, 1.0, frame)) return vec4(0.0);
   float keep = mix(0.5, 1.0, frame);
@@ -187,13 +198,32 @@ vec4 drift(vec2 px, vec2 c, float t, float cell, float size, int fall, float den
   return vec4(col * a, a);
 }
 
+// Pixel art: a small palette, nearest colour, hard alpha.
+vec4 pixelate(vec4 col) {
+  if (col.a < 0.45) return vec4(0.0);
+  vec3 c = col.rgb / col.a;
+  vec3 pal[7] = vec3[7](vec3(1.0, 0.95, 0.96), vec3(0.98, 0.86, 0.90), vec3(0.95, 0.72, 0.80),
+    vec3(0.88, 0.48, 0.62), vec3(0.98, 0.84, 0.46), vec3(0.46, 0.37, 0.36), vec3(0.98, 0.90, 0.93));
+  vec3 best = pal[0];
+  float bd = 9.0;
+  for (int i = 0; i < 7; i++) {
+    float dd = dot(c - pal[i], c - pal[i]);
+    if (dd < bd) { bd = dd; best = pal[i]; }
+  }
+  return vec4(best, 1.0);
+}
+
 void main() {
   vec2 px = gl_FragCoord.xy / u_pixelRatio;
   vec2 res = u_resolution / u_pixelRatio;
+  bool pixel = p_style == 1;
+  PIX = pixel ? 1.0 : 0.0;
+  float B = 2.0;                                                       // pixel-art block (CSS px)
+  if (pixel) px = (floor(px / B) + 0.5) * B;
   vec2 c = vec2(res.x - px.x, res.y - px.y);
-  float t = u_time;
-  AA = 0.8 / u_pixelRatio;
-  E = clamp(res.x * 0.42, 120.0, 300.0);
+  float t = pixel ? floor(u_time * 8.0) / 8.0 : u_time;               // pixel art steps at 8fps
+  AA = pixel ? 0.01 : 0.8 / u_pixelRatio;
+  E = res.x / 3.0;                                                     // the mass reaches 1/3 of the width
   D = max(0.0, res.y - 56.0);
   CX = clamp(res.x * 0.1, 46.0, 80.0);
   CY = min(res.x < 500.0 ? 17.0 : 22.0, max(res.y - 28.0, 16.0));   // phones: lines run closer to the corner
@@ -201,18 +231,15 @@ void main() {
   vec4 col = vec4(0.0);
   float frame = max(max(1.0 - smoothstep(BAND_Y - 1.0, BAND_Y, c.y), (1.0 - smoothstep(BAND_X - 1.0, BAND_X, c.x)) * step(c.y, D + 6.0)), cornerZone(c));
   if (c.x < E + 16.0 && c.y < max(max(CY, D), BAND_Y) + 16.0) {
-    float shadow = 0.0;
-    vec4 back = bokeh(c);
+    vec4 back = farClusters(c);
     // the branch, glimpsed only between clusters
     float yb = 3.0 + 0.012 * c.x + 1.2 * sin(c.x * 0.05 + 1.0);
-    // the wood only shows inside the mass: short dark glimpses between clusters, never a bare stick
     float glimpse = smoothstep(0.35, 0.7, density(c));
-    vec4 wood = bark(abs(c.y - yb), mix(2.6, 0.8, smoothstep(0.0, E, c.x)) * step(c.x, E * 0.95), c.x) * glimpse;
+    vec4 wood = bark(abs(c.y - yb), mix(2.4, 0.8, smoothstep(0.0, E, c.x)) * step(c.x, E * 0.95), c.x) * glimpse;
     float xb = 3.0 + 0.6 * sin(c.y * 0.09);
     wood = over(wood, bark(abs(c.x - xb), 2.0 * step(c.y, CY * 0.45), c.y + 50.0) * glimpse);
-    vec4 mid = layer(c, 9.0, vec2(4.5, 3.0), 0.92, 0.9, 31, shadow);
-    vec4 front = layer(c, 10.0, vec2(0.0), 1.0, 1.0, 47, shadow);
-    col = vec4(0.0, 0.0, 0.0, shadow * 0.6);                          // contact shadow on the glass
+    vec4 mid = pixel ? vec4(0.0) : layer(c, 9.0, vec2(4.5, 3.0), 0.92, 0.5, 31);
+    vec4 front = layer(c, 10.0, vec2(0.0), 1.0, 0.0, 47);
     col = over(col, back);
     col = over(col, wood);
     col = over(col, mid);
@@ -222,5 +249,5 @@ void main() {
   col = over(col, drift(px, c, t, 26.0, 1.3, 5, 0.45, 11, false, frame));
   col = over(col, drift(px + 11.0, c, t, 38.0, 2.0, 7, 0.32, 23, false, frame));
   col = over(col, drift(px + 5.0, c, t, 17.0, 0.7, 3, 0.3, 37, true, frame));
-  fragColor = col;
+  fragColor = pixel ? pixelate(col) * (col.a < 0.45 ? 0.0 : 1.0) : col;
 }

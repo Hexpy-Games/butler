@@ -16,7 +16,8 @@ export const SHORE_PRESETS: Record<Exclude<ShoreOption, "c">, ShoreParams> = {
   a: { wl: null, exp: 1.22, hl: 0.06, gs: 0, g0: 50, g1: 100 },
   // (b), raised: 10px of water instead of round 3's 6px; any higher puts surf behind the toolbar labels
   b: { wl: 10, exp: 1.22, hl: 0.06, gs: 0, g0: 50, g1: 100 },
-  d: { wl: 12, exp: 1.25, hl: 0.04, gs: 0.3, g0: 75, g1: 100 },
+  // the owner's setting from the (d) sliders, 2026-10-06: the shipped default
+  d: { wl: 19, exp: 1.22, hl: 0.06, gs: 0.3, g0: 75, g1: 100 },
 };
 
 export const SHORE_SLIDERS: Array<{ key: Exclude<keyof ShoreParams, "wl"> | "wl"; label: string; min: number; max: number; step: number }> = [
@@ -37,11 +38,11 @@ export function readShoreParams(option: ShoreOption, search: string): ShoreParam
     const value = Number(params.get(`d_${key}`));
     return params.has(`d_${key}`) && Number.isFinite(value) ? value : fallback;
   };
-  return { wl: num("wl", base.wl ?? 12), exp: num("exp", base.exp), hl: num("hl", base.hl), gs: num("gs", base.gs), g0: num("g0", base.g0), g1: num("g1", base.g1) };
+  return { wl: num("wl", base.wl ?? 19), exp: num("exp", base.exp), hl: num("hl", base.hl), gs: num("gs", base.gs), g0: num("g0", base.g0), g1: num("g1", base.g1) };
 }
 
 export function shoreSearch(params: ShoreParams): Array<[string, string]> {
-  return [["d_wl", String(params.wl ?? 12)], ["d_exp", String(params.exp)], ["d_hl", String(params.hl)],
+  return [["d_wl", String(params.wl ?? 19)], ["d_exp", String(params.exp)], ["d_hl", String(params.hl)],
     ["d_gs", String(params.gs)], ["d_g0", String(params.g0)], ["d_g1", String(params.g1)]];
 }
 
