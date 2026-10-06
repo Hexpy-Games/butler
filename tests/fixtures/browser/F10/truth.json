@@ -1,0 +1,18 @@
+{
+  "id": "F10",
+  "targets": [
+    "item-737"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "item-737",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

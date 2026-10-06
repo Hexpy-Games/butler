@@ -19,6 +19,10 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     assert!(version.status.success());
     let version: serde_json::Value = serde_json::from_slice(&version.stdout)?;
     assert_eq!(version["command"], "butler version");
+    assert!(matches!(
+        version["data"]["runtime"]["buildProfile"].as_str(),
+        Some("debug" | "release")
+    ));
     let output = launch.command().args(["--help", "--json"]).output()?;
     assert!(output.status.success());
     let help: serde_json::Value = serde_json::from_slice(&output.stdout)?;

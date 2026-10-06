@@ -1,0 +1,20 @@
+{
+  "id": "F15",
+  "targets": [
+    "addon",
+    "checkout"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "checkout",
+        "type": "state",
+        "value": "confirm-without-addon"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

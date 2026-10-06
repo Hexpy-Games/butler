@@ -1,0 +1,25 @@
+{
+  "id": "F01",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "none",
+    "hidden",
+    "offscreen",
+    "tiny",
+    "clip",
+    "aria"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

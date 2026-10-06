@@ -56,7 +56,10 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             json!({
                 "version": provenance.as_ref().and_then(|value| value.agent_version.as_deref()),
                 "appVersion": provenance.as_ref().and_then(|value| value.app_version.as_deref()),
-                "runtime": {"kind": "native", "source": "installed_executable"},
+                "runtime": {
+                    "kind": "native", "source": "installed_executable",
+                    "buildProfile": crate::host::build_info::current().profile,
+                },
                 "installation": {
                     "schema": provenance.as_ref().map(|value| value.schema.as_str()),
                     "platform": provenance.as_ref().and_then(|value| value.platform.as_deref()),

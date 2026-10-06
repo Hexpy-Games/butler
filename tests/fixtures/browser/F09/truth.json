@@ -1,0 +1,25 @@
+{
+  "id": "F09",
+  "targets": [
+    "keyboard-grid",
+    "mouse-grid"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "keyboard-grid",
+        "type": "state",
+        "value": "B3=value"
+      },
+      {
+        "target": "mouse-grid",
+        "type": "state",
+        "value": "B3=value"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

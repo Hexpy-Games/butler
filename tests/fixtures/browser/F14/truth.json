@@ -1,0 +1,24 @@
+{
+  "id": "F14",
+  "targets": [
+    "name",
+    "digits",
+    "postcode",
+    "submit"
+  ],
+  "decoys": [
+    "cancel"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "form",
+        "type": "state",
+        "value": "[\"홍길동\",\"１２３４\",\"서울 중구 세종대로 110\"]"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

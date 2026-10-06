@@ -1,0 +1,106 @@
+{
+  "id": "fixtures",
+  "layer": "L2",
+  "tasks": [
+    {
+      "id": "F01",
+      "path": "tests/fixtures/browser/F01",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F02",
+      "path": "tests/fixtures/browser/F02",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F03",
+      "path": "tests/fixtures/browser/F03",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F04",
+      "path": "tests/fixtures/browser/F04",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F05",
+      "path": "tests/fixtures/browser/F05",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F06",
+      "path": "tests/fixtures/browser/F06",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F07",
+      "path": "tests/fixtures/browser/F07",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F08",
+      "path": "tests/fixtures/browser/F08",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F09",
+      "path": "tests/fixtures/browser/F09",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F10",
+      "path": "tests/fixtures/browser/F10",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F11",
+      "path": "tests/fixtures/browser/F11",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F12",
+      "path": "tests/fixtures/browser/F12",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F13",
+      "path": "tests/fixtures/browser/F13",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F14",
+      "path": "tests/fixtures/browser/F14",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F15",
+      "path": "tests/fixtures/browser/F15",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F16",
+      "path": "tests/fixtures/browser/F16",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F17",
+      "path": "tests/fixtures/browser/F17",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F18",
+      "path": "tests/fixtures/browser/F18",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F19",
+      "path": "tests/fixtures/browser/F19",
+      "source": "report-browser-control-research \u00a76.2"
+    },
+    {
+      "id": "F20",
+      "path": "tests/fixtures/browser/F20",
+      "source": "report-browser-control-research \u00a76.2"
+    }
+  ]
+}
