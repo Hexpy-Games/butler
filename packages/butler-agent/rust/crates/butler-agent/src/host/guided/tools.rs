@@ -6,12 +6,14 @@ mod dispatch;
 mod effect;
 mod execute;
 mod feedback;
+mod hooks;
 mod image;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
 mod message;
 mod monitoring;
 mod occurrence;
+mod outputs;
 mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
@@ -87,6 +89,8 @@ impl GuidedToolBinding {
 #[derive(Default)]
 struct State {
     next_call_index: u64,
+    output_checks: u8,
+    output_images: u8,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
 }
@@ -265,6 +269,8 @@ impl GuidedTools {
                     | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile
+                    | ToolName::OutputCheck
+                    | ToolName::OutputPublish
                     | ToolName::EditFile
                     | ToolName::GrepFiles
                     | ToolName::ReadToolOutputArtifact
@@ -334,6 +340,7 @@ impl GuidedTools {
                     .list_signatures(self.binding.turn_id.clone())
                     .await
                     .map_err(BtccError::from)?;
+                outputs::restore_budget(self, &signatures);
                 Ok(Mutex::new(ResumePool::new(signatures)?))
             })
             .await
@@ -341,6 +348,15 @@ impl GuidedTools {
 }
 
 impl ToolPort for GuidedTools {
+    fn hook_tool_name<'a>(&self, call: &'a ModelRoundToolCall) -> std::borrow::Cow<'a, str> {
+        hooks::name(call)
+    }
+    fn hook_tool_input<'a>(
+        &self,
+        call: &'a ModelRoundToolCall,
+    ) -> &'a serde_json::Map<String, serde_json::Value> {
+        hooks::input(call)
+    }
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

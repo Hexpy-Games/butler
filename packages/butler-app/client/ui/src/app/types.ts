@@ -13,12 +13,12 @@ export type SettingsSectionId =
   | "server"
   | "updates"
   | "mcp"
+  | "hooks"
   | "skills"
   | "usage"
   | "logs"
   | "personalization"
   | "memory"
-  | "privacy"
   | "security"
   | "system"
   | "archives"
@@ -444,7 +444,19 @@ export interface ComponentUpdateStatus {
   manifest_source: string;
 }
 
+export interface UpdateProgressView {
+  component: UpdateComponentId;
+  stage: "idle" | "checking" | "downloading" | "verifying" | "ready" | "applying" | "restarting" | "failed" | "completed";
+  revision: number;
+  bytes_done: number | null;
+  bytes_per_second?: number | null;
+  bytes_total: number | null;
+  cancellable: boolean;
+  error_code: string | null;
+}
+
 export interface UpdateStatusView {
+  progress?: UpdateProgressView | null;
   generated_at: string;
   components: ComponentUpdateStatus[];
   storage_label: "updates";
@@ -569,6 +581,9 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  /** false follows the OS; true forces the DS reduced-motion path. */
+  reduce_motion: boolean;
+  collapse_message_box: boolean;
   main_screen_theme: "none" | "bloom" | "silk";
   main_screen_theme_preset:
     | "monochrome"
@@ -587,6 +602,7 @@ export interface SettingsView {
   ];
   /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
   wallpaper: WallpaperSetting;
+  composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -611,6 +627,7 @@ export interface OnboardingSettingsView {
 export interface SecuritySettingsView {
   remote_access_enabled: boolean;
   allowed_hosts: string[];
+  content_hosts?: string[];
 }
 
 /**
@@ -625,6 +642,7 @@ export interface SecurityView {
   lan_urls: string[];
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
+  content_hosts?: string[];
 }
 
 export interface ModelFallbackSettingsView {
@@ -763,6 +781,7 @@ export type ComposerModelState = ModelCatalogState;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  session_hint?: string;
   work_progress?: { completed: number; total: number };
   id: string;
   kind: ChatKind;
@@ -1213,6 +1232,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
   status?: number;
@@ -1637,6 +1657,7 @@ export interface TimelineEvent {
   type: string;
   created_at?: string;
   payload?: {
+    progress?: UpdateProgressView;
     message?: MessageRecord;
     segment_completed?: boolean;
     turn?: {
@@ -1691,6 +1712,7 @@ export interface WorkStatusView {
 }
 
 export type AppView =
+  | { kind: "browser" }
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
@@ -1739,6 +1761,8 @@ export interface ComposerControls {
   contentParts?: import("./messageContent").MessageContent;
   /** UI-only acknowledgement; never serialized into the transport request. */
   onAccepted?: () => void;
+  /** Restore a rejected draft when session creation changed the editor identity. */
+  onRejected?: (sessionId: string) => void;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;

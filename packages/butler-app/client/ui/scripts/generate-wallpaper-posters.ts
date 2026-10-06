@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
+import { smokeBrowserArgs } from "../../../../../tests/support/smoke-browser-args";
 import { chromium } from "playwright";
 import { wallpaperPosterInputs } from "./wallpaper-poster-inputs";
 
@@ -24,7 +25,7 @@ const server = await createServer({
 });
 await server.listen();
 const address = server.httpServer!.address() as { port: number };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 mkdirSync(directory, { recursive: true });
 const entries: Record<string, string> = {};
 try {
@@ -38,7 +39,7 @@ try {
       const { renderWallpaperStill } = await import(/* @vite-ignore */ stillPath);
       const results = [];
       for (const module of BUILTIN_WALLPAPERS.list()) {
-        if (module.manifest.image === "required" && !module.defaultImage) continue;
+        if ((module.manifest.image === "required" && !module.defaultImage) || module.manifest.decoration) continue;
         const size = { width: 320, height: 200 };
         const blob = await renderWallpaperStill(module, size, tone);
         const bytes = await blob.arrayBuffer();

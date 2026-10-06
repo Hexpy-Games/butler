@@ -1,0 +1,20 @@
+{
+  "id": "F04",
+  "targets": [
+    "download"
+  ],
+  "decoys": [
+    "ad"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "/file.bin",
+        "type": "request"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

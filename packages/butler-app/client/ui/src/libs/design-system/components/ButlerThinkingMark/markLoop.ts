@@ -1,6 +1,7 @@
-import { type ButlerMarkTheme, type ButlerMarkThemeColors, inkForButlerMarkTheme, RISO_INKS } from "./butlerMarkTheme";
-import { DESIGN_SIZE, FRAME_INTERVAL_MS, MAX_STEP_S } from "./thinking-mark/constants";
-import { createSurface, drawFrame, resizeSurface } from "./thinking-mark/canvas-drawing";
+import { observeMark } from "./markObservers";
+import { type ButlerMarkTheme, type ButlerMarkThemeColors } from "./butlerMarkTheme";
+import { FRAME_INTERVAL_MS } from "./thinking-mark/constants";
+import { createMarkRenderer } from "./markRenderer";
 import { MorphSim } from "./thinking-mark/motion";
 
 export interface MarkLoopInputs {
@@ -54,58 +55,30 @@ export function pendingMarkFrames() {
   return sharedFrame === 0 ? 0 : 1;
 }
 
-/** Nearest theme scope (DS Viewer frames, app body), then the OS color scheme. */
-function resolveTheme(element: Element): ButlerMarkTheme {
-  const scope = element.closest(".theme-dark, .theme-light");
-  if (scope) return scope.classList.contains("theme-dark") ? "dark" : "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 /**
  * The mark's frame loop: draws only while the mark moves, and pauses when it
  * is offscreen, the document is hidden, or it has settled (idle logo, or
  * reduced motion). Layout is read on resize, never per frame.
  */
 export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs): MarkLoop | null {
-  const ctx = canvas.getContext("2d", { alpha: true });
-  if (!ctx) return null;
-
-  const sim = (inputs.sim.current ??= new MorphSim());
-  const theme = inputs.theme ?? resolveTheme(canvas);
-  const surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), RISO_INKS[theme]);
+  const renderer = createMarkRenderer(canvas, inputs);
+  if (!renderer) return null;
+  const { sim } = renderer;
   let lastFrame = 0;
   let stopped = false;
   let inView = true;
   const settled = () => inputs.isReduced() || (!inputs.isWorking() && sim.idle);
   const paused = () => stopped || !inView || document.visibilityState === "hidden";
 
-  const resize = () => {
-    const rect = canvas.getBoundingClientRect();
-    const side = Math.max(1, Math.min(rect.width, rect.height || rect.width));
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const pixelSide = Math.round(side * dpr);
-    resizeSurface(surface, pixelSide, pixelSide / DESIGN_SIZE, side);
-  };
-
-  const render = (time: number) => {
-    // A simulation shared by several marks (see morphKey) advances once per frame.
-    if (sim.clock !== time) {
-      const dt = sim.clock > 0 ? Math.min((time - sim.clock) / 1000, MAX_STEP_S) : 1 / 60;
-      sim.clock = time;
-      sim.update(dt, inputs.isWorking());
-    }
-    drawFrame(surface, sim, false);
-  };
-
   const tick = (time: number): boolean => {
     if (paused()) return false;
     if (inputs.isReduced()) {
       sim.park();
-      drawFrame(surface, sim, true);
+      renderer.draw();
       return false;
     }
     if (time - lastFrame >= FRAME_INTERVAL_MS) {
-      render(time);
+      renderer.render(time);
       lastFrame = time;
     }
     return !settled();
@@ -115,7 +88,7 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
     if (moving.has(tick) || paused()) return;
     if (settled()) {
       if (inputs.isReduced()) sim.park();
-      drawFrame(surface, sim, inputs.isReduced());
+      renderer.draw();
       return;
     }
     // After a pause the first step is one frame long, not the time spent paused.
@@ -125,25 +98,14 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
 
   const stopLoop = () => rest(tick);
 
-  const resizeAndRender = () => {
-    resize();
-    drawFrame(surface, sim, inputs.isReduced());
-  };
-  const resizeObserver = new ResizeObserver(resizeAndRender);
-  resizeObserver.observe(canvas);
-  // Offscreen marks (scrolled-away history, collapsed panels) stop drawing.
-  const intersectionObserver = new IntersectionObserver((entries) => {
-    inView = entries.some((entry) => entry.isIntersecting);
-    if (inView) startLoop();
-    else stopLoop();
+  const disposeObservers = observeMark(canvas, {
+    implicitTheme: !inputs.theme,
+    theme: renderer.theme,
+    resize: renderer.resize,
+    intersection(visible) { inView = visible; if (inView) startLoop(); else stopLoop(); },
+    visibility() { if (document.visibilityState === "hidden") stopLoop(); else startLoop(); },
   });
-  intersectionObserver.observe(canvas);
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === "hidden") stopLoop();
-    else startLoop();
-  };
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  resizeAndRender();
+  renderer.resize();
   startLoop();
 
   return {
@@ -151,9 +113,7 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
     dispose: () => {
       stopped = true;
       stopLoop();
-      resizeObserver.disconnect();
-      intersectionObserver.disconnect();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      disposeObservers();
     },
   };
 }

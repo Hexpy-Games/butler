@@ -1718,6 +1718,7 @@ export function activeTitleForView(
   view: AppView,
   activeChat: ActiveChatView,
 ): { title: string; subtitle?: string } {
+  if (view.kind === "browser") return { title: appCopy.browser.title };
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };
@@ -1821,7 +1822,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
-  if (section.includes("security") || section.includes("보안")) return "security";
+  if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||
     section.includes("developer-log") ||
@@ -1831,6 +1832,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     return "logs";
   if (section.includes("appearance")) return "appearance";
   if (section.includes("server") || section.includes("bridge")) return "server";
+  if (section === "hooks" || section === "훅") return "hooks";
   if (section.includes("mcp")) return "mcp";
   if (section.includes("skill")) return "skills";
   // Backup, cleanup and worker models live on the Models page (the
@@ -1848,7 +1850,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     section.includes("사용량")
   )
     return "usage";
-  if (section.includes("model") || section.includes("access")) return "models";
+  if (section.includes("model")) return "models";
   if (
     section.includes("about") ||
     section.includes("info") ||
@@ -1870,7 +1872,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     section.includes("data") ||
     section.includes("diagnostic")
   )
-    return "privacy";
+    return "security";
   return "general";
 }
 

@@ -31,13 +31,21 @@ mod stop;
 mod subsession_result;
 mod subsessions;
 pub(crate) use subsessions::ChildCompletion;
+mod task_graphs;
+pub use task_graphs::{
+    ChildRecord as TaskGraphChildRecord, GraphRecords as TaskGraphRecords,
+    GraphScope as TaskGraphScope, PlanRecord as TaskGraphPlanRecord,
+};
 mod tool_journal;
 mod transitions;
 mod wake;
 mod work;
 
 pub(crate) use authority::SqliteAuthorityRepository;
-pub use bootstrap::{bootstrap_fresh_storage, read_activated_storage_manifest};
+pub use bootstrap::{
+    begin_storage_startup, bootstrap_fresh_storage, read_activated_storage_manifest,
+    storage_error_is_corruption, storage_scan_delay, validate_storage_background,
+};
 pub use context_compactions::{ContextCompactionRecord, ContextCompactionRepository};
 pub use context_documents::{ContextDocumentInput, ContextDocumentRead};
 pub use effects::StorageEffectJournal;
@@ -291,7 +299,7 @@ fn run_connection_lane(
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<(String, u64)>>,
 ) -> StorageResult<()> {
-    let setup: StorageResult<(Connection, RuntimeOwner)> = (|| {
+    let setup: StorageResult<(sqlite::Connection, RuntimeOwner)> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 StorageError::new(StorageCode::SqliteParentCreateFailed, error.to_string())
@@ -301,8 +309,7 @@ fn run_connection_lane(
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
         validate_activation(&connection, activation)?;
-        schema::create_current(&connection).map_err(StorageError::sqlite)?;
-        migration::apply(&mut connection).map_err(StorageError::sqlite)?;
+        bootstrap::migrate_current(&mut connection)?;
         legacy_cutover::apply(&mut connection)?;
         let owner = RuntimeOwner::register(&mut connection, identity, liveness)?;
         Ok((connection, owner))
@@ -314,6 +321,9 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string()).with_source(error)
+    })?;
     if initialized
         .send(Ok((owner.owner_id().to_owned(), owner.generation())))
         .is_err()
@@ -369,6 +379,10 @@ fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<
         .map_err(StorageError::sqlite)?;
     connection
         .pragma_update(None, "foreign_keys", "ON")
+        .map_err(StorageError::sqlite)?;
+    // Applied only at WAL reset/checkpoint, without a periodic idle writer.
+    connection
+        .pragma_update(None, "journal_size_limit", 16_777_216_i64)
         .map_err(StorageError::sqlite)?;
     connection
         .pragma_update(None, "synchronous", "NORMAL")

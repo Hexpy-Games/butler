@@ -1,4 +1,5 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
+use crate::host::AppSubsessions;
 
 mod security_store;
 mod startup;
@@ -132,6 +133,7 @@ impl AppServer {
         let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready.clone());
         let dependencies = AppApplicationDependencies {
+            hooks: Some(runtime.hooks.clone()),
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
             setup: Arc::new(setup.clone()),
@@ -159,7 +161,7 @@ impl AppServer {
             runtime_info: Arc::new(AppRuntimeInfo::open(installation)),
             model_catalog: Arc::new(AppModelCatalog::new(
                 runtime.models.configuration.clone(),
-                settings,
+                settings.clone(),
                 installation.clone(),
                 data_root.to_path_buf(),
             )),
@@ -203,7 +205,7 @@ impl AppServer {
                 runtime.project_ledger.clone(),
             )),
             work_streams: runtime.work_streams.clone(),
-            subsessions: Arc::new(crate::host::AppSubsessions::for_runtime(runtime)),
+            subsessions: Arc::new(AppSubsessions::new(runtime, settings.clone())),
             branch_conversations: Arc::new(AppBranchConversations::new(
                 runtime.conversations.clone(),
             )),
@@ -211,6 +213,27 @@ impl AppServer {
         };
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
+        Self::activate_listener(
+            listener,
+            application,
+            gateway_config,
+            setup,
+            listener_ready,
+            artifacts,
+            data_root,
+        )
+        .await
+    }
+
+    async fn activate_listener(
+        listener: TcpListener,
+        application: Arc<AppApplication>,
+        gateway_config: GatewayConfig,
+        setup: AppSetup,
+        listener_ready: Arc<AtomicBool>,
+        artifacts: Arc<AppMessageFiles>,
+        data_root: &std::path::Path,
+    ) -> Result<Self, BtccError> {
         let server = startup::activate(
             listener,
             application.clone(),
@@ -321,6 +344,8 @@ fn gateway_config(
 ) -> GatewayConfig {
     let mut config = app_config.gateway_config();
     config.local_auth = local_auth;
+    config.output_data = Some(data_root.to_path_buf());
+    config.favicon_cache_root = Some(data_root.join("cache/favicons"));
     config.static_ui_root = Some(installation.resources().join("app-client/dist"));
     config.security_store = Some(Arc::new(AppSecurityStore::new(
         data_root.to_path_buf(),

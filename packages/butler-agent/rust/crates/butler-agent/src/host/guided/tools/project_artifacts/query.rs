@@ -68,7 +68,10 @@ const CANDIDATES: &str = "WITH origins AS (\
     AND (?3='' OR lower(f.mime_type)=lower(?3) OR lower(f.kind)=lower(?3)) \
     AND (?4='' OR f.id=?4)) ";
 
-pub(super) fn open(root: &Path, signal: CancellationToken) -> rusqlite::Result<Connection> {
+pub(super) fn open(
+    root: &Path,
+    signal: CancellationToken,
+) -> rusqlite::Result<butler_platform::sqlite::Connection> {
     // Read-only flags must never create a DB or mutate a refused data root.
     let db = butler_platform::sqlite::open_with_flags(
         root.join("app-server/butler-client.sqlite"),

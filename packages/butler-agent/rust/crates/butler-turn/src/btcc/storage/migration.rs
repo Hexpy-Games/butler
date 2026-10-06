@@ -30,7 +30,7 @@ pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
     migrated.and(restored)
 }
 
-fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
+pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     authority::migrate(&transaction)?;
     subsession::migrate(&transaction)?;
@@ -44,6 +44,7 @@ fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
     ensure_guided_work_progress_columns(&transaction)?;
     migrate_guided_work_execution_ownership(&transaction)?;
     ensure_turn_columns(&transaction)?;
+    authority::permission_indexes(&transaction)?;
     ensure_model_columns(&transaction)?;
     ensure_guided_tool_result_delivery_columns(&transaction)?;
     migrate_guided_work_checkpoint_constraints(&transaction)?;
@@ -66,6 +67,7 @@ fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
          WHERE canonical_assistant_message_id IS NOT NULL;",
     )?;
     startup_indexes::cutover(&transaction)?;
+    transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
     transaction.commit()
 }
 

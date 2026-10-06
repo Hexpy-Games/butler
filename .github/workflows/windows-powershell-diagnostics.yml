@@ -27,8 +27,6 @@ jobs:
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
-        env:
-          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
         run: ./deploy/windows-owner-cleanup.ps1
 
   diagnose-hosted:

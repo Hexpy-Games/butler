@@ -22,14 +22,15 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let path = uri.path();
-    let session_id = query(uri)
-        .get("session_id")
-        .map(|value| butler_core::public_text::trim_js_whitespace(value))
-        .filter(|value| !value.is_empty())
-        .unwrap_or("general")
-        .to_owned();
+    let session_id = authority_session_id(uri);
     let owner = app_session_hint(&session_id);
 
+    if path == "/authority-permissions" && method == Method::GET {
+        return super::authority_permissions::list(&state).await;
+    }
+    if path == "/authority-permissions/revoke" && method == Method::POST {
+        return super::authority_permissions::revoke(&state, request).await;
+    }
     if method == Method::GET && path == "/authority-requests" {
         let page = state.application.authority_list(owner).await?;
         return json(
@@ -171,4 +172,13 @@ async fn question_answer(request: Request<Body>) -> Result<String, HttpError> {
         )
     })?;
     serde_json::to_string(&value).map_err(|_| HttpError::Internal)
+}
+
+fn authority_session_id(uri: &Uri) -> String {
+    query(uri)
+        .get("session_id")
+        .map(|value| butler_core::public_text::trim_js_whitespace(value))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("general")
+        .to_owned()
 }

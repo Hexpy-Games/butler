@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_btcc_graph_parent_turn
+ON btcc_session_relations(parent_session_id,parent_turn_id,ordinal);
+CREATE INDEX IF NOT EXISTS idx_btcc_graph_plan
+ON btcc_subsession_delegations(json_extract(packet_json,'$.parent_work_ref.plan_revision_id'));
+
 CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   instruction_id TEXT PRIMARY KEY,
   relation_id TEXT NOT NULL,
@@ -59,6 +64,7 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
     'worker_work_incomplete', 'worker_no_progress'
   )),
   summary TEXT NOT NULL,
+  failure_key TEXT,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,
   changed_files_json TEXT NOT NULL DEFAULT '[]',
@@ -70,6 +76,9 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_btcc_graph_result
+ON btcc_steward_results(relation_id,created_at DESC,result_id DESC);
 
 CREATE TABLE IF NOT EXISTS btcc_subsession_outbox (
   outbox_id TEXT PRIMARY KEY,

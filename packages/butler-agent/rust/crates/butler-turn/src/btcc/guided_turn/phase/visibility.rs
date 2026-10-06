@@ -19,6 +19,8 @@ const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 const NON_FULL: &[&str] = &[
+    "output_check",
+    "output_publish",
     "run_command",
     "write_file",
     "edit_file",
@@ -74,6 +76,7 @@ const SCHEDULE_WRITES: &[&str] = &[
     "delete_automation",
 ];
 const ASK_FIRST_WRITES: &[&str] = &[
+    "output_publish",
     "run_command",
     "set_wallpaper",
     "save_wallpaper_module",
@@ -127,6 +130,7 @@ pub(super) fn legacy_authorized<'a>(
         names.retain(|name| !catalog.project_inspection.contains(name));
     }
     names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
+    names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     apply_role(&mut names, policy);
@@ -257,7 +261,9 @@ fn apply_access_mode(
                 names.insert(tool.name.clone());
             }
         }
-        names.extend(["run_command", "write_file", "edit_file"].map(str::to_owned));
+        names.extend(
+            ["run_command", "write_file", "edit_file", "output_publish"].map(str::to_owned),
+        );
         if scope.has_project {
             names.insert("bind_session_git_worktree".into());
         }

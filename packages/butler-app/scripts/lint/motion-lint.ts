@@ -254,6 +254,11 @@ export interface CanvasMotionEngine {
 
 export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
   {
+    prefix: "components/lifecycle/still.ts",
+    justification: "One-shot lifecycle wallpaper WebP encoding and average native background colour; it never animates or runs on the typing path.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {

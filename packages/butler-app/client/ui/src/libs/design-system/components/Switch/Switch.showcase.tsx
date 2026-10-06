@@ -16,11 +16,13 @@ const labels = {
   "en-US": {
     fallback: "Use backup models", fallbackHint: "When the main model fails, Butler retries with the next model in the list.",
     developer: "Developer mode", developerHint: "Only available in development builds.",
+    reduceMotion: "Reduce motion", followsSystem: "Follows the system setting",
     on: "On", off: "Off", motion: "The thumb moves on --motion-base with the spring easing; reduced motion switches at once.",
   },
   "ko-KR": {
     fallback: "예비 모델 사용", fallbackHint: "기본 모델이 실패하면 목록의 다음 모델로 다시 시도합니다.",
     developer: "개발자 모드", developerHint: "개발 빌드에서만 사용할 수 있습니다.",
+    reduceMotion: "동작 줄이기", followsSystem: "시스템 설정을 따릅니다",
     on: "켜짐", off: "꺼짐", motion: "손잡이는 --motion-base 동안 스프링 이징으로 움직이고, 동작 줄이기에서는 바로 바뀝니다.",
   },
 } as const;
@@ -70,16 +72,27 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   { name: "Disabled (unavailable)", states: ["disabled"], render: (context) => <SettingsSwitchRow context={context} disabled /> },
+  {
+    name: "Disabled with a reason (hover or focus)",
+    states: ["disabled"],
+    render: (context) => (
+      <Stack align="row" cross="center" gap="md">
+        <Switch aria-label={text(context).reduceMotion} checked disabledReason={text(context).followsSystem} />
+        <Typo.Caption tone="secondary">{text(context).reduceMotion}</Typo.Caption>
+      </Stack>
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "disabled"],
-  variants: ["on", "off"],
+  variants: ["on", "off", "reason"],
   render: (context) => (
     <Switch
-      aria-label={context.variant === "on" ? text(context).on : text(context).off}
-      defaultChecked={context.variant === "on"}
-      disabled={context.state === "disabled"}
+      aria-label={context.variant === "off" ? text(context).off : text(context).on}
+      defaultChecked={context.variant !== "off"}
+      disabled={context.variant !== "reason" && context.state === "disabled"}
+      disabledReason={context.variant === "reason" && context.state === "disabled" ? text(context).followsSystem : undefined}
     />
   ),
 };

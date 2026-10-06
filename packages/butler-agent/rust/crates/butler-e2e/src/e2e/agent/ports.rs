@@ -3,7 +3,7 @@
 use crate::e2e::{HarnessError, harness_error};
 
 /// An unused port for closed-endpoint fixtures. This probe does not reserve it.
-/// Agents bind port 0 themselves and publish the OS-assigned endpoint instead.
+/// Gateway fixtures also probe the adjacent content port.
 pub fn free_port() -> Result<u16, HarnessError> {
     use std::sync::atomic::{AtomicU32, Ordering};
     const FIRST: u32 = 20_000;
@@ -16,10 +16,12 @@ pub fn free_port() -> Result<u16, HarnessError> {
         Ordering::Relaxed,
     );
     for _ in 0..SPAN {
-        let offset = NEXT.fetch_add(1, Ordering::Relaxed) % SPAN;
+        let offset = NEXT.fetch_add(2, Ordering::Relaxed) % SPAN;
         let port =
             u16::try_from(FIRST + offset).map_err(|_| harness_error("free port out of range"))?;
-        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+        if let Ok(_primary) = std::net::TcpListener::bind(("127.0.0.1", port))
+            && std::net::TcpListener::bind(("127.0.0.1", port + 1)).is_ok()
+        {
             return Ok(port);
         }
     }

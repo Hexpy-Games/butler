@@ -1,0 +1,20 @@
+{
+  "id": "F20",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "ad"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

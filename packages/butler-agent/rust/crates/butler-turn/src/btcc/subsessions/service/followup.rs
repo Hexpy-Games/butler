@@ -56,16 +56,10 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .is_some();
-        let open = self
-            .repository
-            .open_relation_by_work(relation.root_work_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_some();
-        if !terminal || open {
+        if !terminal {
             return Err(BtccError::detected(
                 BtccCode::StewardRelationNotActive,
-                "The previous Work is still open or blocked. Steer its existing owner; do not replace it.",
+                "The previous child has no terminal outcome yet. Wait for its result or steer its existing owner; do not replace a running assignment.",
             ));
         }
         Ok(Some(self.prior_context(&relation).await?.to_string()))

@@ -221,7 +221,16 @@
   padding-block: max(0px, calc((var(--control-height-md) - 1lh) / 2));
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .typo[data-align-with="control"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    padding-block: max(0px, calc((var(--control-hit-target) - 1lh) / 2));
+  }
+}
+
+@media (pointer: coarse) {
   .typo[data-align-with="control"] {
     padding-block: max(0px, calc((var(--control-hit-target) - 1lh) / 2));
   }

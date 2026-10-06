@@ -23,7 +23,7 @@ const REQUIRES_STATE_MATRIX = [
   "components/CopyButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
-  "blocks/SplitButton", "blocks/ChoiceCard",
+  "blocks/SplitButton", "blocks/ChoiceCard", "blocks/TabStrip",
 ];
 
 function folderIds(): string[] {

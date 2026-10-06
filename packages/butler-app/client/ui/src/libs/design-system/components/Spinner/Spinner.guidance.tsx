@@ -21,6 +21,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "The shape of loading content is known", use: "Skeleton" },
     { when: "Progress with a known fraction", use: "ProgressMeter" },
+    { when: "Progress in an icon slot that may become known", use: "ProgressRing" },
     { when: "Success replaces the spinner in the same slot", use: "LoadingIndicator" },
   ],
   recipes: [{ name: "Busy button", description: "The spinner takes the icon slot; the button is disabled and aria-busy.", render: () => <SyncingButton /> }],

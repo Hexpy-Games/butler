@@ -30,7 +30,15 @@ pub(super) fn prepare<'a>(
             call.arguments.clone(),
             Some(tool_error(
                 "tool_unavailable",
-                format!("No such tool available: {}", call.name),
+                format!(
+                    "No such tool available: {}. Choose an available tool: {}.",
+                    call.name,
+                    tools
+                        .iter()
+                        .map(|tool| tool.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 None,
             )),
         ),
@@ -38,7 +46,10 @@ pub(super) fn prepare<'a>(
             call.arguments.clone(),
             Some(tool_error(
                 "invalid_arguments",
-                "Tool arguments must be a JSON object".into(),
+                format!(
+                    "Tool arguments must be a JSON object matching this schema: {}",
+                    serde_json::to_string(&tool.map(|t| &t.parameters)).unwrap_or_default()
+                ),
                 None,
             )),
         ),
@@ -98,8 +109,79 @@ pub(super) async fn execute<'a>(
             None,
         )
         .await;
+        super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
         return Ok(result);
     }
+    let denied = super::hooks::pre_tool(policy, invocation, &prepared.call).await;
+    let mut result = if let Some(message) = denied {
+        ToolResult {
+            tool_call_id: prepared.call.id.clone(),
+            name: prepared.call.name.clone(),
+            ok: false,
+            error: Some(tool_error("hook_denied", message, None)),
+            output: None,
+        }
+    } else {
+        execute_validated(policy, invocation, prepared).await?
+    };
+    enrich_rejection(&mut result, prepared);
+    if result
+        .error
+        .as_ref()
+        .is_some_and(|error| error.code == "hook_denied")
+    {
+        policy
+            .record_unexecuted(invocation, &prepared.call, &result)
+            .await?;
+    }
+    super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
+    let visible = result
+        .error
+        .as_ref()
+        .filter(|e| e.code == "hook_denied")
+        .map(|_| denied_operation(policy, &prepared.call));
+    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
+    operation(
+        invocation.progress,
+        visible.as_ref().unwrap_or(&prepared.call),
+        if result.ok {
+            Status::Completed
+        } else {
+            Status::Failed
+        },
+        result.output.as_ref(),
+        operation_call_id.as_deref(),
+    )
+    .await;
+    Ok(result)
+}
+
+fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
+    if let Some(error) = &mut result.error {
+        let schema = prepared.tool.map(|tool| &tool.parameters);
+        error.message.push_str(&format!(
+            " Correct the input using this schema: {}. Resolve prerequisites from the returned state, choose another available tool, or wait for an active dependency; do not repeat the unchanged failure.",
+            serde_json::to_string(&schema).unwrap_or_default()
+        ));
+    }
+}
+
+fn denied_operation(
+    policy: &dyn GuidedPolicyPort,
+    call: &ModelRoundToolCall,
+) -> ModelRoundToolCall {
+    ModelRoundToolCall {
+        name: policy.hook_tool_name(call).into_owned(),
+        arguments: policy.hook_tool_input(call).clone(),
+        ..call.clone()
+    }
+}
+
+async fn execute_validated<'a>(
+    policy: &'a dyn GuidedPolicyPort,
+    invocation: GuidedInvocation<'a>,
+    prepared: &'a PreparedCall<'a>,
+) -> Result<ToolResult, BtccError> {
     let result = match policy
         .execute_tool(
             invocation,
@@ -134,19 +216,6 @@ pub(super) async fn execute<'a>(
             return Err(error);
         }
     };
-    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
-    operation(
-        invocation.progress,
-        &prepared.call,
-        if result.ok {
-            Status::Completed
-        } else {
-            Status::Failed
-        },
-        result.output.as_ref(),
-        operation_call_id.as_deref(),
-    )
-    .await;
     Ok(result)
 }
 
@@ -175,7 +244,10 @@ fn validate_required(
         if !arguments.contains_key(field) {
             return Some(tool_error(
                 "invalid_arguments",
-                format!("Missing required field: {field}"),
+                format!(
+                    "Missing required field: {field}. Supply it using this tool schema: {}",
+                    serde_json::to_string(schema).unwrap_or_default()
+                ),
                 Some(field.into()),
             ));
         }

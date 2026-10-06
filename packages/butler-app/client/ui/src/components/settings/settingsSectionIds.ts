@@ -9,12 +9,12 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "models",
   "updates",
   "usage",
-  "privacy",
   "security",
   "system",
   "archives",
   "about",
   "mcp",
+  "hooks",
   "skills",
   "server",
 ];

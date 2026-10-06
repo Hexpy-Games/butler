@@ -1,7 +1,10 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
-import { MessageSquare } from "../Icons";
+import { ICON_SIZE, MessageSquare } from "../Icons";
+import { IconSlot } from "../IconSlot";
+import { LoadingIndicator } from "../LoadingIndicator";
+import { Tag } from "../Tag";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { Card } from "./Card";
@@ -26,6 +29,10 @@ const labels = {
     seedTitle: "Branched from",
     seed: "Earlier turns summarized the plan and the open questions about the gateway API.",
     padding: { none: "padding none", sm: "padding sm", md: "padding md" },
+    tasks: [
+      { title: "Research Notion", meta: "Worker 3 · GPT-6 Luna", status: "Running", time: "9m 01s" },
+      { title: "Research Obsidian", meta: "Worker 2 · GPT-6 Luna", status: "Done", time: "3m 04s" },
+    ],
   },
   "ko-KR": {
     board: [
@@ -39,6 +46,10 @@ const labels = {
     seedTitle: "분기 원본",
     seed: "이전 대화에서 계획과 게이트웨이 API에 대한 열린 질문을 요약했습니다.",
     padding: { none: "여백 없음", sm: "여백 sm", md: "여백 md" },
+    tasks: [
+      { title: "Notion 조사", meta: "작업자 3 · GPT-6 Luna", status: "진행 중", time: "9분 01초" },
+      { title: "Obsidian 조사", meta: "작업자 2 · GPT-6 Luna", status: "완료", time: "3분 04초" },
+    ],
   },
 } as const;
 
@@ -57,6 +68,27 @@ function BoardCard({ item, selected }: { item: { title: string; progress: string
           <MessageSquare />
           <Typo.Text truncate>{item.session}</Typo.Text>
         </Button>
+      </Stack>
+    </Card>
+  );
+}
+
+/** Task graph card: a running task carries activity="running"; a finished one does not. */
+function TaskCard({ item, running, selected }: { item: { title: string; meta: string; status: string; time: string }; running?: boolean; selected?: boolean }) {
+  return (
+    <Card interactive padding="sm" selected={selected} activity={running ? "running" : undefined} aria-label={item.title} onClick={() => undefined}>
+      <Stack gap="xs">
+        <Stack align="row" gap="sm" cross="start">
+          <IconSlot size="md" minHeight="line" tone="tertiary">
+            <LoadingIndicator state={running ? "loading" : "done"} size={ICON_SIZE.md} />
+          </IconSlot>
+          <Typo.Body lineClamp={2} grow minWidth="0">{item.title}</Typo.Body>
+        </Stack>
+        <Typo.Caption tone="tertiary" truncate>{item.meta}</Typo.Caption>
+        <Stack align="row" justify="between" cross="center" gap="sm">
+          <Tag size="sm" tone={running ? "accent" : "neutral"}>{item.status}</Tag>
+          <Typo.Caption tone="tertiary" numeric="tabular">{item.time}</Typo.Caption>
+        </Stack>
       </Stack>
     </Card>
   );
@@ -96,6 +128,16 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Running activity (task graph)",
+    widths: ["375", "app"],
+    // Running, running + selected (accent border wins, ring stays), finished.
+    render: (context) => (
+      <Grid columns="auto-fit" gap="md">
+        {[true, true, false].map((running, i) => <TaskCard key={i} item={text(context).tasks[running ? 0 : 1]} running={running} selected={i === 1} />)}
+      </Grid>
+    ),
+  },
+  {
     name: "Padding",
     render: (context) => (
       <Stack gap="sm">
@@ -109,7 +151,9 @@ export const stories: ShowcaseStory[] = [
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "selected"],
+  variants: ["default", "running"],
   render: (context) => {
+    if (context.variant === "running") return <TaskCard item={text(context).tasks[0]} running selected={context.state === "selected"} />;
     const [item] = text(context).board;
     return <BoardCard item={item} selected={context.state === "selected"} />;
   },

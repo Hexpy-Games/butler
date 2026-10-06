@@ -44,8 +44,24 @@ impl<'a, 'input: 'a> From<&'a super::driver::Invocation<'input>> for GuidedInvoc
     }
 }
 
+/// Immutable hook scope bound by the host before model execution.
+pub struct GuidedHookBinding {
+    /// Process-owned dispatcher.
+    pub port: Arc<dyn butler_core::hooks::HookPort>,
+    /// Bound project root, otherwise null.
+    pub project_dir: Option<String>,
+    /// Project root or user home.
+    pub cwd: String,
+    /// Effective permission mode.
+    pub access_mode: String,
+    /// Delegation parent, if this is a child turn.
+    pub parent_session_id: Option<String>,
+}
+
 /// The ports a guided policy is composed of.
 pub struct GuidedPolicyDependencies {
+    /// Optional user lifecycle dispatcher and immutable turn scope.
+    pub hooks: Option<GuidedHookBinding>,
     pub prompt: Arc<dyn PromptPort>,
     pub authority: Arc<dyn AuthorityPort>,
     pub context: Arc<dyn ContextPort>,
@@ -116,6 +132,18 @@ pub trait TurnContextProjection: Send + Sync {
 
 /// Resolves and executes the tools of a guided turn.
 pub trait ToolPort: Send + Sync {
+    /// Underlying native/MCP identity behind a progressive call.
+    fn hook_tool_name<'a>(&self, call: &'a ModelRoundToolCall) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::Borrowed(&call.name)
+    }
+    /// Full arguments of that underlying call.
+    fn hook_tool_input<'a>(
+        &self,
+        call: &'a ModelRoundToolCall,
+    ) -> &'a serde_json::Map<String, serde_json::Value> {
+        &call.arguments
+    }
+
     /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(
         &'a self,

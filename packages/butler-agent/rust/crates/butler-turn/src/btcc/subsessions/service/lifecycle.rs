@@ -87,6 +87,20 @@ impl SubsessionService {
             .bound_work_for_turn(turn.to_owned())
             .await?
             .and_then(|work| work.latest_disposition);
+        let blocked = disposition
+            .as_ref()
+            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked);
+        let failure_reason = blocked.map(|value| {
+            value
+                .next_condition
+                .clone()
+                .unwrap_or_else(|| value.summary.clone())
+        });
+        let status = if status == "success" && blocked.is_some() {
+            "blocked"
+        } else {
+            status
+        };
         let handoff = disposition
             .as_ref()
             .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
@@ -110,6 +124,7 @@ impl SubsessionService {
                     turn: turn.into(),
                     status: status.into(),
                     summary,
+                    failure_reason,
                     evidence_refs,
                     handoff,
                 },

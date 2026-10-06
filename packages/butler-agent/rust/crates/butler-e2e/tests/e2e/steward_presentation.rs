@@ -83,7 +83,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
 }
 
 #[tokio::test]
-async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<(), HarnessError> {
+async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessError> {
     use std::sync::atomic::Ordering;
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
@@ -97,9 +97,9 @@ async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<()
     let s = setup.start().await?;
     s.turn("general", stub::OWNER).await?;
     let child = wait_result(&s).await?;
-    assert_eq!(child["result"]["status"], "success", "{child}");
+    assert_eq!(child["result"]["status"], "blocked", "{child}");
     assert_eq!(child["result"]["work_status"], "blocked", "{child}");
-    assert_eq!(child["status"], "delivered", "{child}");
+    assert_eq!(child["status"], "failed", "{child}");
     assert_eq!(child["approved_plan_completed"], 1);
     let own =
         s.gw.get(&format!(
@@ -107,7 +107,7 @@ async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<()
             child["session_id"].as_str().unwrap()
         ))
         .await?;
-    assert_eq!(own.data()["status"], "delivered");
+    assert_eq!(own.data()["status"], "failed");
     assert_eq!(own.data()["latest_turn"]["delivery_state"], "delivered");
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let status: String = db
@@ -127,7 +127,7 @@ async fn delivered_steward_result_is_success_with_unfinished_work() -> Result<()
     Ok(())
 }
 
-pub(super) async fn unfinished_disposition_delivers_failure() -> Result<(), HarnessError> {
+pub(super) async fn unfinished_disposition_recovers_in_child() -> Result<(), HarnessError> {
     use std::sync::atomic::Ordering;
     let (url, script, server) = stub::start().await?;
     script.open_disposition.store(true, Ordering::SeqCst);
@@ -153,17 +153,22 @@ pub(super) async fn unfinished_disposition_delivers_failure() -> Result<(), Harn
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     };
-    assert_eq!(child["result"]["status"], "failed", "{child}");
+    assert_eq!(child["result"]["status"], "success", "{child}");
+    let requests = script.requests.lock().unwrap().clone();
+    let correction = requests
+        .iter()
+        .find(|r| r.to_string().contains("occurred 5 times"))
+        .unwrap();
+    assert!(correction.to_string().contains("Current Work:"));
+    assert!(correction.to_string().contains("record_work_disposition"));
     assert!(
-        child["result"]["summary"]
-            .as_str()
-            .unwrap()
-            .contains("could not complete")
+        requests
+            .iter()
+            .filter(|r| r.to_string().contains("Delegated result"))
+            .all(|r| !r.to_string().contains("occurred 5 times")),
+        "child counts leaked to parent"
     );
-    assert_eq!(
-        child["approved_plan_completed"], 1,
-        "Unfinished actions remain unfinished"
-    );
+    assert_eq!(child["approved_plan_completed"], 2);
     loop {
         let messages = s.gw.messages("general").await?;
         if messages.iter().any(|message| {
@@ -415,8 +420,7 @@ fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     }
     Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", "0"))
+        .env("BUTLER_CODEX_BASE_URL", url))
 }
 
 async fn assert_sidebar_work(

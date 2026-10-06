@@ -45,7 +45,7 @@ const LOAD_PROBE = `(async () => {
     pretendardLoaded: [...document.fonts].filter((face) => face.family.includes("Pretendard Variable") && face.status === "loaded").length,
     // One Pretendard file covers Latin and Hangul; the probes below verify
     // Hangul rendering for both locales.
-    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "Butler 버틀러" : "Butler"),
+    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "Butler 설정" : "Butler"),
   };
 })()`;
 
@@ -58,11 +58,11 @@ const PROBE_NODES = `(async () => {
     node.textContent = text;
     document.body.append(node);
   };
-  make("font-probe-text", "var(--font-body)", "Butler settings 버틀러 설정");
+  make("font-probe-text", "var(--font-body)", "Butler settings Butler 설정");
   make("font-probe-code", "var(--font-family-code)", "const value = 1;");
   make("font-probe-code-hangul", "var(--font-family-code)", "한글");
   await Promise.all([
-    document.fonts.load('14px "Pretendard Variable"', "Butler 버틀러 설정 한글"),
+    document.fonts.load('14px "Pretendard Variable"', "Butler 설정 설정 한글"),
     document.fonts.load('13px "IBM Plex Mono"', "const value = 1;"),
   ]);
   await document.fonts.ready;

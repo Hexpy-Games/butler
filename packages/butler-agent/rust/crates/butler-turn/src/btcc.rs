@@ -25,6 +25,9 @@ mod progress;
 mod project_plan;
 pub mod storage;
 mod subsessions;
+mod task_graph_identity;
+pub use storage::{TaskGraphChildRecord, TaskGraphPlanRecord, TaskGraphRecords, TaskGraphScope};
+pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
 mod work;
 
@@ -72,10 +75,10 @@ pub use agent_loop::{
     ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
     ContextRebase, ExactResultReplaySelection, FinalSynthesis, GuidedActivityBinding,
-    GuidedActivitySnapshot, GuidedInvocation, GuidedPolicyDependencies, GuidedPresentation,
-    GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase,
-    ModelRoundError, ModelRoundMessage, ModelRoundObserver, ModelRoundPort, ModelRoundRequest,
-    ModelRoundResult, ModelRoundRole, ModelRoundTool, ModelRoundToolCall,
+    GuidedActivitySnapshot, GuidedHookBinding, GuidedInvocation, GuidedPolicyDependencies,
+    GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart, JournalCloseout,
+    JournalPort, LoopPhase, ModelRoundError, ModelRoundMessage, ModelRoundObserver, ModelRoundPort,
+    ModelRoundRequest, ModelRoundResult, ModelRoundRole, ModelRoundTool, ModelRoundToolCall,
     OperationResultMessageReferences, OperationResultReplayFactory, OperationResultRuntime,
     OperationResultRuntimeFactory, OperationResultScope, PendingTool, ProductionAgentLoop,
     PromptImages, PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
@@ -146,7 +149,8 @@ pub use storage::{
     StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
-    bootstrap_fresh_storage, read_activated_storage_manifest,
+    begin_storage_startup, bootstrap_fresh_storage, read_activated_storage_manifest,
+    storage_error_is_corruption, storage_scan_delay, validate_storage_background,
 };
 pub use storage::{
     ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,

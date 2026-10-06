@@ -48,7 +48,7 @@ fn data_version(db: &Connection) -> u64 {
         .unwrap()
 }
 
-fn readonly(path: &Path) -> Connection {
+fn readonly(path: &Path) -> butler_platform::sqlite::Connection {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 
@@ -111,7 +111,7 @@ fn catchup_message_cursor(graph: &Path) -> Option<String> {
         .unwrap()
 }
 
-fn catchup_checkpoint_current(data: &Path, graph: &Path) -> bool {
+pub(super) fn catchup_checkpoint_current(data: &Path, graph: &Path) -> bool {
     let source = readonly(&data.join("runtime/conversation-store.sqlite"));
     let (revision, identity): (String, String) = source
         .query_row(

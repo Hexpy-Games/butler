@@ -48,7 +48,9 @@ pub(super) fn coordinator_path(path: &Path) -> PathBuf {
     PathBuf::from(value)
 }
 
-pub(super) fn open_readwrite(path: &Path) -> CoordinationResult<Connection> {
+pub(super) fn open_readwrite(
+    path: &Path,
+) -> CoordinationResult<butler_platform::sqlite::Connection> {
     let connection =
         sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(sqlite_error)?;
     connection

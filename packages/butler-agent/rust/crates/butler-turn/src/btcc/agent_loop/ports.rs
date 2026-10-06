@@ -184,6 +184,22 @@ pub trait ProviderIdentityObserver: Send + Sync {
 }
 
 pub(crate) trait GuidedPolicyPort: Send + Sync {
+    /// Underlying native/MCP identity behind a progressive call.
+    fn hook_tool_name<'a>(&self, call: &'a ModelRoundToolCall) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::Borrowed(&call.name)
+    }
+    /// Full arguments of that underlying call.
+    fn hook_tool_input<'a>(
+        &self,
+        call: &'a ModelRoundToolCall,
+    ) -> &'a serde_json::Map<String, serde_json::Value> {
+        &call.arguments
+    }
+
+    fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
+        None
+    }
+
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy>;
 
     fn before_model_round<'a>(

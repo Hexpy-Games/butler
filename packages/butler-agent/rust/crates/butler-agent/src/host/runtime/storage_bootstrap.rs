@@ -4,7 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use butler_turn::btcc::{StorageError, bootstrap_fresh_storage, read_activated_storage_manifest};
+use butler_turn::btcc::{StorageError, begin_storage_startup, bootstrap_fresh_storage};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FreshStorageBootstrap {
@@ -71,8 +71,7 @@ pub(crate) fn prepare_btcc_storage(
 ) -> Result<FreshStorageBootstrap, FreshStorageError> {
     let path = butler_data.join("agent-runtime/btcc.sqlite");
     if path.exists() {
-        let manifest_id =
-            read_activated_storage_manifest(&path).map_err(FreshStorageError::Storage)?;
+        let manifest_id = begin_storage_startup(&path).map_err(FreshStorageError::Storage)?;
         return Ok(FreshStorageBootstrap { path, manifest_id });
     }
     prepare_fresh_btcc_storage(butler_data, runtime_version)

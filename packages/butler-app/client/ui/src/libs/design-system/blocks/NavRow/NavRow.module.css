@@ -206,18 +206,25 @@
 }
 
 @media (width <= 640px) {
-  .multiline:has(.meta) > .controlRegion {
+  .multiline:has(.meta)
+    > .controlRegion:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     height: calc(var(--font-size-4) * 1.5);
   }
-  .multiline .icon {
+  .multiline .icon:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--font-size-4);
   }
-  .compactHiddenActions {
+  .compactHiddenActions:not(
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ) {
     visibility: hidden;
     pointer-events: none;
   }
 
-  .label {
+  .label:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--font-size-4);
   }
 }

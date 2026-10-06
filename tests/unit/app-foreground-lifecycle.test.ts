@@ -208,10 +208,12 @@ describe("App foreground lifecycle", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  // test-category: format-pin
   test("persists redacted startup progress", () => {
     const root = mkdtempSync(join(tmpdir(), "butler-foreground-progress-"));
     const progress = writeAppForegroundStartupProgress(root, {
       stage: "agent ready:C:\\secret",
+      timings: [{ stage: "splash_shown", elapsed_ms: 123.456, timestamp_ms: 1_800_000_000_000 }],
       platform: "win32",
       architecture: "x64",
       lifecycleMode: "app-foreground",
@@ -221,6 +223,7 @@ describe("App foreground lifecycle", () => {
     }, () => new Date("2026-07-15T00:00:00Z"));
     expect(progress).toMatchObject({
       stage: "agent_ready_C__secret",
+      timings: [{ stage: "splash_shown", elapsed_ms: 123.456, timestamp_ms: 1_800_000_000_000 }],
       agent_phase: "running",
       tray_ready: true,
       raw_text_included: false,

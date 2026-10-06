@@ -53,19 +53,9 @@ pub(super) async fn reject_tools(
         )
         .await?;
     }
-    if state.automatic_continuations >= 3 {
-        return finish_limit(
-            input,
-            state,
-            "the final-report correction limit was reached",
-        )
-        .await
-        .map(Step::finished)
-        .map(Some);
-    }
-    state.automatic_continuations += 1;
+    let observation = state.feedback("Final report only: tool execution is closed. Use the recorded evidence and provide the final answer without tool calls.");
     state.messages.push(ModelRoundMessage::user(
-        "Final report only: tool execution is closed. Use the recorded evidence and provide the final answer without tool calls.".into(),
+        observation,
         Some("final_report_policy".into()),
     ));
     Ok(Some(Step::Continue))

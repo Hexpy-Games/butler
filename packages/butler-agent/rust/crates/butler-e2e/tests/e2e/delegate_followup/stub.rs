@@ -5,22 +5,27 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     fmt::Write,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tokio::sync::Notify;
 
-pub(super) const OWNER: &str = "AI 연구를 조사해 주세요.";
-pub(super) const FOLLOWUP: &str = "다시 조사해줄래?";
+pub(crate) const OWNER: &str = "AI 연구를 조사해 주세요.";
+pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
     pub held: Notify,
     pub release: Notify,
+    pub failing: AtomicBool,
+    pub duplicate: AtomicBool,
     stopped: bool,
 }
-pub(super) async fn start(
+pub(crate) async fn start(
     stopped: bool,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -75,7 +80,28 @@ async fn reply(
     }
     let replay: Value = serde_json::from_str(include_str!("replay.json")).unwrap();
     let items = replay[kind].as_array().unwrap();
-    let template = &items[step.min(items.len() - 1)];
+    let mut template = items[step.min(items.len() - 1)].clone();
+    if script.failing.load(Ordering::SeqCst) {
+        if child {
+            template = match step {
+                2..=5 => {
+                    let arguments = if step % 2 == 0 {
+                        json!({"alpha":1,"beta":{"left":1,"right":2}})
+                    } else {
+                        json!({"beta":{"right":2,"left":1},"alpha":1})
+                    };
+                    json!({"type":"function_call","name":"read_file","arguments":arguments})
+                }
+                6 => json!({"type":"function_call","name":"record_work_disposition","arguments":{
+                    "work_id":"{{WORK}}","disposition":"blocked","summary":"Source requires owner credentials",
+                    "action_updates":[],"remaining_actions":["research"],"next_condition":"Owner supplies source credentials","followups":[]}}),
+                7.. => json!({"type":"message","text":"Source requires owner credentials"}),
+                _ => template,
+            };
+        } else if kind == "followup" && template["name"] == "delegate_to_steward" {
+            template["arguments"]["request"] = OWNER.into();
+        }
+    }
     let id = if template["name"] == "delegate_to_steward" {
         "delegate".into()
     } else {
@@ -91,6 +117,14 @@ async fn reply(
         json!({"type":"function_call","id":id,"call_id":id,"name":template["name"],"arguments":template["arguments"].to_string(),"status":"completed"})
     } else {
         message(template["text"].as_str().unwrap())
+    };
+    let item = if script.duplicate.load(Ordering::SeqCst) && kind == "parent" && step == 3 {
+        let mut duplicate = item.clone();
+        duplicate["id"] = "duplicate-delegate".into();
+        duplicate["call_id"] = "duplicate-delegate".into();
+        json!([item, duplicate])
+    } else {
+        item
     };
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
@@ -114,7 +148,11 @@ fn message(text: &str) -> Value {
 }
 
 fn wire(item: Value) -> String {
-    let items = if item["call_id"] == "delegate" {
+    let items = if let Some(batch) = item.as_array() {
+        let mut items = vec![message("이전 결과를 바탕으로 다시 조사하겠습니다.")];
+        items.extend(batch.iter().cloned());
+        items
+    } else if item["call_id"] == "delegate" {
         vec![message("이전 결과를 바탕으로 다시 조사하겠습니다."), item]
     } else {
         vec![item]

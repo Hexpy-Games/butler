@@ -48,6 +48,8 @@ export type CookieJar = {
 export type NativeAppServerHandle = {
   url: string;
   port: number;
+  /** Owned gateway PID for native resource measurements. */
+  pid: number;
   butlerData: string;
   stubModelCalls: StubModelRequest[];
   /** The gateway's local bearer token (read from the temp BUTLER_DATA). */
@@ -217,6 +219,28 @@ export async function freePort(): Promise<number> {
   });
 }
 
+/** A gateway fixture needs both its API port and adjacent content port. */
+export async function freeGatewayPort(): Promise<number> {
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const port = 20_000 + 2 * Math.floor(Math.random() * 6_000);
+    const sockets = [createNetServer(), createNetServer()];
+    try {
+      for (const [index, socket] of sockets.entries()) {
+        await new Promise<void>((done, fail) => {
+          socket.once("error", fail);
+          socket.listen(port + index, "127.0.0.1", done);
+        });
+      }
+      return port;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+    } finally {
+      await Promise.all(sockets.filter(socket => socket.listening).map(socket => new Promise<void>(done => socket.close(() => done()))));
+    }
+  }
+  throw new Error("No gateway fixture port pair available");
+}
+
 export const LOCAL_AUTH_FILE = "app/runtime/auth/local-agent-auth.json";
 
 /** The bearer token the gateway keeps in its data folder, once it exists. */
@@ -257,7 +281,7 @@ async function completeAppOnboarding(url: string, token: string): Promise<void> 
   });
 }
 
-async function startStubModel(
+export async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
   toolReply?: NativeAppServerOptions["stubToolCall"],
@@ -332,7 +356,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     }, null, 2)}\n`);
   }
 
-  const port = await freePort();
+  const port = await freeGatewayPort();
   const gateway = spawnTrackedProcess(
     join(installation, "bin/butler-agent"),
     ["--installation-root", installation, "--resource-root", resources],
@@ -412,6 +436,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     },
     url,
     port,
+    pid: gateway.pid,
     butlerData,
     stubModelCalls,
     token: token!,

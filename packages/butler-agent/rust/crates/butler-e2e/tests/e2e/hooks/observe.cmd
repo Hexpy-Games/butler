@@ -1,0 +1,2 @@
+@echo off
+powershell.exe -NoProfile -Command "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; $body = [Console]::In.ReadToEnd(); Add-Content -Encoding UTF8 -LiteralPath $env:HOOK_OUTPUT -Value $body; if ($env:BUTLER_HOOK_EVENT -eq 'Stop' -and $env:HOOK_STOP_ONCE -and !(Test-Path -LiteralPath $env:HOOK_STOP_ONCE)) { New-Item -ItemType File -Path $env:HOOK_STOP_ONCE | Out-Null; [Console]::Write((@{decision='deny';reason='Continue once'} | ConvertTo-Json -Compress)) }"

@@ -1,3 +1,4 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useId, useState } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
@@ -5,7 +6,7 @@ import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { AppInfoView, SettingsView } from "@/app/types.ts";
-import { KeyValueRow, SettingsField, Switch, Typo } from "@/butler-ds";
+import { InlineReference, KeyValueRow, SettingsField, Switch, Typo } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { OpenSourceLicenses } from "./OpenSourceLicenses";
 
@@ -92,8 +93,8 @@ export function AboutSettings() {
           data-test-class="about-app-repository"
           label={fields.appRepository}
           value={info?.repository_url ? (
-            <Typo.Body as="span" tone="primary" wrap="anywhere">
-              <a href={info.repository_url}>{info.repository_url}</a>
+            <Typo.Body as="span" tone="primary">
+              <InlineReference kind="external" href={info.repository_url} iconSrc={faviconSrc(info.repository_url)}>{repositoryLabel(info.repository_url)}</InlineReference>
             </Typo.Body>
           ) : "-"}
         />
@@ -124,4 +125,9 @@ export function AboutSettings() {
       </SettingsSection>
     </SettingsPage>
   );
+}
+
+function repositoryLabel(href: string): string {
+  const url = new URL(href);
+  return url.pathname.replace(/^\/+|\/+$/gu, "") || url.hostname;
 }

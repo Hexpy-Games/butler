@@ -1,6 +1,7 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { PageContainer } from "../../components/PageContainer";
+import { Box } from "../../components/Box";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
@@ -134,10 +135,14 @@ export function SetupWizardContent({
   width = "default",
   surface,
 }: SetupWizardContentProps) {
+  const body = <Stack gap="lg">{children}</Stack>;
   return (
-    <Stack className={dsClass(styles.content)} data-width={width} data-surface={surface} data-test-class="setup-wizard-content" gap="lg">
-      {children}
-    </Stack>
+    <Box surface={surface === "solid" ? "raised-opaque" : undefined}
+      elevation={surface === "solid" ? "card" : undefined} border={surface === "solid" ? "hairline" : undefined}
+      radius={surface === "solid" ? "panel" : undefined} padding={surface === "solid" ? "lg" : undefined}
+      className={dsClass(styles.content)} data-width={width} data-test-class="setup-wizard-content">
+      {body}
+    </Box>
   );
 }
 

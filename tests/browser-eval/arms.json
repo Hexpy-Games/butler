@@ -1,0 +1,58 @@
+{
+  "model": "openai/gpt-6-luna",
+  "liveCalls": false,
+  "arms": [
+    {
+      "id": "A0",
+      "observation": "raw-a11y",
+      "actions": [
+        "refs"
+      ],
+      "textOnly": true,
+      "pointVerification": null,
+      "status": "implemented-l1"
+    },
+    {
+      "id": "A1",
+      "observation": "hit-tested",
+      "actions": [
+        "refs",
+        "grid-refs"
+      ],
+      "textOnly": true,
+      "pointVerification": true,
+      "status": "pending-P2a"
+    },
+    {
+      "id": "A2",
+      "observation": "hit-tested+som",
+      "actions": [
+        "refs"
+      ],
+      "textOnly": false,
+      "pointVerification": true,
+      "status": "pending-P2a"
+    },
+    {
+      "id": "A3",
+      "observation": "hit-tested+som+zoom",
+      "actions": [
+        "refs",
+        "points"
+      ],
+      "textOnly": false,
+      "pointVerification": true,
+      "status": "pending-P2a"
+    },
+    {
+      "id": "A4",
+      "observation": "screenshot",
+      "actions": [
+        "points"
+      ],
+      "textOnly": false,
+      "pointVerification": false,
+      "status": "pending-P2a"
+    }
+  ]
+}

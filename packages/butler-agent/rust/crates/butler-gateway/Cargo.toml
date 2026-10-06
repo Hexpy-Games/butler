@@ -24,6 +24,7 @@ bytes.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 http-body-util.workspace = true
@@ -38,7 +39,7 @@ rusqlite.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
+tokio-util = { workspace = true, features = ["io"] }
 tz-rs.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true

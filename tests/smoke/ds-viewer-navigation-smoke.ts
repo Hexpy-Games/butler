@@ -1,3 +1,4 @@
+import { judgeWallpaperScreenshot } from "../support/wallpaper-paint.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 
 // DS Viewer deep links (page/theme/locale/width/motion, #anchors), toolbar URL writes, "/" filter and Cmd+K palette.
 // The Overview hero's fluid background follows the chrome theme it sits in (every viewer theme, both system
-// schemes), live when the hero's theme toggle flips, and its pixels are dark in dark and light in light.
+// schemes), live when the hero's theme toggle flips, and its completed frame uses the matching tone.
 // The Wallpaper draws on its main canvas; a hidden sibling canvas only holds crossfades, so probes target the main one.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
@@ -181,63 +182,18 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
   assert(param(page, "page") === "blocks", `${label}: sidebar navigation did not write the page param`);
 }
 
-type HeroState = { chrome: string | undefined; tone: string | null; luminance: number | null };
-
-async function heroState(page: Page): Promise<HeroState> {
-  const meta = await page.evaluate(() => {
+async function assertHero(page: Page, label: string, timeoutMs = 10_000): Promise<void> {
+  await page.waitForFunction(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-ds-hero] canvas[data-test-class~="wallpaper"]');
     const chrome = document.body.className.match(/theme-(light|dark)/u)?.[1];
-    const hero = document.querySelector("[data-ds-hero]")?.getBoundingClientRect();
-    return { chrome, tone: canvas?.getAttribute("data-tone") ?? null, hero: hero ? { x: hero.x, y: hero.y, width: hero.width } : null };
-  });
-  if (!meta.tone || !meta.hero) return { chrome: meta.chrome, tone: meta.tone, luminance: null };
-  // The Wallpaper engine keeps no drawing buffer between frames (alpha off, preserveDrawingBuffer off), so its
-  // canvas reads back black. Sample the composited page instead: a strip of the hero's top padding, where only
-  // the fluid shows.
-  const png = await page.screenshot({ clip: { x: meta.hero.x + 24, y: meta.hero.y + 4, width: meta.hero.width - 48, height: 16 } });
-  const luminance = await page.evaluate(async (data) => {
-    const image = new Image();
-    image.src = `data:image/png;base64,${data}`;
-    await image.decode();
-    const probe = document.createElement("canvas");
-    probe.width = 32;
-    probe.height = 8;
-    const context = probe.getContext("2d")!;
-    context.drawImage(image, 0, 0, 32, 8);
-    const pixels = context.getImageData(0, 0, 32, 8).data;
-    let sum = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      sum += (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
-    }
-    return sum / (pixels.length / 4);
-  }, png.toString("base64"));
-  return { chrome: meta.chrome, tone: meta.tone, luminance };
-}
-
-function heroProblem(state: HeroState, label: string): string | null {
-  if (!state.chrome || state.tone !== state.chrome) return `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`;
-  if (state.luminance === null) return null;
-  const ok = state.chrome === "dark" ? state.luminance < 0.35 : state.luminance > 0.65;
-  return ok ? null : `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`;
-}
-
-/**
- * The fluid paints on its own frame loop, so the canvas can lag the tone
- * attribute by a few frames (many more on a loaded machine): poll until it
- * matches instead of sampling once after a fixed sleep.
- */
-async function assertHero(page: Page, label: string, timeoutMs = 10_000): Promise<void> {
-  const started = Date.now();
-  let state = await heroState(page);
-  // No sample yet means "not mounted yet" until the grace period ends; without
-  // WebGL the strip shows the hero's own surface, which follows the theme too.
-  while ((heroProblem(state, label) || (state.luminance === null && Date.now() - started < 2_000)) &&
-    Date.now() - started < timeoutMs) {
-    await page.waitForTimeout(100);
-    state = await heroState(page);
-  }
-  const problem = heroProblem(state, label);
-  assert(!problem, problem ?? "");
+    return canvas?.dataset.wallpaperState === "painted" && canvas.width > 0 && canvas.height > 0
+      && canvas.dataset.paintedModule === canvas.dataset.module
+      && canvas.dataset.paintedTone === chrome && canvas.dataset.tone === chrome;
+  }, undefined, { timeout: timeoutMs });
+  const selector = '[data-ds-hero] canvas[data-test-class~="wallpaper"]';
+  const module = await page.locator(selector).getAttribute("data-painted-module");
+  await judgeWallpaperScreenshot(page, selector, module!);
+  console.log(`${label}: hero first frame matches chrome theme`);
 }
 
 async function assertHeroTheme(browser: Awaited<ReturnType<typeof launchSmokeBrowser>>, baseUrl: string): Promise<void> {

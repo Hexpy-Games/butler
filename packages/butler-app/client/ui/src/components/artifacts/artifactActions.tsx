@@ -18,6 +18,7 @@ export interface ArtifactCardAction {
 export function artifactCardActions(
   artifact: SessionArtifactSummary,
 ): ArtifactCardAction[] {
+  if (artifact.kind === "web") return [];
   const url = artifactUrl(artifact);
   const title = artifact.title || artifact.safe_path_label || "artifact";
   const canUseDesktopSave =

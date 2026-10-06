@@ -51,6 +51,7 @@ function bridgeErrorEnvelope(error) {
   return {
     schema: bridgeErrorSchema,
     code,
+    ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
     ...(code === "session_cursor_resync_required"
       ? {
@@ -588,12 +589,15 @@ function writeAppUiStateCache(snapshot) {
 
 const butlerApp = Object.freeze({
   protocolVersion: "butler.app.v1",
+  signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   get serverUrl() {
     return cachedServerUrl;
   },
   platform: process.platform,
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
+  recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
+  readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),
   getAppInfo: () => ipcRenderer.invoke("butler:get-app-info"),
   setDeveloperMode: ({ enabled } = {}) =>
     ipcRenderer.invoke("butler:set-developer-mode", { enabled }),
@@ -688,6 +692,8 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/new-chat-briefing?${query}` : "/new-chat-briefing");
   },
+  cancelUpdate: () => requestJson("/updates/cancel", { method: "POST" }),
+  setUpdateProgress: (value) => ipcRenderer.invoke("butler:update-progress", value),
   getAppUpdateState: () => ipcRenderer.invoke("butler:app-update-state"),
   chooseAppUpdate: (input) => ipcRenderer.invoke("butler:app-update-choice", input),
   onAppUpdateState: (handler) => {
@@ -869,7 +875,7 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestBridgeResult("/messages", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
@@ -888,6 +894,10 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
+  getAuthorityPermissions: () => requestJson("/authority-permissions"),
+  revokeAuthorityPermissions: ({ grants } = {}) => requestJson("/authority-permissions/revoke", {
+    method: "POST", body: JSON.stringify({ grants }),
+  }),
   getAuthorityRequests: ({ sessionId } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-requests?${params.toString()}`);
@@ -926,7 +936,7 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestBridgeResult("/session-queue", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
@@ -1055,7 +1065,11 @@ const butlerApp = Object.freeze({
       ...(typeof revision === "string" && revision ? { revision } : {}),
     }),
   }),
-  listMcpServers: () => requestJson("/mcp-servers"),
+  getHooks: () => requestSecurity("getHooks"),
+  saveHooks: (body) => requestSecurity("saveHooks", body),
+  getHookRuns: () => requestSecurity("getHookRuns"),
+  testHook: (body) => requestSecurity("testHook", body),
+  listMcpServers: () => requestBridgeResult("/mcp-servers"),
   listMcpCapabilities: () => requestJson("/mcp-capabilities"),
   listSkills: () => requestJson("/skills"),
   importSkill: ({ name, bytes, projectId } = {}) => {
@@ -1067,23 +1081,23 @@ const butlerApp = Object.freeze({
         : new TextEncoder().encode(String(bytes ?? "")).buffer;
     form.set("file", new Blob([fileBytes], { type: "application/zip" }), name || "skill.zip");
     if (projectId) form.set("project_id", projectId);
-    return requestJson("/skills/import", {
+    return requestBridgeResult("/skills/import", {
       method: "POST",
       body: form,
     });
   },
-  createMcpServer: (request) => requestJson("/mcp-servers", {
+  createMcpServer: (request) => requestBridgeResult("/mcp-servers", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  updateMcpServer: ({ serverId, request } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
+  updateMcpServer: ({ serverId, request } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
     method: "PATCH",
     body: JSON.stringify(request ?? {}),
   }),
-  deleteMcpServer: ({ serverId } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
+  deleteMcpServer: ({ serverId } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}`, {
     method: "DELETE",
   }),
-  probeMcpServer: ({ serverId } = {}) => requestJson(`/mcp-servers/${encodeURIComponent(serverId ?? "")}/probe`, {
+  probeMcpServer: ({ serverId } = {}) => requestBridgeResult(`/mcp-servers/${encodeURIComponent(serverId ?? "")}/probe`, {
     method: "POST",
     body: JSON.stringify({}),
   }),
@@ -1126,15 +1140,15 @@ const butlerApp = Object.freeze({
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),
-  discoverLocalModels: (request) => requestJson("/model-catalog/local/discover", {
+  discoverLocalModels: (request) => requestBridgeResult("/model-catalog/local/discover", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  registerLocalModel: (request) => requestJson("/model-catalog/local-models", {
+  registerLocalModel: (request) => requestBridgeResult("/model-catalog/local-models", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  updateLocalModel: ({ modelRef, request } = {}) => requestJson(`/model-catalog/local-models/${encodeURIComponent(modelRef ?? "")}`, {
+  updateLocalModel: ({ modelRef, request } = {}) => requestBridgeResult(`/model-catalog/local-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "PATCH",
     body: JSON.stringify(request ?? {}),
   }),
@@ -1199,6 +1213,9 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getSessionTaskGraphs: (input) => requestTaskGraph("sessions", "task-graphs", input),
+  getPlanTaskGraph: (input) => requestTaskGraph("plans", "task-graph", input),
+  getTaskDocument: (input) => requestTaskGraph("tasks", "document", input),
   getSessionSummary: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-summary?${params.toString()}`);
@@ -1225,6 +1242,15 @@ const butlerApp = Object.freeze({
   listArtifacts: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
+  },
+  getOutputView: ({ outputId, revision } = {}) => {
+    if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");
+    const params = new URLSearchParams();
+    if (revision !== undefined) {
+      if (!Number.isSafeInteger(Number(revision)) || Number(revision) < 1) throw new Error("Invalid revision");
+      params.set("revision", String(revision));
+    }
+    return requestBridgeResult(`/outputs/${outputId}/view?${params.toString()}`);
   },
   exportTranscript: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
@@ -1329,3 +1355,28 @@ const butlerApp = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
+
+// Keep the sandboxed preload self-contained, on its existing authenticated channel.
+function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
+  const query = new URLSearchParams();
+  if (revision) query.set("revision", revision);
+  if (cursor) query.set("cursor", cursor);
+  if (limit !== undefined) query.set("limit", String(limit));
+  const suffix = query.size ? `?${query}` : "";
+  return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
+}
+const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
+contextBridge.exposeInMainWorld("butlerBrowser", {
+  call: browserCall,
+  subscribe: (handler) => {
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler-browser:state", listener);
+    browserCall("state").then(handler);
+    return () => ipcRenderer.removeListener("butler-browser:state", listener);
+  },
+  onAddress: (handler) => {
+    const listener = () => handler();
+    ipcRenderer.on("butler-browser:address", listener);
+    return () => ipcRenderer.removeListener("butler-browser:address", listener);
+  },
+});

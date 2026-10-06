@@ -240,6 +240,11 @@ export function writeAppForegroundStartupProgress(
 ) {
   const record = {
     schema: APP_FOREGROUND_STARTUP_PROGRESS_SCHEMA,
+    timings: Array.isArray(input?.timings) ? input.timings.map((event) => ({
+      stage: safeErrorCode(event.stage),
+      elapsed_ms: Number.isFinite(event.elapsed_ms) ? event.elapsed_ms : null,
+      timestamp_ms: Number.isFinite(event.timestamp_ms) ? event.timestamp_ms : null,
+    })) : [],
     stage: safeErrorCode(input?.stage) ?? "unknown",
     platform: safeString(input?.platform),
     architecture: safeString(input?.architecture),

@@ -1,6 +1,7 @@
 //! Concrete per-execution composition over the retained native domain owners.
 
 mod authority;
+mod hooks;
 mod surface;
 
 #[cfg(test)]
@@ -27,6 +28,7 @@ use crate::host::{
 
 /// All fields are process services or immutable host configuration, never Turn state.
 pub(crate) struct GuidedTurnFactoryAdapter {
+    pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
     pub preparation: GuidedPreparation,
     pub documents: BtccRepositories,
     pub effects: Arc<dyn EffectJournal>,
@@ -265,6 +267,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 },
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
+            let hooks = self.hook_binding(start.turn, &phase).await?;
             let text = Arc::new(GuidedTextState {
                 skill_catalog: self
                     .skill_catalog(phase.execution_policy.project_id.clone())
@@ -303,6 +306,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             let inputs = GuidedTurnInputs {
                 semantic,
                 dependencies: GuidedPolicyDependencies {
+                    hooks,
                     prompt,
                     authority,
                     context,
@@ -319,11 +323,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 source_revision,
                 stream_relay: Some(stream_relay),
             };
-            Ok(Box::new(BoundTurn {
-                inputs: Some(inputs),
-                progress: start.progress,
-                base: start.base,
-            }) as Box<dyn BoundGuidedTurn + 'a>)
+            Ok(bound_turn(inputs, &start))
         })
     }
 }
@@ -376,4 +376,15 @@ fn resolved_workspace(
     let path = workspace.get().map_err(|e| error(e.code()))?;
     phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
     Ok(path)
+}
+
+fn bound_turn<'a>(
+    inputs: GuidedTurnInputs,
+    start: &GuidedTurnStart<'a>,
+) -> Box<dyn BoundGuidedTurn + 'a> {
+    Box::new(BoundTurn {
+        inputs: Some(inputs),
+        progress: start.progress,
+        base: start.base,
+    })
 }

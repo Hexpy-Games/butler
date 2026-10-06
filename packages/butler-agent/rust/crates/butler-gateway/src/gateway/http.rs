@@ -1,9 +1,14 @@
 mod authority;
+mod authority_permissions;
+mod browser_host;
+mod content;
 mod start;
 pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod favicons;
+mod hooks;
 mod latency_trace;
 mod listeners;
 mod mcp_servers;
@@ -33,6 +38,7 @@ mod space_mutations;
 mod static_ui;
 mod subsession_result;
 mod subsessions;
+mod task_graphs;
 mod transcript_export;
 mod updates;
 mod wallpaper_modules;
@@ -69,6 +75,7 @@ const DEFAULT_PAGE_LIMIT: usize = 200;
 const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
 struct HttpState {
+    browser: browser_host::Hub,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
@@ -77,8 +84,10 @@ struct HttpState {
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
+    favicons: Arc<favicons::Favicons>,
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
+    output_data: Option<PathBuf>,
 }
 
 /// Who sent an authorized request (a request extension for the routes).
@@ -124,7 +133,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             payload_too_large_response()
         }
     } else {
-        match authorized_route(state, request, &origin).await {
+        match authorized_route(state.clone(), request, &origin).await {
             Ok(response) => response,
             Err(error) => {
                 if html_connect_form {
@@ -135,6 +144,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             }
         }
     };
+    content::admit_ui_frames(&state, &mut response);
     latency_trace::finish(timing, &mut response);
     security::apply_cors(&mut response, &origin);
     response
@@ -193,11 +203,24 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
+    if uri.path().starts_with("/internal/browser") {
+        return browser_host::route(state, request, &client).await;
+    }
+    if uri.path().starts_with("/__o/") {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    if uri.path().starts_with("/outputs/") {
+        return content::view(state, request).await;
+    }
     if uri.path() == "/security" || uri.path().starts_with("/security/") {
         return security_settings::route(state, request).await;
     }
+    if uri.path() == "/hooks" || uri.path().starts_with("/hooks/") {
+        return hooks::route(state, request).await;
+    }
     match (request.method(), uri.path()) {
         (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
+        (&Method::GET, "/favicons") => favicons::get(state, &uri).await,
         (&Method::GET, "/events/live") => {
             let scope = request
                 .extensions()
@@ -213,11 +236,10 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
-    if matches!(
-        uri.path(),
-        "/session-view" | "/session-summary" | "/context-details"
-    ) || uri.path().starts_with("/steward-relations/")
-    {
+    if task_graphs::matches(&uri) {
+        return task_graphs::route(state, request, &uri).await;
+    }
+    if subsessions::matches(&uri) {
         if let Some(response) = subsessions::route(state, request, &uri).await? {
             return Ok(response);
         }
@@ -283,8 +305,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/automations" || uri.path().starts_with("/automations/") {
         return automations::route(state, request, &uri).await;
     }
-    if uri.path() == "/updates" || uri.path() == "/updates/check" || uri.path() == "/updates/apply"
-    {
+    if updates::handles(uri.path()) {
         return updates::route(state, request).await;
     }
     if message_files::handles(&method, uri.path()) {

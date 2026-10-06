@@ -25,5 +25,6 @@ extern crate butler_core;
 pub mod capabilities;
 pub mod context;
 pub mod operations;
+pub mod outputs;
 pub mod skills;
 pub mod web_access;

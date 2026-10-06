@@ -90,7 +90,8 @@ float cloudAt(vec2 ps, vec2 gdir, float stretch) {
   vec2 cq = (gdir * dot(ps, gdir) / stretch + gn * dot(ps, gn)) * vec2(2.0, 2.6);
   float ang = TAU * u_time / CLOUD_PERIOD;
   cq -= vec2(cos(ang), 0.45 * sin(ang));                        // slow drift, loops in 240 s
-  return smoothstep(0.5, 0.92, vn(cq + vec2(0.0, u_seed * 50.0) + 40.0));
+  // dayClouds scales the shadows in the day grade only (1: unchanged); the night grade keeps them.
+  return mix(p_dayClouds, 1.0, Lnight) * smoothstep(0.5, 0.92, vn(cq + vec2(0.0, u_seed * 50.0) + 40.0));
 }
 
 // film look: foam, glints with halation, filmic curve, split tone, vignette, animated grain.

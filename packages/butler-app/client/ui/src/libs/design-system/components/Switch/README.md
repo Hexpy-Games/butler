@@ -21,6 +21,20 @@ import { Switch } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+### Unavailable with a reason
+
+Pass `disabledReason` (a few words, localized) when the setting cannot be
+changed right now and the user should learn why:
+
+```tsx
+<Switch id="reduce-motion" checked={system} disabledReason={copy.followsSystem} onCheckedChange={save} />
+```
+
+The switch looks disabled but stays focusable and hoverable
+(`aria-disabled="true"`, not `disabled`), ignores clicks and Space/Enter,
+and shows the reason in a `Tooltip` on hover and keyboard focus. It wins
+over `disabled`. Use plain `disabled` only when no reason is worth showing.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

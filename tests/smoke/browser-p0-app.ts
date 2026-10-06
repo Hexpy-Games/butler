@@ -35,6 +35,7 @@ export async function launchP0App({ harness = true } = {}) {
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE || resolve(process.platform === "win32" ? "packages/butler-app/client/electron/node_modules/electron/dist/electron.exe" : "packages/butler-app/client/electron/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron");
   const args = smokeElectronArgs();
+  if (harness && process.env.BUTLER_P0_CRASH_LIMIT === "off") args.push("--disable-gpu-process-crash-limit");
   assert(!args.includes("--single-process"), "P0 needs independent GPU and renderer processes");
   const child = spawn(executable, [resolve("packages/butler-app/client/electron"), `--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...args], { env: {
     ...process.env, HOME: home, USERPROFILE: home, BUTLER_DATA: data, CODEX_HOME: join(home, ".codex"), TMPDIR: dir, TEMP: dir, TMP: dir,
@@ -43,8 +44,15 @@ export async function launchP0App({ harness = true } = {}) {
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
     BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
-  const logs: string[] = [];
-  child.stdout!.on("data", value => logs.push(String(value))); child.stderr!.on("data", value => logs.push(String(value)));
+  let logBytes = 0, logTail = "", watchdogTimeout = false, machRendezvous = false;
+  const observeLog = (value: Buffer) => {
+    logBytes += value.length;
+    const text = logTail + String(value);
+    watchdogTimeout ||= /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(text);
+    machRendezvous ||= /Mach|rendezvous/iu.test(text);
+    logTail = text.slice(-4096);
+  };
+  child.stdout!.on("data", observeLog); child.stderr!.on("data", observeLog);
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   let main: Awaited<ReturnType<typeof mainInspector>> | undefined;
   async function stop() {
@@ -71,10 +79,10 @@ export async function launchP0App({ harness = true } = {}) {
     await page.expression(`window.butlerApp.updateSettings(${JSON.stringify({ language: "ko", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: at, completed_at: at }, wallpaper: { source: { kind: "live", module: "butler.silk", params: {}, paramsDark: {} }, motion: "auto", pauseOnBattery: false } })})`);
     await page.reload();
     await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="workspace"]')));
-    return { dir, data, page, main, child, stop };
+    return { dir, data, page, main, child, stop, watchdogEvidence: () => ({ timeoutLog: watchdogTimeout, logBytesWithheld: logBytes }) };
   } catch (error) {
     // Logs can include bearer-bearing URLs: do not print raw App logs.
-    await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logs.join("").length} log bytes withheld; Mach rendezvous=${/Mach|rendezvous/iu.test(logs.join(""))}`, { cause: error });
+    await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logBytes} log bytes withheld; Mach rendezvous=${machRendezvous}`, { cause: error });
   }
 }
 

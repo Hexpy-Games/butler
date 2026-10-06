@@ -167,7 +167,10 @@
    the safe area. It drops in from above; reduced motion zeroes the travel
    token, so it only fades. */
 @media (width <= 640px) {
-  .content[data-motion="palette"] {
+  .content[data-motion="palette"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     top: 0;
     left: 0;
     width: 100%;
@@ -179,12 +182,18 @@
     transform: none;
   }
 
-  .content[data-motion="palette"][data-state="open"] {
+  .content[data-motion="palette"][data-state="open"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     animation: palette-sheet-enter var(--motion-slow)
       var(--motion-ease-emphasized);
   }
 
-  .content[data-motion="palette"][data-state="closed"] {
+  .content[data-motion="palette"][data-state="closed"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     animation: palette-sheet-exit var(--motion-exit-fast)
       var(--motion-ease-accelerate) forwards;
   }

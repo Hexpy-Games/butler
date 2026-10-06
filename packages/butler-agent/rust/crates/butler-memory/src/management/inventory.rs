@@ -1,6 +1,6 @@
 use super::{MemoryCard, MemoryInventory, measurement::files};
 use crate::cognition::CognitionPathEnvironment;
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 use std::{io, path::Path};
 use tokio_util::sync::CancellationToken;
@@ -98,7 +98,7 @@ pub(super) fn measure(
     Ok(result)
 }
 
-fn open(path: &Path) -> io::Result<Connection> {
+fn open(path: &Path) -> io::Result<butler_platform::sqlite::Connection> {
     butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(io::Error::other)
 }

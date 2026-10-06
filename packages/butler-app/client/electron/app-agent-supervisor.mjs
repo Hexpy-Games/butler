@@ -494,7 +494,7 @@ export function createBundledAgentSupervisor({
     await ensureReady();
   }
 
-  async function stop({ wait = false, reason = "stop" } = {}) {
+  async function stop({ wait = false, reason = "stop", preserveWork = false } = {}) {
     cancelRestartWait();
     cancelPollTick();
     respawning = false;
@@ -512,15 +512,27 @@ export function createBundledAgentSupervisor({
     }
     phase = "stopping";
     const stopping = child;
+    // Subscribe before delivering a stop: EOF can produce an immediate exit.
+    const exited = wait ? new Promise((resolve) => stopping.once("exit", (code, signal) => resolve({ code, signal }))) : null;
     const intent = recordAppStopIntent(stopping, reason);
-    // TODO(#223): on Windows, child.kill() terminates the Agent without a clean
-    // exit. Stop it with `butler-agent service stop --requested-by app` there.
-    if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
-    shutdownKillTimer = setKillTimer(() => {
-      if (child === stopping) stopping.kill("SIGKILL");
-    }, killTimeoutMs);
+    if (preserveWork) {
+      if (!activeGateway?.foregroundHost || !stopping.stdin?.writable) {
+        throw new Error("foreground_graceful_stop_unavailable");
+      }
+      // EOF is the portable App-owned graceful request. Windows kill() is not.
+      stopping.stdin.end();
+    } else {
+      // Non-Quit controllers retain their existing signal/deadline policy.
+      if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
+      shutdownKillTimer = setKillTimer(() => {
+        if (child === stopping) stopping.kill("SIGKILL");
+      }, killTimeoutMs);
+    }
     if (wait) {
-      await new Promise((resolve) => stopping.once("exit", resolve));
+      const exit = await exited;
+      if (preserveWork && (exit.code !== 0 || exit.signal !== null)) {
+        throw new Error("foreground_shutdown_failed");
+      }
       if (child === null) phase = "stopped";
     }
     return {

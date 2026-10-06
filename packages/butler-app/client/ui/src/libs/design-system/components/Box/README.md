@@ -9,7 +9,8 @@ Box is the single-surface primitive: padding, radius, background surface and bor
 | --- | --- |
 | `padding`, `paddingX`, `paddingY` | `none`, `xs`, `sm`, `md`, `lg`, `xl`, `2xl` (`--space-*`) |
 | `radius` | `none`, `control`, `panel`, `popover`, `pill` (`--radius-*`) |
-| `surface` | `none`, `base` (`--surface`), `raised`, `overlay`, `muted` |
+| `surface` | `none`, `base` (`--surface`), `raised`, `raised-opaque` (`--color-surface-raised-opaque`), `overlay`, `muted` |
+| `elevation` | `none`, `card` (`--shadow-card`) |
 | `border` | `none`, `hairline` (`--border-hairline` + `--line`), `strong` (`--border-width-strong` + `--line-strong`) |
 | `as` | `div`, `section`, `article`, `aside`, `header`, `footer`, `span`, `li` |
 
@@ -27,7 +28,9 @@ import { Box, Stack } from "@/butler-ds";
 
 ## Best practice
 - Put layout (gap, direction) on a Stack inside the Box; Box only owns the surface.
-- Use Card or SurfacePanel when you need their elevation or interaction states.
+- Use Card or SurfacePanel when you need their interaction states.
+- A solid card above decorative art (setup wizard, lifecycle windows) is
+  `surface="raised-opaque" elevation="card" border="hairline" radius="panel" padding="lg"`.
 
 ## Wrong use cases
 - Box has no `tone`; use `Notice` or `Tag` for status color.

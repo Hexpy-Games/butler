@@ -2,6 +2,7 @@
 
 mod admission;
 mod admission_identity;
+mod authority_permissions;
 mod automations;
 mod briefing_snapshot;
 mod context_details;
@@ -21,6 +22,7 @@ mod gateway_impl;
 mod gateway_mutations;
 mod gateway_session_controls_impl;
 mod handle;
+mod hooks;
 mod internal_continuation;
 mod mcp_servers;
 mod memory_management;
@@ -34,6 +36,7 @@ mod operation_output;
 mod panic_isolation;
 mod personalization;
 pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
+mod outputs;
 mod plan_decisions;
 mod progress_view;
 mod project_sources;
@@ -60,6 +63,10 @@ mod sessions;
 mod settings;
 mod setup;
 mod subsession_events;
+mod task_graphs;
+pub use task_graphs::{
+    project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
+};
 mod turn_dispatch;
 pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
@@ -300,6 +307,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {
             let _ = self.close().await;
             return Err(error);
@@ -400,26 +408,6 @@ impl AppApplication {
         self.dependencies.updates.close();
     }
 
-    async fn message_page(
-        &self,
-        chat_id: String,
-        cursor: f64,
-        limit: usize,
-    ) -> Result<super::MessageListView, GatewayApplicationError> {
-        self.storage
-            .read(move |db| read_model::list_messages(db, &chat_id, cursor, limit))
-            .await
-            .map_err(app_error)
-    }
-    async fn artifact_page(
-        &self,
-        session_id: String,
-    ) -> Result<Vec<super::SessionArtifactSummary>, GatewayApplicationError> {
-        self.storage
-            .read(move |db| read_model::list_artifacts(db, &session_id))
-            .await
-            .map_err(app_error)
-    }
     async fn queue_page(
         &self,
         session_id: String,

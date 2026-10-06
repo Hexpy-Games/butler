@@ -189,7 +189,12 @@ function readMemoryState() {
 }
 
 async function oneClickLaunch() {
-  run(join(release, `ButlerSetup-${from}-x64.exe`), []);
+  const installer = join(release, `ButlerSetup-${from}-x64.exe`);
+  assert.equal(digest(installer), readFileSync(installer + ".sha256", "utf8").trim().split(/\s+/u)[0], "Baseline installer checksum");
+  run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+    resolve("packages/butler-agent/rust/crates/butler-platform/scripts/capture-installer.ps1"),
+    "-Setup", join(release, `ButlerSetup-${from}-x64.exe`),
+    "-Output", resolve("dist/startup-installer-evidence/install")]);
   await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
   page = await electronPage(debugPort);
   await proof(from);

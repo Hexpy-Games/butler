@@ -1,3 +1,4 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -9,7 +10,7 @@ import {
   ArtifactPreviewImage,
   ArtifactPreviewPre,
   Button,
-  MarkdownContent,
+  MarkdownContent, MarkdownLink,
   PanelHeader,
   Stack,
   Typo,
@@ -27,18 +28,10 @@ import {
   artifactMeta,
   artifactPreviewMode,
 } from "./artifactDisplay";
+import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
 
-const MARKDOWN_COMPONENTS: Components = {
-  a({ href, children, node: _node, ...props }) {
-    if (!href) return <span>{children}</span>;
-    return (
-      <a {...props} href={href} rel="noreferrer" target="_blank">
-        {children}
-      </a>
-    );
-  },
-};
+const MARKDOWN_COMPONENTS: Components = { a: MarkdownLink };
 
 export function ArtifactViewer({
   artifact,
@@ -83,7 +76,7 @@ export function ArtifactViewer({
         title={artifact.title}
       />}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {renderPreview({ mode, state, text, title: artifact.title, file })}
+        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );
@@ -121,7 +114,7 @@ function renderPreview(input: {
   }
   if (input.mode === "markdown") {
     return (
-      <MarkdownContent>
+      <MarkdownContent faviconSrc={faviconSrc}>
         <ReactMarkdown
           components={MARKDOWN_COMPONENTS}
           remarkPlugins={[remarkGfm]}

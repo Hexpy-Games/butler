@@ -39,6 +39,7 @@ export * from "./components/Select";
 export * from "./components/Separator";
 export * from "./components/Skeleton";
 export { Spinner, type SpinnerProps } from "./components/Spinner";
+export * from "./components/ProgressRing";
 export { SuccessCheck, type SuccessCheckProps } from "./components/SuccessCheck";
 export { LoadingIndicator, type LoadingIndicatorProps, type LoadingIndicatorState } from "./components/LoadingIndicator";
 export * from "./components/ButlerThinkingMark";
@@ -147,6 +148,17 @@ export * from "./blocks/ActivityStrip";
 export * from "./blocks/KanbanBoard";
 export * from "./blocks/SplitBrowser";
 export * from "./blocks/StatusCapsule";
+export * from "./blocks/TabStrip";
+export * from "./blocks/NativeViewSlot";
 
 export * from "./blocks/ComposerQuestionPanel";
 export * from "./blocks/QuestionAnswerCard";
+
+export * from "./blocks/TaskGraphCard";
+export * from "./blocks/TaskGraphCanvas";
+export * from "./blocks/TaskGraphLanes";
+export * from "./blocks/TaskGraphSection";
+export * from "./blocks/TaskGraphDetail";
+export { desktopViewportScope } from "./lib/desktopViewport";
+
+export { WallpaperStage } from "./blocks/WallpaperStage";

@@ -79,6 +79,16 @@ impl GatewaySecurityStore for AppSecurityStore {
                         .collect(),
                 ),
             );
+            patch.insert(
+                "contentHosts".into(),
+                Value::Array(
+                    exposure
+                        .content_hosts
+                        .into_iter()
+                        .map(Value::String)
+                        .collect(),
+                ),
+            );
             crate::host::cli::gateway::patch_app_config(&data_root, &installation, patch)
                 .await
                 .map_err(|error| {

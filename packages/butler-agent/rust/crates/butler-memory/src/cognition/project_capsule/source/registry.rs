@@ -1,7 +1,7 @@
 //! Read the App's canonical project identities without creating or migrating its DB.
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
@@ -19,7 +19,7 @@ pub(super) fn app_entries(
         return Ok(Vec::new());
     }
     let read = || -> rusqlite::Result<Vec<ProjectRegistryEntry>> {
-        let db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let db = butler_platform::sqlite::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let mut statement = db.prepare(
             "SELECT id,display_name,workspace_path FROM projects WHERE archived=0 ORDER BY id",
         )?;

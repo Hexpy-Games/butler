@@ -35,7 +35,7 @@ pub(super) async fn start_with_config(
     config: GatewayConfig,
 ) -> GatewayServer {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    serve_gateway(listener, application, config).unwrap()
+    serve_gateway(listener, application, config).await.unwrap()
 }
 
 type EventListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
@@ -285,6 +285,15 @@ impl GatewayApplication for TestApplication {
         Box::pin(async { Ok(message_result()) })
     }
 
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn authority_revoke_permissions(
+        &self,
+        _: Vec<crate::gateway::AppGrantRef>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn authority_list(&self, _: String) -> ApplicationFuture<AppAuthorityPage> {
         Box::pin(async {
             Ok(AppAuthorityPage {

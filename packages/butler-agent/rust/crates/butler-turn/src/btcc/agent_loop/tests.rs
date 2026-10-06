@@ -20,6 +20,7 @@ async fn guided_constructor_runs_real_policy_and_scoped_progress() {
         "btcc-model-round-1:retry:3".into();
     let fixture = Fixture::new([tool_round, final_round]);
     let dependencies = GuidedPolicyDependencies {
+        hooks: None,
         prompt: fixture.clone(),
         authority: fixture.clone(),
         context: fixture.clone(),

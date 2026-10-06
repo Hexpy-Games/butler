@@ -5,10 +5,10 @@ import { ArchivesSettings } from "./ArchivesSettings";
 import { DeveloperLogsSettings } from "./DeveloperLogsSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { MemorySettings } from "./MemorySettings";
+import { HooksSettings } from "./HooksSettings";
 import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
-import { PrivacySettings } from "./PrivacySettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { ServerSettings } from "./ServerSettings";
 import { SkillsSettings } from "./SkillsSettings";
@@ -31,13 +31,13 @@ export function SettingsDetailContent({
       {activeSection === "appearance" && <AppearanceSettings />}
       {activeSection === "server" && <ServerSettings />}
       {activeSection === "updates" && <UpdatesSettings />}
+      {activeSection === "hooks" && <HooksSettings />}
       {activeSection === "mcp" && <McpSettings />}
       {activeSection === "skills" && <SkillsSettings />}
       {activeSection === "usage" && <UsageSettings />}
       {activeSection === "logs" && developerModeEnabled && (
         <DeveloperLogsSettings />
       )}
-      {activeSection === "privacy" && <PrivacySettings />}
       {activeSection === "security" && <SecuritySettings />}
       {activeSection === "system" && <SystemEventsSettings />}
       {activeSection === "archives" && <ArchivesSettings />}

@@ -11,7 +11,6 @@ import {
   Palette,
   RefreshCcw,
   Server,
-  ShieldCheck,
   SlidersHorizontal,
   Terminal,
   UserRound,
@@ -46,12 +45,12 @@ function createSettingsSectionMap(
     appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
     server: section("server", settingsCopy.sections.server, <Server />),
     updates: section("updates", settingsCopy.sections.updates, <RefreshCcw />),
+    hooks: section("hooks", settingsCopy.sections.hooks, <Terminal />),
     mcp: section("mcp", settingsCopy.sections.mcp, <McpServer />),
     skills: section("skills", settingsCopy.sections.skills, <MagicWand />),
     usage: section("usage", settingsCopy.sections.usage, <Database />),
     logs: section("logs", settingsCopy.sections.logs, <Terminal />),
     personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
-    privacy: section("privacy", settingsCopy.sections.privacy, <ShieldCheck />),
     security: section("security", settingsCopy.sections.security, <Lock />),
     system: section("system", settingsCopy.sections.system, <Activity />),
     archives: section("archives", settingsCopy.sections.archives, <Archive />),
@@ -86,7 +85,6 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
       "updates",
       "usage",
       "logs",
-      "privacy",
       "security",
       "system",
       "archives",
@@ -97,7 +95,7 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "advanced",
     label: "advanced",
-    sectionIds: ["mcp", "skills", "server"],
+    sectionIds: ["mcp", "hooks", "skills", "server"],
   },
 ];
 
@@ -155,6 +153,5 @@ export function filterSettingsSectionGroups(
     })
     .filter((group) => group.sections.length > 0);
 }
-
 
 export { settingsPageSchema, type SettingsSectionSchema } from "./settingsPageSchema";

@@ -33,6 +33,8 @@ export function resolveBundledNativeAgentCommand({
     env: {
       ...installation.env,
       BUTLER_APP_FOREGROUND_LEASE: "1",
+      BUTLER_APP_QUIT_WAIT_SAFELY: "1",
+      BUTLER_SHUTDOWN_TRACE: "1",
     },
   };
 }

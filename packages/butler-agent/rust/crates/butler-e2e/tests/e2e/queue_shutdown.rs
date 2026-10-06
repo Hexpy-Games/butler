@@ -16,7 +16,7 @@ use butler_e2e::e2e::{
 use serde_json::json;
 use std::time::{Duration, Instant};
 
-async fn active_stream() -> Result<(Scenario, String), HarnessError> {
+async fn active_stream(safe_quit: bool) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("Q-02")?;
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
     let body = cassette.exchanges[0].response.body();
@@ -30,10 +30,13 @@ async fn active_stream() -> Result<(Scenario, String), HarnessError> {
             text: format!("{text}\n\n"),
         })
         .collect();
-    let s = Setup::new("Q-02-SHUTDOWN")?
-        .stub_cassette(cassette)
-        .start()
-        .await?;
+    let mut setup = Setup::new("Q-02-SHUTDOWN")?.stub_cassette(cassette);
+    if safe_quit {
+        setup = setup
+            .app_supervisor()
+            .env("BUTLER_APP_QUIT_WAIT_SAFELY", "1");
+    }
+    let s = setup.start().await?;
     s.provider()?.set_pacing(Pacing {
         scale: 1.0,
         cap_ms: 30_000,
@@ -61,7 +64,7 @@ async fn active_stream() -> Result<(Scenario, String), HarnessError> {
 #[tokio::test]
 async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, running) = active_stream().await?;
+    let (mut s, running) = active_stream(false).await?;
     let live = s.gw.get("/user-work").await?.data().clone();
     assert_eq!(live["classification"], "active_work_detected");
     assert_eq!(live["active_turn_count"], 1);
@@ -141,12 +144,111 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
         "interrupted model work was resumed"
     );
     assert!(!s.agent.logs().contains("app_sqlite_owner_closed"));
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.contains("[native-shutdown]"))
+    {
+        eprintln!("{line}");
+    }
     let idle = s.gw.get("/user-work").await?.data().clone();
     assert_eq!(idle["classification"], "no_active_work", "{idle}");
     assert_eq!(idle["active_turn_count"], 0);
     assert_eq!(idle["queued_message_count"], 0);
     assert_eq!(idle["delegated_work_present"], false);
     eprintln!("active shutdown and queue drain: {:?}", started.elapsed());
+    s.finish().await
+}
+
+#[tokio::test]
+async fn app_quit_waits_past_budget_and_preserves_the_full_queue() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, running) = active_stream(true).await?;
+    let queued =
+        s.gw.post(
+            "/session-queue",
+            json!({
+                "chat_id":"general", "text":"Reply with exactly the word: waiting",
+                "client_message_id":uuid::Uuid::new_v4().to_string()
+            }),
+        )
+        .await?;
+    assert_eq!(queued.status, 202, "{}", queued.text);
+    let db = butler_platform::sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))
+        .map_err(|e| HarnessError(e.to_string()))?;
+    db.execute_batch("BEGIN IMMEDIATE")
+        .map_err(|e| HarnessError(e.to_string()))?;
+    let started = Instant::now();
+    assert!(s.agent.release_foreground_lease());
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while !s.agent.logs().contains("budget_exceeded_waiting_safely") {
+        assert!(
+            s.agent.is_running(),
+            "App-owned agent force-exited before storage settled"
+        );
+        assert!(Instant::now() < deadline, "budget status missing");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(s.agent.is_running());
+    assert!(!s.agent.logs().contains("deadline_exit"));
+    // Hold beyond multiple SQLite busy waits and the App's slow-quit status.
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    assert!(
+        s.agent.is_running(),
+        "storage close abandoned an external writer"
+    );
+    assert!(!s.agent.logs().contains("deadline_exit"));
+    db.execute_batch("ROLLBACK")
+        .map_err(|e| HarnessError(e.to_string()))?;
+    drop(db);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while s.agent.is_running() {
+        assert!(
+            Instant::now() < deadline,
+            "Agent did not finish after storage released"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(s.agent.reap().unwrap().success());
+    eprintln!(
+        "safe App quit with blocked storage: {:?}",
+        started.elapsed()
+    );
+    s.gw = s.agent.start_again().await?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let turns = s.gw.turns("general").await?;
+        if turns.iter().any(|turn| turn_state(turn) == "delivered") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "follow-up not recovered: {turns:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let active = s.gw.turn("general", &running).await?.unwrap();
+    assert_eq!(active["safe_error_code"], "turn_interrupted");
+    assert_eq!(active["retryable"], true);
+    let turns = s.gw.turns("general").await?;
+    assert_eq!(turns.len(), 2, "{turns:?}");
+    let queue = s.gw.get("/session-queue?chat_id=general").await?;
+    assert_eq!(queue.data()["paused"], false);
+    assert_eq!(queue.data()["queued_messages"].as_array().unwrap().len(), 1);
+    let messages = s.gw.messages("general").await?;
+    assert_eq!(messages.iter().filter(|m| m["role"] == "user").count(), 2);
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m["role"] == "assistant"
+                && m["text"]
+                    .as_str()
+                    .is_some_and(|text| text.trim() == "waiting"))
+            .count(),
+        1
+    );
+    assert_eq!(s.provider()?.served(), 2);
     s.finish().await
 }
 

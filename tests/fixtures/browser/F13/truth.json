@@ -1,0 +1,20 @@
+{
+  "id": "F13",
+  "targets": [
+    "cart",
+    "pointer"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "cart",
+        "type": "state",
+        "value": "opened"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

@@ -9,6 +9,7 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod contained_read;
 mod fault;
 pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
 
@@ -230,6 +231,11 @@ pub fn is_owner_only(metadata: &Metadata) -> Option<bool> {
 /// [`NO_FOLLOW`].
 pub fn no_follow(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
     sys::no_follow(options)
+}
+
+/// Reads a regular file below an anchored root, refusing symlink components.
+pub fn open_read_beneath(root: &Path, relative: &Path) -> io::Result<File> {
+    contained_read::open(root, relative)
 }
 
 /// Opens the file at `path` for reading, refusing a symbolic link as the

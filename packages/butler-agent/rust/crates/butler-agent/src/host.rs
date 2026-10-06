@@ -16,6 +16,7 @@ mod mcp;
 mod oauth_callback;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use butler_memory::cognition::MemorySourceReader;
+mod hooks;
 mod runtime;
 
 pub(crate) use crate::host::app::monitoring::AppMonitoring;

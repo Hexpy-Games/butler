@@ -17,6 +17,8 @@ pub struct GatewayConfig {
     /// Extra Host names the gateway answers besides loopback (`name` or
     /// `name:port`); their `http`/`https` origins are allowed too.
     pub allowed_hosts: Vec<String>,
+    pub content_hosts: Vec<String>,
+    pub output_data: Option<std::path::PathBuf>,
     /// Settings → Security: also listen on the machine's LAN addresses (same
     /// port) and answer their Host names.
     pub remote_access_enabled: bool,
@@ -33,6 +35,8 @@ pub struct GatewayConfig {
     pub signed_url_ttl: std::time::Duration,
     pub message_rate_limit_max: u64,
     pub message_rate_limit_window: std::time::Duration,
+    /// Site icon cache, normally BUTLER_DATA/cache/favicons.
+    pub favicon_cache_root: Option<std::path::PathBuf>,
     pub static_ui_root: Option<std::path::PathBuf>,
 }
 
@@ -42,6 +46,8 @@ impl Default for GatewayConfig {
             local_auth: LocalAuthConfig::default(),
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
+            content_hosts: Vec::new(),
+            output_data: None,
             remote_access_enabled: false,
             admin_credential: None,
             security_store: None,
@@ -49,6 +55,7 @@ impl Default for GatewayConfig {
             message_rate_limit_max: 60,
             message_rate_limit_window: std::time::Duration::from_secs(60),
             static_ui_root: None,
+            favicon_cache_root: None,
         }
     }
 }
@@ -91,17 +98,59 @@ impl Drop for GatewayServer {
 
 /// Serves `listener` (the loopback listener), and the LAN listeners when
 /// remote access is enabled.
-pub fn serve_gateway(
+pub async fn serve_gateway(
     listener: TcpListener,
     application: Arc<dyn GatewayApplication>,
-    config: GatewayConfig,
+    mut config: GatewayConfig,
 ) -> std::io::Result<GatewayServer> {
+    validate_content_hosts(&mut config)?;
     let local_addr = listener.local_addr()?;
+    let content_addr = SocketAddr::new(
+        local_addr.ip(),
+        local_addr
+            .port()
+            .checked_add(1)
+            .ok_or_else(|| std::io::Error::other("content port overflow"))?,
+    );
+    let content_listener = TcpListener::bind(content_addr).await?;
     let shutdown = CancellationToken::new();
-    let task = http::serve(listener, application, config, shutdown.clone(), local_addr);
+    let task = http::serve(
+        listener,
+        content_listener,
+        application,
+        config,
+        shutdown.clone(),
+        local_addr,
+    );
     Ok(GatewayServer {
         local_addr,
         shutdown,
         task: Some(task),
     })
+}
+
+fn validate_content_hosts(config: &mut GatewayConfig) -> std::io::Result<()> {
+    config.content_hosts = config
+        .content_hosts
+        .iter()
+        .map(|host| {
+            super::normalize_allowed_host(host)
+                .map_err(|_| std::io::Error::other("invalid content host"))
+        })
+        .collect::<Result<_, _>>()?;
+    let api_hosts: Vec<_> = config
+        .allowed_hosts
+        .iter()
+        .filter_map(|host| super::normalize_allowed_host(host).ok())
+        .collect();
+    if config
+        .content_hosts
+        .iter()
+        .any(|host| api_hosts.contains(host))
+    {
+        return Err(std::io::Error::other(
+            "content host must use a separate origin",
+        ));
+    }
+    Ok(())
 }
