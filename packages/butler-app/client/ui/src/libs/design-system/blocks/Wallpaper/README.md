@@ -209,10 +209,12 @@ living photos `butler.photo-clouds` and `butler.photo-daisies` (on their bundled
 photos, `imageDim: noDarkStep`), `butler.stipple` (an image filter, two-pass,
 `pixelRatio: device`, `imageDim: none`, with a sample photo) and the image
 filter `butler.grain` (film grain, `amount` and black-and-white `mono`), and
-the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`: a
-mass of blossom clusters at a card's top-right padding frame, the branch only
-glimpsed, petals drifting across; boolean `lush`, on by default, fills the
-top-right corner); register
+the decoration `butler.cherry-blossom` (transparent, `pixelRatio: device`, no
+params: a painterly cherry canopy drawn at its 375px reference size, never
+stretched; one mass swept into the top-right corner and a smaller one at the
+top-left, justified so wider cards leave the middle of the top edge empty;
+petals drifting down-left; dark mode paints the corner end in deeper roses so
+white text keeps 4.5:1); register
 more with `createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), module])`
 and pass the registry (image filters resolve against it too). Built-ins
 cannot be shadowed.

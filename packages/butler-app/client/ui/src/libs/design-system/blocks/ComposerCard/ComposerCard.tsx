@@ -5,6 +5,7 @@ import { Collapsible } from "../../components/Collapsible";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import type { ComposerCardEdge } from "./composerEdge";
+import { useDraftScrolledMark } from "./useDraftScrolledMark";
 import styles from "./ComposerCard.module.css";
 
 export type { ComposerCardEdge } from "./composerEdge";
@@ -45,6 +46,7 @@ export function ComposerCard({
   ...props
 }: ComposerCardProps) {
   const reserve = edge?.reserveTop && edge.reserveTop > 0 ? edge.reserveTop : undefined;
+  const formRef = useDraftScrolledMark(Boolean(decoration), styles.textarea);
   return (
     <div
       className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
@@ -62,10 +64,12 @@ export function ComposerCard({
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
+        data-decorated={decoration ? "" : undefined}
         data-drop-active={dropActive ? "true" : undefined}
         data-expanded={expanded}
         data-test-class="composer-card"
         {...props}
+        ref={formRef}
       >
         {decoration ? (
           <div aria-hidden="true" className={styles.background} data-slot="tinted-glass-decoration" data-test-class="composer-decoration-slot">

@@ -1302,8 +1302,11 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   const markdownContentStyles = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/MarkdownContent/MarkdownContent.module.css",
   );
+  // The renderer and its context attributes (glContext.ts).
   const wallpaperRenderer = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/renderer.ts",
+  ) + read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/glContext.ts",
   );
   const wallpaperScheduler = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/scheduler.ts",

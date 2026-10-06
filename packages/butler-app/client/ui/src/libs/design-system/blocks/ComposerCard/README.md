@@ -57,6 +57,13 @@ outside the collapsible form and participates in the floating composer height.
 
 ### Decoration and edge character
 
+A decorated card (`data-decorated`) keeps its draft out of the art: the editor
+gets `scroll-padding-top` (caret moves and scrollIntoView keep the caret line
+inside the content box), and while the draft is scrolled (`data-draft-scrolled`
+on the form, from one passive `scroll` listener, nothing on the typing path)
+the editor is clipped at the top of its content box, so a scrolled line never
+passes through the top padding the art lives in. Unscrolled, nothing changes.
+
 `decoration` takes card art, normally `<ComposerDecoration scene="shoreline" />`.
 The slot renders it as the form's first child in an `aria-hidden` layer that
 fills the card (`position: absolute; inset: 0; z-index: -1`), clipped by the
@@ -67,7 +74,13 @@ readability comes from the scene's own grade, never from a layer behind the
 text. TintedGlass redraws its top highlight above the art.
 
 `ComposerDecoration` scenes carry their approved tuning, so product code only
-picks a name (`COMPOSER_DECORATION_SCENES`) and passes no numbers. `shoreline`
+picks a name (`COMPOSER_DECORATION_SCENES`: `shoreline`, `cherry`) and passes
+no numbers. `cherry` is the `butler.cherry-blossom` canopy on a transparent
+canvas filling the card: drawn at its 375px reference size (never stretched),
+one mass swept into the top-right corner and a smaller one at the top-left,
+justified so wider cards leave the middle of the top edge empty; the glass
+shows everywhere else, and dark mode paints the corner end in deeper roses.
+`shoreline`
 puts the waterline 19px above the bottom edge at a fixed scale (the canvas is
 at least 360px tall), grades exposure 1.22 and tones the sand highlight down by
 0.06 in light mode, adds a 0.3 gradient toward the glass tint over the bottom
@@ -76,8 +89,8 @@ quarter, and draws no cloud shadows by day. Pass the user's wallpaper `motion`;
 pauses offscreen, hidden and on reduced motion).
 
 `edge` takes `{ behind, front }` for a character on the card's top edge,
-normally `composerDecorationEdge("shoreline")` (a crab;
-`ComposerEdgeCharacter` renders the parts). Both parts sit in zero-height
+normally `composerDecorationEdge(scene)` (a crab for `shoreline`, a cat for
+`cherry`; `ComposerEdgeCharacter` renders the parts). Both parts sit in zero-height
 strips anchored to the form's top, not the wrap, so a `notice` above never
 moves them: `behind` paints under the card (the card hides its lower 8px),
 `front` over the top edge. Both are decorative and take no pointer events.
