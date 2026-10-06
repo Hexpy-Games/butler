@@ -22,7 +22,10 @@ async function screenshot(page: Page, key: string, id: string) {
   const dialog = page.getByRole("alertdialog");
   await (await dialog.count() ? dialog : section(page, id)).scrollIntoViewIfNeeded({ timeout: 10_000 });
   console.log(`screenshot ${key} ${id} fonts`);
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+  });
   const path = join(output, `${key}-${id}.png`);
   console.log(`screenshot ${key} ${id} capture`);
   await page.screenshot({ path, animations: "allow", timeout: 10_000 }); screenshots.push(path);
@@ -55,7 +58,7 @@ async function open(page: Page, url: string, name: string, width: number) {
 try {
   for (const locale of ["ko", "en"]) {
     setAppCopyLanguage(locale);
-    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } } });
+    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0" } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -69,9 +72,6 @@ try {
     const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
     const routeApi = async (route: Route) => {
       const path = new URL(route.request().url()).pathname;
-      if (path === "/security" && refusal && refusal !== "admin_credential_required") {
-        await route.fulfill({ status: refusal === "loopback_required" ? 403 : 500, json: { error: { code: refusal, message: "INTERNAL TEST MESSAGE" } } }); return;
-      }
       if (path === "/authority-permissions" && listState !== "ready") {
         if (listState === "loading") await new Promise<void>(done => { pendingLoads.add(done); });
         if (listState === "error") { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
@@ -180,7 +180,14 @@ try {
           console.log(`refused ${locale} ${code}`);
           await freshPage(375);
           refusal = code;
+          // Register the refusal before navigation, with a fixed response for this case.
+          await page.route(`${server.url}security`, async route => {
+            if (code === "admin_credential_required") await route.continue({ headers: { ...route.request().headers(), ...server.authHeaders } });
+            else await route.fulfill({ status: code === "loopback_required" ? 403 : 500, json: { error: { code, message: "INTERNAL TEST MESSAGE" } } });
+          });
+          const denied = page.waitForResponse(response => new URL(response.url()).pathname === "/security");
           await open(page, server.url, appCopy.settings.sections.security, 375);
+          assert.equal((await denied).status(), code === "test_error" ? 500 : 403);
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
           await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
