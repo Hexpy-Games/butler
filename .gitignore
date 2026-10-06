@@ -56,3 +56,10 @@ data/personas/active.md
 #    under fixtures stay ignored. (`memory/hot/*.md` and the other slash-containing
 #    patterns are anchored to the repo root and never match fixture paths.)
 !packages/butler-agent/rust/crates/butler-e2e/fixtures/**/data/
+
+# Work documents belong in the Project Ledger; scratch belongs in $TMPDIR.
+.codex-ledger-drafts/
+.tmp/
+.codex-tmp/
+plans/
+HANDOFF*.md

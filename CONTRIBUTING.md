@@ -78,7 +78,7 @@ bun run app:client:dev
 
 ## Checks
 
-Read [AGENTS.md](AGENTS.md) and [plans/README.md](plans/README.md) before changing code. Run every test or check with a fresh temporary `HOME` and `BUTLER_DATA`; never use the owner's real `~/.butler`. Before you open a pull request, run:
+Read [AGENTS.md](AGENTS.md) before changing code. Run every test or check with a fresh temporary `HOME` and `BUTLER_DATA`; never use the owner's real `~/.butler`. Before you open a pull request, run:
 
 ```sh
 export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
@@ -128,7 +128,7 @@ Run Clippy on the crates you changed; the example selects the Agent's static bui
 
 Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
-Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [plans/README.md](plans/README.md).
+Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
 
 ## Design system
 
@@ -146,7 +146,7 @@ The manual lives in `packages/butler-site`, with Korean pages in `src/content/do
 
 ## Project records
 
-Specs, plans, decisions, implementation reports and experiment evidence belong in the [Project Ledger](packages/project-ledger/README.md). Write them through its CLI (`packages/project-ledger/bin/pl`) or Butler's native tools. Don't add project-management records under `docs/`. Work and Task records reference canonical record IDs. Package READMEs remain the home for usage and API notes that belong to the source.
+Specs, plans, decisions, implementation reports and experiment evidence belong in the [Project Ledger](packages/project-ledger/README.md). Write them through its CLI (`packages/project-ledger/bin/project-ledger`) or Butler's native tools. Never add work documents anywhere in the repo; keep scratch in `$TMPDIR`. Work and Task records reference canonical record IDs. Package READMEs remain the home for usage and API notes that belong to the source.
 
 ## Releases
 

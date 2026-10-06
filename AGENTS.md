@@ -1,6 +1,27 @@
 # Instructions for coding agents (Codex)
 
-Read [plans/README.md](plans/README.md) first. It holds the repo rules: test policy, code-shape limits, the platform rule and performance at owner scale. This file adds the working rules for agent-run tasks. It ends with a log of mistakes that agents have repeated. Each log entry is a rule; follow it.
+This file holds the standing repository and agent rules. Each feedback-log entry is also a rule; follow it.
+
+## Repository rules
+
+- **Tests:** E2E first in `packages/butler-agent/rust/crates/butler-e2e`, stub tier. Non-E2E tests require `// test-category: <category>`: `race`, `security`, `pure-logic` or `format-pin`. Source-check ratchets `source-check-tests.txt`; counts may only go down. UI behavior uses harness/smoke tests, no unit tests or screen recordings.
+- **Code shape:** files ≤500 lines, production functions ≤80 lines. OS-specific code only in `butler-platform`; no unsafe code. Keep code readable and minimal; never game checks.
+- **Owner-scale performance:** design and verify against App DB ~1.3 GB, 600+ chats/~300k events, BTCC DB ~7 GB, 2,440 transcripts/1.5 GB (largest 290 MB), and metrics >300 MB. No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
+- **E2E auth:** stub/replay only; authorized live cassette recording uses only `openai/gpt-6-luna` with the owner's `~/.butler-e2e-auth` profile.
+- **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
+- **Security:** never print tokens or widen access defaults. Approval cards show the exact action.
+- **Native dependencies:** static ORT recipe: [Rust README](packages/butler-agent/rust/README.md) and #293.
+- **Owner-machine procedure:** touch the live install, owner data, or port 18765 only when explicitly requested and the owner is present. Back up DBs first; stop gracefully with `butler-agent stop --data ~/.butler`. Never `pkill`/`killall`.
+
+## Documents
+
+Work plans, specs, reports, audits, handoffs, checkpoints and notes never go in the repo. Publish through `packages/project-ledger/bin/project-ledger` to `~/.butler/project-ledger/projects/butler`, following its `SYNC.txt`:
+
+1. `git -C ~/.butler/project-ledger/projects/butler pull --ff-only` before mutations.
+2. CLI `record create|update --project ~/.butler/project-ledger/projects/butler --kind <kind> --id <ID> --from "$TMPDIR/<file>"`; then `index`, `render dashboard|handoff|roadmap --write`, `status`, `check --verbose` with that project path.
+3. Commit source records, `ledger.jsonl`, index and views together; push Ledger `main`. Stop on divergence; never force-push.
+
+This routine requires Ledger access and publication authorization. Codex workers without Ledger permission put their plan/report in the final message; the coordinator publishes it. Scratch belongs in `$TMPDIR`, never the tree. The repo retains code, product READMEs, standing agent rules, release notes and explicitly allowed source assets.
 
 ## Working rules
 
@@ -28,6 +49,9 @@ Read [plans/README.md](plans/README.md) first. It holds the repo rules: test pol
 ## Recurring mistakes (feedback log)
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
+
+- **2026-10-06: Work documents belong only in the Project Ledger.**
+  - What happened: work docs accumulated in `plans/`, root and `rust/docs`; moved to the ledger.
 
 - **2026-10-03: UI changes must include before/after screenshots of every screen they can affect.** Check shared DS blocks in both themes, desktop/mobile, wallpaper/plain, and pending/completed onboarding against the existing screen before accepting a visual change.
   - What happened: preview.7 captain commit `83ac46d41` added an opaque hero Card and opaque suggestion fills to the shared `PromptSuggestionList`. The onboarding captures asserted the new opacity but did not compare completed new-chat screens against preview.6; the unrelated screen changed and the mark overlapped the new box.

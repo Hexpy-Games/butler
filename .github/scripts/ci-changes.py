@@ -40,6 +40,7 @@ def categories(path):
     license_input = path in LICENSE_INPUTS or bool(notice)
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
                         (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
+    # Repository and CI lint is unconditional in rust-quality.yml, including docs-only PRs.
     if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input:
         return set()
     result = set()
@@ -64,8 +65,8 @@ def categories(path):
     if 'ui' in result:
         result.add('ds')  # Every UI/Bun owner retains the existing renderer browser smokes.
     # Unknown executable/configuration inputs fail closed, rather than silently
-    # leaving a new package or tool untested. Assets/readme and plans are docs.
-    if not result and not path.startswith(('assets/readme/', 'plans/')):
+    # leaving a new package or tool untested. Assets/readme are product assets.
+    if not result and not path.startswith('assets/readme/'):
         result = set(GROUPS) - {'workflows'}
     return result
 
