@@ -95,7 +95,7 @@ function helperInfoPlist(version) {
   <key>CFBundleVersion</key>
   <string>${version}</string>
   <key>LSMinimumSystemVersion</key>
-  <string>12.0</string>
+  <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>

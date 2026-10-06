@@ -2,11 +2,22 @@ import { chromium, type Browser, type BrowserContext, type BrowserContextOptions
 
 /** Explicit launch flags for restricted smoke runners; normal runs keep defaults. */
 export function smokeBrowserArgs(): string[] {
-  const raw = process.env.BUTLER_SMOKE_BROWSER_ARGS;
+  return parseSmokeArgs("BUTLER_SMOKE_BROWSER_ARGS");
+}
+
+/** Electron needs its production process model; Chromium's restricted-runner
+ * --single-process workaround crashes Electron 44 on macOS.
+ */
+export function smokeElectronArgs(): string[] {
+  return parseSmokeArgs("BUTLER_SMOKE_ELECTRON_ARGS");
+}
+
+function parseSmokeArgs(name: string): string[] {
+  const raw = process.env[name];
   if (!raw) return [];
   const args: unknown = JSON.parse(raw);
   if (!Array.isArray(args) || !args.every((arg) => typeof arg === "string")) {
-    throw new Error("BUTLER_SMOKE_BROWSER_ARGS must be a JSON string array");
+    throw new Error(`${name} must be a JSON string array`);
   }
   return args;
 }

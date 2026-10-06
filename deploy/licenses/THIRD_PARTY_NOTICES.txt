@@ -848,9 +848,9 @@ License: https://www.npmjs.com/package/devlop/v/1.1.0
 Copyright (c) 2023 Titus Wormer <tituswormer@gmail.com>
 
 ===== COMPONENT =====
-electron 41.10.4
+electron 44.5.1
 MIT
-License: https://github.com/electron/electron/blob/v41.10.4/LICENSE
+License: https://github.com/electron/electron/blob/v44.5.1/LICENSE
 Copyright (c) Electron contributors
 Copyright (c) 2013-2020 GitHub Inc.
 
@@ -1561,11 +1561,12 @@ License: https://www.npmjs.com/package/zwitch/v/2.0.4
 Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
 
 ===== COMPONENT =====
-Electron Chromium Node suppliers 41.10.4
+Electron Chromium Node suppliers 44.5.1
 LicenseRef-Electron-ThirdParty
-License: https://github.com/electron/electron/releases/tag/v41.10.4
+License: https://github.com/electron/electron/releases/tag/v44.5.1
 Copyright(C) 1997,2001 Takuya OOURA (email: ooura@kurims.kyoto-u.ac.jp).
 Copyright (C) 2012-2022 by various contributors (see AUTHORS)
+Copyright (c) 2015 Andrew Gallant
 Copyright (c) 2016, Alliance for Open Media. All rights reserved.
 // Copyright 2018 The ANGLE Project Authors.
 Copyright (c) 2015, The Android Open Source Project
@@ -1802,6 +1803,7 @@ Copyright 2014 Google Inc. All Rights Reserved.
 Copyright (c) 2017, Google Inc.
 *** Copyright (C) 2012-2020 Intel Corporation.  All rights reserved.
 Copyright 2017-2020 The array-init developers
+Copyright (c) 2000-2011 INRIA, France Telecom
 Copyright (c) 2004-2012 Leonard Richardson
 ** Copyright (c) 2014 Blackmagic Design
 Copyright (C) 2008 Apple Inc. All Rights Reserved.
@@ -1812,7 +1814,6 @@ Based on the Linux screenreader BRLTTY, copyright (C) 1999-2006 by
 The BRLTTY Team
 Copyright (C) 2004, 2005, 2006, 2009 ViewPlus Technologies, Inc.
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
-Copyright (c) 2015 Andrew Gallant
 Copyright (c) 2018 Carl Lerche
 Copyright (c) 2016 Rian Hunter
 Copyright (c) 2012-2016 Dan Wheeler and Dropbox, Inc.
@@ -1824,9 +1825,6 @@ Copyright 2004-present by the Checker Framework developers
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 Copyright (C) <year> <name of author>
 Gnomovision version 69, Copyright (C) year name of author Gnomovision comes
-Copyright 2014, the V8 project authors. All rights reserved.
-Copyright (c) 1994-2006 Sun Microsystems Inc.
-Copyright (C) 2000-2007 Julian Seward.  All rights reserved.
 // Copyright 2013 Google Inc.
 // Copyright 2006-2009 The ChromiumOS Authors
 // Copyright 2021 The Chromium Authors
@@ -1866,16 +1864,26 @@ Copyright (C) 2010-2012 Marat Dukhan
 Copyright 2017, The CRC32C Authors.
 Copyright 2010-2023 Mike Bostock
 Copyright © 2018, VideoLAN and dav1d authors
-// Copyright 2017-2023 The Dawn & Tint Authors
-Copyright (c) Microsoft Corporation.
+// Copyright 2017-2026 The Dawn & Tint Authors
 // Copyright 2014 The Chromium Authors
+Copyright (c) Microsoft Corporation.
 Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
 Copyright 2022 The Diplomat Developers
+Copyright (c) 2003-2015 University of Illinois at Urbana-Champaign.
+Copyright 2013-2014 RAD Game Tools and Valve Software
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+Copyright 2001-2004 Unicode, Inc.
+Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
+Copyright (c) 2006 Kirill Simonov
 Copyright 2014 The Chromium Authors
 Copyright (c) 2009-2011 Christian Kohlschütter
 Copyright 2007 Timepedia.org
 Copyright 2008 Google
 WIPO Copyright Treaty of 1996, the WIPO Performances and Phonograms
+Copyright 2013-2020 The Khronos Group Inc.
+Copyright 2007-2020 The Khronos Group Inc.
+Copyright (c) 2013-2018 The Khronos Group Inc.
+Copyright (c) 2008-2018 The Khronos Group Inc.
 Copyright © 1991-2021 Unicode, Inc. All rights reserved.
 * Copyright (C) 2009 The Android Open Source Project
 Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
@@ -1883,6 +1891,8 @@ Copyright (c) 2001-2025 Expat maintainers
 // Copyright (c) 2014 Google, Inc.
 Copyright (c) 2021 The fast_float authors
 Copyright (c) 2020-2025
+Copyright © 2025 Tristan Matthews
+Partly based on h264_pred.c Copyright (c) 2023 SiFive, Inc.
 Copyright © 2024 Rémi Denis-Courmont.
 Copyright © 2025 Rémi Denis-Courmont.
 Copyright (c) 2024 J. Dekker <jdek@itanimul.li>
@@ -1902,7 +1912,7 @@ Copyright (C) 2000-2009  Josh Coalson
 Copyright (C) 2011-2022  Xiph.Org Foundation
 Copyright (c) 2007-2014 IOLA and Ole Laursen
 Copyright (c) 2024 Orson Peters
-Copyright 2019 Colin Rothfels
+Copyright 2019 Fontations Developers
 Copyright © 2000,2001,2002,2003,2004,2006,2007 Keith Packard
 Copyright © 2005 Patrick Lam
 Copyright © 2007 Dwayne Bailey and Translate.org.za
@@ -1950,7 +1960,8 @@ Copyright © 2022  Matthias Clasen
 Copyright © 2018,2021  Khaled Hosny
 Copyright © 2018,2019,2020  Adobe, Inc
 Copyright © 2013-2015  Alexei Podtelezhnikov
-Copyright (c) Microsoft Corporation. All rights reserved.
+Copyright (c) HarfBuzz developers
+Copyright (c) 2020 Yevhenii Reizner
 Copyright (c) 2019-2026, Frank Denis.
 Portions created by ______________________ are Copyright (C) ______
 Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
@@ -2003,6 +2014,7 @@ Copyright (C) 1998-2001 Maksym Polyakov
 *  Copyright (c) 2007, 2010 Linux Foundation
 *  Copyright (c) 2006 IBM Corporation
 *  Copyright (c) 2000, 2006 Sun Microsystems, Inc.
+Copyright (c) 2022, Alliance for Open Media. All rights reserved.
 Copyright 2020 Andrew Straw
 Copyright © 2016-2025 Unicode, Inc.
 # Copyright (C) 2016 and later: Unicode, Inc. and others.
@@ -2011,6 +2023,7 @@ Copyright (c) 2013-2022 Niels Lohmann
 Copyright © 2004 Scott James Remnant <scott@netsplit.com>.
 Copyright © 2012-2015 Dan Nicholson <dbn.lists@gmail.com>
 Copyright 1991 by the Massachusetts Institute of Technology
+Copyright (c) 1997-date Stuart Langridge
 Copyright (c) 2013-2018, Kim Davies. All rights reserved.
 Copyright (c) 2001-2014 Python Software Foundation; All Rights Reserved
 Copyright (c) 1991-2014 Unicode, Inc. All rights reserved.
@@ -2023,6 +2036,7 @@ Copyright (c) 2019, Oath Inc.
 * Portions created by the Initial Developer are Copyright (C) 2002
 * the Initial Developer. All Rights Reserved.
 Copyright 2023 The Chromium Authors
+This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
 Copyright (c) 2014, Eugene Ware
 Copyright JS Foundation and other contributors, https://js.foundation/
 Copyright (c) 2013-2025 Niels Lohmann
@@ -2032,9 +2046,6 @@ Copyright (c) 2007-2010 Baptiste Lepilleur
 Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso
 Copyright (c) the JPEG XL Project Authors.
 Copyright (C) 1992 Silicon Graphics, Inc. All Rights Reserved.
-Copyright 2013-2020 The Khronos Group Inc.
-Copyright 2007-2020 The Khronos Group Inc.
-Copyright (c) 2013-2018 The Khronos Group Inc.
 // Copyright 2024 The Chromium Authors
 Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 Copyright © 2020 Red Hat, Inc.
@@ -2079,6 +2090,8 @@ Copyright 2018 Airbnb, Inc.
 Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
 Copyright © 2004, John Gruber
 *              Copyright (c) 2002 by Lucent Technologies.
+Copyright (c) Microsoft Corporation. All rights reserved.
+Copyright (C) Microsoft Corporation. All rights reserved.
 // Copyright 2014 The Chromium OS Authors. All rights reserved.
 Copyright (c) 2021 Jason Miller
 * Copyright (c) 2005, 2006  Nick Galbreath -- nickg [at] modp [dot] com
@@ -2094,7 +2107,6 @@ Copyright (c) Marco Ippolito and Amaro contributors
 Copyright 2024 SWC contributors.
 Copyright © 2004 Scott James Remnant .
 Copyright © 2012-2015 Dan Nicholson
-Copyright (c) 1997-date Stuart Langridge
 Copyright (c) 2015-present libuv project contributors.
 Copyright 2017 - 2025 R. Thomas
 Copyright 2017 - 2025 Quarkslab
@@ -2105,8 +2117,9 @@ Copyright (c) 2022 Postman, Inc
 Copyright 2017 - 2022 R. Thomas
 Copyright 2017 - 2022 Quarkslab
 Copyright Mathias Bynens <https://mathiasbynens.be/>
+Copyright 2014, the V8 project authors. All rights reserved.
 Copyright (c) 2016 Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>
-Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
+Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler
 Copyright 2018-2025 The simdjson authors
 Copyright 2021 The simdutf authors
 Copyright 2023 Yagiz Nizipli and Daniel Lemire
@@ -2142,6 +2155,8 @@ Copyright (c) 2017 Matteo Collina
 Copyright (c) 2013, Jim Higson
 Copyright 2019 Inria
 // Copyright 2018 The Chromium Authors
+Copyright 2008-2020 The Khronos Group Inc.
+Copyright 2017-2020 The Khronos Group Inc.
 Copyright (c) 2013, Cisco Systems
 * Copyright (c) 2002-2014, Universite catholique de Louvain (UCL), Belgium
 * Copyright (c) 2002-2014, Professor Benoit Macq
@@ -2164,6 +2179,7 @@ Copyright (c) 2020 Lea Verou
 Copyright (c) 2010, Paul Hsieh
 // Copyright 2014 The PDFium Authors
 Copyright 2015 The Chromium Authors
+Copyright 2025 The syntaqlite Authors. All rights reserved.
 Copyright 2002 Niels Provos <provos@citi.umich.edu>
 Copyright (c) 2013  Julien Pommier ( pommier@modartt.com )
 Copyright (c) 2004 the University Corporation for Atmospheric
@@ -2182,11 +2198,13 @@ Copyright (C) 1998, 2007 Brian Raiter <breadbox@muppetlabs.com>
 * Copyright (c) 1999-2000 Ross Bencina and Phil Burk
 Copyright 2019-2020 CreepySkeleton <creepy-skeleton@yandex.ru>
 Copyright (c) 2022, Google Inc.
-Copyright 2020 Google LLC
+Copyright 2020 Google Inc.  All rights reserved.
+Copyright 2020, Google Inc.
 Copyright (c) 2015-2017 Georgia Institute of Technology
+Copyright 2021-2026 The Khronos® Group Inc.
 // Copyright 2017 The Chromium OS Authors. All rights reserved.
 Copyright (c) 2005-2019, Ilya Etingof <etingof@gmail.com>
-Copyright (c) 2006, Google Inc.
+Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
 * Copyright (C) 2024 Nicolas De Carli
 Copyright 2014 Reactive Streams
 Copyright (c) 2010 Arc90 Inc
@@ -2206,6 +2224,7 @@ Copyright 2008-2009  Marius Muja (mariusm@cs.ubc.ca). All rights reserved.
 Copyright 2008-2009  David G. Lowe (lowe@cs.ubc.ca). All rights reserved.
 Copyright 2011-2016  Jose Luis Blanco (joseluisblancoc@gmail.com).
 Copyright (c) 2008 - 2012 The Khronos Group Inc.
+Copyright (c) 2006-2010, Rob Hess <hess@eecs.oregonstate.edu>
 Copyright (c) 2011 Google Inc. All rights reserved.
 Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 Copyright (c) 1996
@@ -2219,9 +2238,7 @@ Copyright (C) 2001-2003
 William E. Kempf
 Copyright (c) 2001, Daniel C. Nuffer
 Copyright 2010-2012, D. E. Shaw Research.
-Copyright (c) 2001 Alexander Peslyak and it is hereby released to the
 documentation, are copyright (C) 1996-2019 Julian R Seward.  All
-Copyright (c) 2014 Alex Crichton
 Copyright (c) 2013, Ryan Haining, Aaron Josephs, Google
 Copyright (c) 2008-2014, Susumu Yata
 Copyright (c) 2016-     Facebook, Inc            (Adam Paszke)
@@ -2244,8 +2261,6 @@ Copyright (c) 1992-2013 The University of Tennessee and The University
 Copyright (c) 2000-2013 The University of California Berkeley. All
 Copyright (c) 2006-2013 The University of Colorado Denver.  All rights
 Copyright (C) 1997-2020 by Dimitri van Heesch
-Copyright (c) 2018-2025 The rust-random Project Developers
-Copyright (c) 2014 The Rust Project Developers
 Copyright (c) 2012-2025 Christian Rau
 Copyright (c) 2012-2020 MIT CSAIL, Google, Facebook, Adobe, NVIDIA CORPORATION, and other contributors.
 apps/bgu is Copyright 2016 Google Inc. and is Licensed under the Apache License,
@@ -2270,7 +2285,11 @@ Copyright © 2015      Research Organization for Information Science and Technol
 Copyright © 2015-2016 Intel, Inc.  All rights reserved.
 1. Unicode Copyright: Copyright © 1991-Present Unicode, Inc.
 -  Copyright (C) 2001 Leptonica.  All rights reserved.
-Copyright (c) 2014-2020 The Rust Project Developers
+Copyright (C) 1996-2021 Julian R Seward.
+Copyright (C) 2019-2020 Federico Mena Quintero
+Copyright (C) 2021 Micah Snyder
+"libbzip2", and is Copyright (C) 2024-2025 Trifecta Tech Foundation and contributors
+Copyright (c) The Rust Project Developers
 This software is copyright (C) 1991-2016, Thomas G. Lane, Guido Vollbeding.
 MIT License Copyright (c) 1997-2020 by Dimitri van Heesch
 Copyright (c) 1996-1998 John D. Polstra.
@@ -2282,6 +2301,7 @@ Copyright © 2009 Free Software Foundation, Inc. <http://fsf.org/>
 Copyright (c) 1999-2000 Pawel W. Olszta. All Rights Reserved.
 Copyright (C) 2009 Mozilla Foundation
 Copyright (C) 1998-2007 Marti Maria
+Copyright (c) 2014 The Rust Project Developers
 Copyright 2011 Jose L. Blanco (joseluisblancoc@gmail.com). All rights reserved.
 * Copyright (c) 1995-2026 The PNG Reference Library Authors.
 * Copyright (c) 2018-2026 Cosmin Truta.
@@ -2293,11 +2313,6 @@ Copyright (c) 1998-2000 Glenn Randers-Pehrson, are derived from
 Copyright (c) 1996-1997 Andreas Dilger, are derived from libpng-0.88,
 and are distributed according to the same disclaimer and license as
 Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
-Copyright 2019 The CryptoCorrosion Contributors
-Copyright (c) 2019 The CryptoCorrosion Contributors
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
-Copyright (c) 2024 Dillon Sharlet
 Copyright 2020 The TensorFlow Authors.  All rights reserved.
 Copyright 2022 Google LLC. All rights reserved.
 Copyright 2016, The Authors.
@@ -2309,7 +2324,6 @@ The Regents of the University of California.
 *              Copyright (c) 1998-2002 by Lucent Technologies.
 Copyright (c) 2019 Yibo Cai
 Copyright 2022 Google LLC
-Copyright 2023 The Fuchsia Authors
 Copyright 2011, Google Inc.
 - fireworks.jpeg is Copyright 2013 Steinar H. Gunderson, and
 Copyright (c) 2010 Miguel A. Ballicora
@@ -2317,12 +2331,15 @@ Copyright (c) 2016-present, Facebook, Inc. All rights reserved.
 Copyright (c) 2003 Thomas Klausner.
 Copyright (c) 2003-2008 Yuta Mori All Rights Reserved.
 Copyright 2022 Software Freedom Conservancy (SFC)
+Copyright (c) 2009 John Resig
+Copyright (c) 2007 Cybozu Labs, Inc.
+Copyright (c) 2012 Google Inc.
 Copyright (c) 2008-2011, Susumu Yata All rights reserved.
 Copyright (c) 2010 Daisuke Okanohara All Rights Reserved.
+Copyright (c) 2020, Cisco Systems
 Copyright (c) [2021] [Marvin Countryman]
 Copyright (c) 2006 Bob Ippolito
 Copyright (c) 2010-2020 Benjamin Peterson
-Copyright (c) 2009 John Resig
 Copyright (c) 2011 Google, Inc.
 Copyright 2025 The Chromium Authors
 Copyright (c) 2015-2024 The Khronos Group Inc.
@@ -2340,6 +2357,7 @@ Copyright 2019 The TensorFlow Authors.  All rights reserved.
 Copyright (c) 2012, Linux USB Project
 Copyright (c) 2019 Patrick Hulce
 Copyright (c) 2017 Intel Corporation
+Copyright 2022 The transpose developers
 Copyright (c) 2018 The typed-arena developers
 Copyright © 1991-2023 Unicode, Inc.
 Copyright 2020 The Chromium Authors
@@ -2362,6 +2380,7 @@ Copyright © 2014      Jonas Ådahl
 Copyright © 2014      Jason Ekstrand
 Copyright © 2014-2015 Collabora, Ltd.
 Copyright © 2015      Red Hat Inc.
+Copyright 2020 Google LLC
 Copyright 2010 Rodrigo Moraes.
 Copyright 2008 Google Inc.
 Copyright (c) 2007 Ian Bicking and Contributors
@@ -2370,17 +2389,15 @@ Copyright 2009 Facebook
 Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
 2006, 2007 Alexander Kellett, Alexey Proskuryakov, Alex Mathews, Allan
 Copyright (c) 2010, Google Inc. All rights reserved.
-Copyright (c) 2010 Ian Bicking and Contributors
-Copyright (c) 2007 Cybozu Labs, Inc.
-Copyright (c) 2012 Google Inc.
 Copyright (c) 2017 Andrew Gallant
 Copyright (c) 2013-2017 by the WOFF2 Authors.
+Copyright 2023 The Wuffs Authors
 Copyright 1987, 1994, 1998  The Open Group
 Copyright 1987 by Digital Equipment Corporation, Maynard, Massachusetts
 Copyright (c) 2007 Red Hat, inc
 Copyright (c) 2014 Vladimir Matveev
 "Portions Copyright (c) 1999-2003 Apple Computer, Inc. All Rights
-Copyright (c) 2012-2014, Yann Collet
+Copyright (c) 2012-2021 Yann Collet
 Copyright (c) 2014 Mathijs van de Nes
 Copyright (c) 2025 Colin McDonnell
 

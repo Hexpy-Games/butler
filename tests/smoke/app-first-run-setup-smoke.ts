@@ -1,4 +1,4 @@
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { smokeElectronArgs } from "../support/smoke-browser.ts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
@@ -482,7 +482,7 @@ async function main(): Promise<void> {
   electronProcess = spawn(
     electronBin,
     [
-      `--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs(),
+      `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(),
       `--user-data-dir=${electronProfileDir}`,
       "--lang=ko-KR",
       electronAppRoot,

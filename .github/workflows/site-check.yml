@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'butler.hexpy.games' }}
     steps:
       - uses: actions/checkout@v4
