@@ -689,6 +689,7 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/new-chat-briefing?${query}` : "/new-chat-briefing");
   },
   cancelUpdate: () => requestJson("/updates/cancel", { method: "POST" }),
+  setUpdateProgress: (value) => ipcRenderer.invoke("butler:update-progress", value),
   getAppUpdateState: () => ipcRenderer.invoke("butler:app-update-state"),
   chooseAppUpdate: (input) => ipcRenderer.invoke("butler:app-update-choice", input),
   onAppUpdateState: (handler) => {

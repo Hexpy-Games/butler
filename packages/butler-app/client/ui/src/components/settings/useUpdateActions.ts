@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { appCopy } from "@/app/copy";
 import { api } from "@/app/api";
+import { applyComponentUpdate } from "@/app/updateCommands";
 import type { UpdateApplyResult, UpdateComponentId, UpdateStatusView } from "@/app/types";
 import { useUpdateProgressStore } from "@/stores/updateProgressStore";
 import { emptyComponentStatus, UPDATE_COMPONENTS } from "./UpdateComponentRow";
@@ -42,10 +43,7 @@ export function useUpdateActions({ setView, setLoading, setLoadFailed, reportErr
 
   const apply = useCallback(async (component: UpdateComponentId) => {
     try {
-      const result = await api<UpdateApplyResult>("/updates/apply", {
-        method: "POST",
-        body: JSON.stringify({ component }),
-      });
+      const result = await applyComponentUpdate(component);
       setView((previous) => mergeUpdateResult(previous, result));
     } catch (error) {
       // The failed/cancelled snapshot owns feedback, including a response arriving after SSE.

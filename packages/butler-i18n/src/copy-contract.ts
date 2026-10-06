@@ -212,6 +212,7 @@ interface ConversationCopy {
 }
 
 export interface AppCopy {
+  shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
