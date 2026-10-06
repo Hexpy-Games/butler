@@ -100,6 +100,7 @@ jobs:
           export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
+          if [[ "$BUTLER_PACKAGE_REF_NAME" == release/* ]]; then export GITHUB_REF_NAME="v${BUTLER_PACKAGE_REF_NAME#release/}"; fi
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
             cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           else
@@ -124,6 +125,7 @@ jobs:
           export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
+          if [[ "$BUTLER_PACKAGE_REF_NAME" == release/* ]]; then export GITHUB_REF_NAME="v${BUTLER_PACKAGE_REF_NAME#release/}"; fi
           bun test tests/unit/package-versions.test.ts
           bun run deploy/app/linux-version-smoke.ts
           bun run packages/butler-app/scripts/release/package-linux-app.ts \

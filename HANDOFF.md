@@ -69,7 +69,7 @@ The body of each draft PR lists what is done, partial and not started, with file
   - #234 Schedule UX for non-technical users.
   - #269 Unify schedule stores across App, CLI and chat.
 - **Release.**
-  1. The tag version must equal `crates/butler-agent/Cargo.toml`.
+  1. The tag version must equal `crates/butler-agent-cli/Cargo.toml`.
   2. **The owner confirms before the tag is pushed.**
   3. The workflow signs and notarizes the Mac build, builds the Linux archives, publishes the release after all assets exist, then runs npm publish (`next` for prereleases).
   4. Verify on a clean Mac with `spctl`, `stapler`, and a first launch. If the app crashes at JIT, re-add `allow-unsigned-executable-memory`.

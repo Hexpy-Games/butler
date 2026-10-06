@@ -6,7 +6,7 @@ The owner writes plans with Claude Code, and Codex executes them. Agents also fo
 
 ## How to execute a plan
 
-1. Branch from latest `origin/main`, or from the branch named in the plan's **Start from** field. Branch names use the prefix `codex/`.
+1. Branch from latest `origin/main` as `<type>/<slug>` (see AGENTS.md). If the plan names `release/<v>` in **Start from**, branch from `origin/release/<v>` as `fix/<v>-<slug>`. Tool-named prefixes such as `codex/` and `claude/` are forbidden.
 2. Read the plan's **Context** section, then check every file:line reference against current main. They were recorded on 2026-09-29, so line numbers may have drifted.
 3. Implement in the order given. Keep the diff scoped to the plan.
 4. Meet every **Acceptance** check, then open a PR that links the plan file and any issue it names.
