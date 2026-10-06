@@ -25,7 +25,7 @@ try {
       await app.main.evaluate("browserP0.loseGPU('gpu')");
       await waitFor(async () => (await app.main.evaluate<any>("browserP0.sample()")).gone.length > before.gone.length, "GPU loss");
       await Bun.sleep(3000);
-      const state = await app.page.expression("({contexts:window.p0Contexts,canvases:Array.from(document.querySelectorAll('canvas[data-module]'),c=>({module:c.dataset.module,paint:c.dataset.wallpaperPaint,contextLost:c.getContext('webgl2')?.isContextLost()})),freshWebGL:!!document.createElement('canvas').getContext('webgl2')})");
+      const state = await app.page.expression("({contexts:window.p0Contexts,canvases:Array.from(document.querySelectorAll('canvas[data-module]'),c=>({module:c.dataset.module,paint:c.dataset.wallpaperState,contextLost:c.getContext('webgl2')?.isContextLost()})),freshWebGL:!!document.createElement('canvas').getContext('webgl2')})");
       const a = await app.main.evaluate("browserP0.wallpaperFrame()");
       await Bun.sleep(1000);
       const b = await app.main.evaluate("browserP0.wallpaperFrame()");

@@ -46,9 +46,11 @@ export async function launchP0App({ harness = true } = {}) {
   }, stdio: ["ignore", "pipe", "pipe"] });
   let logBytes = 0, logTail = "", watchdogTimeout = false, machRendezvous = false;
   const observeLog = (value: Buffer) => {
-    logBytes += value.length; logTail = (logTail + String(value)).slice(-4096);
-    watchdogTimeout ||= /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(logTail);
-    machRendezvous ||= /Mach|rendezvous/iu.test(logTail);
+    logBytes += value.length;
+    const text = logTail + String(value);
+    watchdogTimeout ||= /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(text);
+    machRendezvous ||= /Mach|rendezvous/iu.test(text);
+    logTail = text.slice(-4096);
   };
   child.stdout!.on("data", observeLog); child.stderr!.on("data", observeLog);
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
