@@ -219,8 +219,8 @@ publication). These packages are build inputs, outside the product Releases feed
 After the first publish, an organization package administrator must open each
 package's **Package settings → Danger Zone → Change visibility → Public**:
 
-- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fnative-deps/settings>
-- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fcargo-target/settings>
+- `butler-ci/native-deps` in [organization Packages](https://github.com/orgs/Hexpy-Games/packages)
+- `butler-ci/cargo-target` in the same organization Packages list
 
 The OCI `org.opencontainers.image.source` annotation links both packages to
 `Hexpy-Games/butler`. Keep inherited repository access enabled so workflows can

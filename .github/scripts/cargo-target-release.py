@@ -169,7 +169,7 @@ def split(archive, directory, prefix):
     return chunks
 
 
-def prune(tag):
+def prune(tag, prefix):
     # GHCR does not implement registry manifest deletion. Package version
     # deletion uses the same workflow token, with package admin access inherited
     # from the linked repository. Never delete another compatibility key.
@@ -183,9 +183,13 @@ def prune(tag):
         matching = [value.removeprefix(tag + '--') for value in tags if value.startswith(tag + '--')]
         if matching:
             versions.append((max(tuple(map(int, value.split('-'))) for value in matching), entry))
-    for _, entry in sorted(versions, key=lambda value: value[0], reverse=True)[KEEP:]:
-        if tag not in entry['metadata']['container']['tags']:
-            subprocess.run(['gh', 'api', '--method', 'DELETE', endpoint + '/' + str(entry['id'])], check=True)
+    ordered = sorted(versions, key=lambda value: value[0], reverse=True)
+    if ordered and ordered[0][0] > tuple(map(int, prefix.split('-'))):
+        latest = '-'.join(map(str, ordered[0][0]))
+        reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{latest}'
+        ci_oci.checked('tag', reference, tag, anonymous=False)
+    for _, entry in ordered[KEEP:]:
+        subprocess.run(['gh', 'api', '--method', 'DELETE', endpoint + '/' + str(entry['id'])], check=True)
 
 
 def publish(directory, run_id):
@@ -217,7 +221,7 @@ def publish(directory, run_id):
                 raise ValueError('Committed Cargo generation cannot be overwritten')
     ci_oci.checked('tag', reference, tag, anonymous=False)
     if os.environ.get('BUTLER_OCI_LAYOUT') != '1':
-        prune(tag)
+        prune(tag, prefix)
 
 
 def publish_lane(platform, mode, kind):
