@@ -40,7 +40,6 @@ pub(super) fn decode(
             reported_model: butler_core::public_text::trim_js_whitespace(&reported_model).into(),
         });
     let assistant_message = Some(ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::Assistant,
         content: text.clone().unwrap_or_default().into(),
         tool_call_id: None,

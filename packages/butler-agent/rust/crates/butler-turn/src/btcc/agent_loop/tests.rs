@@ -282,7 +282,6 @@ pub(crate) fn stored_authority_continuation_with_every_field_is_byte_stable() {
 
 #[tokio::test]
 async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
-    super::message_facts::tests::verify_cache_invalidation();
     let pending = Fixture::new([result("", vec![call("pending", "read_file")], 0)]);
     pending.tool_outputs.lock().unwrap().insert(
         "pending".into(),

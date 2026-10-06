@@ -44,7 +44,6 @@ pub(super) fn result_message(
     content.push('}');
     let content = preview::fit(result, references, preview::without_details(&content)?)?;
     Ok(ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::Tool,
         content: content.into(),
         tool_call_id: Some(result.tool_call_id.clone()),

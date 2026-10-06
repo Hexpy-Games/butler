@@ -201,7 +201,6 @@ where
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::<u8>::new();
     let mut start = 0;
-    let mut scanned = 0;
     let mut first_chunk = true;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk
@@ -215,8 +214,8 @@ where
         } else if first_chunk && ![0xef, 0xbb, 0xbf].starts_with(&buffer) {
             first_chunk = false;
         }
-        while let Some((index, width)) = boundary(&buffer, scanned.max(start)) {
-            let end = index;
+        while let Some((index, width)) = boundary(&buffer[start..]) {
+            let end = start + index;
             check_limit(&buffer[start..end], limit, provider, api)?;
             let frame = String::from_utf8_lossy(&buffer[start..end]);
             if let Some(data) = data(&frame)
@@ -225,14 +224,10 @@ where
                 return Ok(Some(result));
             }
             start = end + width;
-            scanned = start;
         }
-        // Only the last three bytes can start a boundary completed by the next chunk.
-        scanned = scanned.max(buffer.len().saturating_sub(3)).max(start);
         check_limit(&buffer[start..], limit, provider, api)?;
         if start > 64 * 1024 && start * 2 >= buffer.len() {
             buffer.drain(..start);
-            scanned -= start;
             start = 0;
         }
     }
@@ -255,13 +250,7 @@ fn check_limit(
     provider: &str,
     api: &str,
 ) -> Result<(), Box<ProviderRequestError>> {
-    // Lossy decoding only lengthens a frame (an invalid byte becomes three),
-    // so the exact length is needed only between the two bounds.
-    if limit.is_some_and(|limit| {
-        frame.len() > limit
-            || (frame.len().saturating_mul(3) > limit
-                && String::from_utf8_lossy(frame).len() > limit)
-    }) {
+    if limit.is_some_and(|limit| String::from_utf8_lossy(frame).len() > limit) {
         return Err(Box::new(diagnostics::protocol(
             provider,
             api,
@@ -271,22 +260,16 @@ fn check_limit(
     Ok(())
 }
 
-/// The first frame boundary (`\r\n\r\n`, `\n\n` or `\r\r`) starting at or
-/// after `from`: its index and width.
-fn boundary(value: &[u8], from: usize) -> Option<(usize, usize)> {
-    let mut at = from;
-    while let Some(offset) = memchr::memchr2(b'\r', b'\n', value.get(at..)?) {
-        let index = at + offset;
-        let rest = &value[index..];
-        if rest.starts_with(b"\r\n\r\n") {
-            return Some((index, 4));
-        }
-        if rest.starts_with(b"\r\r") || rest.starts_with(b"\n\n") {
-            return Some((index, 2));
-        }
-        at = index + 1;
-    }
-    None
+fn boundary(value: &[u8]) -> Option<(usize, usize)> {
+    [&b"\r\n\r\n"[..], &b"\n\n"[..], &b"\r\r"[..]]
+        .into_iter()
+        .filter_map(|needle| {
+            value
+                .windows(needle.len())
+                .position(|window| window == needle)
+                .map(|index| (index, needle.len()))
+        })
+        .min_by_key(|(index, _)| *index)
 }
 
 fn data(frame: &str) -> Option<String> {

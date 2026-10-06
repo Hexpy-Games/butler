@@ -3,6 +3,7 @@
 mod atomic_units;
 mod bounded;
 mod compaction;
+mod measurement;
 mod serialization;
 mod summary;
 
@@ -20,7 +21,7 @@ use butler_turn::btcc::{
 };
 
 use compaction::CompactionState;
-use serialization::{MessageProjection, messages_json, request_for_messages, request_json};
+use serialization::{request_for_messages, request_json};
 use summary::{SummaryPort, SummaryRequest, SummarySizing};
 
 pub struct ContextPortAdapter {
@@ -216,27 +217,14 @@ impl TurnContext {
                 butler_data: input.butler_data,
             })
             .map_err(ContextProjectionError::Model)?;
-        let message_bytes = |messages: &[ModelRoundMessage]| match model
-            .stateless_message_bytes(messages, input.butler_data)
-            .map_err(ContextProjectionError::Model)?
-        {
-            Some(bytes) => Ok(bytes),
-            None => messages_json(messages.iter(), MessageProjection::Exact)
-                .map_err(ContextProjectionError::Contract)
-                .map(|json| json.len()),
-        };
-        let measure = |messages: &[ModelRoundMessage]| {
-            let stateless = message_bytes(messages)? as f64;
-            let pressure = match &sizing {
-                Some(sizing) => {
-                    (sizing.measure)(messages).map_err(ContextProjectionError::Contract)?
-                        * message_limit as f64
-                        / sizing.max_message_bytes
-                }
-                None => 0.0,
-            };
-            Ok(stateless.max(pressure))
-        };
+        let measurement = measurement::RoundMeasurement::new(
+            model,
+            sizing,
+            input.semantic_messages,
+            input.butler_data,
+            message_limit,
+        );
+        let measure = |messages: &[ModelRoundMessage]| measurement.pressure(messages);
         let mut state = state.lock().await;
         let summary = RoundSummary {
             invocation,
@@ -267,7 +255,7 @@ impl TurnContext {
             .messages
             .as_deref()
             .unwrap_or(input.semantic_messages);
-        let projected_message_bytes = message_bytes(projected)?;
+        let projected_message_bytes = measurement.bytes(projected)?;
         let requires_rebase = projection.identity.is_some();
         Ok((
             projection.messages,
@@ -334,7 +322,9 @@ impl SummaryPort for RoundSummary<'_> {
             .map(|sizing| {
                 sizing.map(|sizing| SummarySizing {
                     max_bytes: sizing.max_message_bytes,
-                    measure: Box::new(move |content| (sizing.measure)(&[user_message(content)])),
+                    measure: Box::new(move |content| {
+                        (sizing.measure)(&[user_message(content)]).map(|value| value.pressure_bytes)
+                    }),
                 })
             })
     }
@@ -406,7 +396,6 @@ impl SummaryPort for RoundSummary<'_> {
 
 fn user_message(content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role: butler_turn::btcc::ModelRoundRole::User,
         content: Arc::from(content),
         tool_call_id: None,

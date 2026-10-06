@@ -56,8 +56,14 @@ pub struct ContextSizing<'a> {
     pub measure: Box<ContextMeasure<'a>>,
 }
 
+/// Pressure and optional exact stateless size from the same serialized input.
+pub struct ContextMeasurement {
+    pub pressure_bytes: f64,
+    pub stateless_bytes: Option<usize>,
+}
+
 pub(crate) type ContextMeasure<'a> =
-    dyn Fn(&[ModelRoundMessage]) -> Result<f64, BtccError> + Send + Sync + 'a;
+    dyn Fn(&[ModelRoundMessage]) -> Result<ContextMeasurement, BtccError> + Send + Sync + 'a;
 
 /// What a model execution borrows from the turn.
 pub struct ModelExecutionInput<'a> {

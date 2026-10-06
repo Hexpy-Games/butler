@@ -280,7 +280,6 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         Arc::new(Metrics),
     );
     let messages = [ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::User,
         content: "hello".into(),
         tool_call_id: None,

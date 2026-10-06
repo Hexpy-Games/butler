@@ -356,7 +356,6 @@ fn project(
 
 fn summary_message(content: String) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::User,
         content: content.into(),
         tool_call_id: None,

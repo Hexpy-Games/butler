@@ -1,10 +1,11 @@
-//! Native filesystem model facts. Snapshots belong to their caller, not a cache.
+//! Fresh filesystem facts and request-owned snapshots of shared catalog construction.
 
 mod metadata;
 pub use metadata::ModelContextMetadataRead;
 
 mod admission;
 mod auth;
+mod catalog_cache;
 mod credential_admin;
 mod credential_migration;
 mod credential_vault;
@@ -119,6 +120,7 @@ pub struct ModelConfiguration {
     catalog: Arc<ModelCatalog>,
     collation: Arc<LocaleCollation>,
     registration_catalog: Arc<ModelCatalogSnapshot>,
+    catalog_cache: catalog_cache::Cache,
     client: Client,
     configuration_writes: Arc<ConfigurationWrites>,
     secrets: ProviderSecrets,
@@ -189,6 +191,7 @@ impl ModelConfiguration {
             catalog,
             collation,
             registration_catalog: Arc::new(registration_catalog),
+            catalog_cache: catalog_cache::Cache::default(),
             client,
             configuration_writes,
             secrets,
@@ -256,7 +259,8 @@ impl ModelConfiguration {
             codex_url.as_deref(),
         );
         registered_metadata.extend(local_metadata.iter().cloned());
-        let catalog = self.catalog.snapshot(
+        let catalog = self.catalog_cache.snapshot(
+            &self.catalog,
             ModelCatalogSnapshotInput {
                 configured_local: local_metadata.clone(),
                 extra_models: local_metadata,
@@ -307,7 +311,8 @@ impl ModelConfiguration {
             codex_url.as_deref(),
         );
         registered_metadata.extend(local_metadata.iter().cloned());
-        self.catalog.snapshot(
+        self.catalog_cache.snapshot(
+            &self.catalog,
             ModelCatalogSnapshotInput {
                 configured_local: local_metadata.clone(),
                 extra_models: local_metadata,

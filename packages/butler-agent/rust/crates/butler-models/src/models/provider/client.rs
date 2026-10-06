@@ -92,7 +92,8 @@ impl ModelProvider {
         let (mut body, continuation) =
             serialize::body_with_continuation(&request, &config, carrier)?;
         super::visual::apply(&mut body, &request, carrier).await?;
-        let serialized = butler_core::json::stringify(&body).map_err(|error| {
+        let prefix = self.prefix_history.prepare(&body, &config)?;
+        let serialized = prefix.body_json(&body).map_err(|error| {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 &config.metadata.provider_id,
                 api,
@@ -101,7 +102,6 @@ impl ModelProvider {
         })?;
         let provider_cache_identity =
             serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
-        let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
         let serialized = Bytes::from(serialized);
         let physical_admission =
             self.admission(&request, &config, &body, serialized.clone(), carrier)?;
@@ -390,35 +390,7 @@ impl ModelRoundPort for ModelProvider {
             max_output_tokens: metadata.max_output_tokens,
             max_message_bytes,
             measure: Box::new(move |messages| {
-                let value = if model.starts_with("openai/") {
-                    serde_json::Value::Array(serialize::bounded_items(messages))
-                } else {
-                    serde_json::to_value(messages).map_err(|source| {
-                        butler_turn::btcc::BtccError::relayed(
-                            "context_serialization_failed",
-                            "Context serialization failed.",
-                        )
-                        .with_source(source)
-                    })?
-                };
-                let bytes = butler_core::json::stringify(&value).map_err(|source| {
-                    butler_turn::btcc::BtccError::relayed(
-                        "context_serialization_failed",
-                        "Context serialization failed.",
-                    )
-                    .with_source(source)
-                })?;
-                let tokens = catalog
-                    .estimate_tokens(&snapshot, TokenEstimateInput::Text(&bytes), Some(&model))
-                    .map_err(|source| {
-                        butler_turn::btcc::BtccError::relayed(
-                            "context_tokenization_failed",
-                            "Context tokenization failed.",
-                        )
-                        .with_source(source)
-                    })?
-                    .tokens;
-                Ok(tokens * 2.0)
+                super::sizing::measure(&catalog, &snapshot, &model, messages)
             }),
         }))
     }

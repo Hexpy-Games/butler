@@ -14,7 +14,6 @@ fn reference(id: &str) -> butler_turn::btcc::OperationResultReference {
 
 fn message(role: ModelRoundRole, content: &str, call_id: Option<&str>) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role,
         content: content.into(),
         tool_call_id: call_id.map(str::to_owned),

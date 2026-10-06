@@ -138,7 +138,12 @@ impl ModelRoundPort for Base {
         Ok(Some(ContextSizing {
             max_output_tokens: Some(7.5),
             max_message_bytes: 99.25,
-            measure: Box::new(|messages| Ok(messages.len() as f64 * 3.5)),
+            measure: Box::new(|messages| {
+                Ok(ContextMeasurement {
+                    pressure_bytes: messages.len() as f64 * 3.5,
+                    stateless_bytes: None,
+                })
+            }),
         }))
     }
     fn initial_request_bytes(
@@ -277,7 +282,6 @@ pub(super) fn result(text: &str) -> ModelRoundResult {
 }
 pub(super) fn message(content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role: crate::btcc::agent_loop::ModelRoundRole::User,
         content: content.into(),
         tool_call_id: None,

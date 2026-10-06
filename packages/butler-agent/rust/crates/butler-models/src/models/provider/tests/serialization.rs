@@ -8,7 +8,6 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::User,
         content: "hello".into(),
         tool_call_id: None,
@@ -63,6 +62,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     };
     let body = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
     let encoded = butler_core::json::stringify(&body).unwrap();
+    compiled_body_matches(&config);
     assert_eq!(
         encoded,
         r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello"}"#
@@ -130,7 +130,6 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
 fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fences() {
     {
         let messages = [ModelRoundMessage {
-            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "find it".into(),
             tool_call_id: None,
@@ -194,7 +193,6 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
     }
     {
         let messages = [ModelRoundMessage {
-            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "explain".into(),
             tool_call_id: None,
@@ -280,7 +278,6 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     }];
     let messages = [
         ModelRoundMessage {
-            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "hello".into(),
             tool_call_id: None,
@@ -294,7 +291,6 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
             continuation_item_id: Some("turn-item-0".into()),
         },
         ModelRoundMessage {
-            facts: Default::default(),
             role: ModelRoundRole::Assistant,
             content: "ignored fallback".into(),
             tool_call_id: None,
@@ -396,4 +392,35 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
         serialize::body(&input, &llama, serialize::Carrier::Chat { stream: false }).unwrap();
     assert_eq!(llama_body["thinking_budget_tokens"], 250.0);
     assert!(llama_body.get("reasoning_effort").is_none());
+}
+
+fn compiled_body_matches(config: &ProviderRequestConfig) {
+    let history = super::super::prefix_diagnostics::History::default();
+    for body in [
+        serde_json::json!({"model":"gpt-6-luna","input":[]}),
+        serde_json::json!({"model":"gpt-6-luna","input":"single\n한글"}),
+        serde_json::json!({"input":[{"output":"escaped\nline\r\t\""},{"n":1e20}]}),
+        serde_json::json!({"messages":[{"role":"user","content":"안녕 👋"}]}),
+        serde_json::json!({"contents":[{"parts":[{"text":"latest state"}]}],"2":2,"0":0}),
+        serde_json::json!({"input":null,"messages":["unused"]}),
+        serde_json::json!({"model":"no input"}),
+        serde_json::from_str(r#"{"input":[{"role":"user","content":"old"}]}"#).unwrap(),
+        serde_json::from_str(r#"{"input":[{"role":"user","content":"old"},"appended"]}"#).unwrap(),
+        serde_json::from_str(r#"{"input":[{"role":"user","content":"latest"}]}"#).unwrap(),
+        serde_json::from_str(r#"{"input":[{"content":"latest","role":"user"}]}"#).unwrap(),
+        serde_json::from_str(r#"{"input":[{"role":"user","content":"old"}]}"#).unwrap(),
+    ] {
+        for _ in 0..2 {
+            let compiled = history.prepare(&body, config).unwrap();
+            compiled.assert_matches(
+                &super::super::prefix_diagnostics::History::default()
+                    .prepare(&body, config)
+                    .unwrap(),
+            );
+            assert_eq!(
+                compiled.body_json(&body).unwrap(),
+                butler_core::json::stringify(&body).unwrap()
+            );
+        }
+    }
 }

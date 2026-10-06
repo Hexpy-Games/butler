@@ -324,6 +324,8 @@ request transcript (`input`, excluding tools and instructions) is at least
 1.4 MB enter the owner-scale p95; it must be below 20 ms.
 Every request must contain the exact results so far, with their call IDs and
 order; the final request carries all 60 files. Final delivery is checked too.
+The diagnostic prefix hashes, token counts and longest common prefixes are
+checked against an independent reconstruction with the uncached tokenizer.
 
 This scenario uses the existing release-branch perf selector and
 `BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`. Run locally with a release agent:
@@ -335,17 +337,60 @@ python3 ../../../.github/scripts/isolated.py cargo test -p butler-e2e \
   --test e2e perf_02_ -- --nocapture --test-threads=1
 ```
 
-Linux x86_64 release measurements on 2026-10-06, against main `c54d1b761`:
+Linux x86_64 release measurements on 2026-10-06, before at `ca0212d27`
+(the earlier SSE scan and message-facts cache), after with exact token-block
+reuse, fewer serialization passes, and shared catalog construction:
 
 | Measurement | Before | After |
 | --- | ---: | ---: |
 | Transcript bytes | 1,455,703 | 1,455,703 |
 | Final request bytes | 1,508,906 | 1,508,906 |
 | Owner-scale samples | 3 | 3 |
-| Per-round p50 | 141.9 ms | 148.5 ms |
-| Per-round p95 | 144.9 ms | 150.0 ms |
+| Per-round p50 | 145.1 ms | 19.2 ms |
+| Per-round p95 | 147.3 ms | 19.3 ms |
 
-Both runs passed every history and final-delivery assertion, then failed the
-unchanged 20 ms gate. These two fixes do not meet the overall round budget;
-this paired measurement does not show an end-to-end speedup. The other audit
-items from the closed PR are outside this change.
+Both runs passed the exact history and final-delivery assertions. The after
+run also passed the independent token assertions and the unchanged 20 ms gate.
+The measured tree includes `origin/main` at `3379b7a6f` (the thin CLI split);
+`98581771a` was subsequently merged with CI/docs changes only.
+The margin is small: the instrumented run measured 20.4 ms p95 and failed the
+gate. No assertion or budget was changed.
+
+Profiling used the same release agent and scenario, with
+`perf record -e cpu-clock:u -F 1999 -g --clockid mono --call-graph dwarf,32768`.
+Samply unwound the captured DWARF stacks; a flamegraph was generated from
+resolved stacks. `BUTLER_E2E_PROFILE=1` prints monotonic endpoints so analysis
+includes only the three owner-scale reply-to-request gaps. There were 918
+before and 138 after agent CPU samples; profiled p95 was 163.0 and 20.4 ms.
+Inclusive percentages overlap. These are the top ten named application/library
+frames, excluding generic Rust/Tokio/libc executor frames:
+
+| Before frame | CPU % | After frame | CPU % |
+| --- | ---: | --- | ---: |
+| `CoreBPE::encode_ordinary` | 81.26 | `driver::obtain_reply` | 44.20 |
+| `driver::obtain_reply` | 62.20 | `driver::run_iteration` | 42.03 |
+| `fancy_regex::Matches::next` | 59.15 | `ProductionAgentLoop::run` | 28.26 |
+| `fancy_regex::Regex::find_from_pos_with_option_flags` | 56.43 | `TurnContextProjection::project` | 22.46 |
+| `fancy_regex::vm::run` | 54.47 | `model_round::project_context` | 22.46 |
+| `catalog::estimate_tokens` | 52.83 | `RoutedRound::run` | 21.74 |
+| `CoreBPE::count_ordinary` | 52.72 | `ModelProvider::run` | 21.74 |
+| `RoutedRound::run` | 34.53 | `RoutedRound::run_round` | 21.01 |
+| `ModelProvider::run` | 34.42 | `TokenizerOwner::block` | 15.94 |
+| `RoutedRound::run_round` | 33.66 | `TurnContext::compacted` | 13.04 |
+
+Repeated full-history regex/BPE work was the main cause. The replacement caches
+exact source blocks only at proven o200k pre-tokenizer boundaries; counting
+reuses lengths and encoding retains every token. Entries are bounded by bytes
+and count, and changed bytes miss the cache. Context pressure and byte admission
+share one serialization, request encoding reuses serialized diagnostic input,
+unchanged diagnostic components reuse their bytes/hashes after ordered value
+comparison, and image admission walks the already parsed body once. Catalog
+construction reuses identical dynamic facts after fresh file reads, with fresh
+observation times and current secret resolution. Unrelated tool results
+are not parsed as work anchors. The earlier SSE scan and message-facts cache
+were reverted.
+
+Remaining after-profile work includes string escaping (11.59%), fresh-block BPE
+(10.14%), SQLite statement preparation (12.32%), and SHA-256 (7.97%). Catalog
+construction was 6.90% before its reuse; the final cache path is 0.72%. SQLite
+and catalog state still remain current on each round.

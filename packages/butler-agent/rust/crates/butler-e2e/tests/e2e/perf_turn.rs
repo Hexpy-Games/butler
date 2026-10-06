@@ -103,6 +103,7 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
     );
     let requests = s.provider()?.requests();
     assert_history(&requests);
+    super::token_metrics::report(&s, &requests, "PERF-02 exact prefix tokens")?;
     let transcript_sizes: Vec<_> = requests
         .iter()
         .map(|request| serde_json::to_vec(&request["input"]).map(|bytes| bytes.len()))
@@ -128,6 +129,17 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
         .map(|(overhead, _)| *overhead)
         .collect();
     assert!(!late.is_empty(), "no round reached owner scale");
+    if std::env::var("BUTLER_E2E_PROFILE").as_deref() == Ok("1") {
+        for (index, bytes) in transcript_sizes.iter().enumerate().skip(1) {
+            if *bytes >= 1_400_000 {
+                eprintln!(
+                    "PERF-02 profile round {index}: {:?} -> {:?}",
+                    timings[index - 1].replied,
+                    timings[index].arrived
+                );
+            }
+        }
+    }
     let mut sorted = late;
     sorted.sort();
     let p95 = percentile(&sorted, 95);

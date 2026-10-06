@@ -175,7 +175,6 @@ pub(super) fn assistant_message(
     provider_data: Option<Value>,
 ) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role: ModelRoundRole::Assistant,
         content: content.into(),
         tool_call_id: None,

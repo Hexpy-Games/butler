@@ -21,7 +21,6 @@ use butler_turn::btcc::{
 
 pub(super) fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
-        facts: Default::default(),
         role,
         content: Arc::from(content),
         tool_call_id: None,
