@@ -101,6 +101,8 @@ impl AppApplication {
                 .map_err(super::super::app_error)?;
             if let Some(event) = event {
                 super::super::events::publish(&subscribers, &event);
+                self.session_start_hook(row.target_session_id.clone(), "branched")
+                    .await?;
             }
             row = self
                 .storage

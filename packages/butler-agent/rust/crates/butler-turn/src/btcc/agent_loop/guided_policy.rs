@@ -42,6 +42,19 @@ impl GuidedPolicy {
 }
 
 impl GuidedPolicyPort for GuidedPolicy {
+    fn hook_tool_name<'a>(&self, call: &'a ModelRoundToolCall) -> std::borrow::Cow<'a, str> {
+        self.dependencies.tools.hook_tool_name(call)
+    }
+    fn hook_tool_input<'a>(
+        &self,
+        call: &'a ModelRoundToolCall,
+    ) -> &'a serde_json::Map<String, serde_json::Value> {
+        self.dependencies.tools.hook_tool_input(call)
+    }
+    fn hooks(&self) -> Option<&super::guided_ports::GuidedHookBinding> {
+        self.dependencies.hooks.as_ref()
+    }
+
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy> {
         Box::pin(async move {
             let rendered = self.dependencies.prompt.render(invocation).await?;

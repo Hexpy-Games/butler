@@ -24,6 +24,10 @@ const HEADER_VALUE = /^[\x21-\x7e]+$/u;
 
 /** The only calls that carry the admin credential, by bridge route. */
 const SECURITY_ROUTES = Object.freeze({
+  getHooks: { method: "GET", path: "/hooks" },
+  saveHooks: { method: "PUT", path: "/hooks" },
+  getHookRuns: { method: "GET", path: "/hooks/runs" },
+  testHook: { method: "POST", path: "/hooks", hook: true },
   getSecurity: { method: "GET", path: "/security" },
   issuePairingCode: { method: "POST", path: "/security/pairing" },
   getPairingStatus: { method: "GET", path: "/security/pairing" },
@@ -88,10 +92,12 @@ export async function requestSecurityRoute(
   if (route?.device && (typeof deviceId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(deviceId))) {
     return failure("invalid_request");
   }
-  const path = route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.path;
+  const hookId = input?.body?.hookId;
+  if (route?.hook && (typeof hookId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(hookId))) return failure("invalid_request");
+  const path = route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.path;
   const security = input?.body?.security;
-  const needsBody = input?.route === "updateSecuritySettings";
-  if (!route || (needsBody && (typeof security !== "object" || security === null))) {
+  const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook;
+  if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {
     return failure("invalid_request");
   }
   try {
@@ -104,7 +110,7 @@ export async function requestSecurityRoute(
         ...bearer,
         ...(adminCredential ? { [APP_ADMIN_HEADER]: adminCredential } : {}),
       },
-      ...(needsBody ? { body: JSON.stringify({ security }) } : {}),
+      ...(needsBody ? { body: JSON.stringify(input?.route === "saveHooks" ? input.body : route?.hook ? {} : { security }) } : {}),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) return failure(body?.error?.code, response.status);

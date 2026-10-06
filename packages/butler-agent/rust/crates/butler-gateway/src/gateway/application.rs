@@ -21,6 +21,7 @@ mod gateway_impl;
 mod gateway_mutations;
 mod gateway_session_controls_impl;
 mod handle;
+mod hooks;
 mod internal_continuation;
 mod mcp_servers;
 mod memory_management;

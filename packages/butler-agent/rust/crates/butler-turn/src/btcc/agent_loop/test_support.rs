@@ -89,6 +89,7 @@ impl Fixture {
             self.clone(),
             self.clone(),
             GuidedPolicyDependencies {
+                hooks: None,
                 prompt: self.clone(),
                 authority: self.clone(),
                 context: self.clone(),

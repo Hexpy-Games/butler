@@ -116,3 +116,27 @@ pub(super) fn memory_source_readers(
         Arc::new(ConversationSessionReference::new(data_root, 2, sources)),
     )
 }
+
+pub(super) fn workspace_services(
+    stores: &RuntimeStores,
+    commands: &Commands,
+    files: &WorkspaceFiles,
+    host_environment: &Arc<std::collections::HashMap<String, String>>,
+    paths: &RuntimePaths,
+) -> (SessionWorktrees, SessionWorkspaceRecovery) {
+    let session_worktrees = SessionWorktrees::new(
+        stores.bindings.clone(),
+        commands.clone(),
+        files.clone(),
+        host_environment.clone(),
+        paths.data_root.clone(),
+        Arc::new(SystemIdentity),
+    );
+    let workspace_recovery = SessionWorkspaceRecovery::new(
+        stores.bindings.clone(),
+        commands.clone(),
+        files.clone(),
+        host_environment.clone(),
+    );
+    (session_worktrees, workspace_recovery)
+}
