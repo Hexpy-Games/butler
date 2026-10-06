@@ -23,10 +23,10 @@ export function nodeText(node: ReactNode): string {
 }
 
 /**
- * Splits a label into its first character (plus any leading space) and the
+ * Splits a label into its first character (including leading space) and the
  * rest, so the icon can be glued to that character: the icon never ends a
  * line on its own, and the rest still wraps anywhere. A plain `span` (a
- * streaming reveal chunk) is split inside; any other element is glued whole.
+ * streaming reveal chunk) is split inside; each remaining element is glued whole.
  */
 export function splitLabelLead(node: ReactNode): [ReactNode, ReactNode[]] {
   const [first, ...rest] = Children.toArray(node);
