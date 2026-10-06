@@ -30,7 +30,7 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
                 exchange.request.key.user_request = prompt.into();
                 exchange.request.key.round = round.clone();
                 exchange.response = response(
-                    json!({"type":"function_call","id":format!("fc_output_{index}"),"call_id":format!("call_output_{index}"),"name":tool,"arguments":args.to_string(),"status":"completed"}),
+                    &json!({"type":"function_call","id":format!("fc_output_{index}"),"call_id":format!("call_output_{index}"),"name":tool,"arguments":args.to_string(),"status":"completed"}),
                 );
                 c.exchanges.push(exchange);
                 round.extend(["function_call".into(), "function_call_output".into()]);
@@ -39,14 +39,14 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
             last.request.key.user_request = prompt.into();
             last.request.key.round = round;
             last.response = response(
-                json!({"type":"message","id":"msg_output","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Published.","annotations":[]}]}),
+                &json!({"type":"message","id":"msg_output","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Published.","annotations":[]}]}),
             );
             c.exchanges.push(last);
         }
     }
     Ok(c)
 }
-fn response(item: Value) -> ResponseRecord {
+fn response(item: &Value) -> ResponseRecord {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_output","status":"in_progress","output":[]}}),
         json!({"type":"response.output_item.added","output_index":0,"item":item}),

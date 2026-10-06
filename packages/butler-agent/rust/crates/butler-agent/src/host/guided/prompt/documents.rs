@@ -9,10 +9,20 @@ use butler_turn::btcc::{BtccError, BtccRepositories, ContextDocumentRead, TurnRe
 
 pub(super) struct DocumentProjection {
     pub context: String,
+    pub project_instructions: String,
     pub response_language: String,
     pub governing: String,
     pub persona: String,
     pub eol: String,
+}
+
+impl DocumentProjection {
+    pub(super) fn prompt_context(&self) -> impl Iterator<Item = String> {
+        [&self.project_instructions, &self.context]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .cloned()
+    }
 }
 
 fn references<'a>(turn: &'a TurnRecord, field: &str) -> impl Iterator<Item = &'a str> {
@@ -35,6 +45,9 @@ async fn group(
         let Ok(document) = repo.read_context_document(reference.clone()).await else {
             continue;
         };
+        if document.source_id == "project-instructions" {
+            continue; // Exact admitted instructions are projected separately from memory.
+        }
         let content = match projected {
             Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
             None => document.content,
@@ -77,8 +90,9 @@ pub(super) async fn response_language(repo: &BtccRepositories, turn: &TurnRecord
     for reference in
         references(turn, "mandatoryHotCacheRefs").chain(references(turn, "optionalHotCacheRefs"))
     {
-        if let Ok(content) = repo.resolve_context_document(reference.to_owned()).await
-            && let Some(language) = language(&content)
+        if let Ok(document) = repo.read_context_document(reference.to_owned()).await
+            && document.source_id != "project-instructions"
+            && let Some(language) = language(&document.content)
         {
             return language;
         }
@@ -191,6 +205,7 @@ async fn project_profile(
         admitted.push(document);
     }
     let eol_content = exact_eol(&admitted)?;
+    let project_instructions = exact_project_instructions(repo, turn).await?;
     let persona_sources: HashSet<_> = [
         "active-persona-reminder",
         "first-chat-onboarding",
@@ -226,6 +241,7 @@ async fn project_profile(
     };
     Ok(DocumentProjection {
         context,
+        project_instructions,
         response_language,
         governing: join(&governing_sources),
         persona: join(&persona_sources),
@@ -249,4 +265,30 @@ fn exact_eol(admitted: &[ContextDocumentRead]) -> Result<String, BtccError> {
         ));
     }
     Ok(eol_content.unwrap_or_default())
+}
+
+/// Project operating instructions stay exact across memory budgets and phases.
+async fn exact_project_instructions(
+    repo: &BtccRepositories,
+    turn: &TurnRecord,
+) -> Result<String, BtccError> {
+    let mut contents = Vec::new();
+    for reference in references(turn, "mandatoryHotCacheRefs") {
+        let document = repo.read_context_document(reference.to_owned()).await?;
+        if document.source_id != "project-instructions" {
+            continue;
+        }
+        if document.projection_class != "mandatory_hot_cache"
+            || document.scope_kind != "project"
+            || turn.context.get("projectRef").and_then(Value::as_str)
+                != Some(document.scope_id.as_str())
+        {
+            return Err(BtccError::relayed(
+                "guided_project_instruction_document_invalid",
+                "guided_project_instruction_document_invalid",
+            ));
+        }
+        contents.push(document.content);
+    }
+    Ok(contents.join("\n\n"))
 }

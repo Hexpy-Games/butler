@@ -3,6 +3,7 @@
 mod assembler;
 mod cache;
 mod files;
+mod project_instructions;
 mod runtime;
 mod sections;
 #[cfg(test)]
