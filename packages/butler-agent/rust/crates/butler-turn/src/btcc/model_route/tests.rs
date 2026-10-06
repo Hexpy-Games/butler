@@ -71,7 +71,7 @@ async fn accepted_replay_skips_provider_and_forwards_sizing() {
         })
         .unwrap()
         .unwrap();
-    assert_eq!((sizing.measure)(&messages).unwrap(), 3.5);
+    assert_eq!((sizing.measure)(&messages).unwrap().pressure_bytes, 3.5);
     assert_eq!(sizing.max_output_tokens, Some(7.5));
     assert_eq!(sizing.max_message_bytes, 99.25);
 }
