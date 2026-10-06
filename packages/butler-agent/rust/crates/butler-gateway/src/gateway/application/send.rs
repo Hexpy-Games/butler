@@ -91,6 +91,8 @@ impl AppApplication {
                 )
                 .await;
         }
+        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
+            .await?;
         let mut prepared = inspected.prepared;
         let has_project_refs = request.content_parts.as_ref().is_some_and(|content| {
             content
@@ -185,24 +187,35 @@ impl AppApplication {
             controls: resolved,
         };
         if inserted {
-            let visual = self
-                .admit_visual_localized(VisualAdmissionRequest {
-                    model_ref: prepared.controls.model.clone(),
-                    files: inspected.files,
-                })
-                .await;
-            match visual {
-                Ok(attachments) => {
-                    self.finish_visual(&chat_id, &queued_id, attachments)
-                        .await?;
-                }
-                Err(error) => {
-                    self.fail_admission(&chat_id, &queued_id, &error).await?;
-                    return Err(error);
-                }
-            }
+            self.complete_visual_admission(&chat_id, &queued_id, &prepared, inspected.files)
+                .await?;
         }
         self.dispatch(&chat_id, &client_id, prepared).await
+    }
+
+    async fn complete_visual_admission(
+        &self,
+        chat_id: &str,
+        queued_id: &str,
+        prepared: &ResolvedAppAdmission,
+        files: Vec<AppMessageFileSnapshot>,
+    ) -> Result<(), GatewayApplicationError> {
+        let visual = self
+            .admit_visual_localized(VisualAdmissionRequest {
+                model_ref: prepared.controls.model.clone(),
+                files,
+            })
+            .await;
+        match visual {
+            Ok(attachments) => {
+                self.finish_visual(chat_id, queued_id, attachments).await?;
+            }
+            Err(error) => {
+                self.fail_admission(chat_id, queued_id, &error).await?;
+                return Err(error);
+            }
+        }
+        Ok(())
     }
 
     async fn dispatch(

@@ -1718,6 +1718,7 @@ export function activeTitleForView(
   view: AppView,
   activeChat: ActiveChatView,
 ): { title: string; subtitle?: string } {
+  if (view.kind === "browser") return { title: appCopy.browser.title };
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };
@@ -1831,6 +1832,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     return "logs";
   if (section.includes("appearance")) return "appearance";
   if (section.includes("server") || section.includes("bridge")) return "server";
+  if (section === "hooks" || section === "훅") return "hooks";
   if (section.includes("mcp")) return "mcp";
   if (section.includes("skill")) return "skills";
   // Backup, cleanup and worker models live on the Models page (the

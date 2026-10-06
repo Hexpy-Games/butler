@@ -1671,7 +1671,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       controls.onAccepted?.();
     } catch (error) {
-      notifyError(error, appCopy.interfaceFeedback.queueFailed, {
+      controls.onRejected?.(targetChatId);
+      const hookBlocked = error instanceof Error && "code" in error && error.code === "hook_blocked";
+      notifyError(error, hookBlocked ? `${appCopy.settings.hooks.blocked} · ${error.message}` : appCopy.interfaceFeedback.queueFailed, {
         id: `queue-message-${targetChatId}`,
       });
     }
@@ -2071,7 +2073,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ? null
             : state.optimisticSessionStart,
       }));
-      notifyError(error, appCopy.interfaceFeedback.sendFailed, {
+      controls.onRejected?.(targetChatId);
+      const hookBlocked = error instanceof Error && "code" in error && error.code === "hook_blocked";
+      notifyError(error, hookBlocked ? `${appCopy.settings.hooks.blocked} · ${error.message}` : appCopy.interfaceFeedback.sendFailed, {
         id: `send-message-${targetChatId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -2499,7 +2503,7 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
+  (selectActiveSessionView(state) || state.view.kind === "browser") && isServerBackedSessionId(state.activeChatId);
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

@@ -52,6 +52,9 @@ pub(super) async fn read(
             if document.context_ref != reference || document.projection_class != class {
                 return Err(error("phase_scoped_memory_document_invalid"));
             }
+            if document.source_id == "project-instructions" {
+                continue; // Operating instructions use their own exact admitted projection.
+            }
             let allowed = class == "profile"
                 || class == "recent_feedback"
                 || (class == "mandatory_hot_cache" && phase != "direct")

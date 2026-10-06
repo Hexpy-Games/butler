@@ -349,6 +349,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/updates/apply") {
     return await callBridge<T>(bridge, "applyUpdate", parseBody(options.body));
   }
+  if (method === "GET" && url.pathname === "/hooks") return unwrapBridgeResult<T>(await callBridge(bridge, "getHooks"));
+  if (method === "GET" && url.pathname === "/hooks/runs") return unwrapBridgeResult<T>(await callBridge(bridge, "getHookRuns"));
+  if (method === "PUT" && url.pathname === "/hooks") return unwrapBridgeResult<T>(await callBridge(bridge, "saveHooks", parseBody(options.body)));
+  const hookTest = method === "POST" ? url.pathname.match(/^\/hooks\/([a-z0-9_-]+)\/test$/iu) : null;
+  if (hookTest) return unwrapBridgeResult<T>(await callBridge(bridge, "testHook", { hookId: hookTest[1] }));
   if (method === "GET" && url.pathname === "/mcp-servers") return await callBridge<T>(bridge, "listMcpServers");
   if (method === "GET" && url.pathname === "/mcp-capabilities") return await callBridge<T>(bridge, "listMcpCapabilities");
   if (method === "GET" && url.pathname === "/skills") return await callBridge<T>(bridge, "listSkills");
@@ -699,7 +704,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/session-queue") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "queueMessage", {
+    return unwrapBridgeResult<T>(await callBridge(bridge, "queueMessage", {
       chatId: body.chat_id,
       text: body.text,
       contentParts: body.content_parts,
@@ -708,7 +713,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       accessMode: body.access_mode,
       planMode: body.plan_mode,
       attachments: body.attachments,
-    });
+    }));
   }
   const queuedMessageMatch = url.pathname.match(/^\/session-queue\/([^/]+)$/u);
   if (method === "PATCH" && queuedMessageMatch) {
@@ -742,7 +747,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/messages") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "sendMessage", {
+    return unwrapBridgeResult<T>(await callBridge(bridge, "sendMessage", {
       chatId: body.chat_id,
       text: body.text,
       clientMessageId: body.client_message_id,
@@ -753,7 +758,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       planMode: body.plan_mode,
       queuePolicy: body.queue_policy,
       attachments: body.attachments,
-    });
+    }));
   }
   const retryMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/retry$/) : null;
   if (retryMatch) return await callBridge<T>(bridge, "retryTurn", { turnId: decodeURIComponent(retryMatch[1]) });
@@ -946,7 +951,8 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   const result = value as BridgeResult<T>;
   if (result.ok) return result.data;
   const code = typeof result.error?.code === "string" ? result.error.code : "request_failed";
-  const error = new Error(appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
+  const hookReason = code === "hook_blocked" && typeof result.error?.hook_reason === "string" ? result.error.hook_reason : undefined;
+  const error = new Error(hookReason ?? appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
   Object.assign(error, {
     code,
     ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),

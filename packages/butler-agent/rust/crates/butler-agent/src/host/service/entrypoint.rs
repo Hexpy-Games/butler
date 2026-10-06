@@ -17,6 +17,7 @@ mod poll;
 mod startup;
 mod stop_signal;
 pub(crate) use startup::STARTUP_TIMEOUT;
+mod storage_health;
 mod support;
 use crate::host::{
     AgentRuntime, ProcessEnvironment, ResolvedInstallation, RuntimePaths, ServiceConfiguration,
@@ -320,23 +321,25 @@ async fn serve(
     startup.phase("dispatch_recovery_and_instance_ready");
     log_effective_model(&gateway, logs).await?;
     let _ = ready.send(());
-    let subsessions = runtime.subsessions.repository();
-    let result = poll_service(
-        PollOwners {
-            dispatcher: &dispatcher,
-            queue: queue.clone(),
-            progress: progress.clone(),
-            config,
-            subsessions: &subsessions,
-            parent_client: &parent_client,
-            app_endpoint: &app_endpoint,
-            readiness: &readiness,
-            logs,
-        },
-        PollShutdown {
-            stop,
-            foreground_lease,
-        },
+    let result = storage_health::while_serving(
+        &config.data_root,
+        poll_service(
+            PollOwners {
+                dispatcher: &dispatcher,
+                queue: queue.clone(),
+                progress: progress.clone(),
+                config,
+                subsessions: &runtime.subsessions.repository(),
+                parent_client: &parent_client,
+                app_endpoint: &app_endpoint,
+                readiness: &readiness,
+                logs,
+            },
+            PollShutdown {
+                stop,
+                foreground_lease,
+            },
+        ),
     )
     .await;
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;

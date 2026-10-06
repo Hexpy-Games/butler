@@ -15,6 +15,7 @@ import {
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
 import type { SpaceRowData } from "@/app/space/projection";
+import { BrowserEntry } from "../browser/BrowserEntry";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceBrand } from "./SpaceBrand";
 
@@ -40,6 +41,7 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
             label={appCopy.space.search}
             onClick={() => useButlerStore.getState().setCommandOpen(true)}
           />
+          <BrowserEntry />
         </SidebarNav>
       </Stack>
       <Stack gap="sm">

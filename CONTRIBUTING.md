@@ -173,7 +173,7 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
 4. Merge the notes/version changes into main, then cut `release/<v>` from `origin/main` (hotfixes may start from the last tag). The push starts integration and derives both test-build versions from the release branch.
 5. The owner installs the Mac and Windows test builds while integration runs. Fix failures through `fix/<v>-<slug>` PRs into the candidate. Do not rerun passing jobs with unchanged inputs or retry flaky tests to get green; search existing issues first and link an open issue.
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
-7. The tag builds all release platforms and publishes only after the assets and checksums exist. The owner publishes npm locally. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
+7. The tag builds all release platforms and publishes only after the assets and checksums exist. Stable npm publication runs through `.github/workflows/npm-publish.yml`; previews can be published by dispatching that workflow after desktop verification. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
 
 Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
 
@@ -192,7 +192,7 @@ Windows preview releases include the unsigned Agent and Squirrel App installer.
 Run `gh workflow run release.yml --ref release/<v> -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
 The optional tag must match that run; recovery verifies its commit and requires every platform artifact (including Windows for previews).
 It skips builds, signing and smoke checks, then repeats manifest merging, npm packing, checksums and publication with asset replacement.
-Stable npm publication skips an already published version; previews keep owner-controlled npm publication. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
+Stable npm recovery skips an already published version and sends a missing version through `.github/workflows/npm-publish.yml`; previews keep owner-controlled npm publication through that workflow. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.
 
 ## Reporting issues
 

@@ -328,7 +328,14 @@ The diagnostic prefix hashes, token counts and longest common prefixes are
 checked against an independent reconstruction with the uncached tokenizer.
 
 This scenario uses the existing release-branch perf selector and
-`BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`. Run locally with a release agent:
+`BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`.
+
+PERF-02 checks the selected agent's embedded build profile through
+`--version --json` before starting the turn. A debug or unknown profile fails
+with release build instructions, including when `BUTLER_E2E_BIN` overrides the
+usual executable path. The harness itself may use either profile.
+
+Run locally with a release agent:
 
 ```sh
 BUTLER_E2E_TIER=stub BUTLER_E2E_PERF=1 BUTLER_E2E_SKIP_BUILD=1 \

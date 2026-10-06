@@ -59,7 +59,9 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
     if std::env::var("BUTLER_E2E_PERF").as_deref() != Ok("1") {
         return Ok(());
     }
-    let setup = Setup::new("PERF-02")?.synthetic(Script {
+    let setup = Setup::new("PERF-02")?;
+    require_release_agent(&setup)?;
+    let setup = setup.synthetic(Script {
         rounds: ROUNDS,
         path_for: Box::new(|round| format!("perf-{round}.txt")),
         final_text: "All files read.".into(),
@@ -160,6 +162,23 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
         "PERF-02 p95 per-round overhead at owner scale",
     );
     s.finish().await
+}
+
+fn require_release_agent(setup: &Setup) -> Result<(), HarnessError> {
+    let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    let output = launch.command().args(["--version", "--json"]).output()?;
+    let version: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let profile = version["data"]["runtime"]["buildProfile"]
+        .as_str()
+        .unwrap_or("unknown");
+    if !output.status.success() || profile != "release" {
+        return Err(butler_e2e::e2e::harness_error(format!(
+            "PERF-02 requires a release-profile agent; selected agent reports {profile:?}. \
+             Build with cargo build --release -p butler-agent -j 8 and set \
+             BUTLER_E2E_BIN to that executable. The 20 ms budget is release-only."
+        )));
+    }
+    Ok(())
 }
 
 fn contains_text(value: &serde_json::Value, text: &str) -> bool {

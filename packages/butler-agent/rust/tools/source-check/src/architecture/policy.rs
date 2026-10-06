@@ -17,6 +17,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite file synchronization consumes the durable filesystem facade.
         "sqlite" => &["secure_fs"],
         "process_control" => &["process_table"],
+        // Hook processes compose shell selection and tree containment.
+        "hook_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],
@@ -38,6 +40,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],
         "json" => &["public_text"],
+        // Typed hook envelopes preserve complete tool JSON.
+        "hooks" => &["json"],
         // butler-turn: BTCC owns the turn and reads the transcript and workspace.
         "btcc" => &["conversation", "workspace"],
         "conversation" | "workspace" => &[],

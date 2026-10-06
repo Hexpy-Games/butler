@@ -62,8 +62,8 @@ async function paletteChecks(page: Page, prefix: string) {
     await page.keyboard.press("Escape");
   }
   let dialog = await search(page, "");
-  // Fourteen visible sections, plus any server-owned content results.
-  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), 14);
+  // Fifteen visible sections, plus any server-owned content results.
+  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), 15);
   await capture(page, prefix, "palette-all-sections");
   await dialog.getByRole("combobox").fill("logs");
   await page.getByText(copy.commandPalette.empty, { exact: true }).waitFor();

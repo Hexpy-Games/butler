@@ -240,6 +240,7 @@ function koreanProjectFallbackSuggestions(
 }
 
 export const koKrCopy: AppCopy = {
+  browser: { "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "버틀러 업데이트 필요", "restartRequired": "버틀러 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",
@@ -1097,6 +1098,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     copy: "복사",
   },
   settings: {
+    hooks: { add: "훅 추가", edit: "편집", test: "테스트", remove: "삭제", recent: "최근 실행", empty: "훅 없음", name: "이름", event: "이벤트", tools: "도구", command: "명령", args: "인수 (JSON)", timeout: "제한 시간 (ms)", failClosed: "오류 시 차단", async: "백그라운드", enabled: "사용", refresh: "새로고침", blocked: "훅이 차단함", editTitle: "훅 편집", disabled: "사용 안 함", emptyRuns: "실행 기록 없음", testSuccess: "실행 성공", testFailure: "실행 실패", exitCode: "종료 코드", commandDisabled: "인수를 사용 중입니다.", commandRequired: "명령 또는 인수를 입력합니다.", deleteConfirm: name => `훅 "${name}"을 삭제합니다.` },
     deleteSchedule: name => `예약 작업 "${name}"을 삭제합니다.`,
     deleteMcpServer: name => `MCP 서버 "${name}"과 저장된 인증 정보를 삭제합니다.`,
     mcpEnabled: "사용 중", mcpDisabled: "사용 안 함",
@@ -1127,6 +1129,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       server: "서버",
       updates: "업데이트",
       mcp: "MCP",
+      hooks: "훅",
       skills: "스킬",
       usage: "사용량",
       logs: "로그",
@@ -1145,6 +1148,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
       updates: "버틀러를 확인하고 업데이트합니다.",
       mcp: "MCP 서버와 연결 정보를 관리합니다.",
+      hooks: "명령으로 훅을 관리합니다.",
       skills: "기본 스킬과 프로젝트 스킬을 관리합니다.",
       usage: "모델과 도구 사용량을 확인합니다.",
       logs: "개발자 모드에서 모델 요청과 응답 로그를 확인합니다.",
@@ -1163,6 +1167,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       server: ["연결", "프로젝트 폴더"],
       updates: ["업그레이드", "새 버전"],
       mcp: ["도구 서버", "외부 도구"],
+      hooks: ["hooks", "훅"],
       skills: ["스킬 관리", "기능"],
       usage: ["토큰", "사용량"],
       logs: ["개발자 로그", "디버그", "원문"],

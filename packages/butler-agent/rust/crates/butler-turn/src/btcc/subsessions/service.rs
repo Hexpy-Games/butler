@@ -145,6 +145,19 @@ impl SubsessionService {
         }
     }
 
+    /// Parent identity for a child lifecycle envelope, without loading transcripts.
+    pub async fn hook_parent_session_id(
+        &self,
+        session: String,
+    ) -> Result<Option<String>, BtccError> {
+        Ok(self
+            .repository
+            .by_child(session)
+            .await
+            .map_err(BtccError::from)?
+            .map(|relation| relation.parent_session_id))
+    }
+
     /// Change notifications after durable child execution state transitions.
     pub fn subscribe_changes(&self) -> tokio::sync::broadcast::Receiver<(String, String)> {
         self.changes.subscribe()

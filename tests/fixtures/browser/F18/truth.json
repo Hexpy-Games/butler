@@ -1,0 +1,26 @@
+{
+  "id": "F18",
+  "targets": [
+    "slider",
+    "a",
+    "b"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "slider",
+        "type": "state",
+        "value": "75"
+      },
+      {
+        "target": "order",
+        "type": "state",
+        "value": "B,A"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

@@ -214,6 +214,49 @@ impl PromptAssembler {
         &self,
         input: SharedAssemblyInput<'_>,
     ) -> ContextResult<ContextAssembly> {
+        let mut live = self.shared_live_configuration(&input).await?;
+        live.extend(input.role_configuration);
+        let hash = live_configuration_hash(&live)?;
+        let config = read_config(&self.paths.data_root)?;
+        check_cancelled(input.request)?;
+        let status = self
+            .dependencies
+            .cognition
+            .project_capsule_status(input.binding, &input.request.preparation_cancellation)
+            .await?;
+        let response_config = read_config(&self.paths.data_root)?;
+        let response_persona = active_persona(&self.paths.data_root)?;
+        let language = resolve_language(
+            self.environment.response_language_override.as_deref(),
+            self.environment.response_language.as_deref(),
+            &response_config,
+            response_persona.as_deref(),
+        );
+        Ok(ContextAssembly {
+            static_context: self.runtime_system_context()?,
+            live_configuration: live,
+            runtime_state: vec![runtime_state(RuntimeStateInput {
+                binding: input.binding,
+                request: input.request,
+                config: &config,
+                environment: &self.environment,
+                clock: self.dependencies.clock.as_ref(),
+                response_language: language,
+                live_config_hash: &hash,
+                project_status: status,
+            })?],
+            working_context: Vec::new(),
+            retrieved_context: Vec::new(),
+            current_input: Vec::new(),
+            references: Vec::new(),
+            live_config_hash: hash,
+        })
+    }
+
+    async fn shared_live_configuration(
+        &self,
+        input: &SharedAssemblyInput<'_>,
+    ) -> ContextResult<Vec<ContextSection>> {
         let mut live = Vec::new();
         let eol = match read_text_if_exists(&self.paths.data_root.join("eol.md"))? {
             Some(content) => Some(content),
@@ -265,42 +308,13 @@ impl PromptAssembler {
                 &feedback.scope_kind,
             ));
         }
-        live.extend(input.role_configuration);
-        let hash = live_configuration_hash(&live)?;
-        let config = read_config(&self.paths.data_root)?;
-        check_cancelled(input.request)?;
-        let status = self
-            .dependencies
-            .cognition
-            .project_capsule_status(input.binding, &input.request.preparation_cancellation)
-            .await?;
-        let response_config = read_config(&self.paths.data_root)?;
-        let response_persona = active_persona(&self.paths.data_root)?;
-        let language = resolve_language(
-            self.environment.response_language_override.as_deref(),
-            self.environment.response_language.as_deref(),
-            &response_config,
-            response_persona.as_deref(),
-        );
-        Ok(ContextAssembly {
-            static_context: self.runtime_system_context()?,
-            live_configuration: live,
-            runtime_state: vec![runtime_state(RuntimeStateInput {
-                binding: input.binding,
-                request: input.request,
-                config: &config,
-                environment: &self.environment,
-                clock: self.dependencies.clock.as_ref(),
-                response_language: language,
-                live_config_hash: &hash,
-                project_status: status,
-            })?],
-            working_context: Vec::new(),
-            retrieved_context: Vec::new(),
-            current_input: Vec::new(),
-            references: Vec::new(),
-            live_config_hash: hash,
-        })
+        if let Some(instructions) =
+            super::project_instructions::snapshot(input.binding, self.project_instructions.clone())
+                .await
+        {
+            live.push(instructions);
+        }
+        Ok(live)
     }
 }
 
