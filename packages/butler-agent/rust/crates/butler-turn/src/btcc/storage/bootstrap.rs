@@ -2,8 +2,12 @@
 
 mod health;
 mod manifest;
+mod verdict;
 pub(super) use health::migrate_current;
-pub use health::{begin_storage_startup, finish_storage_shutdown, validate_storage_background};
+pub use health::{
+    begin_storage_startup, storage_error_is_corruption, storage_scan_delay,
+    validate_storage_background,
+};
 mod validate;
 
 use crate::btcc::StorageCode;
@@ -160,10 +164,12 @@ impl FreshStorage<'_> {
     }
 }
 
-/// Existing current-manifest target: inspect read-only, never repair or
-/// fabricate the receipt/activation pair during startup.
+/// Full offline validation for recovery. A passing scan clears the corruption
+/// verdict, without repairing or fabricating the receipt/activation pair.
 pub fn read_activated_storage_manifest(path: &Path) -> StorageResult<String> {
-    validate::read_activated(path)
+    let id = validate::read_activated(path)?;
+    verdict::verified(path)?;
+    Ok(id)
 }
 
 fn remove_temp(temp: &Path) -> StorageResult<()> {

@@ -50,14 +50,37 @@ pub(super) fn integrity(db: &Connection) -> StorageResult<()> {
         return Err(error(StorageCode::AgentBtccStorageQuickCheckFailed));
     }
     activated::trace("quick_check_validated", started);
-    let foreign: Option<()> = db
-        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
+    let tables = db
+        .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
+        .map_err(StorageError::sqlite)?
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(StorageError::sqlite)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(StorageError::sqlite)?;
+    for table in tables {
+        foreign_keys(db, Some(&table))?;
+    }
+    activated::trace("foreign_keys_validated", started);
+    Ok(())
+}
+
+pub(super) fn foreign_keys(db: &Connection, table: Option<&str>) -> StorageResult<()> {
+    let sql = table.map_or_else(
+        || "PRAGMA foreign_key_check".to_owned(),
+        |name| {
+            format!(
+                "PRAGMA foreign_key_check(\"{}\")",
+                name.replace('"', "\"\"")
+            )
+        },
+    );
+    let foreign = db
+        .query_row(&sql, [], |_| Ok(()))
         .optional()
         .map_err(StorageError::sqlite)?;
     if foreign.is_some() {
         return Err(error(StorageCode::AgentBtccStorageForeignKeyCheckFailed));
     }
-    activated::trace("foreign_keys_validated", started);
     Ok(())
 }
 

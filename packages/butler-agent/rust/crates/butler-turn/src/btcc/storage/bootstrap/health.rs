@@ -1,127 +1,110 @@
-//! WAL-atomic startup fence; a clean marker is published only by the service
-//! after every producer and SQLite owner has closed successfully.
+//! Startup checks only metadata. Full validation belongs to the serving worker.
+use super::super::{StorageError, StorageResult, migration, schema};
+use super::{validate, verdict};
+use rusqlite::Connection;
 use std::path::Path;
-
-use butler_platform::sqlite;
-use rusqlite::{Connection, OptionalExtension};
 use tokio_util::sync::CancellationToken;
 
-use super::super::{StorageError, StorageResult, migration, schema};
-use super::{manifest::digest, validate};
-
-const HEALTH_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS agent_storage_health (
- singleton INTEGER PRIMARY KEY CHECK(singleton=1), clean INTEGER NOT NULL,
- schema_version INTEGER NOT NULL, migration_revision TEXT NOT NULL)";
-
-fn revision() -> String {
-    digest(
-        concat!(
-            include_str!("../schema.rs"),
-            include_str!("../schema/core.rs"),
-            include_str!("../schema/work.rs"),
-            include_str!("../schema/effects.rs"),
-            include_str!("../schema/authority.rs"),
-            include_str!("../schema/subsession.rs"),
-            include_str!("../schema/legacy.rs"),
-            include_str!("../migration.rs"),
-            include_str!("../migration/authority.rs"),
-            include_str!("../migration/subsession.rs"),
-            include_str!("../migration/monitoring.rs"),
-            include_str!("../migration/startup_indexes.rs"),
-        )
-        .as_bytes(),
-    )
-}
-
-fn current(db: &Connection) -> StorageResult<bool> {
-    let exists: bool = db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='agent_storage_health' AND type='table')",
-        [], |row| row.get(0),
-    ).map_err(StorageError::sqlite)?;
-    if !exists {
-        return Ok(false);
-    }
-    let stamp: Option<(i64, String)> = db
-        .query_row(
-            "SELECT schema_version,migration_revision FROM agent_storage_health WHERE singleton=1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(StorageError::sqlite)?;
-    let version: i64 = db
-        .pragma_query_value(None, "schema_version", |row| row.get(0))
-        .map_err(StorageError::sqlite)?;
-    Ok(stamp.is_some_and(|(saved, code)| saved == version && code == revision()))
-}
-
-/// Validate before any startup mutation; the writer durably clears the fence.
-/// Missing markers (including older installations) always receive a full scan.
+/// SQLite open/schema errors and a persisted corruption verdict fail fast.
 pub fn begin_storage_startup(path: &Path) -> StorageResult<String> {
-    let db = sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(StorageError::sqlite)?;
-    let clean = current(&db)?
-        && db
-            .query_row(
-                "SELECT clean=1 FROM agent_storage_health WHERE singleton=1",
-                [],
-                |row| row.get::<_, bool>(0),
-            )
-            .map_err(StorageError::sqlite)?;
-    drop(db);
-    validate::activated::read(path, !clean, CancellationToken::new(), false)
+    verdict::require_healthy(path)?;
+    validate::activated::read(path, false, CancellationToken::new(), false)
 }
+
+/// This is a migration version, advanced when the migration contract changes.
+const MIGRATION_VERSION: i64 = 1;
 
 pub(in crate::btcc::storage) fn migrate_current(db: &mut Connection) -> StorageResult<()> {
-    let started = std::time::Instant::now();
-    let migrated = current(db)?;
-    // This fence is synced before any runtime owner/migration/Turn can write,
-    // including callers that open storage without the service bootstrap.
-    db.pragma_update(None, "synchronous", "FULL")
+    let version: i64 = db
+        .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(StorageError::sqlite)?;
-    db.execute_batch(HEALTH_SCHEMA)
-        .map_err(StorageError::sqlite)?;
-    db.execute("INSERT INTO agent_storage_health VALUES(1,0,-1,'') ON CONFLICT(singleton) DO UPDATE SET clean=0", [])
-        .map_err(StorageError::sqlite)?;
-    db.pragma_update(None, "synchronous", "NORMAL")
-        .map_err(StorageError::sqlite)?;
-    if migrated {
-        validate::activated::trace("migrations_unchanged", started);
+    if version == MIGRATION_VERSION {
         return Ok(());
     }
-    schema::create_current(db).map_err(StorageError::sqlite)?;
-    migration::apply(db).map_err(StorageError::sqlite)?;
-    validate::activated::trace("migrations_applied", started);
-    validate::integrity(db)?;
-    db.execute_batch(HEALTH_SCHEMA)
+    if version > MIGRATION_VERSION {
+        return Err(super::error(
+            crate::btcc::StorageCode::AgentBtccStorageManifestMismatch,
+        ));
+    }
+    // Adopt an origin/main DB without replaying data backfills. Comparing the
+    // bounded schema catalog also handles installations predating user_version.
+    let before = objects(db)?;
+    let mut expected = Connection::open_in_memory().map_err(StorageError::sqlite)?;
+    schema::create_current(&expected).map_err(StorageError::sqlite)?;
+    migration::apply_transaction(&mut expected).map_err(StorageError::sqlite)?;
+    if before != objects(&expected)? {
+        migrate_changed(db, &before)?;
+    }
+    db.pragma_update(None, "user_version", MIGRATION_VERSION)
+        .map_err(StorageError::sqlite)
+}
+
+type Objects = std::collections::BTreeMap<(String, String), String>;
+
+fn objects(db: &Connection) -> StorageResult<Objects> {
+    let mut statement = db
+        .prepare(
+            "SELECT type,name,sql FROM sqlite_schema
+        WHERE name LIKE 'btcc_%' OR name LIKE 'idx_btcc_%' ORDER BY type,name",
+        )
         .map_err(StorageError::sqlite)?;
-    let version: i64 = db
-        .pragma_query_value(None, "schema_version", |row| row.get(0))
-        .map_err(StorageError::sqlite)?;
-    db.execute("INSERT INTO agent_storage_health VALUES(1,0,?1,?2) ON CONFLICT(singleton) DO UPDATE SET schema_version=excluded.schema_version,migration_revision=excluded.migration_revision", rusqlite::params![version, revision()])
-        .map_err(StorageError::sqlite)?;
+    statement
+        .query_map([], |row| Ok(((row.get(0)?, row.get(1)?), row.get(2)?)))
+        .map_err(StorageError::sqlite)?
+        .collect::<rusqlite::Result<Objects>>()
+        .map_err(StorageError::sqlite)
+}
+
+fn migrate_changed(db: &mut Connection, before: &Objects) -> StorageResult<()> {
+    let touched = std::sync::Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
+    let writes = touched.clone();
+    db.update_hook(Some(move |_, _: &str, table: &str, _| {
+        if let Ok(mut tables) = writes.lock() {
+            tables.insert(table.to_owned());
+        }
+    }));
+    let migrated = schema::create_current(db).and_then(|()| migration::apply(db));
+    db.update_hook(None::<fn(rusqlite::hooks::Action, &str, &str, i64)>);
+    migrated.map_err(StorageError::sqlite)?;
+    let mut tables = touched.lock().map_err(|_| {
+        StorageError::relayed(
+            "migration_tracking_failed",
+            "migration tracking lock poisoned",
+        )
+    })?;
+    let after = objects(db)?;
+    tables.retain(|name| after.contains_key(&("table".to_owned(), name.clone())));
+    for ((kind, name), sql) in after {
+        if kind == "table" && before.get(&(kind, name.clone())) != Some(&sql) {
+            tables.insert(name);
+        }
+    }
+    for table in tables.iter() {
+        validate::foreign_keys(db, Some(table))?;
+    }
     Ok(())
 }
 
-/// Called after successful graceful service shutdown, never from Drop/error paths.
-pub fn finish_storage_shutdown(path: &Path) -> StorageResult<()> {
-    let db = sqlite::open(path).map_err(StorageError::sqlite)?;
-    db.pragma_update(None, "synchronous", "FULL")
-        .map_err(StorageError::sqlite)?;
-    db.set_db_config(
-        rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
-        true,
-    )
-    .map_err(StorageError::sqlite)?;
-    db.execute(
-        "UPDATE agent_storage_health SET clean=1 WHERE singleton=1",
-        [],
-    )
-    .map_err(StorageError::sqlite)?;
-    Ok(())
-}
-
-/// Complete read-only snapshot validation, interruptible when the service stops.
+/// Successful full validation is the only way to clear a corruption verdict.
 pub fn validate_storage_background(path: &Path, stop: CancellationToken) -> StorageResult<()> {
-    validate::activated::read(path, true, stop, true).map(|_| ())
+    // Reuse the platform's debug-only one-shot fault harness; release builds
+    // never consult its environment or create its marker.
+    butler_platform::secure_fs::fault_checkpoint("btcc_scan_busy").map_err(|_| {
+        StorageError::sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+            None,
+        ))
+    })?;
+    let result =
+        validate::activated::read(path, true, stop, true).and_then(|_| verdict::verified(path));
+    verdict::record_corruption(path, &result);
+    result
+}
+
+pub fn storage_scan_delay(path: &Path) -> std::time::Duration {
+    verdict::scan_delay(path)
+}
+
+pub fn storage_error_is_corruption(error: &StorageError) -> bool {
+    verdict::corruption(error)
 }

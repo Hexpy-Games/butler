@@ -38,8 +38,8 @@ mod work;
 
 pub(crate) use authority::SqliteAuthorityRepository;
 pub use bootstrap::{
-    begin_storage_startup, bootstrap_fresh_storage, finish_storage_shutdown,
-    read_activated_storage_manifest, validate_storage_background,
+    begin_storage_startup, bootstrap_fresh_storage, read_activated_storage_manifest,
+    storage_error_is_corruption, storage_scan_delay, validate_storage_background,
 };
 pub use context_compactions::{ContextCompactionRecord, ContextCompactionRepository};
 pub use context_documents::{ContextDocumentInput, ContextDocumentRead};
@@ -371,6 +371,10 @@ fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<
         .map_err(StorageError::sqlite)?;
     connection
         .pragma_update(None, "foreign_keys", "ON")
+        .map_err(StorageError::sqlite)?;
+    // Applied only at WAL reset/checkpoint, without a periodic idle writer.
+    connection
+        .pragma_update(None, "journal_size_limit", 16_777_216_i64)
         .map_err(StorageError::sqlite)?;
     connection
         .pragma_update(None, "synchronous", "NORMAL")

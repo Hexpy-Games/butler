@@ -12,7 +12,6 @@ use butler_memory::coordination::CognitionCoordinationHost;
 use butler_turn::btcc::{
     BtccStorage, BtccStorageConfig, ProcessLiveness, RuntimeOwnerIdentity, StorageActivation,
     StorageEffectJournal, StorageProfile, ToolJournalRepository, begin_storage_startup,
-    finish_storage_shutdown,
 };
 
 use crate::host::SystemIdentity;
@@ -138,15 +137,7 @@ async fn record_offline_terminal(
         .close()
         .await
         .map_err(|_| "restart_handoff_journal_close_failed".to_owned());
-    result.and(closed).map_err(crate::host::HostError::from)?;
-    tokio::task::spawn_blocking(move || finish_storage_shutdown(&path))
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("restart_handoff_journal_close_failed").with_source(source)
-        })?
-        .map_err(|source| {
-            crate::host::HostError::new("restart_handoff_journal_close_failed").with_source(source)
-        })
+    result.and(closed).map_err(crate::host::HostError::from)
 }
 
 async fn handoff_manifest(path: PathBuf) -> Result<String, crate::host::HostError> {

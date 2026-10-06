@@ -215,7 +215,6 @@ fn open_validation(
             false
         }),
     );
-    db.execute_batch("BEGIN").map_err(StorageError::sqlite)?;
     // Full validation revisits overflow pages. Both the bounded page cache and
     // host-specific mapping belong only to this startup connection. Complete
     // quick/FK/reference checks still run; closing releases all retained pages.
