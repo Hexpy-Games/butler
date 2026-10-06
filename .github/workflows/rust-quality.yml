@@ -375,6 +375,9 @@ jobs:
       - name: Validate workflow selection invariants
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+      - name: Guard shared Windows runner resources
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py
