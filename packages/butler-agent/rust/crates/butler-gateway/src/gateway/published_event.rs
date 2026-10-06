@@ -6,6 +6,9 @@ use axum::body::Bytes;
 
 use super::AppEventEnvelope;
 
+/// Dropping the subscription must synchronously unregister its callback.
+pub trait EventSubscription: Send {}
+
 /// One committed event shared by every live listener. Its Server-Sent-Events
 /// frame is serialized once, on first use, however many streams are connected.
 pub struct PublishedEvent {
@@ -19,6 +22,11 @@ impl PublishedEvent {
             event,
             frame: OnceLock::new(),
         }
+    }
+
+    /// Immutable committed envelope for change-driven host observers.
+    pub fn envelope(&self) -> &AppEventEnvelope {
+        &self.event
     }
 
     pub fn id(&self) -> u64 {

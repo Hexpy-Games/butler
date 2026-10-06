@@ -148,7 +148,7 @@ async fn onboarding_entry_precedes_generated_cards_until_profile_completion()
         assert_eq!(
             briefing.data()["suggestions"][0]["title"],
             if locale == "ko" {
-                "버틀러와 알아가기"
+                "Butler와 알아가기"
             } else {
                 "Get acquainted with Butler"
             }

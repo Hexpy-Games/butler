@@ -30,6 +30,7 @@ struct Inner {
 struct HostStream {
     state: Arc<HttpState>,
     receiver: mpsc::Receiver<Value>,
+    _subscription: Box<dyn crate::gateway::EventSubscription>,
 }
 impl Drop for HostStream {
     fn drop(&mut self) {
@@ -64,6 +65,9 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => attach(state, client.keys.live_streams()),
         (&Method::POST, "/internal/browser/calls") => call(state, request).await,
+        (&Method::POST, "/internal/browser-host/stills") => {
+            agent_calls::still(state, read_json(request).await?).await
+        }
         (&Method::POST, "/internal/browser-host/events") => {
             agent_calls::events(state, read_json(request).await?).await
         }
@@ -98,18 +102,48 @@ fn attach(
         }
         hub.host = Some(sender);
     }
-    let shutdown = state.shutdown.clone();
-    let stream = stream::unfold(HostStream { state, receiver }, move |mut host| {
-        let shutdown = shutdown.clone();
-        let rotated = rotated.clone();
-        async move {
-            tokio::select! {
-                () = shutdown.cancelled() => None,
-                () = rotated.cancelled() => None,
-                frame = host.receiver.recv() => frame.map(|v| (Ok::<_, std::convert::Infallible>(Event::default().event("call").data(v.to_string())), host)),
-            }
+    let weak = Arc::downgrade(&state);
+    // Committed events are published on the SQLite owner thread, not Tokio.
+    let runtime = tokio::runtime::Handle::current();
+    let subscription = state.application.subscribe_events(Arc::new(move |event| {
+        let envelope = event.envelope();
+        if envelope.event_type != "turn.state_changed"
+            || envelope.payload.get("state").and_then(Value::as_str) != Some("waiting_for_form")
+        {
+            return;
         }
-    });
+        let Some(state) = weak.upgrade() else {
+            return;
+        };
+        runtime.spawn(async move {
+            let tabs = state
+                .browser
+                .0
+                .lock()
+                .map(|hub| hub.tabs.ready_waits())
+                .unwrap_or_default();
+            let _ = agent_calls::resume_waits(&state, &tabs).await;
+        });
+    }))?;
+    let shutdown = state.shutdown.clone();
+    let stream = stream::unfold(
+        HostStream {
+            state,
+            receiver,
+            _subscription: subscription,
+        },
+        move |mut host| {
+            let shutdown = shutdown.clone();
+            let rotated = rotated.clone();
+            async move {
+                tokio::select! {
+                    () = shutdown.cancelled() => None,
+                    () = rotated.cancelled() => None,
+                    frame = host.receiver.recv() => frame.map(|v| (Ok::<_, std::convert::Infallible>(Event::default().event("call").data(v.to_string())), host)),
+                }
+            }
+        },
+    );
     use axum::response::IntoResponse;
     Ok(Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(60)))

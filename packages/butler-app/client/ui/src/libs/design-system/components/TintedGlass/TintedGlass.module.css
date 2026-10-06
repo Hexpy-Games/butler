@@ -23,6 +23,17 @@
   backdrop-filter: var(--tinted-glass-filter);
 }
 
+/* A decoration layer inside the glass (data-slot="tinted-glass-decoration", e.g.
+   ComposerCard's) paints over the inset top highlight; redraw it above the art. */
+.surface > [data-slot="tinted-glass-decoration"]::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 var(--tinted-glass-highlight);
+  content: "";
+  pointer-events: none;
+}
+
 .surface[data-radius="control"] {
   --tinted-glass-radius: var(--radius-control);
 }

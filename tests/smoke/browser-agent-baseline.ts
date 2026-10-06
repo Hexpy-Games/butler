@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { browserAgentApp } from "../support/browser-agent-app";
 const evidence=process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence,{recursive:true});
-const app=await browserAgentApp(evidence,()=>null,resolve(evidence,"../baseline-dist"));
+const app=await browserAgentApp(evidence,()=>null,process.env.BUTLER_BROWSER_BASELINE_DIST ?? resolve(evidence,"../baseline-dist"));
 const fixture=Bun.serve({hostname:"127.0.0.1",port:0,fetch:()=>new Response("<title>Browser task</title><h1>Conversation browser</h1><button>Confirm</button>",{headers:{"content-type":"text/html"}})});
 try {
   await app.call("open"); const id=await app.call<string>("create",{owner:"conversation:general",url:`http://127.0.0.1:${fixture.port}/`});

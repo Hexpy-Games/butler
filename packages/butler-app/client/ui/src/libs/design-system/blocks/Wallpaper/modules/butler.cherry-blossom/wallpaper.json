@@ -1,0 +1,16 @@
+{
+  "id": "butler.cherry-blossom",
+  "name": {
+    "en": "Cherry canopy",
+    "ko": "벚꽃"
+  },
+  "version": "0.8.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 240,
+  "pixelRatio": "device",
+  "transparent": true,
+  "decoration": true,
+  "params": []
+}

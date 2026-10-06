@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useId, useRef, type ReactNode } from "react";
+import { FieldError } from "../../components/Field";
 import { FolderPlus } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
 import { Typo } from "../../components/Typo";
@@ -11,15 +12,19 @@ export const WALLPAPER_MODULE_IMPORT_ACCEPT = ".zip,application/zip";
 interface WallpaperPickerModuleImportProps {
   label: string;
   importing: boolean;
+  error?: ReactNode;
   onImportModule: (file: File) => void;
 }
 
 /** The import-module tile: opens the file chooser for a module `.zip`; same visual language as the upload tile. */
-export function WallpaperPickerModuleImport({ label, importing, onImportModule }: WallpaperPickerModuleImportProps) {
+export function WallpaperPickerModuleImport({ label, importing, onImportModule, error }: WallpaperPickerModuleImportProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const errorId = useId();
+  // The FieldError announces itself (role=alert); focus stays where the user left it.
   return (
     <div className={styles.tile} data-option="import-module">
       <button
+        aria-describedby={error ? errorId : undefined}
         aria-busy={importing || undefined}
         className={styles.option}
         disabled={importing}
@@ -31,6 +36,7 @@ export function WallpaperPickerModuleImport({ label, importing, onImportModule }
         </span>
         <Typo.Caption tone="secondary" truncate>{label}</Typo.Caption>
       </button>
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
       <input
         accept={WALLPAPER_MODULE_IMPORT_ACCEPT}
         hidden

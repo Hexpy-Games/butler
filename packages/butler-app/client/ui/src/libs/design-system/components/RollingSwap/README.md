@@ -16,4 +16,7 @@ for content taller than one line.
 ## Motion
 
 Uses the adaptive panel duration and easing tokens. Under reduced motion the
-outgoing frame is hidden and the incoming frame appears without travel.
+outgoing frame is hidden and the incoming frame appears without travel. Reduced
+motion is read through `lib/motion` `prefersReducedMotion()`, so both the OS
+setting and the `data-motion="reduced"` scope (DS Viewer toggle, proposal
+stages) turn the roll off.

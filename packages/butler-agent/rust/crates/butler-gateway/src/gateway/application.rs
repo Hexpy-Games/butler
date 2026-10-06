@@ -2,6 +2,7 @@
 
 mod admission;
 mod admission_identity;
+mod authority_permissions;
 mod automations;
 mod briefing_snapshot;
 mod context_details;
@@ -63,6 +64,10 @@ mod sessions;
 mod settings;
 mod setup;
 mod subsession_events;
+mod task_graphs;
+pub use task_graphs::{
+    project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
+};
 mod turn_dispatch;
 pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
@@ -303,6 +308,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {
             let _ = self.close().await;
             return Err(error);

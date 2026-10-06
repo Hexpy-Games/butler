@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use super::contracts::{
     AuthorityAdmissionInput, AuthorityError, AuthorityRecord, AuthorityResult,
-    ConversationPermission,
+    ConversationPermission, PermissionSource, PermissionTarget,
 };
 use super::identity::{canonical, digest};
 use butler_core::tool_protocol::ToolName;
@@ -67,45 +67,18 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
         owner,
         workspace,
         capability,
-        target,
+        target: _,
         input,
         title,
         executable,
-        collation,
+        collation: _,
     } = facts;
     let file_edit = matches!(
         ToolName::parse(capability),
         Some(ToolName::WriteFile | ToolName::EditFile)
     );
     let command = matches!(capability, "run_command" | "run_command_remote_observation");
-    let scope = if capability == "browser_act" && input["always_confirm"] != true {
-        json!({"kind":"browser_site","capability":capability,"target":target})
-    } else if file_edit {
-        json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
-    } else if command {
-        let mut scope = serde_json::Map::new();
-        scope.insert("kind".into(), json!("command"));
-        for (name, source) in [
-            ("command", "command"),
-            ("cwd", "cwd"),
-            ("stateEffect", "state_effect"),
-        ] {
-            if let Some(value) = input.get(source) {
-                scope.insert(name.into(), value.clone());
-            }
-        }
-        Value::Object(scope)
-    } else {
-        json!({"kind":"effect","capability":capability,"target":target,"input":input})
-    };
-    let scope_key = digest(&canonical(&scope, collation)?);
-    let grant_ref = format!(
-        "permission-{}",
-        &digest(&canonical(
-            &json!([owner, workspace, scope_key]),
-            collation
-        )?)[..32]
-    );
+    let (scope_key, grant_ref) = permission_identity(facts, file_edit, command)?;
     Ok(ConversationPermission {
         capability: capability.into(),
         target: butler_core::public_text::sanitize_public_delta(&permission_target(facts, command)),
@@ -134,6 +107,126 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
         },
         description: permission_description(file_edit, command, executable),
         created_at: String::new(),
+    })
+}
+
+fn permission_scope_key(
+    facts: PermissionFacts<'_>,
+    file_edit: bool,
+    command: bool,
+) -> AuthorityResult<String> {
+    let PermissionFacts {
+        capability,
+        target,
+        input,
+        collation,
+        ..
+    } = facts;
+    let scope = if capability == "browser_act" && input["always_confirm"] != true {
+        json!({"kind":"browser_site","capability":capability,"target":target})
+    } else if file_edit {
+        json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
+    } else if command {
+        let mut scope = serde_json::Map::new();
+        scope.insert("kind".into(), json!("command"));
+        for (name, source) in [
+            ("command", "command"),
+            ("cwd", "cwd"),
+            ("stateEffect", "state_effect"),
+        ] {
+            if let Some(value) = input.get(source) {
+                scope.insert(name.into(), value.clone());
+            }
+        }
+        Value::Object(scope)
+    } else {
+        json!({"kind":"effect","capability":capability,"target":target,"input":input})
+    };
+    Ok(digest(&canonical(&scope, collation)?))
+}
+
+fn permission_identity(
+    facts: PermissionFacts<'_>,
+    file_edit: bool,
+    command: bool,
+) -> AuthorityResult<(String, String)> {
+    let PermissionFacts {
+        owner,
+        workspace,
+        collation,
+        ..
+    } = facts;
+    let scope_key = permission_scope_key(facts, file_edit, command)?;
+    let grant_ref = format!(
+        "permission-{}",
+        &digest(&canonical(
+            &json!([owner, workspace, scope_key]),
+            collation
+        )?)[..32]
+    );
+    Ok((scope_key, grant_ref))
+}
+
+pub(super) fn for_source(
+    source: &PermissionSource<'_>,
+    collation: &butler_core::locale::LocaleCollation,
+    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+) -> AuthorityResult<PermissionTarget> {
+    let input: Value = serde_json::from_str(source.input_json)
+        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let facts = PermissionFacts {
+        owner: source.owner,
+        workspace: source.workspace,
+        capability: source.capability,
+        target: source.target,
+        input: &input,
+        title: None,
+        executable: None,
+        collation,
+    };
+    let file_edit = matches!(
+        ToolName::parse(source.capability),
+        Some(ToolName::WriteFile | ToolName::EditFile)
+    );
+    let command = matches!(
+        source.capability,
+        "run_command" | "run_command_remote_observation"
+    );
+    let scope_key = permission_scope_key(facts, file_edit, command)?;
+    // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
+    if !prefixes
+        .get(source.owner)
+        .is_some_and(|workspaces| workspaces.contains_key(source.workspace))
+    {
+        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
+        let _ = prefix.pop(); // Preserve the shared codec's exact array escaping.
+        prefixes
+            .entry(source.owner.to_owned())
+            .or_default()
+            .insert(source.workspace.to_owned(), prefix);
+    }
+    let prefix = prefixes
+        .get(source.owner)
+        .and_then(|workspaces| workspaces.get(source.workspace))
+        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
+    let grant_ref = format!(
+        "permission-{}",
+        &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
+    );
+    let target =
+        butler_core::public_text::sanitize_public_delta(&permission_target(facts, command));
+    let cwd = command.then(|| {
+        input
+            .get("cwd")
+            .and_then(Value::as_str)
+            .unwrap_or(source.workspace)
+            .to_owned()
+    });
+    Ok(PermissionTarget {
+        grant_ref,
+        capability: source.capability.to_owned(),
+        target,
+        cwd,
     })
 }
 

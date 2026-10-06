@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "./native-app-server.ts";
+import { judgeScreenshotPair } from "./visual-judge.ts";
 import { smokeBrowserArgs } from "./smoke-browser.ts";
 
 export interface VisualNode {
@@ -24,9 +25,13 @@ export interface NewChatVisualCase {
 export async function assertNewChatSurfaces(page: Page): Promise<void> {
   const surface = await page.locator('[data-test-class="new-chat-empty-state"]').evaluate(root => {
     const alpha = (color: string) => {
-      const context = document.createElement("canvas").getContext("2d")!;
-      context.fillStyle = color; context.fillRect(0, 0, 1, 1);
-      return context.getImageData(0, 0, 1, 1).data[3]!;
+      const probe = document.createElement("span");
+      probe.style.color = `rgb(from ${color.trim() || "transparent"} r g b / alpha)`;
+      root.append(probe);
+      const normalized = getComputedStyle(probe).color;
+      probe.remove();
+      const channels = normalized.match(/[\d.]+/g)!.map(Number);
+      return (channels[3] ?? 1) * 255;
     };
     const header = root.querySelector("header")!;
     const heading = header.querySelector("h2")!.getBoundingClientRect();
@@ -45,29 +50,6 @@ export async function assertNewChatSurfaces(page: Page): Promise<void> {
   assert(surface.cards.length > 0);
   assert(surface.cards.every(card => card.backgroundAlpha < 255 && card.tintAlpha < 255 && card.backdrop.includes("blur")),
     `Suggestion cards retain TintedGlass: ${JSON.stringify(surface.cards)}`);
-}
-
-/** Sample the composited screenshot: WebGL releases its buffer after presenting. */
-async function reportWallpaperPixels(page: Page, screenshot: Buffer, coastal: boolean): Promise<void> {
-  const colors = await page.evaluate(async source => {
-    const image = new Image();
-    image.src = source;
-    await image.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width; canvas.height = image.height;
-    const context = canvas.getContext("2d")!;
-    context.drawImage(image, 0, 0);
-    const colors = new Set<string>();
-    for (let y = 600; y < 720; y += 12) for (let x = Math.floor(image.width * 0.75); x < image.width * 0.9; x += 12) {
-      colors.add([...context.getImageData(x, y, 1, 1).data].join(","));
-    }
-    return colors.size;
-  }, `data:image/png;base64,${screenshot.toString("base64")}`);
-  // Plain pages may still have DS shadows; hidden/zero-sized wallpaper is checked separately.
-  console.log(`Wallpaper pixel sample: ${colors} painted colors; coastal=${coastal}`);
-  if (coastal && colors <= 16) {
-    console.warn(`::warning::Coastal scene: ${colors} painted colors; pixel sampling is advisory because art and animation change.`);
-  }
 }
 
 /** Actual rendered descendants, including wrappers and pseudo-element surfaces. */
@@ -105,14 +87,17 @@ async function settleNewChat(page: Page, coastal: boolean): Promise<void> {
   if (coastal) {
     await page.waitForFunction(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('[data-module="butler.shoreline"]');
-      return canvas && canvas.width > 0 && canvas.height > 0 && getComputedStyle(canvas).visibility === "visible";
+      return canvas && canvas.dataset.wallpaperState === "painted" && canvas.dataset.paintedModule === "butler.shoreline"
+        && canvas.dataset.paintedTone === canvas.dataset.tone && canvas.width > 0 && canvas.height > 0
+        && performance.getEntriesByType("mark").some(mark => mark.name.startsWith("butler:wallpaper:first-frame:"))
+        && getComputedStyle(canvas).visibility === "visible";
     });
   } else {
     // Wallpaper retains a cleared canvas after switching to `none` (its public contract).
     await page.waitForFunction(() => {
       const canvases = [...document.querySelectorAll<HTMLCanvasElement>('[data-test-class~="wallpaper"]')];
       return canvases.every(canvas => {
-        return canvas.dataset.module === "none" && canvas.width === 0 && getComputedStyle(canvas).visibility === "hidden";
+        return canvas.dataset.module === "none" && canvas.dataset.wallpaperState === "none" && canvas.width === 0 && getComputedStyle(canvas).visibility === "hidden";
       });
     });
   }
@@ -127,7 +112,15 @@ export async function captureNewChatMatrix(uiRoot: string, output: string) {
   try {
     // Reuse one context: sandboxed single-process Chromium cannot replace contexts.
     const page = await browser.newPage({ reducedMotion: "reduce", timezoneId: "Asia/Seoul" });
-    await page.clock.setFixedTime(new Date("2026-10-03T06:25:00Z"));
+    // Freeze only Date: Playwright's clock also replaces performance.mark/getEntries.
+    await page.addInitScript(fixed => {
+      const NativeDate = Date;
+      globalThis.Date = new Proxy(NativeDate, {
+        construct: (target, args) => Reflect.construct(target, args.length ? args : [fixed]),
+        apply: () => new NativeDate(fixed).toString(),
+        get: (target, key) => key === "now" ? () => fixed : Reflect.get(target, key),
+      });
+    }, Date.parse("2026-10-03T06:25:00Z"));
     await page.route("**/new-chat-briefing*", async route => {
       const response = await route.fetch();
       const body = await response.json();
@@ -147,10 +140,10 @@ export async function captureNewChatMatrix(uiRoot: string, output: string) {
       const roots = '[data-test-class="new-chat-empty-state"] header, [data-test-class="new-chat-suggestion"]';
       const nodes = await readVisualNodes(page, roots);
       const path = join(output, `${key}.png`);
-      const screenshot = await page.screenshot({ path }); screenshots.push(path);
-      await reportWallpaperPixels(page, screenshot, scene === "coastal").catch(error => {
-        console.warn(`::warning::Wallpaper pixel sampling unavailable: ${String(error)}; tracked in #526.`);
-      });
+      await page.screenshot({ path }); screenshots.push(path);
+      await judgeScreenshotPair({ actual: path, expected: process.env.BUTLER_VISUAL_EXPECTED_DIR
+        ? join(process.env.BUTLER_VISUAL_EXPECTED_DIR, `${key}.png`) : undefined,
+        expectation: `New chat ${key}: readable hero, separate Butler mark, four translucent suggestions, no clipping; ${scene === "coastal" ? "visible coastal wallpaper" : "plain background"}.` });
       const firstCard = '[data-test-class="new-chat-suggestion"] >> nth=0';
       await page.locator(firstCard).hover();
       const hover = await readVisualNodes(page, firstCard);

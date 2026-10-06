@@ -13,6 +13,7 @@ use super::super::*;
 use crate::gateway::MessageSendRequest;
 use butler_turn::btcc::ReasoningEffort;
 
+mod personalization;
 mod relocation;
 pub(super) use relocation::UnprovidedRelocation;
 
@@ -54,16 +55,6 @@ impl AppModelCatalogPort for ModelCatalog {
 }
 
 pub(super) struct Personalization;
-
-impl AppPersonalizationPort for Personalization {
-    fn execute(
-        &self,
-        _: AppPersonalizationCommand,
-        _: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<AppPersonalizationResult> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-}
 
 pub(super) struct SettingsMutation;
 
@@ -206,6 +197,12 @@ impl AppAuthorityHandoff for Authority {
     }
 
     fn close_self_session(&self, _: String, _: String) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    fn list_all_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn revoke_permissions(&self, _: Vec<crate::gateway::AppGrantRef>) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
     fn list(&self, _: String) -> ApplicationFuture<AppAuthorityPage> {
@@ -475,15 +472,4 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
         std::process::id(),
         Clock(AtomicU64::new(1)).new_uuid()
     ))
-}
-
-impl AppMemoryPort for Personalization {
-    fn execute(
-        &self,
-        _: AppMemoryCommand,
-        _: MemoryEventSink,
-        _: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<Value> {
-        Box::pin(async { Ok(Value::Null) })
-    }
 }

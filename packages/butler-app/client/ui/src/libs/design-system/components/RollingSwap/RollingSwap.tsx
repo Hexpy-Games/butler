@@ -5,6 +5,7 @@ import {
   type AnimationEvent,
   type ReactNode,
 } from "react";
+import { prefersReducedMotion } from "../../lib/motion";
 import styles from "./RollingSwap.module.css";
 
 type RollingFrame = {
@@ -62,10 +63,4 @@ export function RollingSwap({
       </div>
     </div>
   );
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

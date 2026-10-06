@@ -1,3 +1,4 @@
+import { noteNativeContext } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
 import { guardUrl, installNavigationGuard } from "./guard.mjs";
@@ -14,7 +15,7 @@ export function wireAgentTab(browser, tab) {
   contents.once("did-finish-load", () => { tab.loaded = true; emulation(tab); });
   contents.setBackgroundThrottling(false);
 
-  contents.on("did-navigate", () => { tab.epoch++; tab.observation = null; browser.publish(); });
+  contents.on("did-frame-navigate", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   contents.on("did-navigate-in-page", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   const takeover = input => {
     if (!tab.expectedInputs?.some(expected => expected.type === input.type && (expected.x === undefined || expected.x === input.x && expected.y === input.y)) && tab.holder === "agent" && ["mouseDown", "keyDown"].includes(input.type)) controlTab(browser, tab, "user");
@@ -27,6 +28,22 @@ function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
   contents.debugger.attach("1.3");
   wireDialogs(browser,tab);
+  tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
+  contents.debugger.on("message",(_event,method,value,sessionId)=>{
+    noteNativeContext(tab,method,value,sessionId);
+    if(method==="Target.attachedToTarget" && value.targetInfo.type==="iframe") {
+      const ready=(async()=>{
+        await contents.debugger.sendCommand("Page.enable",{},value.sessionId);
+        const {frameTree}=await contents.debugger.sendCommand("Page.getFrameTree",{},value.sessionId);
+        tab.frameSessions.set(frameTree.frame.id,value.sessionId);
+        await contents.debugger.sendCommand("Runtime.enable",{},value.sessionId);
+        await contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true},value.sessionId);
+      })();
+      tab.frameAttachPromises.set(value.sessionId,ready);void ready.catch(()=>{});
+    }
+    if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
+  });
+  tab.debuggerReady=Promise.all([contents.debugger.sendCommand("Runtime.enable"),contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true})]);
   void contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true}).catch(()=>{});
 }
 export function emulation(tab) {
@@ -37,22 +54,27 @@ export function emulation(tab) {
 }
 export function backgroundTab(browser, tab) {
   if (tab.agent) viewedTab(browser, tab, false);
-  if (!tab.agent || !tab.view || tab.attached || tab.status === "crashed") return;
+  if (!tab.agent && !tab.driven || !tab.view || tab.attached || tab.status === "crashed") return;
   if (!browser.agentWindow || browser.agentWindow.isDestroyed()) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }
   browser.agentWindow.contentView.addChildView(tab.view); tab.attached = browser.agentWindow;
-  tab.view.setBounds({ x: 0, y: 0, width: 1280, height: 800 }); emulation(tab);
+  tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
+}
+function armExpiry(browser, tab) {
+  if (!tab.agent || tab.owner === "mine" || tab.userViewed) {clearTimeout(tab.expiry);tab.expiry=null;return;}
+  if (tab.expiry) return;
+  const remaining=Math.max(0,10*60*1000-(Date.now()-(tab.lastAgentCall ?? Date.now())));
+  tab.expiry = setTimeout(() => browser.close(tab.id), remaining);
 }
 function touch(browser, tab) {
-  if (!tab.agent) return;
-  if (tab.viewed) { clearTimeout(tab.expiry); tab.expiry = null; return; }
-  if (tab.expiry) return;
-  tab.expiry = setTimeout(() => browser.close(tab.id), 10 * 60 * 1000);
+  tab.lastAgentCall=Date.now();clearTimeout(tab.expiry);tab.expiry=null;
+  armExpiry(browser,tab);
 }
 export function viewedTab(browser, tab, visible) {
   tab.viewed = visible;
-  touch(browser, tab);
+  if(visible) tab.userViewed=true;
+  armExpiry(browser, tab);
 }
 export async function executeBrowser(browser, frame) {
   if (!browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
@@ -74,9 +96,20 @@ export async function executeBrowser(browser, frame) {
   if (tab.dialog) return pendingDialog(tab);
   touch(browser, tab);
   if (!tab.view || tab.status === "crashed") return { status: "unknown", reason: "tab_crashed" };
+  if (!tab.agent && !tab.driven) {
+    tab.policy=args.policy ?? {};
+    if (!await guardUrl(tab.url,tab.view.webContents.session,tab.policy)) return {status:"not_dispatched",reason:"navigation_denied"};
+    const agents=[...browser.tabs.values()].filter(item=>item.agent || item.driven);
+    if (agents.length>=6 || agents.filter(item=>item.owner===owner).length>=3) return {status:"not_dispatched",reason:"tab_budget_exhausted"};
+    tab.driven=true;tab.loaded=!tab.view.webContents.isLoading();
+    wireAgentTab(browser,tab);backgroundTab(browser,tab);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    connectDebugger(browser,tab);emulation(tab);browser.publish();
+  }
   if (op === "tab.observe") return observeTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "tab.act") {
+    if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
     tab.busy = true; tab.cancelled = false; tab.callId = frame.call_id; browser.publish();
     try { return await actBatch(tab, { ...args, deadline_ms: frame.deadline_ms }, session); }

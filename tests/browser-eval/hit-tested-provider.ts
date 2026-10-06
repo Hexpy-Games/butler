@@ -17,7 +17,8 @@ export class HitTestedProvider implements SnapshotProvider {
       const frameId = find(frameTree);
       const context = frameId ? await closedRoots({ sendCommand: (method, params) => session.send(method as Parameters<typeof session.send>[0], params) }, frameId, frameTree.frame.id) : undefined;
       const code = perceptionSource({ obs: "eval", epoch: 1, prefix: `f${index}-`, full_grid: this.fullGrid });
-      const response = context ? await session.send("Runtime.evaluate", { expression: code, contextId: context, returnByValue: true }) : undefined;
+      const response = context ? await session.send("Runtime.evaluate", { expression: code, contextId: context.contextId, returnByValue: true }) : undefined;
+      if(response?.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text);
       const result = (response ? response.result.value : await frame.evaluate(code)) as {
         text: string; nodes: Array<SnapshotNode & { coveredTargetId?: string }>; scriptMs: number; gridSampleMs: number;
       };

@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { settingsErrorCopy } from "./settingsErrors";
 
 interface NotifyOptions {
   id?: string;
@@ -45,8 +46,7 @@ export function dismissNotification(id: string): void {
 }
 
 export function notifyError(error: unknown, fallback: string, options: NotifyOptions = {}): void {
-  toast.error(options.title ?? fallback, {
+  toast.error(settingsErrorCopy(error, options.title ?? fallback), {
     id: options.id,
-    description: safeErrorMessage(error, fallback),
   });
 }

@@ -26,7 +26,7 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
             old.push((index, obs));
         }
     }
-    // Fold in groups of eight during long browser runs, preserving the cache prefix.
+    // Bound each history rewrite batch to eight observations.
     // The final small tail is folded as well so only the newest observation is full.
     for batch in old.chunks(8) {
         for (index, obs) in batch {

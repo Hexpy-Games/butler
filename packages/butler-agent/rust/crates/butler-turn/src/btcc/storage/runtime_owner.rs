@@ -156,15 +156,22 @@ impl RuntimeOwner {
     }
 
     pub(super) fn close(&self, connection: &Connection) -> StorageResult<()> {
-        connection
-            .execute(
+        // An external writer can outlive the per-statement busy wait. Closing
+        // is not settled until our owner record is durable; the host owns any
+        // shutdown deadline, including an App's wait-safely policy.
+        loop {
+            match connection.execute(
                 "UPDATE btcc_runtime_owners SET status = 'closed', \
                  closed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
                  WHERE owner_id = ?1 AND owner_generation = ?2 AND status = 'active'",
                 params![self.owner_id(), self.generation],
-            )
-            .map_err(StorageError::sqlite)?;
-        Ok(())
+            ) {
+                Ok(_) => return Ok(()),
+                Err(rusqlite::Error::SqliteFailure(error, _))
+                    if error.code == rusqlite::ErrorCode::DatabaseBusy => {}
+                Err(error) => return Err(StorageError::sqlite(error)),
+            }
+        }
     }
 }
 

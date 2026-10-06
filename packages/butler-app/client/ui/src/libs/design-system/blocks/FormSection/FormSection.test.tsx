@@ -101,7 +101,7 @@ test("repeated settings copy ignores case, width, whitespace and end punctuation
   expect(repeatsSettingsCopy("MCP", "mcp")).toBe(true);
   expect(repeatsSettingsCopy("ＭＣＰ", "MCP")).toBe(true);
   expect(repeatsSettingsCopy("  System   events ", "System events")).toBe(true);
-  expect(repeatsSettingsCopy("버틀러 버전과 앱 정보를 확인합니다", "버틀러 버전과 앱 정보를 확인합니다.")).toBe(true);
+  expect(repeatsSettingsCopy("Butler 버전과 앱 정보를 확인합니다", "Butler 버전과 앱 정보를 확인합니다.")).toBe(true);
   expect(repeatsSettingsCopy("Check and update Butler App。", "Check and update Butler App.")).toBe(true);
   // A longer description that only extends the page description repeats it.
   expect(repeatsSettingsCopy(

@@ -1,12 +1,13 @@
+import { resetWallpaperPaint } from "./paintSignal";
 import type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
+import { initialWallpaperState } from "./engineState";
 import { createEngineWatchdog } from "./engineWatchdog";
 import { measureWallpaperFrame, readWallpaperCanvasBox } from "./measure";
 import { createWallpaperPresenter } from "./presenter";
 import { createWallpaperRenderer } from "./renderer";
 import { reportWallpaperRuntimeFailure } from "./runtimeFailure";
-import { WALLPAPER_DAY_PHASE_REFRESH_MS, advanceWallpaperClock, nextWallpaperFrameSlot, wallpaperFrameDue } from "./scheduler";
-import { wallpaperFrameMode, wallpaperRenderPolicy, wallpaperStillFrameDue, type WallpaperScheduleState } from "./scheduler";
-import { readWallpaperSignals, watchWallpaperContext, watchWallpaperSignals, type WallpaperSignals } from "./signals";
+import { WALLPAPER_DAY_PHASE_REFRESH_MS, advanceWallpaperClock, nextWallpaperFrameSlot, wallpaperFrameDue, wallpaperFrameMode, wallpaperRenderPolicy, wallpaperStillFrameDue, type WallpaperScheduleState } from "./scheduler";
+import { watchWallpaperContext, watchWallpaperSignals, type WallpaperSignals } from "./signals";
 import { wallpaperDayPhase } from "./time";
 import type { WallpaperContentRect } from "./types";
 
@@ -20,16 +21,15 @@ export type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
  * (reported through onError).
  */
 export function createWallpaperEngine(canvas: HTMLCanvasElement, options: WallpaperEngineOptions): WallpaperEngine | null {
-  const { onError } = options;
-  const renderer = createWallpaperRenderer(canvas, { onError });
+  const { onError, transparent } = options;
+  const renderer = createWallpaperRenderer(canvas, { onError, transparent });
   if (!renderer) {
+    resetWallpaperPaint(canvas, "unsupported");
     onError({ reason: "unsupported", module: "", message: "WebGL2 is unavailable" });
     return null;
   }
   const seed = Math.random();
-  let state: WallpaperScheduleState = {
-    ...readWallpaperSignals(), moduleMotion: "static", motion: "auto", pauseOnBattery: false, degraded: false, contextLost: false,
-  };
+  let state: WallpaperScheduleState = initialWallpaperState(canvas, renderer.softwareRendering());
   let hasScene = false;
   let contentRect: WallpaperContentRect | null = null;
   let box = readWallpaperCanvasBox(canvas);
@@ -48,19 +48,16 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     dirty = true;
     schedule();
   };
-
   const armRefresh = () => {
     window.clearTimeout(refreshTimer);
     refreshTimer = 0;
     if (!renderer.usesDayPhase() || wallpaperFrameMode(state) === "animate") return;
     refreshTimer = window.setTimeout(schedule, WALLPAPER_DAY_PHASE_REFRESH_MS);
   };
-
   const paint = () => {
     const geometry = measureWallpaperFrame(box, renderer.motion(), contentRect, renderer.pixelRatio());
     renderer.draw({ ...geometry, timeMs: clock, dayPhase: wallpaperDayPhase(new Date()), seed });
   };
-
   const draw = (now: number) => {
     paint();
     presenter.drawn();
@@ -68,7 +65,6 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     dirty = false;
     armRefresh();
   };
-
   const tick = (now: number) => {
     frame = 0;
     const mode = hasScene ? wallpaperFrameMode(state) : "idle";
@@ -81,8 +77,10 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     if (lastTick !== null) clock = advanceWallpaperClock(clock, now - lastTick);
     lastTick = now;
     const { maxFps } = wallpaperRenderPolicy(state.moduleMotion);
-    if (dirty || wallpaperFrameDue(now, slot, maxFps)) {
-      slot = nextWallpaperFrameSlot(now, slot, maxFps);
+    const due = wallpaperFrameDue(now, slot, maxFps);
+    if (dirty || due) {
+      // Only a due frame takes a slot: changes drawn between slots never push the cap's grid ahead of the clock.
+      if (due) slot = nextWallpaperFrameSlot(now, slot, maxFps);
       if (watchdog.time(() => draw(now))) return;
     }
     schedule();
@@ -95,10 +93,10 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   });
 
   const update = (patch: Partial<WallpaperScheduleState>) => {
+    if (patch.reducedMotion !== undefined && patch.reducedMotion !== state.reducedMotion) dirty = true;
     state = { ...state, ...patch };
     schedule();
   };
-
   const presenter = createWallpaperPresenter({
     ...options,
     canvas,
@@ -107,6 +105,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     repaint: () => { if (hasScene && lastDraw !== null && !state.contextLost) paint(); },
     bufferSize: (motion, pixelRatio) => measureWallpaperFrame(box, motion, null, pixelRatio),
     show(scene) {
+      resetWallpaperPaint(canvas, scene ? "pending" : "none");
       hasScene = scene !== null;
       if (scene) renderer.setScene(scene);
       watchdog.reset();
@@ -121,6 +120,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     presenter.refresh();
   });
   const stopContext = watchWallpaperContext(canvas, () => {
+    resetWallpaperPaint(canvas, "context-lost");
     reportWallpaperRuntimeFailure(onError, hasScene ? renderer.drawnModule() : null, "context-lost");
     update({ contextLost: true });
   }, () => {
@@ -134,6 +134,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   return {
     setScene(scene) {
       if (scene?.error) onError(scene.error);
+      resetWallpaperPaint(canvas, scene ? "pending" : "none");
       presenter.request(scene);
     },
     setMotion(motion, pauseOnBattery) {
@@ -142,8 +143,8 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     setContentRect(rect) {
       contentRect = rect;
       box = readWallpaperCanvasBox(canvas); // A layout change may have moved the canvas too.
-      // Only modules that read u_contentRect redraw; animated ones pick it up on the next frame.
-      if (renderer.usesContentRect()) redraw();
+      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame.
+      if (renderer.usesContentRect() && wallpaperFrameMode(state) !== "animate") redraw();
     },
     dispose() {
       window.cancelAnimationFrame(frame);
@@ -153,6 +154,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
       stopSignals();
       stopContext();
       renderer.dispose();
+      resetWallpaperPaint(canvas, "disposed");
     },
   };
 }

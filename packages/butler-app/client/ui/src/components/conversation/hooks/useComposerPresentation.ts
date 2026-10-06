@@ -4,6 +4,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject,
 } from "react";
+import { useButlerStore } from "@/app/store";
 import { useComposerStore } from "../composerStore";
 
 export function useComposerPresentation({
@@ -15,6 +16,7 @@ export function useComposerPresentation({
   containerRef: RefObject<HTMLDivElement | null>;
   protectedExpanded: boolean;
 }) {
+  const collapse = useButlerStore((store) => store.settings.collapse_message_box);
   const engaged = useComposerStore((store) => store.engaged);
   const setEngaged = useComposerStore((store) => store.setEngaged);
   const internalPointerActive = useRef(false);
@@ -79,7 +81,7 @@ export function useComposerPresentation({
   );
 
   return {
-    expanded: engaged || protectedExpanded,
+    expanded: !collapse || engaged || protectedExpanded,
     onBlurCapture,
     onFocusCapture,
     onPointerDownCapture,

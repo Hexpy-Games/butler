@@ -171,6 +171,7 @@ fn approval_input(args: &Value, prepared: &mut Value, scope: &str) -> Value {
     let always = prepared["steps"].as_array().is_some_and(|steps| {
         steps.iter().any(|s| {
             s["payment"] == true && s["submit"] == true
+                || s["upload"] == true
                 || s["frame_payment"] == true
                 || s["hit"]["frame"]
                     .as_str()

@@ -3,7 +3,7 @@ use butler_e2e::e2e::HarnessError;
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
-pub(super) struct Watch(Vec<(Connection, u64)>);
+pub(super) struct Watch(Vec<(butler_platform::sqlite::Connection, u64)>);
 impl Watch {
     pub(super) fn open(data: &Path) -> Result<Self, HarnessError> {
         let mut databases = Vec::new();

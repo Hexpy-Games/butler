@@ -25,7 +25,7 @@ test("everyday settings come first and agent-level pages sit in a last Advanced 
     groups.map((group) => group.sections.map((section) => section.id)),
   ).toEqual([
     ["general", "appearance", "personalization", "models"],
-    ["updates", "usage", "privacy", "security", "system", "archives", "about"],
+    ["updates", "usage", "security", "system", "archives", "about"],
     ["mcp", "skills", "server"],
   ]);
   expect(
@@ -44,7 +44,6 @@ test("developer logs stay in the app group when enabled", () => {
     "updates",
     "usage",
     "logs",
-    "privacy",
     "security",
     "system",
     "archives",
@@ -57,7 +56,7 @@ test("model settings stay on the Models page and old links still resolve", () =>
   for (const [link, section] of [
     ["models", "models"],
     ["settings:models", "models"],
-    ["Models/Access", "models"],
+    ["Models/Access", "security"],
     ["helpers", "models"],
     ["settings:helpers", "models"],
     ["worker-profiles", "models"],
@@ -77,8 +76,6 @@ test("model settings stay on the Models page and old links still resolve", () =>
   expect(settingsPageSchema.models.map((section) => [section.id, section.optional === true])).toEqual([
     ["butler-model", false],
     ["backup-models", false],
-    ["saved-keys", false],
-    ["permissions", false],
     ["advanced-models", false],
     ["memory-cleanup", true],
     ["worker-profiles", true],
@@ -89,6 +86,10 @@ test("model settings stay on the Models page and old links still resolve", () =>
     ["remote-access", false],
     ["device-pairing", true],
     ["paired-devices", true],
+    ["permissions", false],
+    ["grants", false],
+    ["saved-keys", false],
+    ["diagnostics", false],
     ["security-advanced", true],
     ["allowed-hosts", true],
   ]);
@@ -106,7 +107,7 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
   expect(sectionIds("project folder")).toEqual(["server"]);
   expect(sectionIds("worker")).toEqual(["models"]);
   expect(sectionIds("backup")).toEqual(["models"]);
-  expect(sectionIds("api keys")).toEqual(["models"]);
+  expect(sectionIds("api keys")).toEqual(["models", "security"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
   expect(sectionIds("connection code")).toEqual(["security"]);
   expect(sectionIds("remote access")).toEqual(["security"]);

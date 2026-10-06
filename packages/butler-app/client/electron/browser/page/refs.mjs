@@ -1,5 +1,5 @@
 export function resolveRef({ ref, obs, epoch, scroll = false }) {
-  globalThis.__butlerPerceptionCache={styles:new WeakMap(),boxes:new WeakMap()};
+  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
   const state = globalThis.__butlerObservation;
   if (!state || state.obs !== obs || state.epoch !== epoch) return { reason: "stale_ref" };
   const element = state.refs.get(ref)?.deref();
@@ -13,6 +13,7 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
   if (point.blocker) return { reason: "blocked_by", hit: semantic(point.blocker) };
   return { x: point.x, y: point.y, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
     payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
+    upload: element.localName === "input" && element.type === "file",
     submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name) };
 }
 export function selectValue({ ref, obs, epoch, value }) {

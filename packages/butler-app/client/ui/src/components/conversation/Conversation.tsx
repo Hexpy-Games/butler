@@ -1,3 +1,5 @@
+import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
@@ -99,12 +101,14 @@ export function Conversation() {
     >
       {showMessageList ? (
         <BranchProjectContext.Provider value={branchProjectId}>
-          <MessageList
-            messages={messages}
-            turnProgress={turnProgress}
-            bottomReserve={composerReserve}
-            isSending={isActiveChatSending}
-          />
+          <ErrorBoundary key={activeChatId} scope="messages">
+            <MessageList
+              messages={messages}
+              turnProgress={turnProgress}
+              bottomReserve={composerReserve}
+              isSending={isActiveChatSending}
+            />
+          </ErrorBoundary>
         </BranchProjectContext.Provider>
       ) : showEmptyState ? (
         <ConversationScroll masked={false} scrollable={false}>
@@ -118,10 +122,13 @@ export function Conversation() {
       ) : (
         <ConversationScroll>{null}</ConversationScroll>
       )}
-      <Composer
-        onReserveChange={updateComposerReserve}
-        large={composerLarge}
-      />
+      <ErrorBoundary key={activeChatId} scope="composer"
+        fallback={(retry) => <ComposerCrashFallback retry={retry} onReserveChange={updateComposerReserve} />}>
+        <Composer
+          onReserveChange={updateComposerReserve}
+          large={composerLarge}
+        />
+      </ErrorBoundary>
     </ConversationShell>
   );
 }

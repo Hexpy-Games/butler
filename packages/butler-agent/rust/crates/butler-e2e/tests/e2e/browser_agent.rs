@@ -15,7 +15,8 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
     let event = json!({"tabs":[
         {"id":"mine","owner":"mine","profile":"signed_in","epoch":1,"holder":"user"},
         {"id":"other","owner":"conversation:other","profile":"signed_out","epoch":1,"holder":"agent"},
-        {"id":"owned","owner":"conversation:general","profile":"signed_out","epoch":2,"holder":"user"}
+        {"id":"owned","owner":"conversation:general","profile":"signed_out","epoch":2,"holder":"user"},
+        {"id":"private","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"http://127.0.0.1/"}
     ]});
     assert_eq!(
         admin
@@ -33,6 +34,7 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
         ("mine", "not_your_tab"),
         ("other", "not_your_tab"),
         ("owned", "user_control"),
+        ("private", "navigation_denied"),
     ] {
         let response = admin
             .send(
@@ -49,7 +51,7 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
         "file:///etc/passwd",
         "http://127.0.0.1/",
         "http://169.254.169.254/",
-        "http://10.0.0.1/",
+        "http://10.0.0.1/", // privacy-hygiene: allow-private-ip (denied LAN fixture)
     ] {
         let response = admin
             .send(

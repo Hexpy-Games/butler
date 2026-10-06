@@ -21,6 +21,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "A labelled progress bar in a panel", use: "ProgressMeter" },
     { when: "A breakdown of usage by category", use: "KeyValueRow" },
+    { when: "A progress ring that is not a button", use: "ProgressRing" },
   ],
   recipes: [{ name: "Context usage popover", description: "The donut is the trigger; the popover holds the breakdown.", render: () => <ContextUsage /> }],
   doDont: [

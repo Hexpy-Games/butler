@@ -70,3 +70,16 @@ fn source(
         fallback
     })
 }
+
+/// Additive read indexes: permission identity, storage rows and enforcement stay intact.
+pub(super) fn permission_indexes(db: &Connection) -> rusqlite::Result<()> {
+    db.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_btcc_permission_sources
+         ON btcc_authority_requests(owner_session_id,created_at,workspace_path,capability,
+         normalized_target,normalized_input_json,decision,allow_scope)
+         WHERE decision='allowed' AND allow_scope='conversation';
+         CREATE INDEX IF NOT EXISTS idx_btcc_permissions_active
+         ON btcc_conversation_permissions(created_at DESC,grant_ref,owner_session_id,workspace_path,revoked_at)
+         WHERE revoked_at IS NULL;",
+    )
+}

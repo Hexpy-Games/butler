@@ -3,6 +3,10 @@ import { readingText } from "./text.mjs";
 import { resolveRef, selectValue } from "./refs.mjs";
 
 function collect(root, elements, candidates) {
+  for (const label of root.querySelectorAll("label")) {
+    const control=label.control, labels=globalThis.__butlerPerceptionCache.labels;
+    if(control && !labels.has(control)) labels.set(control,label.textContent);
+  }
   for (const element of root.querySelectorAll('button,a,select,textarea,canvas,summary,input,[role],[onclick],h1,h2,h3,h4,h5,h6,[contenteditable],[contenteditable] *')) candidates.add(element);
   for (const element of root.querySelectorAll("*")) {
     elements.push(element);
@@ -10,7 +14,7 @@ function collect(root, elements, candidates) {
   }
 }
 function snapshot(options) {
-  globalThis.__butlerPerceptionCache={styles:new WeakMap(),boxes:new WeakMap()};
+  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map(),labels:new WeakMap()};
   const start = performance.now(), elements = [], nodes = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const candidates = new WeakSet();
   collect(document, elements, candidates);
@@ -47,7 +51,7 @@ function snapshot(options) {
   for (const element of elements) {
     if (seen.has(element)) continue;
     const box=boxOf(element);
-    if (box.width>=4 && box.height>=4 && box.bottom>0 && box.right>0 && box.top<innerHeight && box.left<innerWidth && styleOf(element).cursor==="pointer") gridCandidates.push(box);
+    if (box.width>=4 && box.height>=4 && box.bottom>0 && box.right>0 && box.top<innerHeight && box.left<innerWidth && styleValue(element,"cursor")==="pointer") gridCandidates.push(box);
   }
   const gridStart = performance.now();
   for (let y = 12; y < innerHeight; y += 24) for (let x = 12; x < innerWidth; x += 24) {

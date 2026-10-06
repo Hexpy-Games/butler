@@ -176,6 +176,27 @@ pub struct AppAuthorityDecisionInput {
     pub alternative_input: Option<String>,
 }
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct AppGrantRef {
+    pub grant_ref: String,
+    pub session_id: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct AppGrantView {
+    pub grant_ref: String,
+    pub capability: String,
+    pub target: String,
+    pub cwd: Option<String>,
+    pub scope: &'static str,
+    pub session_id: String,
+    pub workspace_path: String,
+    pub created_at: String,
+    pub session_title: Option<String>,
+    pub project_id: Option<String>,
+    pub project_name: Option<String>,
+}
+
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
     fn attention_sessions(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
         Box::pin(async { Ok(Vec::new()) })
@@ -185,6 +206,8 @@ pub trait AppAuthorityHandoff: Send + Sync + 'static {
         owner_session_id: String,
         turns: Vec<String>,
     ) -> ApplicationFuture<(Vec<Value>, Vec<Value>)>;
+    fn list_all_permissions(&self) -> ApplicationFuture<Vec<AppGrantView>>;
+    fn revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()>;
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()>;
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;
@@ -355,7 +378,9 @@ pub trait AppContextReadPort: Send + Sync {
 }
 
 mod subsessions;
-pub use subsessions::{AppSessionViewPage, AppSubsessionPort, AppWorkerActivitySourcePage};
+pub use subsessions::{
+    AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,
+};
 
 #[derive(Clone, Debug)]
 pub struct AppSettingsFacts {

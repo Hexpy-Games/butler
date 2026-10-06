@@ -1,4 +1,5 @@
 /** P2a-2 public guided tools, ownership, authority and native hand-back in the real App. */
+import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
@@ -7,7 +8,11 @@ import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser, actConfirm } from "../support/browser-agent-stub";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { soakBrowser } from "../support/browser-agent-soak";
+import { browserBoundaryChecks } from "../support/browser-agent-boundaries";
 import { browserAuthorityChecks } from "../support/browser-agent-authority";
+import { browserArchiveCheck } from "../support/browser-agent-lifecycle";
+import { browserUiChecks, browserOutputEntry } from "../support/browser-agent-ui";
+import { browserContextCheck } from "../support/browser-agent-context";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
@@ -35,9 +40,10 @@ async function settings(language: string, theme: string) {
   await app.call("activate", { id: agentTab.id });
   await app.click(language === "ko" ? "브라우저" : "Browser");
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
-  await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]')));
+  try { await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]'))); }
+  catch(error) {writeFileSync(join(evidence!,`${language}-${theme}-ui-failure.json`),JSON.stringify(await app.page.expression("({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})")));await app.shot(`${language}-${theme}-ui-failure`);throw error;}
 }
-let agentTab: Tab;
+let agentTab!: Tab;
 try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
   await app.call("open");
@@ -50,8 +56,11 @@ try {
   const artifacts = await app.gateway.api<{ artifacts: Array<{ id: string; kind: string }> }>("/artifacts?session_id=general");
   const output = artifacts.artifacts.find(item=>item.kind === "web"); assert.ok(output);
   const view = await app.gateway.api<{ url: string }>(`/outputs/${output.id}/view`);
-  stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: view.url }), request => bridgeBrowser("browser_observe", { tab: latestBrowser(request,"tab").tab }), actConfirm]);
+  if(!baseline) await browserOutputEntry(app,evidence);
+  const observe=(request:Parameters<typeof latestBrowser>[0])=>bridgeBrowser("browser_observe",{tab:latestBrowser(request,"tab").tab});
+  stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: view.url }), observe, request=>{const call=actConfirm(request);const args=call.arguments.arguments as {steps:unknown[]};args.steps=[args.steps[0],args.steps[0]];return call;},observe,observe]);
   await send("Browse the fixture by ref"); await delivered();
+  await browserContextCheck(app,evidence);
   agentTab = (await state()).tabs.find(tab=>tab.agent && tab.owner === "conversation:general")!; assert.ok(agentTab, JSON.stringify({ nativeError: await app.main("globalThis.browserAgentError"), toolRounds: stub.results.length }));
   assert.equal(agentTab.profile, "signed_out");
   await app.call("activate", { id: agentTab.id });
@@ -73,6 +82,7 @@ try {
   for(const row of rows.filter(row=>row.tool_result_id && row.tool_call_id)) {
     const turn=(sessionView.latest_turn as {id:string}).id;
     const raw=await app.gateway.api<{content:string}>(`/turns/${turn}/operations/${row.tool_call_id}/output?result_id=${row.tool_result_id}&offset=0`).catch(()=>null);
+    if(row.safe_tool_name==="browser_act" && raw) {const receipt=JSON.parse(raw.content);assert.equal(receipt.steps.length,process.env.BUTLER_BROWSER_SOAK==="1"?1:2);assert.ok(receipt.steps.every((step:{status:string;still_file?:unknown})=>step.status==="completed" && step.still_file));}
     summaries.push({name:row.safe_tool_name,input:row.safe_input_label,keys:raw?Object.keys(JSON.parse(raw.content)):[],hasStill:raw?.content.includes('still_file'),size:raw?.content.length});
   }
   writeFileSync(join(evidence,"timeline-projection.json"),JSON.stringify(summaries,null,2));
@@ -81,6 +91,7 @@ try {
   writeFileSync(join(evidence,"timeline-dom.json"),JSON.stringify(await app.page.expression(`({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})`)));
   writeFileSync(join(evidence,"timeline-props.json"),JSON.stringify(await app.page.expression(`(()=>{const el=document.querySelector('[data-test-class="message assistant"]');let f=el?.[Object.keys(el).find(k=>k.startsWith('__reactFiber'))];const rows=[];for(;f;f=f.return){const p=f.memoizedProps;if(p?.message)rows.push({turn:p.message.turn_id,state:p.message.status,rows:p.message.turn_activity_rows,running:p.running});}return rows})()`)));
   if (!baseline) await waitBrowser(()=>app.page.expression("Boolean(document.querySelector('[data-test-class=browser-step-still] img'))"), "real browser still in timeline");
+  await browserBoundaryChecks(app,agentTab.id,evidence);
   const mine = await app.call<string>("create", { url: "https://example.com" });
   assert.equal((await internal("tab.observe", mine)).reason, "not_your_tab");
   assert.equal((await internal("tab.observe", agentTab.id, {}, "other")).reason, "not_your_tab");
@@ -125,16 +136,57 @@ try {
     await phone.getByText("Confirm", { exact: false }).first().waitFor();
     assert.equal(await phone.locator('[data-test-class="browser-step-still"]').count(),0);
     assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,"390px approval fits");
-    await phone.screenshot({ path:join(evidence,"en-dark-phone-approval-390.png") });
+    for(const language of ["ko","en"])for(const theme of ["light","dark"]) {
+      await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({language,appearance_theme:theme})});
+      await phone.reload();
+      await phone.getByRole("button",{name:language==="ko"?"사이드바 보기":"Show sidebar",exact:true}).click();
+      await phone.getByText(language==="ko"?"일반":"General",{exact:true}).first().click();
+      await phone.getByRole("button",{name:language==="ko"?"이번만 허용":"Allow once",exact:true}).waitFor();
+      await phone.getByText(language==="ko"?"127.0.0.1 · 로그아웃 사용":"127.0.0.1 · Signed out",{exact:true}).waitFor();
+      await phone.evaluate(()=>document.fonts.ready.then(()=>undefined));
+      await phone.waitForFunction(()=>{
+        const card=document.querySelector('[data-test-class="composer-authority-decision"]');
+        if(!card)return false;
+        return [card,...card.querySelectorAll('button')].every(node=>{
+          const r=node.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight;
+        });
+      });
+      assert.equal(await phone.locator('[data-test-class="browser-step-still"]').count(),0);
+      assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      await phone.screenshot({path:join(evidence,`${language}-${theme}-phone-approval-390.png`)});
+    }
     await phone.getByRole("button", { name: "Allow once", exact:true }).click();
     await delivered(); await context.close();
   } finally { await browser.close(); }
   await browserAuthorityChecks(app,stub,agentTab.id,send,delivered);
+  await browserUiChecks(app,agentTab.id,evidence);
+  await browserArchiveCheck(app,view.url,evidence);
+  assert.ok(!stub.results.some(item=>item && typeof item==="object" && "stubFailure" in item),"all guided stub steps completed");
   traces.push({ loadAverage1m: loadavg()[0], tools: stub.results });
   writeFileSync(join(evidence,"acceptance.json"),JSON.stringify(traces,null,2));
   console.log(JSON.stringify({ status:"passed", loadAverage1m:loadavg()[0] }));
 } finally {
-  writeFileSync(join(evidence,"final-state.json"),JSON.stringify({session:await app.gateway.api("/session-view?session_id=general").then((view:any)=>({latest:view.latest_turn})).catch(()=>null),authority:await app.gateway.api("/authority-requests?session_id=general").catch(()=>null),tabs:(await state()).tabs.map(({id,owner,epoch,holder,waiting})=>({id,owner,epoch,holder,waiting}))},null,2));
+  const oopifDiagnostic=await app.main("globalThis.oopifProof").catch(()=>null);if(oopifDiagnostic)writeFileSync(join(evidence,"oopif-diagnostic.json"),JSON.stringify(oopifDiagnostic,null,2));
+  const db=new Database(join(app.gateway.butlerData,"agent-runtime/btcc.sqlite"),{readonly:true});
+  const turns=db.query("SELECT turn_id,semantic_state,suspension_reason,revision FROM btcc_turns ORDER BY rowid DESC LIMIT 3").all();
+  const authority=db.query("SELECT request_ref,decision,outcome,capability,close_reason FROM btcc_authority_requests ORDER BY rowid DESC LIMIT 3").all();
+  const appdb=new Database(join(app.gateway.butlerData,"app-server/butler-client.sqlite"),{readonly:true});
+  const staged=appdb.query("SELECT action_id,state,json_extract(event_json,'$.payload.metadata') AS metadata FROM app_transport_projection_staged_outbounds").all();
+  const events=appdb.query("SELECT type,payload_json FROM events ORDER BY id DESC LIMIT 60").all();
+  const queue=appdb.query("SELECT id,state,turn_id,claim_id,terminal_result_message_id,dispatched_message_id FROM session_queued_messages ORDER BY rowid DESC LIMIT 3").all();
+  const delivery=db.query("SELECT turn_id,status,committed_turn_revision FROM btcc_delivery_outbox ORDER BY rowid DESC LIMIT 3").all();
+  appdb.close();writeFileSync(join(evidence,"app-projection-state.json"),JSON.stringify({staged,events,queue,delivery},null,2));
+  db.close();writeFileSync(join(evidence,"btcc-state.json"),JSON.stringify({turns,authority},null,2));
+  writeFileSync(join(evidence,"final-state.json"),JSON.stringify({rustObserve:await internal("tab.observe",agentTab?.id).then((value:any)=>({status:value.status,reason:value.reason})).catch(()=>null),session:await app.gateway.api("/session-view?session_id=general").then((view:any)=>({latest:view.latest_turn})).catch(()=>null),authority:await app.gateway.api("/authority-requests?session_id=general").catch(()=>null),tabs:(await state()).tabs.map(({id,owner,epoch,holder,waiting})=>({id,owner,epoch,holder,waiting}))},null,2));
   writeFileSync(join(evidence,"trace.json"),JSON.stringify({ traces, toolResults: stub.results, nativeError: await app.main("globalThis.browserAgentError").catch(()=>null), renderer: await app.page.diagnostics().catch(()=>null) },null,2));
+  const journal=await Bun.file(join(app.gateway.butlerData,"transcripts/butler_app-general.jsonl")).text().catch(()=>"");
+  const outbounds=journal.trim().split("\n").filter(Boolean).map(line=>JSON.parse(line)).filter(event=>['outbound','delivery'].includes(event.type ?? event.kind)).map(event=>({kind:event.type ?? event.kind,event:event.eventId ?? event.event_id,action:event.payload?.actionId,ok:event.payload?.ok,error:event.payload?.error,metadata:event.payload?.metadata}));
+  writeFileSync(join(evidence,"outbound-metadata.json"),JSON.stringify(outbounds,null,2));
+  const inbound=[];
+  for(const event of outbounds.filter(event=>event.metadata?.queueId)) for(const folder of ['processed','failed','processing']) {
+    const value=await Bun.file(join(app.gateway.butlerData,'runtime/inbound-events',folder,`${event.metadata.queueId}.json`)).json().catch(()=>null);
+    if(value) inbound.push({queue:event.metadata.queueId,folder,terminalClaim:value.metadata?.terminalClaimId,failure:value.metadata?.failure?.code});
+  }
+  writeFileSync(join(evidence,"inbound-claims.json"),JSON.stringify(inbound,null,2));
   await app.stop();
 }

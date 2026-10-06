@@ -41,11 +41,15 @@ export async function browserCall(op: string, input?: unknown) {
 }
 export async function openBrowser(output?: { url: string; sessionId: string }) {
   if (!window.butlerBrowser) return;
+  const session=output?.sessionId;
   connectBrowser();
-  await browserCall("open");
-  if (output) {
-    await browserCall("create", { owner: `conversation:${output.sessionId}`, url: output.url });
-    useButlerStore.getState().setActiveChatId(output.sessionId);
+  const snapshot=await browserCall("open") as BrowserSnapshot | undefined;
+  if (session) {
+    const group=snapshot?.tabs.filter(tab=>tab.owner===`conversation:${session}`) ?? [];
+    const target=output ? await browserCall("create",{owner:`conversation:${session}`,url:output.url})
+      : group.find(tab=>tab.id===snapshot?.activeId)?.id ?? group[0]?.id ?? await browserCall("create",{owner:`conversation:${session}`,profile:"signed_out"});
+    if(typeof target==="string") await browserCall("activate",{id:target});
+    useButlerStore.getState().setActiveChatId(session);
     useButlerStore.getState().setRightOpen(true);
   }
   useButlerStore.getState().setView({ kind: "browser" });

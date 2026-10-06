@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldLabel,
   Input,
   Textarea,
@@ -13,21 +14,26 @@ import { McpSecretRows } from "./McpSecretRows";
 export function StdioFields({
   form,
   onChange,
+  error,
 }: {
   form: McpServerFormState;
+  error?: string;
   onChange: (patch: Partial<McpServerFormState>) => void;
 }) {
   useAppLocale();
   const copy = appCopy.settings;
   return (
     <>
-      <Field>
+      <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor="mcp-stdio-command">{copy.fields.mcpCommand}</FieldLabel>
         <Input
           id="mcp-stdio-command"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "mcp-stdio-command-error" : undefined}
           value={form.command}
           onChange={(event) => onChange({ command: event.target.value })}
         />
+        {error ? <FieldError id="mcp-stdio-command-error">{error}</FieldError> : null}
       </Field>
       <Field>
         <FieldLabel htmlFor="mcp-stdio-args">{copy.fields.mcpArgs}</FieldLabel>

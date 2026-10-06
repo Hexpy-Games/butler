@@ -1,6 +1,8 @@
 //! File SQLite connections using the host's path-capable VFS.
 //! Database schemas, flags, transactions and state remain with their owners.
-use rusqlite::{Connection, OpenFlags, Result};
+use rusqlite::{OpenFlags, Result};
+mod connection;
+pub use connection::Connection;
 use std::path::Path;
 
 /// Startup scans can traverse overflow pages without a copy per page. macOS
@@ -61,11 +63,16 @@ pub fn open_with_flags(path: impl AsRef<Path>, flags: OpenFlags) -> Result<Conne
                 Some(error.to_string()),
             )
         })?;
-        Connection::open_with_flags_and_vfs(path, flags, "win32-longpath")
+        rusqlite::Connection::open_with_flags_and_vfs(path, flags, "win32-longpath")
+            .map(Connection::track)
     }
     #[cfg(not(windows))]
     {
-        Connection::open_with_flags(path, flags)
+        let raw = rusqlite::Connection::open_with_flags(path, flags)?;
+        #[cfg(target_os = "macos")]
+        return Connection::track(raw);
+        #[cfg(not(target_os = "macos"))]
+        Ok(Connection::track(raw))
     }
 }
 
@@ -92,7 +99,7 @@ fn extended_file_path(path: &Path) -> std::io::Result<std::path::PathBuf> {
 
 /// Sync committed WAL bytes and their directory entry without copying pages to
 /// the main DB. Callers retain their own checkpoint and close policy.
-pub fn sync_wal(connection: &Connection) -> std::io::Result<()> {
+pub fn sync_wal(connection: &rusqlite::Connection) -> std::io::Result<()> {
     let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
         return Ok(());
     };
@@ -105,4 +112,48 @@ pub fn sync_wal(connection: &Connection) -> std::io::Result<()> {
         crate::secure_fs::sync_directory(parent).unwrap_or(Ok(()))?;
     }
     Ok(())
+}
+
+/// Finish mapped WAL-index writeback while retaining the file descriptor for
+/// the lifetime of every connection, so SQLite's process locks are preserved.
+pub fn sync_wal_index(connection: &rusqlite::Connection) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    return connection::sync_wal_index(connection);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = connection;
+        Ok(())
+    }
+}
+
+/// Cross-process WAL deadman-lock evidence for E2E; never changes a lock.
+/// Unsupported platforms return `None`, an unlocked index returns PID zero.
+#[cfg(feature = "test-support")]
+pub fn wal_index_lock_owner(path: &Path) -> std::io::Result<Option<u32>> {
+    #[cfg(unix)]
+    {
+        use nix::{
+            fcntl::{FcntlArg, fcntl},
+            libc,
+        };
+        let file = crate::secure_fs::open_read_no_follow(path)?;
+        #[cfg(target_os = "macos")]
+        let lock_type = libc::F_WRLCK;
+        #[cfg(not(target_os = "macos"))]
+        let lock_type = i16::try_from(libc::F_WRLCK).map_err(std::io::Error::other)?;
+        let mut lock = libc::flock {
+            l_start: 128,
+            l_len: 1,
+            l_pid: 0,
+            l_type: lock_type,
+            l_whence: i16::try_from(libc::SEEK_SET).map_err(std::io::Error::other)?,
+        };
+        fcntl(&file, FcntlArg::F_GETLK(&mut lock)).map_err(std::io::Error::from)?;
+        Ok(Some(u32::try_from(lock.l_pid).unwrap_or(0)))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(None)
+    }
 }

@@ -3,9 +3,10 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ProjectWallpaper } from "@/app/types.ts";
 import { uploadedWallpaperSource } from "@/app/wallpaperAssets.ts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, ScrollArea, WallpaperPicker } from "@/butler-ds";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, ScrollArea, FieldError, Stack, WallpaperPicker } from "@/butler-ds";
 import { mainScreenWallpaper } from "@/components/conversation/mainScreenTheme.ts";
 import { useWallpaperAssets } from "@/components/settings/hooks/useWallpaperAssets";
+import { WallpaperImportError } from "@/components/settings/WallpaperImportError";
 import { useWallpaperModules } from "@/components/settings/hooks/useWallpaperModules";
 import { wallpaperPickerLabels } from "@/components/settings/wallpaperPickerLabels";
 import { useProjectWallpaperSave } from "@/hooks/useProjectWallpaperSave.ts";
@@ -44,7 +45,7 @@ export function ProjectWallpaperDialog({ open, onOpenChange, ...picker }: Projec
 function ProjectWallpaperPicker({ projectId, value, revision }: Omit<ProjectWallpaperDialogProps, "open" | "onOpenChange">) {
   const locale = useAppLocale();
   const settings = useButlerStore((state) => state.settings);
-  const images = useWallpaperAssets();
+  const images = useWallpaperAssets("project-wallpaper-picker");
   const modules = useWallpaperModules();
   const [draft, setDraft] = useState(value);
   const save = useProjectWallpaperSave(projectId, revision);
@@ -61,10 +62,11 @@ function ProjectWallpaperPicker({ projectId, value, revision }: Omit<ProjectWall
     if (installed) change({ kind: "live", module: installed.id });
   };
   return (
-    <WallpaperPicker
+    <Stack gap="sm"><WallpaperPicker
       dataTestClass="project-wallpaper-picker"
       images={images.assets}
       importingModule={modules.importing}
+            importError={modules.importError ? <WallpaperImportError message={modules.importError} replace={modules.replaceImport} /> : undefined}
       inherit={{ label: appCopy.settings.wallpaper.inherit, source: mainScreenWallpaper(settings).source }}
       labels={wallpaperPickerLabels()}
       locale={locale}
@@ -76,5 +78,7 @@ function ProjectWallpaperPicker({ projectId, value, revision }: Omit<ProjectWall
       onImportModule={(file) => void importModule(file)}
       onUpload={(file) => void upload(file)}
     />
+    {images.uploadError ? <FieldError id={images.uploadErrorId}>{images.uploadError}</FieldError> : null}
+    </Stack>
   );
 }

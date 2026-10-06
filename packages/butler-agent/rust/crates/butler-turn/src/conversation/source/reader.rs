@@ -36,7 +36,7 @@ const REQUIRED_TABLES: [&str; 8] = [
 
 /// A read-only connection to the conversation store for source readers.
 pub struct ConversationSourceReader {
-    pub(super) connection: Option<Connection>,
+    pub(super) connection: Option<sqlite::Connection>,
 }
 
 impl ConversationSourceReader {
@@ -268,7 +268,7 @@ impl ConversationSourceReader {
     }
 
     fn connection(&self) -> ConversationResult<&Connection> {
-        self.connection.as_ref().ok_or_else(|| {
+        self.connection.as_deref().ok_or_else(|| {
             ConversationError::new(
                 ConversationCode::ConversationSourceClosed,
                 "Conversation source reader is closed",

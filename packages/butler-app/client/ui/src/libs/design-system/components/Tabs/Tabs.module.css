@@ -223,7 +223,13 @@
   }
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .trigger:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .trigger {
     min-height: var(--control-hit-target);
   }

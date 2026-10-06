@@ -30,7 +30,13 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A bare Field in settings breaks the ramp.", render: () => <Field><FieldLabel htmlFor="sg">Smart groups</FieldLabel><Input id="sg" /></Field> },
     },
   ],
-  content: ["Labels name the setting; descriptions explain the effect in one sentence."],
-  accessibility: ["The control gets the label via id and the description via aria-describedby (descriptionId)."],
+  content: [
+    "Labels name the setting; descriptions explain the effect in one sentence.",
+    "error is a few words saying what is wrong (\"Port must be a number\"), not how the app failed.",
+  ],
+  accessibility: [
+    "The control gets the label via id; SettingsField adds the description and error ids to its aria-describedby.",
+    "error sets aria-invalid on the control and renders a FieldError (role=alert) under it.",
+  ],
   tokens: ["--settings-field-copy-gap", "--settings-field-control-gap", "--settings-field-gap"],
 };

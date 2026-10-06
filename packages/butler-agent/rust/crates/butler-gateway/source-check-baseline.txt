@@ -9,7 +9,7 @@ src/gateway/application/project_sources.rs	AppApplication::resolve_project_sourc
 src/gateway/application/projection.rs	project_final	143
 src/gateway/application/projection/final_candidate.rs	candidate	87
 src/gateway/application/projection/final_result.rs	apply	214
-src/gateway/application/projection/non_final.rs	apply	182
+src/gateway/application/projection/non_final.rs	apply	179
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projects/dashboard/board.rs	board_cards	95
 src/gateway/application/projects/dashboard/board.rs	get	119
@@ -32,14 +32,14 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::update_sessio
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	81
 src/gateway/application/settings/update/patch/project.rs	project	202
-src/gateway/application/settings/update/patch/sanitize.rs	sanitize	201
-src/gateway/application/settings/view.rs	read	250
+src/gateway/application/settings/update/patch/sanitize.rs	sanitize	181
+src/gateway/application/settings/view.rs	read	224
 src/gateway/application/shell.rs	command_palette	148
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	160
+src/gateway/http.rs	route	158
 src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96

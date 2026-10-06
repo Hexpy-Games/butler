@@ -1,3 +1,4 @@
+import { stepStill } from "./stills.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 
 export async function prepareBatch(tab, args) {
@@ -12,7 +13,7 @@ export async function prepareBatch(tab, args) {
   return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
 }
 function sameTarget(prepared, current) {
-  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.submit === current.submit && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
+  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.upload === current.upload && prepared.submit === current.submit && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
 }
 async function dispatch(tab, args, step, target) {
   const contents = tab.view.webContents;
@@ -52,16 +53,12 @@ export async function actBatch(tab, args, session) {
       if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: "control_changed" }); failed = true; continue; }
       steps.push(await dispatch(tab, args, step, target));
       if (tab.dialog) { steps[steps.length-1] = {status:"unknown",reason:"dialog_pending",hit:target.hit}; failed=true; }
+      else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
+        steps.at(-1).still = await stepStill(tab);
+        if(tab.dialog) {steps[steps.length-1]={status:"unknown",reason:"dialog_pending",hit:target.hit};failed=true;}
+      }
     } catch { steps.push({ status: "unknown", reason: "dispatch_interrupted" }); failed = true; }
   }
   if (tab.dialog) { tab.pendingBatch=steps; return {status:"dialog_pending",tab:tab.id,url:tab.url,epoch:tab.epoch,dialog:tab.dialog,steps}; }
-  let still;
-  if (steps.some(step => step.status === "completed") && tab.stills !== false && tab.holder === "agent" && tab.epoch === epoch && tab.view && !tab.view.webContents.isDestroyed()) {
-    const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true }).catch(() => null);
-    if (image && !image.isEmpty()) {
-      const jpeg = image.resize({ width: 320 }).toJPEG(70);
-      if (jpeg.length <= 24 * 1024) still = { mime: "image/jpeg", base64: jpeg.toString("base64") };
-    }
-  }
-  return { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch, still };
+  return { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch };
 }

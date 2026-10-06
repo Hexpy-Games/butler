@@ -18,9 +18,11 @@ export async function waitBrowser(read: () => Promise<boolean>, label: string) {
   throw new Error(`Timed out: ${label}`);
 }
 export async function browserAgentApp(evidence: string, stubToolCall: (request: StubModelRequest) => { name: string; arguments: Record<string, unknown> } | null, rendererDist?: string) {
+  mkdirSync(evidence,{recursive:true});
   const dir = mkdtempSync(join(tmpdir(), "browser-agent-app-"));
   const home = join(dir, "home"); mkdirSync(home); mkdirSync(join(dir, "profile"));
-  const gateway = await createNativeAppServer({ stubToolCall, uiRoot: rendererDist });
+  const gateway = await createNativeAppServer({ stubToolCall, uiRoot: rendererDist,
+    env: process.env.BUTLER_BROWSER_DISABLED ? {BUTLER_BROWSER_DISABLED:process.env.BUTLER_BROWSER_DISABLED} : {} });
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   assert.ok(executable, "explicit Electron 44 executable required");
@@ -43,6 +45,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       while(Date.now()<until && child.exitCode===null && child.signalCode===null) await new Promise(done=>setTimeout(done,100));
       if(child.exitCode===null && child.signalCode===null) child.kill("SIGKILL");
     }
+    writeFileSync(join(evidence,"agent.log"),gateway.diagnostics());
     await gateway.stop(); writeFileSync(join(evidence, "electron.log"), logs.join("")); rmSync(dir, { recursive: true, force: true });
   };
   try {
@@ -52,12 +55,17 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     assert.match(await main<string>("process.versions.electron"), /^44\./u);
     await main(`(() => { const make=${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/tabs.mjs"))}).createUserBrowser;
       const dummy=make({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null); const proto=Object.getPrototypeOf(dummy); const publish=proto.publish; const execute=proto.execute;
+      const snapshot=proto.snapshot;proto.snapshot=function(){globalThis.browserAgentSubject=this;return snapshot.call(this)};
       proto.execute=async function(frame){try{return await execute.call(this,frame)}catch(error){globalThis.browserAgentError=String(error.stack);throw error}};
       proto.publish=function(){globalThis.browserAgentSubject=this;return publish.call(this)};
     })()`);
     const call = async <T>(op: string, input: unknown = {}) => page!.expression<T>(`window.butlerBrowser.call(${JSON.stringify(op)},${JSON.stringify(input)})`);
     const shot = async (name: string) => {
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
+      await main(`(async()=>{const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && !tab.view.webContents.isDestroyed() && tab.attached===${win})await tab.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")})()`);
+      await page!.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>img.decode()))");
+      const facts=await main(`(async()=>{${win}.show();${win}.focus();const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && tab.attached===${win})await tab.view.webContents.capturePage(undefined,{stayHidden:true});await ${win}.webContents.capturePage();return {attached:tab?.attached===${win},covered:tab?.covered,nativeCovers:browser?.nativeCovers,bounds:tab?.bounds}})()`);
+      writeFileSync(join(evidence,`${name}-capture.json`),JSON.stringify(facts));
       const capture = process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE; assert.ok(capture);
       const source = await main<string>(`${win}.getMediaSourceId()`);
       const result = Bun.spawnSync([capture, source.split(":")[1]!, join(evidence, `${name}.png`)]);

@@ -1,0 +1,61 @@
+/* The canvas rests its first column on the inspector inset: ScrollArea's
+   edge padding (--scroll-fade-size) plus --space-xs. */
+.canvas {
+  --task-graph-card-width: 208px;
+  --task-graph-column-gap: var(--space-4xl);
+
+  position: relative;
+  box-sizing: border-box;
+  width: max-content;
+  padding: var(--space-xs);
+}
+
+/* Edges paint under the cards (the columns are positioned after the SVG). */
+.edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.columns {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--task-graph-column-gap);
+}
+
+.column {
+  display: flex;
+  width: var(--task-graph-card-width);
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* A rank-skipping edge passes straight through this slot. */
+.dummy {
+  height: var(--space-lg);
+}
+
+.edge {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-linecap: round;
+  stroke-width: 1.25px;
+}
+
+.edge[data-edge-state="waiting"] {
+  stroke-dasharray: 3 4;
+}
+
+.edge[data-edge-state="failed"] {
+  stroke: var(--danger);
+  stroke-dasharray: 3 4;
+}
+
+.edge[data-edge-state="active"] {
+  stroke: var(--worker-active);
+  stroke-width: 2px;
+}

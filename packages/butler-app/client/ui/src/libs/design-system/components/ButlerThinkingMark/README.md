@@ -14,8 +14,8 @@ single morph in reverse; it settles on exactly the idle logo and stops drawing.
 | Prop | Values |
 | --- | --- |
 | `state` | `idle` (default), `working` |
-| `size` | Icon size token (`sm` ... `2xl`); omit to fill the container width |
-| `theme` | `dark` (white ink), `light` (near-black ink); omit to follow the nearest `.theme-dark` / `.theme-light` scope |
+| `size` | Icon size token (`sm` ... `3xl`, 48px); omit to fill the container width |
+| `theme` | `dark` (white ink), `light` (near-black ink); omit to follow the nearest `.theme-dark` / `.theme-light` scope, re-read when that scope's class changes (the running simulation continues) |
 | `themeColors` | Overrides the key ink per theme |
 | `reducedMotion` | Forces reduced motion on or off; default is the OS setting and the DS `data-motion="reduced"` scope |
 | `morphKey` | Marks with the same key share one morph: a remount mid-work (pending -> current status) continues instead of restarting from the logo |

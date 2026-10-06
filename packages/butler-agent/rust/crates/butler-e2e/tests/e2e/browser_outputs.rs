@@ -37,9 +37,33 @@ fn blob_count(path: &std::path::Path) -> usize {
 async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("BROWSER-OUTPUTS")?.stub_cassette(stub::cassette()?);
+    // A first publisher opens the file before its schema transaction commits.
+    let outputs = setup.sandbox.data.join("outputs");
+    std::fs::create_dir_all(&outputs)?;
+    let index = butler_platform::sqlite::open(outputs.join("index.sqlite")).unwrap();
+    drop(index);
     let site = setup.sandbox.data.join("site");
     let mut s = setup.start().await?;
-    let (turn, _) = s.turn("general", "Publish").await?;
+    let finished = std::sync::atomic::AtomicBool::new(false);
+    let reader = s.gw.clone();
+    let (publication, ()) = tokio::join!(
+        async {
+            let result = s.turn("general", "Publish").await;
+            finished.store(true, std::sync::atomic::Ordering::Release);
+            result
+        },
+        async {
+            while !finished.load(std::sync::atomic::Ordering::Acquire) {
+                let projection = reader
+                    .get("/session-view?session_id=general")
+                    .await
+                    .unwrap();
+                assert_eq!(projection.status, 200, "{}", projection.text);
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }
+    );
+    let (turn, _) = publication?;
     butler_platform::secure_fs::symlink(&site, &s.sandbox.data.join("linked"))?;
     let published = result(&s, &turn);
     assert_eq!(

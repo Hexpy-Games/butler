@@ -1441,41 +1441,42 @@
 }
 
 @media (width <= 640px) {
-  .doDont {
+  .doDont:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .themePanes {
+  .themePanes:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .roleCard .themePanes {
+  .roleCard
+    .themePanes:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .chapterNumber {
+  .chapterNumber:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: calc(var(--typo-new-chat-title-size-sm) * 1.5);
   }
 
-  .chapterTitle,
-  .voiceLine {
+  .chapterTitle:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .voiceLine:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--typo-new-chat-title-size-sm);
   }
 
-  .voiceGlyph {
+  .voiceGlyph:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: calc(var(--typo-new-chat-title-size-sm) * 2.4);
   }
 
-  .glyphRow {
+  .glyphRow:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-xs);
   }
 
-  .specGrid {
+  .specGrid:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .roleInk {
+  .roleInk:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     font-size: var(--typo-body-size);
   }
 }

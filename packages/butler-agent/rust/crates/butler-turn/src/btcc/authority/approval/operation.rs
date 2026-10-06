@@ -13,6 +13,8 @@ pub struct ApprovalOperation {
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_conversation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub browser_mode: Option<String>,
 }
 
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
@@ -29,6 +31,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             targets: vec![facts.target.into()],
             command: None,
             allow_conversation: Some(false),
+            browser_mode: None,
         };
     }
     let command = input["command"].as_str().map(str::to_owned);
@@ -77,6 +80,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         targets,
         command,
         allow_conversation: None,
+        browser_mode: None,
     }
 }
 
@@ -133,5 +137,6 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         targets,
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
+        browser_mode: facts.input["mode"].as_str().map(str::to_owned),
     }
 }

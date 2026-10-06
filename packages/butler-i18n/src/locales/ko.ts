@@ -1,3 +1,5 @@
+import { TASK_GRAPH_COPY } from "./task-graph.ts";
+import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
@@ -40,12 +42,12 @@ const generalFallback: BriefingFallbackCopy = {
 const onboardingFallback: BriefingFallbackCopy = {
     title: "반갑습니다. 당신을 모시게 되어 기쁩니다.",
     description:
-      "AI 에이전트 집사 버틀러를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.",
+      "AI 에이전트 집사 Butler를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.",
     suggestions: [
       {
         id: "butler-onboarding",
-        title: "버틀러와 알아가기",
-        description: "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.",
+        title: "Butler와 알아가기",
+        description: "Butler를 사용하기에 앞서 기본적인 설정을 진행합니다.",
         text: "처음 설정을 도와주세요.",
       },
     ],
@@ -240,6 +242,9 @@ function koreanProjectFallbackSuggestions(
 }
 
 export const koKrCopy: AppCopy = {
+  shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
+  taskGraph: TASK_GRAPH_COPY["ko-KR"],
+  lifecycle: lifecycleCopy.ko,
   browser: { "signedIn": "로그인됨", "stills": "단계 이미지", "agentControl": "버틀러가 사용 중", "userControl": "직접 조작 중", "takeOver": "직접 조작", "handBack": "돌려주기", "waiting": "승인 대기", "still": "브라우저 단계", "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "버틀러 업데이트 필요", "restartRequired": "버틀러 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
@@ -251,7 +256,7 @@ export const koKrCopy: AppCopy = {
     refreshing: "통계를 업데이트하고 있습니다…", loadFailed: "통계 응답을 받지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.",
     focus: "어떤 일을 다뤘나요",
     materials: "자료와 결과물의 변화", materialsHelp: "날짜별 문서 등록·수정과 새로 전달된 첨부입니다. 같은 문서의 하루 여러 번 수정은 한 건으로 셉니다.",
-    outcomes: "버틀러 요청 결과", outcomesHelp: "종료 이벤트가 기록된 요청을 종료일 기준으로 보여줍니다. 답변 완료가 프로젝트 작업 완료를 뜻하지는 않습니다.",
+    outcomes: "Butler 요청 결과", outcomesHelp: "종료 이벤트가 기록된 요청을 종료일 기준으로 보여줍니다. 답변 완료가 프로젝트 작업 완료를 뜻하지는 않습니다.",
     duration: "요청 처리에 걸린 시간", durationHelp: "요청 생성부터 기록된 종료 상태까지, 대기를 포함한 경과 시간입니다. 사람의 작업 시간이나 순수 모델 실행 시간은 아닙니다.",
     usage: "모델 사용량", usageHelp: "이 화면에 연결된 프로젝트별 토큰·비용 기록은 아직 없습니다. 미수집은 사용량 0이 아니며, 구독 사용량을 API 요금으로 환산하지 않습니다.",
     empty: "선택한 범위에 기록이 없습니다.", unavailable: "이 데이터를 확인할 수 없습니다.",
@@ -299,6 +304,7 @@ export const koKrCopy: AppCopy = {
     noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 Task", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },
   projectDocumentMetadata: {
+    document: "문서",
     active: "진행 중", other: "기타", roadmap: "로드맵",
     sourceDetails: "원본 식별 정보", readOnly: "원본 문서를 읽기 전용으로 보고 있습니다.", referenceAction: "대화에 참조하기",
     statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
@@ -313,7 +319,7 @@ export const koKrCopy: AppCopy = {
       interrupted: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.", waitingForChildren: "Worker 결과를 기다리는 중입니다.",
     },
     argumentLabels: { command: "명령", cmd: "명령", command_intent: "명령", output_count: "출력", path: "경로", file_path: "경로", target: "대상", objective: "목표", query: "검색어", pattern: "패턴" },
-    tools: { ...additionalToolLabels, browser_open: "탭 열기", browser_observe: "페이지 읽기", browser_act: "브라우저 조작", browser_tabs: "탭 확인", browser_close: "탭 닫기", browser_wait_for_user: "직접 조작 대기", read_project_source: "프로젝트 원문 읽기", web_search: "웹 검색", web_read: "웹 문서 읽기", read_file: "파일 읽기", list_files: "작업공간 파일 찾기", grep_files: "작업공간 검색", write_file: "작성", edit_file: "수정", tool_search: "사용 가능한 도구 찾기", tool_describe: "도구 사용법 확인", tool_call: "도구 실행", run_command: "명령 실행", project_ledger_change: "프로젝트 기록 변경", project_ledger_read: "프로젝트 기록 확인", start_work: "요청 내용 확인", continue_work: "진행 내용 확인", replace_work_plan: "실행 계획 수립", record_work_checkpoint: "작업 진행 확인", record_work_review: "결과 검토", plan_review: "계획 검토", completion_review: "완료 검토", record_work_disposition: "완료 상태 기록", work_tool: "작업 상태 변경", tool_work: "도구 작업", fallback: "도구 사용" },
+    tools: { ...additionalToolLabels, browser_open: "탭 열기", browser_observe: "페이지 읽기", browser_act: "브라우저 조작", browser_tabs: "탭 확인", browser_close: "탭 닫기", browser_wait_for_user: "직접 조작 대기", read_project_source: "프로젝트 원문 읽기", web_search: "웹 검색", web_read: "웹 문서 읽기", read_file: "파일 읽기", list_files: "작업공간 파일 찾기", grep_files: "작업공간 검색", write_file: "작성", edit_file: "수정", tool_search: "사용 가능한 도구 찾기", tool_describe: "도구 사용법 확인", tool_call: "도구 실행", run_command: "명령 실행", project_ledger_change: "프로젝트 기록 변경", project_ledger_read: "프로젝트 기록 확인", start_work: "요청 내용 확인", continue_work: "진행 내용 확인", replace_work_plan: "실행 계획 수립", record_work_checkpoint: "작업 진행 확인", record_work_review: "결과 검토", plan_review: "계획 검토", completion_review: "완료 검토", record_work_disposition: "완료 상태 기록", work_tool: "작업 상태 변경", tool_work: "도구 작업", fallback: "작업 중" },
     checkingPrevious: "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다.", checkingRequest: "요청하신 내용과 필요한 결과를 정리하고 있습니다.", toolWorking: "도구 작업을 진행하고 있습니다", checkingInformation: "작업에 필요한 정보를 확인하고 있습니다.", commandExecuting: "작업 공간에서 필요한 명령을 실행하고 있습니다.", conceptionTitle: "요청 의도 확인", planningNext: "요청에 맞는 작업 순서와 검증 기준을 정합니다.", reportTitle: "결과 보고",
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `요청의 목표와 범위를 확인했습니다: ${text}` : "요청의 목표와 범위를 확인했습니다.", workInProgress: text => `${text} 작업을 진행하고 있습니다.`, toolsSummary: text => text ? `${text} 도구로 필요한 정보를 확인하고 있습니다.` : "필요한 도구로 작업을 진행하고 있습니다.",
   },
@@ -322,14 +328,14 @@ export const koKrCopy: AppCopy = {
     space_changed: "목록이 변경되었습니다. 최신 목록에서 다시 시도해 주세요.", space_invalid_group: "서로 다른 두 대화를 선택해 주세요.", space_invalid_scope: "같은 프로젝트의 대화끼리 묶을 수 있습니다.", space_invalid_pin: "대화 또는 프로젝트를 즐겨찾기에 추가해 주세요.", space_undo_expired: "다른 변경이 있어 되돌릴 수 없습니다.", space_invalid_title: "그룹 이름은 1~120자로 입력해 주세요.",
     branch_source_required: "출처 대화가 필요합니다.", branch_source_invalid: "이 대화의 답변을 선택해 주세요.", branch_source_unavailable: "분리할 완료된 답변이 없습니다.", branch_cancelled: "새 대화 만들기가 취소되었습니다.", branch_identity_conflict: "같은 생성 요청의 내용이 변경되었습니다.", branch_request_invalid: "새 대화의 제목과 출처를 확인해 주세요.",
     session_relocating: "대화를 이동하고 있습니다. 잠시 후 다시 시도해 주세요.", relocation_identity_conflict: "이동 요청의 내용이 달라졌습니다.", relocation_aborted: "이동이 완료되지 않았습니다. 이동 상태를 확인해 주세요.", session_context_changed: "대화의 실행 환경이 변경되어 이동하지 못했습니다.", session_not_movable: "이 대화는 이동할 수 없습니다.", space_invalid_target: "다른 이동 위치를 선택해 주세요.", project_unavailable: "사용 가능한 프로젝트를 선택해 주세요.", same_session_context: "같은 프로젝트 안에서는 목록 이동을 사용해 주세요.", model_not_configured: "먼저 사용할 모델을 설정해 주세요.", session_context_conflict: "대화 이동의 실행 환경을 확인해야 합니다. 기존 작업은 보존되어 있습니다.", relocation_preparation_missing: "이동 준비 정보를 확인할 수 없습니다.", session_busy: "진행 중인 작업과 대기 메시지가 끝난 뒤 다시 시도해 주세요.",
-    space_node_not_found: "항목을 찾을 수 없습니다. 목록을 새로 확인해 주세요.", space_invalid_parent: "대화 안에 항목을 넣을 수 없습니다.", space_scope_conflict: "프로젝트 소속을 바꾸려면 프로젝트 이동을 사용해 주세요.", space_cycle: "항목을 자신의 하위로 옮길 수 없습니다.", invalid_message_content: "대화 참조의 형식이 올바르지 않습니다.", settings_model_unavailable: "선택한 모델을 더 이상 사용할 수 없습니다. 설정 > 모델에서 다른 모델을 선택해 주세요.", image_payload_invalid: "이미지 첨부를 처리할 수 없습니다.",
+    space_node_not_found: "항목을 찾을 수 없습니다. 목록을 새로 확인해 주세요.", space_invalid_parent: "대화 안에 항목을 넣을 수 없습니다.", space_scope_conflict: "프로젝트 소속을 바꾸려면 프로젝트 이동을 사용해 주세요.", space_cycle: "항목을 자신의 하위로 옮길 수 없습니다.", invalid_message_content: "대화 참조의 형식이 올바르지 않습니다.", settings_model_unavailable: "선택한 모델을 더 이상 사용할 수 없습니다.", image_payload_invalid: "이미지 첨부를 처리할 수 없습니다.",
   },
   runtimeMessages: {
     ungroundedWorkerDispatch: () => "이번 답변에서는 Worker 또는 백그라운드 작업 실행을 확인하지 못했습니다.\n\n실행 기록으로 확인되기 전에는 백그라운드 작업이 시작됐다고 단정하지 않겠습니다. 다시 요청하시면 먼저 상태를 확인한 뒤 안전하게 이어가겠습니다.",
     ungroundedTaskInspection: () => "아직 작업 큐를 확인하지 않았습니다.\n\n기억만으로 작업 상태를 보고하지 않겠습니다. 다시 물어보시면 저장된 작업 상태를 먼저 읽고 답하겠습니다.",
   },
   interfaceFeedback: {
-    updateReady: "버틀러 업데이트가 준비되었습니다.",
+    updateReady: "Butler 업데이트가 준비되었습니다.",
     stewardStopFailed: "하위 작업 중지 실패",
     stewardResumeFailed: "하위 작업 재개 실패",
     planDecisionFailed: "계획 결정 전달 실패",
@@ -382,8 +388,11 @@ export const koKrCopy: AppCopy = {
     noProjectChats: "프로젝트 대화가 없습니다",
     noPlans: "프로젝트 기록에 계획이 없습니다",
     noSpecs: "프로젝트 기록에 스펙이 없습니다",
+    copyDiagnostics: "진단 복사",
+    panelCrashed: "화면을 표시할 수 없습니다.",
+    retry: "다시 시도",
     uiCrashed: "버틀러 화면에 오류가 발생했습니다.",
-    reload: "창을 새로고침하거나 버틀러를 다시 열어 주세요.",
+    reload: "다시 불러오기",
     custom: "직접 지정",
     freeContext: "남은 컨텍스트",
     generalChat: "일반 대화",
@@ -449,6 +458,7 @@ export const koKrCopy: AppCopy = {
     grantedItems: count => `허용한 항목 ${count}개`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
+      browserMode: { signed_out: "로그아웃 사용", signed_in: "로그인 사용" },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
@@ -461,7 +471,7 @@ export const koKrCopy: AppCopy = {
       manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
       updateProject: "프로젝트 기록을 업데이트할까요?",
       startConversation: "새 대화를 시작할까요?",
-      restartService: "버틀러를 다시 시작할까요?",
+      restartService: "Butler를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,
@@ -515,7 +525,7 @@ export const koKrCopy: AppCopy = {
     branchSource: "원본 답변으로 이동",
     progressDetails: "진행 상세 보기",
     toolHistory: "도구 사용 내역",
-    toolUsage: "도구 사용",
+    workerActivity: "작업 중",
     noHistory: "내역 없음",
     tool: "도구",
     answerFailed: "답변 실패",
@@ -748,7 +758,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     maxBytesUtf8: "출력 용량이 한 글자를 읽기에도 부족합니다.",
     readFailed: "파일을 읽지 못했습니다.",
     spec: "스펙",
-    task: "Task",
+    task: "작업",
     reviewNoun: "리뷰",
     report: "보고서",
     result: "결과",
@@ -1071,6 +1081,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   inspector: {
     tabs: {
+      tasks: "작업",
       summary: "요약",
       activity: "활동",
       context: "맥락",
@@ -1098,6 +1109,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     copy: "복사",
   },
   settings: {
+    localModelErrors: { discover: "이 주소에서 모델을 찾지 못했습니다.", register: "모델을 추가하지 못했습니다.", },
+    archiveErrors: { restore: "복원하지 못했습니다.", loadMore: "더 불러오지 못했습니다.", },
+    skillErrors: { invalid: "스킬 .zip 파일이 아닙니다.", tooLarge: "파일이 너무 큽니다.", import: "가져오지 못했습니다.", },
+    mcpErrors: { save: "서버를 저장하지 못했습니다.", notFound: "이미 삭제된 서버입니다.", unavailable: "MCP 설정을 열지 못했습니다.", remove: "서버를 삭제하지 못했습니다.", toggle: "변경하지 못했습니다.", probe: "연결을 확인하지 못했습니다.", },
     hooks: { add: "훅 추가", edit: "편집", test: "테스트", remove: "삭제", recent: "최근 실행", empty: "훅 없음", name: "이름", event: "이벤트", tools: "도구", command: "명령", args: "인수 (JSON)", timeout: "제한 시간 (ms)", failClosed: "오류 시 차단", async: "백그라운드", enabled: "사용", refresh: "새로고침", blocked: "훅이 차단함", editTitle: "훅 편집", disabled: "사용 안 함", emptyRuns: "실행 기록 없음", testSuccess: "실행 성공", testFailure: "실행 실패", exitCode: "종료 코드", commandDisabled: "인수를 사용 중입니다.", commandRequired: "명령 또는 인수를 입력합니다.", deleteConfirm: name => `훅 "${name}"을 삭제합니다.` },
     deleteSchedule: name => `예약 작업 "${name}"을 삭제합니다.`,
     deleteMcpServer: name => `MCP 서버 "${name}"과 저장된 인증 정보를 삭제합니다.`,
@@ -1141,23 +1156,23 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       about: "정보",
     },
     sectionDescriptions: {
-      memory: "버틀러가 기억하는 내용을 종류별로 관리합니다.",
+      memory: "Butler가 기억하는 내용을 종류별로 관리합니다.",
       general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
-      models: "버틀러 모델, 예비 모델과 권한을 설정합니다.",
+      models: "버틀러 모델과 예비 모델을 설정합니다.",
       appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
-      server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
-      updates: "버틀러를 확인하고 업데이트합니다.",
+      server: "Butler 서버 연결과 새 프로젝트 폴더를 설정합니다.",
+      updates: "Butler를 확인하고 업데이트합니다.",
       mcp: "MCP 서버와 연결 정보를 관리합니다.",
       hooks: "명령으로 훅을 관리합니다.",
       skills: "기본 스킬과 프로젝트 스킬을 관리합니다.",
       usage: "모델과 도구 사용량을 확인합니다.",
       logs: "개발자 모드에서 모델 요청과 응답 로그를 확인합니다.",
-      personalization: "버틀러가 사용할 이름, 말투와 사용자 정보를 관리합니다.",
+      personalization: "Butler가 사용할 이름, 말투와 사용자 정보를 관리합니다.",
       privacy: "진단 정보 수집과 개인정보 관련 설정을 관리합니다.",
-      security: "다른 기기의 접속과 연결 코드를 관리합니다.",
+      security: "접속, 권한, 키와 진단 정보를 관리합니다.",
       system: "정기 정리와 유지보수 이벤트를 확인합니다.",
       archives: "보관한 프로젝트와 대화를 복원하거나 삭제합니다.",
-      about: "버틀러 버전과 앱 정보를 확인합니다.",
+      about: "Butler 버전과 앱 정보를 확인합니다.",
     },
     sectionAliases: {
       memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리"],
@@ -1173,12 +1188,26 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       logs: ["개발자 로그", "디버그", "원문"],
       personalization: ["사용자 정보", "페르소나", "말투"],
       privacy: ["진단", "개인정보"],
-      security: ["원격 접속", "연결 코드", "LAN", "네트워크", "허용 호스트", "터널"],
+      security: ["원격 접속", "연결 코드", "LAN", "네트워크", "허용 호스트", "터널", "권한", "허용한 작업", "API 키", "저장된 키", "진단", "개인정보"],
       system: ["유지보수", "기억 정리"],
       archives: ["보관", "아카이브"],
       about: ["버전", "앱 정보"],
     },
     updateComponents: { app: "버틀러", service: "버틀러 에이전트" },
+    updateProgress: {
+      idle: "업데이트 대기", checking: "확인 중", downloading: "다운로드 중", verifying: "파일 확인 중", ready: "다시 시작하면 적용됩니다.",
+      applying: "적용 중", restarting: "다시 시작하는 중", failed: "업데이트 실패", completed: "확인 완료",
+      retry: "다시 시도", cancel: "취소", restart: "다시 시작",
+      downloadMeta: "{percent}% · {done} / {total}", downloadedBytes: "{done} 받음", cancelled: "다운로드를 취소했습니다.",
+    },
+    updateErrors: {
+      download: "업데이트를 받지 못했습니다. 연결을 확인해 주세요.",
+      damaged: "받은 파일을 확인하지 못했습니다. 다시 받아 주세요.",
+      incompatible: "이 기기용 업데이트가 아직 없습니다.",
+      storage: "업데이트 파일을 저장하지 못했습니다.",
+      apply: "적용하지 못해 지금 버전을 유지합니다.",
+      generic: "업데이트하지 못했습니다.",
+    },
     sectionState: {
       loading: "불러오는 중",
       error: "이 섹션을 불러오지 못했습니다.",
@@ -1186,6 +1215,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       empty: "아직 표시할 항목이 없습니다.",
     },
     pageSections: {
+      accessibility: "접근성",
       instructions: "지침",
       chatMemory: "대화 기억",
       profileMemory: "프로필",
@@ -1204,10 +1234,11 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       responseStyle: "응답 스타일",
       learning: "알아가기",
       import: "가져오기",
-      butlerModel: "버틀러 모델",
+      butlerModel: "Butler 모델",
       backupModels: "예비 모델",
       savedKeys: "API 키",
       memoryCleanup: "기억 정리",
+      grants: "허용한 작업",
       permissions: "권한",
       workerProfiles: "작업자 설정",
       connection: "연결",
@@ -1220,16 +1251,17 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       allowedHosts: "허용 호스트",
     },
     pageSectionDescriptions: {
+      grants: "묻지 않고 실행하도록 허용한 작업입니다.",
       instructions: "채팅에서 추가하고 고칩니다.",
-      chatMemory: "대화에서 버틀러가 스스로 기억한 내용입니다. 프로젝트 채팅도 포함합니다.",
+      chatMemory: "대화에서 Butler가 스스로 기억한 내용입니다. 프로젝트 채팅도 포함합니다.",
       profileMemory: "대화에서 알게 된 사용자 정보입니다.",
-      projectMemory: "프로젝트 하나에 대해 버틀러가 기억하는 내용입니다.",
+      projectMemory: "프로젝트 하나에 대해 Butler가 기억하는 내용입니다.",
       notificationPermission: "운영체제 알림 권한을 확인하고 테스트 알림을 보냅니다.",
       searchProvider: "웹 검색 결과를 가져올 곳을 고릅니다. 키는 비밀값으로 저장합니다.",
-      searchBehavior: "버틀러가 검색 전에 페이지를 읽고 계획하는 방식입니다.",
+      searchBehavior: "Butler가 검색 전에 페이지를 읽고 계획하는 방식입니다.",
       sidebar: "사이드바가 대화를 정리하는 방식입니다.",
       homeScreen: "새 채팅 첫 화면의 배경입니다.",
-      learning: "버틀러가 대화하면서 사용자를 알아가는 범위입니다.",
+      learning: "Butler가 대화하면서 사용자를 알아가는 범위입니다.",
     },
     memory: {
       reset: "초기화", resetChatTitle: "대화 기억을 초기화할까요?", resetProfileTitle: "프로필을 초기화할까요?", resetProjectTitle: "프로젝트 기억을 초기화할까요?",
@@ -1325,6 +1357,14 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       editLabel: "예비 모델 편집",
       done: "완료",
     },
+    grants: {
+      kind: { command: "명령 실행", fileWrite: "파일 쓰기", network: "네트워크", tool: "외부 도구", other: "기타 작업" },
+      scope: { conversation: "대화", project: "프로젝트", always: "항상" },
+      conversations: count => `대화 ${count}개`, cwd: path => `위치 ${path}`,
+      revoke: "허용 해제", revokeAlwaysTitle: "항상 허용을 해제할까요?", revokeAlwaysMessage: "다음부터는 실행 전에 묻습니다.", revoked: "허용을 해제했습니다.",
+      search: "허용한 작업 검색", filter: "종류", filterAll: "전체", empty: "허용한 작업이 없습니다.", noMatch: "검색 결과가 없습니다.",
+      targetUnknown: "대상 정보 없음", deletedChat: "삭제된 대화", loadFailed: "허용 목록을 불러오지 못했습니다.", revokeFailed: "허용을 해제하지 못했습니다.",
+    },
     modelsAdvanced: {
       title: "고급",
       contents: "기억 정리 모델과 작업자 설정",
@@ -1335,6 +1375,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       maxSimultaneousWorkers: "최대 동시 작업자 수",
     },
     wallpaper: {
+      moduleInvalid: "월페이퍼 파일이 올바르지 않습니다.", imageUnsupported: "JPG, PNG, WebP 이미지만 가능", imageTooLarge: "이미지가 너무 큽니다.",
       options: "월페이퍼",
       none: "없음",
       image: (index) => `이미지 ${index}`,
@@ -1400,6 +1441,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaper: "월페이퍼",
       wallpaperMotion: "움직임",
       wallpaperPauseOnBattery: "배터리 사용 시 멈춤",
+      collapseMessageBox: "입력창 접기",
+      reduceMotion: "동작 줄이기",
+      composerDecoration: "입력창 배경",
+      composerCharacter: "캐릭터",
       translucentSidebar: "투명 사이드바",
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",
@@ -1414,7 +1459,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       appRepository: "GitHub 저장소",
       appProtocol: "프로토콜",
       developerMode: "개발자 모드",
-      butlerNickname: "버틀러 닉네임",
+      butlerNickname: "Butler 닉네임",
       principalName: "내 이름",
       preferredAddress: "나를 부를 호칭",
       responseLanguage: "답변 언어",
@@ -1480,25 +1525,31 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     descriptions: {
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
-      language: "버틀러 앱의 인터페이스 언어를 설정합니다",
+      language: "Butler 앱의 인터페이스 언어를 설정합니다",
       timezone:
-        "버틀러가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",
+        "Butler가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",
       consolidationModel:
         "대화 기억 정리와 알아가기에서 사용할 모델입니다.",
       consolidationModelDefault:
-        "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
+        "현재 Butler 기본 모델 설정을 그대로 따릅니다.",
       localReasoningBudget:
         "선택한 로컬 모델의 최대 출력 토큰 중 추론에 사용할 비율입니다.",
       wallpaper: "새 채팅 화면의 배경입니다.",
       wallpaperMotion: "배경을 천천히 움직입니다.",
       wallpaperPauseOnBattery: "전원이 연결되지 않으면 멈춥니다.",
+      collapseMessageBox: "입력하지 않을 때 입력창을 한 줄로 줄입니다.",
+      reduceMotion: "끄면 시스템 설정을 따릅니다.",
+      reduceMotionSystem: "시스템 설정에서 켜져 있습니다",
+      wallpaperStill: "동작 줄이기가 켜져 있어 멈춰 있습니다",
+      composerDecoration: "글자 뒤에 그림을 깝니다. 움직임은 월페이퍼 설정을 따릅니다.",
+      composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
       contextLimit: (maxLabel) =>
-        `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
+        `실제 Butler 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
       contextLimitClamped: (value) =>
         `컨텍스트 한도를 ${value} 토큰으로 조정했습니다.`,
       responseLanguage:
-        "버틀러가 채팅에서 최종 답변과 진행 상태를 말할 때 사용할 언어입니다.",
+        "Butler가 채팅에서 최종 답변과 진행 상태를 말할 때 사용할 언어입니다.",
       personaPreset:
         "프리셋을 고르면 아래 페르소나 초안만 바뀌고, 적용 전에는 저장되지 않습니다.",
       profilingMode:
@@ -1512,7 +1563,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       profilingExtractorModel:
         "개인화에 필요한 정보를 읽어낼 때 사용할 모델입니다.",
       profilingExtractorDefault:
-        "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
+        "현재 Butler 기본 모델 설정을 그대로 따릅니다.",
       profileMigration: "외부 AI 서비스에서 기억을 가져올 수 있습니다.",
       profileMigrationImmediate:
         "가져오기를 누르면 이 화면에서 바로 처리되며, 완료되면 결과가 표시됩니다.",
@@ -1527,10 +1578,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       systemEvents:
         "정기 정리, 알아가기, 유지보수 작업이 언제 어떻게 끝났는지 확인합니다.",
       systemEventsEmpty: "아직 표시할 시스템 이벤트가 없습니다.",
-      updates: "버틀러를 확인하고 업데이트합니다.",
+      updates: "Butler를 확인하고 업데이트합니다.",
       eolLastLoaded: (value) => `마지막으로 불러온 시각 ${value}`,
       mcpServers:
-        "설정은 Butler data home에 저장되고, 활성 서버의 도구와 리소스는 버틀러가 대화 중 바로 호출할 수 있습니다.",
+        "설정은 Butler data home에 저장되고, 활성 서버의 도구와 리소스는 Butler가 대화 중 바로 호출할 수 있습니다.",
       mcpSecrets:
         "값의 출처, 키, 값을 행 단위로 입력합니다. 필요하면 같은 출처를 전체 행에 적용할 수 있고, 저장된 값은 화면과 API 응답에서 숨깁니다.",
       skills:
@@ -1645,7 +1696,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       revokeAllConfirm: "연결된 모든 기기의 접속 권한을 해제합니다.",
       revokeFailed: "기기 연결을 끊지 못했어요",
       hostOnly: "호스트 컴퓨터에서만 사용할 수 있습니다.",
-      adminRequired: "버틀러 앱을 확인하지 못했습니다.",
+      adminRequired: "Butler 앱을 확인하지 못했습니다.",
       advanced: "고급",
       advancedContents: "터널·프록시용 허용 호스트",
       hosts: "호스트 이름",
@@ -1775,6 +1826,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       developerLogSession: "세션 ID 필터",
     },
     errors: {
+      saveFailed: "저장하지 못했습니다.",
       loadPersonalization: "개인화 불러오기 실패",
       updateSettings: "설정 업데이트 실패",
       chooseFolder: "폴더 선택 실패",

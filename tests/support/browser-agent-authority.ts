@@ -29,7 +29,7 @@ export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof b
   const response = await fetch(`${app.gateway.url}/authority-requests/${payment.request_ref}/allow?session_id=general`,{method:"POST",headers:{...app.gateway.authHeaders,"content-type":"application/json"},body:JSON.stringify({scope:"conversation"})});
   assert.equal(response.status,400); assert.match(await response.text(),/browser_confirm_once_required/u);
   await allow(payment.request_ref,"once"); await delivered();
-  await app.main(`${contents}.executeJavaScript("document.getElementById('payment-field').remove();window.dialogClicks=0;document.getElementById('confirm').onclick=()=>{window.dialogClicks++;if(confirm('Continue?'))document.getElementById('result').textContent='Confirmed'}")`);
+  await app.main(`${contents}.executeJavaScript("document.getElementById('payment-field').remove();window.dialogClicks=0;document.getElementById('confirm').onclick=()=>{window.dialogClicks++;if(confirm('Continue?'))document.getElementById('result').textContent='Confirmed'};void 0")`);
   await act("Ask before answering the page's confirmation dialog.");
   const dialog = await pending(); assert.equal(dialog.approval.operation.allow_conversation,false);
   assert.ok(dialog.approval.operation.targets.some(target=>target.includes("Continue?")));

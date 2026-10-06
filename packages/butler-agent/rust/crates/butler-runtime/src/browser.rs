@@ -46,6 +46,15 @@ impl TabRegistry {
     pub fn is_waiting(&self, id: &str) -> bool {
         self.tabs.get(id).is_some_and(|tab| tab["waiting"] == true)
     }
+    pub fn ready_waits(&self) -> Vec<Value> {
+        self.tabs
+            .values()
+            // Hand-back clears the UI waiting flag before durable admission may
+            // finish. Holder ownership is the durable wait's readiness fact.
+            .filter(|tab| tab["holder"] == "agent")
+            .cloned()
+            .collect()
+    }
     pub fn clear(&mut self) {
         self.tabs.clear();
     }

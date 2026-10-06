@@ -8,6 +8,7 @@ export interface ElectronPage {
   press(key: "Escape" | "Enter"): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
+  drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
   diagnostics(): Promise<unknown>;
@@ -95,6 +96,14 @@ async function connect(url: string): Promise<ElectronPage> {
   }
   return {
     expression, waitForFunction, diagnostics,
+    drag: async (from,to) => {
+      await send("Input.dispatchMouseEvent",{type:"mousePressed",...from,button:"left",buttons:1,clickCount:1});
+      for(let step=1;step<=12;step++) {
+        await send("Input.dispatchMouseEvent",{type:"mouseMoved",x:from.x+(to.x-from.x)*step/12,y:from.y+(to.y-from.y)*step/12,button:"left",buttons:1});
+        await new Promise(done=>setTimeout(done,16));
+      }
+      await send("Input.dispatchMouseEvent",{type:"mouseReleased",...to,button:"left",buttons:0,clickCount:1});
+    },
     press: async key => {
       const windowsVirtualKeyCode = key === "Escape" ? 27 : 13;
       await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode });

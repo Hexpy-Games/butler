@@ -1,3 +1,6 @@
+import type { TaskGraphCopy } from "./task-graph-copy.ts";
+
+import type { LifecycleCopy } from "./lifecycle.ts";
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
   | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
@@ -119,6 +122,7 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  browserMode: { signed_out: string; signed_in: string };
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
@@ -212,6 +216,9 @@ interface ConversationCopy {
 }
 
 export interface AppCopy {
+  shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  taskGraph: TaskGraphCopy;
+  lifecycle: LifecycleCopy;
   browser: { agentControl: string; userControl: string; takeOver: string; handBack: string; signedIn: string; stills: string; waiting: string; still: string; title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
   projectSignpost: {
     evidenceCount: (count: number) => string;
@@ -251,7 +258,7 @@ export interface AppCopy {
     excluded: (count: number) => string; age: (days: number) => string; changes: (count: number) => string;
     sources: (count: number) => string; labels: Record<string, string>;
   };
-  projectDocumentMetadata: { active: string; other: string; roadmap: string;
+  projectDocumentMetadata: { document: string; active: string; other: string; roadmap: string;
     sourceDetails: string; readOnly: string; referenceAction: string;
     labels: Record<string, string>; statuses: Record<string, string> };
   guided: {
@@ -322,6 +329,9 @@ export interface AppCopy {
     noPlans: string;
     noSpecs: string;
     uiCrashed: string;
+    panelCrashed: string;
+    copyDiagnostics: string;
+    retry: string;
     reload: string;
     custom: string;
     freeContext: string;
@@ -444,7 +454,7 @@ export interface AppCopy {
     branchSource: string;
     progressDetails: string;
     toolHistory: string;
-    toolUsage: string;
+    workerActivity: string;
     noHistory: string;
     tool: string;
     answerFailed: string;
@@ -932,6 +942,7 @@ export interface AppCopy {
   inspector: {
     tabs: {
       summary: string;
+      tasks: string;
       activity: string;
       context: string;
       artifacts: string;
@@ -959,6 +970,10 @@ export interface AppCopy {
     copy: string;
   };
   settings: {
+    mcpErrors: { save: string; notFound: string; unavailable: string; remove: string; toggle: string; probe: string; };
+    skillErrors: { invalid: string; tooLarge: string; import: string; };
+    archiveErrors: { restore: string; loadMore: string; };
+    localModelErrors: { discover: string; register: string; };
     hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
       failClosed: string; async: string; enabled: string; refresh: string; blocked: string; editTitle: string; disabled: string; emptyRuns: string; testSuccess: string; testFailure: string;
@@ -1047,9 +1062,24 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
+    updateProgress: {
+      idle: string; checking: string; downloading: string; verifying: string; ready: string;
+      applying: string; restarting: string; failed: string; completed: string;
+      retry: string; cancel: string; restart: string;
+      downloadMeta: string; downloadedBytes: string; cancelled: string;
+    };
+    updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
+    grants: {
+      kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
+      scope: Record<"conversation" | "project" | "always", string>;
+      conversations: (count: number) => string; cwd: (path: string) => string;
+      revoke: string; revokeAlwaysTitle: string; revokeAlwaysMessage: string; revoked: string;
+      search: string; filter: string; filterAll: string; empty: string; noMatch: string;
+      targetUnknown: string; deletedChat: string; loadFailed: string; revokeFailed: string;
+    };
     modelsAdvanced: { title: string; contents: string };
     memory: {
       reset: string; resetChatTitle: string; resetProfileTitle: string; resetProjectTitle: string;
@@ -1118,6 +1148,7 @@ export interface AppCopy {
     };
     /** Wallpaper picker copy and its brief toasts. */
     wallpaper: {
+      moduleInvalid: string; imageUnsupported: string; imageTooLarge: string;
       options: string;
       none: string;
       image: (index: number) => string;
@@ -1193,6 +1224,10 @@ export interface AppCopy {
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
+      collapseMessageBox: string;
+      reduceMotion: string;
+      composerDecoration: string;
+      composerCharacter: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -1280,7 +1315,13 @@ export interface AppCopy {
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
+      composerDecoration: string;
+      composerCharacter: string;
       /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
+      collapseMessageBox: string;
+      reduceMotion: string;
+      reduceMotionSystem: string;
+      wallpaperStill: string;
       themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
@@ -1499,6 +1540,7 @@ export interface AppCopy {
       developerLogSession: string;
     };
     errors: {
+      saveFailed: string;
       loadPersonalization: string;
       updateSettings: string;
       chooseFolder: string;

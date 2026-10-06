@@ -16,6 +16,13 @@ function findStill(value: unknown, depth = 0): Still | undefined {
   if (typeof record.tab === "string" && record.still_file && typeof record.still_file === "object") return record as unknown as Still;
   for (const item of Object.values(record)) { const found = findStill(item, depth + 1); if (found) return found; }
 }
+function allStills(value: unknown): Still[] {
+  if (typeof value === "string") {try {return allStills(JSON.parse(value));} catch {return [];}}
+  if (!value || typeof value !== "object") return [];
+  const record=value as Record<string,unknown>;
+  const children=Object.values(record).flatMap(allStills);
+  return [...(typeof record.tab==="string" && record.still_file ? [record as unknown as Still] : []),...children];
+}
 /** Images are a desktop-only timeline projection, never a provider image attachment. */
 export function BrowserStepStill({ turnId, callId, resultId, content }: { turnId: string; callId: string; resultId: string; content?: string }) {
   const [still, setStill] = useState<Still>();
@@ -32,10 +39,13 @@ export function BrowserStepStill({ turnId, callId, resultId, content }: { turnId
     return () => { active = false; };
   }, [turnId, callId, resultId, content]);
   if (!window.butlerBrowser || !still || !/^\/message-files\/file-[0-9a-f-]{36}$/iu.test(still.still_file.url)) return null;
-  const src = absoluteGatewayUrl(messageFileSource(still.still_file) ?? still.still_file.url);
+  const images=content ? [...new Map(allStills(content).map(item=>[item.still_file.url,item])).values()] : [still];
   return <Stack cross="start" data-test-class="browser-step-still">
-    <Clickable aria-label={appCopy.browser.still} onClick={() => void focusBrowserTab(still.tab, sessionId, src)}>
-      <ArtifactPreviewImage src={src} alt={appCopy.browser.still} width={320} />
-    </Clickable>
+    {images.filter(item=>/^\/message-files\/file-[0-9a-f-]{36}$/iu.test(item.still_file.url)).map(item=>{
+      const src=absoluteGatewayUrl(messageFileSource(item.still_file) ?? item.still_file.url);
+      return <Clickable key={item.still_file.url} aria-label={appCopy.browser.still} onClick={()=>void focusBrowserTab(item.tab,sessionId,src)}>
+        <ArtifactPreviewImage src={src} alt={appCopy.browser.still} width={320} />
+      </Clickable>;
+    })}
   </Stack>;
 }

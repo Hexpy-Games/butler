@@ -7,6 +7,8 @@ export default tseslint.config(
   {
     ignores: [
       "data/**",
+      "target/**",
+      "packages/butler-app/client/ui/lifecycle-assets/**",
       ".tmp/**",
       "node_modules/**",
       "src/**/node_modules/**",
@@ -19,7 +21,7 @@ export default tseslint.config(
       // Cargo output, including the static ONNX Runtime source/build cache that
       // scripts/prepare-static-ort.py keeps under target/native-deps.
       "packages/butler-agent/rust/target/**",
-      "target/**",
+      "target/**", // CARGO_TARGET_DIR may also point at the worktree root.
       "bun.lock",
       "*.lockb",
     ],

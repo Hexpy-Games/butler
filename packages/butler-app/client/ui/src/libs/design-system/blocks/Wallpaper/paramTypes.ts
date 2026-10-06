@@ -6,6 +6,11 @@ interface WallpaperParamBase<Value> {
   label: WallpaperLabel;
   default: Value;
   defaultDark?: Value;
+  /**
+   * Internal: set only by code that knows the module (e.g. a DS preset); param
+   * controls and pickers never list it. Omitted: listed.
+   */
+  hidden?: boolean;
 }
 
 /** `shuffle`: the UI offers a shuffle button (a random value on the step grid) instead of a slider, e.g. a composition seed. */

@@ -1,0 +1,23 @@
+{
+  "surface": {
+    "light": "#ffffff",
+    "dark": "#232427"
+  },
+  "sceneTones": {
+    "butler.shoreline": {
+      "param": "realtime",
+      "darkPhases": [
+        [
+          0,
+          0.2436
+        ],
+        [
+          0.7564,
+          1
+        ]
+      ],
+      "default": false
+    }
+  },
+  "initialHeight": 138
+}

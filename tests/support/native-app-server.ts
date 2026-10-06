@@ -46,8 +46,11 @@ export type CookieJar = {
 };
 
 export type NativeAppServerHandle = {
+  diagnostics(): string;
   url: string;
   port: number;
+  /** Owned gateway PID for native resource measurements. */
+  pid: number;
   butlerData: string;
   stubModelCalls: StubModelRequest[];
   /** The gateway's local bearer token (read from the temp BUTLER_DATA). */
@@ -426,6 +429,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   };
 
   return {
+    diagnostics() { return output.replaceAll(token ?? "", "[redacted]").replace(/(__o\/)[^/\s]+/gu,"$1[redacted]").slice(-12000); },
     assertRunning() {
       if (child.exitCode !== null || child.signalCode !== null) {
         const tail = token ? output.slice(-4000).replaceAll(token, "[redacted]") : output.slice(-4000);
@@ -434,6 +438,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     },
     url,
     port,
+    pid: gateway.pid,
     butlerData,
     stubModelCalls,
     token: token!,

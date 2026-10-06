@@ -1,12 +1,13 @@
+import { stepStill } from "./stills.mjs";
 import { randomUUID } from "node:crypto";
 
 /** Dialog answers use a separate, Rust-approved dispatch; the triggering click is never replayed. */
 export function wireDialogs(browser, tab) {
   const contents=tab.view.webContents;
   void contents.debugger.sendCommand("Page.enable").catch(()=>{});
-  contents.debugger.on("message", (_event, method, value) => {
+  contents.debugger.on("message", (_event, method, value, sessionId) => {
     if (method === "Page.javascriptDialogOpening") {
-      tab.dialog={id:randomUUID(),epoch:tab.epoch,type:value.type,message:value.message};
+      tab.dialog={id:randomUUID(),epoch:tab.epoch,type:value.type,message:value.message,sessionId:sessionId || undefined};
       tab.waiting=true;browser.publish();
     }
     if (method === "Page.javascriptDialogClosed") {tab.dialog=null;tab.waiting=false;browser.publish();}
@@ -18,8 +19,10 @@ export function pendingDialog(tab) {
 export async function answerDialog(browser, tab, args) {
   if (!tab.dialog || tab.dialog.id!==args.dialog || tab.dialog.epoch!==tab.epoch || args.accept!==true) return {status:"not_dispatched",reason:"stale_dialog"};
   if (tab.dialog.beforeUnloadClose) { browser.close(tab.id); return {status:"ok",tab:tab.id}; }
-  await tab.view.webContents.debugger.sendCommand("Page.handleJavaScriptDialog",{accept:true});
+  await tab.view.webContents.debugger.sendCommand("Page.handleJavaScriptDialog",{accept:true},tab.dialog.sessionId);
   const steps=(tab.pendingBatch ?? []).map(step=>step.reason==="dialog_pending"?{...step,status:"completed",reason:undefined}:step);
+  const completed=steps.findLast(step=>step.status==="completed");
+  if(completed) completed.still=await stepStill(tab);
   tab.pendingBatch=null;
   return {status:"ok",tab:tab.id,epoch:tab.epoch,url:tab.url,steps};
 }

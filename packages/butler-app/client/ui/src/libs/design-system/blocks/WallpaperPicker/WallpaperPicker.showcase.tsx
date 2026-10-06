@@ -62,10 +62,13 @@ export const stories: ShowcaseStory[] = [
   { name: "Project scope with inherit", render: (context) => <ProjectScope {...context} /> },
 ];
 
+const IMPORT_ERROR = { "en-US": "Not a wallpaper module.", "ko-KR": "배경 모듈이 아닙니다." } as const;
+
 export const stateMatrix: ShowcaseStateMatrix = {
-  states: ["default", "loading"],
+  states: ["default", "loading", "invalid"],
   render: ({ locale, state }) => (
     <WallpaperPicker labels={PICKER_LABELS[locale]} locale={locale} uploading={state === "loading"} value={{ kind: "none" }}
-      onChange={() => undefined} onUpload={() => undefined} />
+      importError={state === "invalid" ? IMPORT_ERROR[locale] : undefined}
+      onChange={() => undefined} onImportModule={() => undefined} onUpload={() => undefined} />
   ),
 };

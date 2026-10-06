@@ -160,7 +160,27 @@
   text-underline-offset: 3px;
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .button:not(
+    .variantLink,
+    .variantInline,
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ) {
+    min-height: var(--control-hit-target);
+  }
+
+  .sizeIcon:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .sizeIconXs:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .sizeIconSm:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .sizeIconLg:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    width: var(--control-hit-target);
+    height: var(--control-hit-target);
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .button:not(.variantLink, .variantInline) {
     min-height: var(--control-hit-target);
   }

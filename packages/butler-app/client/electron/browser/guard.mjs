@@ -39,6 +39,7 @@ export function installNavigationGuard(tab, onViolation) {
   router.set(contents.id, { tab, onViolation });
   contents.once("destroyed", () => router.delete(contents.id));
   contents.on("will-frame-navigate", event => {
+    if (!event.isMainFrame && /^about:(blank|srcdoc)$/u.test(event.url)) return;
     if (!webUrl(event.url)) { event.preventDefault(); onViolation(); }
   });
 }

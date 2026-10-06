@@ -1,0 +1,70 @@
+.lanes {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.gutter {
+  flex: none;
+  overflow: visible;
+}
+
+.rows {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.edge {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-linecap: round;
+  stroke-width: 1.25px;
+}
+
+.edge[data-edge-state="waiting"] {
+  stroke-dasharray: 3 4;
+}
+
+.edge[data-edge-state="failed"] {
+  stroke: var(--danger);
+  stroke-dasharray: 3 4;
+}
+
+.edge[data-edge-state="active"] {
+  stroke: var(--worker-active);
+  stroke-width: 2px;
+}
+
+.dot {
+  fill: var(--surface-raised);
+  stroke: var(--line-strong);
+  stroke-width: 1.25px;
+}
+
+.dot[data-status="running"] {
+  fill: var(--worker-active);
+  stroke: var(--worker-active);
+}
+
+.dot[data-status="done"] {
+  fill: var(--line-strong);
+}
+
+.dot[data-status="failed"] {
+  fill: var(--danger);
+  stroke: var(--danger);
+}
+
+.dot[data-status="blocked"] {
+  fill: var(--color-warning);
+  stroke: var(--color-warning);
+}
+
+.dot[data-status="review"] {
+  fill: var(--accent);
+  stroke: var(--accent);
+}

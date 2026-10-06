@@ -1,6 +1,8 @@
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { attachNativeWorlds } from "./native-worlds.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, openAgentPopup, viewedTab } from "./agent.mjs";
@@ -105,9 +107,11 @@ class UserBrowser {
       protectPartition(partition, () => this.nativeCover()); this.profiles.add(partition);
     }
     tab.view = new WebContentsView({ webPreferences: {
+      ...(tab.profile === "signed_out" ? {preload:fileURLToPath(new URL("./frame-preload.cjs",import.meta.url)),nodeIntegrationInSubFrames:true} : {}),
       partition, webgl: !tab.agent, contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false,
     } });
     tab.session = tab.view.webContents.session;
+    if(tab.profile === "signed_out")attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       window: this.getWindow, shortcut: (input) => this.shortcut(input, true),
@@ -120,17 +124,24 @@ class UserBrowser {
       await openAgentPopup(this, source, url); return;
     }
     const id = this.create({ owner: source.owner, url, agent: source.agent, policy: source.policy, partition: source.partition, profile: source.profile }, false);
-    this.materialize(this.tabs.get(id));
+    const popup=this.tabs.get(id);
+    this.materialize(popup);
+    if (popup.agent) {backgroundTab(this,popup);await popup.view.webContents.loadURL(url).catch(()=>{});}
   }
   create(input = {}, activateTab = true) {
     if (!this.enabled()) throw new Error("browsing_disabled");
     const owner = input.owner ?? "mine";
     if (owner !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner)) throw new Error("invalid_owner");
+    if(this.tabs.size>=36) throw new Error("tab_budget_exhausted");
     const url = input.url ? webUrl(input.url) : "";
     if (input.url && !url) throw new Error("blocked_protocol");
     if (owner === "mine" && [...this.tabs.values()].filter(tab => tab.owner === "mine").length >= 30) throw new Error("tab_budget_exhausted");
     const output = url && new URL(url).hostname === "127.0.0.1" && new URL(url).pathname.startsWith("/__o/");
     const profile = input.profile ?? (input.agent || output ? "signed_out" : "signed_in");
+    if(input.agent===true) {
+      const agents=[...this.tabs.values()].filter(tab=>tab.agent || tab.driven);
+      if(agents.length>=6 || agents.filter(tab=>tab.owner===owner).length>=3) throw new Error("tab_budget_exhausted");
+    }
     if (profile === "signed_out" && !this.conversationPartitions.has(owner)) this.conversationPartitions.set(owner, `butler-conv-${randomUUID()}`);
     const tab = { id: randomUUID(), owner, profile, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
       agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
@@ -168,7 +179,7 @@ class UserBrowser {
       for (const [owner, partition] of this.conversationPartitions) if (partition === tab.partition) this.conversationPartitions.delete(owner);
       this.profiles.delete(tab.partition);
     }
-    if (![...this.tabs.values()].some(item => item.agent)) { this.agentWindow?.destroy(); this.agentWindow = null; }
+    if (![...this.tabs.values()].some(item => item.agent || item.driven)) { this.agentWindow?.destroy(); this.agentWindow = null; }
     if (tab.owner === "mine") this.restore.changed();
     if (this.activeId === id) {
       this.activeId = null;
@@ -232,6 +243,10 @@ class UserBrowser {
   move({ tabId, toGroupId, index }) {
     const tab = this.tabs.get(tabId);
     if (!tab || (toGroupId !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(toGroupId)) || !Number.isInteger(index)) throw new Error("invalid_move");
+    if(toGroupId!==tab.owner) {
+      const peers=[...this.tabs.values()].filter(item=>item.owner===toGroupId);
+      if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
+    }
     const previousOwner = tab.owner;
     if (toGroupId !== tab.owner) { tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);

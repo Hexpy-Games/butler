@@ -74,6 +74,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   const targets = (Array.isArray(value.targets) ? value.targets : [])
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
   return { tool: value.tool, access: value.access, targets,
+    ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
     ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
 }
@@ -106,7 +107,7 @@ export function approvalRequestView(
   return {
     title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
-    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets]
+    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target)]
       : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)

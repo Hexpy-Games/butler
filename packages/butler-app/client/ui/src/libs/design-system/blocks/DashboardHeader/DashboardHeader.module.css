@@ -24,7 +24,7 @@
 }
 
 @media (width <= 640px) {
-  .header {
+  .header:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     flex-direction: column;
   }
 }

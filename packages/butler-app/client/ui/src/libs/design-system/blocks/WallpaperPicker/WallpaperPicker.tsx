@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   WallpaperParamControls,
   useWallpaperRegistry,
@@ -45,6 +45,8 @@ export interface WallpaperPickerProps {
   onImportModule?: (file: File) => void;
   /** An import is in flight: the import tile shows a spinner and takes nothing. */
   importingModule?: boolean;
+  /** Localized import feedback immediately under the import tile. */
+  importError?: ReactNode;
   /** Adds a delete button to every user module tile except the selected one (built-ins cannot be deleted). */
   onDeleteModule?: (id: string) => void;
   /** Offers an `inherit` tile first (e.g. a project following the global wallpaper). */
@@ -83,7 +85,7 @@ function Params({ value, registry, labels, locale, tone, onChange }: Required<Pi
  */
 export function WallpaperPicker({
   value, onChange, labels, locale, images = [], onUpload, onDeleteImage, uploading = false, inherit,
-  onImportModule, importingModule = false, onDeleteModule,
+  onImportModule, importingModule = false, onDeleteModule, importError,
   registry: explicitRegistry, userModules: explicitUserModules, imageLoader, tone: explicitTone, accept = WALLPAPER_PICKER_ACCEPT, dataTestClass,
 }: WallpaperPickerProps) {
   const registry = useWallpaperRegistry(explicitRegistry);
@@ -102,7 +104,7 @@ export function WallpaperPicker({
   const choose = (option: WallpaperPickerOption) => onChange(remembered.current.get(option.key) ?? wallpaperPickerDefault(option));
   return (
     <div className={styles.root} data-slot="wallpaper-picker" data-test-class={dataTestClass ? `wallpaper-picker ${dataTestClass}` : "wallpaper-picker"} ref={rootRef}>
-      <WallpaperPickerOptions accept={accept} importingModule={importingModule} labels={labels} loader={loader} locale={locale} registry={registry} selectedKey={selectedKey}
+      <WallpaperPickerOptions importError={importError} accept={accept} importingModule={importingModule} labels={labels} loader={loader} locale={locale} registry={registry} selectedKey={selectedKey}
         options={wallpaperPickerOptions({ registry, images, inherit, value, userModules })} recall={(key) => remembered.current.get(key)} tone={tone}
         uploading={uploading} value={value} onChoose={choose} onDeleteImage={onDeleteImage} onDeleteModule={onDeleteModule}
         onImportModule={onImportModule} onUpload={onUpload} />

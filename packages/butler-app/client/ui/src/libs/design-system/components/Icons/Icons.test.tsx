@@ -20,8 +20,9 @@ test("each Hugeicons glyph is mapped once; alternate names alias it", () => {
   expect(ChevronDownIcon).toBe(ChevronDown);
 });
 
+// test-category: format-pin
 test("named icon sizes render the token scale", () => {
-  expect(ICON_SIZE).toEqual({ xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32 });
+  expect(ICON_SIZE).toEqual({ xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32, "3xl": 48 });
   expect(renderToStaticMarkup(<Plus size="xs" />)).toContain('width="12"');
   expect(renderToStaticMarkup(<Plus size="xl" />)).toContain('width="24"');
   expect(renderToStaticMarkup(<Plus size="2xl" />)).toContain('width="32"');

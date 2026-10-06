@@ -983,7 +983,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   );
   const generalSettings = read(
     "packages/butler-app/client/ui/src/components/settings/GeneralSettings.tsx",
-  );
+  ) + read("packages/butler-app/client/ui/src/components/settings/generalPreferenceSections.tsx");
   const nativeNotificationStatusPanel = read(
     "packages/butler-app/client/ui/src/components/settings/NativeNotificationStatusPanel.tsx",
   );
@@ -1302,8 +1302,11 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   const markdownContentStyles = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/MarkdownContent/MarkdownContent.module.css",
   );
+  // The renderer and its context attributes (glContext.ts).
   const wallpaperRenderer = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/renderer.ts",
+  ) + read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/glContext.ts",
   );
   const wallpaperScheduler = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/scheduler.ts",
@@ -2707,7 +2710,7 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("settings-main-theme-silk-option");
   expect(smoke).toContain("settings-silk-theme-detail-absent");
   expect(smoke).toContain("settings-bloom-colors-circular");
-  expect(smoke).toContain("new-chat-silk-fluid-visible");
+  expect(smoke).toContain("new-chat-silk-first-frame-painted");
   expect(smoke).toContain("new-chat-vertical-scroll-absent");
   expect(smoke).toContain("new-chat-start-position-high");
   expect(smoke).toContain("new-chat-moment-time-visible");
@@ -2793,10 +2796,13 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(electronMain).toContain("createBundledAgentSupervisor");
 });
 
+// test-category: format-pin
 test("thinking mark components expose state and theme contracts", () => {
   const canvasMark = [
     "ButlerThinkingMark.tsx",
     "markLoop.ts",
+    "markRenderer.ts",
+    "markObservers.ts",
   ].map((file) => read(`packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/${file}`)).join("\n");
   const svgIcon = read(
     "packages/butler-app/client/ui/src/components/common/ButlerMarkIcon.tsx",

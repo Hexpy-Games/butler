@@ -28,6 +28,25 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
                 json!({"status":"not_dispatched","reason":reason}),
             );
         }
+        if matches!(
+            op.as_str(),
+            "tab.observe" | "tab.prepare" | "tab.act" | "tab.dialog"
+        ) {
+            let tab = hub
+                .tabs
+                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
+                .map_err(|_| error(403, "not_your_tab"))?;
+            if tab["url"]
+                .as_str()
+                .is_some_and(|url| !permitted_url(&state, url))
+            {
+                return super::super::json(
+                    StatusCode::OK,
+                    json!({"status":"not_dispatched","reason":"navigation_denied"}),
+                );
+            }
+            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(&state))});
+        }
         let Some(host) = hub.host.as_ref() else {
             return super::super::json(
                 StatusCode::OK,
@@ -167,7 +186,11 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
             .map_err(|_| error(400, "invalid_snapshot"))?;
         changed
     };
-    for tab in &handed_back {
+    resume_waits(&state, &handed_back).await?;
+    super::super::json(StatusCode::OK, json!({"ok":true}))
+}
+pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<(), HttpError> {
+    for tab in tabs {
         let Some(session) = tab["owner"]
             .as_str()
             .and_then(|s| s.strip_prefix("conversation:"))
@@ -199,7 +222,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
             }
         }
     }
-    super::super::json(StatusCode::OK, json!({"ok":true}))
+    Ok(())
 }
 pub(in crate::gateway::http) fn close_owner(state: &HttpState, session: &str) {
     if let Ok(hub) = state.browser.0.lock()
@@ -209,7 +232,40 @@ pub(in crate::gateway::http) fn close_owner(state: &HttpState, session: &str) {
     }
 }
 
+pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Response, HttpError> {
+    let session = value["session"].as_str().unwrap_or("").to_owned();
+    {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.tabs
+            .check(&session, value["tab"].as_str().unwrap_or(""), "tab.observe")
+            .map_err(|_| error(403, "not_your_tab"))?;
+    }
+    upload_still(&state, &session, &mut value).await?;
+    super::super::json(StatusCode::OK, json!({"still_file":value["still_file"]}))
+}
 async fn store_still(
+    state: &HttpState,
+    session: &str,
+    result: &mut Value,
+) -> Result<(), HttpError> {
+    let tab = result["tab"].clone();
+    upload_still(state, session, result).await?;
+    let mut latest = result.get("still_file").cloned();
+    if let Some(steps) = result.get_mut("steps").and_then(Value::as_array_mut) {
+        for step in steps.iter_mut().take(10) {
+            step["tab"] = tab.clone();
+            upload_still(state, session, step).await?;
+            if let Some(file) = step.get("still_file") {
+                latest = Some(file.clone());
+            }
+        }
+    }
+    if let Some(file) = latest {
+        result["still_file"] = file;
+    }
+    Ok(())
+}
+async fn upload_still(
     state: &HttpState,
     session: &str,
     result: &mut Value,

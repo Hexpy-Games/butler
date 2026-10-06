@@ -66,11 +66,8 @@ test("an unavailable model is reported in the interface language and the catalog
       string,
       { description?: string },
     ];
-    expect(title).toBe("설정 업데이트 실패");
-    expect(options.description).toBe(
-      "선택한 모델을 더 이상 사용할 수 없습니다. 설정 > 모델에서 다른 모델을 선택해 주세요.",
-    );
-    expect(options.description).not.toContain("not an available model");
+    expect(title).toBe("선택한 모델을 더 이상 사용할 수 없습니다.");
+    expect(options.description).toBeUndefined();
     // The draft keeps the previous model; nothing was applied.
     expect(useSettingsUIStore.getState().draft?.model).toBe("local/stub");
     expect(applied).toHaveLength(0);
@@ -113,10 +110,9 @@ test("a browser 400 settings_model_unavailable maps to the same localized copy",
   const toastError = spyOn(toast, "error");
   try {
     await useSettingsUIStore.getState().update({ model: "local/missing" }, () => {});
-    const [, options] = toastError.mock.calls[0] as [string, { description?: string }];
-    expect(options.description).toBe(
-      "The selected model is no longer available. Choose another model in Settings > Models.",
-    );
+    const [title, options] = toastError.mock.calls[0] as [string, { description?: string }];
+    expect(title).toBe("That model is no longer available.");
+    expect(options.description).toBeUndefined();
     expect(requests).toEqual(["PATCH /settings", "GET /model-catalog"]);
   } finally {
     toastError.mockRestore();
