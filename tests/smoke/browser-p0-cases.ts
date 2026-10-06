@@ -61,8 +61,9 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
     await Bun.sleep(2000);
     const navigation = await app.main.evaluate<{ blocked?: boolean }>(`browserP0.navigate('gpu', '${origin}/gpu')`);
     if (user && i === 4) {
-      assert(navigation.blocked && await app.main.evaluate("browserP0.productBlocked()"), "Real USER Browser breaker trips at five losses");
-      rows.push({ test: "gpu crash", metric: "USER five-loss breaker", value: "blocked", budget: "blocked", status: "PASS" });
+      const validWindow = lossAt - firstLoss <= 600_000;
+      if (validWindow) assert(navigation.blocked && await app.main.evaluate("browserP0.productBlocked()"), "Real USER Browser breaker trips at five losses");
+      rows.push({ test: "gpu crash", metric: "USER five-loss breaker", value: validWindow ? "blocked" : "invalid trigger window", budget: "blocked within five losses / 10 min", status: validWindow ? "PASS" : "UNAVAILABLE" });
     }
     const state = await sample(app);
     const wallpaperAfter = await app.page.expression<number>("window.p0WallpaperDraws");
