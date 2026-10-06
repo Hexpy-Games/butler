@@ -60,19 +60,42 @@ def os_release():
 
 
 def visual_studio_identity():
-    """The installed MSVC toolset, read without a developer environment."""
-    root = pathlib.Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))
-    vswhere = root / "Microsoft Visual Studio/Installer/vswhere.exe"
-    if not vswhere.is_file():
-        fail("Visual Studio (vswhere.exe) is required on a Windows host")
-    query = [str(vswhere), "-latest", "-products", "*", "-requires",
-             "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"]
-    installation = pathlib.Path(command([*query, "-property", "installationPath"]))
-    tools = installation / "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
-    return {
-        "installation_version": command([*query, "-property", "installationVersion"]),
-        "vc_tools_version": tools.read_text().strip() if tools.is_file() else "unknown",
+    """Fingerprint the selected developer environment, never a newer installation."""
+    required = ("VCToolsVersion", "VCToolsInstallDir", "UCRTVersion", "UniversalCRTSdkDir")
+    if any(not os.environ.get(name) for name in required):
+        fail("Static Windows SDK selection requires an initialized MSVC developer environment")
+    tools = pathlib.Path(os.environ["VCToolsInstallDir"])
+    compiler = shutil.which("cl")
+    if not compiler or not pathlib.Path(compiler).resolve().is_relative_to(tools.resolve()):
+        fail("Selected cl.exe does not belong to VCToolsInstallDir")
+    if tools.name != os.environ["VCToolsVersion"].strip():
+        fail("VCToolsVersion does not match VCToolsInstallDir")
+    ucrt = pathlib.Path(os.environ["UniversalCRTSdkDir"])
+    version = os.environ["UCRTVersion"]
+    files = {
+        "stl_header": tools / "include/yvals_core.h",
+        "crt_header": tools / "include/vcruntime.h",
+        "stl_static": tools / "lib/x64/libcpmt.lib",
+        "stl_import": tools / "lib/x64/msvcprt.lib",
+        "crt_static": tools / "lib/x64/libcmt.lib",
+        "vcruntime_static": tools / "lib/x64/libvcruntime.lib",
+        "crt_import": tools / "lib/x64/vcruntime.lib",
+        "ucrt_header": ucrt / f"Include/{version}/ucrt/corecrt.h",
+        "ucrt_static": ucrt / f"Lib/{version}/ucrt/x64/libucrt.lib",
+        "ucrt_import": ucrt / f"Lib/{version}/ucrt/x64/ucrt.lib",
     }
+    identity = {
+        "vc_tools_version": os.environ["VCToolsVersion"].strip(),
+        "ucrt_version": version,
+        "compiler_sha256": sha256(pathlib.Path(compiler)),
+        "stl_crt_sha256": {name: sha256(path) for name, path in files.items()},
+    }
+    # cl without input prints its exact version without compiling anything.
+    banner = subprocess.run([compiler], text=True, capture_output=True, check=False)
+    print((banner.stdout + banner.stderr).strip(), file=sys.stderr)
+    print(f"Windows SDK toolset: VCToolsVersion={identity['vc_tools_version']} "
+          f"UCRTVersion={version}; STL/CRT digests={identity['stl_crt_sha256']}", file=sys.stderr)
+    return identity
 
 
 def host_identity(target, rust_target):

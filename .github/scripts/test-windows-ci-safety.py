@@ -5,6 +5,8 @@ import hashlib
 import importlib.util
 import io
 import os
+import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -26,6 +28,33 @@ class WindowsSafety(unittest.TestCase):
         self.assertGreaterEqual(len(jobs), 6, jobs)
         self.assertEqual(findings, [], '\n'.join(findings))
         print(f'Windows concurrency audit: {len(jobs)} owner jobs, no hazards')
+
+    # test-category: security
+    def test_windows_consumers_cannot_select_sdk_without_toolset_key(self):
+        scripts = ROOT.parents[1] / 'packages/butler-agent/rust/scripts'
+        sys.path.insert(0, str(scripts))
+        try:
+            import static_ort_prebuilt as sdk
+            from static_ort_targets import TARGETS
+            script = scripts / 'prepare-static-ort.py'
+            lock = json.loads((scripts / 'static-ort.lock.json').read_text())
+            selected = {'vc_tools_version': '14.44.35207', 'ucrt_version': '10.0.26100.0',
+                        'compiler_sha256': 'compiler', 'stl_crt_sha256': {'stl': 'old', 'crt': 'old'}}
+            with patch.object(sdk.host, 'visual_studio_identity', return_value=selected):
+                owner_key = sdk.key(script, lock, 'windows-x64')
+            variants = [{**selected, 'vc_tools_version': '14.51.36231'},
+                        {**selected, 'ucrt_version': '10.0.28000.0'},
+                        {**selected, 'stl_crt_sha256': {'stl': 'new', 'crt': 'old'}},
+                        {**selected, 'stl_crt_sha256': {'stl': 'old', 'crt': 'new'}}]
+            for toolset in variants:
+                with patch.object(sdk.host, 'visual_studio_identity', return_value=toolset):
+                    self.assertNotEqual(owner_key, sdk.key(script, lock, 'windows-x64'))
+            with patch.object(sdk.host, 'visual_studio_identity', side_effect=RuntimeError('missing MSVC')):
+                with self.assertRaisesRegex(RuntimeError, 'missing MSVC'):
+                    sdk.key(script, lock, 'windows-x64')
+            self.assertIn('windows-x64', TARGETS)
+        finally:
+            sys.path.remove(str(scripts))
 
     # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):

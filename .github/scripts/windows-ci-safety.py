@@ -151,7 +151,10 @@ def audit(root):
         source = workflow.read_text()
         for block in re.split(r'(?=^  [\w-]+:\s*\n)', source, flags=re.M):
             runner = re.search(r'^    runs-on:[ \t]*([^\n]*(?:\n      - [^\n]+)*)', block, re.M)
-            if not runner or not re.search(r'butler-win|self-hosted', runner[1], re.I):
+            owner_runner = runner and re.search(r'butler-win|self-hosted', runner[1], re.I)
+            owner_matrix = runner and 'matrix.runner' in runner[1] and re.search(
+                r'runner:\s*\[[^\n]*butler-win', block, re.I)
+            if not (owner_runner or owner_matrix):
                 continue
             job = block.split(':', 1)[0].strip()
             jobs.append(f'{workflow.name}/{job}')

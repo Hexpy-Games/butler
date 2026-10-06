@@ -6,6 +6,7 @@ import http.server
 import io
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -25,6 +26,11 @@ sdk = recipe.prebuilt
 
 class NativeDeps(unittest.TestCase):
     def setUp(self):
+        self.msvc = {"vc_tools_version": "14.44.35207", "ucrt_version": "10.0.26100.0",
+                     "compiler_sha256": "cl", "stl_crt_sha256": {"stl_static": "stl"}}
+        identity = patch.object(sdk.host, "visual_studio_identity", return_value=self.msvc)
+        identity.start()
+        self.addCleanup(identity.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
@@ -222,8 +228,107 @@ class NativeDeps(unittest.TestCase):
             projected = recipe.target_lock(lock, target)
             previous = {'lock': projected, 'target': target,
                         'recipe': compatibility['published_recipe']}
+            if target == 'windows-x64':
+                previous['msvc'] = self.msvc
             expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
             self.assertEqual(sdk.key(recipe.SCRIPT, projected, target), expected)
+
+    # test-category: security
+    def test_windows_key_covers_selected_toolset_stl_and_crt(self):
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), 'windows-x64')
+        original = sdk.key(recipe.SCRIPT, lock, 'windows-x64')
+        for field, value in [('vc_tools_version', '14.51.36231'),
+                             ('ucrt_version', '10.0.28000.0'),
+                             ('compiler_sha256', 'different compiler'),
+                             ('stl_crt_sha256', {'stl_static': 'different STL'})]:
+            changed = {**self.msvc, field: value}
+            with patch.object(sdk.host, 'visual_studio_identity', return_value=changed):
+                self.assertNotEqual(original, sdk.key(recipe.SCRIPT, lock, 'windows-x64'))
+        with patch.object(sdk.host, 'visual_studio_identity', side_effect=RuntimeError('no toolset')):
+            with self.assertRaisesRegex(RuntimeError, 'no toolset'):
+                sdk.key(recipe.SCRIPT, lock, 'windows-x64')
+        legacy = {'lock': lock, 'target': 'windows-x64',
+                  'recipe': json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())['published_recipe']}
+        self.assertNotEqual(original, hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest())
+
+    # test-category: security
+    def test_windows_key_miss_builds_locally_and_other_toolset_cache_is_rejected(self):
+        target = 'windows-x64'
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), target)
+        for name, entry in lock['sources'].items():
+            entry['sha256'] = hashlib.sha256(name.encode()).hexdigest()
+        original = sdk.key(recipe.SCRIPT, lock, target)
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(sdk, 'release', return_value=None), \
+                patch.object(recipe.host, 'host_identity', return_value={'msvc': self.msvc}), \
+                patch.object(recipe, 'prepare', side_effect=self.build) as build:
+            complete = recipe.prepare_cache(self.root, original, lock, target, False, False)
+            build.assert_called_once()
+            with patch.object(sdk.host, 'visual_studio_identity',
+                              return_value={**self.msvc, 'vc_tools_version': '14.51.36231'}):
+                other = sdk.key(recipe.SCRIPT, lock, target)
+            with self.assertRaisesRegex(RuntimeError, 'fingerprint mismatch'):
+                recipe.adopt(complete, other, lock, target)
+
+    # test-category: pure-logic
+    def test_windows_ci_key_miss_allows_local_build_and_protoc_needs_no_msvc(self):
+        for target, flags, required in [('windows-x64', [], False),
+                                        ('windows-x64', ['--require-prebuilt'], True),
+                                        ('linux-x64', [], True)]:
+            with patch.object(recipe.sys, 'argv', ['prepare-static-ort.py', *flags]), \
+                    patch.object(recipe, 'host_target', return_value=target), \
+                    patch.object(recipe.host, 'rust_identity'), \
+                    patch.object(recipe, 'root_for_target', return_value=self.root), \
+                    patch.dict(os.environ, GITHUB_ACTIONS='true'), \
+                    patch.object(recipe, 'prepare_cache', return_value=self.root) as prepare:
+                recipe.main()
+                self.assertEqual(prepare.call_args.args[-1], required)
+        with patch.object(recipe.sys, 'argv', ['prepare-static-ort.py', '--protoc-only']), \
+                patch.object(recipe, 'host_target', return_value='windows-x64'), \
+                patch.object(recipe.host, 'rust_identity'), \
+                patch.object(recipe, 'root_for_target', return_value=self.root), \
+                patch.object(recipe, 'prepare_protoc', return_value=self.root / 'protoc'), \
+                patch.object(sdk.host, 'visual_studio_identity', side_effect=AssertionError('no MSVC')):
+            recipe.main()
+
+    # test-category: security
+    def test_msvc_identity_uses_selected_environment_and_all_stl_crt_digests(self):
+        tools = self.root / '14.44.35207'
+        ucrt = self.root / 'sdk'
+        paths = ['include/yvals_core.h', 'include/vcruntime.h', 'lib/x64/libcpmt.lib',
+                 'lib/x64/msvcprt.lib', 'lib/x64/libcmt.lib', 'lib/x64/vcruntime.lib',
+                 'lib/x64/libvcruntime.lib',
+                 'bin/Hostx64/x64/cl.exe']
+        for name in paths:
+            path = tools / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
+        for name in ['Include/10.0.26100.0/ucrt/corecrt.h', 'Lib/10.0.26100.0/ucrt/x64/libucrt.lib',
+                     'Lib/10.0.26100.0/ucrt/x64/ucrt.lib']:
+            path = ucrt / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
+        compiler = tools / paths[-1]
+        environment = dict(VCToolsVersion=tools.name, VCToolsInstallDir=str(tools),
+                           UCRTVersion='10.0.26100.0', UniversalCRTSdkDir=str(ucrt))
+        # Restore the real function temporarily: setUp mocks it for cross-platform key tests.
+        spec = importlib.util.spec_from_file_location('host_fixture', SCRIPTS / 'static_ort_host.py')
+        host = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(host)
+        with patch.dict(os.environ, environment), patch.object(host.shutil, 'which', return_value=str(compiler)), \
+                patch.object(host.subprocess, 'run') as banner:
+            banner.return_value.stdout, banner.return_value.stderr = '', 'MSVC fixture version'
+            selected = host.visual_studio_identity()
+            self.assertEqual(selected['vc_tools_version'], tools.name)
+            self.assertEqual(len(selected['stl_crt_sha256']), 10)
+            (tools / paths[0]).write_bytes(b'changed STL')
+            self.assertNotEqual(selected, host.visual_studio_identity())
+            with patch.dict(os.environ, VCToolsVersion='14.51.36231'):
+                with self.assertRaisesRegex(RuntimeError, 'does not match'):
+                    host.visual_studio_identity()
+            with patch.dict(os.environ, VCToolsVersion=''):
+                with self.assertRaisesRegex(RuntimeError, 'initialized MSVC'):
+                    host.visual_studio_identity()
 
     # test-category: security
     def test_inner_archive_and_protoc_digests_remain_required(self):

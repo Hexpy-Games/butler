@@ -15,6 +15,7 @@ import urllib.parse
 import zipfile
 
 import ci_oci
+import static_ort_host as host
 
 REPOSITORY = 'Hexpy-Games/butler'
 MAX_BYTES = 2 * 1024**3
@@ -31,6 +32,8 @@ def key(script, lock, target):
     if recipe == compatibility['build_recipe']:
         recipe = compatibility['published_recipe']
     inputs = {'lock': lock, 'target': target, 'recipe': recipe}
+    if target == 'windows-x64':
+        inputs['msvc'] = host.visual_studio_identity()
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 

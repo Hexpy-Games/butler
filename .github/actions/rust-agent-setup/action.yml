@@ -117,10 +117,11 @@ runs:
       run: |
         set -euo pipefail
         if [ "$PREPARED_STATIC_ORT" = "true" ] && [ ! -f "$ORT_CACHE_TARGET/native-deps/ort-$ORT_FINGERPRINT/complete.json" ]; then
-          echo 'Prepared static runtime does not match this runner toolchain/compiler image.' >&2
-          exit 1
+          echo 'Prepared SDK toolset key differs; resolving this runner SDK or building locally.' >&2
         fi
-        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py --require-prebuilt)"
+        sdk_args=()
+        if [ "$RUNNER_OS" != "Windows" ]; then sdk_args+=(--require-prebuilt); fi
+        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py "${sdk_args[@]}")"
         echo "$prepared"
         {
           echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
