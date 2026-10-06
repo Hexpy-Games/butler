@@ -57,6 +57,7 @@ function diagnostics(contents, partition) {
 
 async function emulate(contents, mobile) {
   const size = mobile ? MOBILE : DESKTOP;
+  BrowserWindow.fromWebContents(contents).setContentSize(size.width, size.height);
   contents.enableDeviceEmulation({ screenPosition: mobile ? "mobile" : "desktop", screenSize: size,
     viewPosition: { x: 0, y: 0 }, deviceScaleFactor: 1, viewSize: size, scale: 1 });
   // Electron has no native touch-emulation API. Only this gap uses the debugger.
@@ -91,7 +92,7 @@ export async function checkOutput(args, policy) {
   }
   if (hosts.size >= 6) return { status: "unknown", reason: "browser_busy" };
   const partition = session.fromPartition(`butler-output-${crypto.randomUUID()}`, { cache: false });
-  const host = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: {
+  const host = new BrowserWindow({ show: false, width: 1280, height: 800, useContentSize: true, webPreferences: {
     session: partition, sandbox: true, contextIsolation: true, nodeIntegration: false,
     backgroundThrottling: false, disableDialogs: true, webgl: false,
   } });
@@ -103,11 +104,13 @@ export async function checkOutput(args, policy) {
   const errors = diagnostics(contents, partition);
   const timeout = setTimeout(() => { if (!host.isDestroyed()) host.destroy(); }, 7500);
   try {
+    // Native window creation and navigation must not monopolize one main tick.
+    await new Promise(resolve => setTimeout(resolve, 0));
     contents.debugger.attach("1.3");
-    await emulate(contents, false);
     const started = performance.now();
     await contents.loadURL(args.url);
     const load_ms = Math.round(performance.now() - started);
+    // Electron 44 needs a loaded renderer before native device emulation.
     const desktop = await measure(contents, false);
     const mobile = await measure(contents, true);
     if (denied || !allowed(contents.getURL(), origin)) return { status: "navigation_denied" };
