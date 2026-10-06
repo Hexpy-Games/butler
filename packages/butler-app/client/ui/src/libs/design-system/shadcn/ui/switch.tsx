@@ -10,7 +10,11 @@ import styles from "../../components/Switch/Switch.module.css";
 
 interface SwitchProps extends DsBaseProps<React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>> {
   size?: "default" | "sm";
-  /** Disables the switch and explains why on hover. */
+  /**
+   * Blocks the switch and names why in a short tooltip (a few words). It
+   * stays focusable and hoverable (aria-disabled) so the reason can be read;
+   * it wins over `disabled`.
+   */
   disabledReason?: string;
 }
 
@@ -19,21 +23,26 @@ function Switch({
   size = "default",
   disabled,
   disabledReason,
+  onClick,
   ...props
 }: SwitchProps) {
+  const blocked = Boolean(disabledReason);
   const control = (
     <SwitchPrimitive.Root
       data-slot="switch"
       data-size={size}
       className={cn(styles.switch, className)}
       {...props}
-      disabled={Boolean(disabled || disabledReason)}>
+      // Radix skips its toggle when the click is default-prevented.
+      onClick={blocked ? (event) => event.preventDefault() : onClick}
+      disabled={disabled && !blocked}
+      aria-disabled={blocked ? true : props["aria-disabled"]}>
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={styles.thumb} />
     </SwitchPrimitive.Root>
   );
-  return disabledReason ? <Tooltip label={disabledReason}>{control}</Tooltip> : control;
+  return blocked ? <Tooltip label={disabledReason}>{control}</Tooltip> : control;
 }
 
 export { Switch };
