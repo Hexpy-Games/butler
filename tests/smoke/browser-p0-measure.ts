@@ -2,7 +2,7 @@ import { traceProcessStats } from "./browser-p0-trace.ts";
 import { strict as assert } from "node:assert";
 import type { launchP0App } from "./browser-p0-app.ts";
 export type P0App = Awaited<ReturnType<typeof launchP0App>>;
-export type Sample = { at: number; mainPID: number; uiPID: number; mainRSS: number; versions: { electron: string }; gpu: Record<string, string>; metrics: Array<{ pid: number; type: string; cpu: { percentCPUUsage: number }; memory: { workingSetSize: number } }>; gone: Array<{ type: string; at: number }>; crashes: Array<{ id: string; code: string }>; initial: Resources; resources: Resources; loop: { p99Ms: number; maxMs: number } };
+export type Sample = { at: number; crashLimitDisabled: boolean; mainPID: number; uiPID: number; mainRSS: number; versions: { electron: string }; gpu: Record<string, string>; metrics: Array<{ pid: number; type: string; cpu: { percentCPUUsage: number }; memory: { workingSetSize: number } }>; gone: Array<{ type: string; at: number }>; crashes: Array<{ id: string; code: string }>; initial: Resources; resources: Resources; loop: { p99Ms: number; maxMs: number } };
 type Resources = { contents: number; listeners: number; debuggers: number };
 export type Row = { test: string; metric: string; value: number | string | null; budget: number | string; status: "PASS" | "FAIL" | "UNAVAILABLE" | "DESCRIPTIVE"; attribution?: string; mitigation?: string };
 export function budget(rows: Row[], test: string, metric: string, value: number, limit: number, attribution: string, mitigation: string) {
@@ -49,8 +49,15 @@ export async function typing(app: P0App, count = 60, prepared = false) {
 /** Inclusive trace buckets are diagnostic evidence, never additive CPU totals. */
 export function attributeTrace(trace: { traceEvents: Array<{ name: string; ph: string; dur?: number; pid: number; tid: number; args?: any }> }, uiPID: number, mainPID: number) {
   const events = trace.traceEvents;
+  const threadNames = new Map(events.filter(e => e.name === "thread_name").map(e => [`${e.pid}:${e.tid}`, e.args?.name]));
+  const jpegEvents = events.filter(e => e.ph === "X" && e.name === "EncodeBitmapAsJpeg");
+  const jpegEncoding = jpegEvents.length ? {
+    samples: jpegEvents.length, p95Ms: percentile(jpegEvents.map(e => (e.dur || 0) / 1000), .95),
+    maxMs: Math.max(...jpegEvents.map(e => (e.dur || 0) / 1000)),
+    threads: [...new Set(jpegEvents.map(e => `${e.pid}:${e.tid}:${threadNames.get(`${e.pid}:${e.tid}`) || "unknown"}`))],
+  } : null;
   const totals = (pattern: RegExp, pid?: number) => events.filter(e => e.ph === "X" && (pid === undefined || e.pid === pid) && pattern.test(e.name)).reduce((n, e) => n + (e.dur || 0) / 1000, 0);
-  return { processStats: traceProcessStats(events as any),
+  return { jpegEncoding, processStats: traceProcessStats(events as any),
     uiLongTasks: events.filter(e=>e.pid===uiPID && e.ph==="X" && (e.dur||0)>=100000).sort((a,b)=>(b.dur||0)-(a.dur||0)).slice(0,12).map(e=>({name:e.name,ms:(e.dur||0)/1000})),
     mainLongTasks: events.filter(e=>e.pid===mainPID && e.ph==="X" && (e.dur||0)>=30000).sort((a,b)=>(b.dur||0)-(a.dur||0)).slice(0,12).map(e=>({name:e.name,ms:(e.dur||0)/1000})),
     memoryShape: events.filter(e=>e.ph==="v").slice(0,2).map(e=>({name:e.name,pid:e.pid,keys:Object.keys(e.args||{}),dumpKeys:Object.keys(e.args?.dumps||{}),processTotals:e.args?.dumps?.process_totals})), butlerJSms: totals(/FunctionCall|EvaluateScript|V8.Execute/, uiPID), blinkMs: totals(/Layout|Paint|UpdateLayoutTree|PrePaint/, uiPID), gpuMs: totals(/Gpu|GPU|DrawFrame|SwapBuffers/),

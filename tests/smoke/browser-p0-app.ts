@@ -35,6 +35,7 @@ export async function launchP0App({ harness = true } = {}) {
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE || resolve(process.platform === "win32" ? "packages/butler-app/client/electron/node_modules/electron/dist/electron.exe" : "packages/butler-app/client/electron/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron");
   const args = smokeElectronArgs();
+  if (harness && process.env.BUTLER_P0_CRASH_LIMIT === "off") args.push("--disable-gpu-process-crash-limit");
   assert(!args.includes("--single-process"), "P0 needs independent GPU and renderer processes");
   const child = spawn(executable, [resolve("packages/butler-app/client/electron"), `--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...args], { env: {
     ...process.env, HOME: home, USERPROFILE: home, BUTLER_DATA: data, CODEX_HOME: join(home, ".codex"), TMPDIR: dir, TEMP: dir, TMP: dir,
@@ -71,7 +72,7 @@ export async function launchP0App({ harness = true } = {}) {
     await page.expression(`window.butlerApp.updateSettings(${JSON.stringify({ language: "ko", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: at, completed_at: at }, wallpaper: { source: { kind: "live", module: "butler.silk", params: {}, paramsDark: {} }, motion: "auto", pauseOnBattery: false } })})`);
     await page.reload();
     await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="workspace"]')));
-    return { dir, data, page, main, child, stop };
+    return { dir, data, page, main, child, stop, watchdogEvidence: () => ({ timeoutLog: /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(logs.join("")), logBytesWithheld: logs.join("").length }) };
   } catch (error) {
     // Logs can include bearer-bearing URLs: do not print raw App logs.
     await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logs.join("").length} log bytes withheld; Mach rendezvous=${/Mach|rendezvous/iu.test(logs.join(""))}`, { cause: error });

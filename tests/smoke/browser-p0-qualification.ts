@@ -1,9 +1,10 @@
 /** Run: python3 .github/scripts/isolated.py bun tests/smoke/browser-p0-qualification.ts [version|normal|renderer|gpu-crash|gpu-hang|load|baseline|soak|all]
- * Full soak: BUTLER_P0_SOAK_MINUTES=120; default=10. No real sites.
+ * Full soak: BUTLER_P0_SOAK_MINUTES=120; default=10. Local fixtures plus IANA real pages in soak.
  * On Windows set BUTLER_SMOKE_ELECTRON_EXECUTABLE to electron.exe.
  * Owned-PID file tracing: BUTLER_P0_FS_USAGE_SUDO=1 only with authorized noninteractive sudo.
  * Native agent defaults to target/debug/butler-agent; all data is disposable.
  */
+import { quietHost } from "./browser-p0-host-load.ts";
 import { strict as assert, AssertionError } from "node:assert";
 import { readFileSync } from "node:fs";
 import { browserP0Fixtures } from "./browser-p0-fixtures.ts";
@@ -13,7 +14,7 @@ import { leakSoak } from "./browser-p0-soak.ts";
 import { sample, type Row } from "./browser-p0-measure.ts";
 
 const selected = process.argv[2] || "all";
-assert(["all", "version", "normal", "renderer", "gpu-crash", "gpu-hang", "load", "baseline", "soak"].includes(selected));
+assert(["all", "version", "policy", "normal", "renderer", "gpu-crash", "gpu-hang", "load", "baseline", "soak"].includes(selected));
 const rows: Row[] = [];
 const evidence: Record<string, unknown> = {};
 // Reviewed against https://releases.electronjs.org/schedule on 2026-10-06.
@@ -33,6 +34,15 @@ try {
         assert.equal(await app!.main.evaluate("typeof globalThis.browserP0"), "undefined");
         rows.push({ test: "normal", metric: "test harness absent", value: "undefined", budget: "undefined", status: "PASS" });
       },
+      policy: async () => {
+        await app!.main.evaluate(`browserP0.open('policy','${origin}/gpu')`);
+        const agent = await app!.main.evaluate<Record<string, boolean>>("browserP0.gpuPolicy('policy')");
+        const user = await app!.main.evaluate<Record<string, boolean>>("browserP0.gpuPolicy('user')");
+        for (const feature of ["webgl", "webgl2", "webgpu"]) rows.push({ test: "policy", metric: `agent ${feature} disabled`, value: String(agent[feature]), budget: "false", status: agent[feature] ? "FAIL" : "PASS" });
+        for (const feature of ["webgl", "webgl2", "webgpu"]) rows.push({ test: "policy", metric: `user ${feature} allowed`, value: String(user[feature]), budget: "true", status: user[feature] ? "PASS" : "FAIL" });
+        await app!.main.evaluate("browserP0.close('policy')");
+        return { agent, user, candidate: "webgl:false; renderer --disable-features=WebGPUService" };
+      },
       renderer: () => rendererCrash(app!, origin, rows),
       "gpu-crash": () => gpuCrash(app!, origin, rows),
       "gpu-hang": () => gpuHang(app!, origin, rows),
@@ -44,11 +54,12 @@ try {
       if (selected !== "all" && selected !== name) continue;
       console.log(JSON.stringify({ started: name }));
       try {
+        await quietHost(`${name} startup`);
         app = await launchP0App({ harness: name !== "normal" });
         if (name === "normal") { await run(); await app.stop(); app = undefined; continue; }
         const initial = await sample(app);
         assert.equal(initial.versions.electron, pin);
-        evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, mainPID: initial.mainPID, uiPID: initial.uiPID };
+        evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, crashLimitDisabled: initial.crashLimitDisabled, mainPID: initial.mainPID, uiPID: initial.uiPID };
         await app.main.evaluate(`browserP0.open('user','${origin}/video',{user:true})`);
         await waitFor(() => app!.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "decoded user video playing");
         evidence[name] = await run();
@@ -63,6 +74,6 @@ try {
 } finally {
   if (app) await app.stop(); fixtures.stop(true);
   // §9.3 requires failures AFTER mitigations. Raw failures alone are not triggers.
-  console.log(JSON.stringify({ rows, evidence, decision: "§9.3 not established: mitigation reruns required for failures; unavailable results are not passes", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", platform: `${process.platform}/${process.arch}` }));
+  console.log(JSON.stringify({ rows, evidence, decision: "Review GPU proof, user-tab results, and full soak against §9.3; unavailable is never a pass", gpuSource: process.env.BUTLER_P0_GPU_SOURCE || "agent", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", platform: `${process.platform}/${process.arch}` }));
   if (rows.some(r => r.status === "FAIL" || r.status === "UNAVAILABLE")) process.exitCode = 1;
 }

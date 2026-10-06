@@ -1,4 +1,5 @@
 // Test-only main-process harness. Not copied into Electron release packages.
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 const { app, ipcMain, WebContentsView, webContents, contentTracing } = createRequire(
@@ -10,6 +11,7 @@ export function installBrowserP0Harness(window) {
   const views = new Map();
   const gone = [];
   const crashes = [];
+  const routed = { frames: 0, subresources: 0 };
   const delay = monitorEventLoopDelay({ resolution: 1 });
   delay.enable();
   const childGone = (_event, details) => gone.push({ ...details, at: performance.now() });
@@ -20,15 +22,21 @@ export function installBrowserP0Harness(window) {
   globalThis.browserP0 = {
     async open(id, url, { webgl = true, user = false } = {}) {
       const parsed = new URL(url);
-      if (parsed.hostname !== "127.0.0.1" || parsed.protocol !== "http:") throw new Error("Local fixtures only");
+      if (!((parsed.hostname === "127.0.0.1" && parsed.protocol === "http:") ||
+        (parsed.protocol === "https:" && parsed.hostname === "www.iana.org" && ["/help/example-domains", "/domains/reserved"].includes(parsed.pathname)))) throw new Error("P0 fixtures only");
       if (views.has(id)) throw new Error("Duplicate tab");
+      // WebGPUService is a candidate, not a proven per-tab block: gpuPolicy must verify it.
       const gpuOff = !user && process.env.BUTLER_P0_AGENT_GPU === "off";
       const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true,
-        nodeIntegration: false, backgroundThrottling: false, webgl: webgl && !gpuOff, disableBlinkFeatures: gpuOff ? "WebGPU" : "", partition: `p0-${id}` } });
+        nodeIntegration: false, backgroundThrottling: false, webgl: webgl && !gpuOff, additionalArguments: gpuOff ? ["--disable-features=WebGPUService"] : [], partition: `p0-${id}` } });
       view.webContents.on("render-process-gone", (_event, details) => crashes.push({ id, code: "tab_crashed", ...details }));
       view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       // Exercise the router cost without product browser policy or API access.
-      view.webContents.session.webRequest.onBeforeRequest({ urls: [`${parsed.origin}/*`] }, (_details, callback) => {
+      view.webContents.session.webRequest.onBeforeRequest({ urls: [`${parsed.origin}/*`] }, (details, callback) => {
+        if (!["mainFrame", "subFrame"].includes(details.resourceType)) {
+          routed.subresources++; callback({ cancel: false }); return;
+        }
+        routed.frames++;
         callback({ cancel: false });
       });
       window.contentView.addChildView(view);
@@ -41,6 +49,7 @@ export function installBrowserP0Harness(window) {
     navigate: (id, url) => get(id).loadURL(url),
     evaluate: (id, expression) => get(id).executeJavaScript(expression),
     paintProbe: () => paintProbe(window.webContents),
+    wallpaperFrame: () => wallpaperFrame(window.webContents),
     async beginTyping() {
       const wc = window.webContents;
       window.focus(); wc.focus();
@@ -56,16 +65,17 @@ export function installBrowserP0Harness(window) {
       const view = views.get(id); if (!view) throw new Error("Unknown tab");
       view.webContents.session.webRequest.onBeforeRequest(null);
       window.contentView.removeChildView(view);
+      if (view.webContents.debugger.isAttached()) view.webContents.debugger.detach();
       view.webContents.close(); views.delete(id);
     },
     sample() {
       return { at: performance.now(), versions: process.versions, gpu: app.getGPUFeatureStatus(), gone, crashes,
-        mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, metrics: app.getAppMetrics(), initial, resources: baseline(),
+        crashLimitDisabled: app.commandLine.hasSwitch("disable-gpu-process-crash-limit"), paths: { userData: app.getPath("userData"), sessionData: app.getPath("sessionData") }, routed, mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, metrics: app.getAppMetrics(), initial, resources: baseline(),
         loop: { p99Ms: delay.percentile(99) / 1e6, maxMs: delay.max / 1e6 } };
     },
-    gpuPolicy: id => get(id).executeJavaScript("(async()=>({webgl:!!document.createElement('canvas').getContext('webgl')||!!document.createElement('canvas').getContext('webgl2'),webgpu:Boolean(await navigator.gpu?.requestAdapter())}))()"),
+    gpuPolicy: id => get(id).executeJavaScript("(async()=>({webgl:!!document.createElement('canvas').getContext('webgl'),webgl2:!!document.createElement('canvas').getContext('webgl2'),gpuPresent:!!navigator.gpu,webgpu:Boolean(await navigator.gpu?.requestAdapter())}))()"),
     resetDelay: () => delay.reset(),
-    traceStart: () => contentTracing.startRecording({ included_categories: ["devtools.timeline", "blink", "gpu", "toplevel", "disabled-by-default-memory-infra", "blink.user_timing"], memory_dump_config: { triggers: [{ mode: "light", periodic_interval_ms: 1000 }] } }),
+    traceStart: () => contentTracing.startRecording({ included_categories: ["devtools", "devtools.timeline", "blink", "gpu", "toplevel", "disabled-by-default-memory-infra", "blink.user_timing"], memory_dump_config: { triggers: [{ mode: "light", periodic_interval_ms: 1000 }] } }),
     traceStop: path => contentTracing.stopRecording(path),
     dispose() {
       for (const id of [...views.keys()]) this.close(id);
@@ -78,14 +88,22 @@ async function observeActCapture(wc) {
   const observed = await wc.executeJavaScript("({count:document.querySelectorAll('[data-node]').length,ids:Array.from(document.querySelectorAll('[data-node]'),e=>Number(e.dataset.node))})");
   const expected = new URL(wc.getURL()).pathname === "/nodes" ? 10000 : 0;
   if (observed.count !== expected || observed.ids.some((n, i) => n !== i)) throw new Error("Incomplete observation");
-  await wc.executeJavaScript("(()=>{const b=document.querySelector('button');if(!b)throw Error('Act target missing');const before=Number(b.dataset.clicks||0);b.click();if(Number(b.dataset.clicks)!==before+1)throw Error('Act failed')})()");
+  if (new URL(wc.getURL()).protocol === "https:") {
+    const heading = new URL(wc.getURL()).pathname === "/help/example-domains" ? "Example Domains" : "IANA-managed Reserved Domains";
+    await wc.executeJavaScript(`(()=>{if(document.querySelector('h1')?.textContent.trim()!==${JSON.stringify(heading)})throw Error('Real site incomplete');window.scrollTo(0,document.body.scrollHeight)})()`);
+  }
+  else await wc.executeJavaScript("(()=>{const b=document.querySelector('button');if(!b)throw Error('Act target missing');const before=Number(b.dataset.clicks||0);b.click();if(Number(b.dataset.clicks)!==before+1||b.textContent!=='Act '+(before+1))throw Error('Act failed')})()");
+  if (!wc.debugger.isAttached()) wc.debugger.attach("1.3");
   const start = performance.now();
-  const image = await wc.capturePage(undefined, { stayHidden: true });
-  if (image.isEmpty()) throw new Error("Agent compositor capture empty");
-  const capturedMs = performance.now() - start;
-  const encodeStart = performance.now();
-  const jpeg = image.toJPEG(70);
-  return { nodes: observed.count, capturedMs, jpegMs: performance.now() - encodeStart, jpegBytes: jpeg.length };
+  // ScreencastFrameCaptured posts JPEG encoding to Chromium ThreadPool.
+  const expectedSize = await wc.executeJavaScript("({width:Math.round(innerWidth*devicePixelRatio),height:Math.round(innerHeight*devicePixelRatio)})");
+  const { data } = await captureJpeg(wc, expectedSize);
+  const jpeg = Buffer.from(data, "base64");
+  if (jpeg.length < 4 || jpeg.readUInt16BE(0) !== 0xffd8 || jpeg.readUInt16BE(jpeg.length - 2) !== 0xffd9) throw new Error("Incomplete Chromium JPEG");
+  const size = jpegSize(jpeg);
+  if (size.width !== expectedSize.width || size.height !== expectedSize.height) throw new Error(`Capture resolution mismatch: ${JSON.stringify({size,expectedSize})}`);
+  return { size, nodes: observed.count, capturedMs: performance.now() - start, jpegMs: performance.now() - start, jpegBytes: jpeg.length };
+
 }
 
 async function inputCapture(wc, text) {
@@ -127,4 +145,48 @@ function resourceInventory() {
   const emitters = new Set([app, ipcMain, ...contents, ...contents.map(w => w.session)]);
   const listeners = [...emitters].reduce((n, emitter) => n + emitter.eventNames().reduce((count, name) => count + emitter.listenerCount(name), 0), 0);
   return { contents: contents.length, listeners, debuggers: contents.filter(w => w.debugger.isAttached()).length };
+}
+
+async function wallpaperFrame(wc) {
+  // This region is outside agent/user views and contains the live wallpaper
+  // behind the static new-chat content. Hash compositor pixels, not draw calls.
+  const image = await wc.capturePage({ x: 600, y: 400, width: 64, height: 64 }, { stayHidden: true });
+  if (image.isEmpty()) throw new Error("Wallpaper compositor capture empty");
+  return createHash("sha256").update(image.toBitmap()).digest("hex");
+}
+
+async function captureJpeg(wc, size) {
+  let receive, fail, requestedAt = Infinity;
+  const next = new Promise((resolve, reject) => { receive = resolve; fail = reject; });
+  const message = (_event, method, params) => {
+    if (method !== "Page.screencastFrame") return;
+    if (!Number.isFinite(params.metadata?.timestamp)) { fail(new Error("Capture timestamp unavailable")); return; }
+    if (params.metadata.timestamp < requestedAt) {
+      void wc.debugger.sendCommand("Page.screencastFrameAck", { sessionId: params.sessionId }).catch(fail); return;
+    }
+    receive(params);
+  };
+  const timer = setTimeout(() => fail(new Error("Screencast capture deadline expired")), 10_000);
+  wc.debugger.on("message", message);
+  try {
+    await wc.executeJavaScript("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+    requestedAt = Date.now() / 1000;
+    await wc.debugger.sendCommand("Page.startScreencast", { format: "jpeg", quality: 70, everyNthFrame: 1, maxWidth: size.width, maxHeight: size.height });
+    const frame = await next;
+    await wc.debugger.sendCommand("Page.screencastFrameAck", { sessionId: frame.sessionId });
+    return frame;
+  } finally {
+    clearTimeout(timer); wc.debugger.removeListener("message", message);
+    await wc.debugger.sendCommand("Page.stopScreencast");
+  }
+}
+
+function jpegSize(bytes) {
+  for (let offset = 2; offset + 9 < bytes.length;) {
+    const marker = bytes[offset + 1], length = bytes.readUInt16BE(offset + 2);
+    if ([0xc0, 0xc1, 0xc2].includes(marker)) return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
+    if (length < 2 || marker === 0xda) break;
+    offset += 2 + length;
+  }
+  throw new Error("JPEG dimensions unavailable");
 }
