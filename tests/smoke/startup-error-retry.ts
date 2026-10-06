@@ -74,10 +74,11 @@ try {
   await splash.bringToFront();
   phase = "retry-click";
   await retry.click();
+  // Release the attached renderer debugger before observing native process exit.
+  await browser.close(); browser = undefined;
   await waitFor(() => original!.exitCode !== null || original!.signalCode !== null, "Retry did not exit the failed process");
   assert.equal(original.exitCode, 0);
   phase = "original-exit";
-  await browser.close(); browser = undefined;
   browser = await connect();
   phase = "successor-inspector";
   const facts = await waitFor(async () => {
