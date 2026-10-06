@@ -103,7 +103,57 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.keyboard.type("Z");
   assert((await editor.innerText()).endsWith("YZ"), "window activation places caret at end");
-  console.log(JSON.stringify({ ok: true, cases: 7, modelCalls: server.stubModelCalls.length }));
+  // Folded preview: a long draft truncates with an ellipsis inside the toolbar; + and send keep their boxes.
+  const preview = page.locator('[data-slot="composer-compact-preview"]');
+  const fold = async () => {
+    await page.locator('[data-test-class="new-chat-empty-state"] h2').click();
+    await preview.waitFor({ state: "visible" });
+  };
+  const toolbarGeometry = () => page.evaluate(() => {
+    const toolbar = document.querySelector<HTMLElement>('[data-test-class="composer-toolbar"]')!;
+    const compact = toolbar.querySelector<HTMLElement>('[data-slot="composer-compact-preview"]')!;
+    const box = (element: Element) => {
+      const { left, right, top, width, height } = element.getBoundingClientRect();
+      return { left, right, top, width, height };
+    };
+    const buttons = [...toolbar.querySelectorAll<HTMLElement>("button")].filter((button) => button !== compact && button.getClientRects().length > 0);
+    const style = getComputedStyle(compact);
+    const next = buttons.find((button) => button.getBoundingClientRect().left >= compact.getBoundingClientRect().right - 0.5);
+    return {
+      toolbar: box(toolbar), contentRight: toolbar.getBoundingClientRect().right - parseFloat(getComputedStyle(toolbar).paddingRight),
+      preview: box(compact), nextLeft: next ? next.getBoundingClientRect().left : null, buttons: buttons.map(box),
+      overflowing: compact.scrollWidth > compact.clientWidth + 1,
+      ellipsis: style.textOverflow === "ellipsis" && style.overflowX === "hidden" && style.whiteSpace === "nowrap",
+    };
+  });
+  const drafts = {
+    ko: "주간 디자인 리뷰 메모를 정리하고 남은 작업을 담당자별로 나눈 다음 다음 주 일정에 맞춰 우선순위를 다시 매겨 주세요. 길게 이어지는 초안입니다.",
+    en: "Summarize the weekly design review notes, split the remaining work by owner and re-rank it against next week's schedule. A long draft.",
+  };
+  const ellipsis: Record<string, unknown> = {};
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await padding();
+    await editor.fill("");
+    await fold();
+    const empty = await toolbarGeometry();
+    for (const [language, draft] of Object.entries(drafts)) {
+      await padding();
+      await editor.fill(draft);
+      await fold();
+      const folded = await toolbarGeometry();
+      const key = `${width}-${language}`;
+      ellipsis[key] = { previewRight: folded.preview.right, nextLeft: folded.nextLeft, contentRight: folded.contentRight, overflowing: folded.overflowing };
+      assert(folded.preview.right <= (folded.nextLeft ?? folded.contentRight) + 0.5, `${key}: preview stays inside the toolbar's free space ${JSON.stringify(folded)}`);
+      assert(folded.preview.right <= folded.contentRight + 0.5, `${key}: preview never passes the card edge`);
+      assert(folded.overflowing && folded.ellipsis, `${key}: the long draft truncates with an ellipsis`);
+      assert.equal(folded.preview.height, empty.preview.height, `${key}: preview keeps one line`);
+      assert.deepEqual(folded.buttons.map(({ width, height }) => [width, height]), empty.buttons.map(({ width, height }) => [width, height]), `${key}: + and send keep their size`);
+      assert.deepEqual(folded.toolbar, empty.toolbar, `${key}: the toolbar does not move`);
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  console.log(JSON.stringify({ ok: true, cases: 8, ellipsis, modelCalls: server.stubModelCalls.length }));
 } finally {
   await browser.close();
   await server.stop();

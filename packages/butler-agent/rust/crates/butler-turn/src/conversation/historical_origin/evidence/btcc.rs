@@ -13,7 +13,7 @@ use super::{
 };
 use butler_core::json::{CanonicalKeyOrder, canonical_json};
 
-fn open(data_root: &Path) -> rusqlite::Result<Option<Connection>> {
+fn open(data_root: &Path) -> rusqlite::Result<Option<sqlite::Connection>> {
     let path = data_root.join("agent-runtime/btcc.sqlite");
     if !path.exists() {
         return Ok(None);

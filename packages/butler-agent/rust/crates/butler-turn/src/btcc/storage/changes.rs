@@ -1,5 +1,7 @@
 //! Write completion notifications from the single SQLite owner.
-use super::{BtccStorage, DatabaseOperation, RuntimeOwner, StorageResult};
+use super::{
+    BtccStorage, DatabaseOperation, RuntimeOwner, StorageCode, StorageError, StorageResult,
+};
 use rusqlite::Connection;
 use tokio::sync::oneshot;
 
@@ -22,10 +24,19 @@ impl BtccStorage {
         let job: DatabaseOperation = Box::new(move |connection, owner| {
             let before = connection.total_changes();
             let result = operation(connection, owner);
+            let synced = if connection.total_changes() == before {
+                Ok(())
+            } else {
+                butler_platform::sqlite::sync_wal_index(connection).map_err(|error| {
+                    StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string())
+                        .with_source(error)
+                })
+            };
             if connection.total_changes() != before {
                 changes.send_replace(());
             }
-            let _ignored_cancelled_caller = completion_tx.send(result);
+            let _ignored_cancelled_caller =
+                completion_tx.send(result.and_then(|value| synced.map(|()| value)));
         });
         self.complete(job, completion_rx)
     }

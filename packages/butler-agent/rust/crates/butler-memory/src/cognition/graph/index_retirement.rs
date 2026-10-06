@@ -62,7 +62,7 @@ fn aborted() -> CognitionError {
 #[cfg(test)]
 pub(super) fn assert_interrupted_retirement() {
     use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
-    let db = rusqlite::Connection::open_in_memory().unwrap();
+    let db = butler_platform::sqlite::Connection::open_in_memory().unwrap();
     db.execute_batch("CREATE TABLE memory_alias_postings(node_id,gram,source_id,surface_original,identity_scope,project_id);
         WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<10000)
         INSERT INTO memory_alias_postings SELECT n,'abc','s','surface','user',NULL FROM ids;

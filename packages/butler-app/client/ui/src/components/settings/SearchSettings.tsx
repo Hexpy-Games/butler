@@ -14,7 +14,7 @@ export { SearchBehaviorFields } from "./SearchBehaviorFields";
 type WebSearchSettings = SettingsView["web_search"];
 
 /** Search provider section: the backend and its API key. */
-export function SearchProviderFields({ draft }: { draft: SettingsView }) {
+export function SearchProviderFields({ draft }: { draft: Pick<SettingsView, "web_search"> }) {
   useAppLocale();
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);

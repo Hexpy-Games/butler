@@ -121,7 +121,7 @@ impl ReadPool {
             gate: Arc::default(),
         })
     }
-    fn connection(path: &Path) -> StorageResult<Connection> {
+    fn connection(path: &Path) -> StorageResult<butler_platform::sqlite::Connection> {
         let connection =
             butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(StorageError::sqlite)?;
@@ -194,7 +194,11 @@ impl ReadPool {
             )
         })?
     }
-    fn run_worker(path: &Path, work: &WorkQueue, mut connection: Option<Connection>) {
+    fn run_worker(
+        path: &Path,
+        work: &WorkQueue,
+        mut connection: Option<butler_platform::sqlite::Connection>,
+    ) {
         let mut last_used = Instant::now();
         loop {
             let deadline = connection.as_ref().map(|_| last_used + SPARE_RETENTION);
@@ -229,7 +233,7 @@ impl ReadPool {
     fn run_read(
         path: &Path,
         work: &WorkQueue,
-        connection: &mut Option<Connection>,
+        connection: &mut Option<butler_platform::sqlite::Connection>,
         operation: ReadOperation,
     ) -> StorageResult<()> {
         if connection.is_none() {
@@ -249,7 +253,11 @@ impl ReadPool {
                 .unchecked_transaction()
                 .map_err(StorageError::sqlite)?;
             operation(&transaction)?;
-            transaction.commit().map_err(StorageError::sqlite)
+            transaction.commit().map_err(StorageError::sqlite)?;
+            butler_platform::sqlite::sync_wal_index(connection).map_err(|error| {
+                StorageError::new(super::StorageCode::SqliteWalSyncFailed, error.to_string())
+                    .with_source(error)
+            })
         }))
         .unwrap_or_else(|payload| {
             let message = payload

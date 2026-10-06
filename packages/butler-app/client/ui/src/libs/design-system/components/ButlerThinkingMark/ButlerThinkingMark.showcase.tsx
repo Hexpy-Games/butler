@@ -15,7 +15,7 @@ export const meta: ShowcaseMeta = {
   status: "beta",
 };
 
-const SIZES: IconSize[] = ["sm", "md", "lg", "xl", "2xl"];
+const SIZES: IconSize[] = ["sm", "md", "lg", "xl", "2xl", "3xl"];
 /** Round trip demo: hold the thinking form (the morph lands in ~2s) before settling back. */
 const ROUND_TRIP_HOLD_MS = 3200;
 

@@ -1,3 +1,5 @@
+mod permission_projection;
+pub(crate) use permission_projection::{PermissionSource, PermissionTarget};
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -303,12 +305,12 @@ pub struct ConversationPermission {
     pub target: String,
     pub cwd: Option<String>,
     pub grant_ref: String,
-    pub(crate) owner_session_id: String,
-    pub(crate) workspace_path: String,
+    pub owner_session_id: String,
+    pub workspace_path: String,
     pub(crate) scope_key: String,
     pub title: String,
     pub description: String,
-    pub(crate) created_at: String,
+    pub created_at: String,
 }
 /// The stored decision of an authority request (`btcc_authority_requests.decision`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -437,9 +439,17 @@ pub(crate) trait AuthorityRepository {
     fn retains_approval_claim(&mut self, turn_id: &str) -> AuthorityResult<bool>;
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool>;
     fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>>;
+    fn list_all_permissions(&mut self) -> AuthorityResult<Vec<ConversationPermission>>;
+    fn revoke_permissions(&mut self, grants: &[(String, String)], now: &str)
+    -> AuthorityResult<()>;
     fn permission_records(&mut self, _owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         Ok(Vec::new())
     }
+    fn permission_projection_records(
+        &mut self,
+        owners: &[String],
+        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
+    ) -> AuthorityResult<()>;
     fn revoke_permission(&mut self, owner: &str, grant_ref: &str, now: &str)
     -> AuthorityResult<()>;
     fn resume_source(

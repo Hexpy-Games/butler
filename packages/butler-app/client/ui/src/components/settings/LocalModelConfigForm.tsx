@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { Button, Input, SettingsField, SlidersHorizontal, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -18,6 +19,7 @@ interface LocalModelConfigFormProps {
   platform: LocalModelDiscoveryRequest["platform"];
   setPlatform: (value: LocalModelDiscoveryRequest["platform"]) => void;
   serverUrl: string;
+  error?: string;
   setServerUrl: (value: string) => void;
   advancedOpen: boolean;
   setAdvancedOpen: (value: boolean) => void;
@@ -29,6 +31,7 @@ export function LocalModelConfigForm({
   platform,
   setPlatform,
   serverUrl,
+  error,
   setServerUrl,
   advancedOpen,
   setAdvancedOpen,
@@ -36,14 +39,17 @@ export function LocalModelConfigForm({
   useAppLocale();
   const copy = appCopy.settings.localModels;
 
+  useEffect(() => { if (error) document.getElementById("local-model-server-url")?.focus(); }, [error]);
   return (
     <Stack gap="md">
       <SettingsField
+        error={error}
         id="local-model-server-url"
         data-test-class="settings-field"
         label={copy.serverUrl}
         control={
           <Input
+            aria-invalid={Boolean(error)}
             id="local-model-server-url"
             placeholder="http://localhost:8080"
             value={serverUrl}

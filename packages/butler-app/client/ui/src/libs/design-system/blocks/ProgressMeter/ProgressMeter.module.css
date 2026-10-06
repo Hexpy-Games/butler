@@ -43,6 +43,14 @@
   height: var(--space-xs);
 }
 
+/* Caption metrics on the row, so the spinner slot (min-height: 1lh) centers
+   on the caption's first line when the text wraps. The Spinner owns its own
+   reduced-motion treatment (a slow breathe); nothing here overrides it. */
+.indeterminate {
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fill {
     transition: none;

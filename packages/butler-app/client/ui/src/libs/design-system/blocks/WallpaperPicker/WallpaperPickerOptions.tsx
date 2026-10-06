@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type ReactNode, type DragEvent, type KeyboardEvent } from "react";
 import { AlertCircle } from "../../components/Icons";
 import type { WallpaperLocale } from "../Wallpaper";
 import { wallpaperPickerReason, type WallpaperPickerOption } from "./pickerModel";
@@ -21,6 +21,7 @@ interface WallpaperPickerOptionsProps extends WallpaperPreviewContext {
   uploading: boolean;
   /** An import is in flight: the import tile shows a spinner and takes no files. */
   importingModule: boolean;
+  importError?: ReactNode;
   /** What a tile had earlier in the session (its preview shows it). */
   recall: (key: string) => WallpaperPickerValue | undefined;
   onChoose: (option: WallpaperPickerOption) => void;
@@ -91,7 +92,7 @@ export function WallpaperPickerOptions(props: WallpaperPickerOptionsProps) {
         })}
       </div>
       {onImportModule ? (
-        <WallpaperPickerModuleImport importing={importingModule} label={labels.importModule} onImportModule={onImportModule} />
+        <WallpaperPickerModuleImport error={props.importError} importing={importingModule} label={labels.importModule} onImportModule={onImportModule} />
       ) : null}
       {onUpload ? <WallpaperPickerUpload accept={accept} dropping={dropping} label={labels.addImage} uploading={uploading} onUpload={onUpload} /> : null}
     </div>

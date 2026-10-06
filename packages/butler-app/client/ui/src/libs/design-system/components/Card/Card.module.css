@@ -20,6 +20,41 @@
   padding: var(--space-3);
 }
 
+/* Running: the worker-active border plus a ring that breathes on
+   --pulse-duration (opacity only, so it stays on the compositor). Under
+   reduced motion --motion-loop-count is 0 and the ring rests at its
+   static strength. Declared before selected so selection wins the border. */
+.card[data-activity="running"] {
+  position: relative;
+  border-color: var(--worker-active);
+}
+
+.card[data-activity="running"]::after {
+  /* Sits on the border box; the ring is an outset shadow, so it adds no
+     scrollable overflow to grids or scroll areas around the card. */
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--worker-active) 32%, transparent);
+  content: "";
+  opacity: 0.6;
+  pointer-events: none;
+  animation: card-activity-pulse var(--pulse-duration)
+    var(--motion-ease-standard) var(--motion-loop-count);
+}
+
+@keyframes card-activity-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 0.15;
+  }
+}
+
 .card[data-selected="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));

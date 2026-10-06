@@ -29,7 +29,7 @@ pub(super) fn eligible_sources(
     } else {
         None
     };
-    eligible_sources_in_db(data_root, sources, db.as_ref(), entries, mode, now_ms)
+    eligible_sources_in_db(data_root, sources, db.as_deref(), entries, mode, now_ms)
 }
 
 pub(super) fn eligible_sources_in_db(

@@ -1,3 +1,4 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import { useEffect } from "react";
 import {
   Button,
@@ -10,6 +11,7 @@ import {
   NativeSelectOption,
   SetupWizardContent,
   Stack,
+  InlineReference,
   Typo,
 } from "@/butler-ds";
 import type { FirstRunLanguage } from "@/app/firstRunSetup.ts";
@@ -66,9 +68,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
         <FirstRunPrepStatus flow={flow} />
       </Stack>
       <Stack cross="center">
-        <Button asChild size="sm" variant="link">
-          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
-        </Button>
+        <Typo.Body as="span"><InlineReference kind="external" href={FIRST_RUN_GUIDE_URL} iconSrc={faviconSrc(FIRST_RUN_GUIDE_URL)}>{copy.learnMore}</InlineReference></Typo.Body>
       </Stack>
     </SetupWizardContent>
   );

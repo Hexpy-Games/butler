@@ -96,7 +96,7 @@ pub enum ParentResultRoute {
 /// The SQLite subsession store.
 #[derive(Clone)]
 pub struct SqliteSubsessionRepository {
-    storage: BtccStorage,
+    pub(super) storage: BtccStorage,
 }
 
 /// One atomic child closeout, including its typed parent continuation.

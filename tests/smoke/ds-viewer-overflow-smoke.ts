@@ -177,12 +177,15 @@ if (!existsSync(join(uiRoot, "index.html"))) throw new Error("UI dist is missing
 const only = new Set(process.argv.slice(2).filter((arg) => arg && arg !== "--"));
 const server = await createNativeAppServer({ uiRoot });
 const browser = await launchSmokeBrowser();
+const context = await browser.newContext({ deviceScaleFactor: 1 });
 const offenders: Offender[] = [];
 let checkedPages = 0;
 try {
   for (const run of runs) {
     const runLabel = `${run.width} ${run.colorScheme} chrome`;
-    const page = await browser.newPage({ viewport: { width: run.width, height: 1000 }, colorScheme: run.colorScheme, deviceScaleFactor: 1 });
+    const page = await context.newPage();
+    await page.setViewportSize({ width: run.width, height: 1000 });
+    await page.emulateMedia({ colorScheme: run.colorScheme });
     await server.signIn(page);
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
@@ -213,6 +216,7 @@ try {
     await page.close();
   }
 } finally {
+  await context.close();
   await browser.close();
   await server.stop();
   rmSync(tempDir, { recursive: true, force: true });

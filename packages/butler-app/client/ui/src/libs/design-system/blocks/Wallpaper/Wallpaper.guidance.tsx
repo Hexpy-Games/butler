@@ -1,5 +1,6 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Card } from "../../components/Card";
+import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
 import {
   Wallpaper,
@@ -53,6 +54,22 @@ function ImageWallpaper() {
 }
 // #endregion
 
+// #region recipe: Decoration on a card
+// A transparent module draws only its art; the card's glass shows through everywhere else. Text sits above the canvas.
+const BLOSSOM: WallpaperSource = { kind: "live", module: "butler.cherry-blossom" };
+
+function CardDecoration() {
+  return (
+    <TintedGlass padding="none" radius="composer">
+      <div style={{ position: "relative", minHeight: 96, padding: 16 }}>
+        <Wallpaper scope="container" source={BLOSSOM} />
+        <div style={{ position: "relative", zIndex: 1 }}><Typo.Body tone="secondary">Ask Butler anything</Typo.Body></div>
+      </div>
+    </TintedGlass>
+  );
+}
+// #endregion
+
 // #region recipe: Plug in a module
 // wallpaper.json + shader.frag; user modules go through the same validation as built-ins.
 const DUSK = defineWallpaperModule({
@@ -100,6 +117,7 @@ export const guidance: ShowcaseGuidance = {
     "Behind a whole screen (new chat, setup wizard) with the default viewport scope",
     "Behind a content area such as a dashboard with scope=\"container\"",
     "Whenever the background comes from settings or an agent as a WallpaperSource",
+    "Art on a card (a decoration module such as butler.cherry-blossom): its transparent canvas leaves the glass visible",
   ],
   whenNotToUse: [
     { when: "A translucent surface over the wallpaper", use: "TintedGlass" },
@@ -110,6 +128,7 @@ export const guidance: ShowcaseGuidance = {
     { name: "Screen wallpaper", description: "A live module with a preset palette as a fixed full-screen layer.", render: () => <ScreenWallpaper /> },
     { name: "Wallpaper inside a panel", description: "Container scope fills the nearest positioned parent; motion=\"paused\" holds a still frame.", render: () => <PanelWallpaper /> },
     { name: "Image wallpaper", description: "An image source with the app's imageLoader (prop or WallpaperImageLoaderProvider); fit, dim and blur are source fields.", render: () => <ImageWallpaper /> },
+    { name: "Decoration on a card", description: "A transparent module (\"transparent\": true) draws only its art; the canvas stays see-through, so the glass shows. Keep text above it.", render: () => <CardDecoration /> },
     { name: "Plug in a module", description: "defineWallpaperModule validates wallpaper.json + shader.frag; pass a registry that includes it.", render: () => <PluggedModule /> },
     { name: "One registry for the app", description: "WallpaperRegistryProvider hands built-ins plus user modules to every Wallpaper and picker below; a new registry hot-reloads a changed module.", render: () => <AppRegistry /> },
   ],
@@ -122,6 +141,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Module names, param labels and enum option labels come from wallpaper.json ({ en, ko }); keep them short nouns.",
     "A composition seed is a number param with control \"shuffle\": the UI shows a shuffle button, not a slider.",
+    "Transparent modules write premultiplied fragColor and need image \"none\"; decoration modules (\"decoration\": true) never appear in pickers.",
   ],
   accessibility: [
     "Decorative: the canvas is aria-hidden and never takes pointer events.",

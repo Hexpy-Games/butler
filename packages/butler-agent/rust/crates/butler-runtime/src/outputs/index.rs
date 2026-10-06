@@ -1,6 +1,6 @@
 //! Small indexed projections; rendering a session never scans manifests or blobs.
 use super::store::{Output, error};
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{OpenFlags, params};
 use std::path::Path;
 
 pub struct OutputSummary {
@@ -48,7 +48,7 @@ pub(super) fn summaries(path: &Path, session: &str) -> std::io::Result<Vec<Outpu
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(std::io::Error::other)?;
     let mut statement = db.prepare("SELECT id,session,message,turn,title,bytes,created FROM outputs WHERE session=?1 ORDER BY id").map_err(std::io::Error::other)?;
     statement
@@ -86,7 +86,7 @@ pub(super) fn messages(
     if !path.exists() || turns.is_empty() {
         return Ok(Vec::new());
     }
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(std::io::Error::other)?;
     let placeholders = std::iter::repeat_n("?", turns.len())
         .collect::<Vec<_>>()

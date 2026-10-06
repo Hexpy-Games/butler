@@ -67,7 +67,9 @@ Commit the generated PNGs, input hashes and `builtinPosters.ts` together.
   the upload tile); the container installs it, then selects the new module.
   `onDeleteModule(id)` appears on every user module tile except the selected
   one, usable or not. `importingModule` shows a spinner on the import tile
-  and takes no files.
+  and takes no files. `importError` (localized, a few words) shows a
+  `FieldError` (role=alert) under the import tile and describes the tile
+  button; it never moves focus. The container clears it on the next import.
 - A picked image starts as `{ fit: "cover", dim, blur: 0 }` with
   `dim = wallpaperImageDefaultDim(luminance)` (brighter images dim more).
   Re-picking any tile restores what it had earlier in the session.

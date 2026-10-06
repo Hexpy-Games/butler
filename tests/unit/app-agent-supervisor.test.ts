@@ -110,6 +110,7 @@ test("supervisor env carries an explicit app update manifest source", () => {
   expect(env.BUTLER_APP_UPDATE_MANIFEST).toBe("https://updates.example/app.json");
 });
 
+// test-category: race
 test("bundled Agent supervisor starts, health-checks, restarts, and stops", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-"));
   try {
@@ -252,13 +253,23 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
     expect(resolved).toBe(1);
     expect(gatewayStarts).toBe(2);
 
-    const stopped = await supervisor.stop({ wait: true });
+    let leaseReleased = false;
+    spawned[1]!.stdin = {
+      writable: true,
+      end: () => {
+        leaseReleased = true;
+        // Synchronous exit proves the listener is armed before EOF delivery.
+        spawned[1]!.emit("exit", 0, null);
+      },
+    };
+    const stopped = await supervisor.stop({ wait: true, preserveWork: true });
     expect(stopped).toMatchObject({
       stopped: true,
       containment_released: true,
       raw_text_included: false,
     });
-    expect(killed.filter((signal) => signal === "SIGTERM")).toHaveLength(2);
+    expect(leaseReleased).toBe(true);
+    expect(killed.filter((signal) => signal === "SIGTERM")).toHaveLength(1);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1364,6 +1375,7 @@ test("supervisor records gateway resolution failures for setup diagnostics", asy
 });
 
 class FakeChildProcess extends EventEmitter {
+  stdin?: { writable: boolean; end(): void };
   spawn?: {
     command: string;
     args: string[];

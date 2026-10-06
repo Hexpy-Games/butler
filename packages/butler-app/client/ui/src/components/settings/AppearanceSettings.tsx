@@ -1,3 +1,5 @@
+import { memo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -10,11 +12,18 @@ import {
   SettingsSwitch,
 } from "./SettingsFormComponents";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
+import { ComposerFoldField } from "./ComposerFoldField";
+import { ReduceMotionField } from "./ReduceMotionField";
+import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
-export function AppearanceSettings() {
+export const AppearanceSettings = memo(function AppearanceSettings() {
   useAppLocale();
-  const draft = useSettingsUIStore((state) => state.draft);
+  const draft = useSettingsUIStore(useShallow((state) => state.draft && ({
+    appearance_theme: state.draft.appearance_theme,
+    translucent_sidebar: state.draft.translucent_sidebar,
+    smart_grouping_enabled: state.draft.smart_grouping_enabled,
+  })));
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   // A real-time wallpaper sets light/dark itself while it is on.
@@ -71,7 +80,12 @@ export function AppearanceSettings() {
         description={settingsCopy.pageSectionDescriptions.homeScreen}
       >
         <MainScreenThemeSettings />
+        <ComposerFoldField />
+        <ComposerDecorationSettings />
+      </SettingsSection>
+      <SettingsSection id="accessibility" kind="form" title={sections.accessibility}>
+        <ReduceMotionField />
       </SettingsSection>
     </SettingsPage>
   );
-}
+});

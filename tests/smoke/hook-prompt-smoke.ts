@@ -3,17 +3,22 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server";
-import { smokeBrowserArgs } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
+const cases = [1280, 375].flatMap(width => ["light", "dark"].flatMap(theme => ["en", "ko"].map(language => `${width}-${theme}-${language}`)));
+if (await runSmokeCases(cases, "HOOK_PROMPT_CASE", import.meta.path)) {
+  console.log("Prompt deny: 8 viewport/theme/language cases retained exact text; zero model calls");
+  process.exit(0);
+}
 const data = mkdtempSync(join(tmpdir(), "hook-prompt-"));
 writeFileSync(join(data, "hooks.json"), JSON.stringify({ version: 1, hooks: [{ id: "guard", event: "UserPromptSubmit", type: "command", args: ["sh", "-c", "printf '{\"decision\":\"deny\",\"reason\":\"Keep the draft\"}'"] }] }));
 const server = await createNativeAppServer({ butlerData: data, uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
-const output = "/tmp/butler-hooks-prompt";
+const browser = await launchSmokeBrowser();
+const output = process.env.HOOK_PROMPT_SCREENSHOTS ?? join(tmpdir(), "butler-hooks-prompt");
 mkdirSync(output, { recursive: true });
 try {
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const language of ["en", "ko"]) {
+    if (process.env.HOOK_PROMPT_CASE && process.env.HOOK_PROMPT_CASE !== `${width}-${theme}-${language}`) continue;
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, language }) });
     const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
     await server.signIn(page);
@@ -28,5 +33,5 @@ try {
     await page.screenshot({ path: join(output, `after-${width}-${theme}-${language}.png`) });
     await page.close();
   }
-  console.log("Prompt deny: 8 viewport/theme/language cases retained exact text; zero model calls");
+  console.log(`Prompt deny: ${process.env.HOOK_PROMPT_CASE ?? "8 viewport/theme/language cases"} retained exact text; zero model calls`);
 } finally { await browser.close(); await server.stop(); rmSync(data, { recursive: true, force: true }); }

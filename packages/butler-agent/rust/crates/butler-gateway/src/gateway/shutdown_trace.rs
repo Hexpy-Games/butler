@@ -1,4 +1,4 @@
-//! Debug stub diagnostics for App owner shutdown phases.
+//! Desktop and debug stub diagnostics for App owner shutdown phases.
 
 use std::{
     future::Future,
@@ -7,7 +7,8 @@ use std::{
 };
 
 fn emit(phase: &str, edge: &str) {
-    if !cfg!(debug_assertions) || std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub") {
+    let stub = cfg!(debug_assertions) && std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub");
+    if !stub && std::env::var("BUTLER_SHUTDOWN_TRACE").as_deref() != Ok("1") {
         return;
     }
     static STARTED: OnceLock<Instant> = OnceLock::new();

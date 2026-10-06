@@ -1,10 +1,11 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { memo, useMemo, type ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef, SessionArtifactSummary } from "@/app/types.ts";
-import { MarkdownContent, MarkdownTable, useStreamingReveal } from "@/butler-ds";
+import { MarkdownContent, MarkdownLink, MarkdownTable, useStreamingReveal } from "@/butler-ds";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource.ts";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { MessageInlineImage } from "./MessageInlineImage";
@@ -25,14 +26,7 @@ function markdownComponents(
   return {
     pre: MarkdownCodeBlock,
     table: MarkdownTable,
-    a: ({
-      children,
-      ...props
-    }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-      <a {...props} target="_blank" rel="noreferrer">
-        {children}
-      </a>
-    ),
+    a: MarkdownLink,
     img: ({
       node: _node,
       ...props
@@ -76,7 +70,7 @@ function MessageMarkdownComponent({
       aria-label={appCopy.conversation.result.regionLabel}
       data-test-class="turn-result-section"
     >
-      <MarkdownContent data-test-class="markdown-document">
+      <MarkdownContent data-test-class="markdown-document" faviconSrc={faviconSrc}>
         <ReactMarkdown components={components} rehypePlugins={rehypePlugins} remarkPlugins={MESSAGE_MARKDOWN_PLUGINS}>
           {text}
         </ReactMarkdown>

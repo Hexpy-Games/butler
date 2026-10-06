@@ -253,7 +253,7 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
         tone: "ok",
       });
     } catch (error) {
-      notifyError(error, appCopy.settings.errors.updateSettings, {
+      notifyError(error, appCopy.settings.errors.saveFailed, {
         id: "settings-update",
       });
       if (apiErrorCode(error) === "settings_model_unavailable") {
@@ -551,6 +551,7 @@ function settingsDraftFrom(settings: SettingsData): SettingsData {
       settings.main_screen_theme_custom_colors ??
       EMPTY_SETTINGS.main_screen_theme_custom_colors,
     wallpaper: settings.wallpaper ?? legacyWallpaperSetting(settings),
+    composer_decoration: settings.composer_decoration ?? EMPTY_SETTINGS.composer_decoration,
     web_search: {
       ...DEFAULT_WEB_SEARCH_SETTINGS,
       ...(settings.web_search ?? {}),

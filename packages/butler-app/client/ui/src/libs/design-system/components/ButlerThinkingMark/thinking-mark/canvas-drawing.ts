@@ -130,6 +130,11 @@ export function renderHalftone(s: MarkSurface, sim: MorphSim) {
   drawHalftoneInk(l, key, 0, 0, 0, p);
   grainOver(s, preset.grain * M);
   clipToOutline(s, M, preset.pitch);
+  // Cross-fade the last halftone edge into the exact rest ribbon below M=0.05.
+  const blend = Math.min(1, M / 0.05);
+  s.ctx.globalAlpha = 1 - blend;
+  s.ctx.drawImage(s.rctx.canvas, 0, 0);
+  s.ctx.globalAlpha = blend;
   s.ctx.drawImage(l.canvas, 0, 0);
   drawRing(s);
 }
@@ -140,4 +145,6 @@ export function drawFrame(s: MarkSurface, sim: MorphSim, reduced: boolean) {
   // Reduced motion draws the still logo; the breathe is a CSS opacity loop on the canvas.
   if (mode === "reduced" || mode === "rest") drawRest(s);
   else renderHalftone(s, sim);
+  const canvas = s.ctx.canvas as HTMLCanvasElement;
+  if (canvas.dataset.markState !== "painted") canvas.dataset.markState = "painted";
 }
