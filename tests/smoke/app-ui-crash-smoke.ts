@@ -224,6 +224,8 @@ async function persistenceSmoke() {
   assert.equal(statSync(store.path).mtimeMs, before.mtimeMs);
   assert(before.size < CRASH_LOG_BYTES);
   console.log(JSON.stringify({ entries: log.length, bytes: before.size, idleWrites: 0 }));
+  await store.append({ message: "Error: Minified React error #130; args[]=private conversation sk-secret" });
+  assert.equal((await store.read()).at(-1)?.message, "React error #130");
 }
 
 let failure: unknown;

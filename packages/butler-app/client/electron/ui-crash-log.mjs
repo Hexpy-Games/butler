@@ -11,6 +11,8 @@ function safeMessage(value) {
   const message = typeof value === "string" ? value.slice(0, 2048) : "";
   const native = message.match(/^(?:TypeError: )?(Cannot read properties of (?:undefined|null)|Cannot set properties of (?:undefined|null)|undefined is not an object|null is not an object)/u);
   if (native) return native[1];
+  const react = message.match(/^(?:Error: )?Minified React error #(\d{1,4})\b/u);
+  if (react) return `React error #${react[1]}`;
   if (/Maximum update depth exceeded/u.test(message)) return "Maximum update depth exceeded";
   if (/Rendered (?:more|fewer) hooks/u.test(message)) return "Hook order changed";
   const name = message.match(/^(TypeError|ReferenceError|RangeError|SyntaxError|Error)\b/u)?.[1] ?? "Error";
