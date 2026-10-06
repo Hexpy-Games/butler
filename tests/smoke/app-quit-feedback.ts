@@ -21,6 +21,7 @@ const executablePath = createRequire(resolve("packages/butler-app/client/electro
 const extraArgs = smokeBrowserArgs();
 const entry = resolve(process.env.BUTLER_QUIT_ELECTRON_ROOT ?? "packages/butler-app/client/electron");
 let application: ElectronApplication | undefined;
+let applicationProcess: ReturnType<ElectronApplication["process"]> | undefined;
 let phaseLog = "";
 
 async function waitFor(check: () => Promise<boolean>, label: string, timeout = 10_000) {
@@ -43,6 +44,7 @@ async function launch() {
     }
   });
   application = app;
+  applicationProcess = app.process();
   await app.firstWindow({ timeout: 30_000 });
   await waitFor(async () => {
     try { return (await fixture.api("/runtime-readiness")).btcc_executor_ready === true; } catch { return false; }
@@ -130,6 +132,6 @@ try {
   application = undefined;
   console.log("PASS: active input retryable, follow-up delivered once, queue unpaused");
 } finally {
-  if (application && application.process().exitCode === null) await application.close();
+  if (application && applicationProcess?.exitCode === null) await application.close();
   fixture.cleanup();
 }

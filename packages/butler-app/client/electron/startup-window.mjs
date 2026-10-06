@@ -50,6 +50,7 @@ export function failStartup() {
 export function configureStartupActions(next) { actions = next; }
 export function waitForStartupRenderer(win) {
   rendererId = win.webContents.id;
+  win.webContents.setBackgroundThrottling(false);
   const failWhileStarting = () => { if (surface) failStartup(); };
   win.webContents.once("render-process-gone", failWhileStarting);
   win.webContents.once("did-fail-load", failWhileStarting);
@@ -62,6 +63,7 @@ export function completeStartup(win, show = true) {
   clearStageTimers();
   startupTiming(`stage_${state.stage}_end`);
   if (show) win.show();
+  win.webContents.setBackgroundThrottling(true);
   startupTiming("main_window_ready");
   surface?.destroy(); surface = null;
   startupTiming("splash_destroyed");

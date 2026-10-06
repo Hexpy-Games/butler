@@ -25,7 +25,9 @@ export async function checkLifecycleStills(decode = true, renderer?: Page) {
   const browser = renderer ? undefined : await chromium.launch({ headless: true, args: smokeBrowserArgs(), executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
   try {
     const page = renderer ?? await browser!.newPage();
-    if (!renderer) await page.setContent("<!doctype html><html><body>Lifecycle still decode</body></html>");
+    // Decode in an idle renderer, independently of the DS capture's animation work.
+    if (renderer) await page.goto("about:blank");
+    await page.setContent("<!doctype html><html><body>Lifecycle still decode</body></html>");
     const rows = await page.evaluate(async (frames) => {
       // Drain renderer initialization and argument transport before timing; no image warm-up.
       await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));

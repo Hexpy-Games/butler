@@ -1,3 +1,4 @@
+// test-category: pure-logic
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   pendingMarkFrames,
@@ -53,7 +54,7 @@ function frame() {
 }
 
 beforeEach(() => {
-  for (const key of ["window", "document", "ResizeObserver", "IntersectionObserver"]) saved[key] = (globalThis as Stub)[key];
+  for (const key of ["window", "document", "ResizeObserver", "IntersectionObserver", "MutationObserver"]) saved[key] = (globalThis as Stub)[key];
   rafQueue = new Map();
   rafRequests = 0;
   nextRaf = 1;
@@ -78,6 +79,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
       createElement: () => canvas(1).element,
     },
+    MutationObserver: class { observe() {} disconnect() {} },
     ResizeObserver: class { observe() {} disconnect() {} },
     IntersectionObserver: class {
       constructor(callback: (entries: { isIntersecting: boolean }[]) => void) { intersection.push(callback); }

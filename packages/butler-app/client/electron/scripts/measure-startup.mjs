@@ -38,11 +38,13 @@ async function measure(mode, run, env) {
   const port = await freePort();
   const requested = Date.now();
   const environment = { ...process.env, ...env, BUTLER_APP_SERVER_PORT: String(port),
-    BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`, BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
+    BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
     BUTLER_SECRET_STORE: "file", BUTLER_PLATFORM_SYSTEM_SECRETS: "0" };
+  // An explicit URL selects external-server mode and prevents the App-owned
+  // Agent from starting. Measure the native foreground lifecycle instead.
+  delete environment.BUTLER_APP_SERVER_URL;
   const child = spawn(resolve(executable), launchArgs(), { shell: false, stdio: ["ignore", "pipe", "pipe"], env: environment });
   const events = [];
-  let pending = "";
   let stopping = false;
   let forcedStop = false;
   let hardStop;
@@ -62,20 +64,24 @@ async function measure(mode, run, env) {
   };
   const deadline = setTimeout(stop, 150_000);
   process.once("SIGINT", stop);
-  child.stderr.resume();
-  child.stdout.on("data", (chunk) => {
-    const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
-    for (const line of lines) {
-      try {
-        const event = JSON.parse(line).startup;
-        if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
-      } catch { /* No general app logs in timing evidence. */ }
-    }
-  });
+  // Electron hosts can emit main-process console timing lines on either pipe.
+  for (const stream of [child.stdout, child.stderr]) {
+    let pending = "";
+    stream.on("data", (chunk) => {
+      const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line).startup;
+          if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
+        } catch { /* No general app logs in timing evidence. */ }
+      }
+    });
+  }
   try { await once(child, "exit"); }
   finally { clearTimeout(deadline); clearTimeout(hardStop); process.removeListener("SIGINT", stop); }
   if (signal && signal.exitCode === null && signal.signalCode === null) await once(signal, "exit");
   const elapsed = (name) => events.find((event) => event.stage === name)?.elapsed_ms;
+  if (!events.some((event) => event.stage === "window_ready")) console.log(JSON.stringify({ failure: "window_not_ready", mode, run, exitCode: child.exitCode, events }));
   if (!events.some((event) => event.stage === "window_ready")) throw new Error(`${mode}/${run}: main window did not become ready`);
   if (forcedStop) throw new Error(`${mode}/${run}: forced_stop`);
   const metrics = Object.fromEntries(events.filter((event) => event.elapsed_ms !== null).map((event) => [event.stage, event.elapsed_ms]));
