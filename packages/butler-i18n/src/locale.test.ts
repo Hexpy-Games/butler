@@ -122,9 +122,9 @@ function strings(value: unknown, into: string[] = []): string[] {
   return into;
 }
 
-test("Korean glossary: 시간대 not 타임존, 아카이브 not 보관함, 버틀러 not Butler App", () => {
+test("Korean glossary: Butler uses Latin spelling, 시간대 not 타임존, 아카이브 not 보관함", () => {
   const ko = strings(getAppCopy("ko-KR"));
-  expect(ko.filter((text) => /타임존|보관함|Butler App/u.test(text))).toEqual([]);
+  expect(ko.filter((text) => /타임존|보관함|버틀러|Butler App/u.test(text))).toEqual([]);
   expect(getAppCopy("ko-KR").settings.fields.timezone).toBe("시간대");
   expect(getAppCopy("ko-KR").space.archives).toBe("아카이브");
   expect(getAppCopy("ko-KR").settings.sections.appearance).toBe("모양");
