@@ -5,6 +5,7 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod hooks;
 mod latency_trace;
 mod listeners;
 mod mcp_servers;
@@ -204,6 +205,9 @@ async fn route_for_client(
     }
     if uri.path() == "/security" || uri.path().starts_with("/security/") {
         return security_settings::route(state, request).await;
+    }
+    if uri.path() == "/hooks" || uri.path().starts_with("/hooks/") {
+        return hooks::route(state, request).await;
     }
     match (request.method(), uri.path()) {
         (&Method::GET, "/settings") => settings::get(state, Some(client)).await,

@@ -62,6 +62,25 @@ impl AppApplication {
             .await
     }
 
+    async fn queue_project_sources(
+        &self,
+        request: &MessageSendRequest,
+        chat: &super::AppChatSnapshot,
+    ) -> Result<Value, GatewayApplicationError> {
+        let has_project_refs = has_project_sources(request.content_parts.as_ref());
+        let sources = self
+            .resolve_project_sources(chat, request.content_parts.as_ref())
+            .await?;
+        if has_project_refs && sources.as_array().is_none_or(Vec::is_empty) {
+            return Err(public_error(
+                503,
+                "project_sources_unavailable",
+                "Project sources are unavailable.",
+            ));
+        }
+        Ok(sources)
+    }
+
     async fn create_session_queue_inner(
         &self,
         request: MessageSendRequest,
@@ -90,23 +109,12 @@ impl AppApplication {
             return self.queue_page(chat_id).await;
         }
 
-        let mut prepared = inspected.prepared;
-        let has_project_refs = has_project_sources(request.content_parts.as_ref());
-        prepared.project_sources = self
-            .resolve_project_sources(&inspected.chat, request.content_parts.as_ref())
+        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
-        if has_project_refs
-            && prepared
-                .project_sources
-                .as_array()
-                .is_none_or(Vec::is_empty)
-        {
-            return Err(public_error(
-                503,
-                "project_sources_unavailable",
-                "Project sources are unavailable.",
-            ));
-        }
+        let mut prepared = inspected.prepared;
+        prepared.project_sources = self
+            .queue_project_sources(&request, &inspected.chat)
+            .await?;
         let digest = admission_identity::input_digest(&request, &prepared)?;
         let queued_id = format!("queued-{}", self.dependencies.identity_clock.new_uuid());
         let created_at = self.dependencies.identity_clock.now_iso();

@@ -256,7 +256,15 @@ pub(super) async fn record_unexecuted(
         .journal
         .finish(ToolJournalFinish {
             call_id,
-            status: ToolJournalFinishStatus::Cancelled,
+            status: if result
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == "hook_denied")
+            {
+                ToolJournalFinishStatus::Completed
+            } else {
+                ToolJournalFinishStatus::Cancelled
+            },
             result: Some(JsonDocument::from_encoded(body).map_err(|error| {
                 BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error)
             })?),
