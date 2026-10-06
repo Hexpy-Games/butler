@@ -4,6 +4,7 @@ import { resolve, relative, join } from "node:path";
 import subsetFont from "subset-font";
 import { lifecycleBrowser, uiRoot } from "./lifecycle-browser";
 import { captureLifecycleCss } from "./lifecycle-css";
+import { checkLifecycleStills } from "./generate-lifecycle-stills";
 import { lifecycleCopy } from "../../../../butler-i18n/src/lifecycle";
 
 export const lifecycleOutput = resolve(uiRoot, "lifecycle-assets");
@@ -25,14 +26,14 @@ async function subsetLifecycleFont() {
   const options = { targetFormat: "woff2" as const, noHinting: true };
   return await subsetFont(readFileSync(font), glyphs, options);
 }
-async function capture() {
+async function capture(checkStills: boolean) {
   const host = await lifecycleBrowser();
   try {
     const page = await host.browser.newPage({ viewport: { width: 1280, height: 800 } });
     await page.goto(host.url);
     await page.locator("[data-slot=primary]").waitFor();
     const css = await page.evaluate(captureLifecycleCss, (await page.locator("#root > *").elementHandle())!);
-    return await page.evaluate((css) => {
+    const view = await page.evaluate((css) => {
       const root = document.querySelector("#root > *")!.cloneNode(true) as Element;
       const primary = root.querySelector("[data-slot=primary]")!;
       const destructive = root.querySelector("[data-slot=destructive]")!;
@@ -51,6 +52,8 @@ async function capture() {
       return { html: root.outerHTML, css, classes,
         surfaceBase: { light: getComputedStyle(base).getPropertyValue("--color-surface-base").trim(), dark: "" } };
     }, css);
+    if (checkStills) await checkLifecycleStills(true, page);
+    return view;
   } finally { await host.close(); }
 }
 async function bundled(entry: string) {
@@ -58,8 +61,8 @@ async function bundled(entry: string) {
   if (!build.success) throw new Error(build.logs.join("\n"));
   return await build.outputs[0]!.text();
 }
-export async function buildLifecycleAssets(check = false) {
-  const [view, fontBytes, mark, state] = await Promise.all([capture(), subsetLifecycleFont(),
+export async function buildLifecycleAssets(check = false, checkStills = false) {
+  const [view, fontBytes, mark, state] = await Promise.all([capture(checkStills), subsetLifecycleFont(),
     bundled("src/components/lifecycle/mark-entry.ts"), bundled("src/components/lifecycle/state.ts")]);
   const tokens = readFileSync(resolve(uiRoot, "src/libs/design-system/tokens.css"), "utf8");
   const colors = Object.fromEntries([...tokens.matchAll(/(--grayscale-\d+):\s*(#[\da-f]+);/g)].map((match) => [match[1]!, match[2]!]));

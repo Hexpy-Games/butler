@@ -4,11 +4,15 @@
 import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { Database } from "bun:sqlite";
+import { DatabaseSync as Database } from "node:sqlite";
 import { _electron, type ElectronApplication } from "playwright";
 import { quitFixture } from "./app-quit-fixture.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser-args.ts";
 import { quitPhaseReport } from "./quit-phase-report.ts";
+
+import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
+const nativeExitCode = await nativeSmokeRuntime(import.meta.url);
+if (nativeExitCode !== null) process.exit(nativeExitCode);
 
 const baseline = process.argv.includes("--baseline");
 const blocked = process.argv.includes("--blocked");

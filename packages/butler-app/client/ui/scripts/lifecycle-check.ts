@@ -1,5 +1,4 @@
 import { buildLifecycleAssets } from "./lifecycle-window-build";
-import { checkLifecycleStills } from "./generate-lifecycle-stills";
-await buildLifecycleAssets(true);
-checkLifecycleStills();
+// Reuse the captured renderer; each asset is decoded once, without image warm-up.
+await buildLifecycleAssets(true, true);
 console.log("Lifecycle window and still inputs are current.");

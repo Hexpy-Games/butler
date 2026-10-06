@@ -1,11 +1,11 @@
 // Report measured intervals against current source locations, never estimate I/O.
-import { readFileSync } from "node:fs";
+import { readFileSync, globSync } from "node:fs";
 import { resolve } from "node:path";
 
 function phaseSources() {
   const sources = new Map<string, string[]>();
   const root = resolve("packages/butler-agent/rust");
-  for (const file of new Bun.Glob("crates/{butler-agent,butler-gateway}/src/**/*.rs").scanSync({ cwd: root })) {
+  for (const file of globSync("crates/{butler-agent,butler-gateway}/src/**/*.rs", { cwd: root })) {
     const content = readFileSync(resolve(root, file), "utf8");
     for (const match of content.matchAll(/(?:measure|measure_sync|measure_shutdown|event)\s*\(\s*"([a-z_]+)(?::(?:begin|end))?"/gu)) {
       const line = content.slice(0, match.index).split("\n").length;

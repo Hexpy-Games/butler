@@ -1,5 +1,7 @@
 // Real App-owned Agent and deterministic local model; no provider credentials.
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { freePort, nativeAgentExecutable, readLocalAuthToken, writeOnboardingComplete } from "../support/native-app-server.ts";
@@ -20,30 +22,32 @@ export async function quitFixture() {
   cpSync(resolve("packages/butler-app/client/ui/dist"), join(install, "resources/app-client/dist"), { recursive: true });
   writeOnboardingComplete(data);
   let calls = 0;
-  const model = Bun.serve({
-    hostname: "127.0.0.1", port: 0, idleTimeout: 0,
-    async fetch(request) {
-      if (request.method === "GET") return Response.json({ object: "list", data: [{ id: "stub", object: "model" }] });
-      const body = await request.json() as { stream?: boolean };
-      const first = ++calls === 1;
-      const base = { id: `quit-${calls}`, object: "chat.completion.chunk", model: "stub" };
-      const delta = (text: string) => `data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { content: text } }] })}\n\n`;
-      if (!body.stream) return Response.json({ choices: [{ message: { role: "assistant", content: "waiting" }, finish_reason: "stop" }] });
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(delta(first ? "one" : "waiting")));
-          if (!first) {
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`));
-            controller.close();
-          }
-        },
-      });
-      return new Response(stream, { headers: { "content-type": "text/event-stream" } });
-    },
+  const model = createServer(async (request, response) => {
+    if (request.method === "GET") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ object: "list", data: [{ id: "stub", object: "model" }] }));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean };
+    const first = ++calls === 1;
+    const base = { id: `quit-${calls}`, object: "chat.completion.chunk", model: "stub" };
+    const delta = (text: string) => `data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { content: text } }] })}\n\n`;
+    if (!body.stream) {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "waiting" }, finish_reason: "stop" }] }));
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.write(delta(first ? "one" : "waiting"));
+    if (!first) response.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
   });
+  model.listen(0, "127.0.0.1"); await once(model, "listening");
+  const modelPort = (model.address() as { port: number }).port;
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({
     user: { name: "Smoke", language: "ko" }, system: { defaultModel: "local/stub" },
-    models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${model.port}`, context_window_tokens: 128000 }] },
+    models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${modelPort}`, context_window_tokens: 128000 }] },
     metrics: { enabled: false },
   }));
   const port = await freePort();
@@ -72,6 +76,6 @@ export async function quitFixture() {
   return {
     root, data, env, api, calls: () => calls,
     lastExit: () => JSON.parse(readFileSync(join(data, "app/runtime/foreground/last-exit.json"), "utf8")),
-    cleanup() { model.stop(true); rmSync(root, { recursive: true, force: true }); },
+    cleanup() { model.closeAllConnections(); model.close(); rmSync(root, { recursive: true, force: true }); },
   };
 }

@@ -15,11 +15,11 @@ with zero busy timeout. Matching user stills take precedence over bundled
 change-driven and keyed by source, tone and, where relevant, day phase.
 
 Build inputs are checked by `lifecycle-window-build.ts --check` and
-`generate-lifecycle-stills.ts --check`. Both window and still size budgets
-remain enforced. The bundled still generator currently rejects Dusk light
-(108,594 bytes), Stipple light (283,144) and Stipple dark (175,360), exceeding
-80 KiB at the required size and quality. Full app builds and native timing
-acceptance are therefore blocked until this design constraint is resolved.
+`generate-lifecycle-stills.ts --check`. Both window and still budgets remain enforced. Each 720×528 WebP is at most
+320 KiB and must decode through renderer `createImageBitmap` in at most 15 ms,
+with dimensions and file integrity checked. The generator uses quality 0.8
+for Stipple and 0.9 for the other modules. The byte cap replaces the former
+80 KiB cap; the splash paint budget remains 300 ms.
 
 `measure-startup.mjs --runs 5 --json <file> <executable>` measures five cold
 and five warm profiles. It reports median/p95, including painted minus ready.
