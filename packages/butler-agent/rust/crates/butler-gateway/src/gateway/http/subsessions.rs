@@ -18,6 +18,13 @@ use crate::gateway::{
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
+pub(super) fn matches(uri: &Uri) -> bool {
+    matches!(
+        uri.path(),
+        "/session-view" | "/session-summary" | "/context-details"
+    ) || uri.path().starts_with("/steward-relations/")
+}
+
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,

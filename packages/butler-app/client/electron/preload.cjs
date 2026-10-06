@@ -1199,6 +1199,9 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getSessionTaskGraphs: (input) => requestTaskGraph("sessions", "task-graphs", input),
+  getPlanTaskGraph: (input) => requestTaskGraph("plans", "task-graph", input),
+  getTaskDocument: (input) => requestTaskGraph("tasks", "document", input),
   getSessionSummary: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-summary?${params.toString()}`);
@@ -1329,3 +1332,13 @@ const butlerApp = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
+
+// Keep the sandboxed preload self-contained, on its existing authenticated channel.
+function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
+  const query = new URLSearchParams();
+  if (revision) query.set("revision", revision);
+  if (cursor) query.set("cursor", cursor);
+  if (limit !== undefined) query.set("limit", String(limit));
+  const suffix = query.size ? `?${query}` : "";
+  return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
+}

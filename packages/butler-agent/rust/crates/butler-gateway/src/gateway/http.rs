@@ -33,6 +33,7 @@ mod space_mutations;
 mod static_ui;
 mod subsession_result;
 mod subsessions;
+mod task_graphs;
 mod transcript_export;
 mod updates;
 mod wallpaper_modules;
@@ -213,11 +214,10 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
-    if matches!(
-        uri.path(),
-        "/session-view" | "/session-summary" | "/context-details"
-    ) || uri.path().starts_with("/steward-relations/")
-    {
+    if task_graphs::matches(&uri) {
+        return task_graphs::route(state, request, &uri).await;
+    }
+    if subsessions::matches(&uri) {
         if let Some(response) = subsessions::route(state, request, &uri).await? {
             return Ok(response);
         }

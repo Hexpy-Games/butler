@@ -144,3 +144,5 @@ mod memory_reset_support;
 
 mod skills_cleanup;
 mod storage_concurrency_support;
+
+mod task_graphs;

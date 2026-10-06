@@ -346,7 +346,9 @@ pub trait AppContextReadPort: Send + Sync {
 }
 
 mod subsessions;
-pub use subsessions::{AppSessionViewPage, AppSubsessionPort, AppWorkerActivitySourcePage};
+pub use subsessions::{
+    AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,
+};
 
 #[derive(Clone, Debug)]
 pub struct AppSettingsFacts {

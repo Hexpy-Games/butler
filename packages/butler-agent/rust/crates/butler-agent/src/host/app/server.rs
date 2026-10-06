@@ -1,4 +1,5 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
+use crate::host::AppSubsessions;
 
 mod security_store;
 mod startup;
@@ -159,7 +160,7 @@ impl AppServer {
             runtime_info: Arc::new(AppRuntimeInfo::open(installation)),
             model_catalog: Arc::new(AppModelCatalog::new(
                 runtime.models.configuration.clone(),
-                settings,
+                settings.clone(),
                 installation.clone(),
                 data_root.to_path_buf(),
             )),
@@ -203,7 +204,7 @@ impl AppServer {
                 runtime.project_ledger.clone(),
             )),
             work_streams: runtime.work_streams.clone(),
-            subsessions: Arc::new(crate::host::AppSubsessions::for_runtime(runtime)),
+            subsessions: Arc::new(AppSubsessions::new(runtime, settings.clone())),
             branch_conversations: Arc::new(AppBranchConversations::new(
                 runtime.conversations.clone(),
             )),

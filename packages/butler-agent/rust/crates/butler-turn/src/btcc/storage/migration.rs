@@ -66,6 +66,7 @@ fn apply_transaction(connection: &mut Connection) -> rusqlite::Result<()> {
          WHERE canonical_assistant_message_id IS NOT NULL;",
     )?;
     startup_indexes::cutover(&transaction)?;
+    transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
     transaction.commit()
 }
 

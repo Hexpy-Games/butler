@@ -1,3 +1,4 @@
+import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
 import type {
   AppInfoView,
@@ -268,6 +269,8 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
 async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: ApiOptions = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
+  const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
+  if (graph) return await callBridge<T>(bridge, graph.method, graph.input);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
   if (method === "GET" && url.pathname === "/setup/status") return await callBridge<T>(bridge, "getSetupStatus");
   if (method === "POST" && url.pathname === "/setup/start") return await callBridge<T>(bridge, "startSetup", parseBody(options.body));

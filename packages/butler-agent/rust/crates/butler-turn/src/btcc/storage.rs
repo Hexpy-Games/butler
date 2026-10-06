@@ -31,6 +31,11 @@ mod stop;
 mod subsession_result;
 mod subsessions;
 pub(crate) use subsessions::ChildCompletion;
+mod task_graphs;
+pub use task_graphs::{
+    ChildRecord as TaskGraphChildRecord, GraphRecords as TaskGraphRecords,
+    GraphScope as TaskGraphScope, PlanRecord as TaskGraphPlanRecord,
+};
 mod tool_journal;
 mod transitions;
 mod wake;
