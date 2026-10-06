@@ -375,7 +375,7 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
     done("LIVE-09")
 }
 
-/// LIVE-10 — Subscription token refresh (Butler OAuth profile only).
+/// LIVE-10 — Subscription token refresh (dedicated Butler or Codex profile).
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
@@ -384,10 +384,7 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
         return Ok(());
     };
     let Some(Credential::CodexProfile(path)) = provider.credential.clone() else {
-        live::report(
-            "LIVE-10",
-            "SKIPPED (needs a Butler OAuth test profile: butler auth login --data ~/.butler-e2e-auth)",
-        );
+        live::report("LIVE-10", "SKIPPED (needs a dedicated OAuth test profile)");
         return Ok(());
     };
     // The profile is the owner's test-only login; only `expiresAt` is touched

@@ -187,6 +187,18 @@ The app release gate fails when the bundled agent version changes and the app ve
 
 Windows preview releases include the unsigned Agent and Squirrel App installer.
 
+### Live E2E OAuth setup (Windows owner runner)
+
+On the owner's `butler-win` runner, sign in once in PowerShell:
+
+```powershell
+$env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login
+```
+
+Integration live E2E uses this dedicated profile's `auth.json` in place and
+atomically saves rotated tokens there. Live jobs share one concurrency group.
+Repeat the login only if it is revoked. The profile is never uploaded as an artifact.
+
 ### Recovering a failed release
 
 Run `gh workflow run release.yml --ref release/<v> -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
