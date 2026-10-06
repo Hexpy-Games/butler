@@ -27,19 +27,61 @@ async function nativeCalls(page: Page): Promise<Array<number | string | null>> {
   return JSON.parse((await button.textContent())!);
 }
 
-async function geometry(page: Page, width: number, settings: string) {
+async function geometry(page: Page, width: number, settingsName: string, stage: string, restartLabel: string) {
   const row = page.locator('[data-test-class="sidebar-update-row"]');
   const box = await row.boundingBox();
-  const setting = await page.locator('[data-test-class="app-sidebar"]').getByRole("button", { name: settings, exact: true }).boundingBox();
+  const settings = page.locator('[data-test-class="app-sidebar"]').getByRole("button", { name: settingsName, exact: true });
+  const setting = await settings.boundingBox();
   assert(box && setting);
-  assert.equal(box.height, width === 375 ? 44 : 30);
+  const touch = width === 375;
+  const rowSize = touch ? 44 : 30;
+  const iconSize = touch ? 20 : 16;
+  assert.equal(box.height, rowSize);
   assert.equal(setting.height, box.height);
-  assert.equal(setting.y - box.y - box.height, width === 375 ? 8 : 4);
+  assert.equal(setting.y - box.y - box.height, touch ? 8 : 4);
   assert.equal(setting.x, box.x);
   assert.equal(setting.width, box.width);
   assert(box.y >= 0 && setting.y + setting.height <= page.viewportSize()!.height, "footer stays in viewport");
   assert.equal(await row.evaluate((element) => element.scrollWidth > element.clientWidth), false);
-  return setting;
+  const gear = await settings.locator('[data-slot="nav-row-icon"] svg').boundingBox();
+  assert(gear);
+  assert.equal(gear.width, iconSize);
+  assert.equal(gear.height, iconSize);
+  assert.equal(gear.x - setting.x, 8);
+  if (stage === "failed") {
+    const alert = await row.locator('[data-slot="nav-row-icon"] svg').boundingBox();
+    assert(alert);
+    assert.equal(alert.width, iconSize);
+    assert.equal(alert.height, iconSize);
+    assert.equal(alert.x - box.x, 8);
+  } else {
+    const ring = row.locator('[data-slot="progress-ring"]');
+    const ringBox = await ring.boundingBox();
+    assert(ringBox);
+    assert.equal(await ring.getAttribute("data-size"), "sidebar");
+    assert.equal(ringBox.width, iconSize);
+    assert.equal(ringBox.height, iconSize);
+    assert.equal(ringBox.x - box.x, 8);
+    assert.equal(ringBox.x, gear.x);
+    if (stage === "ready") {
+      const button = row.getByRole("button", { name: restartLabel, exact: true });
+      const buttonBox = await button.boundingBox();
+      const buttonIcon = await button.locator("svg").boundingBox();
+      assert(buttonBox && buttonIcon);
+      assert.equal(buttonBox.width, rowSize);
+      assert.equal(buttonBox.height, rowSize);
+      assert.equal(buttonBox.x + buttonBox.width, box.x + box.width);
+      assert.equal(buttonIcon.width, iconSize);
+      assert.equal(buttonIcon.height, iconSize);
+      assert.equal(box.x + box.width - buttonIcon.x - buttonIcon.width, touch ? 12 : 7);
+      assert.equal(await button.getAttribute("aria-label"), restartLabel);
+      assert.equal(await button.getAttribute("data-variant"), "ghost");
+      assert.equal(await button.getAttribute("data-size"), "icon-sm");
+      const container = button.locator("xpath=..");
+      assert.equal(await container.getAttribute("data-slot"), "button-container");
+      assert.equal(await container.getAttribute("data-button-size"), "icon-sm");
+    }
+  }
 }
 
 try {
@@ -83,17 +125,29 @@ try {
         const label = stage === "downloading" ? copy.shell.update.downloading : stage === "ready" ? copy.shell.update.ready
           : stage === "failed" ? copy.shell.update.failed : copy.shell.update.working;
         assert.equal(await row.getAttribute("aria-label"), stage === "downloading" ? `${label} 42%` : label);
-        await geometry(page, width, copy.sidebar.settings);
+        await geometry(page, width, copy.sidebar.settings, stage, copy.shell.update.restart);
         const ring = row.locator('[data-slot="progress-ring"]');
         assert.equal(await ring.count(), stage === "failed" ? 0 : 1);
         if (stage !== "failed") {
           assert.equal(await ring.getAttribute("data-state"), stage === "ready" ? "complete" : stage === "downloading" ? "determinate" : "indeterminate");
+          assert.equal(await ring.getAttribute("data-tone"), stage === "ready" ? "success" : "default");
           assert.equal(await ring.getAttribute("aria-hidden"), "true");
+          assert.equal(await ring.locator('[data-slot="spinner"]').count(), stage === "ready" || stage === "downloading" ? 0 : 1);
           if (stage === "downloading") assert(Math.abs(await ring.evaluate((element) => Number.parseFloat(getComputedStyle(element).getPropertyValue("--progress-ring-offset"))) - 2 * Math.PI * 8 * .58) < .001);
         }
         assert.equal((await nativeCalls(page)).at(-1), stage === "failed" ? null : stage === "ready" ? 1 : stage === "downloading" ? .42 : "indeterminate");
         await row.screenshot({ path: join(output, `${stage}-row-${name}.png`) });
         await page.locator('[data-test-class="app-sidebar"]').screenshot({ path: join(output, `${stage}-${name}.png`) });
+        if (stage === "ready") {
+          const restart = row.getByRole("button", { name: copy.shell.update.restart, exact: true });
+          await restart.hover();
+          const tooltip = page.getByRole("tooltip");
+          await tooltip.waitFor();
+          assert.equal((await tooltip.textContent())?.trim(), copy.shell.update.restart);
+          assert(await restart.getAttribute("aria-describedby"));
+          await page.mouse.move(0, 0);
+          await tooltip.waitFor({ state: "hidden" });
+        }
       }
       cells++;
     }
@@ -109,6 +163,8 @@ try {
     await page.locator('[data-test-id="harness-bytes"]').evaluate((element) => (element as HTMLButtonElement).click());
     await row.locator('[data-state="indeterminate"]').waitFor();
     assert.equal(await row.getAttribute("aria-label"), copy.shell.update.downloading);
+    assert.equal(await row.locator('[data-slot="progress-ring"]').getAttribute("data-size"), "sidebar");
+    assert.equal(await row.locator('[data-slot="progress-ring"] [data-slot="spinner"]').count(), 1);
     assert.equal((await nativeCalls(page)).at(-1), "indeterminate");
     await page.locator('[data-test-id="stage-ready"]').evaluate((element) => (element as HTMLButtonElement).click());
     await page.locator('[data-test-id="harness-deferred"]').evaluate((element) => (element as HTMLButtonElement).click());
@@ -135,7 +191,7 @@ try {
     await page.locator('[data-test-id="harness-view"]').filter({ hasText: "settings:updates" }).waitFor({ state: "attached" });
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, chats: 600, heights: [44, 30], gaps: [8, 4], idleFrames: 0, idleStorageWrites: 0, idleNativeCalls: 0, maxDownloadTaskMs: maxDownloadTask, screenshots: output }));
+  console.log(JSON.stringify({ ok: true, cells, chats: 600, rowHeights: [30, 44], actionSizes: [30, 44], restartIconSizes: [16, 20], restartIconRightInsets: [7, 12], ringSizes: [16, 20], ringLeftInset: 8, rowGaps: [4, 8], idleFrames: 0, idleStorageWrites: 0, idleNativeCalls: 0, maxDownloadTaskMs: maxDownloadTask, screenshots: output }));
 } catch (error) { testError = error; throw error; }
 finally {
   try { await browser.close(); } catch (error) { cleanupFailure = { error }; if (testError) console.error("Browser cleanup:", error); }

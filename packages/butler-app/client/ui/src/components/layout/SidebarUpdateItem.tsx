@@ -3,7 +3,14 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { applyComponentUpdate } from "@/app/updateCommands";
 import { notifyStatus } from "@/app/notifications";
 import { useButlerStore } from "@/app/store";
-import { Button, CircleAlert, NavRow, ProgressRing } from "@/butler-ds";
+import {
+  ButtonContainer,
+  CircleAlert,
+  IconButton,
+  NavRow,
+  ProgressRing,
+  RotateCcw,
+} from "@/butler-ds";
 import { useAppUpdateState } from "@/hooks/useAppUpdateState";
 import { updatePercent, useUpdateProgressStore } from "@/stores/updateProgressStore";
 
@@ -19,18 +26,22 @@ export function SidebarUpdateItem() {
   const copy = appCopy.shell.update;
   const label = stage === "downloading" ? copy.downloading : stage === "ready" ? copy.ready
     : stage === "failed" ? copy.failed : copy.working;
-  const icon = stage === "failed" ? <CircleAlert /> : <ProgressRing size="sidebar" aria-hidden
-    value={stage === "ready" ? 1 : (percent ?? 0) / 100}
-    indeterminate={stage !== "ready" && percent === null} />;
+  const icon = stage === "failed" ? <CircleAlert /> : stage === "ready"
+    ? <ProgressRing size="sidebar" value={1} tone="success" aria-hidden />
+    : <ProgressRing size="sidebar" aria-hidden value={(percent ?? 0) / 100} indeterminate={percent === null} />;
   return <NavRow dataTestClass="sidebar-update-row" icon={icon} label={label}
     ariaLabel={percent === null ? label : `${label} ${percent}%`}
     badge={percent === null ? undefined : `${percent}%`}
-    actions={stage === "ready" ? <Button size="xs" variant="outline"
-      disabled={["deferred", "preparing", "restarting", "choice_required"].includes(restart.status)}
-      onClick={(event) => {
-        event.stopPropagation();
-        void applyComponentUpdate(component)
-          .catch(() => notifyStatus(appCopy.settings.updateErrors.generic, { tone: "error", id: "app-update" }));
-      }}>{copy.restart}</Button> : undefined}
+    actions={stage === "ready" ? <ButtonContainer size="icon-sm" wrap={false}
+      onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+      <IconButton data-test-class="sidebar-update-restart" label={copy.restart}
+        disabled={["deferred", "preparing", "restarting", "choice_required"].includes(restart.status)}
+        onClick={() => {
+          void applyComponentUpdate(component)
+            .catch(() => notifyStatus(appCopy.settings.updateErrors.generic, { tone: "error", id: "app-update" }));
+        }}>
+        <RotateCcw />
+      </IconButton>
+    </ButtonContainer> : undefined}
     onClick={() => openSettings("updates")} />;
 }
