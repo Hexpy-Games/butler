@@ -90,6 +90,7 @@ runs:
       run: |
         set -euo pipefail
         export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+        if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
         case "$ORT_MODE" in
           static-ort)
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
@@ -126,6 +127,7 @@ runs:
       run: |
         set -euo pipefail
         export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+        if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
         platform="$(node -p 'process.platform + "-" + process.arch')"
         payload="$RUNNER_TEMP/butler-native-agent-payload"
         scripts=packages/butler-agent/rust/scripts

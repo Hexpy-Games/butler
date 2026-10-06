@@ -58,6 +58,7 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
@@ -73,6 +74,7 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
           python3 "$isolate" cargo nextest list "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
@@ -87,6 +89,7 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
@@ -101,6 +104,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.1.0-preview.99' || github.ref_name }}
         run: |
           version="$RELEASE_VERSION"
+          if [[ "$version" == release/* ]]; then version="v${version#release/}"; fi
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
@@ -109,7 +113,7 @@ jobs:
           name: rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
       - name: Preserve successful Cargo outputs outside the shared cache quota
         id: cargo-cache

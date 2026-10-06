@@ -16,6 +16,7 @@ runs:
     - name: Record successful inputs
       shell: bash
       env:
+        GH_TOKEN: ${{ github.token }}
         RESULTS: ${{ inputs.results }}
         JOB_GROUPS: ${{ inputs.groups }}
         CI_PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}

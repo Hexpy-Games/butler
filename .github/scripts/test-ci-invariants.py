@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -100,20 +101,45 @@ class Gate(unittest.TestCase):
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
         results = {job: {'result': 'success'} for job in jobs}
-        results['linux-arm64-tests']['result'] = 'skipped'  # Existing non-PR arm64 restriction.
-        results['linux-arm64-perf']['result'] = 'skipped'
-        results['linux-arm64-perf-archive']['result'] = 'skipped'
+        outputs['tier'] = 'smoke'
+        integration_only = ['linux-perf-archive', 'linux-perf', 'macos-native', 'macos-perf-archive', 'macos-perf', 'macos-package', 'macos-updates', 'install-macos', 'install-merge', 'linux-arm64-tests', 'linux-arm64-perf', 'linux-arm64-perf-archive']
+        for name in integration_only:
+            results[name]['result'] = 'skipped'
         results['changes'] = dict(result='success', outputs=outputs)
         env = dict(os.environ, EVENT='pull_request', RESULTS=json.dumps(results))
         self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
         for job in jobs:
-            if job in ['linux-arm64-tests', 'linux-arm64-perf-archive', 'linux-arm64-perf']:
+            if job in integration_only:
                 continue
             for outcome in ['failure', 'cancelled', 'skipped']:
                 changed = json.loads(json.dumps(results))
                 changed[job]['result'] = outcome
                 env['RESULTS'] = json.dumps(changed)
                 self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (job, outcome))
+
+    # test-category: pure-logic
+    def test_smoke_cannot_reach_e2e_or_perf_on_pr_or_main(self):
+        source = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        blocks = {block.split(':', 1)[0].strip(): block
+                  for block in re.split(r'(?=^  [a-z][a-z0-9-]*:\n)', source, flags=re.M)}
+        forbidden = ['linux-perf', 'linux-perf-archive', 'macos-perf', 'macos-perf-archive',
+                     'linux-arm64-perf', 'linux-arm64-perf-archive', 'linux-arm64-tests',
+                     'macos-native', 'macos-package', 'macos-updates', 'install-macos']
+        for event in ['pull_request', 'push']:
+            for name in forbidden:
+                condition = re.search(r'^    if: (.*)$', blocks[name], re.M)[1]
+                condition = re.sub(r"fromJSON\(needs.changes.outputs.jobs\)\['[^']+'\]", 'True', condition)
+                condition = condition.replace("needs.changes.outputs.tier", "'smoke'")
+                condition = re.sub(r'needs.changes.outputs.[a-z-]+', "'true'", condition)
+                condition = condition.replace('needs.changes.result', "'success'")
+                condition = condition.replace('github.event_name', repr(event))
+                condition = condition.replace('always()', 'True').replace('!cancelled()', 'True')
+                condition = condition.replace('&&', 'and').replace('||', 'or')
+                self.assertFalse(eval(condition), (event, name, condition))
+        for name in ['linux-tests', 'macos-tests']:
+            self.assertIn("e2e: ${{ needs.changes.outputs.tier == 'integration' }}", blocks[name])
+        tests = (ROOT.parent / 'workflows/rust-tests.yml').read_text()
+        self.assertIn('!inputs.performance-only && inputs.e2e', tests)
 
 
 class CargoCache(unittest.TestCase):

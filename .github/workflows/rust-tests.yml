@@ -2,6 +2,18 @@ name: Archived Rust tests
 on:
   workflow_call:
     inputs:
+      workspace:
+        type: boolean
+        default: true
+      e2e-shards:
+        type: string
+        default: '[1,2,3,4,5,6,"ins-02","ins-14","install"]'
+      perf-shards:
+        type: string
+        default: '[1,2,3,"idle"]'
+      e2e:
+        type: boolean
+        default: true
       performance-only:
         type: boolean
         default: false
@@ -15,7 +27,7 @@ permissions:
   contents: read
 jobs:
   workspace:
-    if: ${{ !inputs.performance-only }}
+    if: ${{ !inputs.performance-only && inputs.workspace }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     steps:
@@ -35,14 +47,14 @@ jobs:
           python3 "$isolate" cargo-nextest nextest list "${args[@]}"
           python3 "$isolate" cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run "${args[@]}" --no-fail-fast --retries 0
   e2e:
-    if: ${{ !inputs.performance-only }}
+    if: ${{ !inputs.performance-only && inputs.e2e && inputs.e2e-shards != '[]' }}
     name: E2E (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, ins-02, ins-14, install]
+        shard: ${{ fromJSON(inputs.e2e-shards) }}
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
@@ -79,19 +91,14 @@ jobs:
       - if: always()
         uses: ./.github/actions/assert-home-untouched
   perf:
-    if: inputs.performance-only
+    if: inputs.performance-only && inputs.perf-shards != '[]'
     name: Performance (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
-    env:
-      # Owner-approved release exception: only the identified startup deadline
-      # is advisory. Every test still runs with its original assertions/budgets.
-      BUTLER_PREVIEW10_STARTUP_WARNING: ${{ inputs.platform == 'darwin-arm64' && contains(fromJSON('["batch/preview-10", "codex/captain-p10", "v0.1.0-preview.10"]'), github.head_ref || github.ref_name) && '1' || '0' }}
-      BUTLER_PREVIEW10_STORAGE_VIEW_WARNING: ${{ inputs.platform == 'darwin-arm64' && contains(fromJSON('["batch/preview-10", "codex/captain-p10", "v0.1.0-preview.10"]'), github.head_ref || github.ref_name) && '1' || '0' }}
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, idle]
+        shard: ${{ fromJSON(inputs.perf-shards) }}
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
