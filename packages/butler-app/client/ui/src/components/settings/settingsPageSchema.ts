@@ -29,7 +29,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
-    { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send"] },
+    { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send", "plan-mode-default"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
@@ -52,9 +52,6 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
-    // Hidden only for an agent without the #217 key routes.
-    { id: "saved-keys", kind: "list", fields: [] },
-    { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
@@ -78,13 +75,15 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "usage-tools", kind: "list", fields: [] },
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
-  privacy: [{ id: "diagnostics", kind: "form", fields: ["diagnostics"] }],
-  // Only the remote-access line shows for other computers (403
-  // `loopback_required`). Allowed hosts show when Advanced is open.
+  // Remote-only controls hide when refused. Authority, keys and diagnostics stay visible.
   security: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },
+    { id: "permissions", kind: "form", fields: ["access-mode"] },
+    { id: "grants", kind: "list", fields: [] },
+    { id: "saved-keys", kind: "list", fields: [] },
+    { id: "diagnostics", kind: "form", fields: ["diagnostics"] },
     { id: "security-advanced", kind: "form", fields: [], optional: true },
     { id: "allowed-hosts", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],

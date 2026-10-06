@@ -890,6 +890,10 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
+  getAuthorityPermissions: () => requestJson("/authority-permissions"),
+  revokeAuthorityPermissions: ({ grants } = {}) => requestJson("/authority-permissions/revoke", {
+    method: "POST", body: JSON.stringify({ grants }),
+  }),
   getAuthorityRequests: ({ sessionId } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-requests?${params.toString()}`);

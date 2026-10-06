@@ -2,7 +2,7 @@ use rusqlite::{Connection, OptionalExtension, Row, ToSql};
 
 use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityError, AuthorityRecord, AuthorityResult,
-    AuthorityResumeSource, ConversationPermission,
+    AuthorityResumeSource, ConversationPermission, PermissionSource,
 };
 use crate::btcc::authority::contracts::{RequestDecision, RequestOutcome};
 
@@ -133,20 +133,7 @@ pub(super) fn list_permissions(
     let mut statement = db.prepare("SELECT grant_ref, owner_session_id, workspace_path, scope_key, title, description, created_at \
         FROM btcc_conversation_permissions WHERE owner_session_id=?1 AND revoked_at IS NULL ORDER BY created_at").map_err(sql)?;
     statement
-        .query_map([owner], |row| {
-            Ok(ConversationPermission {
-                capability: String::new(),
-                target: String::new(),
-                cwd: None,
-                grant_ref: row.get(0)?,
-                owner_session_id: row.get(1)?,
-                workspace_path: row.get(2)?,
-                scope_key: row.get(3)?,
-                title: row.get(4)?,
-                description: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })
+        .query_map([owner], permission_row)
         .map_err(sql)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)
@@ -278,17 +265,33 @@ pub(super) fn question_history(
     Ok(records)
 }
 
+const PERMISSION_FILTER: &str = "WHERE owner_session_id=?1 AND decision='allowed' AND allow_scope='conversation' ORDER BY created_at";
+
+pub(super) fn permission_projection_records(
+    db: &Connection,
+    owner: &str,
+) -> AuthorityResult<Vec<PermissionSource>> {
+    let mut statement = db.prepare_cached(&format!("SELECT owner_session_id,workspace_path,capability,normalized_target,normalized_input_json FROM btcc_authority_requests {PERMISSION_FILTER}")).map_err(sql)?;
+    statement
+        .query_map([owner], |row| {
+            Ok(PermissionSource {
+                owner: row.get(0)?,
+                workspace: row.get(1)?,
+                capability: row.get(2)?,
+                target: row.get(3)?,
+                input_json: row.get(4)?,
+            })
+        })
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)
+}
+
 pub(super) fn permission_records(
     db: &Connection,
     owner: &str,
 ) -> AuthorityResult<Vec<AuthorityRecord>> {
-    many(
-        db,
-        &format!(
-            "{ROW} WHERE owner_session_id=?1 AND decision='allowed' AND allow_scope='conversation' ORDER BY created_at"
-        ),
-        &[&owner],
-    )
+    many(db, &format!("{ROW} {PERMISSION_FILTER}"), &[&owner])
 }
 
 pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
@@ -310,6 +313,45 @@ pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityR
         .map_err(sql)?;
     statement
         .query_map([owners], |row| row.get(0))
+        .map_err(sql)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql)
+}
+
+fn permission_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationPermission> {
+    Ok(ConversationPermission {
+        capability: String::new(),
+        target: String::new(),
+        cwd: None,
+        grant_ref: row.get(0)?,
+        owner_session_id: row.get(1)?,
+        workspace_path: row.get(2)?,
+        scope_key: row.get(3)?,
+        title: row.get(4)?,
+        description: row.get(5)?,
+        created_at: row.get(6)?,
+    })
+}
+
+pub(super) fn list_all_permissions(
+    db: &Connection,
+) -> AuthorityResult<Vec<ConversationPermission>> {
+    let mut statement = db.prepare_cached("SELECT grant_ref,owner_session_id,workspace_path,created_at FROM btcc_conversation_permissions WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref").map_err(sql)?;
+    statement
+        .query_map([], |row| {
+            Ok(ConversationPermission {
+                grant_ref: row.get(0)?,
+                owner_session_id: row.get(1)?,
+                workspace_path: row.get(2)?,
+                created_at: row.get(3)?,
+                capability: String::new(),
+                target: String::new(),
+                cwd: None,
+                scope_key: String::new(),
+                title: String::new(),
+                description: String::new(),
+            })
+        })
         .map_err(sql)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)

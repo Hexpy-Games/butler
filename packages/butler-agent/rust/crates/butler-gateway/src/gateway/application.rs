@@ -2,6 +2,7 @@
 
 mod admission;
 mod admission_identity;
+mod authority_permissions;
 mod automations;
 mod briefing_snapshot;
 mod context_details;

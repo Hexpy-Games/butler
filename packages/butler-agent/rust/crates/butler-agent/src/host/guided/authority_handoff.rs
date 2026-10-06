@@ -161,6 +161,49 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         })
     }
 
+    fn list_all_permissions(
+        &self,
+    ) -> ApplicationFuture<Vec<butler_gateway::gateway::AppGrantView>> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            Ok(authority
+                .list_all_permissions()
+                .await
+                .map_err(permission_error)?
+                .into_iter()
+                .map(|g| butler_gateway::gateway::AppGrantView {
+                    grant_ref: g.grant_ref,
+                    capability: g.capability,
+                    target: g.target,
+                    cwd: g.cwd,
+                    scope: "conversation",
+                    session_id: g.owner_session_id,
+                    workspace_path: g.workspace_path,
+                    created_at: g.created_at,
+                    session_title: None,
+                    project_id: None,
+                    project_name: None,
+                })
+                .collect())
+        })
+    }
+    fn revoke_permissions(
+        &self,
+        grants: Vec<butler_gateway::gateway::AppGrantRef>,
+    ) -> ApplicationFuture<()> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .revoke_permissions(
+                    grants
+                        .into_iter()
+                        .map(|g| (g.session_id, g.grant_ref))
+                        .collect(),
+                )
+                .await
+                .map_err(permission_error)
+        })
+    }
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()> {
         let owner = self.authority.clone();
         Box::pin(async move {
@@ -274,5 +317,19 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
         code: public_code.into(),
         message: message.into(),
         source: None,
+    }
+}
+
+fn permission_error(error: AuthorityError) -> GatewayApplicationError {
+    let (status, code, message) = if error.code() == "authority_permission_not_found" {
+        (404, "authority_permission_not_found", "Approval not found.")
+    } else {
+        (503, "authority_unavailable", "Approvals are unavailable.")
+    };
+    GatewayApplicationError::Public {
+        status,
+        code: code.into(),
+        message: message.into(),
+        source: Some(std::sync::Arc::new(error)),
     }
 }

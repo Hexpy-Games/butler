@@ -27,14 +27,15 @@ function parseSmokeArgs(name: string): string[] {
  */
 export async function launchSmokeBrowser(extraArgs: string[] = []): Promise<Browser> {
   const args = [...smokeBrowserArgs(), ...extraArgs];
-  const base = await chromium.launch({ headless: true, args });
+  const channel = process.env.BUTLER_SMOKE_BROWSER_CHANNEL === "chromium" ? "chromium" : undefined;
+  const base = await chromium.launch({ headless: true, args, channel });
   if (!args.includes("--single-process")) return base;
   await boundOwnedClose(base);
   const owned = new Set<Browser>();
   let unusedBase = true;
   let tracingBrowser: Browser | undefined;
   async function newContext(options?: BrowserContextOptions): Promise<BrowserContext> {
-    const browser = unusedBase ? base : await chromium.launch({ headless: true, args });
+    const browser = unusedBase ? base : await chromium.launch({ headless: true, args, channel });
     if (!unusedBase) await boundOwnedClose(browser);
     unusedBase = false;
     reportEventTracing(browser);
@@ -94,7 +95,8 @@ function reportEventTracing(browser: Browser): void {
 
 /** Some sandboxed single-process builds hang closing iframe/GPU documents.
  * All assertions have finished when close is called; reap only this browser's
- * exact PID if its graceful teardown stalls, then let Playwright observe exit.
+ * exact PID if its graceful teardown stalls. Verify exit within the same 10s
+ * deadline even if the protocol close acknowledgement remains unresolved.
  */
 async function boundOwnedClose(browser: Browser): Promise<void> {
   const session = await browser.newBrowserCDPSession();
@@ -105,22 +107,32 @@ async function boundOwnedClose(browser: Browser): Promise<void> {
   const close = browser.close.bind(browser);
   let closing: Promise<void> | undefined;
   browser.close = (options) => closing ??= (async () => {
+    if (!browser.isConnected()) return;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const stalled = new Promise<void>((done, reject) => {
+    const disconnected = new Promise<void>(resolve => browser.once("disconnected", () => resolve()));
+    const stalled = new Promise<void>((resolve, reject) => {
       deadline = setTimeout(() => {
         try { process.kill(owner.id, "SIGKILL"); }
         catch (error) {
-          // The owned process can exit before Playwright's close promise
-          // settles. ESRCH proves teardown, rather than an orphan to reap.
-          if ((error as NodeJS.ErrnoException).code === "ESRCH") { done(); return; }
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
           reject(error); return;
         }
-        // Restricted single-process Chromium can leave its protocol close
-        // pending after all checks. SIGKILL targets the captured owner only.
-        done();
-      }, 10_000);
+        const expires = performance.now() + 500;
+        const observe = () => {
+          try { process.kill(owner.id, 0); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
+            reject(error); return;
+          }
+          if (performance.now() >= expires) { reject(new Error(`Owned smoke browser ${owner.id} did not exit`)); return; }
+          setTimeout(observe, 10);
+        };
+        observe();
+      }, 9_500);
     });
-    try { await Promise.race([close(options), stalled]); }
+    try {
+      await Promise.race([close(options), disconnected, stalled]);
+    }
     finally { clearTimeout(deadline); }
   })();
 }

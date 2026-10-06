@@ -323,6 +323,13 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.send(command).await })
     }
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.all_authority_permissions().await })
+    }
+    fn authority_revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()> {
+        self.revoke_authority_permissions(grants)
+    }
     fn authority_list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage> {
         self.dependencies.authority_handoff.list(owner_session_id)
     }
@@ -472,17 +479,7 @@ impl GatewayApplication for AppApplication {
         event_type: &'static str,
         payload: serde_json::Map<String, Value>,
     ) -> ApplicationFuture<()> {
-        let storage = self.storage.clone();
-        let subscribers = self.subscribers.clone();
-        let now = self.dependencies.identity_clock.now_iso();
-        Box::pin(async move {
-            storage
-                .execute(move |db| {
-                    events::append(db, &subscribers, event_type, None, payload, &now).map(drop)
-                })
-                .await
-                .map_err(app_error)
-        })
+        self.publish_gateway_event_owned(event_type, payload)
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
         self.event_cursor_read()
