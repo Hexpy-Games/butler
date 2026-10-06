@@ -6,6 +6,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { Stack } from "../../components/Stack";
 import { MessageFooter } from "../MessageRow";
 import { MarkdownCodeFrame, MarkdownContent, MarkdownTable, useStreamingReveal } from "./index";
+import { MarkdownLinkSample } from "./MarkdownLinkSample";
 
 export const meta: ShowcaseMeta = {
   title: "MarkdownContent",
@@ -98,6 +99,7 @@ export const stories: ShowcaseStory[] = [
       );
     },
   },
+  { name: "Links in a reply", widths: ["375", "app"], render: (context) => <MarkdownLinkSample {...context} /> },
   { name: "Code frame with copy", render: (context) => <MarkdownContent><CodeSample context={context} /></MarkdownContent> },
   {
     name: "Table",
