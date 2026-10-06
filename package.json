@@ -18,7 +18,7 @@
     "lint:motion": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/motion-lint.ts",
     "lint:motion:baseline": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/motion-lint.ts --update-baseline --verbose",
     "lint:css": "${BUTLER_BUN:-bun} run --silent format:css:check && stylelint \"packages/butler-app/client/ui/src/**/*.css\"",
-    "lint:repo": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/tracked-symlink-lint.ts",
+    "lint:repo": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/tracked-symlink-lint.ts && ${BUTLER_PYTHON3:-python3} .github/scripts/work-docs-lint.py",
     "lint:fix": "eslint . --fix",
     "format": "${BUTLER_BUN:-bun} run lint:fix && ${BUTLER_BUN:-bun} run format:css",
     "format:css": "prettier --write \"packages/butler-app/client/ui/src/**/*.css\"",

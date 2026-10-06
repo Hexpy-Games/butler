@@ -36,15 +36,19 @@ class Paths(unittest.TestCase):
             'deploy/install.sh': {'package', 'install', 'linux-package'},
             'packages/butler-site/src/pages/index.astro': {'site'},
             'README.md': set(),
-            'packages/butler-agent/rust/docs/agent-context-audit.md': set(),
+            'packages/butler-agent/rust/docs/install-layout.md': set(),
             'packages/butler-agent/resources/skills/status/SKILL.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-agent/rust/crates/butler-e2e/fixtures/memory/rule.md': {'rust', 'package', 'install', 'linux-package'},
             'packages/butler-app/scripts/release/package-versions.ts': {'ui', 'ds', 'package', 'install', 'linux-package'},
-            'plans/new-plan.md': set(),
-            '.github/CI.md': set(changes.GROUPS),
+            'notes.md': set(),
+            '.github/pull_request_template.md': set(changes.GROUPS),
             '.github/workflows/windows.yml': set(changes.GROUPS),
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
+        workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
+        lint = workflow.split('  lint:\n', 1)[1].split('  gate:\n', 1)[0]
+        self.assertIn("    if: needs.changes.outputs.tier != 'integration'", lint)  # PRs always run the tracked-document guard.
+        self.assertIn('work-docs-lint.py', lint)
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
