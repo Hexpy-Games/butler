@@ -84,7 +84,14 @@ async fn reply(
     if script.failing.load(Ordering::SeqCst) {
         if child {
             template = match step {
-                2..=5 => json!({"type":"function_call","name":"read_file","arguments":{}}),
+                2..=5 => {
+                    let arguments = if step % 2 == 0 {
+                        json!({"alpha":1,"beta":{"left":1,"right":2}})
+                    } else {
+                        json!({"beta":{"right":2,"left":1},"alpha":1})
+                    };
+                    json!({"type":"function_call","name":"read_file","arguments":arguments})
+                }
                 6 => json!({"type":"function_call","name":"record_work_disposition","arguments":{
                     "work_id":"{{WORK}}","disposition":"blocked","summary":"Source requires owner credentials",
                     "action_updates":[],"remaining_actions":["research"],"next_condition":"Owner supplies source credentials","followups":[]}}),
