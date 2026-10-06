@@ -148,6 +148,8 @@ export * from "./blocks/ActivityStrip";
 export * from "./blocks/KanbanBoard";
 export * from "./blocks/SplitBrowser";
 export * from "./blocks/StatusCapsule";
+export * from "./blocks/TabStrip";
+export * from "./blocks/NativeViewSlot";
 
 export * from "./blocks/ComposerQuestionPanel";
 export * from "./blocks/QuestionAnswerCard";

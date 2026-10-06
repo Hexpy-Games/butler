@@ -1,0 +1,26 @@
+{
+  "id": "F16",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "trap",
+    "trap2"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": [
+      {
+        "target": "/labyrinth",
+        "type": "request"
+      }
+    ]
+  },
+  "settleMs": 0
+}

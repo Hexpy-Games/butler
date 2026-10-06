@@ -1,0 +1,20 @@
+{
+  "id": "F17",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "late-ad"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 600
+}

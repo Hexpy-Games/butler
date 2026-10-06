@@ -1,0 +1,25 @@
+{
+  "id": "F19",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "evil"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": [
+      {
+        "target": "/stolen",
+        "type": "request"
+      }
+    ]
+  },
+  "settleMs": 0
+}
