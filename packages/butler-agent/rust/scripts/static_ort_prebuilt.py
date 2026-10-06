@@ -21,10 +21,16 @@ MAX_BYTES = 2 * 1024**3
 
 
 def key(script, lock, target):
-    inputs = {'lock': lock, 'target': target, 'recipe': {}}
-    for path in (script, script.with_name('static_ort_host.py'), Path(__file__).resolve(), script.with_name('static_ort_targets.py'),
+    recipe = {}
+    for path in (script.with_name('static_ort_build.py'), script.with_name('static_ort_targets.py'),
                  script.parent.parent / 'rust-toolchain.toml'):
-        inputs['recipe'][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        recipe[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    # Preserve the immutable SDK namespace only for the exact original build recipe.
+    # The projected lock and target remain part of the hash in both namespaces.
+    compatibility = json.loads(script.with_name('static-ort-key-compat.json').read_text())
+    if recipe == compatibility['build_recipe']:
+        recipe = compatibility['published_recipe']
+    inputs = {'lock': lock, 'target': target, 'recipe': recipe}
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
@@ -92,8 +98,6 @@ def unpack(archive, stage):
     with zipfile.ZipFile(archive) as source:
         members = source.infolist()
         total = sum(item.file_size for item in members)
-        if sys.platform == 'win32':
-            total += sum(item.file_size for item in members if item.filename.startswith('build/Release/_deps/'))
         if total > 4 * 1024**3 or shutil.disk_usage(stage).free <= total + 8 * 1024**3:
             raise RuntimeError('Native asset expansion exceeds disk bound')
         for item in members:
@@ -112,39 +116,20 @@ def unpack(archive, stage):
 
 
 def create_deps_alias(build_root):
-    """ort-sys expects _deps beside Release; Windows needs no link privilege."""
+    """ort-sys's empty profile reads Release/_deps directly on Windows."""
     if sys.platform == 'win32':
-        shutil.copytree(build_root / 'Release/_deps', build_root / '_deps')
+        verify_deps_alias(build_root / 'Release')
     else:
         (build_root / '_deps').symlink_to('Release/_deps', target_is_directory=True)
 
 
-def deps_content(root):
-    """Compare all paths and bytes, including empty directories; reject links."""
-    if not root.is_dir() or root.is_symlink():
-        raise RuntimeError('ORT dependency copy is missing or linked')
-    content = {}
-    for path in root.rglob('*'):
-        if path.is_symlink():
-            raise RuntimeError('Unexpected link in ORT dependency copy')
-        name = path.relative_to(root).as_posix()
-        if path.is_dir():
-            content[name] = None
-        else:
-            digest = hashlib.sha256()
-            with path.open('rb') as source:
-                while block := source.read(1024 * 1024):
-                    digest.update(block)
-            content[name] = digest.hexdigest()
-    return content
-
-
 def verify_deps_alias(lib_path):
-    alias = lib_path.parent / '_deps'
+    if not (lib_path / '_deps').is_dir() or (lib_path / '_deps').is_symlink():
+        raise RuntimeError('ORT dependency directory is missing or linked')
     if sys.platform == 'win32':
-        if deps_content(alias) != deps_content(lib_path / '_deps'):
-            raise RuntimeError('ORT dependency copy content mismatch')
-    elif not alias.is_symlink() or alias.resolve() != (lib_path / '_deps').resolve():
+        return
+    alias = lib_path.parent / '_deps'
+    if not alias.is_symlink() or alias.resolve() != (lib_path / '_deps').resolve():
         raise RuntimeError('ort-sys _deps link does not point to Release/_deps')
 
 

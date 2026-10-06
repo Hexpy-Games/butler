@@ -52,7 +52,7 @@ def windows_test(node):
 
 
 def symlink_hazards(source):
-    """A symlink call must be unreachable on Windows, with a materializing branch."""
+    """A symlink call must be unreachable on Windows, on the Unix branch only."""
     findings = []
     try:
         tree = ast.parse(source)
@@ -61,14 +61,10 @@ def symlink_hazards(source):
     if tree is not None:
         def walk(node, unix_only=False):
             if isinstance(node, ast.If) and windows_test(node.test) is not None:
-                windows_body = node.body if windows_test(node.test) else node.orelse
-                fallback = any(isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                               and call.func.attr in ('copytree', 'copyfile', 'copy2', 'link')
-                               for statement in windows_body for call in ast.walk(statement))
                 for statement in node.body:
-                    walk(statement, unix_only or (fallback and not windows_test(node.test)))
+                    walk(statement, unix_only or not windows_test(node.test))
                 for statement in node.orelse:
-                    walk(statement, unix_only or (fallback and windows_test(node.test)))
+                    walk(statement, unix_only or windows_test(node.test))
                 return
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr in ('symlink', 'symlink_to') and not unix_only:
