@@ -412,20 +412,11 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
     .await
     .unwrap();
     assert_eq!(assembly.working_context.len(), 1);
-    let document: HistoryDocument =
-        serde_json::from_str(&assembly.working_context[0].content).unwrap();
-    let expected = format!(
-        "## Recent Conversation\n\n{}",
-        butler_core::public_text::trim_js_whitespace(
-            main.strip_prefix("## Recent Conversation").unwrap()
-        )
-    );
-    assert_eq!(
-        serde_json::to_string(&document.main_budget_projection)
-            .unwrap()
-            .len(),
-        serde_json::to_string(&expected).unwrap().len(),
-        "main uses JS whitespace, including NEL preservation"
+    assert!(!assembly.working_context[0].content.starts_with('{'));
+    assert!(
+        !assembly.working_context[0]
+            .content
+            .contains("mainBudgetProjection")
     );
     assert!(assembly.working_context[0].content.contains("remember me"));
     assert!(!assembly.working_context[0].content.contains("exclude me"));

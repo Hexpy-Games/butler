@@ -1,4 +1,4 @@
-//! Request diagnostics use admitted identities and hashes, never prompt content.
+//! Request diagnostics hash only fixed system-authored sections, never user content.
 #![allow(clippy::unwrap_used, reason = "E2E assertions")]
 use butler_e2e::e2e::provider::Script;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
@@ -60,28 +60,26 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
     let mut offset = 0;
     for section in sections {
         assert!(section["bytes"].as_u64().unwrap() > 0);
-        let private = matches!(
+        let system_authored = matches!(
             section["id"].as_str().unwrap(),
-            "current-request"
-                | "scope"
-                | "recent-conversation"
-                | "inbound-message"
-                | "attachments"
-                | "current-attachments"
-                | "project-sources"
-                | "branch-seed"
-                | "session-references"
+            "tools"
+                | "history-heading"
+                | "current-turn-heading"
+                | "delegated-tools"
+                | "runtime-state"
+                | "role"
+                | "runtime-system-contract"
         );
-        if private {
-            assert!(section.get("sha256").is_none());
-        } else {
+        if system_authored {
             assert_eq!(section["sha256"].as_str().unwrap().len(), 64);
+        } else {
+            assert!(section.get("sha256").is_none());
         }
         assert!(section.get("content").is_none());
         if section["representation"] != "serialized_json" {
             let size = usize::try_from(section["bytes"].as_u64().unwrap()).unwrap();
             let text = &source_text[offset..offset + size];
-            if !private {
+            if system_authored {
                 assert_eq!(
                     section["sha256"],
                     format!("{:x}", Sha256::digest(text.as_bytes()))
@@ -91,6 +89,33 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
         }
     }
     assert_eq!(offset.saturating_sub(2), source_text.len());
+    for row in &rows {
+        if row["requestStarted"] != true {
+            continue;
+        }
+        for section in row["inputSections"].as_array().unwrap() {
+            let system_authored = matches!(
+                section["id"].as_str().unwrap(),
+                "tools"
+                    | "history-heading"
+                    | "current-turn-heading"
+                    | "delegated-tools"
+                    | "runtime-state"
+                    | "role"
+                    | "runtime-system-contract"
+            );
+            if !system_authored {
+                assert!(section.get("sha256").is_none());
+            }
+        }
+        for component in ["persona", "reminders"] {
+            assert!(
+                row["instructionComponents"][component]
+                    .get("sha256")
+                    .is_none()
+            );
+        }
+    }
     let subsequent: Vec<_> = rows
         .iter()
         .filter(|row| row["requestStarted"] == true && row["sessionKind"] == "parent")
@@ -111,12 +136,19 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
             .iter()
             .any(|section| section["id"] == "input" && section["index"].as_u64().unwrap_or(0) > 0)
     );
-    for name in ["persona", "onboarding", "reminders"] {
-        assert_eq!(
-            row["instructionComponents"][name].as_str().unwrap().len(),
-            64
-        );
-    }
+    let persona = &row["instructionComponents"]["persona"];
+    assert!(persona["bytes"].as_u64().is_some());
+    assert!(persona.get("sha256").is_none());
+    let reminders = &row["instructionComponents"]["reminders"];
+    assert!(reminders["bytes"].as_u64().is_some());
+    assert!(reminders.get("sha256").is_none());
+    assert_eq!(
+        row["instructionComponents"]["onboarding"]
+            .as_str()
+            .unwrap()
+            .len(),
+        64
+    );
     assert!(!String::from_utf8_lossy(&bytes).contains("Reply with exactly"));
     let measurements: Vec<_> = rows
         .iter()

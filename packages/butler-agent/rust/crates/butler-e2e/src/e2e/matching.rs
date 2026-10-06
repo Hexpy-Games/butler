@@ -62,8 +62,8 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
 fn request_start(text: &str) -> Option<usize> {
     [
         "## Current request\n",
-        "## Delegated result\nSteward:\n",
-        "## Delegated result\nWorker:\n",
+        "## Delegated result\nfrom: delegated task\n",
+        "## Delegated result\nfrom: background worker\n",
         "User request:",
     ]
     .iter()

@@ -16,21 +16,6 @@ pub(crate) async fn include_recent_context(
     input: RecentConversationInput<'_>,
     assembly: ContextAssembly,
 ) -> ContextResult<ContextAssembly> {
-    if std::env::var("BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY").as_deref() == Ok("1") {
-        let (a, b) = tokio::join!(
-            assemble(owner, input, assembly.clone()),
-            assemble(owner, input, assembly)
-        );
-        let (a, b) = (a?, b?);
-        if a != b {
-            return Err(crate::context::ContextError::new(
-                ContextCode::ContextConversationReadError,
-                "Concurrent history assemblies differ",
-            ));
-        }
-        eprintln!("[history-concurrency] identical=true");
-        return Ok(a);
-    }
     assemble(owner, input, assembly).await
 }
 
@@ -73,15 +58,11 @@ async fn assemble(
     let summary_elapsed = started.elapsed().saturating_sub(read_elapsed);
     let options = render_options(token_budget, input.event_id);
     let plan = crate::context::compile_prompt_material_context_plan(&window.material, &options)?;
-    let legacy_plan =
-        crate::context::compile_prompt_material_context_plan(&window.budget_material, &options)?;
     let content = history::render(&window, &plan, cap)?;
     if content.is_empty() {
         return Ok(assembly);
     }
-    assembly
-        .working_context
-        .push(history::document(content, &legacy_plan.rendered)?);
+    assembly.working_context.push(history::document(content)?);
     history::trace(started.elapsed(), read_elapsed, summary_elapsed).await;
     Ok(assembly)
 }

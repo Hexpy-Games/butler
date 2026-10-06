@@ -148,7 +148,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let requests = script.requests.lock().unwrap().clone();
     assert_eq!(requests.len(), 2);
-    super::prompt_history::approval_parity(&s, &requests)?;
+    super::prompt_history::approval_parity(&s, &id, &requests)?;
     if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
         s.finish().await?;
         server.abort();

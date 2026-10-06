@@ -293,27 +293,11 @@ fn render_condensed(
     Ok(text)
 }
 
-pub(super) fn document(
-    history: String,
-    legacy: &str,
-) -> ContextResult<butler_turn::btcc::ContextSection> {
-    let document = butler_turn::conversation::HistoryDocument {
-        history,
-        main_budget_projection: format!(
-            "## Recent Conversation\n\n{}",
-            butler_core::public_text::trim_js_whitespace(
-                legacy
-                    .strip_prefix("## Recent Conversation")
-                    .unwrap_or(legacy)
-            )
-        ),
-    };
-    let content = serde_json::to_string(&document)
-        .map_err(|e| ContextError::new(ContextCode::ContextJsonError, e.to_string()))?;
+pub(super) fn document(history: String) -> ContextResult<butler_turn::btcc::ContextSection> {
     Ok(butler_turn::btcc::ContextSection {
         id: "recent-conversation".into(),
         title: "Recent Conversation".into(),
-        content,
+        content: history,
         region: Some("working_context".into()),
         projection_class: "mandatory_hot_cache".into(),
         scope_kind: "session".into(),

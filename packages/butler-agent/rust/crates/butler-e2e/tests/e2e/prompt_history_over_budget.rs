@@ -80,7 +80,7 @@ fn seed_large_turns(
     for index in 0..count {
         let turn_id = format!("ct_large_{index}");
         db.execute(
-            "INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at,first_completed_at) VALUES(?1,?2,?3,'user','complete',?4,?4,?4)",
+            "INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at) VALUES(?1,?2,?3,'user','complete',?4,?4)",
             rusqlite::params![turn_id, session, turn_seq, timestamp],
         )?;
         for (offset, role, text) in [(0, "user", &request), (1, "assistant", &reply)] {

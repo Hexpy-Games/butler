@@ -22,7 +22,7 @@ impl AgentConversationStore {
         self.execute(move |db| {
             let before = db.total_changes();
             let window = read(db, &session, cap)?;
-            if std::env::var("BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY").as_deref() == Ok("1") {
+            if std::env::var("BUTLER_E2E_VERIFY_HISTORY_WRITES").as_deref() == Ok("1") {
                 eprintln!(
                     "[history-projection-writes] changes={}",
                     db.total_changes() - before
@@ -115,11 +115,14 @@ fn completed_sizes(
          COALESCE((SELECT octet_length(evidence_refs_json)+octet_length(unresolved_obligations_json)+ \
          COALESCE(octet_length(continuation_json),0)+512 FROM conversation_turn_outcomes o WHERE o.turn_id=t.id),0),s.request_seq \
          FROM (SELECT m.turn_id,SUM(CASE WHEN p.kind IN ('tool_call','tool_result') \
-         THEN 160 ELSE octet_length(p.content_json)+64 END) bytes,MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq \
+         THEN 160 ELSE octet_length(p.content_json)+64 END) bytes,MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq, \
+         MIN(CASE WHEN m.role='assistant' AND m.status IN ('complete','compacted') THEN m.seq END) terminal_seq \
          FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
          WHERE m.session_id=?1 AND m.seq>?2 GROUP BY m.turn_id) s \
          JOIN conversation_turns t ON t.id=s.turn_id \
-         WHERE t.completed_at IS NOT NULL ORDER BY COALESCE(t.first_completed_at,t.completed_at),t.seq"
+         LEFT JOIN conversation_turn_outcomes o ON o.turn_id=t.id \
+         LEFT JOIN conversation_messages final ON final.id=o.public_assistant_message_id \
+         WHERE t.completed_at IS NOT NULL ORDER BY COALESCE(final.seq,s.terminal_seq,s.request_seq,t.seq),t.seq"
     ).map_err(ConversationError::sqlite)?;
     query
         .query_map(rusqlite::params![session, epoch], |r| {

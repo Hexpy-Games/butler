@@ -10,6 +10,8 @@ use std::{
 
 #[path = "prompt_history_golden.rs"]
 mod golden;
+#[path = "prompt_history_late.rs"]
+mod late;
 
 mod provider {
     use super::*;
@@ -96,7 +98,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         .env("BUTLER_CODEX_BASE_URL", url)
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env(
-            "BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY",
+            "BUTLER_E2E_VERIFY_HISTORY_WRITES",
             if verify { "1" } else { "0" },
         );
     std::fs::write(
@@ -117,7 +119,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
             "preserve this request ".repeat(40)
         );
         let request_index = stub.requests.lock().unwrap().len();
-        let (_, turn) = s.turn("general", &ask).await?;
+        let (turn_id, turn) = s.turn("general", &ask).await?;
         assert_eq!(turn["state"], "delivered", "{turn}");
         let turn_requests = stub.requests.lock().unwrap()[request_index..].to_vec();
         if heavy {
@@ -182,9 +184,10 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
             assert!(source(&request).contains("butler: once"));
         }
         measurements.push(json!({"turn":index,"prefix_percent":if previous.is_empty(){0.0}else{100.0*common as f64/previous.len() as f64},
-            "bytes":serde_json::to_vec(&request)?.len(),"move":moved}));
+            "bytes":serde_json::to_vec(&request)?.len(),"stored_history_bytes":content.len(),"move":moved}));
         captured.push(golden::capture(
             &s.sandbox.data,
+            &turn_id,
             &turn_requests,
             &placeholders,
         )?);
@@ -203,6 +206,12 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     eprintln!(
         "PROMPT_HISTORY heavy={heavy} moves={moves:?} intervals={intervals:?} measurements={measurements:?}"
     );
+    let max_stored_history_bytes = measurements
+        .iter()
+        .filter_map(|measurement| measurement["stored_history_bytes"].as_u64())
+        .max()
+        .unwrap_or_default();
+    eprintln!("PROMPT_HISTORY_STORAGE heavy={heavy} max_bytes={max_stored_history_bytes}");
     if let Ok(directory) = std::env::var("BUTLER_PROMPT_CAPTURE_DIR") {
         std::fs::create_dir_all(&directory)?;
         std::fs::write(
@@ -214,18 +223,9 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         compare_golden(&format!("heavy-{heavy}"), &captured)?;
         let btcc = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         let content: String = btcc.query_row("SELECT content FROM btcc_context_documents WHERE source_id='recent-conversation' ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))?;
-        let document: Value = serde_json::from_str(
-            content
-                .strip_prefix("## Recent Conversation\n\n")
-                .unwrap_or(&content),
-        )?;
-        let budget = document["mainBudgetProjection"]
-            .as_str()
-            .expect("history document carries the camelCase main budget projection");
-        assert!(
-            asks.iter().all(|ask| !budget.contains(ask)),
-            "budget projection must not hydrate user text"
-        );
+        assert!(!content.contains("mainBudgetProjection"));
+        assert!(!content.trim_start().starts_with('{'));
+        assert_eq!(content, history(&s.sandbox.data));
         assert!(
             !source(stub.requests.lock().unwrap().last().unwrap()).contains("漢漢 é 😀"),
             "budget surrogate must never reach the model"
@@ -233,12 +233,11 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     }
     if verify {
         let log = std::fs::read_to_string(s.sandbox.logs.join("agent-1.log"))?;
-        assert!(log.matches("[history-concurrency] identical=true").count() >= 16);
         let changes: Vec<_> = log
             .lines()
             .filter_map(|line| line.split("[history-projection-writes] changes=").nth(1))
             .collect();
-        assert!(changes.len() >= 30);
+        assert!(changes.len() >= asks.len().saturating_sub(1));
         assert!(changes.iter().all(|line| line.trim() == "0"));
     }
     let db = Connection::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
@@ -282,79 +281,6 @@ fn compare_golden(case: &str, requests: &[Value]) -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
-async fn late_completion_is_appended_with_identity_and_timestamp() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (url, stub, server) = provider::start(false).await?;
-    let s = Setup::new("PROMPT-LATE")?
-        .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
-        .start()
-        .await?;
-    s.turn("general", "first ordinary request").await?;
-    let db = Connection::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
-    seed_late(&db)?;
-    for index in 0..6 {
-        s.turn("general", &format!("ordinary request {index}"))
-            .await?;
-    }
-    let previous = prefix(stub.requests.lock().unwrap().last().unwrap());
-    let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    db.execute(
-        "UPDATE conversation_turns SET status='complete',completed_at=?1,first_completed_at=?1 WHERE id='ct_late'",
-        [&timestamp],
-    )?;
-    s.turn("general", "after late completion").await?;
-    let requests = stub.requests.lock().unwrap().clone();
-    let request = requests.last().unwrap();
-    assert!(prefix(request).starts_with(&previous));
-    let text = source(request);
-    assert!(text.contains(&format!(
-        "turn ct_late status complete completed {timestamp}"
-    )));
-    assert!(text.find("ordinary request 5").unwrap() < text.find("late user request").unwrap());
-    assert!(text.contains("butler: late final reply"));
-    let before_resume = prefix(request);
-    db.execute(
-        "UPDATE conversation_turns SET completed_at='2099-01-01T00:00:00Z' WHERE id='ct_late'",
-        [],
-    )?;
-    s.turn("general", "after resumed completion").await?;
-    let requests = stub.requests.lock().unwrap().clone();
-    let resumed = requests.last().unwrap();
-    assert!(prefix(resumed).starts_with(&before_resume));
-    assert!(source(resumed).contains(&format!(
-        "turn ct_late status complete completed {timestamp}"
-    )));
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
-
-fn seed_late(db: &Connection) -> Result<(), HarnessError> {
-    let session: String =
-        db.query_row("SELECT id FROM conversation_sessions LIMIT 1", [], |row| {
-            row.get(0)
-        })?;
-    let turn_seq: u64 = db.query_row("SELECT MAX(seq)+1 FROM conversation_turns", [], |row| {
-        row.get(0)
-    })?;
-    let seq: u64 = db.query_row("SELECT MAX(seq)+1 FROM conversation_messages", [], |row| {
-        row.get(0)
-    })?;
-    db.execute("INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at) VALUES('ct_late',?1,?2,'user','running','2026-01-01T00:00:00Z')", rusqlite::params![session,turn_seq])?;
-    for (offset, role, text) in [
-        (0, "user", "late user request"),
-        (1, "assistant", "late final reply"),
-    ] {
-        let id = format!("cm_late_{offset}");
-        db.execute("INSERT INTO conversation_messages(id,session_id,turn_id,seq,role,status,visibility,provenance,created_at) VALUES(?1,?2,'ct_late',?3,?4,'complete','user','imported','2026-01-01T00:00:00Z')", rusqlite::params![id,session,seq+offset,role])?;
-        db.execute("INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) VALUES(?1,?2,0,'text',?3,'complete')", rusqlite::params![format!("cp_late_{offset}"),id,json!({"text":text}).to_string()])?;
-    }
-    Ok(())
-}
-
-#[tokio::test]
 async fn direct_phase_preserves_main_content() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     direct_case(true).await
@@ -387,7 +313,7 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
     let mut previous = Vec::new();
     for index in 0..2 {
         let start = stub.requests.lock().unwrap().len();
-        scheduled_direct(&s, index).await?;
+        let turn_id = scheduled_direct(&s, index).await?;
         let requests = stub.requests.lock().unwrap()[start..].to_vec();
         let request = &requests[0];
         let current = prefix(request);
@@ -395,7 +321,12 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
             assert!(current.starts_with(&previous));
         }
         previous = current;
-        captured.push(golden::capture(&s.sandbox.data, &requests, &placeholders)?);
+        captured.push(golden::capture(
+            &s.sandbox.data,
+            &turn_id,
+            &requests,
+            &placeholders,
+        )?);
     }
     if verify {
         let rows = std::fs::read_to_string(
@@ -423,7 +354,7 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
 async fn scheduled_direct(
     s: &butler_e2e::e2e::scenario::Scenario,
     index: usize,
-) -> Result<(), HarnessError> {
+) -> Result<String, HarnessError> {
     let id = format!("prompt-direct-{index}");
     let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let record = json!({"version":1,"queueId":id,"enqueuedAt":timestamp,"attempts":0,"metadata":{},
@@ -453,7 +384,7 @@ async fn scheduled_direct(
                 context["executionPolicy"]["requiredNativeToolProfiles"],
                 json!([])
             );
-            return Ok(());
+            return Ok(id);
         }
         assert!(
             std::time::Instant::now() < deadline,
@@ -463,7 +394,10 @@ async fn scheduled_direct(
     }
 }
 
-pub(super) fn resume_parity(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
+pub(super) fn resume_parity(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    turn_id: &str,
+) -> Result<(), HarnessError> {
     let requests = s.provider()?.requests();
     if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() != Ok("1") {
         let previous = prefix(requests.first().unwrap());
@@ -474,7 +408,7 @@ pub(super) fn resume_parity(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
         );
         eprintln!("PROMPT_RESUME stable_prefix_percent=100");
     }
-    golden::parity_case(s, &requests, "delegated")
+    golden::parity_case(s, turn_id, &requests, "delegated")
 }
 
 #[path = "prompt_history_perf.rs"]
@@ -485,7 +419,8 @@ mod over_budget;
 
 pub(super) fn approval_parity(
     s: &butler_e2e::e2e::scenario::Scenario,
+    turn_id: &str,
     requests: &[Value],
 ) -> Result<(), HarnessError> {
-    golden::parity_case(s, requests, "resume")
+    golden::parity_case(s, turn_id, requests, "resume")
 }

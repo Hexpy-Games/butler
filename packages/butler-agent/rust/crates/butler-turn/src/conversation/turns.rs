@@ -214,7 +214,7 @@ pub(super) fn finalize_in_transaction(
         write_outcome(tx, clock, outcome)?;
     }
     tx.execute(
-        "UPDATE conversation_turns SET status=?1,first_completed_at=COALESCE(first_completed_at,completed_at,?2),completed_at=?2 WHERE id=?3",
+        "UPDATE conversation_turns SET status=?1,completed_at=?2 WHERE id=?3",
         params![
             input.status.unwrap_or_else(|| "complete".into()),
             completed,

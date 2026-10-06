@@ -5,12 +5,13 @@ use sha2::{Digest, Sha256};
 
 pub(super) fn capture(
     data: &std::path::Path,
+    turn_id: &str,
     requests: &[Value],
     placeholders: &butler_e2e::e2e::sanitize::Placeholders,
 ) -> Result<Value, HarnessError> {
     let frames = requests
         .iter()
-        .map(|request| capture_frame(data, request, placeholders))
+        .map(|request| capture_frame(data, turn_id, request, placeholders))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({"frames":frames,
         "wire_bytes":requests.iter().map(|r|serde_json::to_vec(r).unwrap().len()).sum::<usize>()}))
@@ -18,6 +19,7 @@ pub(super) fn capture(
 
 fn capture_frame(
     data: &std::path::Path,
+    turn_id: &str,
     request: &Value,
     placeholders: &butler_e2e::e2e::sanitize::Placeholders,
 ) -> Result<Value, HarnessError> {
@@ -30,7 +32,7 @@ fn capture_frame(
         .filter(|s| s.starts_with("user: ") || s.starts_with("butler: "))
         .map(fingerprint)
         .collect::<Vec<_>>();
-    let sections = fingerprints(&loaded_sections(data, request, placeholders)?);
+    let sections = fingerprints(&loaded_sections(data, turn_id, request, placeholders)?);
     Ok(json!({"sections":sections,"blocks":blocks,
         "instructions_sha256":format!("{:x}",Sha256::digest(instructions)),
         "tools_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&request["tools"])?)),
@@ -120,8 +122,8 @@ fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value 
     }
     let current = [
         "## Current request\n",
-        "## Delegated result\nSteward:\n",
-        "## Delegated result\nWorker:\n",
+        "## Delegated result\nfrom: delegated task\n",
+        "## Delegated result\nfrom: background worker\n",
         "User request:\n",
     ]
     .iter()
@@ -189,40 +191,62 @@ fn fingerprints(value: &Value) -> Value {
 
 fn loaded_sections(
     data: &std::path::Path,
+    turn_id: &str,
     request: &Value,
     placeholders: &butler_e2e::e2e::sanitize::Placeholders,
 ) -> Result<Value, HarnessError> {
     let db = Connection::open(data.join("agent-runtime/btcc.sqlite"))?;
+    let context_json: String = db.query_row(
+        "SELECT context_json FROM btcc_turns WHERE turn_id=?1",
+        [turn_id],
+        |row| row.get(0),
+    )?;
+    let context: Value = serde_json::from_str(&context_json)?;
+    let refs = [
+        "profileRefs",
+        "recentFeedbackRefs",
+        "mandatoryHotCacheRefs",
+        "optionalHotCacheRefs",
+    ]
+    .iter()
+    .flat_map(|field| {
+        context
+            .get(*field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+    })
+    .collect::<Vec<_>>();
     let mut query =
-        db.prepare("SELECT source_id,content FROM btcc_context_documents ORDER BY rowid DESC")?;
+        db.prepare("SELECT source_id,content FROM btcc_context_documents WHERE context_ref=?1")?;
     let mut sections = serde_json::Map::new();
     let prompt = format!(
         "{}\n{}",
         request["instructions"].as_str().unwrap(),
         source(request)
     );
-    for row in query.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (id, content) = row?;
+    for reference in refs {
+        let (id, content) = query.query_row([reference], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
         if id == "recent-conversation" {
             continue;
         }
+        assert!(
+            !sections.contains_key(&id),
+            "turn {turn_id} references multiple revisions for {id}"
+        );
         let loaded = super::super::agent_context::loaded_excerpt(&id, &content, &prompt);
         let normalized = normalize(&loaded, placeholders);
-        if sections
-            .get(&id)
-            .and_then(Value::as_str)
-            .is_none_or(|old| old.len() < normalized.len())
-        {
-            sections.insert(id, normalized.into());
-        }
+        sections.insert(id, normalized.into());
     }
     Ok(Value::Object(sections))
 }
 
 pub(super) fn parity_case(
     s: &butler_e2e::e2e::scenario::Scenario,
+    turn_id: &str,
     requests: &[Value],
     case: &str,
 ) -> Result<(), HarnessError> {
@@ -232,7 +256,14 @@ pub(super) fn parity_case(
     placeholders.add("SANDBOX", s.sandbox.root.display().to_string());
     let captured = requests
         .iter()
-        .map(|r| capture(&s.sandbox.data, std::slice::from_ref(r), &placeholders))
+        .map(|r| {
+            capture(
+                &s.sandbox.data,
+                turn_id,
+                std::slice::from_ref(r),
+                &placeholders,
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
         let directory = std::env::var("BUTLER_PROMPT_CAPTURE_DIR").unwrap();

@@ -31,7 +31,7 @@ fn metadata(
     db: &Connection,
     ids: &str,
 ) -> ConversationResult<(Vec<ConversationTurn>, Vec<TurnOutcomeCapsule>)> {
-    let mut query = db.prepare("SELECT COALESCE(t.first_completed_at,t.completed_at) AS completed_at,t.*, \
+    let mut query = db.prepare("SELECT t.*, \
         o.id AS outcome_id,o.session_id AS outcome_session_id,o.turn_id AS outcome_turn_id, \
         o.generation AS outcome_generation,o.outcome AS outcome_outcome,o.source_hash AS outcome_source_hash, \
         o.request_message_id AS outcome_request_message_id,o.public_assistant_message_id AS outcome_public_assistant_message_id, \

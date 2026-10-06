@@ -390,16 +390,15 @@ fn migration_errors_are_atomic() {
     schema::ensure(&mut db, &clock).unwrap();
     let columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_messages') WHERE name LIKE 'origin_%'", [], |row| row.get(0)).unwrap();
     assert_eq!(columns, 5);
+    let completion_columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_turns') WHERE name='first_completed_at'", [], |row| row.get(0)).unwrap();
+    assert_eq!(
+        completion_columns, 0,
+        "history order must not add persisted turn state"
+    );
 }
 
 async fn verify_readonly_history(store: &AgentConversationStore, valid: bool) {
     if valid {
-        let first = store
-            .read_turn("ct_fixed")
-            .await
-            .unwrap()
-            .unwrap()
-            .completed_at;
         let resumed = store
             .finalize_turn(FinalizeTurnInput {
                 turn_id: "ct_fixed".into(),
@@ -413,13 +412,6 @@ async fn verify_readonly_history(store: &AgentConversationStore, valid: bool) {
             resumed.completed_at.as_deref(),
             Some("2099-01-01T00:00:00Z")
         );
-        let saved = store.execute(|db| {
-            db.query_row(
-                "SELECT COALESCE(first_completed_at, completed_at) FROM conversation_turns WHERE id='ct_fixed'",
-                [], |row| row.get::<_, Option<String>>(0),
-            ).map_err(ConversationError::sqlite)
-        }).await.unwrap();
-        assert_eq!(saved, first, "history preserves first completion");
     }
 
     store

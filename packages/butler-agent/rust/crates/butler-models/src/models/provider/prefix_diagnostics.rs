@@ -90,13 +90,12 @@ fn prepare(
         .get("prompt_cache_key")
         .and_then(Value::as_str)
         .map(hash);
-    let prefix_hash = cache.prefix_hash(&prefix);
     Ok(Prepared {
         metadata: json!({
             "representation":"serialized-components-v1", "components":components,
             "inputSections":layout_sections(&components, None, None), "turnId":null, "trigger":"other",
             "instructionComponents":{"persona":null,"onboarding":null,"reminders":null},
-            "prefixBytes":prefix.len(), "prefixSha256":prefix_hash,
+            "prefixBytes":prefix.len(),
             "promptCacheKeySha256":key, "providerReportedCachedTokens":null,
             "providerCachedTokensFieldPresent":null,
             "providerId":config.metadata.provider_id, "authMode":format!("{:?}",config.auth.mode()),
@@ -119,14 +118,20 @@ fn component(
     components: &mut Vec<Value>,
     cache: &mut components::Cache,
 ) -> Result<(), ModelRoundError> {
-    let cached = cache.component(components.len(), value)?;
+    let include_hash = !matches!(name, "input" | "instructions");
+    let cached = cache.component(components.len(), value, include_hash)?;
     let encoded = &cached.encoded;
     let offset = prefix.len();
     prefix.extend_from_slice(encoded.as_bytes());
     // Delimit components rather than closing an input array on every request:
     // appending a conversation item preserves the previous reconstructed prefix.
     prefix.push(b'\n');
-    components.push(json!({"component":name,"index":index,"bytes":encoded.len(),"sha256":cached.hash,"offset":offset}));
+    let mut diagnostic =
+        json!({"component":name,"index":index,"bytes":encoded.len(),"offset":offset});
+    if let Some(hash) = &cached.hash {
+        diagnostic["sha256"] = hash.clone().into();
+    }
+    components.push(diagnostic);
     Ok(())
 }
 
@@ -428,9 +433,12 @@ fn layout_sections(
             name,
             "tools" | "instructions" | "system" | "systemInstruction" | "input"
         ) {
-            sections.push(json!({"id":name, "index":component["index"],
-                "bytes":component["bytes"], "sha256":component["sha256"],
-                "representation":"serialized_json"}));
+            let mut section = json!({"id":name, "index":component["index"],
+                "bytes":component["bytes"], "representation":"serialized_json"});
+            if let Some(hash) = component.get("sha256") {
+                section["sha256"] = hash.clone();
+            }
+            sections.push(section);
         }
     }
     Value::Array(sections)

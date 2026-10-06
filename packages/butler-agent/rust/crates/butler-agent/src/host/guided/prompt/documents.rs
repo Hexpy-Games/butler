@@ -92,17 +92,19 @@ async fn group(
 fn history_document(
     document: &ContextDocumentRead,
 ) -> Option<butler_turn::conversation::HistoryDocument> {
-    (document.source_id == "recent-conversation")
-        .then(|| {
-            serde_json::from_str(
-                document
-                    .content
-                    .strip_prefix("## Recent Conversation\n\n")
-                    .unwrap_or(&document.content),
-            )
-            .ok()
-        })
-        .flatten()
+    if document.source_id != "recent-conversation" {
+        return None;
+    }
+    let content = document
+        .content
+        .strip_prefix("## Recent Conversation\n\n")
+        .unwrap_or(&document.content);
+    Some(serde_json::from_str(content).unwrap_or_else(|_| {
+        butler_turn::conversation::HistoryDocument {
+            history: content.to_owned(),
+            main_budget_projection: content.to_owned(),
+        }
+    }))
 }
 
 fn language(candidate: &str) -> Option<String> {

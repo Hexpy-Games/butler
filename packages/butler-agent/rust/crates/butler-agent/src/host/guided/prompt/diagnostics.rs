@@ -50,12 +50,12 @@ impl Sections {
                     .get("subsessionResult")
                     .is_some_and(Value::is_object)
                 {
-                    "## Delegated result\nSteward:"
+                    "## Delegated result\nfrom: delegated task"
                 } else if turn
                     .original_message_id
                     .starts_with("worker-result-message:")
                 {
-                    "## Delegated result\nWorker:"
+                    "## Delegated result\nfrom: background worker"
                 } else {
                     "## Current request"
                 },
@@ -70,22 +70,23 @@ impl Sections {
 }
 
 fn digest(id: &str, text: &str) -> Value {
-    if matches!(
-        id,
-        "current-request"
-            | "scope"
-            | "recent-conversation"
-            | "inbound-message"
-            | "attachments"
-            | "current-attachments"
-            | "project-sources"
-            | "branch-seed"
-            | "session-references"
-    ) {
-        json!({"id":id,"bytes":text.len()})
-    } else {
-        json!({"id": id, "bytes": text.len(), "sha256": hash(text)})
+    let mut section = json!({"id": id, "bytes": text.len()});
+    if system_authored(id) {
+        section["sha256"] = hash(text).into();
     }
+    section
+}
+
+fn system_authored(id: &str) -> bool {
+    matches!(
+        id,
+        "history-heading"
+            | "current-turn-heading"
+            | "delegated-tools"
+            | "runtime-state"
+            | "role"
+            | "runtime-system-contract"
+    )
 }
 
 fn hash(text: &str) -> String {
@@ -93,21 +94,20 @@ fn hash(text: &str) -> String {
 }
 
 pub(super) fn instruction_components(documents: &[ContextDocumentRead]) -> Value {
-    let component = |ids: &[&str]| {
-        hash(
-            &documents
-                .iter()
-                .filter(|document| ids.contains(&document.source_id.as_str()))
-                .map(|document| butler_core::public_text::trim_js_whitespace(&document.content))
-                .filter(|text| !text.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n\n"),
-        )
+    let content = |ids: &[&str]| {
+        documents
+            .iter()
+            .filter(|document| ids.contains(&document.source_id.as_str()))
+            .map(|document| butler_core::public_text::trim_js_whitespace(&document.content))
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
     };
+    let size = |ids: &[&str]| json!({"bytes":content(ids).len()});
     json!({
-        "persona": component(&["active-persona-reminder", "personalization-profile", "profile-projection", "turn-personalization-profile"]),
-        "onboarding": component(&["first-chat-onboarding"]),
-        "reminders": component(&["active-persona-reminder"]),
+        "persona": size(&["active-persona-reminder", "personalization-profile", "profile-projection", "turn-personalization-profile"]),
+        "onboarding": hash(&content(&["first-chat-onboarding"])),
+        "reminders": size(&["active-persona-reminder"]),
     })
 }
 
