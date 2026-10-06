@@ -399,32 +399,14 @@ jobs:
     name: Publish the npm package
     # Preview packages are published by the owner after desktop verification.
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
     needs: publish-release
-    environment: deploy
     permissions:
+      actions: write
       contents: read
-      id-token: write
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.3
-          registry-url: https://registry.npmjs.org
-
-      - name: Verify the published Agent release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: bash deploy/npm/verify-release.sh "$GITHUB_REF_NAME"
-
-      - name: Publish with provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-        run: bash deploy/npm/publish.sh "$GITHUB_REF_NAME"
+    uses: ./.github/workflows/npm-publish.yml
+    with:
+      tag: ${{ github.ref_name }}
+      forward_dispatch: true
 
   recover-release:
     name: Recover publication from immutable build artifacts
@@ -474,36 +456,11 @@ jobs:
     name: Recover stable npm publication
     needs: recover-release
     if: ${{ !contains(needs.recover-release.outputs.tag, '-') }}
-    runs-on: ubuntu-latest
-    environment: deploy
     permissions:
+      actions: write
       contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.recover-release.outputs.tag }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.3
-          registry-url: https://registry.npmjs.org
-      - name: Verify the published Agent release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.recover-release.outputs.tag }}
-        run: bash deploy/npm/verify-release.sh "$RELEASE_TAG"
-      - name: Publish only if the exact npm version is absent
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-          RELEASE_TAG: ${{ needs.recover-release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          if result=$(npm view "@hexpygames/butler@${RELEASE_TAG#v}" version --json); then
-            test "$(jq -r . <<< "$result")" = "${RELEASE_TAG#v}"
-          elif jq -e '.error.code == "E404"' <<< "$result" >/dev/null; then
-            bash deploy/npm/publish.sh "$RELEASE_TAG"
-          else
-            echo 'Could not determine npm registry state; refusing to publish.' >&2
-            exit 1
-          fi
+    uses: ./.github/workflows/npm-publish.yml
+    with:
+      tag: ${{ needs.recover-release.outputs.tag }}
+      skip_if_published: true
+      forward_dispatch: true
