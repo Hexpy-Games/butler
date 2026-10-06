@@ -79,7 +79,8 @@
     "check:full": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:full:run --timeout=1800",
     "check:full:verbose": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:full:run --verbose --timeout=1800",
     "check:full:run": "${BUTLER_BUN:-bun} run --silent check:run && ${BUTLER_BUN:-bun} run --silent check:packaging:run",
-    "prepare": "bun run --silent tools/configure-git-hooks.ts"
+    "prepare": "bun run --silent tools/configure-git-hooks.ts",
+    "app:task-graph:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-task-graph-smoke.ts"
   },
   "dependencies": {
     "jsdom": "^29.0.2"

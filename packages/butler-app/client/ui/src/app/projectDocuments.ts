@@ -77,7 +77,17 @@ export function projectDocumentBadgeLabel(
   if (type === "spec") return appCopy.interfaceStatus.spec;
   if (type === "report" || type === "message") return appCopy.interfaceStatus.report;
   if (type === "reference") return appCopy.projectSignpost.history;
-  return appCopy.interfaceStatus.work;
+  return appCopy.projectDocumentMetadata.document;
+}
+
+export function projectDocumentStatusLabel(document: ProjectDashboardDocument): string {
+  const status = document.status ?? "";
+  if (projectDocumentType(document) === "task") {
+    const key = status === "completed" ? "done" : status === "in_review" ? "review" : status;
+    const labels: Readonly<Record<string, string>> = appCopy.taskGraph.status;
+    if (labels[key]) return labels[key];
+  }
+  return appCopy.projectDocumentMetadata.statuses[status] ?? status;
 }
 
 export function projectDocumentFileName(

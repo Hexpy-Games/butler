@@ -1,3 +1,4 @@
+import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
@@ -240,6 +241,7 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
+  taskGraph: TASK_GRAPH_COPY["en-US"],
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",
@@ -298,6 +300,7 @@ export const enUsCopy: AppCopy = {
     noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },
   projectDocumentMetadata: {
+    document: "Document",
     active: "Active", other: "Other", roadmap: "Roadmap",
     sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
     statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
@@ -1059,6 +1062,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   inspector: {
     tabs: {
+      tasks: "Tasks",
       summary: "Summary",
       activity: "Activity",
       context: "Context",

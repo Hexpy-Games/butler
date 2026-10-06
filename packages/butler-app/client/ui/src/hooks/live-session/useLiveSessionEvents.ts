@@ -1,3 +1,4 @@
+import { receiveTaskGraphEvent, refreshVisibleTaskGraphs } from "@/app/taskGraphState.ts";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
@@ -64,6 +65,7 @@ export function useLiveSessionEvents(): void {
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       publishMemoryEvent(event);
+      receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
@@ -162,6 +164,7 @@ export function useLiveSessionEvents(): void {
         if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) useButlerStore.setState({ liveConnectionLost });
       },
       onRecovered: () => {
+        refreshVisibleTaskGraphs();
         // Module changes may have been missed while disconnected.
         void userWallpaperModules.refresh();
         const view = useButlerStore.getState().view;
