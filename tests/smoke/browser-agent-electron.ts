@@ -12,7 +12,7 @@ import { browserBoundaryChecks } from "../support/browser-agent-boundaries";
 import { browserAuthorityChecks } from "../support/browser-agent-authority";
 import { browserArchiveCheck } from "../support/browser-agent-lifecycle";
 import { browserUiChecks, browserOutputEntry, browserGroupSnapshotChecks } from "../support/browser-agent-ui";
-import { browserContextCheck } from "../support/browser-agent-context";
+import { browserContextCheck, browserProviderByteCheck } from "../support/browser-agent-context";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
@@ -63,6 +63,7 @@ try {
   await browserContextCheck(app,evidence);
   agentTab = (await state()).tabs.find(tab=>tab.agent && tab.owner === "conversation:general")!; assert.ok(agentTab, JSON.stringify({ nativeError: await app.main("globalThis.browserAgentError"), toolRounds: stub.results.length }));
   assert.equal(agentTab.profile, "signed_out");
+  if(process.env.BUTLER_BROWSER_CONTEXT_BYTES==='1') await browserProviderByteCheck(app,stub,agentTab.id,evidence,send,delivered);
   await app.call("activate", { id: agentTab.id });
   await app.page.reload();
   const proof = await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)}).view.webContents.executeJavaScript("({result:document.querySelector('#result').textContent,width:innerWidth,height:innerHeight})")`);

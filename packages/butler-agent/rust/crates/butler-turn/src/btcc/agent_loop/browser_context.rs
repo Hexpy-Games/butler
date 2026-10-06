@@ -2,12 +2,19 @@
 use super::contracts::{ModelRoundMessage, ModelRoundRole};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-fn observation(message: &ModelRoundMessage) -> Option<(String, String)> {
+fn observation(message: &mut ModelRoundMessage) -> Option<(String, String)> {
     if message.role != ModelRoundRole::Tool {
         return None;
     }
-    let value: Value = serde_json::from_str(&message.content).ok()?;
-    let output = value.get("output")?;
+    let mut value: Value = serde_json::from_str(&message.content).ok()?;
+    let output = value.get_mut("output")?;
+    if output["schema"] == "butler.browser-action.v1" {
+        if strip_desktop_stills(output) {
+            message.content = value.to_string().into();
+        }
+        message.image_attachments.clear();
+        return None;
+    }
     if output["schema"] != "butler.browser-observation.v1" {
         return None;
     }
@@ -19,7 +26,7 @@ fn observation(message: &ModelRoundMessage) -> Option<(String, String)> {
 pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
     let mut latest = HashMap::new();
     let mut old = Vec::new();
-    for (index, message) in messages.iter().enumerate().rev() {
+    for (index, message) in messages.iter_mut().enumerate().rev() {
         if let Some((tab, obs)) = observation(message)
             && latest.insert(tab, index).is_some()
         {
@@ -37,4 +44,18 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
             message.image_attachments.clear();
         }
     }
+}
+
+fn strip_desktop_stills(output: &mut Value) -> bool {
+    let mut changed = output
+        .as_object_mut()
+        .is_some_and(|record| record.remove("still_file").is_some());
+    if let Some(steps) = output.get_mut("steps").and_then(Value::as_array_mut) {
+        for step in steps {
+            if let Some(record) = step.as_object_mut() {
+                changed |= record.remove("still_file").is_some();
+            }
+        }
+    }
+    changed
 }

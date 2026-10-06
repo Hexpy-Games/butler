@@ -152,8 +152,14 @@ async fn act(
     .await?;
     finish_batch(&args, result)
 }
-pub(super) fn finish_batch(args: &Value, value: Value) -> Result<JsonDocument, ToolExecutionError> {
+pub(super) fn finish_batch(
+    args: &Value,
+    mut value: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
     let count = args["steps"].as_array().map_or(0, Vec::len);
+    if count > 0 {
+        value["schema"] = json!("butler.browser-action.v1");
+    }
     encode_page_data(butler_runtime::browser::batch_receipts(count, value))
 }
 fn encode_page_data(mut value: Value) -> Result<JsonDocument, ToolExecutionError> {
