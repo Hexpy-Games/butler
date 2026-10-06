@@ -22,7 +22,7 @@ export async function installDecorationProbe(page: Page) {
       if (!fiber) return;
       const prior = seen.get(fiber) ?? (fiber.alternate ? seen.get(fiber.alternate) : undefined);
       const changed = !prior || prior.props !== fiber.memoizedProps || prior.state !== fiber.memoizedState;
-      if (changed && (fiber.flags & 1) && typeof fiber.type === "function" && fiber.memoizedProps?.scene === "shoreline") {
+      if (changed && (fiber.flags & 1) && typeof fiber.type === "function" && ["shoreline", "cherry"].includes(String(fiber.memoizedProps?.scene))) {
         target.__decorationProbe.decorationRenders++;
       }
       const snapshot = { props: fiber.memoizedProps, state: fiber.memoizedState };

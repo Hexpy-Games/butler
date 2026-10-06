@@ -11,7 +11,7 @@ async fn composer_decoration_settings_are_validated_and_durable() -> Result<(), 
     let defaults = json!({"theme": "none", "character": true});
     assert_eq!(s.gw.settings().await?["composer_decoration"], defaults);
     for invalid in [
-        json!({"theme":"cherry"}),
+        json!({"theme":"unknown"}),
         json!({"character":1}),
         json!({"extra":true}),
     ] {
@@ -21,13 +21,18 @@ async fn composer_decoration_settings_are_validated_and_durable() -> Result<(), 
         assert_eq!(reply.status, 400, "{}", reply.text);
         assert_eq!(s.gw.settings().await?["composer_decoration"], defaults);
     }
-    for patch in [json!({"theme":"shoreline"}), json!({"character":false})] {
+    for patch in [
+        json!({"theme":"shoreline"}),
+        json!({"theme":"none"}),
+        json!({"theme":"cherry"}),
+        json!({"character":false}),
+    ] {
         let reply =
             s.gw.patch("/settings", json!({"composer_decoration":patch}))
                 .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
     }
-    let chosen = json!({"theme":"shoreline", "character":false});
+    let chosen = json!({"theme":"cherry", "character":false});
     assert_eq!(s.gw.settings().await?["composer_decoration"], chosen);
     let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
         .unwrap();

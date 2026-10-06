@@ -10,21 +10,28 @@ import { createNativeAppServer, writeOnboardingComplete } from "../support/nativ
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { distribution, installDecorationProbe, readDecorationProbe, resetDecorationProbe } from "../support/composer-decoration-probe";
 
+import { verifyDecoratedDraft } from "../support/composer-decoration-draft";
+
 const before = Bun.argv.includes("--before");
+const baseline = Bun.argv.includes("--baseline");
+const decorationTheme = Bun.argv.includes("--cherry") ? "cherry" : "shoreline";
+const characterKind = decorationTheme === "cherry" ? "cat" : "crab";
 const scrollOnly = Bun.argv.includes("--scroll-only");
 const startsOnly = Bun.argv.includes("--starts-only");
 const panelsOnly = Bun.argv.includes("--panels-only");
+const widths = Bun.argv.includes("--mobile-only") ? [375] : Bun.argv.includes("--desktop-only") ? [1280] : [1280, 375];
 let longReply = false;
 const LAST_MESSAGE = "Last complete message. This text must remain above the character and input.";
+let longReplyText: string;
 const LONG_MESSAGE = Array.from({ length: 60 }, (_, i) => `Complete transcript paragraph ${i + 1}.`).join("\n\n") + `\n\n${LAST_MESSAGE}`;
-const out = resolve(`.tmp/composer-decoration/${before ? "before" : "after"}`);
+const out = resolve(`.tmp/composer-decoration/${before ? "before" : baseline ? "baseline" : decorationTheme}`);
 mkdirSync(out, { recursive: true });
 let toolMode: "question" | "authority" | undefined;
 let toolPrompt: string | undefined;
 const isToolRequest = (request: import("../support/native-app-server").StubModelRequest) =>
   request.stream && toolMode && toolPrompt && JSON.stringify(request.body).includes(toolPrompt);
-const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/composer-before-dist" : "packages/butler-app/client/ui/dist"),
-  stubReply: request => isToolRequest(request) ? "" : request.stream ? (longReply ? LONG_MESSAGE : LAST_MESSAGE) : "{}",
+const server = await createNativeAppServer({ uiRoot: resolve(before || baseline ? ".tmp/composer-before-dist" : "packages/butler-app/client/ui/dist"),
+  stubReply: request => isToolRequest(request) ? "" : request.stream ? (longReply ? longReplyText : LAST_MESSAGE) : "{}",
   stubToolCall: request => {
     if (!isToolRequest(request)) return null;
     const mode = toolMode; toolMode = undefined;
@@ -50,6 +57,7 @@ async function capture(page: Page, name: string) {
   await page.waitForFunction(() => [...document.querySelectorAll<HTMLCanvasElement>('[data-test-class~="wallpaper"]')].every(canvas =>
     canvas.dataset.module === "none" || (canvas.width > 0 && canvas.height > 0 && getComputedStyle(canvas).visibility === "visible")));
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   await page.waitForFunction(() => document.getAnimations().every(a =>
     a.effect?.getTiming().iterations === Infinity || a.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -101,9 +109,9 @@ async function typing(page: Page) {
   return distribution(probe.commits);
 }
 async function characterGeometry(page: Page) {
-  const geometry = await page.evaluate(() => {
+  const geometry = await page.evaluate((characterKind) => {
     const wrap = document.querySelector("[data-edge-reserve]")!;
-    const head = wrap.querySelector('[data-character="crab"]')!.getBoundingClientRect();
+    const head = wrap.querySelector(`[data-character="${characterKind}"]`)!.getBoundingClientRect();
     const input = document.querySelector('[contenteditable="true"]')!;
     const walker = document.createTreeWalker(input, NodeFilter.SHOW_TEXT);
     const textRects: DOMRect[] = [];
@@ -119,7 +127,7 @@ async function characterGeometry(page: Page) {
       wrapTop: wrap.getBoundingClientRect().top, wrapHeight: wrap.getBoundingClientRect().height,
       reserve: wrap.getAttribute("data-edge-reserve"),
       scrollReserve: scroll ? getComputedStyle(scroll).getPropertyValue("--composer-reserve") : null };
-  });
+  }, characterKind);
   assert(geometry.head.top >= geometry.wrapTop - 1, "DS reserves the character within measured wrap");
   assert(geometry.textLines > 0, "real text glyph rectangles measured");
   assert(geometry.head.bottom <= geometry.textTop, "character does not overlap input text");
@@ -131,10 +139,10 @@ async function startScreens() {
     writeFileSync(join(server.butlerData, "personalization/onboarding.json"), JSON.stringify({
       schema: "butler.first_chat_onboarding.v1", status, gateway: "any", fields: {}, skipped_fields: [],
     }));
-    for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
+    for (const width of widths) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
       for (const wallpaper of ["none", "butler.bloom"]) {
         await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme,
-          composer_decoration: { theme: before ? "none" : "shoreline", character: true },
+          composer_decoration: { theme: before ? "none" : decorationTheme, character: true },
           wallpaper: { source: wallpaper === "none" ? { kind: "none" } : { kind: "live", module: wallpaper }, motion: "paused" } }) });
         const briefing = await server.api<NewChatBriefingView>("/new-chat-briefing");
         assert.equal(briefing.source.scope, status === "pending" ? "onboarding" : "general");
@@ -145,8 +153,9 @@ async function startScreens() {
         await page.getByRole("heading", { name: briefing.title, exact: true }).waitFor();
         await openEditor(page);
         await page.locator(editor).fill("Character geometry probe ".repeat(5));
-        if (!before) { await firstFrame(page); await characterGeometry(page); }
+        if (!before) await firstFrame(page);
         await capture(page, `${width}-${theme}-${language}-${status}-${wallpaper}`);
+        if (!before) await characterGeometry(page);
         if (!before && status === "complete" && wallpaper === "none") {
           await settings(page, language);
           await page.locator('[data-setting-id="composer-character"]').scrollIntoViewIfNeeded();
@@ -160,10 +169,12 @@ async function startScreens() {
 async function scrollReserveScreens() {
   longReply = true;
   const scrollCases = [];
-  for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
-    console.error(`Overflow transcript ${before ? "before" : "after"}: ${width}-${theme}-${language}`);
+  for (const width of widths) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
+    const lastMessage = `${width}-${theme}-${language}: ${LAST_MESSAGE}`;
+    longReplyText = LONG_MESSAGE.replace(LAST_MESSAGE, lastMessage);
+    console.error(`Overflow transcript ${before ? "before" : baseline ? "baseline" : decorationTheme}: ${width}-${theme}-${language}`);
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme,
-      composer_decoration: { theme: before ? "none" : "shoreline", character: true },
+      composer_decoration: { theme: before ? "none" : decorationTheme, character: true },
       wallpaper: { source: { kind: "none" }, motion: "paused" } }) });
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
@@ -171,11 +182,11 @@ async function scrollReserveScreens() {
     await page.goto(server.url); await openEditor(page);
     await page.locator(editor).fill("Long transcript reserve proof");
     await page.locator('[data-test-class="composer-send-button"]').click();
-    await page.getByText(LAST_MESSAGE, { exact: true }).last().waitFor({ state: "attached" });
+    await page.getByText(lastMessage, { exact: true }).last().waitFor({ state: "attached" });
     const scroll = page.locator('[data-test-class~="conversation-scroll"]');
     await scroll.evaluate(element => element.scrollTo({ top: element.scrollHeight }));
     await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-    await page.getByText(LAST_MESSAGE, { exact: true }).last().waitFor();
+    await page.getByText(lastMessage, { exact: true }).last().waitFor();
     const transcript = await page.locator('[data-test-class~="message-list"]').innerText();
     for (let i = 1; i <= 60; i++) assert(transcript.includes(`Complete transcript paragraph ${i}.`), `paragraph ${i} retained`);
     const extent = await scroll.evaluate(e => ({ height: e.clientHeight, content: e.scrollHeight, offset: e.scrollTop,
@@ -183,8 +194,8 @@ async function scrollReserveScreens() {
     assert(extent.content > extent.height, "real overflowing transcript");
     assert(Math.abs(extent.content - extent.height - extent.offset) <= 1, "scrolled to actual bottom");
     if (!before) await firstFrame(page);
-    const last = await page.getByText(LAST_MESSAGE, { exact: true }).last().boundingBox();
-    const obstruction = await page.locator(before ? '[data-test-class="composer-card"]' : '[data-character="crab"]').first().boundingBox();
+    const last = await page.getByText(lastMessage, { exact: true }).last().boundingBox();
+    const obstruction = await page.locator(before ? '[data-test-class="composer-card"]' : `[data-character="${characterKind}"]`).first().boundingBox();
     assert(last && obstruction && last.y + last.height <= obstruction.y, "complete last message above composer and character");
     const key = `${width}-${theme}-${language}`;
     await capture(page, `${key}-overflow-transcript`);
@@ -195,9 +206,9 @@ async function scrollReserveScreens() {
   console.log(JSON.stringify({ scrollCases }));
 }
 async function panelScreens() {
-  for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
+  for (const width of widths) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme,
-      composer_decoration: { theme: before ? "none" : "shoreline", character: true }, wallpaper: { source: { kind: "none" } } }) });
+      composer_decoration: { theme: before ? "none" : decorationTheme, character: true }, wallpaper: { source: { kind: "none" } } }) });
     const copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: theme });
@@ -212,7 +223,7 @@ async function panelScreens() {
       const panel = page.locator(mode === "question" ? '[data-slot="composer-question-panel"]' : '[data-test-class="composer-authority-decision"]');
       await panel.waitFor();
       assert.equal(await page.locator(scene).count(), 0);
-      assert.equal(await page.locator('[data-character="crab"]').count(), 0);
+      assert.equal(await page.locator(`[data-character="${characterKind}"]`).count(), 0);
       assert.equal(await page.locator("[data-edge-reserve]").count(), 0);
       await capture(page, `${width}-${theme}-${language}-${mode}-panel`);
       await panel.getByRole("button", { name: mode === "question" ? copy.interfaceDetails.questionPanel.skip : copy.interfaceDetails.deny, exact: true }).click();
@@ -223,7 +234,7 @@ async function panelScreens() {
 }
 async function runCase(width: number, theme: "light" | "dark", language: "en" | "ko") {
   const key = `${width}-${theme}-${language}`;
-  console.error(`Composer decoration ${before ? "before" : "after"}: ${key}`);
+  console.error(`Composer decoration ${before ? "before" : baseline ? "baseline" : decorationTheme}: ${key}`);
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme,
     wallpaper: { source: { kind: "none" }, motion: "auto", pauseOnBattery: true },
     composer_decoration: { theme: "none", character: true } }) });
@@ -252,23 +263,32 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
       recordCase({ key, plainTyping }); return;
     }
     const group = page.getByRole("radiogroup", { name: copy.settings.fields.composerDecoration });
-    assert.equal(await group.getByRole("radio").count(), 2, "cherry is not offered");
+    assert.equal(await group.getByRole("radio").count(), baseline ? 2 : 3, "all decoration options offered");
     let patches = 0;
     page.on("request", request => { if (new URL(request.url()).pathname === "/settings" && request.method() === "PATCH") patches++; });
     await group.getByRole("radio", { name: copy.settings.wallpaper.none, exact: true }).click();
     await page.waitForTimeout(100); assert.equal(patches, 0, "unchanged theme sends no write");
-    await group.getByRole("radio", { name: language === "ko" ? "해안선" : "Shoreline", exact: true }).click();
+    for (const name of [language === "ko" ? "해안선" : "Shoreline",
+      ...(baseline ? [] : [language === "ko" ? "벚꽃" : "Cherry blossom"]), copy.settings.wallpaper.none,
+      decorationTheme === "cherry" ? (language === "ko" ? "벚꽃" : "Cherry blossom") : (language === "ko" ? "해안선" : "Shoreline")]) {
+      const saved = page.waitForResponse(response => new URL(response.url()).pathname === "/settings" && response.request().method() === "PATCH");
+      await group.getByRole("radio", { name, exact: true }).click();
+      assert.equal((await saved).status(), 200);
+      await group.getByRole("radio", { name, exact: true }).waitFor();
+      assert.equal(await group.getByRole("radio", { name, exact: true }).getAttribute("aria-checked"), "true");
+    }
     await page.waitForFunction(() => document.querySelector('[data-setting-id="main-screen-motion"]'));
-    await capture(page, `${key}-settings-shoreline`);
+    await capture(page, `${key}-settings-${decorationTheme}`);
     await page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true }).click();
     // On mobile, Back first returns to settings navigation.
     const back = page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true });
     if (await back.count()) await back.click();
     await openEditor(page); await firstFrame(page);
     await page.locator(editor).fill("Character geometry probe ".repeat(5));
+    await capture(page, `${key}-plain-${decorationTheme}`);
     const geometry = await characterGeometry(page);
-    await capture(page, `${key}-plain-shoreline`);
     const decoratedTyping = await typing(page);
+    await verifyDecoratedDraft(page, key, join(out, key));
     await page.locator(editor).fill("Seed conversation");
     await page.locator(editor).press("ControlOrMeta+Enter");
     await page.getByText("Last complete message. This text must remain above the character and input.", { exact: false }).last().waitFor();
@@ -276,9 +296,9 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
     await page.waitForTimeout(300);
     const message = page.getByText("Last complete message. This text must remain above the character and input.", { exact: false }).last();
     const lastBox = await message.boundingBox();
-    const headBox = await page.locator('[data-character="crab"]').first().boundingBox();
+    const headBox = await page.locator(`[data-character="${characterKind}"]`).first().boundingBox();
     assert(lastBox && headBox && lastBox.y + lastBox.height <= headBox.y, "last message above character");
-    await capture(page, `${key}-conversation-shoreline`);
+    await capture(page, `${key}-conversation-${decorationTheme}`);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.waitForTimeout(300); await resetDecorationProbe(page); await page.waitForTimeout(500);
     assert.equal((await readDecorationProbe(page)).draws, 0, "reduced motion freezes scene");
@@ -302,7 +322,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
       const panel = page.locator(mode === "question" ? '[data-slot="composer-question-panel"]' : '[data-test-class="composer-authority-decision"]');
       await panel.waitFor();
       assert.equal(await page.locator(scene).count(), 0, `${mode} hides decoration`);
-      assert.equal(await page.locator('[data-character="crab"]').count(), 0, `${mode} hides character`);
+      assert.equal(await page.locator(`[data-character="${characterKind}"]`).count(), 0, `${mode} hides character`);
       assert.equal(await page.locator("[data-edge-reserve]").count(), 0);
       await capture(page, `${key}-${mode}-panel`);
       await panel.getByRole("button", { name: mode === "question" ? copy.interfaceDetails.questionPanel.skip : copy.interfaceDetails.deny, exact: true }).click();
@@ -316,7 +336,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
     assert.equal(saved.composer_decoration.character, false);
     await page.reload(); await page.keyboard.press("Escape");
     await page.goto(server.url); await openEditor(page); await firstFrame(page);
-    assert.equal(await page.locator('[data-character="crab"]').count(), 0);
+    assert.equal(await page.locator(`[data-character="${characterKind}"]`).count(), 0);
     assert.equal(await page.locator("[data-edge-reserve]").count(), 0);
     await capture(page, `${key}-character-off`);
     const idleDbs = ["app-server/butler-client.sqlite", "agent-runtime/btcc.sqlite"].map(name => new Database(join(server.butlerData, name), { readonly: true }));
@@ -328,9 +348,9 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
     assert.deepEqual(dbAfter, dbBefore, "idle database commits: zero");
     const changedFiles = Object.keys({ ...diskBefore, ...diskAfter }).filter(path => diskBefore[path] !== diskAfter[path]);
     assert.deepEqual(changedFiles, [], "idle disk writes: zero");
-    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ wallpaper: { source: { kind: "live", module: "butler.bloom" } }, composer_decoration: { theme: "shoreline", character: true } }) });
+    await server.api("/settings", { method: "PATCH", body: JSON.stringify({ wallpaper: { source: { kind: "live", module: "butler.bloom" } }, composer_decoration: { theme: decorationTheme, character: true } }) });
     await page.reload(); await openEditor(page); await firstFrame(page);
-    await capture(page, `${key}-wallpaper-shoreline`);
+    await capture(page, `${key}-wallpaper-${decorationTheme}`);
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ composer_decoration: { theme: "none" } }) });
     await page.reload(); await openEditor(page);
     assert.equal(await page.locator(scene).count(), 0);
@@ -352,7 +372,7 @@ try {
   assert(ids.every(id => listed.has(id)), "all 600 owner-scale chat summaries retained");
   if (panelsOnly) await panelScreens();
   if (!scrollOnly && !startsOnly && !panelsOnly) {
-    for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
+    for (const width of widths) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
       await runCase(width, theme, language);
     }
     writeFileSync(join(out, "typing.json"), JSON.stringify(results, null, 2));
@@ -362,7 +382,13 @@ try {
   if (!scrollOnly && !startsOnly && !panelsOnly) writeFileSync(join(out, "results.json"), JSON.stringify({ before, cases: results, browser: browser.version(), ownerScaleChats: 600 }, null, 2));
   console.log(JSON.stringify({ before, cases: results }));
 } catch (error) {
-  console.error(String(error));
+  console.error(error instanceof Error ? `${error.stack}\nCause: ${error.cause instanceof Error ? error.cause.stack : error.cause}` : String(error));
+  writeFileSync(join(out, "failure-dom.json"), JSON.stringify(await page.evaluate(() => {
+    const input = document.querySelector<HTMLElement>('[contenteditable="true"]');
+    return { offset: input?.scrollTop, clip: input ? getComputedStyle(input).clipPath : null,
+      marker: document.querySelector("[data-draft-scrolled]")?.getAttribute("data-draft-scrolled"),
+      forms: [...document.querySelectorAll("form")].map(form => ({ ...form.dataset })), active: document.activeElement?.outerHTML.slice(0, 200) };
+  }).catch(() => null), null, 2));
   await page.screenshot({ path: join(out, "failure.png") }).catch(() => undefined);
   throw error;
 } finally {

@@ -17,6 +17,7 @@ struct Patch {
 enum Theme {
     None,
     Shoreline,
+    Cherry,
 }
 
 pub(super) fn sanitize(value: &Value) -> Result<Value, GatewayApplicationError> {
@@ -34,7 +35,7 @@ pub(super) fn sanitize(value: &Value) -> Result<Value, GatewayApplicationError> 
             status: 400,
             code: "settings_composer_decoration_invalid".into(),
             message:
-                "Composer decoration requires theme (none or shoreline) or character (boolean)."
+                "Composer decoration requires theme (none, shoreline or cherry) or character (boolean)."
                     .into(),
             source: None,
         }),

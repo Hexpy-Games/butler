@@ -30,6 +30,7 @@ export function ComposerDecorationSettings() {
           options={[
             { value: "none", label: copy.wallpaper.none },
             { value: "shoreline", label: locale === "ko-KR" ? "해안선" : "Shoreline" },
+            { value: "cherry", label: locale === "ko-KR" ? "벚꽃" : "Cherry blossom" },
           ]}
           onValueChange={(theme) => save({ theme: theme as Setting["theme"] })} />}
       />

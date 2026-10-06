@@ -17,8 +17,8 @@ export function useComposerDecoration({ authority, question, plan }: ReturnType<
   return useMemo(() => {
     if (theme === "none" || replacesInput) return {};
     return {
-      decoration: <ComposerDecoration scene="shoreline" motion={motion} pauseOnBattery={pauseOnBattery} />,
-      edge: character ? composerDecorationEdge("shoreline") : undefined,
+      decoration: <ComposerDecoration scene={theme} motion={motion} pauseOnBattery={pauseOnBattery} />,
+      edge: character ? composerDecorationEdge(theme) : undefined,
     };
   }, [theme, character, motion, pauseOnBattery, replacesInput]);
 }
