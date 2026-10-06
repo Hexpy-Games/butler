@@ -309,8 +309,7 @@ impl super::AppApplication {
             self.project_creation.resolve_workspace_selection(token)
         })?;
         if prepared.workspace_root.is_none()
-            && (update::unchanged_composer_fold(&prepared.patch, &current)
-                || composer_decoration::unchanged(&prepared.patch, &current))
+            && update::unchanged_composer_preferences(&prepared.patch, &current)
         {
             return Ok((wallpaper::source(&current), current));
         }

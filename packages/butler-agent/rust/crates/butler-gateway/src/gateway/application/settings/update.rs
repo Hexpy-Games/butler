@@ -236,8 +236,12 @@ pub(super) fn normalize_model_fallback(
     json!({"enabled":enabled,"models":models})
 }
 
-/// A repeated appearance toggle has no mutation or persistence work.
-pub(super) fn unchanged_composer_fold(patch: &Value, current: &Value) -> bool {
+/// Repeated composer preferences have no mutation or persistence work.
+pub(super) fn unchanged_composer_preferences(patch: &Value, current: &Value) -> bool {
+    unchanged_composer_fold(patch, current) || super::composer_decoration::unchanged(patch, current)
+}
+
+fn unchanged_composer_fold(patch: &Value, current: &Value) -> bool {
     patch.as_object().is_some_and(|patch| {
         patch.len() == 1
             && patch
