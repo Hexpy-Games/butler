@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { appCopy } from "@/app/copy.ts";
 import { nativeShortcutModifier } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -7,7 +8,11 @@ import { SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 
 /** Existing input controls, in their original order; plan mode is the last field. */
 export function ConversationInputFields() {
-  const draft = useSettingsUIStore(state => state.draft);
+  const draft = useSettingsUIStore(useShallow(state => state.draft && ({
+    follow_up_behavior: state.draft.follow_up_behavior,
+    multiline_send_behavior: state.draft.multiline_send_behavior,
+    plan_mode_default: state.draft.plan_mode_default,
+  })));
   const update = useSettingsUIStore(state => state.update);
   const setSettings = useButlerStore(state => state.setSettings);
   const fields = appCopy.settings.fields;

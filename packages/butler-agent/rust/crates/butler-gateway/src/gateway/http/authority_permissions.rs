@@ -17,7 +17,8 @@ pub(super) async fn list(state: &HttpState) -> Result<Response, HttpError> {
         permissions: Vec<AppGrantView>,
     }
     let grants = state.application.authority_permissions().await?;
-    json(
+    let started = std::time::Instant::now();
+    let response = json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
@@ -25,7 +26,14 @@ pub(super) async fn list(state: &HttpState) -> Result<Response, HttpError> {
                 permissions: grants,
             },
         },
-    )
+    );
+    if std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1") {
+        eprintln!(
+            "approvals-profile serialize_us={}",
+            started.elapsed().as_micros()
+        );
+    }
+    response
 }
 
 pub(super) async fn revoke(

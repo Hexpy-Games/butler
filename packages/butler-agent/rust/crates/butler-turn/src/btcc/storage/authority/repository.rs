@@ -38,9 +38,10 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     }
     fn permission_projection_records(
         &mut self,
-        owner: &str,
-    ) -> AuthorityResult<Vec<PermissionSource>> {
-        query::permission_projection_records(self.db, owner)
+        owners: &[String],
+        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
+    ) -> AuthorityResult<()> {
+        query::permission_projection_records(self.db, owners, visit)
     }
     fn permission_records(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::permission_records(self.db, owner)

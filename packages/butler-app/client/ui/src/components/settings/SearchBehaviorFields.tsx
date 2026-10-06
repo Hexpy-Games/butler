@@ -8,7 +8,7 @@ import { useSearchSettingUpdate } from "./hooks/useSearchSettingUpdate";
 type WebSearchSettings = SettingsView["web_search"];
 
 /** Search behavior section: page reader, search planning and its depth. */
-export function SearchBehaviorFields({ draft }: { draft: SettingsView }) {
+export function SearchBehaviorFields({ draft }: { draft: Pick<SettingsView, "web_search"> }) {
   useAppLocale();
   const updateSearchSetting = useSearchSettingUpdate();
   const copy = appCopy.settings;

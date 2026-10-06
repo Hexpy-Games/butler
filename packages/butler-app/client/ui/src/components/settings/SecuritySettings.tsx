@@ -1,8 +1,10 @@
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
-import { useButlerModels } from "./hooks/useButlerModels";
+import { useShallow } from "zustand/react/shallow";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { DisclosureRow } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
@@ -16,10 +18,15 @@ import { useSecuritySettings } from "./useSecuritySettings";
  * Settings → Security: LAN access and remote pairing (clients on this
  * computer only). Allowed hosts sit in a collapsed Advanced disclosure.
  */
-export function SecuritySettings() {
+export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
-  const models = useButlerModels();
+  const draft = useSettingsUIStore(useShallow(state => state.draft && ({
+    access_mode: state.draft.access_mode, diagnostics_enabled: state.draft.diagnostics_enabled,
+  })));
+  const update = useSettingsUIStore(state => state.update);
+  const setSettings = useButlerStore(state => state.setSettings);
+  const models = { draft, update, setSettings };
   const savedKeys = useSavedKeys();
   const grants = useGrants();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -91,4 +98,4 @@ export function SecuritySettings() {
       )}
     </SettingsPage>
   );
-}
+});

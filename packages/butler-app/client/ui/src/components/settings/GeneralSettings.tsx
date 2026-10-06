@@ -1,3 +1,6 @@
+import { memo, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { DEFAULT_WEB_SEARCH_SETTINGS } from "@/app/constants.ts";
 import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -5,23 +8,28 @@ import { ConversationInputFields } from "./ConversationInputFields";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
-import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
-import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
-import { NativeNotificationStatusPanel } from "./NativeNotificationStatusPanel";
+import { SettingsPage, SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
+import { languageRegionSection, notificationSections } from "./generalPreferenceSections";
 import { MemoryModelPreparation } from "./MemoryModelPreparation";
 import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
-export function GeneralSettings() {
+export const GeneralSettings = memo(function GeneralSettings() {
   useAppLocale();
-  const draft = useSettingsUIStore((state) => state.draft);
+  const draft = useSettingsUIStore(useShallow((state) => state.draft && ({
+    language: state.draft.language, timezone: state.draft.timezone,
+    desktop_notifications: state.draft.desktop_notifications,
+    desktop_tray_enabled: state.draft.desktop_tray_enabled,
+  })));
+  const webSearch = useSettingsUIStore(useShallow((state) => state.draft?.web_search ?? DEFAULT_WEB_SEARCH_SETTINGS));
+  const searchDraft = useMemo(() => ({ web_search: webSearch }), [webSearch]);
+  const timezones = useMemo(timezoneOptions, []);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
 
   const settingsCopy = appCopy.settings;
   const fields = settingsCopy.fields;
   const descriptions = settingsCopy.descriptions;
-  const options = settingsCopy.options;
   const sections = settingsCopy.pageSections;
   const sectionDescriptions = settingsCopy.pageSectionDescriptions;
 
@@ -32,66 +40,11 @@ export function GeneralSettings() {
 
   return (
     <SettingsPage>
-      <SettingsSection id="language-region" kind="form" title={sections.languageRegion}>
-        <SettingsSelect
-          settingId="language"
-          label={fields.language}
-          description={descriptions.language}
-          value={draft.language}
-          onChange={(value) => update({ language: value as SettingsData["language"] }, setSettings)}
-          options={[
-            { value: "en", label: options.english },
-            { value: "ko", label: options.korean },
-          ]}
-        />
-        <SettingsSearchableSelect
-          settingId="timezone"
-          label={fields.timezone}
-          description={descriptions.timezone}
-          value={draft.timezone}
-          onChange={(value) => update({ timezone: value }, setSettings)}
-          options={timezoneOptions()}
-          searchLabel={options.timezoneSearch}
-          searchPlaceholder={options.timezoneSearch}
-          searchClearLabel={options.timezoneSearchClear}
-          allLabel={options.timezoneAll}
-          emptyLabel={options.timezoneEmpty}
-        />
-      </SettingsSection>
+      {languageRegionSection(draft, timezones, update, setSettings)}
       <SettingsSection id="conversation-input" kind="form" title={sections.conversationInput}>
         <ConversationInputFields />
       </SettingsSection>
-      <SettingsSection id="notifications" kind="form" title={sections.notifications}>
-        <SettingsSwitch
-          settingId="desktop-notifications"
-          label={fields.desktopNotifications}
-          description={descriptions.desktopNotifications}
-          checked={notifications.enabled}
-          onChange={(enabled) => updateNotifications({ enabled })}
-        />
-        <SettingsSwitch
-          settingId="notify-assistant-messages"
-          label={fields.desktopNotificationAssistantMessages}
-          description={descriptions.desktopNotificationAssistantMessages}
-          checked={notifications.assistant_messages}
-          onChange={(assistantMessages) => updateNotifications({ assistant_messages: assistantMessages })}
-        />
-        <SettingsSwitch
-          settingId="notify-task-completions"
-          label={fields.desktopNotificationTaskCompletions}
-          description={descriptions.desktopNotificationTaskCompletions}
-          checked={notifications.task_completions}
-          onChange={(taskCompletions) => updateNotifications({ task_completions: taskCompletions })}
-        />
-      </SettingsSection>
-      <SettingsSection
-        id="notification-permission"
-        kind="status"
-        title={sections.notificationPermission}
-        description={sectionDescriptions.notificationPermission}
-      >
-        <NativeNotificationStatusPanel />
-      </SettingsSection>
+      {notificationSections(draft.desktop_notifications, updateNotifications)}
       <SettingsSection id="memory-model" kind="status" title={appCopy.firstRun.memoryModel.label}>
         <MemoryModelPreparation />
       </SettingsSection>
@@ -112,7 +65,7 @@ export function GeneralSettings() {
         title={sections.searchProvider}
         description={sectionDescriptions.searchProvider}
       >
-        <SearchProviderFields draft={draft} />
+        <SearchProviderFields draft={searchDraft} />
       </SettingsSection>
       <SettingsSection
         id="search-behavior"
@@ -120,11 +73,11 @@ export function GeneralSettings() {
         title={sections.searchBehavior}
         description={sectionDescriptions.searchBehavior}
       >
-        <SearchBehaviorFields draft={draft} />
+        <SearchBehaviorFields draft={searchDraft} />
       </SettingsSection>
     </SettingsPage>
   );
-}
+});
 
 function timezoneOptions(): Array<{ value: string; label: string }> {
   const fallback = ["UTC", "Asia/Seoul", "America/Los_Angeles", "America/New_York", "Europe/London", "Europe/Paris"];
