@@ -48,6 +48,14 @@ pub(super) fn decide(
             },
         ));
     }
+    let normalized: serde_json::Value = serde_json::from_str(&current.normalized_input_json)
+        .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    if input.allow_scope.as_deref() == Some("conversation")
+        && (normalized.get("always_confirm") == Some(&serde_json::Value::Bool(true))
+            || current.capability == "browser_wait_for_user")
+    {
+        return Err(AuthorityError::policy("browser_confirm_once_required"));
+    }
     let permission = if action == AuthorityAction::Allow
         && input.allow_scope.as_deref() == Some("conversation")
     {

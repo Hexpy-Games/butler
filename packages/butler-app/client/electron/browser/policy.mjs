@@ -1,7 +1,7 @@
 // Build metadata must advance with the pinned Electron major (official release schedule).
 export const BROWSER_BUILD = Object.freeze({ major: 44, eol: "2027-03-02T00:00:00Z" });
 export function browsingEnabled(version = process.versions.electron, now = Date.now()) {
-  return Number(version?.split(".")[0]) === BROWSER_BUILD.major && now < Date.parse(BROWSER_BUILD.eol);
+  return !process.env.BUTLER_BROWSER_DISABLED && Number(version?.split(".")[0]) === BROWSER_BUILD.major && now < Date.parse(BROWSER_BUILD.eol);
 }
 export function webUrl(value) {
   try {

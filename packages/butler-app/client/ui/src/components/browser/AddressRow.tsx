@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { ArrowLeft, Box, ButtonContainer, ChevronRight, Globe2, IconButton, IconSlot, Input, RefreshCcw, Square, Stack } from "@/butler-ds";
+import { AgentControl } from "./AgentControl";
 import { browserCall, type BrowserTab } from "./browserBridge";
 
 export function AddressRow({ tab, enabled }: { tab?: BrowserTab; enabled: boolean }) {
@@ -27,5 +28,6 @@ export function AddressRow({ tab, enabled }: { tab?: BrowserTab; enabled: boolea
           if (event.key === "Escape") { setAddress(tab?.url ?? ""); call("focus"); }
         }} /></Stack>
     </Stack>
+    <AgentControl tab={tab} />
   </Stack></Box>;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { connectBrowser } from "@/components/browser/browserBridge";
 import { api } from "@/app/api.ts";
 import { useOrganization } from "@/app/space/organization";
 import { EMPTY_NAVIGATION } from "@/app/constants.ts";
@@ -85,7 +86,10 @@ export function useAppBootstrap() {
           hydrateFreshUiState();
         }
       } finally {
-        if (!cancelled) uiStateHydratedRef.current = true;
+        if (!cancelled) {
+          uiStateHydratedRef.current = true;
+          connectBrowser();
+        }
       }
     }
     restoreUiState();

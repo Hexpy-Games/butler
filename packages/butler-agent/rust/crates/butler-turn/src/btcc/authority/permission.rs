@@ -78,7 +78,9 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
         Some(ToolName::WriteFile | ToolName::EditFile)
     );
     let command = matches!(capability, "run_command" | "run_command_remote_observation");
-    let scope = if file_edit {
+    let scope = if capability == "browser_act" && input["always_confirm"] != true {
+        json!({"kind":"browser_site","capability":capability,"target":target})
+    } else if file_edit {
         json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
     } else if command {
         let mut scope = serde_json::Map::new();

@@ -74,6 +74,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   const targets = (Array.isArray(value.targets) ? value.targets : [])
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
   return { tool: value.tool, access: value.access, targets,
+    ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
 }
 

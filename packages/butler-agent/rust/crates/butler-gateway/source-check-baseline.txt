@@ -44,5 +44,5 @@ src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96
 src/gateway/http/monitors.rs	route	139
-src/gateway/http/project_session_mutations.rs	route	133
+src/gateway/http/project_session_mutations.rs	route	100
 src/gateway/http/subsessions.rs	route	95

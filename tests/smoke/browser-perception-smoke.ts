@@ -1,5 +1,7 @@
 // test-category: pure-logic
 // No model calls. Provider injection is the P2a seam; A0 deliberately has no visibility filtering.
+import { loadavg } from "node:os";
+import { HitTestedProvider } from "../browser-eval/hit-tested-provider";
 import { strict as assert } from "node:assert";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -29,8 +31,9 @@ export async function runPerception(provider: SnapshotProvider, output: string) 
       await page.goto(fixture.url(id));
       await Promise.all(page.frames().map((frame) => frame.evaluate("document.fonts.ready")));
       if (truth.settleMs) await page.waitForTimeout(truth.settleMs);
+      const loadAverage1m = loadavg()[0];
       const snapshot = await provider.snapshot(page);
-      rows.push(scoreSnapshot(truth, provider.arm, snapshot));
+      rows.push({ ...scoreSnapshot(truth, provider.arm, snapshot), loadAverage1m } as L1Metrics);
       await writeFile(resolve(output, `${id}.snapshot.json`), JSON.stringify(snapshot, null, 2));
       await page.screenshot({ path: resolve(output, `${id}.png`) });
       await page.close();
@@ -44,12 +47,12 @@ export async function runPerception(provider: SnapshotProvider, output: string) 
       clock: "2026-10-06T12:00:00.000Z", seed: 737, tokenEstimate: "ceil(UTF-8 bytes / 4); not provider usage",
       totals, rows, requests: fixture.events };
     await writeFile(resolve(output, "l1.json"), JSON.stringify(report, null, 2));
-    console.log(JSON.stringify({ ...totals, snapshotBytes: rows.reduce((s, r) => s + r.snapshotBytes, 0), scriptMs: rows.reduce((s, r) => s + r.scriptMs, 0) }));
+    console.log(JSON.stringify({ ...totals, snapshotBytes: rows.reduce((s, r) => s + r.snapshotBytes, 0), scriptMs: rows.reduce((s, r) => s + r.scriptMs, 0), loadAverage1m: loadavg()[0] }));
     return report;
   } finally { await browser.close(); fixture.stop(); }
 }
 
 if (import.meta.main) {
   if (!process.env.BUTLER_BROWSER_EVAL_OUTPUT) throw new Error("Set BUTLER_BROWSER_EVAL_OUTPUT outside the repository");
-  await runPerception(new RawA11yProvider(), resolve(process.env.BUTLER_BROWSER_EVAL_OUTPUT));
+  await runPerception(process.env.BUTLER_BROWSER_EVAL_ARM === "A1" ? new HitTestedProvider() : new RawA11yProvider(), resolve(process.env.BUTLER_BROWSER_EVAL_OUTPUT));
 }

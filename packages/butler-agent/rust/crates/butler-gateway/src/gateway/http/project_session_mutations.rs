@@ -113,35 +113,47 @@ pub(super) async fn route(
         )
         .map(Some);
     }
-    if method == Method::POST
+    session_lifecycle(state, &method, uri).await
+}
+
+async fn session_lifecycle(
+    state: Arc<HttpState>,
+    method: &Method,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
+    let path = uri.path();
+    if *method == Method::POST
         && let Some(encoded) = action_id(path, "/sessions/", "/archive")
     {
+        let id = super::subsessions::decode_component(encoded)?;
+        let data = state.application.archive_session(id.clone(), None).await?;
+        super::browser_host::agent_calls::close_owner(&state, &id);
         return json(
             StatusCode::OK,
             ApiEnvelope {
                 protocol_version: APP_PROTOCOL_VERSION,
-                data: state
-                    .application
-                    .archive_session(super::subsessions::decode_component(encoded)?, None)
-                    .await?,
+                data,
             },
         )
         .map(Some);
     }
-    if method == Method::DELETE
+    if *method == Method::DELETE
         && let Some(encoded) = resource_id(path, "/sessions/")
     {
         let permanent = query(uri)
             .get("permanent")
             .is_some_and(|value| value == "true");
+        let id = super::subsessions::decode_component(encoded)?;
+        let data = state
+            .application
+            .delete_session(id.clone(), permanent)
+            .await?;
+        super::browser_host::agent_calls::close_owner(&state, &id);
         return json(
             StatusCode::OK,
             ApiEnvelope {
                 protocol_version: APP_PROTOCOL_VERSION,
-                data: state
-                    .application
-                    .delete_session(super::subsessions::decode_component(encoded)?, permanent)
-                    .await?,
+                data,
             },
         )
         .map(Some);

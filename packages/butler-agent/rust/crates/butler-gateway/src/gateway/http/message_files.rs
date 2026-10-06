@@ -182,6 +182,7 @@ async fn parse_upload(request: Request<Body>) -> Result<AppFileUpload, HttpError
     }
     let (name, mime_type, bytes) = file.ok_or_else(file_required)?;
     Ok(AppFileUpload {
+        browser_tab: None,
         owner_session_id,
         name,
         mime_type,

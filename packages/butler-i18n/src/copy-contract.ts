@@ -212,7 +212,7 @@ interface ConversationCopy {
 }
 
 export interface AppCopy {
-  browser: { title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
+  browser: { agentControl: string; userControl: string; takeOver: string; handBack: string; signedIn: string; stills: string; waiting: string; still: string; title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;

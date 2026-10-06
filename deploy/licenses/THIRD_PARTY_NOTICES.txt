@@ -5511,6 +5511,19 @@ License: https://github.com/tokio-rs/prost/blob/13646cde7eab75c81b3047767aa0a86e
 
 
 ===== COMPONENT =====
+psl-types 2.0.11
+MIT OR Apache-2.0
+License: https://github.com/addr-rs/psl-types/blob/c0b9c35c4cc306c4f8a888814a68e652571e2730/LICENSE
+License: https://github.com/addr-rs/psl-types/blob/c0b9c35c4cc306c4f8a888814a68e652571e2730/LICENSE-APACHE
+Copyright (c) 2021 Rushmore Mushambi
+
+===== COMPONENT =====
+psl 2.1.239
+MIT OR Apache-2.0
+License: https://github.com/addr-rs/psl/blob/23897ed897cf406bbf9b746fbdd1161d6d6fde75/LICENSE
+Copyright (c) 2016 Rushmore Mushambi
+
+===== COMPONENT =====
 pxfm 0.1.30
 BSD-3-Clause OR Apache-2.0
 License: https://github.com/awxkee/pxfm/blob/acf7acd00cfc845307eda7b7b2de19e42303de82/LICENSE-APACHE.md

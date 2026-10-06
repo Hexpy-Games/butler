@@ -22,6 +22,7 @@
 #[macro_use]
 extern crate butler_core;
 
+pub mod browser;
 pub mod capabilities;
 pub mod context;
 pub mod operations;

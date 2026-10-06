@@ -43,6 +43,9 @@ pub struct GuidedCatalogSnapshot {
 }
 
 impl GuidedCatalogSnapshot {
+    pub fn disable_browser(&mut self) {
+        self.tools.retain(|tool| !tool.name.starts_with("browser_"));
+    }
     /// Every catalog tool.
     pub fn capability_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
         self.tools.iter().map(|tool| GuidedCatalogRead {

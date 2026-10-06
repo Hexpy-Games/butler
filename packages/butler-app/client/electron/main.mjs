@@ -2081,6 +2081,9 @@ function safeString(value) {
 const browserHost = createBrowserHost({
   fetch: (path, init) => appServerFetch(path, init),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
+  executeBrowser: frame => userBrowser?.execute(frame),
+  snapshot: () => userBrowser?.snapshot(),
+  enabled: () => userBrowser?.enabled() ?? false,
 });
 
 let userBrowser;
@@ -2101,6 +2104,8 @@ async function createWindow() {
   }
   if (!legacyDataBlocked) {
     await loadInitialNativeShellPreferences();
+    userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser.onState = () => browserHost.changed();
     browserHost.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {

@@ -1,3 +1,4 @@
+mod message_files;
 use std::{
     path::PathBuf,
     sync::{
@@ -321,18 +322,6 @@ impl AppArtifactMaterializer for Materializer {
         _: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>> {
         Box::pin(async { Ok(Vec::new()) })
-    }
-}
-
-impl AppMessageFileStorage for Materializer {
-    fn write_upload(&self, _: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn prepare_uploaded(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn read_original(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<bytes::Bytes> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 

@@ -1,0 +1,4 @@
+# Production functions over 80 lines, ratcheted by tools/source-check.
+# Split a function and regenerate: cargo run -p butler-source-check -- --bless .
+# Entries may only shrink or disappear; new entries need review.
+src/btcc/authority/decision.rs	decide	81

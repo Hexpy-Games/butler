@@ -1,14 +1,24 @@
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
-export function createBrowserHost({ fetch, adminCredential }) {
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, snapshot, enabled = () => true }) {
   let controller = null;
   let reconnect = null;
   let running = false;
+  let stateTimer = null;
+  const flushState = async () => {
+    if (running && controller && !controller.signal.aborted && snapshot?.()) {
+      await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs }) });
+    }
+  };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
   async function execute(frame) {
-    const result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : { status: "unknown", reason: "unsupported_op" };
+    await flushState();
+    let result;
+    try { result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" }; }
+    catch { result = { status: "unknown", reason: "executor_error" }; }
+    await flushState();
     await request(`/internal/browser-host/results/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });
@@ -18,6 +28,7 @@ export function createBrowserHost({ fetch, adminCredential }) {
     try {
       const response = await request("/internal/browser-host");
       if (!response.ok) throw new Error("host_unavailable");
+      await flushState();
       let pending = "";
       const decoder = new TextDecoder();
       for await (const chunk of response.body) {
@@ -35,7 +46,10 @@ export function createBrowserHost({ fetch, adminCredential }) {
     if (running) reconnect = setTimeout(connect, 1000);
   }
   return {
-    start() { if (!running) { running = true; void connect(); } },
-    stop() { running = false; clearTimeout(reconnect); controller?.abort(); closeOutputChecks(); },
+    start() { if (!running && enabled()) { running = true; void connect(); } },
+    changed() {
+      if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
+    },
+    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); closeOutputChecks(); },
   };
 }

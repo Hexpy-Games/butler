@@ -97,6 +97,7 @@ pub(super) async fn attach(
     }
     application
         .upload_message_file(AppFileUpload {
+            browser_tab: None,
             owner_session_id: None,
             name: original.file.safe_name,
             mime_type: Some(original.file.mime_type),

@@ -120,6 +120,14 @@ impl AppArtifactMaterializer for AppMessageFiles {
 }
 
 impl AppMessageFileStorage for AppMessageFiles {
+    fn replace_browser_still(
+        &self,
+        file: AppMessageFileSnapshot,
+        bytes: Bytes,
+        name: String,
+    ) -> ApplicationFuture<MaterializedResponderFile> {
+        self.run_file_job(move |root, _| upload::replace_still(root, file, &bytes, name))
+    }
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
         self.run_file_job(move |root, clock| upload::write(root, clock, input))
     }

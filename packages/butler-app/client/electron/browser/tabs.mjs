@@ -3,12 +3,15 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
+import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, openAgentPopup, viewedTab } from "./agent.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
   tabs = new Map();
   profiles = new Set();
+  conversationPartitions = new Map();
+  stillPreferences = new Map();
   activeId = null;
   opened = false;
   areaVisible = false;
@@ -28,10 +31,11 @@ class UserBrowser {
   }
   enabled() { return browsingEnabled() && !this.breaker.tripped; }
   snapshot() {
-    return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0,
-      tabs: [...this.tabs.values()].map(({ view: _view, attached: _attached, bounds: _bounds, covered: _covered, capture: _capture, still: _still, ...tab }) => tab) };
+    return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
+      tabs: [...this.tabs.values()].map(tab => ({ id: tab.id, owner: tab.owner, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, stills: this.stillPreferences.get(tab.owner) !== false })) };
   }
   publish() {
+    this.onState?.(this.snapshot());
     const win = this.getWindow();
     if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("butler-browser:state", this.snapshot());
   }
@@ -55,10 +59,12 @@ class UserBrowser {
     const win = this.getWindow();
     const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
       tab.bounds?.visible && !tab.covered && this.nativeCovers === 0 && tab.status !== "crashed";
-    if (!visible || !tab.view) { this.detach(tab); return; }
+    if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
+    viewedTab(this, tab, true);
     if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+    emulation(tab);
   }
   async capture(tab) {
     if (!tab.view || tab.view.webContents.isDestroyed() || tab.status === "crashed") return tab.still;
@@ -94,18 +100,27 @@ class UserBrowser {
   }
   materialize(tab) {
     if (tab.view || !this.enabled()) return;
-    const partition = tab.owner === "mine" ? "persist:butler-web" : `butler-conv-${tab.owner.slice(13)}`;
+    const partition = tab.partition;
     if (!this.profiles.has(partition)) {
       protectPartition(partition, () => this.nativeCover()); this.profiles.add(partition);
     }
     tab.view = new WebContentsView({ webPreferences: {
-      partition, contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false,
+      partition, webgl: !tab.agent, contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false,
     } });
+    tab.session = tab.view.webContents.session;
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       window: this.getWindow, shortcut: (input) => this.shortcut(input, true),
-      popup: (source, url) => this.create({ owner: source.owner, url }, false) });
-    if (tab.url) void tab.view.webContents.loadURL(tab.url).catch(() => {});
+      popup: (source, url) => void this.popup(source, url) });
+    if (tab.agent) wireAgentTab(this, tab);
+    if (tab.url && !tab.agent) void tab.view.webContents.loadURL(tab.url).catch(() => {});
+  }
+  async popup(source, url) {
+    if (source.agent && source.owner.startsWith("conversation:")) {
+      await openAgentPopup(this, source, url); return;
+    }
+    const id = this.create({ owner: source.owner, url, agent: source.agent, policy: source.policy, partition: source.partition, profile: source.profile }, false);
+    this.materialize(this.tabs.get(id));
   }
   create(input = {}, activateTab = true) {
     if (!this.enabled()) throw new Error("browsing_disabled");
@@ -113,7 +128,12 @@ class UserBrowser {
     if (owner !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner)) throw new Error("invalid_owner");
     const url = input.url ? webUrl(input.url) : "";
     if (input.url && !url) throw new Error("blocked_protocol");
-    const tab = { id: randomUUID(), owner, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+    if (owner === "mine" && [...this.tabs.values()].filter(tab => tab.owner === "mine").length >= 30) throw new Error("tab_budget_exhausted");
+    const output = url && new URL(url).hostname === "127.0.0.1" && new URL(url).pathname.startsWith("/__o/");
+    const profile = input.profile ?? (input.agent || output ? "signed_out" : "signed_in");
+    if (profile === "signed_out" && !this.conversationPartitions.has(owner)) this.conversationPartitions.set(owner, `butler-conv-${randomUUID()}`);
+    const tab = { id: randomUUID(), owner, profile, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
+      agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, bounds: null, covered: false, capture: null };
     this.tabs.set(tab.id, tab);
     if (owner === "mine") this.restore.changed();
@@ -124,7 +144,12 @@ class UserBrowser {
   activate(id) {
     const tab = this.tabs.get(id);
     if (!tab) return;
-    if (this.activeId && this.activeId !== id) this.detach(this.tabs.get(this.activeId));
+    if (this.activeId && this.activeId !== id) {
+      const previous = this.tabs.get(this.activeId);
+      if (previous?.holder === "user" && !previous.sticky) controlTab(this, previous, "agent");
+      this.detach(previous); backgroundTab(this, previous ?? {});
+    }
+    tab.viewed = true; clearTimeout(tab.expiry);
     this.activeId = id;
     this.materialize(tab);
     this.sync(tab);
@@ -134,8 +159,16 @@ class UserBrowser {
     const tab = this.tabs.get(id);
     if (!tab) return;
     this.detach(tab);
-    tab.view?.webContents.close({ waitForBeforeUnload: false });
+    const profile = tab.session;
+    if (tab.view && !tab.view.webContents.isDestroyed()) tab.view.webContents.close({ waitForBeforeUnload: false });
+    clearTimeout(tab.expiry);
     this.tabs.delete(id);
+    if (tab.profile === "signed_out" && ![...this.tabs.values()].some(item => item.partition === tab.partition)) {
+      if (profile) { void profile.clearStorageData(); void profile.clearCache(); }
+      for (const [owner, partition] of this.conversationPartitions) if (partition === tab.partition) this.conversationPartitions.delete(owner);
+      this.profiles.delete(tab.partition);
+    }
+    if (![...this.tabs.values()].some(item => item.agent)) { this.agentWindow?.destroy(); this.agentWindow = null; }
     if (tab.owner === "mine") this.restore.changed();
     if (this.activeId === id) {
       this.activeId = null;
@@ -198,21 +231,41 @@ class UserBrowser {
   }
   move({ tabId, toGroupId, index }) {
     const tab = this.tabs.get(tabId);
-    if (!tab || toGroupId !== tab.owner || !Number.isInteger(index)) throw new Error("invalid_move");
+    if (!tab || (toGroupId !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(toGroupId)) || !Number.isInteger(index)) throw new Error("invalid_move");
+    const previousOwner = tab.owner;
+    if (toGroupId !== tab.owner) { tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, tab);
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
-    if (tab.owner === "mine") this.restore.changed(); this.publish();
+    if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
   }
   focusArea(value) { this.keyboardFocused = value; }
-  hide() { this.keyboardFocused = false; this.areaVisible = false; for (const tab of this.tabs.values()) this.detach(tab); }
+  hide() {
+    this.keyboardFocused = false; this.areaVisible = false;
+    for (const tab of this.tabs.values()) {
+      if (tab.holder === "user" && !tab.sticky) controlTab(this, tab, "agent");
+      this.detach(tab); backgroundTab(this, tab);
+    }
+  }
+  control(id, holder, sticky) {
+    if (!["agent", "user"].includes(holder)) throw new Error("invalid_control");
+    controlTab(this, this.tabs.get(id), holder, sticky);
+  }
+  setStills(id, value) {
+    const tab = this.tabs.get(id); if (!tab || tab.owner === "mine") return;
+    this.stillPreferences.set(tab.owner, value !== false);
+    for (const peer of this.tabs.values()) if (peer.owner === tab.owner) peer.stills = value !== false;
+    this.publish();
+  }
+  execute(frame) { return executeBrowser(this, frame); }
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
     this.areaVisible = false;
     clearTimeout(this.metadataTimer);
+    for (const tab of this.tabs.values()) clearTimeout(tab.expiry);
     await Promise.all([...this.tabs.values()].map((tab) => {
       if (tab.attached && !tab.attached.isDestroyed() && tab.view) tab.attached.contentView.removeChildView(tab.view);
       tab.attached = null;
@@ -224,6 +277,7 @@ class UserBrowser {
         contents.close({ waitForBeforeUnload: false });
       });
     }));
+    this.agentWindow?.destroy(); this.agentWindow = null;
   }
 }
 

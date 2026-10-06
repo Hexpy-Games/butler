@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Button, EmptyLine, NativeViewSlot, Stack, TabStrip, type TabStripGroup } from "@/butler-ds";
+import { useButlerStore } from "@/app/store";
+import { activeChatFromNavigation } from "@/app/utils";
 import { AddressRow } from "./AddressRow";
 import { browserCall, connectBrowser, useBrowserState } from "./browserBridge";
 
 export function BrowserArea() {
   useAppLocale();
   const state = useBrowserState();
+  const navigation = useButlerStore((store) => store.navigation);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const tab = state.tabs.find((item) => item.id === state.activeId);
   const copy = appCopy.browser;
   const covering = useRef(0);
@@ -24,9 +28,10 @@ export function BrowserArea() {
   const groups: TabStripGroup[] = [];
   for (const item of state.tabs) {
     let group = groups.find((entry) => entry.id === item.owner);
-    if (!group) { group = { id: item.owner, kind: item.owner === "mine" ? "mine" : "conversation", label: item.owner === "mine" ? copy.myTabs : copy.output, tabs: [] }; groups.push(group); }
+    if (!group) { group = { id: item.owner, kind: item.owner === "mine" ? "mine" : "conversation", label: item.owner === "mine" ? copy.myTabs : activeChatFromNavigation(navigation, item.owner.slice(13)).shortTitle, collapsed: collapsed[item.owner], tabs: [] }; groups.push(group); }
+    if (item.waiting) group.state = "waiting"; else if (item.busy) group.state ??= "working";
     group.tabs.push({ id: item.id, title: item.title, faviconSrc: item.favicon,
-      state: item.status === "idle" ? undefined : item.status });
+      state: item.busy ? "working" : item.status === "idle" ? undefined : item.status });
   }
   const call = (op: string, value?: unknown) => browserCall(op, { id: tab?.id, value });
   const covered = async (value: boolean) => {
@@ -52,10 +57,12 @@ export function BrowserArea() {
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
         untitled: copy.newTab, loading: copy.loading, crashed: copy.crashed }}
       onActivate={(id) => void browserCall("activate", { id })} onClose={(id) => void browserCall("close", { id })}
+      onToggleGroup={(id, value) => setCollapsed((current) => ({ ...current, [id]: value }))}
       onNewTab={state.enabled ? () => void browserCall("create") : undefined}
       onMove={(move) => void browserCall("move", move)} />
     <AddressRow tab={tab} enabled={state.enabled} />
     <Stack fill gap="none"><NativeViewSlot key={tab?.id ?? "empty"} id="browser-page" hidden={empty || crashed || disabled}
+      viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={still?.id === tab?.id ? still?.src : undefined} covered={state.nativeCovered}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>

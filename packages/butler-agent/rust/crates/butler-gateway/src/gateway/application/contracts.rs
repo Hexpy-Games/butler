@@ -86,6 +86,12 @@ pub trait AppArtifactMaterializer: Send + Sync + 'static {
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>>;
 }
 pub trait AppMessageFileStorage: Send + Sync + 'static {
+    fn replace_browser_still(
+        &self,
+        file: AppMessageFileSnapshot,
+        bytes: Bytes,
+        name: String,
+    ) -> ApplicationFuture<MaterializedResponderFile>;
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile>;
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()>;
     fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes>;
@@ -220,6 +226,7 @@ pub struct AppMessageFileSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct AppFileUpload {
+    pub browser_tab: Option<String>,
     pub owner_session_id: Option<String>,
     pub name: String,
     pub mime_type: Option<String>,

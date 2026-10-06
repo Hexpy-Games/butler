@@ -1,4 +1,5 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
+pub(super) mod agent_calls;
 mod report;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -19,11 +20,12 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Default)]
-pub(super) struct Hub(Mutex<Inner>);
+pub(super) struct Hub(Mutex<Inner>, tokio::sync::Mutex<()>);
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
     pending: HashMap<String, oneshot::Sender<Value>>,
+    tabs: butler_runtime::browser::TabRegistry,
 }
 struct HostStream {
     state: Arc<HttpState>,
@@ -34,6 +36,7 @@ impl Drop for HostStream {
         if let Ok(mut hub) = self.state.browser.0.lock() {
             hub.host = None;
             hub.pending.clear();
+            hub.tabs.clear();
         }
     }
 }
@@ -61,6 +64,9 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => attach(state, client.keys.live_streams()),
         (&Method::POST, "/internal/browser/calls") => call(state, request).await,
+        (&Method::POST, "/internal/browser-host/events") => {
+            agent_calls::events(state, read_json(request).await?).await
+        }
         (&Method::POST, p) if p.starts_with("/internal/browser-host/results/") => {
             let id = p.trim_start_matches("/internal/browser-host/results/");
             let body = read_json(request).await?;
@@ -111,6 +117,9 @@ fn attach(
 }
 async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let mut args = read_json(request).await?;
+    if args.get("op").is_some() {
+        return agent_calls::call(state, args).await;
+    }
     let view = super::content::check_view(&state, &args).await?;
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
@@ -159,7 +168,16 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
 }
 
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
-    let bytes = super::read_body_with_limit(request.into_body(), 220 * 1024).await?;
+    let limit = if request
+        .uri()
+        .path()
+        .starts_with("/internal/browser-host/results/")
+    {
+        256 * 1024
+    } else {
+        64 * 1024
+    };
+    let bytes = super::read_body_with_limit(request.into_body(), limit).await?;
     serde_json::from_slice(&bytes).map_err(|_| error(400, "invalid_request"))
 }
 

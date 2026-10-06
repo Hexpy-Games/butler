@@ -15,6 +15,7 @@ import { delegatedRequestGoal } from "./delegatedRequestGoal";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
 import { workActivityToolsFromRows } from "./toolchainUtils";
+import { BrowserTimelineStill } from "../browser/BrowserTimelineStill";
 
 export function TurnActivityTimeline({
   activities,
@@ -60,6 +61,7 @@ export function TurnActivityTimeline({
           />
         </Stack>
         <Stack gap="sm">
+          {!expanded && <BrowserTimelineStill activities={activities} turnId={turnId} live={live} />}
           {expanded ? (
             <Stack as="ol" gap="sm">
               {activities.map((activity, index) => (

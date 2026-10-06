@@ -152,3 +152,29 @@ fn replace_private(path: impl AsRef<Path>, bytes: &[u8], point: &str) -> std::io
         |error| error,
     )
 }
+
+pub(super) fn replace_still(
+    root: &Path,
+    file: AppMessageFileSnapshot,
+    bytes: &Bytes,
+    name: String,
+) -> Result<MaterializedResponderFile, GatewayApplicationError> {
+    if !file.safe_name.starts_with("browser-step-")
+        || file.mime_type != "image/jpeg"
+        || bytes.len() > 24 * 1024
+    {
+        return Err(GatewayApplicationError::internal());
+    }
+    let path = file_path(root, &file)?;
+    replace_private(path, bytes, "browser_still").map_err(internal)?;
+    Ok(MaterializedResponderFile {
+        id: file.id,
+        kind: file.kind,
+        mime_type: file.mime_type,
+        safe_name: name,
+        size_bytes: bytes.len() as u64,
+        sha256: format!("{:x}", Sha256::digest(bytes)),
+        storage_name: file.storage_name,
+        created_at: file.created_at,
+    })
+}

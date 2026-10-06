@@ -1,3 +1,4 @@
+mod browser;
 use std::collections::HashSet;
 
 use crate::btcc::{AccessMode, ApprovalExemptAction};
@@ -133,6 +134,7 @@ pub(super) fn legacy_authorized<'a>(
     names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
+    browser::authorize(&mut names, catalog, policy, scope.worker);
     apply_role(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
@@ -408,6 +410,9 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     }
     if tool.durable {
         return false;
+    }
+    if matches!(tool.name.as_str(), "browser_act" | "browser_wait_for_user") {
+        return true;
     }
     if tool.effect_boundary.as_deref() != Some("none") {
         return false;
