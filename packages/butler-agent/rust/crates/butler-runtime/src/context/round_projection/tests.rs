@@ -133,6 +133,7 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
 // test-category: format-pin
 #[test]
 fn message_writers_keep_the_persisted_digest_field_order_and_omissions() {
+    super::request_cache::verify();
     {
         let mut assistant = message(ModelRoundRole::Assistant, "reply 💡");
         assistant.tool_calls = Some(vec![ModelRoundToolCall {

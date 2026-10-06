@@ -11,8 +11,7 @@ use butler_gateway::gateway::{
 };
 use butler_models::models::{ModelCatalog, TokenEstimateInput};
 use butler_turn::btcc::{
-    ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRoundRole, ModelRoundTool,
-    ReasoningEffort,
+    ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRoundTool, ReasoningEffort,
 };
 use butler_turn::conversation::{
     AgentConversationStore, ConversationMessageWithParts, ConversationRole, ConversationStatus,
@@ -272,19 +271,7 @@ impl AppBranchSummarizer for AppBranchSummarizerAdapter {
                 .map_err(|()| summary_error())?;
             let encoded = serde_json::to_string(&bound.value)
                 .map_err(|source| summary_error().with_source(source))?;
-            let messages = [ModelRoundMessage {
-                role: ModelRoundRole::User,
-                content: encoded.into(),
-                tool_call_id: None,
-                name: None,
-                tool_calls: None,
-                image_attachments: Vec::new(),
-                provider_data: None,
-                request_segment_kind: None,
-                operation_result_reference: None,
-                operation_result_call_id: None,
-                continuation_item_id: None,
-            }];
+            let messages = [ModelRoundMessage::user(encoded, None)];
             let tools: [ModelRoundTool; 0] = [];
             let effort = ReasoningEffort::None;
             let result = provider

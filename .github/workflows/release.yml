@@ -38,6 +38,24 @@ permissions:
   actions: read
 
 jobs:
+  integration-proof:
+    if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require complete integration evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUTLER_RELEASE_OWNER: ${{ vars.BUTLER_RELEASE_OWNER }}
+          BUTLER_RELEASE_COORDINATORS: ${{ vars.BUTLER_RELEASE_COORDINATORS }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/integration-proof.py
+
   macos-process-contract:
     if: ${{ !inputs.reuse_run_id && inputs.macos-process-contract }}
     name: Verify macOS unreaped process identity
@@ -50,6 +68,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: packages/butler-agent/rust
           shared-key: macos-process-identity
       - name: Prove live identity and unreaped exit behavior
@@ -94,11 +113,13 @@ jobs:
           }
 
   native-release:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-macos.yml
     secrets: inherit
 
   agent-linux-x64:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-linux-agent.yml
     with:
@@ -106,6 +127,7 @@ jobs:
       runner: ubuntu-24.04
 
   agent-linux-arm64:
+    needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-linux-agent.yml
     with:
@@ -113,6 +135,7 @@ jobs:
       runner: ubuntu-24.04-arm
 
   agent-windows-build:
+    needs: integration-proof
     name: Build unsigned Windows x64 Agent preview
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
@@ -226,13 +249,13 @@ jobs:
       - name: Check the tag against the Agent version
         run: |
           set -euo pipefail
-          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent/Cargo.toml | head -n 1)"
+          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml | head -n 1)"
           tag_version="${GITHUB_REF_NAME#v}"
           # Preview tags share the base Cargo Agent version; keep the full tag
           # for release URLs and the npm next dist-tag.
           release_version="${tag_version%%-*}"
           if [ "$release_version" != "$agent_version" ]; then
-            printf 'Tag %s does not match the Agent version %s in crates/butler-agent/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
+            printf 'Tag %s does not match the Agent version %s in crates/butler-agent-cli/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
             exit 1
           fi
 

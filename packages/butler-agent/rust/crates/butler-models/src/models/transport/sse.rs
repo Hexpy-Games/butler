@@ -8,6 +8,7 @@ use super::super::provider::ProviderClock;
 use super::super::{diagnostics, request_guard::RequestProgress};
 
 mod chat;
+pub(super) mod frame_size;
 pub(super) use chat::hosted_chat;
 
 pub(super) async fn codex(
@@ -201,6 +202,8 @@ where
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::<u8>::new();
     let mut start = 0;
+    let mut scan = 0;
+    let mut size = frame_size::FrameSize::default();
     let mut first_chunk = true;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk
@@ -214,9 +217,10 @@ where
         } else if first_chunk && ![0xef, 0xbb, 0xbf].starts_with(&buffer) {
             first_chunk = false;
         }
-        while let Some((index, width)) = boundary(&buffer[start..]) {
-            let end = start + index;
-            check_limit(&buffer[start..end], limit, provider, api)?;
+        scan = scan.max(start);
+        while let Some((index, width)) = boundary(&buffer[scan..]) {
+            let end = scan + index;
+            check_limit(&mut size, &buffer[start..end], limit, provider, api)?;
             let frame = String::from_utf8_lossy(&buffer[start..end]);
             if let Some(data) = data(&frame)
                 && let Some(result) = consume_frame(&data)?
@@ -224,16 +228,22 @@ where
                 return Ok(Some(result));
             }
             start = end + width;
+            scan = start;
+            size = frame_size::FrameSize::default();
         }
-        check_limit(&buffer[start..], limit, provider, api)?;
+        // A delimiter can straddle chunks; only its last three bytes need
+        // rescanning. Earlier unframed bytes have already been searched.
+        scan = buffer.len().saturating_sub(3).max(start);
+        check_limit(&mut size, &buffer[start..], limit, provider, api)?;
         if start > 64 * 1024 && start * 2 >= buffer.len() {
             buffer.drain(..start);
+            scan -= start;
             start = 0;
         }
     }
     let tail = &buffer[start..];
     if !butler_core::public_text::trim_js_whitespace(&String::from_utf8_lossy(tail)).is_empty() {
-        check_limit(tail, limit, provider, api)?;
+        check_limit(&mut size, tail, limit, provider, api)?;
         let frame = String::from_utf8_lossy(tail);
         if let Some(data) = data(&frame)
             && let Some(result) = consume_frame(&data)?
@@ -245,12 +255,13 @@ where
 }
 
 fn check_limit(
+    size: &mut frame_size::FrameSize,
     frame: &[u8],
     limit: Option<usize>,
     provider: &str,
     api: &str,
 ) -> Result<(), Box<ProviderRequestError>> {
-    if limit.is_some_and(|limit| String::from_utf8_lossy(frame).len() > limit) {
+    if limit.is_some_and(|limit| size.decoded_bytes(frame) > limit) {
         return Err(Box::new(diagnostics::protocol(
             provider,
             api,

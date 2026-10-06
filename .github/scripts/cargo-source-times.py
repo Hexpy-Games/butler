@@ -2,7 +2,7 @@
 """Restore freshness only for tracked inputs with identical complete contents.
 
 Cargo's source freshness uses mtimes. A new checkout otherwise invalidates
-unchanged workspace libraries in a restored target directory. Changed inputs
+unchanged workspace libraries in either complete snapshot restore path. Changed inputs
 stay newer than the snapshot; revision/version environment checks still run.
 """
 import hashlib
@@ -70,6 +70,15 @@ def capture(root):
     return entries
 
 
+def build_key(root):
+    """Roll main snapshots on build inputs, never on git HEAD or job/ref names."""
+    scopes = ('packages/butler-agent/rust/', 'packages/butler-agent/resources/',
+              'packages/butler-app/client/electron/', 'packages/butler-app/scripts/release/')
+    inputs = [(entry['path'], entry['sha256']) for entry in capture(root)
+              if entry.get('kind', 'file') == 'file' and entry['path'].startswith(scopes)]
+    return hashlib.sha256(json.dumps(inputs, separators=(',', ':')).encode()).hexdigest()
+
+
 def restore(root, entries):
     names = tracked(root)
     now = time.time_ns()
@@ -95,6 +104,13 @@ def restore(root, entries):
         source_time = stamp // 1_000_000_000 * 1_000_000_000 if identical else now
         os.utime(path, ns=(path.stat().st_atime_ns, source_time))
         matched += identical
+    # Newly tracked inputs have no producer timestamp. Explicitly dirty them,
+    # even if a checkout or local caller supplied an older mtime.
+    for name in names - files.keys():
+        path = safe_path(root, name)
+        if path.is_file():
+            files[name] = checksum(path)
+            os.utime(path, ns=(path.stat().st_atime_ns, now))
     current = directory_digests(root, files)
     matched_directories = 0
     for entry in directories:

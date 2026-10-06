@@ -139,7 +139,8 @@ impl Command {
 
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.
-pub async fn main(args: Vec<OsString>) -> ExitCode {
+pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
+    crate::host::build_info::initialize(build_info);
     if args.len() == 1 && args[0] == "--prepare-process-links" {
         let result = butler_platform::process_names::current_exe()
             .and_then(|binary| butler_platform::process_names::prepare(&binary));
@@ -184,7 +185,10 @@ fn print_version() -> ExitCode {
         eprintln!("Could not read Butler build ID.");
         return ExitCode::FAILURE;
     };
-    println!("butler {} ({build_id})", env!("BUTLER_RELEASE_VERSION"));
+    println!(
+        "butler {} ({build_id})",
+        crate::host::build_info::current().version
+    );
     ExitCode::SUCCESS
 }
 

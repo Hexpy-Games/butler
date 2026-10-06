@@ -56,7 +56,7 @@ async fn run(
         }
     })?;
     let serialized = Bytes::from(serialized);
-    let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
+    let prefix = provider.prefix_history.prepare(&body, &config)?;
     let physical = admission(
         provider,
         &request,

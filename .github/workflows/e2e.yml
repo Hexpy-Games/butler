@@ -2,26 +2,17 @@ name: E2E
 
 # Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
 # - Linux/macOS stub tiers consume the shared archives inside rust-quality.yml.
-# - e2e-live: nightly and on demand against a real provider; runs only when a
-#   credential secret is configured, otherwise the job reports SKIPPED.
+# - e2e-live: once per release push, or on demand on a release branch.
+#   Missing credentials fail closed and block the tag.
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
+  push:
+    branches: ['release/**']
   workflow_dispatch:
-    inputs:
-      provider:
-        description: "BUTLER_E2E_PROVIDER (openai-subscription, opencode-go, ...)"
-        default: "openai-subscription"
-      model:
-        description: "BUTLER_E2E_MODEL (provider/model@effort)"
-        default: "openai/gpt-6-luna@max"
-      matrix:
-        description: "BUTLER_E2E_MODEL_MATRIX for LIVE-07"
-        default: "openai/gpt-6-luna@max"
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: e2e-${{ github.event_name }}-${{ github.ref }}
@@ -31,8 +22,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: e2e.yml
+
   e2e-live:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: changes
+    if: needs.changes.outputs.tier == 'integration'
     name: E2E live tier
     runs-on: macos-latest
     timeout-minutes: 150
@@ -41,9 +38,9 @@ jobs:
       run:
         working-directory: packages/butler-agent/rust
     env:
-      BUTLER_E2E_PROVIDER: ${{ inputs.provider || 'openai-subscription' }}
-      BUTLER_E2E_MODEL: ${{ inputs.model || 'openai/gpt-6-luna@max' }}
-      BUTLER_E2E_MODEL_MATRIX: ${{ inputs.matrix || 'openai/gpt-6-luna@max' }}
+      BUTLER_E2E_PROVIDER: openai-subscription
+      BUTLER_E2E_MODEL: openai/gpt-6-luna@max
+      BUTLER_E2E_MODEL_MATRIX: openai/gpt-6-luna@max
       BUTLER_E2E_LIVE_MAX_TURNS: "40"
     steps:
       - name: Check for a live credential
@@ -56,12 +53,8 @@ jobs:
           if [ -n "$CODEX_AUTH_SECRET" ] || [ -n "$API_KEY_SECRET" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=E2E live tier SKIPPED::no credential secret (BUTLER_E2E_CODEX_AUTH_JSON or BUTLER_E2E_API_KEY) in the live-e2e environment"
-            {
-              echo "### E2E live tier"
-              echo "SKIPPED (no credentials: $BUTLER_E2E_PROVIDER). Configure BUTLER_E2E_CODEX_AUTH_JSON or BUTLER_E2E_API_KEY in the live-e2e environment."
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Live E2E credentials are required for integration"
+            exit 1
           fi
 
       - uses: actions/checkout@v4
@@ -73,6 +66,7 @@ jobs:
         with:
           native-deps: prebuilt-ort
           cache-key: e2e
+          artifact-cache-kind: dev
 
       - name: Install the credential
         if: steps.credential.outputs.available == 'true'
@@ -93,8 +87,16 @@ jobs:
 
       - name: Build the agent binary under test
         if: steps.credential.outputs.available == 'true'
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked -p butler-agent --bin butler-agent
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked -p butler-agent --bin butler-agent
 
+      - name: Upload Cargo build timings
+        if: ${{ always() && steps.credential.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-e2e-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Run the live tier
         if: steps.credential.outputs.available == 'true'
         env:
@@ -116,28 +118,3 @@ jobs:
         if: always()
         working-directory: ${{ github.workspace }}
         run: rm -f "$RUNNER_TEMP/codex-auth.json"
-
-  nightly-issue:
-    name: Report nightly E2E failure
-    if: always() && github.event_name == 'schedule' && needs.e2e-live.result == 'failure'
-    needs: e2e-live
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Open or update issue
-        working-directory: ${{ runner.temp }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          title='Nightly E2E failure'
-          body="The nightly E2E run failed: $RUN_URL"
-          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly E2E failure") | .number' | head -1)"
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
-          fi

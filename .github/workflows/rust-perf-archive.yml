@@ -11,21 +11,22 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
 jobs:
   build:
     name: Build perf harness (${{ inputs.platform }})
     runs-on: ${{ inputs.runner }}
+    concurrency:
+      group: cargo-target-rust-perf-archive-${{ inputs.platform }}-${{ github.event_name == 'push' && 'publisher' || github.run_id }}
+      cancel-in-progress: false
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: protoc
@@ -41,28 +42,32 @@ jobs:
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           out="$RUNNER_TEMP/perf-archive"
           mkdir -p "$out"
+          python3 "$isolate" cargo build --timings --release --tests --locked -j 8 -p butler-e2e
           python3 "$isolate" cargo nextest archive --release --locked -p butler-e2e --archive-file "$out/tests.tar.zst"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json > "$out/list.json"
           filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json -E "$filter" > "$out/perf-list.json"
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$out/list.json" "$out" "$out/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$out"
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-rust-perf-archive-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: packages/butler-agent/rust/target/cargo-timings/*.html
+          retention-days: 14
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: perf-rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/perf-archive/*
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
           if-no-files-found: error
-      - name: Preserve successful Cargo outputs outside the shared cache quota
-        id: cargo-cache
-        env:
-          CACHE_PLATFORM: ${{ inputs.platform }}
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" protoc perf
-      - uses: actions/upload-artifact@v4
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
-          name: ${{ steps.cargo-cache.outputs.name }}
-          path: ${{ runner.temp }}/cargo-build-cache/*
-          retention-days: 2
-          compression-level: 0
-          if-no-files-found: error
+          platform: ${{ inputs.platform }}
+          mode: protoc
+          kind: perf
+          producer: Build perf harness (${{ inputs.platform }})

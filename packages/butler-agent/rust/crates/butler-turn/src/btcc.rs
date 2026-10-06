@@ -125,10 +125,10 @@ pub use guided_turn::{
     work_scope_for_turn,
 };
 pub use model_route::{
-    ContextSizing, ContextSizingRequest, GuidedSourceRevision, ModelRequestAdmissionCode,
-    ModelRequestAdmissionError, ModelRequestContextPlan, ModelRouteRetryConfig,
-    ProviderRequestError, RequestContextAdmission, RequestContextMeasurement,
-    TurnModelExecutionFactory,
+    ContextMeasurement, ContextSizing, ContextSizingRequest, GuidedSourceRevision,
+    ModelRequestAdmissionCode, ModelRequestAdmissionError, ModelRequestContextPlan,
+    ModelRouteRetryConfig, ProviderRequestError, RequestContextAdmission,
+    RequestContextMeasurement, TurnModelExecutionFactory,
 };
 pub use progress::{EventVisibility, RuntimeTurnEventInput};
 pub use project_plan::{

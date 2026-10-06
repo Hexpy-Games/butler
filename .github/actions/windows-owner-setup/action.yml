@@ -1,12 +1,19 @@
 name: Prepare owner Windows build host
 description: Installed tools, persistent verified ORT, isolated profile and registry sentinel
 inputs:
+  require-prebuilt:
+    required: false
+    default: 'false'
+    description: Require the digest-verified published SDK instead of compiling it
   workflow:
     required: true
     description: Persistent Cargo cache namespace
 runs:
   using: composite
   steps:
+    - uses: oras-project/setup-oras@v1
+      with:
+        version: 1.2.3
     - uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
@@ -27,7 +34,7 @@ runs:
         }
         @("OWNER_JOB_ROOT=$root", "CARGO_TARGET_DIR=C:\Users\yeonw\work\target\${{ inputs.workflow }}",
           "CARGO_HOME=$env:USERPROFILE\.cargo", "RUSTUP_HOME=$env:USERPROFILE\.rustup",
-          "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=sccache", "SCCACHE_DIR=C:\actions-cache\sccache",
+          "PYTHONDONTWRITEBYTECODE=1", "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=sccache", "SCCACHE_DIR=C:\actions-cache\sccache",
           "SCCACHE_SERVER_PORT=$(Get-Random -Minimum 42000 -Maximum 49000)",
           "BUTLER_SECRET_STORE=file", "BUTLER_PLATFORM_SYSTEM_SECRETS=0", "BUTLER_APP_DISABLE_SHELL_REGISTRATION=1",
           "BUN_INSTALL_CACHE_DIR=C:\actions-cache\bun",
@@ -41,7 +48,9 @@ runs:
         $cargoTarget = $env:CARGO_TARGET_DIR
         try {
           $env:CARGO_TARGET_DIR = 'C:\Users\yeonw\work\ort-cache'
-          $prepared = python scripts/prepare-static-ort.py
+          $sdkArgs = @()
+          if ('${{ inputs.require-prebuilt }}' -eq 'true') { $sdkArgs += '--require-prebuilt' }
+          $prepared = python scripts/prepare-static-ort.py @sdkArgs
           if ($LASTEXITCODE -ne 0) { throw 'Static ORT preparation/hash verification failed' }
           $native = $prepared | ConvertFrom-Json
           @("ORT_LIB_PATH=$($native.ort_lib_path)", "PROTOC=$($native.protoc)",

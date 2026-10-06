@@ -30,6 +30,9 @@ pub use hold::ReplyGate;
 mod memory;
 mod record;
 mod replay;
+mod synthetic;
+use synthetic::Synthetic;
+pub use synthetic::{Script, Timing, round_overheads};
 
 use record::record;
 use replay::{learn_echo_ids, plain, remint_ids, replay, take_fault};
@@ -54,6 +57,7 @@ impl Default for Pacing {
 
 enum Mode {
     Replay(Cassette),
+    Synthetic(Arc<Synthetic>),
     Record {
         upstream: String,
         meta: Meta,
@@ -107,6 +111,24 @@ impl Provider {
     ) -> Result<Self, HarnessError> {
         let count = cassette.exchanges.len();
         Self::serve(Mode::Replay(cassette), placeholders, count).await
+    }
+
+    /// A scripted model instead of a cassette (load scenarios).
+    pub async fn synthetic(script: Script) -> Result<Self, HarnessError> {
+        Self::serve(
+            Mode::Synthetic(Synthetic::new(script)),
+            Placeholders::default(),
+            0,
+        )
+        .await
+    }
+
+    /// The clock of every exchange so far (synthetic mode only).
+    pub fn timings(&self) -> Vec<Timing> {
+        match &self.state.mode {
+            Mode::Synthetic(synthetic) => synthetic.timings(),
+            _ => Vec::new(),
+        }
     }
 
     /// Record mode; the cassette is written to `out_dir` (default: the
@@ -211,7 +233,7 @@ impl Provider {
     /// `text` and whose tool round has `round_len` items (0 in record mode).
     pub fn exchange_for(&self, text: &str, round_len: usize) -> Result<usize, HarnessError> {
         match &self.state.mode {
-            Mode::Record { .. } => Ok(0),
+            Mode::Record { .. } | Mode::Synthetic(_) => Ok(0),
             Mode::Replay(cassette) => cassette
                 .exchanges
                 .iter()
@@ -374,8 +396,17 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     let bytes = axum::body::to_bytes(body, 64 * 1024 * 1024)
         .await
         .unwrap_or_default();
+    let arrived = Instant::now();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     let memory = memory::matches(&json);
+    if let Mode::Synthetic(synthetic) = &state.mode {
+        if memory {
+            return replay(&state, &memory::response(), None);
+        }
+        let response = synthetic.respond(&json, bytes.len(), arrived);
+        lock(&state.requests).push(json);
+        return response;
+    }
     if memory && matches!(&state.mode, Mode::Replay(_)) {
         lock(&state.memory_requests).push(json.clone());
     } else {
@@ -391,6 +422,7 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         let _ = hold.await;
     }
     match &state.mode {
+        Mode::Synthetic(synthetic) => synthetic.respond(&json, bytes.len(), arrived),
         Mode::Replay(cassette) => {
             if !memory
                 && let Some(response) =
