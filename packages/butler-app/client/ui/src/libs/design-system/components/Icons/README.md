@@ -35,6 +35,7 @@ Size icons with the named scale, which mirrors `--icon-size-sm|md|lg` in
 | `lg` | 20 | Status marks, back arrows, prominent headers |
 | `xl` | 24 | Resource tiles and summary illustrations |
 | `2xl` | 32 | Empty-state illustrations |
+| `3xl` | 48 | Brand mark in small lifecycle windows (`--icon-size-3xl`) |
 
 ```tsx
 <Plus />            // md (16px) by default
@@ -67,5 +68,3 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 Use them to distinguish conversation kinds without adding an action symbol.
 
 iconography, action, status
-
-`IconSize` includes `3xl` (48px).

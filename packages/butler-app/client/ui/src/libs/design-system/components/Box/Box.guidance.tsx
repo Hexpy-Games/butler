@@ -30,5 +30,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["paddingStart indents one side (an indented row); windowDrag marks desktop drag regions.", "surface=raised-opaque and elevation=card reproduce the setup wizard solid card.", "No copy of its own."],
   accessibility: ["Box is a div by default; pass as=\"section\" or \"aside\" for landmarks."],
-  tokens: ["--space-sm", "--radius-panel", "--surface-raised", "--line"],
+  tokens: ["--space-sm", "--radius-panel", "--surface-raised", "--color-surface-raised-opaque", "--shadow-card", "--line"],
 };

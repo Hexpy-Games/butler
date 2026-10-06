@@ -13,7 +13,7 @@ Status labels, capsules, avatars built from a canvas.
 Sizing and containment live in the DS instead of inline styles.
 
 ## How to use this component
-`<AspectFrame size="sm" aria-hidden="true"><canvas ref={ref} /></AspectFrame>`; omit `size` to fill the container width.
+`<AspectFrame size="sm" aria-hidden="true"><canvas ref={ref} /></AspectFrame>`; omit `size` to fill the container width. `size` follows the icon scale (`--icon-size-*`, `sm` … `3xl` = 48px).
 
 ## Who can use this component
 Product components that draw on a canvas.
@@ -26,5 +26,3 @@ Do not use it for icon glyphs. Use `IconSlot`.
 
 ## Tags
 canvas, media, square, mark
-
-`size="3xl"` follows `--icon-size-3xl` (48px).
