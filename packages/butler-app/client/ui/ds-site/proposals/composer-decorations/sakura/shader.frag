@@ -1,22 +1,28 @@
 // Cherry canopy, painted like the owner's anime references: the tree hangs over the message box
 // as soft, cloud-shaped masses of blossom built from many small dabs of pink in four tones (deep
 // rose on the shaded underside, rose, mid pink, pale pink-white highlights on top), with
-// scalloped edges and a few thin dark branch strokes peeking through. The main mass drapes from
-// the top-right corner along the top edge and down the right side; a lighter mass comes in from
-// the top-left. Petals fall and flutter from the canopy across the card at varied sizes, spinning.
-// No background: premultiplied alpha, the card's own glass shows through.
+// scalloped edges and a few thin dark branch strokes peeking through. Petals fall and flutter
+// from the canopy across the card at varied sizes, spinning. No background: premultiplied
+// alpha, the card's own glass (or the page) shows through.
 //
-// Readability by composition: the canopy stays in the card's padding frame (top band, right
-// band above the toolbar) and the corner zone; it never covers a text line or a control. Over
-// the text box, falling petals are fewer and fainter.
+// p_layout (where the canopy may be):
+//   0 corner  (baseline): the card's padding frame plus a deeper top-right corner;
+//   1 intrude: masses also fill the empty right ~33% of the card (25% on phones) above the
+//              toolbar row; their outer parts are paler and sparser, long drafts may run under them;
+//   2 spill:   the card keeps a light fringe; the big masses drape OUTSIDE, above the card
+//              (drawn by a second canvas with p_part 1), wrapping around the top corners;
+//   3 frame:   padding frame only.
+// p_part: 0 the canvas inside the card; 1 the canvas outside, above the card (spill only):
+//   it spans the card width + 20px each side and from SPILL px above the card to 34px into it
+//   (into the card body only its top 5px; the rest is the page outside the rounded corners).
 //
-// Coordinates are CSS px. Every motion term is periodic in T = timePeriod.
+// Coordinates are CSS px, y down. Every motion term is periodic in T = timePeriod.
 
 const float T = 240.0;
 const float TAU = 6.2831853;
 
 vec4 hash(int x, int row) { return texelFetch(u_noiseTexture, ivec2(x & 255, row & 255), 0); }
-vec4 hash2(vec2 cell, int row) { return hash(int(mod(cell.x, 64.0)) + 64 * int(mod(cell.y + 8.0, 4.0)), row); }
+vec4 hash2(vec2 cell, int row) { return hash(int(mod(cell.x, 64.0)) + 64 * int(mod(cell.y + 64.0, 4.0)), row); }
 
 float vn(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -26,40 +32,76 @@ float vn(vec2 p) {
 
 vec4 over(vec4 dst, vec4 src) { return src + dst * (1.0 - src.a); }
 
-float W;     // card width
-float H;     // card height
-float D;     // the right band runs down to here (above the toolbar row); 0 on the one-row pill
+float WC;    // card width
+float HC;    // card height (card part) / 0 (outside part)
+float OX;    // card's left edge in canvas px
+float OY;    // card's top edge in canvas px
 float AA;    // one device pixel in CSS px
+float D;     // the right band runs down to here (above the toolbar row); 0 on the one-row pill
 float CX;    // corner zone width
 float CY;    // corner zone depth
 float ER;    // reach of the right-hand canopy along the top edge
 float EL;    // reach of the lighter left-hand canopy
+float IX;    // intrude zone width
+float IY;    // intrude zone depth
+float SPILL; // height of the spill above the card
+int LAYOUT;
+int PART;
 const float BAND_Y = 13.0;   // text starts ~14-15px below the top edge
 const float BAND_X = 16.0;   // text lines end 16px before the right edge
 
-// Depth of the canopy's lower edge at a point of the top edge (rc: px from the right edge;
-// lc: px from the left edge), before scallops. Thickest at the corner, tapering both ways.
-float canopyDepth(float rc, float lc) {
-  float corner = (CY - 4.0) * (1.0 - smoothstep(0.0, CX * 1.15, rc));
-  float lobes = 3.0 * pow(max(0.0, sin(rc * 0.085 + 2.6 * vn(vec2(rc * 0.03, 4.0)))), 2.0);   // cloud-like scallops
-  float right = (mix(BAND_Y - 8.0, 2.0, smoothstep(CX * 0.6, ER, rc)) + lobes * (1.0 - smoothstep(ER * 0.6, ER, rc))) * step(rc, ER);
-  float left = (mix(BAND_Y - 8.5, 1.0, smoothstep(0.0, EL, lc)) + 0.7 * lobes) * step(lc, EL);
+float lobes(float x) { return 3.0 * pow(max(0.0, sin(x * 0.085 + 2.6 * vn(vec2(x * 0.03, 4.0)))), 2.0); }
+
+// The mass at card-relative point q (x from the card's left edge, y from its top edge; y < 0 is
+// above the card). Returns (inside 0/1, light 0 underside .. 1 top, outer 0 core .. 1 fringe).
+vec3 mass(vec2 q) {
+  float rc = WC - q.x;
+  float lc = q.x;
+  float y = q.y;
+  if (PART == 1) {
+    // spill: masses above the card, heaviest at the top-right, lighter at the top-left, a low
+    // swag between; the lower edge rests 9px into the card and wraps down outside the corners
+    // cloud-like crowns: a few big rounded bumps, tallest over the right corner
+    float S = SPILL - 8.0;
+    float crownR = 1.0 - smoothstep(0.0, WC * 0.36, rc + 6.0 * sin(rc * 0.05));
+    float crownL = 1.0 - smoothstep(0.0, WC * 0.2, lc + 5.0 * sin(lc * 0.06));
+    float bumps = 0.78 + 0.22 * sin(q.x * 0.11 + 1.3 * vn(vec2(q.x * 0.02, 5.0)) * TAU);
+    float hR = S * pow(crownR, 0.55) * bumps;
+    float hL = 0.7 * S * pow(crownL, 0.6) * bumps;
+    float hM = 2.0 + 1.2 * lobes(lc);                               // a light swag between
+    float height = max(max(hR, hL), hM);
+    // around the rounded top corners the canopy hugs the card's curve (radius RAD): it may fill
+    // the page area outside the curve, down to RAD; over the card body only its top 5px
+    float outR = max(q.x - WC, 0.0), outL = max(-q.x, 0.0);
+    float RAD = 28.0;
+    float gapR = rc < RAD ? RAD - sqrt(max(0.0, RAD * RAD - (RAD - rc) * (RAD - rc))) : 0.0;
+    float gapL = lc < RAD ? RAD - sqrt(max(0.0, RAD * RAD - (RAD - lc) * (RAD - lc))) : 0.0;
+    float edge = outR + outL > 0.0 ? RAD : max(gapR * step(0.5, crownR), gapL * step(0.5, crownL));
+    float sideFade = (1.0 - smoothstep(4.0, 16.0, outR)) * (1.0 - smoothstep(3.0, 14.0, outL));
+    float bottom = 5.0 + edge * sideFade * (outR + outL > 0.0 ? step(0.5, max(crownR, crownL)) : 1.0)
+      + 1.5 * (vn(vec2(q.x * 0.07, 9.0)) - 0.5);
+    height *= sideFade;
+    float top = -height;
+    float inside = step(top, y) * step(y, bottom) * step(outR, 16.0) * step(outL, 14.0);
+    return vec3(inside, clamp((bottom - y) / max(bottom - top, 1.0), 0.0, 1.0), 0.0);
+  }
   float sway = 1.6 * (vn(vec2(rc * 0.06, 2.0)) - 0.5);
-  return max(max(corner, right), left) + sway;
-}
-
-// Is p (rc, y) inside the canopy? Top band / corner, or the curtain down the right side.
-float inside(float rc, float lc, float y) {
-  float top = step(y, canopyDepth(rc, lc));
-  float curtain = step(rc, BAND_X - 7.0 + 2.0 * vn(vec2(y * 0.08, 7.0))) * step(y, D - 4.0);
-  return max(top, curtain);
-}
-
-// Light: 0 on the shaded underside (near the lower edge) .. 1 on top (near the card edge).
-float lightAt(float rc, float lc, float y) {
-  float depth = max(canopyDepth(rc, lc), 1.0);
-  float side = rc < BAND_X && y > depth ? 1.0 - y / max(D, 1.0) : 1.0 - y / depth;
-  return clamp(side, 0.0, 1.0);
+  float spillFringe = LAYOUT == 2 ? 3.0 : 0.0;           // spill: the card keeps a lighter fringe
+  float corner = LAYOUT == 0 || LAYOUT == 1 ? (CY - 4.0) * (1.0 - smoothstep(0.0, CX * 1.15, rc)) : 0.0;
+  float right = (mix(BAND_Y - 8.0 - spillFringe, 2.0, smoothstep(CX * 0.6, ER, rc)) + lobes(rc) * (1.0 - smoothstep(ER * 0.6, ER, rc))) * step(rc, ER);
+  float left = (mix(BAND_Y - 8.5 - spillFringe, 1.0, smoothstep(0.0, EL, lc)) + 0.7 * lobes(rc)) * step(lc, EL);
+  float depth = max(max(corner, right), left) + sway;
+  float top = step(y, depth);
+  float curtain = LAYOUT == 2 ? 0.0 : step(rc, BAND_X - 7.0 + 2.0 * vn(vec2(y * 0.08, 7.0))) * step(y, D - 4.0);
+  float light = rc < BAND_X && y > depth ? 1.0 - y / max(D, 1.0) : 1.0 - y / max(depth, 1.0);
+  vec3 m = vec3(max(top, curtain), clamp(light, 0.0, 1.0), 0.0);
+  if (LAYOUT == 1) {
+    // intrude: a quarter-ellipse of canopy over the empty right side, above the toolbar row
+    float wob = 1.0 + 0.16 * (vn(vec2(atan(y, rc) * 4.0, 3.0)) - 0.5) + 0.06 * lobes(y * 3.0 + rc);
+    float o = length(vec2(rc / IX, y / IY)) / wob;
+    if (o < 1.0 && m.x < 0.5) m = vec3(1.0, clamp(1.0 - y / IY + 0.25 * (1.0 - o), 0.0, 1.0), smoothstep(0.35, 1.0, o));
+  }
+  return m;
 }
 
 vec3 tone(float l, float n) {
@@ -73,61 +115,69 @@ vec3 tone(float l, float n) {
   return mix(mid, pale, step(2.5, k));
 }
 
-// One layer of dabs on a jittered grid: each dab is a small rounded petal-like ellipse at a random
-// angle. Dabs exist only where the canopy is; overlapping dabs paint over each other.
-vec4 dabs(vec2 px, float cell, float rBias, float lift, int row) {
-  vec2 gi = floor(px / cell);
+// One layer of dabs on a jittered grid (canvas px, y down): small rounded ellipses at random
+// angles, only where the canopy is. The outer fringe of the intrude mass gets fewer, smaller,
+// paler dabs. Overlapping dabs paint over each other.
+vec4 dabs(vec2 p, float cell, float rBias, float lift, int row) {
+  vec2 gi = floor(p / cell);
   vec4 col = vec4(0.0);
   for (int y = -1; y <= 1; y++)
     for (int x = -1; x <= 1; x++) {
       vec2 g = gi + vec2(float(x), float(y));
       vec4 h = hash2(g, row);
       vec2 ctr = (g + 0.2 + 0.6 * h.rg) * cell;
-      float rc = W - ctr.x;
-      float y_ = H - ctr.y;
-      if (inside(rc, ctr.x, y_) < 0.5) continue;
+      vec3 m = mass(ctr - vec2(OX, OY));
+      if (m.x < 0.5) continue;
+      if (h.a < m.z * 0.8) continue;                                  // sparser toward the fringe
       float ang = h.b * TAU;
-      vec2 q = px - ctr;
+      vec2 q = p - ctr;
       q = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * q;
-      float r = cell * rBias * (0.62 + 0.3 * h.a);
+      float r = cell * rBias * (0.62 + 0.3 * h.a) * (1.0 - 0.35 * m.z);
       float d = length(q / vec2(1.0, 0.72)) - r;
       float a = 1.0 - smoothstep(-AA, AA, d);
       if (a <= 0.0) continue;
-      vec3 c = tone(clamp(lightAt(rc, ctr.x, y_) + lift, 0.0, 1.0), h.g);
-      col = over(col, vec4(c * a, a));                                 // dabs layer like paint, no seams
+      vec3 c = tone(clamp(m.y + lift + 0.9 * m.z, 0.0, 1.0), h.g);
+      col = over(col, vec4(c * a, a));
     }
   return col;
 }
 
-// Thin dark branch strokes peeking through the mass.
-vec4 branches(float rc, float lc, float y) {
-  vec4 col = vec4(0.0);
-  for (int k = 0; k < 5; k++) {
-    vec4 h = hash(k, 151);
-    float x0 = k < 4 ? mix(4.0, ER * 0.85, h.r) : -1.0;
-    float yb = 2.0 + 4.0 * h.g + 0.035 * (rc - x0) * (h.b - 0.3) + 1.2 * sin(rc * 0.07 + h.a * 6.0);
-    float len = 30.0 + 50.0 * h.a;
-    float on = step(abs(rc - x0 - len * 0.5), len * 0.5) * step(0.0, x0);
-    float th = mix(1.1, 0.5, clamp((rc - x0) / len, 0.0, 1.0));
-    float a = (1.0 - smoothstep(th - AA, th + AA, abs(y - yb))) * on;
-    col = over(col, vec4(vec3(0.33, 0.24, 0.28) * a, a));
-  }
-  // one stroke down the right side
-  float xb = 3.0 + 0.8 * sin(y * 0.09);
-  float a = (1.0 - smoothstep(0.7 - AA, 0.7 + AA, abs(rc - xb))) * step(y, max(D, CY) * 0.8);
-  return over(col, vec4(vec3(0.33, 0.24, 0.28) * a, a));
+float segment(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h);
 }
 
-// Falling petals: varied sizes, spinning and tumbling, densest under the canopy.
-vec4 petals(vec2 px, float rc, float lc, float y, float t, float cell, float size, int fall, float dens, int row, float frame) {
+// Thin dark branch strokes peeking through the mass (card-relative coordinates).
+vec4 branches(vec2 q) {
+  vec4 col = vec4(0.0);
+  vec3 ink = vec3(0.33, 0.24, 0.28);
+  for (int k = 0; k < 5; k++) {
+    vec4 h = hash(k, 151);
+    vec2 a, b;
+    if (PART == 1) {
+      a = vec2(WC + 14.0 - 6.0 * h.r, -SPILL * (0.5 + 0.5 * h.g));
+      b = vec2(WC - WC * (0.12 + 0.3 * h.b), -2.0 - 10.0 * h.a);
+    } else {
+      a = vec2(WC - 2.0 - 30.0 * h.r, 2.0 + 5.0 * h.g);
+      b = a - vec2(30.0 + 60.0 * h.b, -3.0 * (h.a - 0.4));
+    }
+    float th = PART == 1 ? 1.2 : 0.7;
+    float aa = 1.0 - smoothstep(th - AA, th + AA, segment(q, a, b));
+    col = over(col, vec4(ink * aa, aa));
+  }
+  return col;
+}
+
+// Falling petals: varied sizes, spinning and tumbling, densest under the canopy (glFrag space).
+vec4 petals(vec2 gl, float under, float t, float cell, float size, int fall, float dens, int row, float frame) {
   float vy = float(fall) * cell * 8.0 / T;
   float vx = float(fall / 2 + 1) * cell * 16.0 / T;
-  vec2 p = px + vec2(vx * t, vy * t);
+  vec2 p = gl + vec2(vx * t, vy * t);
   vec2 id = floor(p / cell);
   vec2 f = p - id * cell;
   int hx = int(mod(id.x, 16.0)) + 16 * int(mod(id.y, 8.0));
   vec4 h = hash(hx, row);
-  float under = max(1.0 - smoothstep(ER * 0.6, ER * 1.6, rc), 1.0 - smoothstep(EL * 0.5, EL * 1.4, lc));
   if (h.a > dens * mix(0.3, 1.0, under) * mix(0.33, 1.0, frame)) return vec4(0.0);
   float keep = mix(0.55, 1.0, frame);
   vec4 g = hash(hx + 128, row);
@@ -149,36 +199,62 @@ vec4 petals(vec2 px, float rc, float lc, float y, float t, float cell, float siz
 void main() {
   vec2 res = u_resolution / u_pixelRatio;
   vec2 gl = gl_FragCoord.xy / u_pixelRatio;
-  vec2 px = vec2(gl.x, res.y - gl.y);          // CSS px from the top-left corner, y down
-  W = res.x;
-  H = res.y;
+  vec2 p = vec2(gl.x, res.y - gl.y);
+  LAYOUT = p_layout;
+  PART = p_part;
   float t = u_time;
   AA = 0.8 / u_pixelRatio;
-  D = max(0.0, H - 56.0);
-  CX = clamp(W * 0.12, 48.0, 92.0);
-  CY = p_lush > 0.5 ? min(W < 500.0 ? 15.0 : 22.0, max(H - 28.0, 16.0)) : BAND_Y - 1.0;
-  ER = W * 0.5;
-  EL = W * 0.2;
-  float rc = W - px.x;
-  float lc = px.x;
-  float y = px.y;
+  if (PART == 1) {
+    OX = 20.0;
+    WC = res.x - 40.0;
+    SPILL = res.y - 34.0;
+    OY = SPILL;
+    HC = 0.0;
+  } else {
+    OX = 0.0;
+    OY = 0.0;
+    WC = res.x;
+    HC = res.y;
+    SPILL = 0.0;
+  }
+  bool phone = WC < 500.0;
+  D = max(0.0, HC - 56.0);
+  CX = clamp(WC * 0.12, 48.0, 92.0);
+  CY = phone ? 15.0 : min(22.0, max(HC - 28.0, 16.0));
+  ER = WC * 0.5;
+  EL = WC * 0.2;
+  IX = WC * (phone ? 0.25 : 0.34);
+  IY = HC > 60.0 ? HC - 50.0 : HC;                    // above the toolbar row when open
+  vec2 q = p - vec2(OX, OY);
+  float rc = WC - q.x;
 
   vec4 col = vec4(0.0);
-  if (y < max(max(CY, D), BAND_Y) + 8.0) {
-    vec4 back = dabs(vec2(px.x, H - y) + vec2(1.7, -1.3), 4.5, 1.25, -0.25, 31);  // shaded mass behind
-    vec4 wood = branches(rc, lc, y);
-    vec4 front = dabs(vec2(px.x, H - y), 3.5, 1.1, 0.3, 47);                       // lit dabs on top
-    col = over(col, back);
-    col = over(col, wood * (back.a > 0.2 || front.a > 0.2 ? 1.0 : 0.0) * 0.85);   // only within the mass
-    col = over(col, front);
+  vec4 back = dabs(p + vec2(1.7, 1.3), 4.5, 1.25, -0.25, 31);       // shaded mass behind
+  vec4 front = dabs(p, 3.5, 1.1, 0.3, 47);                           // lit dabs on top
+  vec4 wood = branches(q) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0);   // only within the mass
+  col = over(col, back);
+  col = over(col, wood);
+  col = over(col, front);
+  float frame = 1.0;
+  if (PART == 0) {
+    // corner / frame / spill: nothing below the band except the corner and the right curtain.
+    // intrude: the right zone is allowed too (its fringe is pale and sparse).
+    frame = max(max(1.0 - smoothstep(BAND_Y - 0.5, BAND_Y + 0.5, q.y),
+      (1.0 - smoothstep(BAND_X - 1.0, BAND_X, rc)) * step(q.y, D + 4.0) * (LAYOUT == 2 ? 0.0 : 1.0)),
+      (LAYOUT == 0 || LAYOUT == 1 ? step(length(vec2(rc, q.y) / vec2(CX, CY)), 1.0) : 0.0));
+    if (LAYOUT == 1) frame = max(frame, step(length(vec2(rc / (IX * 1.2), q.y / IY)), 1.0) * step(q.y, IY + 2.0));
+    col *= frame;
   }
-  // the text box never gets canopy: nothing below the band / outside the corner and curtain
-  float frame = max(max(1.0 - smoothstep(BAND_Y - 0.5, BAND_Y + 0.5, y),
-    (1.0 - smoothstep(BAND_X - 1.0, BAND_X, rc)) * step(y, D + 4.0)),
-    step(length(vec2(rc, y) / vec2(CX, CY)), 1.0));
-  col *= frame;
-  col = over(col, petals(gl, rc, lc, y, t, 22.0, 1.5, 5, 0.42, 11, frame));
-  col = over(col, petals(gl + 9.0, rc, lc, y, t, 31.0, 2.4, 7, 0.34, 23, frame));
-  col = over(col, petals(gl + 17.0, rc, lc, y, t, 44.0, 3.4, 9, 0.24, 37, frame));
+  float under = PART == 1 ? 1.0 : max(1.0 - smoothstep(ER * 0.6, ER * 1.6, rc), 1.0 - smoothstep(EL * 0.5, EL * 1.4, q.x));
+  if (LAYOUT == 2 && PART == 0) under = 0.8;
+  // the outside canvas overlaps the card's top 34px: its petals stay off the card body (the card
+  // canvas draws those, fewer and fainter over the text)
+  if (PART == 1) frame = 1.0 - step(0.0, q.x) * step(q.x, WC) * step(4.0, q.y);
+  float keepOut = PART == 1 ? frame : 1.0;
+  // over the toolbar row (open card) petals are only a faint shimmer: controls keep their contrast
+  if (PART == 0 && HC > 60.0 && q.y > HC - 50.0) keepOut = 0.25;
+  col = over(col, petals(gl, under, t, 22.0, 1.5, 5, 0.42, 11, frame) * keepOut);
+  col = over(col, petals(gl + 9.0, under, t, 31.0, 2.4, 7, 0.34, 23, frame) * keepOut);
+  col = over(col, petals(gl + 17.0, under, t, 44.0, 3.4, 9, 0.24, 37, frame) * keepOut);
   fragColor = col;
 }

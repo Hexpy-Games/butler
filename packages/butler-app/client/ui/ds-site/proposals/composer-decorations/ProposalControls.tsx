@@ -65,9 +65,14 @@ export function PreviewKnobs({ state, onChange }: { state: ProposalState; onChan
           <NativeSelectOption value="d">(d) Owner setting (default)</NativeSelectOption>
         </NativeSelect>
       </Knob>
-      <Knob label="Cherry corner">
-        <SegmentedControl ariaLabel="Cherry corner" size="sm" value={state.cherry} onValueChange={(cherry) => onChange({ cherry: cherry as ProposalState["cherry"] })}
-          options={[{ value: "lush", label: "Deep corner (recommended)" }, { value: "frame", label: "Padding only" }]} />
+      <Knob label="Cherry canopy">
+        <NativeSelect aria-label="Cherry canopy" size="sm" stretch value={state.cherry}
+          onChange={(event) => onChange({ cherry: event.currentTarget.value as ProposalState["cherry"] })}>
+          <NativeSelectOption value="spill">(B) Over the card (recommended)</NativeSelectOption>
+          <NativeSelectOption value="intrude">(A) Into the empty side</NativeSelectOption>
+          <NativeSelectOption value="corner">Deep corner (baseline)</NativeSelectOption>
+          <NativeSelectOption value="frame">Padding only</NativeSelectOption>
+        </NativeSelect>
       </Knob>
       <Knob label="Motion">
         <SegmentedControl ariaLabel="Motion" size="sm" value={state.motion} onValueChange={(motion) => onChange({ motion: motion as ProposalState["motion"] })}

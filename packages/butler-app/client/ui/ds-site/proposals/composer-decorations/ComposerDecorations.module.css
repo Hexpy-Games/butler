@@ -163,6 +163,35 @@
   height: 100%;
 }
 
+/* (B) spill: the canopy above the card, portaled into ComposerCard's wrap like the character.
+   It spans the card width + 20px each side and from --spill above the card to 34px down (it
+   enters the card body only in its top 5px, the rest wraps around the rounded corners).
+   The conversation must reserve --spill above the composer. */
+.spillCanvas {
+  --spill: 56px;
+
+  position: absolute;
+  z-index: 1;
+  width: calc(100% + 40px);
+  bottom: calc(100% - 34px);
+  left: -20px;
+  display: block;
+  height: calc(var(--spill) + 34px);
+  pointer-events: none;
+}
+
+@media (width <= 640px) {
+  .spillCanvas {
+    --spill: 44px;
+  }
+}
+
+/* With the spill canopy the character sits in front of it. */
+.spillCanvas ~ .head,
+.spillCanvas ~ .paws {
+  z-index: 2;
+}
+
 /* ---- Edge character: head behind the card, paws in front on the top edge ---- */
 
 /* Portaled into ComposerCard's wrap (a stacking context while floating): the head sits under
