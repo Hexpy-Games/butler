@@ -53,7 +53,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   const reused = kind === "quit" && parkedWindow && !parkedWindow.isDestroyed();
   const window = reused ? parkedWindow : new BrowserWindow({
     width: 296, height: manifest.initialHeight, useContentSize: true, frame: false, resizable: false,
-    maximizable: false, fullscreenable: false, show: false, hasShadow: true,
+    maximizable: false, fullscreenable: false, show: false, paintWhenInitiallyHidden: false, hasShadow: true,
     roundedCorners: true, closable: kind !== "quit", title: "Butler",
     backgroundColor: manifest.surface[appearance.theme],
     webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
