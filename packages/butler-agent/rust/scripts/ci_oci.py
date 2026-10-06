@@ -18,6 +18,17 @@ def digest(path):
         return 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def authenticate():
+    """Keep both login and publisher subprocesses in the same native profile."""
+    config = str(Path(os.environ['HOME']) / 'oras-auth.json')
+    os.environ['BUTLER_OCI_AUTH_CONFIG'] = config
+    result = subprocess.run(['oras', 'login', 'ghcr.io', '--registry-config', config,
+                             '--username', os.environ['GITHUB_ACTOR'], '--password-stdin'],
+                            input=os.environ['GH_TOKEN'], text=True, capture_output=True, timeout=60)
+    if result.returncode:
+        raise RuntimeError('OCI publisher login failed')
+
+
 def command(*args, anonymous=True, cwd=None):
     with tempfile.TemporaryDirectory() as temporary:
         credentials = Path(temporary) / 'config.json'

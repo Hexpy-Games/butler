@@ -1,0 +1,21 @@
+name: Publish owner Windows target
+description: Publish the existing preview or debug tree with its exact build flags
+inputs:
+  profile:
+    description: Existing owner build profile, ci-fast or debug
+    default: ci-fast
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/publish-cargo-target
+      env:
+        TARGET_SNAPSHOT_PROFILE: ${{ inputs.profile }}
+        TARGET_SNAPSHOT_FEATURES: ${{ inputs.profile == 'debug' && 'workspace-no-defaults,butler-agent/static-ort' || 'butler-agent/static-ort' }}
+        CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+        RUSTFLAGS: -C target-feature=+crt-static
+        TARGET_SNAPSHOT_RUNNER_KIND: owner
+      with:
+        platform: windows-x64
+        mode: static-ort
+        kind: ${{ inputs.profile == 'debug' && 'dev' || 'native' }}
+        producer: ${{ inputs.profile == 'debug' && 'Platform contracts and debug stub chat' || 'Build unsigned Windows preview' }}

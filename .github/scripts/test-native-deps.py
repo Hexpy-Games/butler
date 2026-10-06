@@ -247,6 +247,22 @@ class NativeDeps(unittest.TestCase):
                 sdk.ci_oci.manifest('ghcr.io/owner/package:missing')
 
     # test-category: security
+    def test_login_uses_native_disposable_path_and_stdin_without_a_nested_shell(self):
+        import os
+        import subprocess
+        completed = subprocess.CompletedProcess([], 0, stdout='Login Succeeded', stderr='')
+        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token'), \
+                patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
+            sdk.ci_oci.authenticate()
+            arguments = invoke.call_args.args[0]
+            config = str(self.root / 'oras-auth.json')
+            self.assertEqual(arguments[arguments.index('--registry-config') + 1], config)
+            self.assertEqual(os.environ['BUTLER_OCI_AUTH_CONFIG'], config)
+            self.assertEqual(invoke.call_args.kwargs['input'], 'stub-token')
+            self.assertNotIn('stub-token', arguments)
+            self.assertEqual(arguments[0], 'oras')
+
+    # test-category: security
     def test_unsafe_archive_is_rejected(self):
         archive = self.root / 'unsafe.zip'
         with zipfile.ZipFile(archive, 'w') as output:
