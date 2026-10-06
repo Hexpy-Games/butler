@@ -3,7 +3,9 @@
 mod artifact;
 mod bound;
 mod changed_files;
+mod output_image;
 pub(super) use changed_files::without_details;
+pub(super) use output_image::admitted;
 mod exact;
 mod retained;
 mod work;

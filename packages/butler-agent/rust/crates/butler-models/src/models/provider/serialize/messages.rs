@@ -1,4 +1,4 @@
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use butler_turn::btcc::{ModelRoundMessage, ModelRoundRequest, ModelRoundRole};
 
@@ -7,7 +7,7 @@ pub(super) fn bounded_items(messages: &[ModelRoundMessage]) -> Vec<Value> {
         .iter()
         .flat_map(|message| match message.role {
             ModelRoundRole::User => vec![serde_json::json!({"role":"user","content":[{"type":"input_text","text":message.content}]})],
-            ModelRoundRole::Tool => vec![serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":message.content})],
+            ModelRoundRole::Tool => vec![serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":super::super::output_image::response_output(message)})],
             ModelRoundRole::Assistant => {
                 let mut items = if message.content.is_empty() { Vec::new() } else { vec![serde_json::json!({"role":"assistant","content":[{"type":"output_text","text":message.content}]})] };
                 items.extend(message.tool_calls.as_deref().unwrap_or(&[]).iter().map(|call| serde_json::json!({"type":"function_call","call_id":call.id,"name":call.name,"arguments":call.raw_arguments})));
@@ -115,6 +115,16 @@ fn chat_messages_with_instructions(
         {
             row.insert("tool_calls".into(), Value::Array(calls.iter().map(|call| serde_json::json!({"id":call.id,"type":"function","function":{"name":call.name,"arguments":call.raw_arguments}})).collect()));
         }
+        if message.role == ModelRoundRole::Tool
+            && let Some((text, url)) = super::super::output_image::parts(message)
+        {
+            row.insert("content".into(), json!(text));
+            output.push(row.into());
+            output.push(
+                json!({"role":"user","content":[{"type":"image_url","image_url":{"url":url}}]}),
+            );
+            continue;
+        }
         output.push(row.into());
     }
     output
@@ -123,7 +133,7 @@ fn chat_messages_with_instructions(
 pub(super) fn response_items(request: &ModelRoundRequest<'_>) -> Vec<Value> {
     request.messages.iter().flat_map(|message| match message.role {
         ModelRoundRole::System => Vec::new(),
-        ModelRoundRole::Tool => vec![serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":message.content})],
+        ModelRoundRole::Tool => vec![serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":super::super::output_image::response_output(message)})],
         ModelRoundRole::Assistant => response_assistant_items(message),
         ModelRoundRole::User => vec![serde_json::json!({"role":"user","content":message.content})],
     }).collect()
@@ -164,7 +174,7 @@ pub(super) fn anthropic_messages(request: &ModelRoundRequest<'_>) -> Vec<Value> 
     request.messages.iter().filter_map(|message| match message.role {
         ModelRoundRole::System => None,
         ModelRoundRole::Assistant => Some(serde_json::json!({"role":"assistant","content": if let Some(value)=&message.provider_data { value.clone() } else { Value::Array(assistant_blocks(message)) }})),
-        ModelRoundRole::Tool => Some(serde_json::json!({"role":"user","content":[{"type":"tool_result","tool_use_id":message.tool_call_id,"content":message.content}]})),
+        ModelRoundRole::Tool => Some(super::super::output_image::anthropic_output(message)),
         ModelRoundRole::User => Some(serde_json::json!({"role":"user","content":message.content})),
     }).collect()
 }
@@ -182,7 +192,7 @@ pub(super) fn gemini_messages(request: &ModelRoundRequest<'_>) -> Vec<Value> {
     request.messages.iter().filter_map(|message| match message.role {
         ModelRoundRole::System => None,
         ModelRoundRole::Assistant => Some(serde_json::json!({"role":"model","parts":message.provider_data.clone().filter(Value::is_array).unwrap_or_else(|| Value::Array(gemini_assistant_parts(message)))})),
-        ModelRoundRole::Tool => Some(serde_json::json!({"role":"user","parts":[{"functionResponse":{"name":message.name.as_deref().unwrap_or("unknown_tool"),"response":parse_object(&message.content)}}]})),
+        ModelRoundRole::Tool => Some(super::super::output_image::gemini_output(message)),
         ModelRoundRole::User => Some(serde_json::json!({"role":"user","parts":[{"text":message.content}]})),
     }).collect()
 }
@@ -200,9 +210,6 @@ fn gemini_assistant_parts(message: &ModelRoundMessage) -> Vec<Value> {
     parts
 }
 
-fn parse_object(value: &str) -> Value {
-    serde_json::from_str(value).unwrap_or_else(|_| serde_json::json!({"output":value}))
-}
 fn role(value: ModelRoundRole) -> &'static str {
     match value {
         ModelRoundRole::System => "system",

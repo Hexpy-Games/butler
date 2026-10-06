@@ -252,7 +252,7 @@ fn openai_input(
         let items = request.messages.iter().filter_map(|message| match message.role {
             ModelRoundRole::Tool => {
                 tools += 1;
-                (tools > sent_tools).then(|| serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":message.content}))
+                (tools > sent_tools).then(|| serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":super::output_image::response_output(message)}))
             }
             ModelRoundRole::User => {
                 users += 1;

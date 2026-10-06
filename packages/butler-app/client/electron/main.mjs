@@ -110,6 +110,7 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import {
   APP_RENDERER_ORIGIN,
@@ -2075,6 +2076,11 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+const browserHost = createBrowserHost({
+  fetch: (path, init) => appServerFetch(path, init),
+  adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
+});
+
 async function createWindow() {
   if (
     !legacyDataBlocked &&
@@ -2090,7 +2096,10 @@ async function createWindow() {
     await launchReconcile;
     await ensureServer();
   }
-  if (!legacyDataBlocked) await loadInitialNativeShellPreferences();
+  if (!legacyDataBlocked) {
+    await loadInitialNativeShellPreferences();
+    browserHost.start();
+  }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
   } else if (!legacyDataBlocked) {
@@ -2702,6 +2711,7 @@ app.on("before-quit", (event) => {
       foregroundQuitSnapshot = null;
       return;
     }
+    browserHost.stop();
     return stopServerProcess({
       reason: "app_quit",
     });

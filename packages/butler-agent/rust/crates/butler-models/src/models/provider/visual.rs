@@ -16,6 +16,7 @@ pub(super) fn validate(
         ImageCapabilityEvidence, ImageCarrierTuple, VisualAttachmentManifest,
         admit_visual_image_request, assert_visual_carrier_matches_catalog,
     };
+    super::output_image::validate(request, metadata)?;
     if request.image_manifests.is_empty() {
         return Ok(());
     }

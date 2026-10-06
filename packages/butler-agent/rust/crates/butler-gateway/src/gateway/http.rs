@@ -1,4 +1,5 @@
 mod authority;
+mod browser_host;
 mod content;
 mod start;
 pub(super) use start::serve;
@@ -70,6 +71,7 @@ const DEFAULT_PAGE_LIMIT: usize = 200;
 const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
 struct HttpState {
+    browser: browser_host::Hub,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
@@ -196,6 +198,9 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
+    if uri.path().starts_with("/internal/browser") {
+        return browser_host::route(state, request, &client).await;
+    }
     if uri.path().starts_with("/__o/") {
         return Err(HttpError::public(404, "not_found", "Route not found."));
     }
