@@ -65,7 +65,7 @@ runs:
         node-version: 22
     - name: Build renderer
       working-directory: ${{ github.workspace }}
-      shell: powershell
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
         $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
@@ -79,7 +79,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
-      shell: powershell
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust
       run: |
         $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
@@ -124,7 +124,7 @@ runs:
         retention-days: 14
     - name: Package ZIP and shared Agent manifests
       working-directory: ${{ github.workspace }}
-      shell: powershell
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
         $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())

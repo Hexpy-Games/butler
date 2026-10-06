@@ -163,7 +163,7 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
       - name: Verify basic Windows capabilities before release
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         working-directory: packages/butler-agent/rust
         run: |
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
@@ -172,7 +172,7 @@ jobs:
           ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
       - name: Check owner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         run: ./deploy/windows-owner-cleanup.ps1
 
   agent-windows:
@@ -225,7 +225,7 @@ jobs:
           if-no-files-found: error
       - name: Verify owner registration and clean job profile
         if: always() && inputs.runner != 'hosted'
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         run: ./deploy/windows-owner-cleanup.ps1
 
   # Runs after the macOS job, whose single-platform manifests it replaces with
