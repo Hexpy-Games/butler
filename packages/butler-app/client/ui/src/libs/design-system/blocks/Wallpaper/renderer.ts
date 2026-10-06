@@ -6,7 +6,7 @@ import { wallpaperParamUniforms } from "./glsl";
 import { WALLPAPER_IMAGE_MODULE } from "./modules";
 import { BUILTIN_WALLPAPERS, defaultWallpaperModule, type WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
-import { isSoftwareWallpaperRenderer, wallpaperRendererName } from "./softwareGl";
+import { isSoftwareWallpaperRenderer, wallpaperRendererName, wallpaperSoftwareFallbackAllowed } from "./softwareGl";
 import { resolveWallpaperValues } from "./values";
 
 export type { WallpaperDrawFrame } from "./glDraw";
@@ -57,7 +57,7 @@ export function createWallpaperRenderer(
 ): WallpaperRenderer | null {
   const gl = canvas.getContext("webgl2", CONTEXT_ATTRIBUTES) as WebGL2RenderingContext | null;
   if (!gl) return null;
-  const software = isSoftwareWallpaperRenderer(wallpaperRendererName(gl));
+  const software = isSoftwareWallpaperRenderer(wallpaperRendererName(gl)) && wallpaperSoftwareFallbackAllowed();
   let resources = createWallpaperResources(gl);
   let scene: WallpaperScene | null = null;
   let active: WallpaperDrawScene | null = null;

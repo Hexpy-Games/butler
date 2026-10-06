@@ -125,6 +125,11 @@ test("software GL holds still frames for animated modules and marks the canvas b
   const hardware = fakeCanvas();
   createWallpaperEngine(hardware, { onError: () => undefined });
   expect(hardware.dataset.wallpaperFallback).toBeUndefined();
+  // A test harness opts out: software GL animates.
+  (documentTarget as unknown as { documentElement: { dataset: Record<string, string> } }).documentElement = { dataset: { wallpaperSoftwareFallback: "off" } };
+  const optedOut = fakeCanvas({ renderer: "SwiftShader" });
+  createWallpaperEngine(optedOut, { onError: () => undefined });
+  expect(optedOut.dataset.wallpaperFallback).toBeUndefined();
 });
 
 test("the user's pause holds a still frame and stops the loop", () => {

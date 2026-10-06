@@ -10,6 +10,14 @@ export function wallpaperRendererName(gl: WebGL2RenderingContext): string {
   return typeof name === "string" ? name : "";
 }
 
+/**
+ * Test harnesses that must see live frames on software GL (CI, headless) opt
+ * out of the still-frame fallback with `<html data-wallpaper-software-fallback="off">`.
+ */
+export function wallpaperSoftwareFallbackAllowed(): boolean {
+  return typeof document === "undefined" || document.documentElement?.dataset?.wallpaperSoftwareFallback !== "off";
+}
+
 /** Whether a renderer string names a software rasterizer; an unknown renderer counts as hardware. */
 export function isSoftwareWallpaperRenderer(name: string): boolean {
   return SOFTWARE_RENDERER.test(name);
