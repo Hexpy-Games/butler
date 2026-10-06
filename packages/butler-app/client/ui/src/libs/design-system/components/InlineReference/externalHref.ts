@@ -1,4 +1,4 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
 const SCHEME = /^https?:\/\//i;
 
@@ -20,6 +20,28 @@ export function nodeText(node: ReactNode): string {
     else if (isValidElement<{ children?: ReactNode }>(child)) text += nodeText(child.props.children);
   });
   return text;
+}
+
+/**
+ * Splits a label into its first character (plus any leading space) and the
+ * rest, so the icon can be glued to that character: the icon never ends a
+ * line on its own, and the rest still wraps anywhere. A plain `span` (a
+ * streaming reveal chunk) is split inside; any other element is glued whole.
+ */
+export function splitLabelLead(node: ReactNode): [ReactNode, ReactNode[]] {
+  const [first, ...rest] = Children.toArray(node);
+  if (first === undefined) return [null, []];
+  if (typeof first === "string" || typeof first === "number") {
+    const text = String(first);
+    const head = text.match(/^\s*./su)?.[0] ?? text;
+    return [head, [text.slice(head.length), ...rest]];
+  }
+  if (isValidElement<{ children?: ReactNode }>(first) && first.type === "span") {
+    const element = first as ReactElement<{ children?: ReactNode }>;
+    const [head, tail] = splitLabelLead(element.props.children);
+    return [cloneElement(element, {}, head), [cloneElement(element, { key: "tail" }, ...tail), ...rest]];
+  }
+  return [first, rest];
 }
 
 /** True when the link text is the URL itself (a bare or autolinked URL). */

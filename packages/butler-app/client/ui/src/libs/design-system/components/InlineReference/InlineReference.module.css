@@ -50,6 +50,10 @@ button.reference {
   text-underline-offset: 0.2em;
 }
 
+.lead {
+  white-space: nowrap;
+}
+
 .external:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: 1px;
@@ -61,7 +65,8 @@ button.reference {
   display: inline-block;
   width: 1.125em;
   height: 1.125em;
-  margin-inline-end: 0.25em;
+  /* The same icon-to-label gap as the mention kind (.reference gap). */
+  margin-inline-end: var(--space-1);
   border-radius: calc(var(--radius-control) / 2);
   vertical-align: -0.2em;
 }

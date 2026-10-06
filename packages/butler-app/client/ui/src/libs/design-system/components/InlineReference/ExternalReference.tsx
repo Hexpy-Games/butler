@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Tooltip } from "../Tooltip";
-import { externalHrefLabel, isBareUrlText, nodeText } from "./externalHref";
+import { externalHrefLabel, isBareUrlText, nodeText, splitLabelLead } from "./externalHref";
 import { FaviconSlot } from "./FaviconSlot";
 import styles from "./InlineReference.module.css";
 
@@ -16,7 +16,7 @@ export interface ExternalReferenceProps {
 /** An external URL in running text: favicon slot, title or domain, the full URL in the tooltip. */
 export function ExternalReference({ href, children, iconSrc }: ExternalReferenceProps) {
   const text = nodeText(children);
-  const label = isBareUrlText(text, href) ? externalHrefLabel(href, text) : children;
+  const [head, tail] = splitLabelLead(isBareUrlText(text, href) ? externalHrefLabel(href, text) : children);
   return (
     <Tooltip label={href} wrap>
       <a
@@ -27,10 +27,12 @@ export function ExternalReference({ href, children, iconSrc }: ExternalReference
         rel="noopener noreferrer"
         target="_blank"
       >
-        <FaviconSlot src={iconSrc} />
-        {/* Word joiner: the icon never ends a line apart from its label. */}
-        {"⁠"}
-        <span className={styles.label}>{label}</span>
+        {/* The icon and the label's first character never part at a line end. */}
+        <span className={styles.lead}>
+          <FaviconSlot src={iconSrc} />
+          <span className={styles.label}>{head}</span>
+        </span>
+        <span className={styles.label}>{tail}</span>
       </a>
     </Tooltip>
   );
