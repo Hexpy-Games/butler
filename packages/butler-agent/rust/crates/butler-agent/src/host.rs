@@ -9,6 +9,7 @@
 //! The shared system clock and UUID generator here retain no Turn/session state. Domain
 //! ports remain explicit; domains do not depend on this composition module.
 
+pub(crate) mod build_info;
 mod error;
 mod installation;
 mod mcp;

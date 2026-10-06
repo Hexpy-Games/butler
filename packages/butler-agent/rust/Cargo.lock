@@ -814,40 +814,11 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 name = "butler-agent"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
- "butler-core",
- "butler-gateway",
- "butler-ledger",
- "butler-memory",
- "butler-models",
+ "butler-host",
  "butler-platform",
- "butler-runtime",
- "butler-test-support",
- "butler-turn",
- "bytes",
- "chrono",
  "embed-manifest",
- "futures-util",
- "image",
- "indexmap 2.14.2",
- "parking_lot",
- "regex",
- "reqwest 0.12.28",
- "rmcp",
- "rusqlite",
  "semver",
- "serde",
- "serde_json",
- "sha1",
- "sha2 0.10.9",
- "thiserror 2.0.20",
  "tokio",
- "tokio-util",
- "tz-rs",
- "unicode-normalization",
- "unicode-segmentation",
- "url",
- "uuid",
 ]
 
 [[package]]
@@ -934,6 +905,44 @@ dependencies = [
  "url",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "butler-host"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-gateway",
+ "butler-ledger",
+ "butler-memory",
+ "butler-models",
+ "butler-platform",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "image",
+ "indexmap 2.14.2",
+ "parking_lot",
+ "regex",
+ "reqwest 0.12.28",
+ "rmcp",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tz-rs",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
+ "uuid",
 ]
 
 [[package]]

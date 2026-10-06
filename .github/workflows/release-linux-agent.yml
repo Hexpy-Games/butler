@@ -18,12 +18,9 @@ jobs:
     timeout-minutes: 150
     env:
       CARGO_BUILD_JOBS: "8"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - name: Build, package and smoke the Agent archive
         uses: ./.github/actions/build-agent-archive
         with:
