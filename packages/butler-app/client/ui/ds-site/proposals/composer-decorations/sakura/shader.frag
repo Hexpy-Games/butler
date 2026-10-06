@@ -10,7 +10,8 @@
 //     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest). Fixed in
 //     px, so it stays at the same outward position at every width and height. Its outer part is a
 //     sparser fringe; the right end of long first lines may run under it (accepted by the owner).
-// One palette everywhere; nothing else is drawn (no zones, no masks behind the text).
+// Light mode: one palette everywhere. Dark mode: the corner cluster is painted in deeper roses,
+// blended per dab with a radial falloff from the corner. Nothing else is drawn (no zones, no masks).
 //
 // Coordinates are CSS px from the card's top-left, y down. Motion is periodic in T = timePeriod.
 
@@ -68,6 +69,27 @@ vec3 tone(float l, float n) {
   return mix(mid, pale, step(2.5, k));
 }
 
+// Dark mode only: the same four-band structure in darker deep roses (luminance <= 0.085), so white
+// text keeps >= 4.5:1 where it runs under the corner cluster.
+vec3 deepTone(float l, float n) {
+  float k = clamp(l * 3.2 + (n - 0.5) * 1.1, 0.0, 3.0);
+  vec3 a = vec3(0.30, 0.09, 0.18);
+  vec3 b = vec3(0.38, 0.13, 0.24);
+  vec3 c = vec3(0.46, 0.17, 0.30);
+  vec3 d = vec3(0.53, 0.21, 0.35);
+  if (k < 1.0) return mix(a, b, step(0.6, k));
+  if (k < 2.0) return mix(b, c, step(1.5, k));
+  return mix(c, d, step(2.5, k));
+}
+
+// Dark mode only: how far a dab belongs to the corner cluster. Radial from the top-right corner,
+// measured at the dab's centre (so every dab is one colour and the change happens dab by dab):
+// fully deep across the whole cluster, fading out along the top edge, no straight edge anywhere.
+float cornerWeight(vec2 ctr) {
+  float o = length(vec2((W - ctr.x) / IX, ctr.y / IY));
+  return 1.0 - smoothstep(1.25, 2.4, o);
+}
+
 bool inTextZone(vec2 p) { return p.y >= TOP - 1.0 && W - p.x >= SIDE - 1.0 && p.y <= TB; }
 
 // One layer of dabs on a jittered grid: small rounded ellipses at random angles, only where the
@@ -94,6 +116,7 @@ vec4 dabs(vec2 p, vec2 px, float cell, float rBias, float lift, int row) {
       float l = clamp(m.y + lift, 0.0, 1.0);
       // the palette changes over the lower half of the top padding, not at a seam
       vec3 c = tone(l, h.g);
+      if (DARK) c = mix(c, deepTone(l, h.g), cornerWeight(ctr));
       col = over(col, vec4(c * a, a));
     }
   return col;
