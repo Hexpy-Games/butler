@@ -5,6 +5,7 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod favicons;
 mod latency_trace;
 mod listeners;
 mod mcp_servers;
@@ -78,6 +79,7 @@ struct HttpState {
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
+    favicons: Arc<favicons::Favicons>,
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
@@ -207,6 +209,7 @@ async fn route_for_client(
     }
     match (request.method(), uri.path()) {
         (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
+        (&Method::GET, "/favicons") => favicons::get(state, &uri).await,
         (&Method::GET, "/events/live") => {
             let scope = request
                 .extensions()

@@ -48,6 +48,7 @@ pub(in crate::gateway) fn serve(
                 config.message_rate_limit_window,
             ),
             shutdown: shutdown.clone(),
+            favicons: Arc::new(super::favicons::Favicons::new(config.favicon_cache_root)),
             uploads: tokio::sync::Semaphore::new(2),
             static_ui_root: config.static_ui_root,
             output_data: config.output_data,
