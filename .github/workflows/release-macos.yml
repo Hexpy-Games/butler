@@ -49,7 +49,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "${GITHUB_REF_NAME#v}"
 
-        if: steps.reuse.outputs.reused != 'true'
       - name: Cache the pinned native Rust build
         if: steps.reuse.outputs.reused != 'true'
         uses: ./.github/actions/rust-agent-setup
