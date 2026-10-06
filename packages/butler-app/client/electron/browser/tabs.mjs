@@ -14,6 +14,7 @@ class UserBrowser {
   areaVisible = false;
   nativeCovers = 0;
   initialization = null;
+  metadataTimer = null;
 
   constructor(app, getWindow) {
     this.getWindow = getWindow;
@@ -76,7 +77,7 @@ class UserBrowser {
     tab.status = contents.isLoading() ? "loading" : "idle";
     tab.canBack = contents.navigationHistory.canGoBack();
     tab.canForward = contents.navigationHistory.canGoForward();
-    this.publish();
+    if (!this.metadataTimer) this.metadataTimer = setTimeout(() => { this.metadataTimer = null; this.publish(); }, 50);
   }
   nativeCover() {
     this.nativeCovers += 1;
@@ -148,10 +149,10 @@ class UserBrowser {
     const key = input.key.toLowerCase();
     if (command && key === "l") {
       this.getWindow()?.webContents.focus(); this.getWindow()?.webContents.send("butler-browser:address");
-    } else if (command && key === "t") this.create();
-    else if (command && key === "w" && this.activeId) this.close(this.activeId);
+    } else if (command && key === "t") { if (this.enabled()) this.create(); }
+    else if (command && key === "w") { if (this.activeId) this.close(this.activeId); }
     else if ((input.alt && ["arrowleft", "arrowright"].includes(key)) || (command && ["[", "]"].includes(key))) {
-      this.commandTab(key === "arrowleft" || key === "[" ? "back" : "forward", this.activeId);
+      if (this.enabled() && this.activeId) this.commandTab(key === "arrowleft" || key === "[" ? "back" : "forward", this.activeId);
     } else return false;
     return true;
   }

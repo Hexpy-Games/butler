@@ -25,7 +25,7 @@ context.fillStyle = "#eaf0ef"; context.fillRect(0, 0, 1440, 720);
 context.fillStyle = "#123432"; context.font = "36px sans-serif"; context.fillText("Local fixture page", 48, 80);
 const still = canvas.toDataURL("image/jpeg");
 let serial = 0;
-let snapshot: BrowserSnapshot = {
+const snapshot: BrowserSnapshot = {
   enabled: mode !== "disabled", blocked: false, activeId: ["empty", "output"].includes(mode) ? null : "one", nativeCovered: false,
   tabs: ["empty", "output"].includes(mode) ? [] : [{ id: "one", owner: "mine", title: "Local fixture", url: "https://example.com/", favicon: "",
     status: mode === "crash" ? "crashed" : "idle", canBack: true, canForward: true }],

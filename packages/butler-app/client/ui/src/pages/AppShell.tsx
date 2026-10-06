@@ -10,6 +10,7 @@ import {
   AdaptiveShellWorkspace,
   Stack,
   Spinner,
+  InspectorShell,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -33,7 +34,7 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
-import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
+import { activeChatFromNavigation, appShellTheme, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
   selectIsSettingsView,
@@ -260,7 +261,13 @@ function AppWorkspaceShell() {
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
-          {view.kind === "browser" ? <Stack fill id="butler-right-inspector"><Conversation /></Stack> : <Inspector id="butler-right-inspector" />}
+          {view.kind === "browser" ? (
+            <InspectorShell id="butler-right-inspector" activeTab="conversation"
+              tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
+              onTabChange={() => undefined}>
+              <Conversation />
+            </InspectorShell>
+          ) : <Inspector id="butler-right-inspector" />}
         </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (

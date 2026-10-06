@@ -17,7 +17,7 @@ const port = await freePort();
 const origin = `http://127.0.0.1:${port}`;
 const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(request) {
   const path = new URL(request.url).pathname;
-  if (path === "/heavy") return new Response(`<title>Heavy</title><script>setInterval(()=>{let a=[];for(let i=0;i<100000;i++)a.push(Math.sqrt(i));},16)</script><h1>Heavy page</h1>`);
+  if (path === "/heavy") return new Response("<title>Heavy</title><script>setInterval(()=>{let a=[];for(let i=0;i<100000;i++)a.push(Math.sqrt(i));},16)</script><h1>Heavy page</h1>");
   return new Response(`<title>${path === "/second" ? "Second" : "Fixture"}</title><h1>${path}</h1><a href="/second">Next</a><a href="/popup" target="_blank">Popup</a><input aria-label="Field">`, { headers: { "content-type": "text/html" } });
 } });
 let app: ElectronApplication | undefined;

@@ -240,7 +240,7 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
-  browser: {"title": "Browser", "myTabs": "My tabs", "newTab": "New tab", "closeTab": "Close tab", "address": "Address", "addressPlaceholder": "Search or enter URL", "back": "Back", "forward": "Forward", "reload": "Reload", "stop": "Stop", "loading": "Loading", "crashed": "Tab crashed", "empty": "Open a new tab", "updateRequired": "Update Butler", "restartRequired": "Restart Butler", "failed": "Could not open page", "openOutput": "Open in Browser", "output": "Output"},
+  browser: { "title": "Browser", "myTabs": "My tabs", "newTab": "New tab", "closeTab": "Close tab", "address": "Address", "addressPlaceholder": "Search or enter URL", "back": "Back", "forward": "Forward", "reload": "Reload", "stop": "Stop", "loading": "Loading", "crashed": "Tab crashed", "empty": "Open a new tab", "updateRequired": "Update Butler", "restartRequired": "Restart Butler", "failed": "Could not open page", "openOutput": "Open in Browser", "output": "Output" },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",
