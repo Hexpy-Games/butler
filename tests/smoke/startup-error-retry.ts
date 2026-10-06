@@ -102,6 +102,8 @@ try {
   }
   const main = await waitFor(() => browser!.contexts()[0]!.pages().find((page) => page.url().startsWith("app://")), "Retry main renderer unavailable");
   await main.locator("[data-test-class=app-boot]").waitFor({ state: "hidden" });
+  phase = "recovered-renderer";
+  await waitFor(async () => (await main.locator("#root").innerText()).length > 0, "Retry renderer content unavailable");
   assert.ok((await main.locator("#root").innerText()).length > 0);
   await main.screenshot({ path: join(output, "retried.png") });
   await main.evaluate(() => (window as any).butlerApp.quitApp({ confirmed: true }));

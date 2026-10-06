@@ -78,7 +78,8 @@ export function createStartupWindow() {
         startupTiming("retry_requested");
         await actions.retry?.();
         startupTiming("retry_stopped");
-        app.relaunch(); startupTiming("retry_relaunch_registered"); app.exit(0);
+        app.relaunch(); startupTiming("retry_relaunch_registered");
+        if (actions.exit) actions.exit(); else app.exit(0);
       } else if (action === "log") await openLifecycleLog(state, events, actions.diagnostics?.());
       else if (action === "quit") app.quit();
     },
