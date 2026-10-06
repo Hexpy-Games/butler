@@ -56,6 +56,11 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
+  hooks: [
+    { id: "hooks", kind: "list", fields: [] },
+    { id: "hook-form", kind: "form", fields: [], optional: true },
+    { id: "hook-runs", kind: "list", fields: [] },
+  ],
   mcp: [
     { id: "mcp-servers", kind: "list", fields: [] },
     { id: "mcp-server-form", kind: "form", fields: [], optional: true },

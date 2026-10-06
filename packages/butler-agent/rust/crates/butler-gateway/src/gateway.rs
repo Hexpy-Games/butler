@@ -345,6 +345,10 @@ pub trait GatewayApplication:
         let _ = input;
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// User lifecycle hook service; absent without a host implementation.
+    fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
+        None
+    }
     fn list_mcp_servers(&self) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

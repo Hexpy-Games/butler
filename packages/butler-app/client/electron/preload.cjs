@@ -51,6 +51,7 @@ function bridgeErrorEnvelope(error) {
   return {
     schema: bridgeErrorSchema,
     code,
+    ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
     ...(code === "session_cursor_resync_required"
       ? {
@@ -874,7 +875,7 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestJson("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestBridgeResult("/messages", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
@@ -935,7 +936,7 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestJson("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestBridgeResult("/session-queue", {
     method: "POST",
     body: JSON.stringify({
       chat_id: chatId,
@@ -1064,6 +1065,10 @@ const butlerApp = Object.freeze({
       ...(typeof revision === "string" && revision ? { revision } : {}),
     }),
   }),
+  getHooks: () => requestSecurity("getHooks"),
+  saveHooks: (body) => requestSecurity("saveHooks", body),
+  getHookRuns: () => requestSecurity("getHookRuns"),
+  testHook: (body) => requestSecurity("testHook", body),
   listMcpServers: () => requestBridgeResult("/mcp-servers"),
   listMcpCapabilities: () => requestJson("/mcp-capabilities"),
   listSkills: () => requestJson("/skills"),

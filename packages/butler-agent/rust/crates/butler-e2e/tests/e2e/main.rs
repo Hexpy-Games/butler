@@ -34,6 +34,7 @@ mod gateway_rotation;
 mod gateway_security;
 mod gateway_tunnel;
 mod harness_hygiene;
+mod hooks;
 mod idle_resources;
 mod image_errors;
 mod install_app;

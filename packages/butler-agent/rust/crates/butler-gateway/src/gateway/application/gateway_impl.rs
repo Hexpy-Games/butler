@@ -1,6 +1,9 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
+    fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
+        self.dependencies.hooks.clone()
+    }
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.usage_monitor_query(query)
     }
@@ -51,20 +54,10 @@ impl GatewayApplication for AppApplication {
         super::updates::apply(self.dependencies.updates.clone(), request)
     }
     fn report_app_update_progress(&self, stage: String) -> ApplicationFuture<Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            updates
-                .progress
-                .host_stage(&stage)
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::report_stage(self.dependencies.updates.clone(), stage)
     }
     fn cancel_app_update(&self) -> ApplicationFuture<Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(
-            async move { Ok(serde_json::json!({"cancelled":updates.progress.cancel().await})) },
-        )
+        super::updates::cancel(self.dependencies.updates.clone())
     }
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
         let this = self.clone_handle();

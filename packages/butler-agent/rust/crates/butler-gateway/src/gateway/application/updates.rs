@@ -89,6 +89,25 @@ pub(super) fn current(
     })
 }
 
+pub(super) fn report_stage(
+    updates: std::sync::Arc<butler_runtime::operations::AppUpdateService>,
+    stage: String,
+) -> crate::gateway::ApplicationFuture<serde_json::Value> {
+    Box::pin(async move {
+        updates
+            .progress
+            .host_stage(&stage)
+            .await
+            .map_err(|error| update_error(&error))
+    })
+}
+
+pub(super) fn cancel(
+    updates: std::sync::Arc<butler_runtime::operations::AppUpdateService>,
+) -> crate::gateway::ApplicationFuture<serde_json::Value> {
+    Box::pin(async move { Ok(serde_json::json!({"cancelled":updates.progress.cancel().await})) })
+}
+
 pub(super) fn apply(
     updates: std::sync::Arc<butler_runtime::operations::AppUpdateService>,
     request: butler_runtime::operations::UpdateRequest,

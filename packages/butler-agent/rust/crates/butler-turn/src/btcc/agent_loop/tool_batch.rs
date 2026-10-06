@@ -98,8 +98,68 @@ pub(super) async fn execute<'a>(
             None,
         )
         .await;
+        super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
         return Ok(result);
     }
+    let denied = super::hooks::pre_tool(policy, invocation, &prepared.call).await;
+    let result = if let Some(message) = denied {
+        ToolResult {
+            tool_call_id: prepared.call.id.clone(),
+            name: prepared.call.name.clone(),
+            ok: false,
+            error: Some(tool_error("hook_denied", message, None)),
+            output: None,
+        }
+    } else {
+        execute_validated(policy, invocation, prepared).await?
+    };
+    if result
+        .error
+        .as_ref()
+        .is_some_and(|error| error.code == "hook_denied")
+    {
+        policy
+            .record_unexecuted(invocation, &prepared.call, &result)
+            .await?;
+    }
+    super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
+    let visible = result
+        .error
+        .as_ref()
+        .filter(|e| e.code == "hook_denied")
+        .map(|_| denied_operation(policy, &prepared.call));
+    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
+    operation(
+        invocation.progress,
+        visible.as_ref().unwrap_or(&prepared.call),
+        if result.ok {
+            Status::Completed
+        } else {
+            Status::Failed
+        },
+        result.output.as_ref(),
+        operation_call_id.as_deref(),
+    )
+    .await;
+    Ok(result)
+}
+
+fn denied_operation(
+    policy: &dyn GuidedPolicyPort,
+    call: &ModelRoundToolCall,
+) -> ModelRoundToolCall {
+    ModelRoundToolCall {
+        name: policy.hook_tool_name(call).into_owned(),
+        arguments: policy.hook_tool_input(call).clone(),
+        ..call.clone()
+    }
+}
+
+async fn execute_validated<'a>(
+    policy: &'a dyn GuidedPolicyPort,
+    invocation: GuidedInvocation<'a>,
+    prepared: &'a PreparedCall<'a>,
+) -> Result<ToolResult, BtccError> {
     let result = match policy
         .execute_tool(
             invocation,
@@ -134,19 +194,6 @@ pub(super) async fn execute<'a>(
             return Err(error);
         }
     };
-    let operation_call_id = policy.operation_result_call_id(&prepared.call.id);
-    operation(
-        invocation.progress,
-        &prepared.call,
-        if result.ok {
-            Status::Completed
-        } else {
-            Status::Failed
-        },
-        result.output.as_ref(),
-        operation_call_id.as_deref(),
-    )
-    .await;
     Ok(result)
 }
 

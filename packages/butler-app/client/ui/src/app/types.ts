@@ -13,6 +13,7 @@ export type SettingsSectionId =
   | "server"
   | "updates"
   | "mcp"
+  | "hooks"
   | "skills"
   | "usage"
   | "logs"
@@ -1231,6 +1232,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
   status?: number;
@@ -1758,6 +1760,8 @@ export interface ComposerControls {
   contentParts?: import("./messageContent").MessageContent;
   /** UI-only acknowledgement; never serialized into the transport request. */
   onAccepted?: () => void;
+  /** Restore a rejected draft when session creation changed the editor identity. */
+  onRejected?: (sessionId: string) => void;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;

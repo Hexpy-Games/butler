@@ -133,6 +133,7 @@ impl AppServer {
         let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready.clone());
         let dependencies = AppApplicationDependencies {
+            hooks: Some(runtime.hooks.clone()),
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
             setup: Arc::new(setup.clone()),
@@ -212,6 +213,27 @@ impl AppServer {
         };
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
+        Self::activate_listener(
+            listener,
+            application,
+            gateway_config,
+            setup,
+            listener_ready,
+            artifacts,
+            data_root,
+        )
+        .await
+    }
+
+    async fn activate_listener(
+        listener: TcpListener,
+        application: Arc<AppApplication>,
+        gateway_config: GatewayConfig,
+        setup: AppSetup,
+        listener_ready: Arc<AtomicBool>,
+        artifacts: Arc<AppMessageFiles>,
+        data_root: &std::path::Path,
+    ) -> Result<Self, BtccError> {
         let server = startup::activate(
             listener,
             application.clone(),

@@ -25,9 +25,9 @@ src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
 src/gateway/application/projects/dashboard/statistics/ledger.rs	apply_history	135
 src/gateway/application/retry.rs	AppApplication::retry_turn_owned	100
 src/gateway/application/retry/source.rs	retry_snapshot	112
-src/gateway/application/send.rs	AppApplication::send_with_attachment_source	170
+src/gateway/application/send.rs	AppApplication::send_with_attachment_source	158
 src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	126
-src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	130
+src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	119
 src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	81

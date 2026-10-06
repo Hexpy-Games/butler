@@ -45,6 +45,7 @@ function createSettingsSectionMap(
     appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
     server: section("server", settingsCopy.sections.server, <Server />),
     updates: section("updates", settingsCopy.sections.updates, <RefreshCcw />),
+    hooks: section("hooks", settingsCopy.sections.hooks, <Terminal />),
     mcp: section("mcp", settingsCopy.sections.mcp, <McpServer />),
     skills: section("skills", settingsCopy.sections.skills, <MagicWand />),
     usage: section("usage", settingsCopy.sections.usage, <Database />),
@@ -94,7 +95,7 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "advanced",
     label: "advanced",
-    sectionIds: ["mcp", "skills", "server"],
+    sectionIds: ["mcp", "hooks", "skills", "server"],
   },
 ];
 
@@ -152,6 +153,5 @@ export function filterSettingsSectionGroups(
     })
     .filter((group) => group.sections.length > 0);
 }
-
 
 export { settingsPageSchema, type SettingsSectionSchema } from "./settingsPageSchema";

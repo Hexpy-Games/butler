@@ -9,6 +9,7 @@ mod guided_policy;
 /// The ports a guided turn is composed of.
 pub mod guided_ports;
 mod guided_types;
+mod hooks;
 mod model_round;
 pub mod operation_result_replay;
 mod ports;
@@ -68,10 +69,10 @@ pub use contracts::{
     ToolSurface, UsageAttribution,
 };
 pub use guided_ports::{
-    AuthorityPort, ContextPort, FinalSynthesis, GuidedInvocation, GuidedPolicyDependencies,
-    JournalCloseout, JournalPort, PromptImages, PromptPort, RenderedGuidedPrompt,
-    RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort, WorkFinalState,
-    WorkPort,
+    AuthorityPort, ContextPort, FinalSynthesis, GuidedHookBinding, GuidedInvocation,
+    GuidedPolicyDependencies, JournalCloseout, JournalPort, PromptImages, PromptPort,
+    RenderedGuidedPrompt, RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort,
+    WorkFinalState, WorkPort,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use operation_result_replay::OperationResultReference;

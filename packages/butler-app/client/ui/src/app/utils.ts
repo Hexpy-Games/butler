@@ -1831,6 +1831,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     return "logs";
   if (section.includes("appearance")) return "appearance";
   if (section.includes("server") || section.includes("bridge")) return "server";
+  if (section === "hooks" || section === "훅") return "hooks";
   if (section.includes("mcp")) return "mcp";
   if (section.includes("skill")) return "skills";
   // Backup, cleanup and worker models live on the Models page (the
