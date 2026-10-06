@@ -23,6 +23,7 @@ const entry = resolve(process.env.BUTLER_QUIT_ELECTRON_ROOT ?? "packages/butler-
 let application: ElectronApplication | undefined;
 let applicationProcess: ReturnType<ElectronApplication["process"]> | undefined;
 let phaseLog = "";
+const latencyMeasurements: Array<{ hidden_ms: number; feedback_ms: number; status: string }> = [];
 
 async function waitFor(check: () => Promise<boolean>, label: string, timeout = 10_000) {
   const deadline = performance.now() + timeout;
@@ -83,12 +84,14 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
       let shown = -1;
       let status = "";
       const complete = () => { if (hidden >= 0 && shown >= 0 && status) console.error(JSON.stringify({ quitSmoke: { hidden_ms: hidden, feedback_ms: shown, status } })); };
-      main.once("hide", () => { hidden = performance.now() - start; complete(); });
       const painted = (event: { sender: unknown }, profile: { card?: { line?: string; fontReady?: boolean; markReady?: boolean; images?: number } }) => {
         if (event.sender === main.webContents || !(event.sender as { getURL(): string }).getURL().includes("/lifecycle/lifecycle.html")) return;
         ipcMain.removeListener("butler:lifecycle-painted", painted);
         if (profile.card?.fontReady && profile.card.markReady && profile.card.images === 0) {
-          shown = performance.now() - start; status = profile.card.line ?? ""; complete();
+          shown = performance.now() - start;
+          // Native visibility is the effect being budgeted; Cocoa hide events can arrive after exit.
+          hidden = main.isVisible() ? -1 : shown;
+          status = profile.card.line ?? ""; complete();
         }
       };
       ipcMain.on("butler:lifecycle-painted", painted);
@@ -105,8 +108,7 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
   const total = performance.now() - started;
   console.log(JSON.stringify({ scenario: baseline ? "before" : "after", blocked: holdStorage, quit_to_exit_ms: total, ...timing }));
   if (!baseline) {
-    assert(timing.hidden_ms >= 0 && timing.hidden_ms <= 200, JSON.stringify(timing));
-    assert(timing.feedback_ms >= 0 && timing.feedback_ms <= 200, JSON.stringify(timing));
+    latencyMeasurements.push(timing);
     assert(timing.status.length > 0);
     assert.equal(fixture.lastExit().graceful, true);
     assert.equal(fixture.lastExit().port_released, true);
@@ -143,6 +145,10 @@ try {
   await quit(restarted, false);
   application = undefined;
   console.log("PASS: active input retryable, follow-up delivered once, queue unpaused");
+  for (const timing of latencyMeasurements) {
+    assert(timing.hidden_ms >= 0 && timing.hidden_ms <= 200, JSON.stringify(timing));
+    assert(timing.feedback_ms >= 0 && timing.feedback_ms <= 200, JSON.stringify(timing));
+  }
 } finally {
   if (application && applicationProcess?.exitCode === null) await application.close();
   fixture.cleanup();

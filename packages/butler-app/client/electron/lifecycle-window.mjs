@@ -102,7 +102,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
       .catch(() => { timing("trace_failed"); void load(); });
   } else void load();
   timing(`${kind}_show_start`);
-  window.show();
+  if (reused) window.showInactive(); else window.show();
   timing(`${kind}_show_end`);
   return surface;
 }

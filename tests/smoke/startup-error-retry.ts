@@ -29,6 +29,7 @@ const env = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort) };
 let original: ChildProcess | undefined;
 let browser: Browser | undefined;
 let successorPid: number | undefined;
+let phase = "launch";
 async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<NonNullable<T>> {
   const deadline = performance.now() + 30_000;
   while (performance.now() < deadline) {
@@ -63,11 +64,14 @@ try {
   writeFileSync(config, validConfig);
   console.log(JSON.stringify({ originalFacts: await nativeMainFacts(mainPort, fixture.data) }));
   await splash.bringToFront();
+  phase = "retry-click";
   await retry.click();
   await waitFor(() => original!.exitCode !== null || original!.signalCode !== null, "Retry did not exit the failed process");
   assert.equal(original.exitCode, 0);
+  phase = "original-exit";
   await browser.close(); browser = undefined;
   browser = await connect();
+  phase = "successor-inspector";
   const facts = await waitFor(async () => {
     try { const value = await nativeMainFacts(mainPort, fixture.data); return value.pid !== original!.pid ? value : undefined; }
     catch { return undefined; }
@@ -95,6 +99,9 @@ try {
   await waitFor(() => { try { process.kill(successorPid!, 0); return false; } catch { return true; } }, "Retried app did not exit");
   successorPid = undefined;
   console.log("PASS: native config failure, Open log diagnostics/reveal, actual Retry relaunch and recovered main window");
+} catch (error) {
+  console.error(JSON.stringify({ retryFailure: { phase, message: error instanceof Error ? error.message.split("\n")[0] : "unknown" } }));
+  throw error;
 } finally {
   if (successorPid) { try { process.kill(successorPid, "SIGKILL"); } catch { /* already exited */ } }
   if (original?.exitCode === null && original.signalCode === null) {
