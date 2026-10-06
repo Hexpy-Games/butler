@@ -57,6 +57,17 @@ class WindowsSafety(unittest.TestCase):
             sys.path.remove(str(scripts))
 
     # test-category: security
+    def test_shared_rust_setup_initializes_msvc_before_sdk_and_snapshot_selection(self):
+        setup = (ROOT.parents[1] / '.github/actions/rust-agent-setup/action.yml').read_text()
+        initialization = setup.index('uses: ilammy/msvc-dev-cmd@v1')
+        step = setup[initialization:setup.index('    - uses:', initialization)]
+        self.assertIn("if: runner.os == 'Windows'", step)
+        self.assertIn('arch: x64', step)
+        self.assertLess(initialization, setup.index('name: Prepare pinned protoc'))
+        self.assertLess(initialization, setup.index('name: Fingerprint static ONNX Runtime'))
+        self.assertLess(initialization, setup.index('cargo-artifact-cache.py'))
+
+    # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

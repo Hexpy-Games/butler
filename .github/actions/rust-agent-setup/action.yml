@@ -52,6 +52,11 @@ inputs:
 runs:
   using: composite
   steps:
+    # SDK and Cargo snapshot identities must observe the selected Windows toolset.
+    - uses: ilammy/msvc-dev-cmd@v1
+      if: runner.os == 'Windows'
+      with:
+        arch: x64
     - uses: ./.github/actions/setup-oras
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
