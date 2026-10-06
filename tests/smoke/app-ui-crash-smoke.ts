@@ -226,6 +226,9 @@ async function persistenceSmoke() {
   console.log(JSON.stringify({ entries: log.length, bytes: before.size, idleWrites: 0 }));
   await store.append({ message: "Error: Minified React error #130; args[]=private conversation sk-secret" });
   assert.equal((await store.read()).at(-1)?.message, "React error #130");
+  const privateError = new Error("private conversation\n    at stolen (sk-secret.js:1:2)");
+  await store.append({ message: `${privateError.name}: ${privateError.message}`, stack: privateError.stack });
+  assert(!JSON.stringify((await store.read()).at(-1)).includes("sk-secret"));
 }
 
 let failure: unknown;

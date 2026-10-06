@@ -19,10 +19,13 @@ function safeMessage(value) {
   return `${name}: [redacted]`;
 }
 
-function safeFrames(value) {
+function safeFrames(value, message = "") {
   if (typeof value !== "string") return "";
-  // Keep bundle coordinates and component names; omit the error's first line.
-  return value.slice(0, 32_768).split("\n").flatMap((line) => {
+  // A multiline message can itself look like a frame. Remove the whole header.
+  const headers = typeof message === "string" && message ? [message, ...["Error", "TypeError", "ReferenceError", "RangeError", "SyntaxError"].map(name => `${name}: ${message}`)] : [];
+  const header = headers.find(candidate => value.startsWith(candidate));
+  const frames = header ? value.slice(header.length) : value;
+  return frames.slice(0, 32_768).split("\n").flatMap((line) => {
     if (!/^\s*(?:at |[A-Za-z_$][\w$]*@)/u.test(line)) return [];
     const name = line.match(/^\s*at ([A-Za-z_$][\w$]{0,79})(?:\s|\s*\()/u)?.[1];
     const location = line.match(/(?:\/|\b)([A-Za-z0-9_-]+\.(?:js|tsx?|mjs)):(\d+):(\d+)/u);
@@ -39,7 +42,7 @@ export function normalizeCrash(input, version) {
   const appVersion = version ?? input?.appVersion;
   return {
     message: safeMessage(input?.message),
-    stack: safeFrames(input?.stack),
+    stack: safeFrames(input?.stack, input?.message),
     componentStack: safeFrames(input?.componentStack),
     page, scope,
     appVersion: typeof appVersion === "string" && /^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/iu.test(appVersion) ? appVersion : "unknown",
