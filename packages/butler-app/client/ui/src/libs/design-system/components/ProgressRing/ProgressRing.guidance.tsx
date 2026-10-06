@@ -44,7 +44,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Sidebar progress row", description: "size=\"sidebar\" follows the row density; the row names itself, so the ring is aria-hidden.", render: () => <UpdateRow /> },
-    { name: "Status line", description: "Indeterminate until the size is known; the ring is the named progressbar.", render: () => <PreparingLine /> },
+    { name: "Status line", description: "Indeterminate (the Spinner) until the size is known, then the ring fills in the same square; it is the named progressbar.", render: () => <PreparingLine /> },
   ],
   doDont: [
     {
@@ -58,7 +58,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "role=\"progressbar\" with aria-valuenow 0-100; name it with aria-label (aria-valuetext for richer text such as 12 of 40 MB).",
-    "Indeterminate omits aria-valuenow. Under reduced motion (OS or data-motion=\"reduced\") it is a static quarter arc.",
+    "Indeterminate omits aria-valuenow and draws the DS Spinner in the same square, so motion and reduced motion are the Spinner's.",
     "Inside a control or row that already says the percent, pass aria-hidden so it is not announced twice.",
   ],
   tokens: ["--context-track-bg", "--accent", "--color-success", "--color-danger", "--icon-size-md", "--sidebar-icon-size", "--motion-fast", "--spinner-duration"],
