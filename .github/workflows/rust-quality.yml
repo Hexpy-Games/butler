@@ -58,21 +58,23 @@ jobs:
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
           native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-clippy
-      - name: Clippy production targets
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+          cache-key: archive-linux-x64
+          artifact-cache-platform: linux-x64
+          artifact-cache-kind: dev
+          save-cargo-cache: 'false'
+      # These four libraries allow panic/unwrap/expect and dead-code lints
+      # under test-support. --all-targets enables it through dev dependencies;
+      # retain their feature-free production check. Other ordinary libraries
+      # and binaries are covered by the workspace all-targets invocation.
+      - name: Clippy production libraries with stricter cfg lints
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
 

@@ -142,8 +142,26 @@ def restore(expected, root='target'):
                 source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
                                      json.loads((Path(temporary) / 'sources.json').read_text()))
         print(f'Restored compatible Cargo build inputs from native producer run {run_id}.')
-        return
+        return True
     print('No compatible Cargo artifact snapshot; normal Cargo/cache build follows.')
+    return False
+
+
+def restore_local(directory, expected):
+    """A rust-cache hit qualifies only with the complete matching snapshot."""
+    if not (directory / 'cache.json').is_file():
+        return False
+    metadata = json.loads((directory / 'cache.json').read_text())
+    if metadata['identity'] != expected:
+        print('Restored cache has another identity; using the artifact fallback.')
+        return False
+    verify(directory, expected)
+    if not metadata.get('sources_sha256'):
+        return False
+    extract(directory)
+    source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
+                         json.loads((directory / 'sources.json').read_text()))
+    return True
 
 
 def record(directory, expected, root='target'):
@@ -172,7 +190,15 @@ def record(directory, expected, root='target'):
 if __name__ == '__main__':
     command, platform, mode, kind = sys.argv[1:]
     expected = identity(platform, mode, kind)
-    if command == 'restore':
+    if command == 'identify':
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write(f'name={artifact_name(expected)}\n')
+            stream.write(f'sources={source_times.build_key(Path(os.environ["GITHUB_WORKSPACE"]))}\n')
+    elif command == 'restore-local':
+        restored = restore_local(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected)
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+            stream.write(f'restored={str(restored).lower()}\n')
+    elif command == 'restore':
         restore(expected)
     elif command == 'record':
         record(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected)

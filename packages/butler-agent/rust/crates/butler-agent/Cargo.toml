@@ -1,10 +1,14 @@
 [package]
-name = "butler-agent"
+name = "butler-host"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+# Keep the library target/API name and test inventory stable.
+[lib]
+name = "butler_agent"
 
 [features]
 default = ["prebuilt-ort"]
@@ -43,10 +47,6 @@ unicode-normalization.workspace = true
 unicode-segmentation.workspace = true
 url.workspace = true
 rmcp.workspace = true
-
-[build-dependencies]
-semver.workspace = true
-embed-manifest.workspace = true
 
 [dev-dependencies]
 butler-ledger = { path = "../butler-ledger", features = ["test-support"] }

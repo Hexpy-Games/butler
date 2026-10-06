@@ -7,6 +7,9 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  save-cargo-cache:
+    description: Save a complete main producer snapshot; consumers restore only.
+    default: "true"
   publish-runtime-cache:
     description: Preserve the SDK once per workflow; other producers still verify the complete restored SDK.
     default: 'true'
@@ -29,7 +32,7 @@ inputs:
     description: Retain workspace libraries for archive producers.
     default: "false"
   cache-key:
-    description: The rust-cache shared key; one per job so caches do not evict each other.
+    description: The rust-cache shared key; compatible build kind; only main producers save.
     required: true
   cargo-target-dir:
     description: Cargo build directory relative to the Rust workspace for caching.
@@ -135,7 +138,7 @@ runs:
         } >> "$GITHUB_ENV"
 
     - name: Save static ONNX Runtime cache
-      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && steps.ort-cache.outputs.cache-hit != 'true'
+      if: github.ref == 'refs/heads/main' && inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && steps.ort-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/ort-cache/native-deps
@@ -166,13 +169,33 @@ runs:
         sudo apt-get install -y mold
         echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
 
+    - name: Identify complete Cargo snapshot
+      if: inputs.artifact-cache-platform != ''
+      id: snapshot
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        CACHE_PLATFORM: ${{ inputs.artifact-cache-platform }}
+        CACHE_MODE: ${{ inputs.native-deps }}
+        CACHE_KIND: ${{ inputs.artifact-cache-kind }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" identify "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"
+
     - name: Cache Cargo build
       id: cargo-cache
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
-        shared-key: ${{ inputs.cache-key }}-${{ runner.arch }}-${{ inputs.native-deps }}
-        cache-directories: ${{ runner.temp }}/ort-download-cache
+        # No ref/commit/job suffix for producers. A source change rolls the
+        # immutable main snapshot; provenance-only commits reuse it.
+        shared-key: ${{ steps.snapshot.outputs.name || format('{0}-{1}', inputs.cache-key, inputs.native-deps) }}-${{ steps.snapshot.outputs.sources }}
+        # Store the complete, digest-checked snapshot, not rust-cache's
+        # cleaned target (which omits executables and build outputs).
+        cache-targets: ${{ inputs.artifact-cache-platform == '' }}
+        cache-bin: false
+        cache-directories: |
+          ${{ runner.temp }}/ort-download-cache
+          ${{ runner.temp }}/cargo-build-cache
+        save-if: ${{ github.ref == 'refs/heads/main' && inputs.artifact-cache-platform != '' && inputs.save-cargo-cache == 'true' }}
         cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         # Compiler/target/flags/lockfile are included by rust-cache. Cargo
         # validates source fingerprints after restore; the tracked commit input
@@ -180,8 +203,19 @@ runs:
         # rust-cache ignores `key` when `shared-key` is set.
         cache-on-failure: false
 
-    - name: Restore complete Cargo outputs and validated source freshness
+    - name: Validate and restore the rust-cache snapshot
       if: inputs.artifact-cache-platform != ''
+      id: complete-target
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        CACHE_PLATFORM: ${{ inputs.artifact-cache-platform }}
+        CACHE_MODE: ${{ inputs.native-deps }}
+        CACHE_KIND: ${{ inputs.artifact-cache-kind }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore-local "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"
+
+    - name: Restore complete Cargo outputs and validated source freshness
+      if: inputs.artifact-cache-platform != '' && steps.complete-target.outputs.restored != 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
