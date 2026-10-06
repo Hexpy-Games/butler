@@ -1,0 +1,55 @@
+name: Publish pinned native dependencies
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - packages/butler-agent/rust/scripts/prepare-static-ort.py
+      - packages/butler-agent/rust/scripts/static_ort_*.py
+      - packages/butler-agent/rust/scripts/static-ort.lock.json
+      - packages/butler-agent/rust/rust-toolchain.toml
+      - .github/workflows/native-deps.yml
+permissions:
+  contents: write
+concurrency:
+  group: native-deps-publisher
+  cancel-in-progress: false
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: macos-arm64
+            runner: macos-15
+          - target: windows-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Build once and publish verified SDK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_TARGET: ${{ matrix.target }}
+          CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
+        run: |
+          set -euo pipefail
+          export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          python packages/butler-agent/rust/scripts/static_ort_prebuilt.py publish "$NATIVE_TARGET"

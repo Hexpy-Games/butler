@@ -22,7 +22,6 @@ jobs:
           cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
           artifact-cache-platform: darwin-arm64
-          publish-runtime-cache: 'false'
           save-cargo-cache: 'false'
       - name: Build the two real macOS update-fixture versions once
         run: |
