@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
-import { Button, NativeViewSlot, Stack, TabStrip, Typo, type TabStripGroup } from "@/butler-ds";
+import { Button, EmptyLine, NativeViewSlot, Stack, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { AddressRow } from "./AddressRow";
 import { browserCall, connectBrowser, useBrowserState } from "./browserBridge";
 
@@ -16,7 +16,11 @@ export function BrowserArea() {
       void browserCall("still", { id: tab.id }).then((src) => { if (typeof src === "string") setStill({ id: tab.id, src }); });
     }
   }, [tab?.id, tab?.status, tab?.url]);
-  useEffect(() => { connectBrowser(); void browserCall("open"); return () => { void browserCall("hide"); }; }, []);
+  useEffect(() => {
+    connectBrowser(); void browserCall("open");
+    document.getElementById("butler-browser-area")?.focus();
+    return () => { void browserCall("hide"); };
+  }, []);
   const groups: TabStripGroup[] = [];
   for (const item of state.tabs) {
     let group = groups.find((entry) => entry.id === item.owner);
@@ -38,7 +42,11 @@ export function BrowserArea() {
   const empty = !tab || !tab.url;
   const crashed = tab?.status === "crashed";
   const disabled = !state.enabled;
-  return <Stack fill gap="none" data-test-class="browser-area">
+  return <Stack fill gap="none" id="butler-browser-area" tabIndex={-1} data-test-class="browser-area"
+    onFocusCapture={() => void browserCall("scope", { value: true })}
+    onBlurCapture={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
+    }}>
     <TabStrip groups={groups} activeTabId={state.activeId} panelId="browser-page"
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
         untitled: copy.newTab, loading: copy.loading, crashed: copy.crashed }}
@@ -50,12 +58,12 @@ export function BrowserArea() {
       stillSrc={still?.id === tab?.id ? still?.src : undefined} covered={state.nativeCovered}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>
-      {(empty || crashed || disabled) && <Stack fill justify="center" cross="center" gap="md">
-        <Typo.Label>{disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : crashed ? copy.crashed : copy.empty}</Typo.Label>
-        {!disabled && <Button size="sm" variant="outline" onClick={() => {
+      {(empty || crashed || disabled) && <EmptyLine
+        message={disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : crashed ? copy.crashed : copy.empty}
+        action={!disabled ? <Button size="sm" variant="outline" onClick={() => {
           if (crashed) void call("reload"); else if (tab) window.dispatchEvent(new CustomEvent("browser-focus-address")); else void browserCall("create");
-        }}>{crashed ? copy.reload : copy.newTab}</Button>}
-      </Stack>}
+        }}>{crashed ? copy.reload : copy.newTab}</Button> : undefined}
+      />}
     </NativeViewSlot></Stack>
   </Stack>;
 }

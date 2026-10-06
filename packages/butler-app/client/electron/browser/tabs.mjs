@@ -12,6 +12,7 @@ class UserBrowser {
   activeId = null;
   opened = false;
   areaVisible = false;
+  keyboardFocused = false;
   nativeCovers = 0;
   initialization = null;
   metadataTimer = null;
@@ -102,7 +103,7 @@ class UserBrowser {
     } });
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
-      window: this.getWindow, shortcut: (input) => this.shortcut(input),
+      window: this.getWindow, shortcut: (input) => this.shortcut(input, true),
       popup: (source, url) => this.create({ owner: source.owner, url }, false) });
     if (tab.url) void tab.view.webContents.loadURL(tab.url).catch(() => {});
   }
@@ -143,8 +144,8 @@ class UserBrowser {
     }
     this.publish();
   }
-  shortcut(input) {
-    if (!this.areaVisible || input.type !== "keyDown") return false;
+  shortcut(input, nativePage = false) {
+    if (!this.areaVisible || (!nativePage && !this.keyboardFocused) || input.type !== "keyDown") return false;
     const command = input.meta || input.control;
     const key = input.key.toLowerCase();
     if (command && key === "l") {
@@ -205,7 +206,8 @@ class UserBrowser {
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
     if (tab.owner === "mine") this.restore.changed(); this.publish();
   }
-  hide() { this.areaVisible = false; for (const tab of this.tabs.values()) this.detach(tab); }
+  focusArea(value) { this.keyboardFocused = value; }
+  hide() { this.keyboardFocused = false; this.areaVisible = false; for (const tab of this.tabs.values()) this.detach(tab); }
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
 }

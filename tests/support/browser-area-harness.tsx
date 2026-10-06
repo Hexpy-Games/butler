@@ -25,6 +25,7 @@ context.fillStyle = "#eaf0ef"; context.fillRect(0, 0, 1440, 720);
 context.fillStyle = "#123432"; context.font = "36px sans-serif"; context.fillText("Local fixture page", 48, 80);
 const still = canvas.toDataURL("image/jpeg");
 let serial = 0;
+let keyboardFocused = false;
 const snapshot: BrowserSnapshot = {
   enabled: mode !== "disabled", blocked: false, activeId: ["empty", "output"].includes(mode) ? null : "one", nativeCovered: false,
   tabs: ["empty", "output"].includes(mode) ? [] : [{ id: "one", owner: "mine", title: "Local fixture", url: "https://example.com/", favicon: "",
@@ -37,9 +38,10 @@ window.butlerBrowser = {
   subscribe(callback) { subscribers.add(callback); callback(snapshot); return () => { subscribers.delete(callback); }; },
   onAddress(callback) { addressListeners.add(callback); return () => { addressListeners.delete(callback); }; },
   async call(op, raw) {
-    const input = raw as { id?: string; value?: string; tabId?: string; index?: number; owner?: string; url?: string } | undefined;
+    const input = raw as { id?: string; value?: string | boolean; tabId?: string; index?: number; owner?: string; url?: string } | undefined;
     const tab = snapshot.tabs.find((item) => item.id === input?.id);
-    if (op === "state" || op === "open") return snapshot;
+    if (op === "state" || op === "open") return { ...snapshot, keyboardFocused };
+    if (op === "scope") keyboardFocused = input?.value === true;
     if (op === "still") return still;
     if (op === "create") {
       const id = `new-${++serial}`;
@@ -47,7 +49,7 @@ window.butlerBrowser = {
     }
     if (op === "close") { snapshot.tabs = snapshot.tabs.filter((item) => item.id !== input?.id); snapshot.activeId = snapshot.tabs.at(-1)?.id ?? null; }
     if (op === "activate") snapshot.activeId = input?.id ?? null;
-    if (op === "navigate" && tab) { tab.url = input!.value!; tab.title = "Navigated fixture"; }
+    if (op === "navigate" && tab) { tab.url = String(input!.value!); tab.title = "Navigated fixture"; }
     if (op === "reload" && tab) tab.status = "idle";
     if (op === "move") {
       const item = snapshot.tabs.find((entry) => entry.id === input?.tabId)!;

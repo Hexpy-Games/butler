@@ -52,6 +52,10 @@ try {
     await page.getByRole("button", { name: locale === "ko" ? "새 탭" : "New tab", exact: true }).last().click();
     const address = page.getByRole("textbox", { name: locale === "ko" ? "주소" : "Address", exact: true });
     await address.fill("https://example.com/fixture"); await address.press("Enter");
+    assert.equal(await page.evaluate(async () => {
+      const bridge = (window as unknown as { butlerBrowser: { call(op: string): Promise<{ keyboardFocused: boolean }> } }).butlerBrowser;
+      return (await bridge.call("state")).keyboardFocused;
+    }), true, "address focus belongs to Browser keyboard scope");
     await page.getByRole("tab", { name: "Navigated fixture", exact: true }).waitFor();
     await page.getByRole("button", { name: locale === "ko" ? "새 탭" : "New tab", exact: true }).first().click();
     const newTab = page.getByRole("tab", { name: locale === "ko" ? "새 탭" : "New tab", exact: true });
