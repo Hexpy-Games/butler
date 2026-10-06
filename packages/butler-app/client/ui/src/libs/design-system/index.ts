@@ -151,3 +151,9 @@ export * from "./blocks/StatusCapsule";
 
 export * from "./blocks/ComposerQuestionPanel";
 export * from "./blocks/QuestionAnswerCard";
+
+export * from "./blocks/TaskGraphCard";
+export * from "./blocks/TaskGraphCanvas";
+export * from "./blocks/TaskGraphLanes";
+export * from "./blocks/TaskGraphSection";
+export * from "./blocks/TaskGraphDetail";

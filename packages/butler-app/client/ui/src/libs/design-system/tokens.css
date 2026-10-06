@@ -136,6 +136,10 @@
   --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
   --shimmer-duration: 1400ms;
+  /* Iterations of a decorative status loop (activity pulse). Reduced motion
+     (OS or data-motion scope) sets 0, so the loop never runs and the element
+     shows its static resting state. */
+  --motion-loop-count: infinite;
   /* Skeleton heights for a text line and a heading line. */
   --skeleton-height-line: 0.75rem;
   --skeleton-height-title: 1.125rem;
@@ -732,6 +736,7 @@
     --motion-scale-lift: 1;
     --motion-scale-palette: 1;
     --motion-scale-check: 1;
+    --motion-loop-count: 0;
   }
 }
 
@@ -749,6 +754,7 @@
   --motion-scale-lift: 1;
   --motion-scale-palette: 1;
   --motion-scale-check: 1;
+  --motion-loop-count: 0;
 }
 
 /* Compact settings (single-pane SettingsShell) keep the ramp and only

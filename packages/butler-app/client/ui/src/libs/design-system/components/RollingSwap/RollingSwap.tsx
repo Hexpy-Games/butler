@@ -1,4 +1,3 @@
-import { prefersReducedMotion } from "../../lib/motion";
 import {
   useLayoutEffect,
   useRef,
@@ -6,6 +5,7 @@ import {
   type AnimationEvent,
   type ReactNode,
 } from "react";
+import { prefersReducedMotion } from "../../lib/motion";
 import styles from "./RollingSwap.module.css";
 
 type RollingFrame = {
