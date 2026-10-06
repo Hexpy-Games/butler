@@ -12,19 +12,23 @@ use super::{StorageError, StorageResult, canonical_schema, error, integrity, ref
 use crate::btcc::StorageCode;
 
 pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
+    read(
+        path,
+        true,
+        tokio_util::sync::CancellationToken::new(),
+        false,
+    )
+}
+
+pub(crate) fn read(
+    path: &Path,
+    full: bool,
+    cancellation: tokio_util::sync::CancellationToken,
+    deferred: bool,
+) -> StorageResult<String> {
     let started = std::time::Instant::now();
     trace("activated_begin", started);
-    sqlite::advise_validation_scan(path);
-    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(StorageError::sqlite)?;
-    // Full validation revisits overflow pages. Both the bounded page cache and
-    // host-specific mapping belong only to this startup connection. Complete
-    // quick/FK/reference checks still run; closing releases all retained pages.
-    db.pragma_update(None, "cache_size", -65_536_i64)
-        .map_err(StorageError::sqlite)?;
-    db.pragma_update(None, "mmap_size", sqlite::VALIDATION_MMAP_BYTES)
-        .map_err(StorageError::sqlite)?;
-    trace_mapping(&db, started)?;
+    let db = open_validation(path, full, cancellation, deferred, started)?;
     let expected = manifest_id();
     let (receipt_id, receipt_raw) = marker_row(
         &db,
@@ -40,10 +44,13 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     validate_receipt(&receipt, &expected)?;
     canonical_schema(&db)?;
     trace("schema_validated", started);
-    integrity(&db)?;
-    trace("integrity_validated", started);
-    references::validate(&db)?;
-    trace("references_validated", started);
+    if full {
+        trace("full_validation_begin", started);
+        integrity(&db)?;
+        trace("integrity_validated", started);
+        references::validate(&db)?;
+        trace("references_validated", started);
+    }
     let (marker_id, marker_raw) = marker_row(
         &db,
         "agent_storage_activation_marker",
@@ -62,6 +69,7 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     {
         return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }
+    trace("cheap_validation_complete", started);
     Ok(expected)
 }
 
@@ -84,7 +92,7 @@ fn trace_mapping(db: &Connection, started: std::time::Instant) -> StorageResult<
 }
 
 /// Read-only diagnostics for isolated startup qualification; never logs row data.
-pub(super) fn trace(phase: &str, started: std::time::Instant) {
+pub(in crate::btcc::storage) fn trace(phase: &str, started: std::time::Instant) {
     if matches!(
         std::env::var("BUTLER_E2E_TIER").as_deref(),
         Ok("stub" | "perf")
@@ -179,4 +187,42 @@ fn digest(value: &Value) -> bool {
 // Passthrough: parse boundary validating untyped JSON into typed values.
 fn nonempty(value: &Value) -> bool {
     value.as_str().is_some_and(|text| !text.trim().is_empty())
+}
+
+fn open_validation(
+    path: &Path,
+    full: bool,
+    cancellation: tokio_util::sync::CancellationToken,
+    deferred: bool,
+    started: std::time::Instant,
+) -> StorageResult<Connection> {
+    // Whole-file prefetch is not interruptible; reserve it for mandatory
+    // synchronous checks. Deferred reads yield through the SQLite hook.
+    if full && !deferred {
+        sqlite::advise_validation_scan(path);
+    }
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(StorageError::sqlite)?;
+    db.progress_handler(
+        10_000,
+        Some(move || {
+            if cancellation.is_cancelled() {
+                return true;
+            }
+            // Cooperative I/O pacing only on the deferred worker, never Tokio.
+            if deferred {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            false
+        }),
+    );
+    // Full validation revisits overflow pages. Both the bounded page cache and
+    // host-specific mapping belong only to this startup connection. Complete
+    // quick/FK/reference checks still run; closing releases all retained pages.
+    db.pragma_update(None, "cache_size", -65_536_i64)
+        .map_err(StorageError::sqlite)?;
+    db.pragma_update(None, "mmap_size", sqlite::VALIDATION_MMAP_BYTES)
+        .map_err(StorageError::sqlite)?;
+    trace_mapping(&db, started)?;
+    Ok(db)
 }
