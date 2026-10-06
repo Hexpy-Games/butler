@@ -45,6 +45,40 @@ function overlayCovers(root: HTMLElement, rect: DOMRect, selector: string): bool
   return false;
 }
 
+function observeNativeChanges(root: HTMLElement, target: HTMLElement, selector: () => string,
+  schedule: () => void, onMotionStart: (event: Event) => void) {
+  const doc = root.ownerDocument;
+  const onMutation = (records: MutationRecord[]) => {
+    const css = selector();
+    const touches = (node: Node) => node instanceof Element && (node.matches(css) || node.querySelector(css) !== null);
+    const relevant = records.some((record) => record.type === "attributes"
+      ? (record.target as Element).closest?.(css) !== null
+      : [...record.addedNodes, ...record.removedNodes].some(touches));
+    if (relevant) schedule();
+  };
+
+  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+  resize?.observe(root);
+  resize?.observe(target);
+  const move = observeMove(target, schedule);
+  const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver(onMutation);
+  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open"] });
+  const listeners: Array<[EventTarget, string, EventListener, AddEventListenerOptions]> = [
+    [doc.defaultView ?? window, "resize", schedule, { passive: true }],
+    [doc, "scroll", schedule, { capture: true, passive: true }],
+    ...["transitionrun", "animationstart"].map((type): [EventTarget, string, EventListener, AddEventListenerOptions] => [doc, type, onMotionStart, { capture: true }]),
+    ...["transitionend", "transitioncancel", "animationend", "animationcancel"].map((type): [EventTarget, string, EventListener, AddEventListenerOptions] => [doc, type, schedule, { capture: true }]),
+  ];
+  for (const [eventTarget, type, listener, listenerOptions] of listeners) eventTarget.addEventListener(type, listener, listenerOptions);
+  return {
+    refresh: () => move.refresh(),
+    destroy() {
+      resize?.disconnect(); move.disconnect(); mutations?.disconnect();
+      for (const [eventTarget, type, listener, listenerOptions] of listeners) eventTarget.removeEventListener(type, listener, listenerOptions);
+    },
+  };
+}
+
 /**
  * Change-driven bounds and occlusion tracking for a native view slot. Work is batched into one
  * animation frame; frames keep coming only while something moves, and stop once the rect settles.
@@ -53,10 +87,10 @@ export function createNativeViewTracker(options: NativeViewTrackerOptions) {
   let settings: NativeViewTrackerSettings = options;
   let frame = 0;
   let last: NativeViewBounds | null = null;
-  let occluded = false;
+  // Every new presenter reports its initial state, including clear coverage.
+  let occluded: boolean | undefined;
   const movers = new Set<Element>();
   const { root, target } = options;
-  const doc = root.ownerDocument;
   const selector = () => [NATIVE_VIEW_OCCLUDERS, settings.occluders].filter(Boolean).join(", ");
   const schedule = () => {
     if (!frame) frame = requestAnimationFrame(tick);
@@ -89,45 +123,21 @@ export function createNativeViewTracker(options: NativeViewTrackerOptions) {
     movers.add(element);
     schedule();
   };
-  const onMutation = (records: MutationRecord[]) => {
-    const css = selector();
-    const touches = (node: Node) => node instanceof Element && (node.matches(css) || node.querySelector(css) !== null);
-    const relevant = records.some((record) => record.type === "attributes"
-      ? (record.target as Element).closest?.(css) !== null
-      : [...record.addedNodes, ...record.removedNodes].some(touches));
-    if (relevant) schedule();
-  };
-
-  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
-  resize?.observe(root);
-  resize?.observe(target);
-  const move = observeMove(target, schedule);
-  const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver(onMutation);
-  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open"] });
-  const listeners: Array<[EventTarget, string, EventListener, AddEventListenerOptions]> = [
-    [doc.defaultView ?? window, "resize", schedule, { passive: true }],
-    [doc, "scroll", schedule, { capture: true, passive: true }],
-    ...["transitionrun", "animationstart"].map((type): [EventTarget, string, EventListener, AddEventListenerOptions] => [doc, type, onMotionStart, { capture: true }]),
-    ...["transitionend", "transitioncancel", "animationend", "animationcancel"].map((type): [EventTarget, string, EventListener, AddEventListenerOptions] => [doc, type, schedule, { capture: true }]),
-  ];
-  for (const [eventTarget, type, listener, listenerOptions] of listeners) eventTarget.addEventListener(type, listener, listenerOptions);
+  const observers = observeNativeChanges(root, target, selector, schedule, onMotionStart);
   schedule();
 
   return {
     /** New props: re-measure on the next frame. */
     update(next: NativeViewTrackerSettings) {
       settings = next;
-      move.refresh();
+      observers.refresh();
       schedule();
     },
     /** Stops all observers; a visible view is reported hidden so the App can detach it. */
     destroy() {
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
-      resize?.disconnect();
-      move.disconnect();
-      mutations?.disconnect();
-      for (const [eventTarget, type, listener, listenerOptions] of listeners) eventTarget.removeEventListener(type, listener, listenerOptions);
+      observers.destroy();
       if (last?.visible) options.onBounds({ ...last, visible: false });
       if (occluded) options.onOcclusion(false);
     },

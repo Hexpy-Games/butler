@@ -1,0 +1,34 @@
+import { ipcMain } from "electron";
+import { createUserBrowser } from "./tabs.mjs";
+
+export function installUserBrowser(app, getWindow) {
+  const browser = createUserBrowser(app, getWindow);
+  ipcMain.handle("butler-browser:call", (event, op, input = {}) => {
+    const win = getWindow();
+    if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("browser_forbidden");
+    switch (op) {
+      case "state": return browser.snapshot();
+      case "open": return browser.open();
+      case "hide": return browser.hide();
+      case "scope": return browser.focusArea(input.value === true);
+      case "create": return browser.create(input);
+      case "close": return browser.close(input.id);
+      case "activate": return browser.activate(input.id);
+      case "move": return browser.move(input);
+      default:
+        if (!["navigate", "back", "forward", "reload", "stop", "bounds", "covered", "still", "focus"].includes(op)) throw new Error("invalid_browser_call");
+        return browser.commandTab(op, input.id, input.value);
+    }
+  });
+  let flushed = false;
+  app.on("will-quit", (event) => {
+    if (flushed) return;
+    event.preventDefault();
+    void browser.flush().catch(() => {}).then(() => browser.dispose()).finally(() => {
+      flushed = true;
+      // Electron ignores a same-tick quit after cancelling will-quit.
+      setImmediate(() => app.quit());
+    });
+  });
+  return browser;
+}

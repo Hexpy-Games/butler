@@ -12,6 +12,7 @@ import {
   AdaptiveShellWorkspace,
   Stack,
   Spinner,
+  InspectorShell,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -21,6 +22,7 @@ import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
+import { BrowserArea } from "@/components/browser/BrowserArea";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
@@ -34,7 +36,7 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
-import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
+import { activeChatFromNavigation, appShellTheme, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
   selectIsSettingsView,
@@ -233,7 +235,7 @@ function AppWorkspaceShell() {
             <Stack fill gap="none">
               <LiveConnectionNotice />
               <Stack fill gap="none">
-                {view.kind === "automations" ||
+                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
                   <ErrorBoundary key={view.kind} scope="schedules"><AutomationsView /></ErrorBoundary>
                 ) : view.kind === "project-dashboard" ? (
@@ -265,7 +267,15 @@ function AppWorkspaceShell() {
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
-          <ErrorBoundary scope="inspector"><Inspector id="butler-right-inspector" /></ErrorBoundary>
+          <ErrorBoundary scope="inspector">
+            {view.kind === "browser" ? (
+              <InspectorShell id="butler-right-inspector" activeTab="conversation"
+                tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
+                onTabChange={() => undefined}>
+                <Conversation />
+              </InspectorShell>
+            ) : <Inspector id="butler-right-inspector" />}
+          </ErrorBoundary>
         </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (

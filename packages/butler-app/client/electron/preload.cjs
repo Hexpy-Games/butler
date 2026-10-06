@@ -1365,3 +1365,18 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
   const suffix = query.size ? `?${query}` : "";
   return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
 }
+const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
+contextBridge.exposeInMainWorld("butlerBrowser", {
+  call: browserCall,
+  subscribe: (handler) => {
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler-browser:state", listener);
+    browserCall("state").then(handler);
+    return () => ipcRenderer.removeListener("butler-browser:state", listener);
+  },
+  onAddress: (handler) => {
+    const listener = () => handler();
+    ipcRenderer.on("butler-browser:address", listener);
+    return () => ipcRenderer.removeListener("butler-browser:address", listener);
+  },
+});

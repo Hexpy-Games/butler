@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { openBrowser, useBrowserState } from "../browser/browserBridge";
+import { useButlerStore } from "@/app/store";
 import { api, apiErrorCode } from "@/app/api.ts";
 import { ArtifactPreviewFrame, Button, ButtonContainer, NativeSelect, NativeSelectOption, Stack, Typo } from "@/butler-ds";
 
@@ -13,6 +15,8 @@ export function OutputFrame({ outputId, title }: { outputId: string; title: stri
   const [generation, setGeneration] = useState(0);
   const [failure, setFailure] = useState<string>();
   const copy = appCopy.artifacts;
+  const browserEnabled = useBrowserState((state) => state.enabled);
+  const sessionId = useButlerStore((state) => state.activeChatId);
   const load = useCallback(async () => {
     setFailure(undefined);
     try {
@@ -31,6 +35,8 @@ export function OutputFrame({ outputId, title }: { outputId: string; title: stri
       <Stack align="row" gap="sm" cross="center" wrap>
         <ButtonContainer size="xs">
           <Button size="xs" variant="outline" disabled={!view} title={failure} onClick={() => view && window.open(view.url, "_blank", "noopener,noreferrer")}>{copy.open}</Button>
+          {window.butlerBrowser && <Button size="xs" variant="outline" disabled={!view || !browserEnabled} title={!browserEnabled ? appCopy.browser.updateRequired : undefined}
+            onClick={() => view && void openBrowser({ url: view.url, sessionId })}>{appCopy.browser.openOutput}</Button>}
           <Button size="xs" variant="outline" onClick={() => { setGeneration((value) => value + 1); void load(); }}>{copy.reload}</Button>
         </ButtonContainer>
         {view && <NativeSelect aria-label={copy.revision} value={String(view.revision)} onChange={(event) => setRevision(Number(event.target.value))}>

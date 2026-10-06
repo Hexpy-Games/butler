@@ -1712,6 +1712,7 @@ export interface WorkStatusView {
 }
 
 export type AppView =
+  | { kind: "browser" }
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }

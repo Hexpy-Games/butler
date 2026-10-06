@@ -16,6 +16,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
@@ -295,6 +296,7 @@ if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
 }
+app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
@@ -2086,6 +2088,7 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+let userBrowser;
 async function createWindow() {
   if (
     !legacyDataBlocked &&
@@ -2142,6 +2145,13 @@ async function createWindow() {
   });
   mainWindow = win;
   const firstDataPaint = waitForStartupRenderer(win);
+  userBrowser ??= installUserBrowser(app, () => mainWindow);
+  win.on("hide", () => userBrowser.syncAll());
+  win.on("show", () => userBrowser.syncAll());
+  win.on("closed", () => userBrowser.hide());
+  win.webContents.on("before-input-event", (event, input) => {
+    if (userBrowser.shortcut(input)) event.preventDefault();
+  });
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
