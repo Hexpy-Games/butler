@@ -1,4 +1,4 @@
-import { quietHost } from "./browser-p0-host-load.ts";
+import { quietHost, hostWindow } from "./browser-p0-host-load.ts";
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -92,7 +92,7 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
 
 export async function gpuHang(app: P0App, origin: string, rows: Row[]) {
   const user = process.env.BUTLER_P0_GPU_SOURCE === "user";
-  await app.main.evaluate(`browserP0.open('hang', '${origin}/hang', {user:${user}})`);
+  await app.main.evaluate(user ? `browserP0.openProductGPU('hang', '${origin}/hang')` : `browserP0.open('hang', '${origin}/hang')`);
   const policy = await app.main.evaluate("browserP0.gpuPolicy('hang')");
   await quietHost("GPU calibration", app);
   const prepared = await app.main.evaluate<{ blocked: boolean }>("browserP0.evaluate('hang','prepare()')");
@@ -116,8 +116,12 @@ export async function gpuHang(app: P0App, origin: string, rows: Row[]) {
 }
 
 export async function mainLoad(app: P0App, origin: string, rows: Row[], tracing = true, beforeMeasure?: () => Promise<void>) {
+  return hostWindow("main load", () => measuredMainLoad(app, origin, rows, tracing, beforeMeasure));
+}
+
+async function measuredMainLoad(app: P0App, origin: string, rows: Row[], tracing: boolean, beforeMeasure?: () => Promise<void>) {
   for (const path of ["nodes", "cpu", "network"]) await app.main.evaluate(`browserP0.open('${path}', '${origin}/${path}')`);
-  const tracePath = join(app.dir, "load-trace.json");
+  const tracePath = join(process.env.BUTLER_P0_EVIDENCE || app.dir, "load-trace.json");
   const hostLoad = await quietHost("main load", app);
   if (beforeMeasure) await beforeMeasure();
   if (tracing) await app.main.evaluate("browserP0.traceStart()");
@@ -156,7 +160,7 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
   await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 599'))"), "longest transcript sidebar row");
   await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
   await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "latest transcript message");
-  const tracePath = join(app.dir, "baseline-trace.json");
+  const tracePath = join(process.env.BUTLER_P0_EVIDENCE || app.dir, "baseline-trace.json");
   const { session } = await app.page.expression<{ session: { id: string } }>("window.butlerApp.createSession({kind:'chat',title:'P0 streaming'})");
   await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 streaming'))"), "streaming sidebar row");
   await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 streaming')).click()");
@@ -177,14 +181,18 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
   await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
   await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "longest transcript ready before scroll");
   await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
-  const scrollHostLoad = await quietHost("owner-scale scroll", app);
-  await app.main.evaluate("browserP0.traceStart()");
-  await startFrames(app);
-  const scroll = await app.page.expression<{ distance: number; latest: boolean }>("new Promise(resolve=>{const e=document.querySelector('[data-test-class~=\"conversation-scroll\"]');if(!e)throw Error('Transcript scroller missing');const start=e.scrollTop;let n=0;function tick(){e.scrollTop=Math.max(0,e.scrollTop-400);if(++n<120)requestAnimationFrame(tick);else resolve({distance:Math.abs(e.scrollTop-start),latest:e.isConnected&&document.body.textContent.includes('메시지')})}requestAnimationFrame(tick)})");
-  assert(scroll.distance > 0 && scroll.latest);
-  const frameTimes = await frames(app);
-  await app.main.evaluate(`browserP0.traceStop(${JSON.stringify(tracePath)})`);
-  const attribution = attributeTrace(JSON.parse(readFileSync(tracePath, "utf8")), (await sample(app)).uiPID, (await sample(app)).mainPID);
+  const scrollResult = await hostWindow("owner-scale scroll", async () => {
+    const scrollHostLoad = await quietHost("owner-scale scroll", app);
+    await app.main.evaluate("browserP0.traceStart()");
+    await startFrames(app);
+    const scroll = await app.page.expression<{ distance: number; latest: boolean }>("new Promise(resolve=>{const e=document.querySelector('[data-test-class~=\"conversation-scroll\"]');if(!e)throw Error('Transcript scroller missing');const start=e.scrollTop;let n=0;function tick(){e.scrollTop=Math.max(0,e.scrollTop-400);if(++n<120)requestAnimationFrame(tick);else resolve({distance:Math.abs(e.scrollTop-start),latest:e.isConnected&&document.body.textContent.includes('메시지')})}requestAnimationFrame(tick)})");
+    assert(scroll.distance > 0 && scroll.latest);
+    const frameTimes = await frames(app);
+    await app.main.evaluate(`browserP0.traceStop(${JSON.stringify(tracePath)})`);
+    const attribution = attributeTrace(JSON.parse(readFileSync(tracePath, "utf8")), (await sample(app)).uiPID, (await sample(app)).mainPID);
+    return { frameTimes, attribution, scrollHostLoad };
+  });
+  const { frameTimes, attribution, scrollHostLoad } = scrollResult;
   const metrics = (await sample(app)).metrics;
   await waitFor(async () => (await turns()).turns.some(t => t.state === "delivered"), "complete streaming Turn");
   const db = new Database(join(app.data, "app-server/butler-client.sqlite"));

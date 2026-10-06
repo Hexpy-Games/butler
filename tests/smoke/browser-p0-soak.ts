@@ -1,5 +1,5 @@
 import { snapshotFiles, fileDelta } from "./browser-p0-file-snapshot.ts";
-import { quietHost } from "./browser-p0-host-load.ts";
+import { hostWindow } from "./browser-p0-host-load.ts";
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -31,21 +31,21 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     finally { await app.main.evaluate("browserP0.close('warm')"); }
   }
   await Bun.sleep(60_000);
-  const initialIdleLoad = await quietHost("initial 10 min idle", app);
-  const idleBefore = await snapshotFiles(app, "idle-before");
-  await Bun.sleep(600_000);
-  const idleAfter = await snapshotFiles(app, "idle-after"), initialIdle = fileDelta(idleBefore, idleAfter);
-  console.log(JSON.stringify({ initialIdle, initialIdleLoad }));
-  const hostLoad = await quietHost("2 h soak", app);
-  const baselineCPU = await cpuSamples(app);
-  const warm = await sample(app), agentWarm = agentRSS(pid);
-  const productWarm = await app.main.evaluate("browserP0.productInventory()");
-  const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
-  await app.main.evaluate("browserP0.resetDelay()");
-  const loop = await runSoakLoop(app, origin, minutes, evidence);
-  const after = await sample(app);
-  const agentAfter = agentRSS(pid);
-  const productAfter = await app.main.evaluate("browserP0.productInventory()");
+  const initial = await idleSnapshot(app, "initial");
+  const { before: idleBefore, after: idleAfter, delta: initialIdle } = initial;
+  console.log(JSON.stringify({ initialIdle }));
+  const measured = await hostWindow("2 h soak", async () => {
+    const baselineCPU = await cpuSamples(app);
+    const warm = await sample(app), agentWarm = agentRSS(pid);
+    const productWarm = await app.main.evaluate("browserP0.productInventory()");
+    const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
+    await app.main.evaluate("browserP0.resetDelay()");
+    const loop = await runSoakLoop(app, origin, minutes, evidence);
+    const after = await sample(app), agentAfter = agentRSS(pid);
+    const productAfter = await app.main.evaluate("browserP0.productInventory()");
+    return { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter };
+  });
+  const { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter } = measured;
   assert.equal((await app.main.evaluate<{ count: number }>("browserP0.productErrors()")).count, 0, "No rejected product lifecycle IPC during soak");
   assert.deepEqual(productAfter, productWarm, "Product tabs/profiles/stills return to warm baseline");
   assert.equal(await app.main.evaluate("browserP0.sample().sessionsCreated"), sessionsWarm, "No per-iteration Session creation");
@@ -57,20 +57,18 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   for (const key of ["contents", "listeners", "debuggers"] as const) rows.push({ test: "soak", metric: `${key} delta`, value: after.resources[key] - warm.resources[key], budget: 0, status: after.resources[key] === warm.resources[key] ? "PASS" : "FAIL", attribution: "Electron main lifetime", mitigation: "Release views/listeners/debugger sessions" });
   const afterSoak = fileDelta(idleAfter, await snapshotFiles(app, "soak-after"));
   console.log(JSON.stringify({ ...loop, afterSoak, rows: rows.filter(r => r.test === "soak") }));
-  const idleHostLoad = await quietHost("post-soak 10 min idle", app);
-  const beforeWrites = await snapshotFiles(app, "post-idle-before");
-  await Bun.sleep(600_000);
+  const post = await idleSnapshot(app, "post-soak");
   const idleCPU = await cpuSamples(app);
   const mean = (ns: number[]) => ns.reduce((a, b) => a + b, 0) / ns.length;
   budget(rows, "soak", "GPU CPU delta percentage points after close", mean(idleCPU) - mean(baselineCPU), 1, "GPU", "Inspect GPU resources");
-  const postIdle = fileDelta(beforeWrites, await snapshotFiles(app, "post-idle-after"));
+  const postIdle = post.delta;
   for (const [label, delta] of [["initial idle", initialIdle], ["post-soak idle", postIdle]] as const) {
     const data = delta.scopes.find(s => s.scope === "data")!;
     rows.push({ test: "soak", metric: `${label} Butler DATA changed files`, value: delta.writers.Butler ?? data.changedFiles, budget: 0, status: delta.writers.Butler === 0 ? "PASS" : "FAIL" });
     rows.push({ test: "soak", metric: `${label} unresolved writer changed files`, value: delta.writers.unresolved ?? 0, budget: 0, status: delta.writers.unresolved ? "UNAVAILABLE" : "PASS" });
     rows.push({ test: "soak", metric: `${label} Chromium profile deltas`, value: JSON.stringify(delta), budget: "report internal flushes", status: "DESCRIPTIVE" });
   }
-  return { ownerScale, productWarm, productAfter, ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, hostLoad, initialIdleLoad, idleHostLoad, shortVariant: minutes === 10 };
+  return { ownerScale, productWarm, productAfter, ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
 }
 
 async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string) {
@@ -111,4 +109,14 @@ async function cpuSamples(app: P0App) {
   const samples = [];
   for (let i = 0; i < 5; i++) { await Bun.sleep(1000); samples.push(gpuCPU(await sample(app))); }
   return samples;
+}
+
+async function idleSnapshot(app: P0App, label: string) {
+  return hostWindow(`${label} 10 min idle`, async () => {
+    const before = await snapshotFiles(app, `${label}-idle-before`);
+    const started = Date.now();
+    await Bun.sleep(600_000);
+    const after = await snapshotFiles(app, `${label}-idle-after`);
+    return { before, after, elapsedMs: Date.now() - started, delta: fileDelta(before, after) };
+  });
 }
