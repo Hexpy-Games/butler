@@ -64,6 +64,7 @@ impl Access {
 enum Source {
     None,
     Cassette(String),
+    Synthetic(super::provider::Script),
     Stub(Cassette),
     Live(LiveProvider),
 }
@@ -111,6 +112,13 @@ impl Setup {
     /// Replays (or with `BUTLER_E2E_RECORD=1`, records) cassette `name`.
     pub fn cassette(mut self, name: &str) -> Self {
         self.source = Source::Cassette(name.to_owned());
+        self
+    }
+
+    /// Serves a scripted model instead of a recording: load scenarios that
+    /// measure the product, not a provider ([`Provider::timings`]).
+    pub fn synthetic(mut self, script: super::provider::Script) -> Self {
+        self.source = Source::Synthetic(script);
         self
     }
 
@@ -252,6 +260,15 @@ impl Setup {
                     &placeholders,
                     record_into,
                     extends,
+                    &mut launch,
+                )
+                .await?
+            }
+            Source::Synthetic(script) => {
+                sources::synthetic_source(
+                    script,
+                    model,
+                    stub_credential.then(|| sandbox.codex_home()),
                     &mut launch,
                 )
                 .await?

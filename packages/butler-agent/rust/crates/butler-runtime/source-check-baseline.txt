@@ -24,7 +24,6 @@ src/context/conversation_tools/list.rs	read	144
 src/context/conversation_tools/list/args.rs	parse	119
 src/context/prompt/sections.rs	PromptAssembler::runtime_assembly	149
 src/context/prompt/sections.rs	PromptAssembler::shared_assembly	92
-src/context/round_projection.rs	TurnContext::project_round	85
 src/context/round_projection/serialization.rs	append_message_json	122
 src/context/tool_artifact_slice.rs	slice_tool_artifact_text	86
 src/context/tool_output.rs	ToolOutput::new	84

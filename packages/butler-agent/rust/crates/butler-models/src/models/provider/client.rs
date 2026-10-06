@@ -36,6 +36,7 @@ pub struct ModelProvider {
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
     pub(super) prefix_history: Arc<super::prefix_diagnostics::History>,
+    sizing_cache: Arc<super::sizing::Cache>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
@@ -58,6 +59,7 @@ impl ModelProvider {
             clock,
             prompt_metrics,
             prefix_history: Arc::new(super::prefix_diagnostics::History::default()),
+            sizing_cache: Arc::new(super::sizing::Cache::default()),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
             quota: None,
@@ -92,7 +94,8 @@ impl ModelProvider {
         let (mut body, continuation) =
             serialize::body_with_continuation(&request, &config, carrier)?;
         super::visual::apply(&mut body, &request, carrier).await?;
-        let serialized = butler_core::json::stringify(&body).map_err(|error| {
+        let prefix = self.prefix_history.prepare(&body, &config)?;
+        let serialized = prefix.body_json(&body).map_err(|error| {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 &config.metadata.provider_id,
                 api,
@@ -101,7 +104,6 @@ impl ModelProvider {
         })?;
         let provider_cache_identity =
             serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
-        let prefix = super::prefix_diagnostics::prepare(&body, &config)?;
         let serialized = Bytes::from(serialized);
         let physical_admission =
             self.admission(&request, &config, &body, serialized.clone(), carrier)?;
@@ -386,39 +388,12 @@ impl ModelRoundPort for ModelProvider {
         let max_message_bytes = ((context - output - fixed) * 2.0).max(1.0);
         let catalog = Arc::clone(&self.catalog);
         let model = request.model.to_owned();
+        let cache = Arc::clone(&self.sizing_cache);
         Ok(Some(butler_turn::btcc::ContextSizing {
             max_output_tokens: metadata.max_output_tokens,
             max_message_bytes,
             measure: Box::new(move |messages| {
-                let value = if model.starts_with("openai/") {
-                    serde_json::Value::Array(serialize::bounded_items(messages))
-                } else {
-                    serde_json::to_value(messages).map_err(|source| {
-                        butler_turn::btcc::BtccError::relayed(
-                            "context_serialization_failed",
-                            "Context serialization failed.",
-                        )
-                        .with_source(source)
-                    })?
-                };
-                let bytes = butler_core::json::stringify(&value).map_err(|source| {
-                    butler_turn::btcc::BtccError::relayed(
-                        "context_serialization_failed",
-                        "Context serialization failed.",
-                    )
-                    .with_source(source)
-                })?;
-                let tokens = catalog
-                    .estimate_tokens(&snapshot, TokenEstimateInput::Text(&bytes), Some(&model))
-                    .map_err(|source| {
-                        butler_turn::btcc::BtccError::relayed(
-                            "context_tokenization_failed",
-                            "Context tokenization failed.",
-                        )
-                        .with_source(source)
-                    })?
-                    .tokens;
-                Ok(tokens * 2.0)
+                super::sizing::measure(&catalog, &snapshot, &model, messages, &cache)
             }),
         }))
     }

@@ -34,7 +34,7 @@ pub fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTreeSet<us
     }
     let mut latest = [None, None, None];
     for (index, message) in messages.iter().enumerate() {
-        if message.role != ModelRoundRole::Tool || !succeeded(&message.content) {
+        if message.role != ModelRoundRole::Tool {
             continue;
         }
         let name = message
@@ -43,6 +43,9 @@ pub fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTreeSet<us
             .and_then(|id| calls.get(id).map(String::as_str))
             .or(message.name.as_deref())
             .unwrap_or("");
+        if !(PLAN.contains(&name) || WORK.contains(&name)) || !succeeded(&message.content) {
+            continue;
+        }
         for (latest, tools) in latest.iter_mut().zip([PLAN, WORK, REVIEW]) {
             if tools.contains(&name) {
                 *latest = Some(index);
