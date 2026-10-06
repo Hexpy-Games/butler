@@ -21,6 +21,11 @@ impl Sections {
         documents: &super::documents::DocumentProjection,
         stage: Option<super::documents::Stage>,
     ) {
+        if (stage.is_none() || stage == Some(super::documents::Stage::Stable))
+            && !documents.project_instructions.is_empty()
+        {
+            self.push("project-instructions", documents.project_instructions.clone());
+        }
         for section in documents
             .sections
             .iter()

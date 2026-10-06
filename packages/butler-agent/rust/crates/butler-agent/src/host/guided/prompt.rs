@@ -154,6 +154,7 @@ fn scope(state: &GuidedTextState) -> String {
         scope.push_str(&format!("\n- project: {project_id}"));
     }
     scope
+
 }
 
 fn source_excerpts(sources: &Value) -> Value {
