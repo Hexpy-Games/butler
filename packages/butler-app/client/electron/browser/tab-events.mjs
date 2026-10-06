@@ -18,6 +18,10 @@ export function protectPartition(partition, nativeCover) {
 export function wireTab(tab, actions) {
   const contents = tab.view.webContents;
   const update = () => actions.update(tab);
+  // Hidden muted media must remain eligible to restart a loop. Idle user pages
+  // return to Chromium's normal throttling when their media stops.
+  contents.on("media-started-playing", () => contents.setBackgroundThrottling(false));
+  contents.on("media-paused", () => { if (!tab.agent && !tab.driven) contents.setBackgroundThrottling(true); });
   for (const name of ["page-title-updated", "did-start-loading", "did-stop-loading", "did-navigate", "did-navigate-in-page"]) contents.on(name, update);
   contents.on("page-favicon-updated", (_event, urls) => { tab.favicon = urls.find((url) => webUrl(url)) ?? ""; update(); });
   contents.on("did-stop-loading", () => void actions.capture(tab));
