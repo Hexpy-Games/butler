@@ -57,11 +57,21 @@ async fn group(
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
         let retrieval = format!("source {source}; use recall_memory or read_file to expand");
-        let value = if source == "recent-conversation" {
-            content
-        } else {
-            super::excerpts::text(&content, allowance, &retrieval)
-        };
+        let history = (source == "recent-conversation")
+            .then(|| {
+                serde_json::from_str::<butler_turn::conversation::HistoryDocument>(
+                    content
+                        .strip_prefix("## Recent Conversation\n\n")
+                        .unwrap_or(&content),
+                )
+                .ok()
+            })
+            .flatten();
+        let budget_content = history
+            .as_ref()
+            .map_or(content.as_str(), |h| h.main_budget_projection.as_str());
+        let charged = super::excerpts::text(budget_content, allowance, &retrieval);
+        let value = history.map_or_else(|| charged.clone(), |h| h.history);
         if !value.trim().is_empty() {
             contents.push(DocumentSection {
                 stage: stage(&kind, &source),
@@ -69,7 +79,7 @@ async fn group(
                 text: value.clone(),
             });
         }
-        remaining = remaining.saturating_sub(value.len() + 2);
+        remaining = remaining.saturating_sub(charged.len() + 2);
     }
     contents
 }
@@ -166,7 +176,7 @@ pub(super) async fn read(
         ("Required working context", mandatory),
         ("Optional working context", optional),
     ] {
-        if !value.is_empty() {
+        {
             let header = format!("## {title}");
             groups.push(format!(
                 "{header}\n\n{}",

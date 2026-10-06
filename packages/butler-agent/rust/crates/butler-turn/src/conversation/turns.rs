@@ -200,7 +200,7 @@ pub(super) fn finalize_in_transaction(
         write_outcome(tx, clock, outcome)?;
     }
     tx.execute(
-        "UPDATE conversation_turns SET status=?1,completed_at=?2 WHERE id=?3",
+        "UPDATE conversation_turns SET status=?1,completed_at=COALESCE(completed_at,?2) WHERE id=?3",
         params![
             input.status.unwrap_or_else(|| "complete".into()),
             completed,
@@ -225,19 +225,21 @@ pub(super) fn get_turn(
         .query_row(
             "SELECT * FROM conversation_turns WHERE id=?1",
             [id],
-            |row| {
-                Ok(ConversationTurn {
-                    id: row.get("id")?,
-                    session_id: row.get("session_id")?,
-                    seq: row.get("seq")?,
-                    actor: row.get("actor")?,
-                    status: row.get("status")?,
-                    request_id: row.get("request_id")?,
-                    started_at: row.get("started_at")?,
-                    completed_at: row.get("completed_at")?,
-                })
-            },
+            turn_row,
         )
         .optional()
         .map_err(ConversationError::sqlite)
+}
+
+pub(super) fn turn_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationTurn> {
+    Ok(ConversationTurn {
+        id: row.get("id")?,
+        session_id: row.get("session_id")?,
+        seq: row.get("seq")?,
+        actor: row.get("actor")?,
+        status: row.get("status")?,
+        request_id: row.get("request_id")?,
+        started_at: row.get("started_at")?,
+        completed_at: row.get("completed_at")?,
+    })
 }

@@ -8,6 +8,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "prompt_history_golden.rs"]
+mod golden;
+
 mod provider {
     use super::*;
     use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
@@ -63,7 +66,7 @@ fn source(request: &Value) -> &str {
 fn prefix(request: &Value) -> Vec<u8> {
     let text = source(request);
     // Runtime state follows the stable documents and completion-ordered history.
-    let end = text.find("## Runtime State").unwrap();
+    let end = text.find("## Current turn context").or_else(||text.find("## Runtime State")).unwrap();
     let mut bytes =
         serde_json::to_vec(&json!([request["instructions"], request["tools"]])).unwrap();
     bytes.extend_from_slice(text[..end].trim_end().as_bytes());
@@ -71,7 +74,7 @@ fn prefix(request: &Value) -> Vec<u8> {
 }
 fn history(data: &std::path::Path) -> String {
     let db = Connection::open(data.join("agent-runtime/btcc.sqlite")).unwrap();
-    db.query_row("SELECT content FROM btcc_context_documents WHERE source_id='recent-conversation' ORDER BY rowid DESC LIMIT 1", [], |row| row.get(0)).unwrap_or_default()
+    db.query_row("SELECT content FROM btcc_context_documents WHERE source_id='recent-conversation' ORDER BY rowid DESC LIMIT 1", [], |row| row.get::<_,String>(0)).map(|text| serde_json::from_str::<Value>(text.strip_prefix("## Recent Conversation\n\n").unwrap_or(&text)).ok().and_then(|v|v["history"].as_str().map(str::to_owned)).unwrap_or(text)).unwrap_or_default()
 }
 
 #[tokio::test]
@@ -154,9 +157,11 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         }
         measurements.push(json!({"turn":index,"prefix_percent":if previous.is_empty(){0.0}else{100.0*common as f64/previous.len() as f64},
             "bytes":serde_json::to_vec(&request)?.len(),"move":moved}));
-        let sections = loaded_sections(&s.sandbox.data, &request, &placeholders)?;
-        captured.push(json!({"request": request, "sections": sections, "wire_bytes":turn_requests.iter().map(|request| serde_json::to_vec(request).unwrap().len()).sum::<usize>(),
-            "instructions":placeholders.hide(request["instructions"].as_str().unwrap())}));
+        captured.push(golden::capture(
+            &s.sandbox.data,
+            &turn_requests,
+            &placeholders,
+        )?);
         previous = current;
         previous_history = content;
         asks.push(ask);
@@ -186,6 +191,8 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     let writes: u64 = db.query_row("SELECT COUNT(*) FROM conversation_summaries", [], |row| {
         row.get(0)
     })?;
+    assert_eq!(writes,0,"assembly must not create summaries");
+    assert_eq!(db.query_row::<u64,_,_>("SELECT COUNT(*) FROM conversation_messages WHERE status='compacted'",[],|r|r.get(0))?,0);
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert_eq!(
         writes,
@@ -210,36 +217,7 @@ async fn record_main_prompt_golden() -> Result<(), HarnessError> {
 }
 
 fn compare_golden(case: &str, requests: &[Value]) -> Result<(), HarnessError> {
-    let Ok(directory) = std::env::var("BUTLER_PROMPT_GOLDEN_DIR") else {
-        return Ok(());
-    };
-    let main: Vec<Value> = serde_json::from_slice(&std::fs::read(
-        std::path::Path::new(&directory).join(format!("{case}.json")),
-    )?)?;
-    for index in (0..requests.len()).filter(|index| *index == 0 || *index + 1 == requests.len()) {
-        let main_bytes = main[index]["wire_bytes"].as_u64().unwrap();
-        let branch_bytes = requests[index]["wire_bytes"].as_u64().unwrap();
-        eprintln!(
-            "PROMPT_PARITY case={case} turn={index} main_bytes={main_bytes} branch_bytes={branch_bytes}"
-        );
-        assert!(branch_bytes <= main_bytes);
-        let main_text = source(&main[index]["request"]);
-        for line in source(&requests[index]["request"]).lines() {
-            if line.starts_with("user: History request ") || line == "butler: once" {
-                assert!(
-                    main_text.contains(line),
-                    "history content absent from main: {line}"
-                );
-            }
-        }
-        assert_eq!(main[index]["instructions"], requests[index]["instructions"]);
-        assert_eq!(main[index]["sections"], requests[index]["sections"]);
-        assert_eq!(
-            main[index]["request"]["tools"],
-            requests[index]["request"]["tools"]
-        );
-    }
-    Ok(())
+    golden::compare(case, requests)
 }
 
 fn loaded_sections(
@@ -387,9 +365,7 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
             assert!(current.starts_with(&previous));
         }
         previous = current;
-        captured.push(json!({"request":request, "sections":loaded_sections(&s.sandbox.data,request,&placeholders)?,
-            "instructions":placeholders.hide(request["instructions"].as_str().unwrap()),
-            "wire_bytes":requests.iter().map(|request| serde_json::to_vec(request).unwrap().len()).sum::<usize>()}));
+        captured.push(golden::capture(&s.sandbox.data, &requests, &placeholders)?);
     }
     if verify {
         let rows = std::fs::read_to_string(
@@ -468,15 +444,20 @@ pub(super) fn resume_parity(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
         );
         eprintln!("PROMPT_RESUME stable_prefix_percent=100");
     }
-    let request = requests.last().unwrap();
     let mut placeholders = butler_e2e::e2e::sanitize::Placeholders::default();
     placeholders.add("W", s.sandbox.workspace.display().to_string());
     placeholders.add("D", s.sandbox.data.display().to_string());
     placeholders.add("SANDBOX", s.sandbox.root.display().to_string());
-    let captured = vec![json!({"request":request,
-        "instructions":placeholders.hide(request["instructions"].as_str().unwrap()),
-        "sections":loaded_sections(&s.sandbox.data,request,&placeholders)?,
-        "wire_bytes":serde_json::to_vec(request)?.len()})];
+    let captured = requests
+        .iter()
+        .map(|request| {
+            golden::capture(
+                &s.sandbox.data,
+                std::slice::from_ref(request),
+                &placeholders,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
         let directory = std::env::var("BUTLER_PROMPT_CAPTURE_DIR").unwrap();
         std::fs::write(

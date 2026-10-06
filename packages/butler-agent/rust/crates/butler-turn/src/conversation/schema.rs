@@ -71,13 +71,10 @@ CREATE TABLE IF NOT EXISTS conversation_source_identity (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1), identity TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx ON conversation_turns(session_id, seq);
-CREATE INDEX IF NOT EXISTS conversation_turns_history_completion_idx ON conversation_turns(id,session_id,completed_at,seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation_messages(session_id, seq);
-CREATE INDEX IF NOT EXISTS conversation_messages_session_turn_seq_idx ON conversation_messages(session_id, turn_id, seq, id) WHERE compacted_by_summary_id IS NULL AND status!='compacted';
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_role_created_idx ON conversation_messages(session_id, role, created_at, id);
 CREATE INDEX IF NOT EXISTS conversation_messages_created_idx ON conversation_messages(created_at, id);
-CREATE INDEX IF NOT EXISTS conversation_parts_message_size_idx ON conversation_parts(message_id,kind,octet_length(content_json));
 CREATE INDEX IF NOT EXISTS conversation_parts_message_part_idx ON conversation_parts(message_id, part_index);
 CREATE INDEX IF NOT EXISTS conversation_parts_tool_call_idx ON conversation_parts(tool_call_id) WHERE tool_call_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS conversation_bindings_gateway_external_idx ON conversation_bindings(gateway, external_session_id);

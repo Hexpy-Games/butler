@@ -60,15 +60,33 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
     let mut offset = 0;
     for section in sections {
         assert!(section["bytes"].as_u64().unwrap() > 0);
-        assert_eq!(section["sha256"].as_str().unwrap().len(), 64);
+        let private = matches!(
+            section["id"].as_str().unwrap(),
+            "current-request"
+                | "scope"
+                | "recent-conversation"
+                | "inbound-message"
+                | "attachments"
+                | "current-attachments"
+                | "project-sources"
+                | "branch-seed"
+                | "session-references"
+        );
+        if private {
+            assert!(section.get("sha256").is_none());
+        } else {
+            assert_eq!(section["sha256"].as_str().unwrap().len(), 64);
+        }
         assert!(section.get("content").is_none());
         if section["representation"] != "serialized_json" {
             let size = usize::try_from(section["bytes"].as_u64().unwrap()).unwrap();
             let text = &source_text[offset..offset + size];
-            assert_eq!(
-                section["sha256"],
-                format!("{:x}", Sha256::digest(text.as_bytes()))
-            );
+            if !private {
+                assert_eq!(
+                    section["sha256"],
+                    format!("{:x}", Sha256::digest(text.as_bytes()))
+                );
+            }
             offset += size + 2;
         }
     }

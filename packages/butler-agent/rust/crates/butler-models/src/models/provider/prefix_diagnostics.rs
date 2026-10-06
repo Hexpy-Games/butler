@@ -196,7 +196,7 @@ impl Prepared {
                     }
                 }
                 let source = first_prompt
-                    .filter(|prompt| fields.get("sourcePromptSha256") == Some(&json!(hash(prompt))))
+                    .filter(|prompt| fields.get("sourcePromptBytes") == Some(&json!(prompt.len())))
                     .and_then(|_| fields.get("inputSections"))
                     .and_then(Value::as_array);
                 self.metadata["inputSections"] = layout_sections(

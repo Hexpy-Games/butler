@@ -41,7 +41,15 @@ impl Sections {
     pub(super) fn current_request(&mut self, turn: &TurnRecord) {
         self.push(
             "current-request",
-            format!("User request:\n{}", turn.original_message),
+            format!(
+                "{}\n{}",
+                match trigger(turn) {
+                    "steward-result" => "## Delegated result\nSteward:",
+                    "worker-result" => "## Delegated result\nWorker:",
+                    _ => "## Current request",
+                },
+                turn.original_message
+            ),
         );
     }
 
@@ -51,7 +59,22 @@ impl Sections {
 }
 
 fn digest(id: &str, text: &str) -> Value {
-    json!({"id": id, "bytes": text.len(), "sha256": hash(text)})
+    if matches!(
+        id,
+        "current-request"
+            | "scope"
+            | "recent-conversation"
+            | "inbound-message"
+            | "attachments"
+            | "current-attachments"
+            | "project-sources"
+            | "branch-seed"
+            | "session-references"
+    ) {
+        json!({"id":id,"bytes":text.len()})
+    } else {
+        json!({"id": id, "bytes": text.len(), "sha256": hash(text)})
+    }
 }
 
 fn hash(text: &str) -> String {
@@ -109,7 +132,7 @@ pub(super) fn request_usage(
     components: Value,
 ) -> UsageAttribution {
     let mut diagnostics =
-        serde_json::json!({"sourcePromptSha256": hash(prompt), "trigger": trigger(turn)});
+        serde_json::json!({"sourcePromptBytes": prompt.len(), "trigger": trigger(turn)});
     diagnostics["inputSections"] = sections;
     diagnostics["instructionComponents"] = components;
     UsageAttribution {

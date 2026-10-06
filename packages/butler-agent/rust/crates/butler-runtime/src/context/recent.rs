@@ -45,36 +45,33 @@ pub(crate) async fn include_recent_context(
             .with_source(e)
         })?;
     let read_elapsed = started.elapsed();
-    let window = history::summarize(owner, window, cap, &snapshot).await?;
+
     let summary_elapsed = started.elapsed().saturating_sub(read_elapsed);
-    let material = &window.material;
-    let plan = crate::context::compile_prompt_material_context_plan(
-        material,
-        &PromptMaterialRenderOptions {
-            max_tokens: f64::MAX,
-            exclude_source_ref: input.event_id.map(str::to_owned),
-            exclude_turn_id: None,
-            include_summaries: None,
-            include_tools: None,
-            current_request: None,
-        },
-    )?;
-    let mut content = strip_heading(&plan.rendered);
-    for turn in &material.turns {
-        if window.late_turn_ids.contains(&turn.id)
-            && let Some(timestamp) = &turn.completed_at
-        {
-            let header = format!("turn {} status {}", turn.id, turn.status);
-            content = content.replacen(&header, &format!("{header} completed {timestamp}"), 1);
-        }
-    }
+    let options = render_options(token_budget, input.event_id);
+    let plan = crate::context::compile_prompt_material_context_plan(&window.material, &options)?;
+    let legacy_plan =
+        crate::context::compile_prompt_material_context_plan(&window.legacy_material, &options)?;
+    let content = history::render(&window, &plan, cap)?;
     if content.is_empty() {
         return Ok(assembly);
     }
     assembly.working_context.push(ContextSection {
         id: "recent-conversation".into(),
         title: "Recent Conversation".into(),
-        content,
+        content: serde_json::to_string(&butler_turn::conversation::HistoryDocument {
+            history: content,
+            main_budget_projection: format!(
+                "## Recent Conversation\n\n{}",
+                legacy_plan
+                    .rendered
+                    .strip_prefix("## Recent Conversation")
+                    .unwrap_or(&legacy_plan.rendered)
+                    .trim()
+            ),
+        })
+        .map_err(|e| {
+            crate::context::ContextError::new(ContextCode::ContextJsonError, e.to_string())
+        })?,
         region: Some("working_context".into()),
         projection_class: "mandatory_hot_cache".into(),
         scope_kind: "session".into(),
@@ -84,9 +81,13 @@ pub(crate) async fn include_recent_context(
     Ok(assembly)
 }
 
-fn strip_heading(value: &str) -> String {
-    let value = value
-        .strip_prefix("## Recent Conversation")
-        .unwrap_or(value);
-    butler_core::public_text::trim_js_whitespace(value).to_owned()
+fn render_options(max_tokens: f64, event_id: Option<&str>) -> PromptMaterialRenderOptions {
+    PromptMaterialRenderOptions {
+        max_tokens,
+        exclude_source_ref: event_id.map(str::to_owned),
+        exclude_turn_id: None,
+        include_summaries: None,
+        include_tools: None,
+        current_request: None,
+    }
 }
