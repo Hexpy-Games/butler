@@ -104,6 +104,13 @@ def restore(root, entries):
         source_time = stamp // 1_000_000_000 * 1_000_000_000 if identical else now
         os.utime(path, ns=(path.stat().st_atime_ns, source_time))
         matched += identical
+    # Newly tracked inputs have no producer timestamp. Explicitly dirty them,
+    # even if a checkout or local caller supplied an older mtime.
+    for name in names - files.keys():
+        path = safe_path(root, name)
+        if path.is_file():
+            files[name] = checksum(path)
+            os.utime(path, ns=(path.stat().st_atime_ns, now))
     current = directory_digests(root, files)
     matched_directories = 0
     for entry in directories:

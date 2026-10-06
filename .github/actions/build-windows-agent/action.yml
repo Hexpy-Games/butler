@@ -51,6 +51,9 @@ runs:
       if: inputs.owner-runner != 'true'
       with:
         native-deps: static-ort
+        artifact-cache-platform: windows-x64
+        snapshot-profile: ${{ inputs.profile }}
+        snapshot-target: x86_64-pc-windows-msvc
         cache-key: ${{ inputs.cache-key }}-target-v1
         cargo-target-dir: ${{ inputs.cargo-target-dir }}
         prepared-static-ort: ${{ inputs.native-deps-artifact != '' }}
@@ -74,6 +77,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Build unsigned release executable
       env:
+        GH_TOKEN: ${{ github.token }}
         BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       shell: pwsh
       working-directory: packages/butler-agent/rust
@@ -90,7 +94,15 @@ runs:
           $env:CARGO_PROFILE_RELEASE_LTO = 'thin'
           $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '1'
         }
-        cargo build --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        $env:TARGET_SNAPSHOT_PROFILE = '${{ inputs.profile }}'
+        $env:TARGET_SNAPSHOT_FEATURES = 'butler-agent/static-ort'
+        $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
+        # Owner setup bypasses rust-agent-setup; restore after setting exact flags.
+        if ('${{ inputs.owner-runner }}' -eq 'true') {
+          python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
         # A runner has development DLLs installed. Refuse a dependency they hide.
@@ -102,6 +114,14 @@ runs:
             throw 'Agent has an unpackaged runtime dependency'
           }
         }
+    - name: Upload Cargo build timings
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: cargo-timings-build-windows-agent-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-${{ inputs.version || github.run_attempt }}
+        path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+        if-no-files-found: error
+        retention-days: 14
     - name: Package ZIP and shared Agent manifests
       working-directory: ${{ github.workspace }}
       shell: pwsh
