@@ -1,0 +1,29 @@
+name: Publish Cargo target snapshots
+on:
+  workflow_run:
+    workflows: [Rust quality, Cargo target main lanes]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: cargo-target-publisher
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      # Never execute code from a downloaded producer artifact or a PR checkout.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Publish successful main lanes and retain two generations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCER_RUN: ${{ github.event.workflow_run.id }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/cargo-target-release.py publish-run "$PRODUCER_RUN"

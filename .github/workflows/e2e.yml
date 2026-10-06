@@ -66,6 +66,7 @@ jobs:
         with:
           native-deps: prebuilt-ort
           cache-key: e2e
+          artifact-cache-kind: dev
 
       - name: Install the credential
         if: steps.credential.outputs.available == 'true'
@@ -86,8 +87,16 @@ jobs:
 
       - name: Build the agent binary under test
         if: steps.credential.outputs.available == 'true'
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked -p butler-agent --bin butler-agent
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked -p butler-agent --bin butler-agent
 
+      - name: Upload Cargo build timings
+        if: ${{ always() && steps.credential.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-e2e-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Run the live tier
         if: steps.credential.outputs.available == 'true'
         env:

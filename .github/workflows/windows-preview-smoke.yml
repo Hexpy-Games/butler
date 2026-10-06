@@ -90,6 +90,13 @@ jobs:
           "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
           "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
           "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Restore main debug test snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
       - name: Windows formatting, clippy and source policy
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -146,9 +153,17 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo build --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
+          cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-windows-preview-smoke-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Existing stub chat E2E
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |

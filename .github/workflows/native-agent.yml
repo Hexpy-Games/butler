@@ -43,9 +43,17 @@ jobs:
           # retain their debug hooks and assertions in the other shared archive.
           feature=prebuilt-ort
           if [ "$ORT_MODE" = static-ort ]; then feature=static-ort; fi
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features "$feature"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features "$feature"
           mkdir -p "$RUNNER_TEMP/agent-payload"
           cp target/release/butler-agent "$RUNNER_TEMP/agent-payload/butler-agent"
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-native-agent-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify and record production Agent identity
         env:
           PLATFORM: ${{ inputs.platform }}
@@ -71,12 +79,14 @@ jobs:
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 14 }}
           if-no-files-found: error
       - name: Preserve successful Cargo outputs outside the shared cache quota
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: cargo-cache
         env:
           CACHE_PLATFORM: ${{ inputs.platform }}
           CACHE_MODE: ${{ inputs.ort-mode }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" native
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: ${{ steps.cargo-cache.outputs.name }}
           path: ${{ runner.temp }}/cargo-build-cache/*

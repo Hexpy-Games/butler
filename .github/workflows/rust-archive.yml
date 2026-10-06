@@ -66,8 +66,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rust-archive"
           # nextest builds test harnesses, not the Agent CLI. Build all targets
           # together so the ordinary Agent and every test share dependencies.
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8 "${args[@]}"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --workspace --all-targets --locked "${args[@]}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+      - name: Upload Cargo build timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-rust-archive-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Archive tests and record every selection
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -95,7 +103,7 @@ jobs:
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked -j 8 "${args[@]}"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked "${args[@]}"
           fi
       - name: Record native Agent provenance
         env:
@@ -116,12 +124,14 @@ jobs:
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
       - name: Preserve successful Cargo outputs outside the shared cache quota
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: cargo-cache
         env:
           CACHE_PLATFORM: ${{ inputs.platform }}
           CACHE_MODE: ${{ inputs.ort-mode }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" dev
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: ${{ steps.cargo-cache.outputs.name }}
           path: ${{ runner.temp }}/cargo-build-cache/*
