@@ -26,7 +26,7 @@ function SessionTasksPanel({ sessionId }: { sessionId: string }) {
   useEffect(() => visible ? observeTaskGraphs(sessionId, runtimeId) : undefined, [sessionId, runtimeId, visible]);
   const c = appCopy.taskGraph;
   const single = state.graphs.length === 1 ? state.graphs[0] : undefined;
-  const onSelect = (selected: string) => update(sessionId, { selected });
+  const onSelect = (selected: string) => update(sessionId, { selected, selectionExplicit: true });
   const onOpenDocument = async (node: TaskGraphNode) => {
     try { setDocument(await getTaskDocument(node.task_id, node.document.revision)); }
     catch { notifyStatus(appCopy.settings.sectionState.error, { tone: "error" }); }
