@@ -1,3 +1,4 @@
+import "./sandboxGuards.ts";
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
