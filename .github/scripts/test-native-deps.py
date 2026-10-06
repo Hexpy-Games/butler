@@ -234,6 +234,19 @@ class NativeDeps(unittest.TestCase):
                 sdk.ci_oci.command('push', 'ghcr.io/owner/package:key', anonymous=False)
 
     # test-category: security
+    def test_private_cache_is_unavailable_but_publisher_auth_errors_fail(self):
+        import subprocess
+        denied = subprocess.CompletedProcess([], 1, stdout='', stderr='unauthorized: authentication required')
+        with patch.object(sdk.ci_oci, 'command', return_value=denied):
+            self.assertIsNone(sdk.ci_oci.manifest('ghcr.io/owner/package:missing'))
+            with self.assertRaisesRegex(RuntimeError, 'OCI manifest lookup failed'):
+                sdk.ci_oci.manifest('ghcr.io/owner/package:missing', anonymous=False)
+        outage = subprocess.CompletedProcess([], 1, stdout='', stderr='HTTP 500 registry error')
+        with patch.object(sdk.ci_oci, 'command', return_value=outage):
+            with self.assertRaisesRegex(RuntimeError, 'OCI manifest lookup failed'):
+                sdk.ci_oci.manifest('ghcr.io/owner/package:missing')
+
+    # test-category: security
     def test_unsafe_archive_is_rejected(self):
         archive = self.root / 'unsafe.zip'
         with zipfile.ZipFile(archive, 'w') as output:

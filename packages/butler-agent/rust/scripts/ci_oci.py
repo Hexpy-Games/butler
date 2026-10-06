@@ -48,7 +48,8 @@ def manifest(reference, *, anonymous=True):
     if result.returncode:
         if any(code in result.stderr.lower() for code in ['not found', 'manifest_unknown', 'name_unknown', '404']):
             return None
-        if anonymous and 'requested access to the resource is denied' in result.stderr:
+        if anonymous and any(message in result.stderr.lower() for message in
+                             ['requested access to the resource is denied', 'unauthorized: authentication required']):
             print('OCI package is absent or not public; cold build follows.')
             return None
         raise RuntimeError(f'OCI manifest lookup failed: {result.stderr.strip()}')
