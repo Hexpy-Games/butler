@@ -5,7 +5,9 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod images;
 mod security;
+mod self_check;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -42,7 +44,7 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
     let published = result(&s, &turn);
     assert_eq!(
         published["check"],
-        json!({"status":"unavailable","reason":"not_implemented"})
+        json!({"status":"unavailable","reason":"no_browser"})
     );
     assert_eq!(published["new_blobs"], 2);
     let id = published["output_id"].as_str().unwrap();
@@ -257,6 +259,13 @@ async fn published_outputs_idle_ten_minutes_without_writes() -> Result<(), Harne
     let (turn, _) = s.turn("general", "Publish").await?;
     let output = result(&s, &turn);
     assert_eq!(output["new_blobs"], 2);
+    let host = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", s.agent.launch.admin_credential().unwrap())
+        .send()
+        .await?;
+    assert_eq!(host.status(), 200);
     let root = s.sandbox.data.join("outputs");
     let before = output_files(&root);
     assert_eq!(blob_count(&root.join("blobs")), 2);
@@ -270,7 +279,8 @@ async fn published_outputs_idle_ten_minutes_without_writes() -> Result<(), Harne
         .text()
         .await?;
     assert!(body.contains("./app.js"));
-    eprintln!("output idle: 600 seconds, 0 writes, 2 complete blobs");
+    drop(host);
+    eprintln!("output + attached hub idle: 600 seconds, 0 writes, 2 complete blobs");
     s.finish().await
 }
 
