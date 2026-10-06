@@ -24,7 +24,7 @@ export function installUserBrowser(app, getWindow) {
   app.on("will-quit", (event) => {
     if (flushed) return;
     event.preventDefault();
-    void browser.flush().catch(() => {}).finally(() => {
+    void browser.flush().catch(() => {}).then(() => browser.dispose()).finally(() => {
       flushed = true;
       // Electron ignores a same-tick quit after cancelling will-quit.
       setImmediate(() => app.quit());

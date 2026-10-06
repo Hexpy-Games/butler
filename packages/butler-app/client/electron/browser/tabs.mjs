@@ -210,6 +210,21 @@ class UserBrowser {
   hide() { this.keyboardFocused = false; this.areaVisible = false; for (const tab of this.tabs.values()) this.detach(tab); }
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
+  async dispose() {
+    this.areaVisible = false;
+    clearTimeout(this.metadataTimer);
+    await Promise.all([...this.tabs.values()].map((tab) => {
+      if (tab.attached && !tab.attached.isDestroyed() && tab.view) tab.attached.contentView.removeChildView(tab.view);
+      tab.attached = null;
+      const contents = tab.view?.webContents;
+      tab.view = null;
+      if (!contents || contents.isDestroyed()) return;
+      return new Promise((resolve) => {
+        contents.once("destroyed", resolve);
+        contents.close({ waitForBeforeUnload: false });
+      });
+    }));
+  }
 }
 
 export function createUserBrowser(app, getWindow) { return new UserBrowser(app, getWindow); }
