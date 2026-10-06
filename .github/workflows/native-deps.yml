@@ -19,40 +19,59 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
+    name: Publish ${{ matrix.label }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: linux-x64
             runner: ubuntu-24.04
+            label: linux-x64
+            owner: false
           - target: linux-arm64
             runner: ubuntu-24.04-arm
+            label: linux-arm64
+            owner: false
           - target: macos-arm64
             runner: macos-15
+            label: macos-arm64
+            owner: false
           - target: windows-x64
             runner: windows-latest
+            label: windows-hosted
+            owner: false
+          - target: windows-x64
+            runner: [self-hosted, Windows, X64, butler-win]
+            label: windows-owner
+            owner: true
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        if: ${{ !matrix.owner }}
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@master
+        if: ${{ !matrix.owner }}
         with:
           toolchain: 1.91.0
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
         with:
           arch: x64
-      - uses: oras-project/setup-oras@v1
-        with:
-          version: 1.2.3
+      - uses: ./.github/actions/setup-oras
       - name: Build once and publish verified SDK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_TARGET: ${{ matrix.target }}
-          CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
+          # Owner SDK cache stays inside this runner's own workspace (#557).
+          CARGO_TARGET_DIR: ${{ matrix.owner && format('{0}/target/windows-owner/native-deps', github.workspace) || format('{0}/ort-cache', runner.temp) }}
+          PYTHONDONTWRITEBYTECODE: '1'
+          RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"

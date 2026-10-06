@@ -356,9 +356,8 @@ def main():
                          sort_keys=True))
         return
     lock = target_lock(json.loads(LOCK.read_text()), target)
-    fingerprint = prebuilt.key(SCRIPT, lock, target)
     if args.fingerprint:
-        print(fingerprint)
+        print(prebuilt.key(SCRIPT, lock, target))
         return
     host.rust_identity(lock["rust_target"])
     cache_root = root_for_target()
@@ -366,7 +365,10 @@ def main():
     if args.protoc_only:
         print(json.dumps({"protoc": str(prepare_protoc(cache_root, lock, target))}, sort_keys=True))
         return
-    complete = prepare_cache(cache_root, fingerprint, lock, target, args.build_only, args.require_prebuilt or (os.environ.get("GITHUB_ACTIONS") == "true" and not args.build_only))
+    fingerprint = prebuilt.key(SCRIPT, lock, target)
+    require_prebuilt = args.require_prebuilt or (
+        target != "windows-x64" and os.environ.get("GITHUB_ACTIONS") == "true" and not args.build_only)
+    complete = prepare_cache(cache_root, fingerprint, lock, target, args.build_only, require_prebuilt)
     print(json.dumps({
         "ort_lib_path": str(complete / "build/Release"),
         "protoc": str(complete / f"tools/protoc/bin/protoc{TARGETS[target]['exe']}"),
