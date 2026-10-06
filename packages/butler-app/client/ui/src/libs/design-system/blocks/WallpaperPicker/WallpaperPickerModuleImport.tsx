@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { FieldError } from "../../components/Field";
 import { FolderPlus } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
@@ -20,13 +20,10 @@ interface WallpaperPickerModuleImportProps {
 export function WallpaperPickerModuleImport({ label, importing, onImportModule, error }: WallpaperPickerModuleImportProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const errorId = useId();
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (error && !importing) buttonRef.current?.focus(); }, [error, importing]);
+  // The FieldError announces itself (role=alert); focus stays where the user left it.
   return (
     <div className={styles.tile} data-option="import-module">
       <button
-        ref={buttonRef}
-        aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         aria-busy={importing || undefined}
         className={styles.option}
