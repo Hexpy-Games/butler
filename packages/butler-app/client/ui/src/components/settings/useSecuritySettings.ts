@@ -7,6 +7,7 @@ import {
   isAdminRequiredError,
   isHostOnlyError,
   setAllowedHosts,
+  setContentHosts,
   setRemoteAccess,
 } from "./securityApi";
 
@@ -71,6 +72,11 @@ export function useSecuritySettings() {
     toggleRemoteAccess: (enabled: boolean) => run("toggle", async () => {
       await setRemoteAccess(enabled);
       setView((current) => current && { ...current, remote_access_enabled: enabled });
+      notifyStatus(appCopy.settings.saved, { id: TOAST_ID, tone: "ok" });
+      await refresh();
+    }, appCopy.settings.errors.updateSettings),
+    saveContentHosts: (hosts: string[]) => run("hosts", async () => {
+      await setContentHosts(hosts);
       notifyStatus(appCopy.settings.saved, { id: TOAST_ID, tone: "ok" });
       await refresh();
     }, appCopy.settings.errors.updateSettings),

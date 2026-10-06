@@ -914,6 +914,9 @@ export interface AppCopy {
     };
   };
   artifacts: {
+    reload: string;
+    revision: string;
+    contentHostRequired: string;
     title: string;
     empty: string;
     backToList: string;
@@ -1393,6 +1396,8 @@ export interface AppCopy {
       advancedContents: string;
       hosts: string;
       hostsDescription: string;
+      contentHosts: string;
+      contentHostsDescription: string;
       noHosts: string;
       hostPlaceholder: string;
       addHost: string;

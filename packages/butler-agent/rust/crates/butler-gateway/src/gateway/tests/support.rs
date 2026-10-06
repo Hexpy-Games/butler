@@ -35,7 +35,7 @@ pub(super) async fn start_with_config(
     config: GatewayConfig,
 ) -> GatewayServer {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    serve_gateway(listener, application, config).unwrap()
+    serve_gateway(listener, application, config).await.unwrap()
 }
 
 type EventListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;

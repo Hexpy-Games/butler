@@ -36,7 +36,9 @@ use butler_turn::btcc::ReasoningEffort;
 pub(crate) async fn start_real(application: Arc<AppApplication>) -> GatewayServer {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let application: Arc<dyn GatewayApplication> = application;
-    serve_gateway(listener, application, GatewayConfig::default()).unwrap()
+    serve_gateway(listener, application, GatewayConfig::default())
+        .await
+        .unwrap()
 }
 
 pub(super) async fn artifact_request(address: std::net::SocketAddr) -> String {

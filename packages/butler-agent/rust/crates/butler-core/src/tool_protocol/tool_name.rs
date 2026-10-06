@@ -126,6 +126,7 @@ tool_names! {
     WebRead = "web_read",
     WebSearch = "web_search",
     WriteFile = "write_file",
+    OutputPublish = "output_publish",
 }
 
 impl std::fmt::Display for ToolName {

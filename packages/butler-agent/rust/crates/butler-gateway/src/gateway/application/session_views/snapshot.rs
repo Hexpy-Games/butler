@@ -22,6 +22,21 @@ pub(super) async fn read(
     id: String,
     page: AppSessionViewPage,
 ) -> Result<Snapshot, GatewayApplicationError> {
+    let mut snapshot = read_rows(app, id.clone(), page).await?;
+    let outputs = app.output_artifacts(id.clone()).await?;
+    let message_outputs = app
+        .output_message_artifacts(id, &snapshot.message_page.view.messages)
+        .await?;
+    super::super::outputs::decorate(&mut snapshot.message_page.view.messages, &message_outputs);
+    snapshot.artifacts.extend(outputs);
+    Ok(snapshot)
+}
+
+async fn read_rows(
+    app: &AppApplication,
+    id: String,
+    page: AppSessionViewPage,
+) -> Result<Snapshot, GatewayApplicationError> {
     let _measurement = app.storage.measure_view("snapshot");
     let facts = app.dependencies.settings_facts.snapshot()?;
     let subscribers = app.subscribers.clone();

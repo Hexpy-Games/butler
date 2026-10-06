@@ -67,6 +67,9 @@ impl AppApplication {
             })
             .await
             .map_err(app_error)?;
+        if archived {
+            self.collect_session_outputs(session_id).await?;
+        }
         Ok(updated)
     }
 
@@ -96,7 +99,8 @@ impl AppApplication {
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         let session = session_id.clone();
-        self.storage
+        let result = self
+            .storage
             .execute(move |db| {
                 mutate_session(
                     db,
@@ -108,7 +112,9 @@ impl AppApplication {
                 )
             })
             .await
-            .map_err(app_error)
+            .map_err(app_error)?;
+        self.collect_session_outputs(session_id).await?;
+        Ok(result)
     }
 
     pub(crate) async fn delete_session_owned(
@@ -135,7 +141,9 @@ impl AppApplication {
         .await?;
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
-        self.storage
+        let session = session_id.clone();
+        let result = self
+            .storage
             .execute(move |db| {
                 if permanent {
                     delete_permanently(db, &subscribers, &session_id, clock.as_ref())
@@ -151,7 +159,9 @@ impl AppApplication {
                 }
             })
             .await
-            .map_err(app_error)
+            .map_err(app_error)?;
+        self.collect_session_outputs(session).await?;
+        Ok(result)
     }
 
     async fn read_session_row(

@@ -1,4 +1,5 @@
 import { appCopy } from "./copy.ts";
+import { artifactBridgeInput } from "./artifactBridge.ts";
 import type {
   AppInfoView,
   MessageFileRef,
@@ -501,11 +502,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
     });
   }
-  if (method === "GET" && url.pathname === "/artifacts") {
-    return await callBridge<T>(bridge, "listArtifacts", {
-      sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
-    });
-  }
+  const artifact = artifactBridgeInput(method, url);
+  if (artifact) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, artifact.method, artifact.input));
   if (method === "GET" && url.pathname === "/transcript-export") {
     return await callBridge<T>(bridge, "exportTranscript", {
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),

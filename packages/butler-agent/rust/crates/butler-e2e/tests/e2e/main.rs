@@ -7,6 +7,7 @@ mod app_state;
 mod app_storage_scale;
 mod ask_user;
 mod automation;
+mod browser_outputs;
 mod cassette_lint;
 mod cli_launcher;
 mod cli_remote;

@@ -34,6 +34,7 @@ mod operation_output;
 mod panic_isolation;
 mod personalization;
 pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
+mod outputs;
 mod plan_decisions;
 mod progress_view;
 mod project_sources;
@@ -400,26 +401,6 @@ impl AppApplication {
         self.dependencies.updates.close();
     }
 
-    async fn message_page(
-        &self,
-        chat_id: String,
-        cursor: f64,
-        limit: usize,
-    ) -> Result<super::MessageListView, GatewayApplicationError> {
-        self.storage
-            .read(move |db| read_model::list_messages(db, &chat_id, cursor, limit))
-            .await
-            .map_err(app_error)
-    }
-    async fn artifact_page(
-        &self,
-        session_id: String,
-    ) -> Result<Vec<super::SessionArtifactSummary>, GatewayApplicationError> {
-        self.storage
-            .read(move |db| read_model::list_artifacts(db, &session_id))
-            .await
-            .map_err(app_error)
-    }
     async fn queue_page(
         &self,
         session_id: String,

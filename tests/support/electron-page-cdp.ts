@@ -4,6 +4,9 @@ import { strict as assert } from "node:assert";
 export interface ElectronPage {
   evaluate<T>(fn: () => T): Promise<Awaited<T>>;
   expression<T>(expression: string): Promise<T>;
+  frameExpression<T>(origin: string, expression: string): Promise<T>;
+  screenshot(): Promise<Uint8Array>;
+  clickText(text: string, scope: string): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
   diagnostics(): Promise<unknown>;
@@ -21,6 +24,13 @@ export async function electronPage(port: number): Promise<ElectronPage> {
   throw new Error("Electron page did not start.");
 }
 
+/** Cross-site output frames can have their own Chromium target. */
+export async function electronFrame(port: number, origin: string): Promise<ElectronPage | null> {
+  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()) as Array<{url?:string;webSocketDebuggerUrl?:string}>;
+  const frame = targets.find(target=>target.url?.startsWith(`${origin}/__o/`) && target.webSocketDebuggerUrl);
+  return frame ? connect(frame.webSocketDebuggerUrl!) : null;
+}
+
 async function connect(url: string): Promise<ElectronPage> {
   const socket = new WebSocket(url);
   await new Promise<void>((done, fail) => {
@@ -30,10 +40,16 @@ async function connect(url: string): Promise<ElectronPage> {
     socket.addEventListener("error", () => fail(new Error("Electron CDP connection failed.")), { once: true });
   });
   const errors: string[] = [];
+  const contexts = new Map<number, string>();
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   let id = 0;
   socket.addEventListener("message", message => {
     const payload = JSON.parse(String(message.data));
+    if (payload.method === "Runtime.executionContextCreated" && payload.params.context.auxData?.isDefault) {
+      contexts.set(payload.params.context.id, payload.params.context.origin);
+    }
+    if (payload.method === "Runtime.executionContextDestroyed") contexts.delete(payload.params.executionContextId);
+    if (payload.method === "Runtime.executionContextsCleared") contexts.clear();
     if (payload.method === "Log.entryAdded" && payload.params.entry.level === "error") errors.push(payload.params.entry.text);
     if (payload.method === "Runtime.exceptionThrown") errors.push(payload.params.exceptionDetails.exception?.description ?? payload.params.exceptionDetails.text);
     const entry = pending.get(payload.id);
@@ -52,8 +68,8 @@ async function connect(url: string): Promise<ElectronPage> {
     setTimeout(() => { if (pending.delete(next)) reject(new Error(`Electron CDP timed out: ${method}`)); }, 10_000);
     socket.send(JSON.stringify({ id: next, method, params }));
   });
-  async function expression<T>(text: string): Promise<T> {
-    const result = await send("Runtime.evaluate", { expression: text, awaitPromise: true, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: T } };
+  async function expression<T>(text: string, contextId?: number): Promise<T> {
+    const result = await send("Runtime.evaluate", { expression: text, contextId, awaitPromise: true, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: T } };
     assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
     return result.result.value;
   }
@@ -73,6 +89,26 @@ async function connect(url: string): Promise<ElectronPage> {
   }
   return {
     expression, waitForFunction, diagnostics,
+    frameExpression: (origin, text) => {
+      const id = [...contexts].find(([, value]) => value === origin)?.[0];
+      if (!id) return Promise.reject(new Error("Electron output context not ready"));
+      return expression(text, id);
+    },
+    screenshot: async () => {
+      const result = await send("Page.captureScreenshot", {format:"png"}) as {data:string};
+      return Buffer.from(result.data,"base64");
+    },
+    clickText: async (text, scope) => {
+      const point = await expression<{x:number;y:number}>(`(() => {
+        const matches=Array.from(document.querySelectorAll(${JSON.stringify(scope)})).filter(e=>e.textContent?.trim()===${JSON.stringify(text)});
+        const node=matches.find(e=>{const box=e.getBoundingClientRect();return box.y>=0 && box.bottom<=innerHeight;}) ?? matches[0];
+        if (!node) throw new Error('Click target missing');
+        node.scrollIntoView({block:'center'});
+        const box=node.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};
+      })()`);
+      await send("Input.dispatchMouseEvent",{type:"mousePressed",...point,button:"left",clickCount:1});
+      await send("Input.dispatchMouseEvent",{type:"mouseReleased",...point,button:"left",clickCount:1});
+    },
     evaluate: fn => expression(`(${fn.toString()})()`),
     reload: async () => {
       // The preload bridge exists before navigation completes. Reloading then

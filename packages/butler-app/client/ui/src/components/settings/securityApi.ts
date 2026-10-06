@@ -15,7 +15,9 @@ export async function setAllowedHosts(hosts: string[]): Promise<void> {
   await updateSecurity({ allowed_hosts: hosts });
 }
 
-async function updateSecurity(security: { remote_access_enabled?: boolean; allowed_hosts?: string[] }): Promise<void> {
+export async function setContentHosts(hosts: string[]): Promise<void> { await updateSecurity({ content_hosts: hosts }); }
+
+async function updateSecurity(security: { remote_access_enabled?: boolean; allowed_hosts?: string[]; content_hosts?: string[] }): Promise<void> {
   await api("/settings", { method: "PATCH", body: JSON.stringify({ security }) });
 }
 

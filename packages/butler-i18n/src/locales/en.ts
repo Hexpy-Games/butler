@@ -1046,6 +1046,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
   },
   artifacts: {
+    reload: 'Reload',
+    revision: 'Revision',
+    contentHostRequired: 'Set a content host in Security settings.',
     title: "Artifacts",
     empty: "No artifacts yet",
     backToList: "Artifact list",
@@ -1634,6 +1637,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       advanced: "Advanced",
       advancedContents: "Allowed hosts for tunnels and proxies",
       hosts: "Host names",
+      contentHosts: 'Content hosts',
+      contentHostsDescription: 'Separate tunnel names for outputs.',
       hostsDescription: "Names a tunnel or proxy uses.",
       noHosts: "None",
       hostPlaceholder: "butler.example.com",

@@ -102,7 +102,7 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     let settings = app.send(Method::GET, "/settings", None, &[]).await?;
     assert_eq!(
         settings.data()["security"],
-        json!({"remote_access_enabled": false, "allowed_hosts": []})
+        json!({"remote_access_enabled": false, "allowed_hosts": [], "content_hosts": []})
     );
 
     // A local proxy that forwards a remote browser is not a local client,
@@ -345,8 +345,8 @@ fn lan_addresses() -> Vec<std::net::IpAddr> {
 #[tokio::test]
 async fn sec_09_fixed_port_lan_access_survives_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let reserved = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = reserved.local_addr()?.port();
+    let port = butler_e2e::e2e::agent::free_port()?;
+    let reserved = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     assert_ne!(port, 18765);
     let setup = Setup::new("SEC-09-FIXED")?
         .data_folder_token()

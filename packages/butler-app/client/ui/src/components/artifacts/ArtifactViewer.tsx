@@ -27,6 +27,7 @@ import {
   artifactMeta,
   artifactPreviewMode,
 } from "./artifactDisplay";
+import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
 
 const MARKDOWN_COMPONENTS: Components = {
@@ -83,7 +84,7 @@ export function ArtifactViewer({
         title={artifact.title}
       />}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {renderPreview({ mode, state, text, title: artifact.title, file })}
+        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );

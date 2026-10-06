@@ -289,11 +289,8 @@ pub(super) async fn execute(
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
         return project::execute(owner, call).await;
     }
-    if matches!(
-        call.name.as_str(),
-        "read_file" | "list_files" | "grep_files"
-    ) {
-        return file_observation::execute(owner, call, call_id).await;
+    if let Some(result) = workspace_tool(owner, &invocation, call, call_id).await {
+        return result;
     }
     let args = Value::Object(call.arguments.clone());
     if matches!(
@@ -411,11 +408,26 @@ async fn list_automations(
     }))
 }
 
-fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
+pub(super) fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(BtccError::relayed(
             "guided_tool_result_json",
             error.to_string(),
         ))
     })
+}
+
+async fn workspace_tool(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    match call.name.as_str() {
+        "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
+        "read_file" | "list_files" | "grep_files" => {
+            Some(file_observation::execute(owner, call, call_id).await)
+        }
+        _ => None,
+    }
 }

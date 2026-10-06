@@ -46,7 +46,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-runtime: capability adapters consume the skills facade; catalog
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
-        "context" | "skills" => &[],
+        "context" | "skills" | "outputs" => &[],
         "operations" => &["context"],
         "web_access" => &["context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.

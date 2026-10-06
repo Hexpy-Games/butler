@@ -38,6 +38,7 @@ struct TypedGatewaySettings {
     /// answers besides loopback. A list that is not all strings is ignored
     /// as a whole.
     allowed_hosts: Vec<String>,
+    content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
 }
@@ -51,6 +52,10 @@ impl TypedGatewaySettings {
             allowed_hosts: config
                 .get("allowedHosts")
                 .and_then(|value| Vec::<String>::deserialize(value).ok())
+                .unwrap_or_default(),
+            content_hosts: config
+                .get("contentHosts")
+                .and_then(|v| Vec::<String>::deserialize(v).ok())
                 .unwrap_or_default(),
             remote_access_enabled: config
                 .get("remoteAccessEnabled")
@@ -202,6 +207,8 @@ impl AppServiceConfiguration {
             local_auth: self.gateway.local_auth.clone(),
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
+            content_hosts: self.gateway.content_hosts.clone(),
+            output_data: self.gateway.output_data.clone(),
             remote_access_enabled: self.gateway.remote_access_enabled,
             admin_credential: self.gateway.admin_credential.clone(),
             security_store: self.gateway.security_store.clone(),
@@ -279,6 +286,8 @@ fn gateway_config(
             .map(|name| trim_js_whitespace(&name).to_owned())
             .filter(|name| !name.is_empty())
             .collect(),
+        content_hosts: settings.content_hosts,
+        output_data: None,
         remote_access_enabled: settings.remote_access_enabled,
         admin_credential,
         security_store: None,

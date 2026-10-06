@@ -51,7 +51,7 @@ pub(super) async fn activate(
     }
     // serve_gateway starts both loopback and saved LAN exposure. Only now can
     // requests leave the kernel backlog and reach the initialized application.
-    match serve_gateway(listener, application.clone(), config) {
+    match serve_gateway(listener, application.clone(), config).await {
         Ok(server) => Ok(server),
         Err(error) => {
             listener_ready.store(false, Ordering::Release);

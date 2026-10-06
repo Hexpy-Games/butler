@@ -30,6 +30,7 @@ pub struct GatewayExposure {
     /// Extra Host names (`name` or `name:port`) the gateway answers, such as
     /// the public name of a tunnel or reverse proxy the user runs.
     pub allowed_hosts: Vec<String>,
+    pub content_hosts: Vec<String>,
 }
 
 /// A connection code the host has just stored.

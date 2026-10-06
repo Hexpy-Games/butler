@@ -8,7 +8,9 @@ export function SecurityAllowedHostsField({
   hosts,
   disabled,
   onSave,
+  content = false,
 }: {
+  content?: boolean;
   hosts: string[];
   disabled: boolean;
   onSave: (hosts: string[]) => Promise<boolean>;
@@ -31,9 +33,9 @@ export function SecurityAllowedHostsField({
   return (
     <SettingsField
       id={inputId}
-      settingId="allowed-hosts"
-      label={copy.hosts}
-      description={copy.hostsDescription}
+      settingId={content ? "content-hosts" : "allowed-hosts"}
+      label={content ? copy.contentHosts : copy.hosts}
+      description={content ? copy.contentHostsDescription : copy.hostsDescription}
       control={(
         <Stack gap="sm">
           {hosts.length > 0 ? (
