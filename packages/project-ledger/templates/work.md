@@ -3,7 +3,7 @@ id: W-0001
 kind: work
 title: Example work
 status: proposed
-spec: docs/specs/example.md
+spec: SPEC-EXAMPLE
 priority: 1
 ---
 

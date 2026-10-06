@@ -2,6 +2,6 @@
 set -euo pipefail
 
 echo "Running pre-commit checks..."
-bun run lint
-bun run typecheck
+python3 .github/scripts/isolated.py bun run lint
+python3 .github/scripts/isolated.py bun run typecheck
 echo "Pre-commit checks passed."
