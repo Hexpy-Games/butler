@@ -4,6 +4,7 @@ type State = { kind?: string; state?: string; stage?: string; theme?: "light" | 
 type Bridge = { state(): Promise<State>; action(action: string): void; onState(listener: (state: Partial<State>) => void): void; painted(): void };
 const runtime = window as unknown as { butlerLifecycle?: Bridge; startMarkLoop: typeof startMarkLoop };
 
+performance.mark("state_start");
 const slots = Object.fromEntries(Array.from(document.querySelectorAll<HTMLElement>("[data-slot]"), (element) => [element.dataset.slot!, element]));
 const canvas = document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!;
 const sim: Parameters<typeof startMarkLoop>[1]["sim"] = { current: null };
@@ -75,6 +76,7 @@ Object.assign(window, { lifecycleState: apply });
 bridge?.onState(apply);
 void (async () => {
   if (bridge) apply(await bridge.state());
+  performance.mark("copy_ready");
   if (query.get("still")) {
     const image = document.createElement("img");
     image.alt = "";
@@ -83,9 +85,12 @@ void (async () => {
     document.querySelector("[data-surface=base]")!.prepend(image);
     await image.decode().catch(() => image.remove());
   }
+  performance.mark("image_ready");
   await document.fonts.ready;
+  performance.mark("font_ready");
   await new Promise(requestAnimationFrame);
   await new Promise(requestAnimationFrame);
   document.documentElement.dataset.painted = "true";
+  performance.mark("first_frame");
   bridge?.painted();
 })();

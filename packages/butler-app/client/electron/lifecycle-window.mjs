@@ -14,7 +14,7 @@ function installBridges() {
   const owned = (event) => event.senderFrame === event.sender.mainFrame && surfaces.get(event.sender.id);
   ipcMain.handle("butler:lifecycle-state", (event) => owned(event)?.state());
   ipcMain.handle("butler:lifecycle-action", (event, action) => owned(event)?.action(action));
-  ipcMain.on("butler:lifecycle-painted", (event) => owned(event)?.painted());
+  ipcMain.on("butler:lifecycle-painted", (event, profile) => owned(event)?.painted(profile));
 }
 export function lifecycleDist() {
   const dist = findRendererDistRoot([process.env.BUTLER_APP_RENDERER_DIST,
@@ -35,6 +35,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   let state = { kind, stage: kind === "startup" ? "prepare" : "saving", ...appearance,
     locale: locale ?? appearance.locale ?? app.getLocale(), forceQuit: false, copy };
   timing("appearance_read_end");
+  timing(`${kind}_create_start`);
   const window = new BrowserWindow({
     width: 360, height: 264, useContentSize: true, frame: false, resizable: false,
     maximizable: false, fullscreenable: false, show: false, hasShadow: true,
@@ -43,6 +44,9 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
       contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, devTools: !app.isPackaged },
   });
+  timing(`${kind}_create_end`);
+  window.webContents.once("dom-ready", () => timing(`${kind}_dom_ready`));
+  window.webContents.once("did-finish-load", () => timing(`${kind}_load_end`));
   const updateTitle = () => window.setTitle(copy[state.locale.startsWith("ko") ? "ko" : "en"][kind].title);
   updateTitle();
   const area = bounds ?? screen.getPrimaryDisplay().workArea;
@@ -58,7 +62,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     window.webContents.setBackgroundThrottling(true); onPainted?.(window);
   };
   const surface = { window, state: () => state, action: (action) => onAction?.(action, state),
-    painted() { timing(kind === "startup" ? "splash_painted" : "quit_painted"); reveal(); },
+    painted(profile) { if (process.env.BUTLER_LIFECYCLE_PROFILE === "1") console.info(JSON.stringify({ lifecycleProfile: { kind, ...profile } })); timing(kind === "startup" ? "splash_painted" : "quit_painted"); reveal(); },
     update(next) { state = { ...state, ...next }; if (!window.isDestroyed()) { updateTitle(); window.webContents.send("butler:lifecycle-state", state); } },
     destroy() { clearTimeout(fallback); if (!window.isDestroyed()) window.destroy(); } };
   surfaces.set(window.webContents.id, surface);
@@ -68,6 +72,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     timing(kind === "startup" ? "splash_ready_to_show" : "quit_ready_to_show");
     if (kind === "startup") fallback = setTimeout(() => { timing("splash_forced_show"); reveal(); }, 300);
   });
+  timing(`${kind}_load_start`);
   void window.loadFile(join(dist, "lifecycle/lifecycle.html"), { query: {
     kind, stage: state.stage, locale: state.locale, theme: state.theme,
     motion: state.reducedMotion ? "reduced" : "auto", ...(appearance.still ? { still: appearance.still } : {}),

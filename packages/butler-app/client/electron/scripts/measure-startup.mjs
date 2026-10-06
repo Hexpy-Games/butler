@@ -45,6 +45,7 @@ async function measure(mode, run, env) {
   delete environment.BUTLER_APP_SERVER_URL;
   const child = spawn(resolve(executable), launchArgs(), { shell: false, stdio: ["ignore", "pipe", "pipe"], env: environment });
   const events = [];
+  const profiles = [];
   let stopping = false;
   let forcedStop = false;
   let hardStop;
@@ -71,7 +72,9 @@ async function measure(mode, run, env) {
       const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
       for (const line of lines) {
         try {
-          const event = JSON.parse(line).startup;
+          const parsed = JSON.parse(line);
+          if (parsed.lifecycleProfile) profiles.push(parsed.lifecycleProfile);
+          const event = parsed.startup;
           if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
         } catch { /* No general app logs in timing evidence. */ }
       }
@@ -91,7 +94,7 @@ async function measure(mode, run, env) {
     const start = elapsed(`stage_${stage}_start`), end = elapsed(`stage_${stage}_end`);
     if (start !== undefined && end !== undefined) metrics[`interval_${stage}`] = end - start;
   }
-  samples.push({ mode, run, launchKind: basename(executable).toLowerCase() === "update.exe" ? "squirrel-update" : /app-[^/\\]+[/\\]/.test(executable) ? "squirrel-direct" : "direct-or-stub", forcedStop, metrics,
+  samples.push({ mode, run, launchKind: basename(executable).toLowerCase() === "update.exe" ? "squirrel-update" : /app-[^/\\]+[/\\]/.test(executable) ? "squirrel-direct" : "direct-or-stub", forcedStop, metrics, profiles,
     events: events.map((event) => ({ ...event, launch_request_ms: event.timestamp_ms - requested })) });
   console.log(JSON.stringify({ mode, run, splash_after_ready: metrics.splash_after_ready }));
 }
