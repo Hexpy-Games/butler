@@ -22,7 +22,7 @@ pub use admission::{
 #[cfg(any(test, feature = "test-support"))]
 pub use contracts::ModelExecutionView;
 pub use contracts::{
-    ContextSizing, ContextSizingRequest, ModelExecution, ModelExecutionFactory,
+    ContextMeasurement, ContextSizing, ContextSizingRequest, ModelExecution, ModelExecutionFactory,
     ModelExecutionInput, ModelRouteRetryConfig, ProviderRequestError,
 };
 pub use execution::TurnModelExecutionFactory;

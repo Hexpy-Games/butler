@@ -1,6 +1,8 @@
 name: Butler Windows Desktop Source
 
 on:
+  push:
+    branches: ['release/**']
   pull_request:
 permissions:
   actions: read
@@ -22,7 +24,7 @@ jobs:
 
   desktop-source:
     needs: changes
-    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.package == 'true'
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['desktop-source']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.package == 'true')))
     name: Windows Electron and UI checks
     runs-on: windows-latest
     steps:

@@ -21,8 +21,10 @@ runs:
       shell: pwsh
       run: |
         $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
+        $selected = ConvertFrom-Json $needs.changes.outputs.jobs -AsHashtable
         foreach ($job in $needs.GetEnumerator() | Where-Object { $_.Key -ne 'changes' }) {
-          if ($job.Value.result -ne 'success') { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
+          $expected = if ($needs.changes.outputs.tier -eq 'integration' -and !$selected[$job.Key]) { 'skipped' } else { 'success' }
+          if ($job.Value.result -ne $expected) { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
         }
     - uses: actions/download-artifact@v4
       with:

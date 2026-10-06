@@ -136,6 +136,13 @@
   flex-shrink: 0;
 }
 
+/* The folded preview is the one toolbar button that gives way: it shrinks so
+   its ellipsis applies instead of running past the card edge. */
+.toolbar .compactPreview {
+  min-width: 0;
+  flex-shrink: 1;
+}
+
 .compactPreview {
   display: none;
   min-width: 0;
