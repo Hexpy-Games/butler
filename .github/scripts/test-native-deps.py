@@ -111,7 +111,7 @@ class NativeDeps(unittest.TestCase):
         print(f'Fake asset: {entry["size"]} bytes; complete download/extract/verify {time.monotonic()-started:.3f}s')
 
     # test-category: security
-    def test_windows_restore_copies_every_byte_without_symlink_privileges(self):
+    def test_windows_restore_uses_real_deps_without_copy_or_link(self):
         target = 'windows-x64'
         lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), target)
         for name, entry in lock['sources'].items():
@@ -121,6 +121,7 @@ class NativeDeps(unittest.TestCase):
         producer.mkdir()
         with patch.object(sdk.sys, 'platform', 'win32'), \
                 patch.object(Path, 'symlink_to', side_effect=PermissionError('WinError 1314')) as link, \
+                patch.object(sdk.shutil, 'copytree', side_effect=PermissionError('WinError 5')) as duplicate, \
                 patch.object(sdk, 'release', return_value=None), \
                 patch.object(recipe.host, 'host_identity', return_value={'producer': 'fixture'}), \
                 patch.object(recipe, 'prepare', side_effect=self.build):
@@ -143,17 +144,26 @@ class NativeDeps(unittest.TestCase):
                       for path in restored.rglob('*') if path.is_file()
                       and not path.is_relative_to(restored / 'build/_deps')}
             self.assertEqual(actual, expected)
-            self.assertEqual(sdk.deps_content(restored / 'build/_deps'),
-                             sdk.deps_content(restored / 'build/Release/_deps'))
+            duplicate.assert_not_called()
+            self.assertFalse((restored / 'build/_deps').exists())
             self.assertFalse(any(path.is_symlink() for path in restored.rglob('*')))
-            alias = restored / 'build/_deps/onnx-build/onnx.lib'
-            alias.write_bytes(b'tampered alias')
-            with self.assertRaisesRegex(RuntimeError, 'copy content mismatch'):
+            dependency = restored / 'build/Release/_deps/onnx-build/onnx.lib'
+            dependency.write_bytes(b'tampered dependency')
+            with self.assertRaisesRegex(RuntimeError, 'output digest mismatch'):
                 recipe.adopt(restored, fingerprint, lock, target)
-            alias.write_bytes((restored / 'build/Release/_deps/onnx-build/onnx.lib').read_bytes())
-            (restored / 'build/_deps/extra').write_bytes(b'extra')
-            with self.assertRaisesRegex(RuntimeError, 'copy content mismatch'):
-                recipe.adopt(restored, fingerprint, lock, target)
+
+    # test-category: security
+    def test_windows_source_checkout_links_are_never_traversed(self):
+        release = self.root / 'build/Release'
+        source = release / '_deps/flatbuffers-src/java/src/test/java'
+        source.mkdir(parents=True)
+        (source / 'DictionaryLookup').symlink_to('missing-fixture', target_is_directory=True)
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(sdk.shutil, 'copytree', side_effect=PermissionError('WinError 5')), \
+                patch.object(Path, 'symlink_to', side_effect=PermissionError('WinError 1314')):
+            sdk.create_deps_alias(release.parent)
+            sdk.verify_deps_alias(release)
+        self.assertFalse((release.parent / '_deps').exists())
 
     # test-category: security
     def test_asset_digest_mismatch_fails_without_build(self):
@@ -188,12 +198,32 @@ class NativeDeps(unittest.TestCase):
         script_dir = self.root / 'scripts'
         script_dir.mkdir()
         script = script_dir / recipe.SCRIPT.name
-        for name in ('prepare-static-ort.py', 'static_ort_host.py', 'static_ort_targets.py'):
+        for name in ('prepare-static-ort.py', 'static_ort_host.py', 'static_ort_targets.py',
+                     'static_ort_build.py', 'static_ort_prebuilt.py', 'static-ort-key-compat.json'):
             (script_dir / name).write_bytes((SCRIPTS / name).read_bytes())
         (self.root / 'rust-toolchain.toml').write_bytes((SCRIPTS.parent / 'rust-toolchain.toml').read_bytes())
         self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
         script.write_text(script.read_text() + '\n# recipe change\n')
+        self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+        for name in ('static_ort_prebuilt.py', 'static_ort_host.py'):
+            path = script_dir / name
+            path.write_text(path.read_text() + '\n# placement/provenance change\n')
+            self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+        build = script_dir / 'static_ort_build.py'
+        build.write_text(build.read_text().replace('onnxruntime_MINIMAL_BUILD=OFF',
+                                                    'onnxruntime_MINIMAL_BUILD=ON'))
         self.assertNotEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+
+    # test-category: format-pin
+    def test_unchanged_build_inputs_keep_published_fingerprints(self):
+        compatibility = json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())
+        lock = json.loads(recipe.LOCK.read_text())
+        for target in recipe.TARGETS:
+            projected = recipe.target_lock(lock, target)
+            previous = {'lock': projected, 'target': target,
+                        'recipe': compatibility['published_recipe']}
+            expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
+            self.assertEqual(sdk.key(recipe.SCRIPT, projected, target), expected)
 
     # test-category: security
     def test_inner_archive_and_protoc_digests_remain_required(self):

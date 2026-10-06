@@ -116,11 +116,10 @@ class WindowsSafety(unittest.TestCase):
 
 
     # test-category: security
-    def test_symlink_check_requires_a_windows_materializing_branch(self):
+    def test_symlink_check_requires_a_windows_unreachable_branch(self):
         unsafe = ["os.symlink(target, link)", "link.symlink_to(target)",
                   'New-Item -ItemType SymbolicLink -Path $link -Target $target',
                   'cmd /c mklink /D link target', 'mklink /H link target',
-                  "if sys.platform == 'win32':\n    pass\nelse:\n    link.symlink_to(target)",
                   "if sys.platform == 'win32':\n    os.symlink(target, link)\nelse:\n    shutil.copytree(target, link)",
                   "shutil.copytree(target, link)\nlink.symlink_to(target)"]
         for source in unsafe:
@@ -128,6 +127,8 @@ class WindowsSafety(unittest.TestCase):
         for condition in ["sys.platform == 'win32'", "os.name == 'nt'", "platform.system() == 'Windows'"]:
             source = f'if {condition}:\n    shutil.copytree(target, link)\nelse:\n    link.symlink_to(target)'
             self.assertEqual(windows_safety.symlink_hazards(source), [], source)
+        self.assertEqual(windows_safety.symlink_hazards(
+            "if sys.platform == 'win32':\n    pass\nelse:\n    link.symlink_to(target)"), [])
         self.assertEqual(windows_safety.symlink_hazards('cmd /c mklink /J link target'), [])
 
     # test-category: security

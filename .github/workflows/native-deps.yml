@@ -6,6 +6,7 @@ on:
     paths:
       - packages/butler-agent/rust/scripts/prepare-static-ort.py
       - packages/butler-agent/rust/scripts/static_ort_*.py
+      - packages/butler-agent/rust/scripts/static-ort-key-compat.json
       - packages/butler-agent/rust/scripts/static-ort.lock.json
       - packages/butler-agent/rust/rust-toolchain.toml
       - .github/workflows/native-deps.yml
