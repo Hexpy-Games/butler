@@ -11,6 +11,7 @@ pub struct PromptAssembler {
     pub(super) environment: PromptEnvironment,
     pub(super) dependencies: PromptDependencies,
     conversation: ContextConversation,
+    pub(super) project_instructions: super::project_instructions::SnapshotCache,
 }
 
 impl PromptAssembler {
@@ -25,6 +26,7 @@ impl PromptAssembler {
             environment,
             dependencies,
             conversation,
+            project_instructions: Default::default(),
         }
     }
 
