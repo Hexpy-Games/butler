@@ -262,6 +262,7 @@ fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>)
     for key in [
         "plan_mode_default",
         "translucent_sidebar",
+        "collapse_message_box",
         "reduce_motion",
         "diagnostics_enabled",
         "smart_grouping_enabled",
