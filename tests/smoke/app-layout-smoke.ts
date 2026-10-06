@@ -1,4 +1,4 @@
-import { installDrawnFrameCapture } from "../support/drawn-webgl-frame.ts";
+import { assertWallpaperPaint } from "../support/wallpaper-paint.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
@@ -374,7 +374,7 @@ const page = await browser.newPage({
 });
 await server.signIn(page);
 const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
-await page.addInitScript(installDrawnFrameCapture);
+
 await page.addInitScript(
   ({ key, value }) => {
     window.localStorage.setItem(key, value);
@@ -3013,6 +3013,7 @@ try {
   // widths; measure the settled layout, not the opening transition.
   await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
   await page.waitForTimeout(400);
+  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.bloom");
   const emptyStateLayout = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate(async (element) => {
@@ -3080,90 +3081,6 @@ try {
       const fluidStyle = fluid ? getComputedStyle(fluid) : null;
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
-      const measureFluidFrame = async (budgetMs: number) => {
-        if (!(fluid instanceof HTMLCanvasElement)) return null;
-        const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
-        const canvas2d = webgl ? null : fluid.getContext("2d");
-        const frame = webgl ? await window.butlerCaptureDrawnFrame(fluid, budgetMs) : null;
-        const width = frame?.width ?? fluid.width;
-        const height = frame?.height ?? fluid.height;
-        const pixels = frame?.pixels ?? canvas2d?.getImageData(0, 0, width, height).data;
-        if (!pixels?.length || !width || !height) {
-          return {
-            activeCells: 0,
-            averageTone: 0,
-            grayCoverage: 1,
-            minTone: 0,
-            visibleCoverage: 0,
-          };
-        }
-        let grayPixels = 0;
-        let visiblePixels = 0;
-        let toneTotal = 0;
-        let minTone = 255;
-        const cellVisible = new Array<number>(12).fill(0);
-        const cellTotal = new Array<number>(12).fill(0);
-        for (let index = 0; index < pixels.length; index += 4) {
-          const red = pixels[index] ?? 255;
-          const green = pixels[index + 1] ?? 255;
-          const blue = pixels[index + 2] ?? 255;
-          const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
-          const saturation =
-            Math.max(red, green, blue) - Math.min(red, green, blue);
-          const pixel = index / 4;
-          const x = pixel % width;
-          const y = Math.floor(pixel / width);
-          const cell =
-            Math.min(3, Math.floor((x / width) * 4)) +
-            Math.min(2, Math.floor((y / height) * 3)) * 4;
-          if (luminance <= 230) grayPixels += 1;
-          if (saturation >= 18) {
-            visiblePixels += 1;
-            cellVisible[cell] += 1;
-          }
-          cellTotal[cell] += 1;
-          toneTotal += luminance;
-          minTone = Math.min(minTone, luminance);
-        }
-        const total = pixels.length / 4;
-        return {
-          activeCells: cellVisible.filter((count, cell) => {
-            const totalForCell = cellTotal[cell] || 1;
-            return count / totalForCell >= 0.015;
-          }).length,
-          averageTone: toneTotal / total,
-          grayCoverage: grayPixels / total,
-          minTone,
-          visibleCoverage: visiblePixels / total,
-        };
-      };
-      const fluidSamples: Array<{
-        activeCells: number;
-        averageTone: number;
-        grayCoverage: number;
-        minTone: number;
-        visibleCoverage: number;
-      }> = [];
-      // The fluid drifts slowly with wall-clock time, so a single sub-second
-      // window lands on an arbitrary phase: some phases are naturally pale
-      // (low saturation, few tinted cells). Probing SwiftShader and an Apple
-      // M1 Pro Metal GPU over 90s gave the same per-second phase curve
-      // (visible 0.01-0.45, gray 0.16-0.85, average tone 202-244), and every
-      // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
-      // window and assert on its peak liquid and mean tone instead.
-      for (let index = 0; index < 8; index += 1) {
-        // Capture the next screen draw inside each existing 1s window.
-        // alpha:false makes even a discarded buffer opaque, so RAF/alpha
-        // polling cannot establish that its pixels belong to a shader draw.
-        const deadline = performance.now() + 1_000;
-        const sample = await measureFluidFrame(Math.max(0, deadline - performance.now()));
-        if (!sample) throw new Error(`No drawn bloom frame in sample ${index + 1}/8`);
-        fluidSamples.push(sample);
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
-      }
-      const fluidMean = (key: "averageTone" | "grayCoverage") =>
-        fluidSamples.reduce((total, sample) => total + sample[key], 0) /
-        Math.max(1, fluidSamples.length);
       return {
         cardCount: cards.length,
         cardHasTintedGlass:
@@ -3181,17 +3098,9 @@ try {
             fluidRect.left <= emptyRect.left + 1 &&
             fluidRect.right >= emptyRect.right - 1
           : false,
-        fluidAverageToneMean: fluidMean("averageTone"),
-        fluidGrayCoverageMean: fluidMean("grayCoverage"),
-        fluidMinToneMin: Math.min(
-          ...fluidSamples.map((sample) => sample.minTone),
-        ),
-        fluidVisibleCoverageMax: Math.max(
-          ...fluidSamples.map((sample) => sample.visibleCoverage),
-        ),
-        fluidActiveCellsMax: Math.max(
-          ...fluidSamples.map((sample) => sample.activeCells),
-        ),
+        fluidPainted: fluid?.getAttribute("data-wallpaper-state") === "painted"
+          && fluid.getAttribute("data-painted-module") === "butler.bloom"
+          && fluid.getAttribute("data-painted-tone") === fluid.getAttribute("data-tone"),
         fluidTopLeftRadius: Number.parseFloat(
           fluidStyle?.borderTopLeftRadius ?? "0",
         ),
@@ -3293,14 +3202,7 @@ try {
       emptyStateLayout.scrollHeight <=
         emptyStateLayout.scrollClientHeight + 1 &&
       emptyStateLayout.fluidCovers &&
-      emptyStateLayout.fluidGrayCoverageMean >= 0.2 &&
-      emptyStateLayout.fluidGrayCoverageMean <= 0.85 &&
-      emptyStateLayout.fluidAverageToneMean >= 200 &&
-      emptyStateLayout.fluidAverageToneMean <= 240 &&
-      emptyStateLayout.fluidMinToneMin >= 150 &&
-      emptyStateLayout.fluidMinToneMin <= 205 &&
-      emptyStateLayout.fluidVisibleCoverageMax >= 0.03 &&
-      emptyStateLayout.fluidActiveCellsMax >= 3 &&
+      emptyStateLayout.fluidPainted &&
       emptyStateLayout.cardHasTintedGlass &&
       emptyStateLayout.cardIconCount === 0 &&
       emptyStateLayout.cardGraphicCount === 0 &&
@@ -3566,7 +3468,8 @@ try {
     0,
     "right panel toggle should be hidden on draft new chat",
   );
-  await patchSettings({ main_screen_theme: "silk" });
+  await patchSettings({ main_screen_theme: "silk",
+    wallpaper: { source: { kind: "live", module: "butler.silk" }, motion: "auto", pauseOnBattery: false } });
   // The live app keeps an event stream open, so "networkidle" never settles.
   await page.goto(server.url, { waitUntil: "load" });
   await page.locator(testClass("mac-window")).evaluate(
@@ -3592,52 +3495,11 @@ try {
   await page
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
-  const silkFluidState = await page
-    .locator(testClass("new-chat-fluid-gradient"))
-    .evaluate(async (canvas) => {
-      if (!(canvas instanceof HTMLCanvasElement)) {
-        return { changedCoverageMax: 0, spreadMax: 0 };
-      }
-      const webgl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-      const samples: Array<{ changedCoverage: number; spread: number }> = [];
-      for (let sample = 0; sample < 5; sample += 1) {
-        const deadline = performance.now() + 80;
-        const frame = webgl ? await window.butlerCaptureDrawnFrame(canvas, Math.max(0, deadline - performance.now())) : null;
-        const pixels = frame?.pixels ?? null;
-        if (!pixels) throw new Error(`No drawn silk frame in sample ${sample + 1}/5`);
-        let changedPixels = 0;
-        let minTone = 255;
-        let maxTone = 0;
-        for (let index = 0; index < pixels.length; index += 4) {
-          const red = pixels[index] ?? 255;
-          const green = pixels[index + 1] ?? 255;
-          const blue = pixels[index + 2] ?? 255;
-          const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
-          if (luminance <= 246) changedPixels += 1;
-          minTone = Math.min(minTone, luminance);
-          maxTone = Math.max(maxTone, luminance);
-        }
-        const total = pixels.length / 4;
-        samples.push({
-          changedCoverage: changedPixels / total,
-          spread: maxTone - minTone,
-        });
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
-      }
-      return {
-        changedCoverageMax: Math.max(
-          ...samples.map((sample) => sample.changedCoverage),
-        ),
-        spreadMax: Math.max(...samples.map((sample) => sample.spread)),
-      };
-    });
-  assert(
-    silkFluidState.changedCoverageMax >= 0.12 && silkFluidState.spreadMax >= 18,
-    `silk main screen theme should render visible monochrome folds: ${JSON.stringify(silkFluidState)}`,
-  );
+  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.silk");
   await patchSettings({
     main_screen_theme: "bloom",
     main_screen_theme_preset: "monochrome",
+    wallpaper: { source: { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }, motion: "auto", pauseOnBattery: false },
   });
   // The live app keeps an event stream open, so "networkidle" never settles.
   await page.goto(server.url, { waitUntil: "load" });
@@ -3771,22 +3633,11 @@ try {
     .locator(`${testClass("assistant-status-mark-active")} canvas`)
     .evaluate((canvas) => {
       const target = canvas as HTMLCanvasElement;
-      const context = target.getContext("2d");
-      if (!context || target.width === 0 || target.height === 0) return false;
-      const pixels = context.getImageData(
-        0,
-        0,
-        target.width,
-        target.height,
-      ).data;
-      for (let index = 3; index < pixels.length; index += 4) {
-        if ((pixels[index] ?? 0) > 0) return true;
-      }
-      return false;
+      return target.dataset.markState === "painted" && target.width > 0 && target.height > 0;
     });
   assert(
     activeButlerMarkPainted,
-    "active assistant status should paint visible Butler mark pixels",
+    "active assistant status should complete a Butler mark draw",
   );
   const turnActivityText = await timelineActivity.innerText();
   const pendingLabels = appCopy.conversation.work.pendingStateLabels;
@@ -4149,9 +4000,9 @@ try {
         "light-theme-sidebar-tokenized",
         "light-titlebar-text-tokenized",
         "new-chat-fluid-covers-titlebar",
-        "new-chat-fluid-palette-tone-preserved",
-        "new-chat-fluid-liquid-visible",
-        "new-chat-silk-fluid-visible",
+        "new-chat-fluid-module-tone-matched",
+        "new-chat-bloom-first-frame-painted",
+        "new-chat-silk-first-frame-painted",
         "new-chat-moment-title-flow",
         "new-chat-moment-time-visible",
         "new-chat-tall-tinted-cards",

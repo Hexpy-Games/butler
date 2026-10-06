@@ -36,6 +36,7 @@ function fakeCanvas({ unused = ["u_dayPhase"] }: { unused?: string[] } = {}): HT
     getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: () => { lostContexts += 1; } } : null),
   } as Record<string, unknown>, { get: (target, key) => target[key as string] ?? (() => ({})) });
   return Object.assign(new EventTarget(), {
+    dataset: {},
     width: 0,
     height: 0,
     style: { visibility: "" },
@@ -253,7 +254,7 @@ test("unknown modules and missing WebGL2 report through onError", () => {
   const errors: string[] = [];
   const engine = createWallpaperEngine(fakeCanvas(), { onError: (error) => errors.push(error.reason) })!;
   engine.setScene(sceneOf({ kind: "live", module: "me.gone" }));
-  const canvas = Object.assign(new EventTarget(), { getContext: () => null }) as unknown as HTMLCanvasElement;
+  const canvas = Object.assign(new EventTarget(), { dataset: {}, getContext: () => null }) as unknown as HTMLCanvasElement;
   expect(createWallpaperEngine(canvas, { onError: (error) => errors.push(error.reason) })).toBeNull();
   expect(errors).toEqual(["unknown-module", "unsupported"]);
 });
@@ -271,6 +272,7 @@ interface FakeAnimation { keyframes: Keyframe[]; onfinish: (() => void) | null; 
 
 function fakeOverlay() {
   const overlay = {
+    dataset: {},
     width: 0,
     height: 0,
     hidden: true,

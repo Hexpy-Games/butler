@@ -1,3 +1,4 @@
+import { resetWallpaperPaint } from "./paintSignal";
 import type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
 import { createEngineWatchdog } from "./engineWatchdog";
 import { measureWallpaperFrame, readWallpaperCanvasBox } from "./measure";
@@ -23,6 +24,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   const { onError } = options;
   const renderer = createWallpaperRenderer(canvas, { onError });
   if (!renderer) {
+    resetWallpaperPaint(canvas, "unsupported");
     onError({ reason: "unsupported", module: "", message: "WebGL2 is unavailable" });
     return null;
   }
@@ -48,19 +50,16 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     dirty = true;
     schedule();
   };
-
   const armRefresh = () => {
     window.clearTimeout(refreshTimer);
     refreshTimer = 0;
     if (!renderer.usesDayPhase() || wallpaperFrameMode(state) === "animate") return;
     refreshTimer = window.setTimeout(schedule, WALLPAPER_DAY_PHASE_REFRESH_MS);
   };
-
   const paint = () => {
     const geometry = measureWallpaperFrame(box, renderer.motion(), contentRect, renderer.pixelRatio());
     renderer.draw({ ...geometry, timeMs: clock, dayPhase: wallpaperDayPhase(new Date()), seed });
   };
-
   const draw = (now: number) => {
     paint();
     presenter.drawn();
@@ -68,7 +67,6 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     dirty = false;
     armRefresh();
   };
-
   const tick = (now: number) => {
     frame = 0;
     const mode = hasScene ? wallpaperFrameMode(state) : "idle";
@@ -98,7 +96,6 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     state = { ...state, ...patch };
     schedule();
   };
-
   const presenter = createWallpaperPresenter({
     ...options,
     canvas,
@@ -107,6 +104,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     repaint: () => { if (hasScene && lastDraw !== null && !state.contextLost) paint(); },
     bufferSize: (motion, pixelRatio) => measureWallpaperFrame(box, motion, null, pixelRatio),
     show(scene) {
+      resetWallpaperPaint(canvas, scene ? "pending" : "none");
       hasScene = scene !== null;
       if (scene) renderer.setScene(scene);
       watchdog.reset();
@@ -121,6 +119,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     presenter.refresh();
   });
   const stopContext = watchWallpaperContext(canvas, () => {
+    resetWallpaperPaint(canvas, "context-lost");
     reportWallpaperRuntimeFailure(onError, hasScene ? renderer.drawnModule() : null, "context-lost");
     update({ contextLost: true });
   }, () => {
@@ -134,6 +133,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   return {
     setScene(scene) {
       if (scene?.error) onError(scene.error);
+      resetWallpaperPaint(canvas, scene ? "pending" : "none");
       presenter.request(scene);
     },
     setMotion(motion, pauseOnBattery) {
@@ -153,6 +153,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
       stopSignals();
       stopContext();
       renderer.dispose();
+      resetWallpaperPaint(canvas, "disposed");
     },
   };
 }

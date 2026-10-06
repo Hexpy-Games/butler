@@ -38,7 +38,7 @@ function context(canvas: Stub, counts: { draws: number; arcs: number }) {
 }
 
 function canvas(side: number, counts = { draws: 0, arcs: 0 }) {
-  const element: Stub = { width: 0, height: 0 };
+  const element: Stub = { width: 0, height: 0, dataset: {} };
   element.getContext = () => context(element, counts);
   element.getBoundingClientRect = () => { boundingReads += 1; return { width: side, height: side }; };
   element.closest = () => null;

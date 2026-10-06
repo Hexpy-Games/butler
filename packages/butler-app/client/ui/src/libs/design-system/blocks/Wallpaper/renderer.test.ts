@@ -34,7 +34,7 @@ function fakeCanvas({ failSource }: { failSource?: string } = {}) {
   }
   // GL enums read as their names so calls stay legible.
   const context = new Proxy(gl, { get: (target, key) => target[key as string] ?? (/^[A-Z0-9_]+$/u.test(String(key)) ? key : () => ({})) });
-  const canvas = { width: 0, height: 0, getContext: (kind: string) => (kind === "webgl2" ? context : null) } as unknown as HTMLCanvasElement;
+  const canvas = { dataset: {}, width: 0, height: 0, getContext: (kind: string) => (kind === "webgl2" ? context : null) } as unknown as HTMLCanvasElement;
   return { calls, canvas };
 }
 
