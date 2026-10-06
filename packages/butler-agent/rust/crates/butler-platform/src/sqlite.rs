@@ -64,11 +64,15 @@ pub fn open_with_flags(path: impl AsRef<Path>, flags: OpenFlags) -> Result<Conne
             )
         })?;
         rusqlite::Connection::open_with_flags_and_vfs(path, flags, "win32-longpath")
-            .and_then(Connection::track)
+            .map(Connection::track)
     }
     #[cfg(not(windows))]
     {
-        rusqlite::Connection::open_with_flags(path, flags).and_then(Connection::track)
+        let raw = rusqlite::Connection::open_with_flags(path, flags)?;
+        #[cfg(target_os = "macos")]
+        return Connection::track(raw);
+        #[cfg(not(target_os = "macos"))]
+        Ok(Connection::track(raw))
     }
 }
 
@@ -113,7 +117,13 @@ pub fn sync_wal(connection: &rusqlite::Connection) -> std::io::Result<()> {
 /// Finish mapped WAL-index writeback while retaining the file descriptor for
 /// the lifetime of every connection, so SQLite's process locks are preserved.
 pub fn sync_wal_index(connection: &rusqlite::Connection) -> std::io::Result<()> {
-    connection::sync_wal_index(connection)
+    #[cfg(target_os = "macos")]
+    return connection::sync_wal_index(connection);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = connection;
+        Ok(())
+    }
 }
 
 /// Cross-process WAL deadman-lock evidence for E2E; never changes a lock.
@@ -127,11 +137,15 @@ pub fn wal_index_lock_owner(path: &Path) -> std::io::Result<Option<u32>> {
             libc,
         };
         let file = crate::secure_fs::open_read_no_follow(path)?;
+        #[cfg(target_os = "macos")]
+        let lock_type = libc::F_WRLCK;
+        #[cfg(not(target_os = "macos"))]
+        let lock_type = i16::try_from(libc::F_WRLCK).map_err(std::io::Error::other)?;
         let mut lock = libc::flock {
             l_start: 128,
             l_len: 1,
             l_pid: 0,
-            l_type: libc::F_WRLCK as _,
+            l_type: lock_type,
             l_whence: i16::try_from(libc::SEEK_SET).map_err(std::io::Error::other)?,
         };
         fcntl(&file, FcntlArg::F_GETLK(&mut lock)).map_err(std::io::Error::from)?;

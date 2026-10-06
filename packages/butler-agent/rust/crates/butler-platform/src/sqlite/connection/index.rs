@@ -78,7 +78,10 @@ impl Index {
 impl Drop for Index {
     fn drop(&mut self) {
         if let Ok(mut owners) = indexes().owners.lock() {
-            let file = self.file.get_mut().ok().and_then(Option::take);
+            let file = match self.file.get_mut() {
+                Ok(file) => file.take(),
+                Err(poisoned) => poisoned.into_inner().take(),
+            };
             drop(file);
             owners.remove(&self.path);
             indexes().closed.notify_all();

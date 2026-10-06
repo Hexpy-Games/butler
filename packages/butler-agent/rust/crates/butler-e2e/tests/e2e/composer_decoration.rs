@@ -193,9 +193,9 @@ fn projection_settled(data: &std::path::Path, graph: &std::path::Path) -> bool {
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM memory_projection_jobs) AND NOT EXISTS(
         SELECT 1 FROM memory_projection_jobs WHERE
-        json_extract(source_state,'$.state') != 'complete' OR
-        json_extract(semantic_graph_state,'$.state') != 'complete' OR
-        json_extract(hot_cache_state,'$.state') != 'complete')",
+        json_extract(source_state,'$.state') IS NOT 'complete' OR
+        json_extract(semantic_graph_state,'$.state') IS NOT 'complete' OR
+        json_extract(hot_cache_state,'$.state') IS NOT 'complete')",
         [],
         |row| row.get(0),
     )
