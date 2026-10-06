@@ -126,6 +126,7 @@ tool_names! {
     WebRead = "web_read",
     WebSearch = "web_search",
     WriteFile = "write_file",
+    OutputCheck = "output_check",
     OutputPublish = "output_publish",
 }
 

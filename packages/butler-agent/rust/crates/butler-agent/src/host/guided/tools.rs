@@ -89,6 +89,8 @@ impl GuidedToolBinding {
 #[derive(Default)]
 struct State {
     next_call_index: u64,
+    output_checks: u8,
+    output_images: u8,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
 }
@@ -267,6 +269,7 @@ impl GuidedTools {
                     | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile
+                    | ToolName::OutputCheck
                     | ToolName::OutputPublish
                     | ToolName::EditFile
                     | ToolName::GrepFiles
@@ -337,6 +340,7 @@ impl GuidedTools {
                     .list_signatures(self.binding.turn_id.clone())
                     .await
                     .map_err(BtccError::from)?;
+                outputs::restore_budget(self, &signatures);
                 Ok(Mutex::new(ResumePool::new(signatures)?))
             })
             .await

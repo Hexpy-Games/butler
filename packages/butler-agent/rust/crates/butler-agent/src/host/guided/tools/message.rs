@@ -42,7 +42,12 @@ pub(super) fn result_message(
         append_output(result, output, &mut content)?;
     }
     content.push('}');
-    let content = preview::fit(result, references, preview::without_details(&content)?)?;
+    let content = preview::without_details(&content)?;
+    let content = if preview::admitted(result) {
+        content
+    } else {
+        preview::fit(result, references, content)?
+    };
     Ok(ModelRoundMessage {
         role: ModelRoundRole::Tool,
         content: content.into(),

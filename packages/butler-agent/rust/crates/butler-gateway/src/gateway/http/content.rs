@@ -259,3 +259,29 @@ fn view_origin(state: &HttpState, request: &Request<Body>) -> Result<String, Htt
     };
     Ok(origin)
 }
+
+/// Host checks always use the loopback content origin, never a caller URL.
+pub(super) async fn check_view(
+    state: &HttpState,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, HttpError> {
+    let id = args["output_id"].as_str().ok_or_else(refused)?.to_owned();
+    let outputs = store(state)?;
+    let output = tokio::task::spawn_blocking(move || outputs.read(&id))
+        .await
+        .map_err(|_| refused())?
+        .map_err(|_| refused())?;
+    if args["session_id"].as_str() != Some(output.session_id.as_str()) {
+        return Err(refused());
+    }
+    let rev = output.revisions.last().ok_or_else(refused)?;
+    let token = state.security.token().ok_or_else(refused)?;
+    let cap = capability::sign(&token, &output.output_id, rev.revision, now());
+    let mut url = url::Url::parse(&format!("http://127.0.0.1:{}/__o/{cap}/", port(state)))
+        .map_err(|_| refused())?;
+    url.path_segments_mut()
+        .map_err(|()| refused())?
+        .pop_if_empty()
+        .extend(rev.entry.split('/'));
+    Ok(serde_json::json!({"url":url.to_string(),"revision":rev.revision}))
+}
