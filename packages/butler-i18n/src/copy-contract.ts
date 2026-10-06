@@ -1181,6 +1181,8 @@ export interface AppCopy {
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
+      composerDecoration: string;
+      composerCharacter: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -1268,6 +1270,8 @@ export interface AppCopy {
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
+      composerDecoration: string;
+      composerCharacter: string;
       /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
       themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;

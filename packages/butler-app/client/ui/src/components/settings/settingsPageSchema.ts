@@ -39,7 +39,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
     { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
+    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery", "composer-decoration", "composer-character"] },
   ],
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },

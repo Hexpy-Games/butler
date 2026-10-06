@@ -1385,6 +1385,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "Wallpaper",
       wallpaperMotion: "Motion",
       wallpaperPauseOnBattery: "Pause on battery",
+      composerDecoration: "Message box background",
+      composerCharacter: "Character",
       translucentSidebar: "Translucent sidebar",
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",
@@ -1477,6 +1479,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "The new chat screen's background.",
       wallpaperMotion: "Animate the background.",
       wallpaperPauseOnBattery: "Hold still when unplugged.",
+      composerDecoration: "Art behind your text. Follows wallpaper motion.",
+      composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,

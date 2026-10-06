@@ -10,6 +10,7 @@ import {
   SettingsSwitch,
 } from "./SettingsFormComponents";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
+import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export function AppearanceSettings() {
@@ -71,6 +72,7 @@ export function AppearanceSettings() {
         description={settingsCopy.pageSectionDescriptions.homeScreen}
       >
         <MainScreenThemeSettings />
+        <ComposerDecorationSettings />
       </SettingsSection>
     </SettingsPage>
   );

@@ -62,7 +62,7 @@ export function MainScreenThemeSettings() {
           />
         }
       />
-      {source.kind === "none" ? null : (
+      {source.kind === "none" && draft.composer_decoration.theme === "none" ? null : (
         <SettingsSwitch
           settingId="main-screen-motion"
           label={copy.fields.wallpaperMotion}
@@ -71,7 +71,7 @@ export function MainScreenThemeSettings() {
           onChange={(on) => save({ motion: on ? "auto" : "paused" })}
         />
       )}
-      {source.kind !== "none" && motion === "auto" ? (
+      {(source.kind !== "none" || draft.composer_decoration.theme !== "none") && motion === "auto" ? (
         <SettingsSwitch
           settingId="main-screen-battery"
           label={copy.fields.wallpaperPauseOnBattery}

@@ -302,6 +302,10 @@ fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
     output.insert("main_screen_theme_custom_colors".into(), json!(colors));
     let setting = wallpaper::view(stored.get(wallpaper::KEY), legacy_source(stored));
     output.insert(wallpaper::KEY.into(), setting);
+    output.insert(
+        super::composer_decoration::KEY.into(),
+        super::composer_decoration::view(stored.get(super::composer_decoration::KEY)),
+    );
 }
 
 /// The wallpaper source the legacy main-screen keys of `settings` describe.

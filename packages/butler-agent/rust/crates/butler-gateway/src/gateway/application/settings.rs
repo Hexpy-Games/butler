@@ -7,6 +7,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
 mod access;
+mod composer_decoration;
 mod controls;
 mod default_model;
 mod model;
@@ -307,6 +308,9 @@ impl super::AppApplication {
         let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
             self.project_creation.resolve_workspace_selection(token)
         })?;
+        if composer_decoration::unchanged(&prepared.patch, &current) {
+            return Ok((wallpaper::source(&current), current));
+        }
         if let Some(asset) = wallpaper::patched_image_asset(&prepared.patch)
             && !self.wallpaper_asset_exists(asset.to_owned()).await?
         {

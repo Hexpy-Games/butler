@@ -1392,6 +1392,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaper: "월페이퍼",
       wallpaperMotion: "움직임",
       wallpaperPauseOnBattery: "배터리 사용 시 멈춤",
+      composerDecoration: "입력창 배경",
+      composerCharacter: "캐릭터",
       translucentSidebar: "투명 사이드바",
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",
@@ -1484,6 +1486,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaper: "새 채팅 화면의 배경입니다.",
       wallpaperMotion: "배경을 천천히 움직입니다.",
       wallpaperPauseOnBattery: "전원이 연결되지 않으면 멈춥니다.",
+      composerDecoration: "글자 뒤에 그림을 깝니다. 움직임은 월페이퍼 설정을 따릅니다.",
+      composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
