@@ -80,3 +80,5 @@ composer capsules (`size="sm"`), and the thinking-mark harness
 
 ## Tags
 brand, identity, logo, butler, thinking, activity, working, motion, halftone, riso, canvas
+
+`size="3xl"` is 48px. Implicit theme ink follows the nearest theme scope when its class changes, while the same simulation continues.

@@ -326,7 +326,7 @@
 
 @media (width <= 640px) {
   /* Phones: large sits 18px above the safe area, 4px below the floating spot. */
-  .floating.large {
+  .floating.large:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     translate: 0 4px;
   }
 }

@@ -21,10 +21,11 @@ function text({ locale }: ShowcaseRenderContext) {
 }
 
 const spaces: BoxSpace[] = ["none", "xs", "sm", "md", "lg", "xl", "2xl"];
-const surfaces: BoxSurface[] = ["none", "base", "raised", "overlay", "muted"];
+const surfaces: BoxSurface[] = ["none", "base", "raised", "raised-opaque", "overlay", "muted"];
 const borders: BoxBorder[] = ["none", "hairline", "strong"];
 
 export const stories: ShowcaseStory[] = [
+  { name: "Opaque raised card", render: () => <Box surface="raised-opaque" elevation="card" border="hairline" radius="panel" padding="lg"><Typo.Body>Opaque raised surface</Typo.Body></Box> },
   {
     name: "Padding scale",
     render: (context) => (

@@ -157,3 +157,6 @@ export * from "./blocks/TaskGraphCanvas";
 export * from "./blocks/TaskGraphLanes";
 export * from "./blocks/TaskGraphSection";
 export * from "./blocks/TaskGraphDetail";
+export { desktopViewportScope } from "./lib/desktopViewport";
+
+export { WallpaperStage } from "./blocks/WallpaperStage";

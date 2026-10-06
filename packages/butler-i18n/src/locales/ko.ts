@@ -1,4 +1,5 @@
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
+import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
@@ -243,6 +244,7 @@ function koreanProjectFallbackSuggestions(
 export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
+  lifecycle: lifecycleCopy.ko,
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",

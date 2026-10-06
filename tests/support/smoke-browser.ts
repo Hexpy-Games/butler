@@ -1,9 +1,7 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Page } from "playwright";
 
-/** Explicit launch flags for restricted smoke runners; normal runs keep defaults. */
-export function smokeBrowserArgs(): string[] {
-  return parseSmokeArgs("BUTLER_SMOKE_BROWSER_ARGS");
-}
+import { smokeBrowserArgs } from "./smoke-browser-args";
+export { smokeBrowserArgs } from "./smoke-browser-args";
 
 /** Electron needs its production process model; Chromium's restricted-runner
  * --single-process workaround crashes Electron 44 on macOS.

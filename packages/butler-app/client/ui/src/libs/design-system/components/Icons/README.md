@@ -67,3 +67,5 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 Use them to distinguish conversation kinds without adding an action symbol.
 
 iconography, action, status
+
+`IconSize` includes `3xl` (48px).

@@ -130,6 +130,11 @@ export function renderHalftone(s: MarkSurface, sim: MorphSim) {
   drawHalftoneInk(l, key, 0, 0, 0, p);
   grainOver(s, preset.grain * M);
   clipToOutline(s, M, preset.pitch);
+  // Cross-fade the last halftone edge into the exact rest ribbon below M=0.05.
+  const blend = Math.min(1, M / 0.05);
+  s.ctx.globalAlpha = 1 - blend;
+  s.ctx.drawImage(s.rctx.canvas, 0, 0);
+  s.ctx.globalAlpha = blend;
   s.ctx.drawImage(l.canvas, 0, 0);
   drawRing(s);
 }

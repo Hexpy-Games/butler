@@ -1,4 +1,7 @@
 // Wallpaper stills (picker thumbnails) and module checks, drawn on the shared offscreen contexts (stillContext).
+// The one offscreen WebGL2 context behind every wallpaper still (picker thumbnails) and module check.
+import type { WallpaperStillSize } from "./still";
+import { wallpaperContentRectUniform } from "./contentRect";
 import { linkWallpaperModule, type WallpaperModuleProgramsResult } from "./glModule";
 import { drawWallpaperScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
@@ -88,9 +91,9 @@ export function probeWallpaperStillDraw(module: WallpaperModule): void {
 }
 
 /** Uploads a scene's default image once (decoded small); stills keep it. */
-async function ensureImage(image: WallpaperImageScene): Promise<void> {
+async function ensureImage(image: WallpaperImageScene, loader: WallpaperImageLoader = NO_LOADER): Promise<void> {
   if (gpu()?.resources.images.get(image.asset)) return;
-  const blob = await loadWallpaperImageBytes(NO_LOADER, image.asset, "thumbnail");
+  const blob = await loadWallpaperImageBytes(loader, image.asset, "thumbnail");
   const bitmap = await createImageBitmap(blob, {
     imageOrientation: "flipY",
     premultiplyAlpha: "premultiply",
@@ -106,14 +109,17 @@ async function ensureImage(image: WallpaperImageScene): Promise<void> {
  * the shared context and encodes it (the bitmap is copied synchronously). Module default images load first; a
  * two-pass module draws its base and overlay at its still clock.
  */
-export async function drawWallpaperStill(scene: WallpaperScene, size: { width: number; height: number }): Promise<Blob> {
+export async function drawWallpaperStill(scene: WallpaperScene, size: WallpaperStillSize): Promise<Blob> {
   const mode = modeOf(scene.module);
   if (!gpu(mode)) throw new Error("WebGL2 is unavailable");
-  if (scene.image) await ensureImage(scene.image);
+  if (scene.image) await ensureImage(scene.image, size.imageLoader);
   const context = gpu(mode);
   if (!context) throw new Error("WebGL2 is unavailable");
   const { canvas, gl, resources } = context;
-  const screen = { width: Math.max(size.width, STILL_SCREEN_WIDTH), height: Math.max(size.height, Math.round((STILL_SCREEN_WIDTH * size.height) / size.width)) };
+  const width = size.compositionWidth ?? Math.max(size.width, STILL_SCREEN_WIDTH);
+  const screen = { width, height: Math.round(width * size.height / size.width) };
+  const pixelRatio = size.pixelRatio ?? 1;
+  const contentRect = wallpaperContentRectUniform(size.contentRect, { left: 0, top: 0, width: screen.width / pixelRatio, height: screen.height / pixelRatio }, screen);
   canvas.width = screen.width;
   canvas.height = screen.height;
   const result = linked(context, scene.module);
@@ -122,6 +128,6 @@ export async function drawWallpaperStill(scene: WallpaperScene, size: { width: n
   revision += 1;
   const drawn = { compiled: result.base, overlay: result.overlay, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
   clearTransparentStill(context, mode, screen);
-  drawWallpaperScene(gl, resources, drawn, { ...screen, ...STILL_FRAME, timeMs: (scene.module.stillTime ?? 0) * 1000 });
+  drawWallpaperScene(gl, resources, drawn, { ...screen, ...STILL_FRAME, pixelRatio, contentRect, dayPhase: size.dayPhase ?? STILL_FRAME.dayPhase, timeMs: (scene.module.stillTime ?? 0) * 1000 });
   return encodeScaled(canvas, size);
 }

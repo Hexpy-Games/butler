@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { fileURLToPath } from "node:url";
 import { windowsPackageVersion } from "./windows-package-version.mjs";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
@@ -107,6 +108,7 @@ try {
     noDelta: true,
     setupExe,
     setupIcon: resolve(setupIcon),
+    loadingGif: fileURLToPath(new URL("../assets/butler-install.gif", import.meta.url)),
     iconUrl:
       "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
     noMsi: true,

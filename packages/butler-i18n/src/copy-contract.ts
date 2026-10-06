@@ -1,5 +1,6 @@
 import type { TaskGraphCopy } from "./task-graph-copy.ts";
 
+import type { LifecycleCopy } from "./lifecycle.ts";
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
   | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
@@ -216,6 +217,7 @@ interface ConversationCopy {
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
+  lifecycle: LifecycleCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;

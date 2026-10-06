@@ -26,3 +26,5 @@ Do not use it for icon glyphs. Use `IconSlot`.
 
 ## Tags
 canvas, media, square, mark
+
+`size="3xl"` follows `--icon-size-3xl` (48px).

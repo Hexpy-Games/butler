@@ -2796,10 +2796,13 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(electronMain).toContain("createBundledAgentSupervisor");
 });
 
+// test-category: format-pin
 test("thinking mark components expose state and theme contracts", () => {
   const canvasMark = [
     "ButlerThinkingMark.tsx",
     "markLoop.ts",
+    "markRenderer.ts",
+    "markObservers.ts",
   ].map((file) => read(`packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/${file}`)).join("\n");
   const svgIcon = read(
     "packages/butler-app/client/ui/src/components/common/ButlerMarkIcon.tsx",

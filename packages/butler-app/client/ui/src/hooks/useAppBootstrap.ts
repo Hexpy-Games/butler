@@ -1,3 +1,4 @@
+import { startupResourceReady } from "@/app/startupReady";
 import { useEffect, useRef } from "react";
 import { api } from "@/app/api.ts";
 import { useOrganization } from "@/app/space/organization";
@@ -89,6 +90,7 @@ export function useAppBootstrap() {
           uiStateHydratedRef.current = true;
           const section = new URLSearchParams(window.location.search).get("settings");
           if (section) useButlerStore.getState().openSettings(section);
+          if (isDraftChatId(useButlerStore.getState().activeChatId)) startupResourceReady("messages");
         }
       }
     }
@@ -146,8 +148,10 @@ export function useAppBootstrap() {
     const requestGeneration = useButlerStore.getState().navigationGeneration;
     void recoverBootstrapResource({
       load: () => api<NavigationView>("/navigation"),
-      onReady: (navigation) =>
-        useButlerStore.getState().setNavigation(navigation, { requestGeneration }),
+      onReady: (navigation) => {
+        useButlerStore.getState().setNavigation(navigation, { requestGeneration });
+        startupResourceReady("navigation");
+      },
       onUnavailable: () =>
         useButlerStore.getState().setNavigation(EMPTY_NAVIGATION, { requestGeneration }),
       isCancelled: () => abortController.signal.aborted,
@@ -162,7 +166,7 @@ export function useAppBootstrap() {
     const abortController = new AbortController();
     void recoverBootstrapResource({
       load: () => api<ModelCatalogView>("/model-catalog"),
-      onReady: setModelCatalog,
+      onReady: (catalog) => { setModelCatalog(catalog); startupResourceReady("catalog"); },
       onUnavailable: () => setModelCatalogState("error"),
       isCancelled: () => abortController.signal.aborted,
       signal: abortController.signal,
@@ -180,7 +184,7 @@ export function useAppBootstrap() {
         noteSettingsSnapshotRequest();
         return api<SettingsView>("/settings");
       },
-      onReady: setSettings,
+      onReady: (settings) => { setSettings(settings); startupResourceReady("settings"); },
       onUnavailable: () => setSettings(readCachedSettings()),
       isCancelled: () => abortController.signal.aborted,
       signal: abortController.signal,
@@ -206,6 +210,7 @@ export function useAppBootstrap() {
         setSummary(null);
         setTurnProgress({});
         setStatus({ label: "ready", tone: "ok" });
+        if (uiStateHydratedRef.current) startupResourceReady("messages");
         return;
       }
       if (!isServerBackedSessionId(activeChatId)) return;
@@ -242,6 +247,7 @@ export function useAppBootstrap() {
               : {}),
           };
           setSessionView(data);
+          startupResourceReady("messages");
           setStatus({ label: "ready", tone: "ok" });
           void writeCachedMessageList(activeChatId, next);
         }

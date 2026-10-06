@@ -3,8 +3,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
+import { smokeBrowserArgs } from "../../../../../tests/support/smoke-browser-args";
 import { chromium } from "playwright";
-import { smokeBrowserArgs } from "../../../../../tests/support/smoke-browser.ts";
 import { wallpaperPosterInputs } from "./wallpaper-poster-inputs";
 
 const root = resolve(import.meta.dir, "..");

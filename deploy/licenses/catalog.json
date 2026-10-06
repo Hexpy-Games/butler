@@ -1,6 +1,6 @@
 {
   "inputs": {
-    "bun.lock": "6ba036816f462429ca7548c5e3fd813714af0b50a3960d796f9e93c8b9116a6d",
+    "bun.lock": "e43f7f9bea24ac8984976aee088eca02c969d25fbfb0688dcc62b1dee7ec40ac",
     "deploy/licenses/disclosure.py": "a2e4f4796b81881e944e1b7f605ce9b8850ccaee60c09d3124108d07f1304036",
     "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
     "deploy/licenses/inputs.mjs": "364e3fb4d76a9942421d75d873bbced06c0a749e64dcd833d8aa356b44f795a2",
@@ -25,7 +25,7 @@
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
-    "packages/butler-app/client/electron/package.json": "de74faa5f02d726cbc8c62558dd860ba0e7df816ba3f08e14319e3281e8240ea",
+    "packages/butler-app/client/electron/package.json": "5483175850fa549ada6a0b3abde1b2d6c909a029dfd60cbb51f20a41ff56aaf2",
     "packages/butler-app/client/ui/package.json": "57b4ef776d4fb91ec8de072e77f2c0782140d3c85a72a87b25983bf0250bb759",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",

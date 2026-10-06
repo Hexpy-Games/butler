@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { startupAssets } from "./scripts/startup-assets";
 import { checkWallpaperPosters } from "./scripts/check-wallpaper-posters";
 
 const srcRoot = path.resolve(process.cwd(), "src");
@@ -84,7 +85,7 @@ export default defineConfig({
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
+  plugins: [startupAssets(process.cwd()), hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
     name: "wallpaper-poster-inputs",
     apply: "build",
     buildStart: () => checkWallpaperPosters(process.cwd()),

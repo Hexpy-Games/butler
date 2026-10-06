@@ -69,12 +69,27 @@
 }
 
 @media (width <= 640px) {
-  .content,
-  .content[data-menu-size],
-  .content[data-menu-size="compact"],
-  .content[data-menu-size="content"],
-  .content[data-menu-size="wide"],
-  .content[data-menu-size="fit"] {
+  .content:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .content[data-menu-size]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .content[data-menu-size="compact"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .content[data-menu-size="content"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .content[data-menu-size="wide"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .content[data-menu-size="fit"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     width: min(100%, calc(100vw - var(--space-2xl)));
     min-width: 0;
     max-width: calc(100vw - var(--space-2xl));
