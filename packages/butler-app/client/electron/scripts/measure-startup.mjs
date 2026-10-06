@@ -91,6 +91,10 @@ async function measure(mode, run, env) {
     if (output) writeFileSync(resolve(output), JSON.stringify({ runs, samples, failure: { mode, run, forcedStop, events, profiles } }, null, 2));
     throw new Error(`${mode}/${run}: forced_stop`);
   }
+  if (process.env.BUTLER_LIFECYCLE_PROFILE === "1") {
+    const card = profiles.find((profile) => profile.kind === "startup")?.card;
+    if (!card?.title || !card.line || !card.fontReady || !card.markReady || card.images !== 0) throw new Error(`${mode}/${run}: incomplete first card frame`);
+  }
   const metrics = Object.fromEntries(events.filter((event) => event.elapsed_ms !== null).map((event) => [event.stage, event.elapsed_ms]));
   metrics.splash_after_ready = elapsed("splash_painted") - elapsed("app_ready");
   if (!Number.isFinite(metrics.splash_after_ready)) throw new Error(`${mode}/${run}: missing splash_painted or app_ready timing`);

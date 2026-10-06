@@ -80,7 +80,7 @@ export async function buildLifecycleAssets(check = false) {
     }));
   const manifest = { surface: view.surface, sceneTones, initialHeight: view.initialHeight };
   const css = `${view.css}[hidden]{display:none!important}`;
-  const prefix = `<!doctype html><html data-copy='${JSON.stringify(lifecycleCopy).replaceAll("'", "&#39;")}' data-classes='${JSON.stringify(view.classes)}'><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: file:; font-src data:; connect-src 'none'"><title>Butler</title><style>${css}html,body{margin:0;width:100%}body>div{width:100%}`;
+  const prefix = `<!doctype html><html data-copy='${JSON.stringify(lifecycleCopy).replaceAll("'", "&#39;")}' data-classes='${JSON.stringify(view.classes)}'><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: file:; font-src data:; connect-src 'none'"><title>Butler</title><style>${css}html,body{margin:0;width:100%;height:auto;min-height:0}body>div{width:100%}`;
   const suffix = `</style></head><body>${view.html}<script src="mark.js"></script><script src="state.js"></script></body></html>`;
   const html = `${prefix}@font-face{font-family:"Pretendard Variable";font-weight:100 900;font-display:block;src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format("woff2")}${suffix}`;
   const sizes = { html: Buffer.byteLength(prefix + suffix), font: fontBytes.length, mark: Buffer.byteLength(mark), state: Buffer.byteLength(state) };

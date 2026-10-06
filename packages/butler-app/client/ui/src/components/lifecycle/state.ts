@@ -65,6 +65,7 @@ function apply(next: Partial<State>) {
     loop?.dispose();
     loop = runtime.startMarkLoop(canvas, { theme, isWorking: () => working, isReduced: () => reduced, sim });
   }
+  canvas.dataset.ready = loop ? "1" : "";
   canvas.dataset.breathe = reduced && working ? "on" : "";
   loop?.start();
   bridge?.layout?.(Math.ceil(document.body.getBoundingClientRect().height));

@@ -30,6 +30,7 @@ try {
       await page.evaluate((forceQuit) => (window as unknown as { lifecycleState(state: unknown): void }).lifecycleState({ forceQuit }), forceQuit);
       const height = await page.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height));
       await page.setViewportSize({ width: 296, height });
+      await page.evaluate(async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); });
       const audit = await page.evaluate(() => {
         const mark = document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!;
         const visible = Array.from(document.querySelectorAll<HTMLElement>("[data-slot]"))
@@ -48,6 +49,7 @@ try {
       assert.ok(audit.mark.width > 0 && audit.mark.height > 0 && audit.mark.visible);
       assert.deepEqual(audit.overflow, [296, height], `${kind}/${state}/${theme}/${locale}/${forceQuit}`);
       assert.deepEqual(audit.scripts, [{ src: "mark.js", type: "" }, { src: "state.js", type: "" }]);
+      assert.ok(audit.elements.some((element) => element.slot === "title"), "Card title remains visible");
       assert.equal(audit.status, "polite");
       assert.equal(audit.titleRole, ["error", "failed"].includes(state) ? "alert" : "heading");
       for (const element of audit.elements) {

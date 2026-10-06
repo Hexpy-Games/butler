@@ -69,7 +69,7 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
       lock.exec("ROLLBACK"); lock.close(); done();
     });
   }, 15_500)) : Promise.resolve();
-  const timing = await app.evaluate(({ BrowserWindow, app }) => {
+  const timing = await app.evaluate(({ BrowserWindow, app, ipcMain }) => {
     const start = performance.now();
     const main = BrowserWindow.getAllWindows().find((win) => win.isVisible())!;
     return new Promise<{ hidden_ms: number; feedback_ms: number; status: string }>((done) => {
@@ -79,13 +79,14 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
       const complete = () => { if (hidden >= 0 && shown >= 0 && status) done({ hidden_ms: hidden, feedback_ms: shown, status }); };
       main.once("hide", () => { hidden = performance.now() - start; complete(); });
       app.once("browser-window-created", (_event, feedback) => {
-        feedback.once("show", () => {
-          const timer = setInterval(() => {
-            void feedback.webContents.executeJavaScript("document.documentElement.dataset.painted === 'true' ? document.querySelector('[role=status]').textContent : ''").then((text: string) => {
-              if (text) { clearInterval(timer); shown = performance.now() - start; status = text; complete(); }
-            }).catch(() => undefined);
-          }, 5);
-        });
+        const painted = (event: { sender: unknown }, profile: { card?: { line?: string; fontReady?: boolean; markReady?: boolean; images?: number } }) => {
+          if (event.sender !== feedback.webContents) return;
+          ipcMain.removeListener("butler:lifecycle-painted", painted);
+          if (profile.card?.fontReady && profile.card.markReady && profile.card.images === 0) {
+            shown = performance.now() - start; status = profile.card.line ?? ""; complete();
+          }
+        };
+        ipcMain.on("butler:lifecycle-painted", painted);
       });
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");
     });
