@@ -6,13 +6,11 @@
 // Composition, FIXED size anchored to the top-right corner (never grows with the card's height):
 //   - along the top padding from the corner to 50% of the width, a lighter mass from the
 //     top-left to 20%;
-//   - a quarter-ellipse mass over the empty right side: IX = 24% of the width (18% below 500px),
-//     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest).
-//     Long first lines may run under its right end: accepted by the owner.
-// Readability by colour, not a layer: every dab pixel inside the text area (below the top
-// padding, left of the right padding) uses the TEXT-ZONE palette for the theme: dark mode deep
-// rose tones (luminance <= 0.16, white text keeps >= 4.5:1), light mode pale tones under dark
-// text. The full four-tone range (pale highlights) stays in the top and right padding.
+//   - a quarter-ellipse cluster tucked into the top-right corner: IX = 50px from the right edge,
+//     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest). Fixed in
+//     px, so it stays at the same outward position at every width and height. Its outer part is a
+//     sparser fringe; the right end of long first lines may run under it (accepted by the owner).
+// One palette everywhere; nothing else is drawn (no zones, no masks behind the text).
 //
 // Coordinates are CSS px from the card's top-left, y down. Motion is periodic in T = timePeriod.
 
@@ -70,21 +68,6 @@ vec3 tone(float l, float n) {
   return mix(mid, pale, step(2.5, k));
 }
 
-// Text-zone tones. Dark: deep roses, all luminance <= 0.085 (light text >= 6:1). Light: pale pinks.
-vec3 textTone(float l, float n) {
-  float k = clamp(l * 3.2 + (n - 0.5) * 1.1, 0.0, 3.0);
-  if (DARK) {
-    vec3 a = vec3(0.30, 0.09, 0.18), b = vec3(0.38, 0.13, 0.24), c = vec3(0.46, 0.17, 0.30), d = vec3(0.53, 0.21, 0.35);
-    if (k < 1.0) return mix(a, b, step(0.6, k));
-    if (k < 2.0) return mix(b, c, step(1.5, k));
-    return mix(c, d, step(2.5, k));
-  }
-  vec3 a = vec3(0.97, 0.76, 0.84), b = vec3(0.98, 0.83, 0.88), c = vec3(0.99, 0.89, 0.92), d = vec3(1.0, 0.94, 0.96);
-  if (k < 1.0) return mix(a, b, step(0.6, k));
-  if (k < 2.0) return mix(b, c, step(1.5, k));
-  return mix(c, d, step(2.5, k));
-}
-
 bool inTextZone(vec2 p) { return p.y >= TOP - 1.0 && W - p.x >= SIDE - 1.0 && p.y <= TB; }
 
 // One layer of dabs on a jittered grid: small rounded ellipses at random angles, only where the
@@ -93,7 +76,6 @@ bool inTextZone(vec2 p) { return p.y >= TOP - 1.0 && W - p.x >= SIDE - 1.0 && p.
 vec4 dabs(vec2 p, vec2 px, float cell, float rBias, float lift, int row) {
   vec2 gi = floor(p / cell);
   vec4 col = vec4(0.0);
-  bool tz = inTextZone(px);                              // the palette follows the actual pixel
   for (int y = -1; y <= 1; y++)
     for (int x = -1; x <= 1; x++) {
       vec2 g = gi + vec2(float(x), float(y));
@@ -111,8 +93,7 @@ vec4 dabs(vec2 p, vec2 px, float cell, float rBias, float lift, int row) {
       if (a <= 0.0) continue;
       float l = clamp(m.y + lift, 0.0, 1.0);
       // the palette changes over the lower half of the top padding, not at a seam
-      vec3 c = tz ? textTone(l, h.g) : mix(textTone(l, h.g), tone(l, h.g), DARK || px.x < W - SIDE ? smoothstep(TOP - 1.0, TOP - 6.0, px.y) : 1.0);
-      if (W - px.x < SIDE - 1.0) c = tone(l, h.g);
+      vec3 c = tone(l, h.g);
       col = over(col, vec4(c * a, a));
     }
   return col;
@@ -161,8 +142,8 @@ vec4 petals(vec2 gl, vec2 p, float under, float t, float cell, float size, int f
   float s = size * (0.6 + 0.8 * g.b);
   float notch = length(q - vec2(0.0, s * 1.02)) - s * 0.28;
   float d = max(length(vec2(q.x / 0.62, q.y)) - s, -notch) * tumble;
-  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * (bar ? 0.15 : tz ? 0.45 : 0.92);
-  vec3 col = tz ? textTone(tumble, 0.5) : mix(vec3(0.93, 0.62, 0.74), vec3(0.99, 0.86, 0.90), tumble);
+  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * (bar ? 0.15 : tz ? 0.3 : 0.92);   // faint over text
+  vec3 col = mix(vec3(0.93, 0.62, 0.74), vec3(0.99, 0.86, 0.90), tumble);
   return vec4(col * a, a);
 }
 
@@ -177,7 +158,7 @@ void main() {
   AA = 0.8 / u_pixelRatio;
   ER = W * 0.5;
   EL = W * 0.2;
-  IX = W * (W < 500.0 ? 0.18 : 0.24);
+  IX = 50.0;                                            // fixed: tucked into the corner
   TB = H > 60.0 ? H - 50.0 : H;                         // the toolbar row starts ~47-53px from the bottom
   IY = min(56.0, TB);                                   // fixed depth; never deeper than 56px
   float rc = W - p.x;

@@ -157,15 +157,6 @@
   pointer-events: none;
 }
 
-/* Mock of a proposed ComposerCard change: the editor's scroll area is clipped to its content
-   box, so a scrolled draft never passes through the top padding the canopy lives in. Unscrolled
-   text starts at the padding edge, so nothing visible changes until the draft scrolls. */
-.background[data-composer-decoration="cherry-blossom"]
-  ~ :global([data-slot="composer-expanded-body"])
-  :global([role="textbox"]) {
-  clip-path: inset(var(--composer-inner-padding-block) 0 0 0);
-}
-
 .cherryCanvas {
   display: block;
   width: 100%;
