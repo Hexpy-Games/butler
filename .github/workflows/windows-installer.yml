@@ -1,5 +1,7 @@
 name: Windows Squirrel install and update
 on:
+  push:
+    branches: ['release/**']
   workflow_dispatch:
     inputs:
       hosted-only:
@@ -30,8 +32,14 @@ concurrency:
   group: windows-installer-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-changes.yml
+    with:
+      workflow: windows-installer.yml
+
   build:
-    if: ${{ !inputs.reuse-run }}
+    needs: changes
+    if: ${{ !inputs.reuse-run && (needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).build) }}
     name: Build Windows Squirrel artifacts
     runs-on: ${{ inputs.hosted-only && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
     timeout-minutes: 120
@@ -46,12 +54,12 @@ jobs:
           owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           profile: ci-fast
           cache-key: windows-installer
-          version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
+          version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
           owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
-          version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
+          version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
         shell: pwsh
         run: |
@@ -62,12 +70,12 @@ jobs:
           owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           profile: ci-fast
           cache-key: windows-installer
-          version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
+          version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
           owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
-          version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
+          version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
         shell: pwsh
         run: ./deploy/windows-installer-contracts.ps1 -Mode Build
@@ -87,8 +95,8 @@ jobs:
 
   verify:
     name: Verify Windows install update uninstall
-    needs: build
-    if: ${{ always() && (needs.build.result == 'success' || inputs.reuse-run) }}
+    needs: [changes, build]
+    if: ${{ always() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs).verify) || (needs.changes.outputs.tier != 'integration' && (needs.build.result == 'success' || inputs.reuse-run))) }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -119,8 +127,8 @@ jobs:
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         env:
-          BUTLER_WINDOWS_SMOKE_FROM: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
-          BUTLER_WINDOWS_SMOKE_TO: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
+          BUTLER_WINDOWS_SMOKE_FROM: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
+          BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
@@ -141,7 +149,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_TAG: ${{ inputs.baseline-tag }}
-          BUTLER_WINDOWS_SMOKE_TO: ${{ inputs.candidate-version }}
+          BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:BASELINE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a published preview baseline' }
@@ -197,3 +205,23 @@ jobs:
           name: startup-installer-evidence
           path: dist/startup-installer-evidence/
           if-no-files-found: warn
+  gate:
+    name: windows-installer gate
+    if: always()
+    needs: [changes, build, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish successful inputs
+        if: always() && needs.changes.result == 'success' && !inputs.reuse-run
+        uses: ./.github/actions/ci-input-receipt
+        with:
+          results: ${{ toJSON(needs) }}
+          groups: '{"package": ["build", "verify"], "rust": ["build", "verify"], "ui": ["build", "verify"]}'
+          workflow: windows-installer.yml
+      - name: Require selected checks
+        if: needs.changes.outputs.tier == 'integration'
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CHECK_GROUPS: '{"build": ["package", "rust", "ui"], "verify": ["package", "rust", "ui"]}'
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py

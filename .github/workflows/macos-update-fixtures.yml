@@ -10,22 +10,20 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: static-ort
-          cache-key: macos-update-fixtures
+          cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
           artifact-cache-platform: darwin-arm64
           publish-runtime-cache: 'false'
+          save-cargo-cache: 'false'
       - name: Build the two real macOS update-fixture versions once
         run: |
           set -euo pipefail
@@ -42,6 +40,6 @@ jobs:
         with:
           name: macos-update-agent-builds
           path: ${{ runner.temp }}/update-agent-builds/*
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 0
           if-no-files-found: error

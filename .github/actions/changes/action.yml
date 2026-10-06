@@ -5,6 +5,21 @@ inputs:
     description: Calling workflow file
     required: true
 outputs:
+  parts:
+    description: Selected matrix jobs
+    value: ${{ steps.paths.outputs.parts }}
+  artifacts:
+    description: CI artifacts
+    value: ${{ steps.paths.outputs.artifacts }}
+  jobs:
+    description: CI jobs
+    value: ${{ steps.paths.outputs.jobs }}
+  candidate:
+    description: CI candidate
+    value: ${{ steps.paths.outputs.candidate }}
+  tier:
+    description: CI tier
+    value: ${{ steps.paths.outputs.tier }}
   rust:
     description: Selected rust inputs
     value: ${{ steps.paths.outputs.rust }}

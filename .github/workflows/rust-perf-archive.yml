@@ -18,14 +18,11 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: protoc
@@ -51,7 +48,7 @@ jobs:
         with:
           name: perf-rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/perf-archive/*
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
           if-no-files-found: error
       - name: Preserve successful Cargo outputs outside the shared cache quota
