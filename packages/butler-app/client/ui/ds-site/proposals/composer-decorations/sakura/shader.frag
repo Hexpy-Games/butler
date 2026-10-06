@@ -1,16 +1,18 @@
 // Cherry canopy inside the message box, painted like the owner's anime references: soft,
-// cloud-shaped masses of blossom built from many small dabs of pink in four tones (deep rose on
-// the shaded underside, rose, mid pink, pale pink-white highlights on top), scalloped edges, a few
-// thin dark branch strokes peeking through. Petals fall and flutter across the card at varied
-// sizes, spinning. No background: premultiplied alpha, the card's own glass shows through.
+// cloud-shaped masses of blossom built from many small dabs of pink (four tones), scalloped
+// edges, a few thin dark branch strokes peeking through. Petals fall and flutter across the card
+// at varied sizes, spinning. No background: premultiplied alpha, the card's own glass shows through.
 //
-// Composition (fixed size, anchored to the top-right corner and the top edge; it never grows,
-// stretches or repeats with the card's height):
-//   - along the top padding from the top-right corner (thickest) to 50% of the width, with a
-//     lighter mass from the top-left to 20%;
-//   - down the right padding (outside the text lines' right end) for a fixed RD px, only while
-//     the card is open; the rest of the right side stays clear glass;
-//   - a small rounded bulge in the corner itself. Nothing reaches the text lines.
+// Composition, FIXED size anchored to the top-right corner (never grows with the card's height):
+//   - along the top padding from the corner to 50% of the width, a lighter mass from the
+//     top-left to 20%;
+//   - a quarter-ellipse mass over the empty right side: IX = 24% of the width (18% below 500px),
+//     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest).
+//     Long first lines may run under its right end: accepted by the owner.
+// Readability by colour, not a layer: every dab pixel inside the text area (below the top
+// padding, left of the right padding) uses the TEXT-ZONE palette for the theme: dark mode deep
+// rose tones (luminance <= 0.16, white text keeps >= 4.5:1), light mode pale tones under dark
+// text. The full four-tone range (pale highlights) stays in the top and right padding.
 //
 // Coordinates are CSS px from the card's top-left, y down. Motion is periodic in T = timePeriod.
 
@@ -31,32 +33,32 @@ vec4 over(vec4 dst, vec4 src) { return src + dst * (1.0 - src.a); }
 float W;     // card width
 float H;     // card height
 float AA;    // one device pixel in CSS px
-float RD;    // fixed depth of the right-padding curtain (0 while the card is the one-row pill)
 float ER;    // reach of the right-hand mass along the top edge
 float EL;    // reach of the lighter left-hand mass
-const float TOP = 12.0;      // the editor content box starts 12px down: the mass stays above it
+float IX;    // right-side mass width
+float IY;    // right-side mass depth (fixed)
+float TB;    // bottom of the text area (top of the toolbar row while open)
+bool DARK;
+const float TOP = 12.0;      // the editor content box starts 12px down
 const float SIDE = 15.0;     // text lines end 16px before the right edge
-const float BX = 26.0;       // corner bulge width (from the right edge)
-const float BY = 12.0;       // corner bulge depth (stays in the top padding)
 
 float lobes(float x) { return pow(max(0.0, sin(x * 0.085 + 2.6 * vn(vec2(x * 0.03, 4.0)))), 2.0); }
 
 // The mass at p (rc: px from the right edge, lc: from the left edge, y: from the top).
-// Returns (inside 0/1, light 0 underside .. 1 top).
-vec2 mass(float rc, float lc, float y) {
+// Returns (inside 0/1, light 0 underside .. 1 top, fringe 0 core .. 1 outer edge).
+vec3 mass(float rc, float lc, float y) {
   float sway = 1.2 * (vn(vec2(rc * 0.06, 2.0)) - 0.5);
-  float right = mix(TOP - 1.5, 3.0, smoothstep(BX, ER, rc)) + 2.0 * lobes(rc) * (1.0 - smoothstep(ER * 0.5, ER, rc));
-  right = min(right, TOP) * step(rc, ER);
+  float right = (mix(TOP - 1.0, 3.0, smoothstep(IX * 0.5, ER, rc)) + 2.0 * lobes(rc) * (1.0 - smoothstep(ER * 0.5, ER, rc))) * step(rc, ER);
   float left = (mix(TOP - 5.0, 1.0, smoothstep(0.0, EL, lc)) + 1.5 * lobes(lc + 40.0)) * step(lc, EL);
-  float depth = max(right, min(left, TOP)) + sway;
-  if (y <= depth) return vec2(1.0, clamp(1.0 - y / max(depth, 1.0), 0.0, 1.0));
-  float bulge = length(vec2(rc / BX, y / BY)) / (1.0 + 0.1 * lobes(y * 4.0 + rc * 2.0));
-  if (bulge < 1.0) return vec2(1.0, clamp(1.0 - y / BY, 0.0, 1.0));
-  float width = mix(SIDE - 1.0, SIDE - 6.0, smoothstep(0.0, RD, y)) + 1.5 * (vn(vec2(y * 0.09, 7.0)) - 0.5);
-  if (RD > 0.0 && y < RD - 3.0 * smoothstep(SIDE - 6.0, SIDE, rc) && rc < width) return vec2(1.0, clamp(1.0 - y / RD, 0.0, 1.0) * 0.8 + 0.2);
-  return vec2(0.0);
+  float depth = min(max(right, left), TOP) + sway;
+  if (y <= depth) return vec3(1.0, clamp(1.0 - y / max(depth, 1.0), 0.0, 1.0), 0.0);
+  float wob = 1.0 + 0.16 * (vn(vec2(atan(y, rc) * 4.0, 3.0)) - 0.5) + 0.06 * lobes(y * 3.0 + rc);
+  float o = length(vec2(rc / IX, y / IY)) / wob;
+  if (o < 1.0) return vec3(1.0, clamp(1.0 - y / IY + 0.25 * (1.0 - o), 0.0, 1.0), smoothstep(0.4, 1.0, o));
+  return vec3(0.0);
 }
 
+// Full four-tone range (padding zones).
 vec3 tone(float l, float n) {
   float k = clamp(l * 3.2 + (n - 0.5) * 1.1, 0.0, 3.0);
   vec3 deep = vec3(0.84, 0.43, 0.58);
@@ -68,26 +70,50 @@ vec3 tone(float l, float n) {
   return mix(mid, pale, step(2.5, k));
 }
 
+// Text-zone tones. Dark: deep roses, all luminance <= 0.085 (light text >= 6:1). Light: pale pinks.
+vec3 textTone(float l, float n) {
+  float k = clamp(l * 3.2 + (n - 0.5) * 1.1, 0.0, 3.0);
+  if (DARK) {
+    vec3 a = vec3(0.30, 0.09, 0.18), b = vec3(0.38, 0.13, 0.24), c = vec3(0.46, 0.17, 0.30), d = vec3(0.53, 0.21, 0.35);
+    if (k < 1.0) return mix(a, b, step(0.6, k));
+    if (k < 2.0) return mix(b, c, step(1.5, k));
+    return mix(c, d, step(2.5, k));
+  }
+  vec3 a = vec3(0.97, 0.76, 0.84), b = vec3(0.98, 0.83, 0.88), c = vec3(0.99, 0.89, 0.92), d = vec3(1.0, 0.94, 0.96);
+  if (k < 1.0) return mix(a, b, step(0.6, k));
+  if (k < 2.0) return mix(b, c, step(1.5, k));
+  return mix(c, d, step(2.5, k));
+}
+
+bool inTextZone(vec2 p) { return p.y >= TOP - 1.0 && W - p.x >= SIDE - 1.0 && p.y <= TB; }
+
 // One layer of dabs on a jittered grid: small rounded ellipses at random angles, only where the
-// mass is. Overlapping dabs paint over each other.
-vec4 dabs(vec2 p, float cell, float rBias, float lift, int row) {
+// mass is; the outer fringe of the right-side mass gets fewer, smaller dabs. Colour is chosen per
+// pixel: the text-zone palette inside the text area, the full range in the padding.
+vec4 dabs(vec2 p, vec2 px, float cell, float rBias, float lift, int row) {
   vec2 gi = floor(p / cell);
   vec4 col = vec4(0.0);
+  bool tz = inTextZone(px);                              // the palette follows the actual pixel
   for (int y = -1; y <= 1; y++)
     for (int x = -1; x <= 1; x++) {
       vec2 g = gi + vec2(float(x), float(y));
       vec4 h = hash2(g, row);
       vec2 ctr = (g + 0.2 + 0.6 * h.rg) * cell;
-      vec2 m = mass(W - ctr.x, ctr.x, ctr.y);
+      vec3 m = mass(W - ctr.x, ctr.x, ctr.y);
       if (m.x < 0.5) continue;
+      if (h.a < m.z * 0.75) continue;
       float ang = h.b * TAU;
       vec2 q = p - ctr;
       q = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * q;
-      float r = cell * rBias * (0.62 + 0.3 * h.a);
+      float r = cell * rBias * (0.62 + 0.3 * h.a) * (1.0 - 0.3 * m.z);
       float d = length(q / vec2(1.0, 0.72)) - r;
       float a = 1.0 - smoothstep(-AA, AA, d);
       if (a <= 0.0) continue;
-      col = over(col, vec4(tone(clamp(m.y + lift, 0.0, 1.0), h.g) * a, a));
+      float l = clamp(m.y + lift, 0.0, 1.0);
+      // the palette changes over the lower half of the top padding, not at a seam
+      vec3 c = tz ? textTone(l, h.g) : mix(textTone(l, h.g), tone(l, h.g), DARK || px.x < W - SIDE ? smoothstep(TOP - 1.0, TOP - 6.0, px.y) : 1.0);
+      if (W - px.x < SIDE - 1.0) c = tone(l, h.g);
+      col = over(col, vec4(c * a, a));
     }
   return col;
 }
@@ -112,16 +138,18 @@ vec4 branches(vec2 p) {
 }
 
 // Falling petals: varied sizes, spinning and tumbling, densest under the canopy (gl space).
-vec4 petals(vec2 gl, float under, float t, float cell, float size, int fall, float dens, int row, float frame) {
+// Over the text area: a quarter as many, 45% opacity, in the text-zone palette.
+vec4 petals(vec2 gl, vec2 p, float under, float t, float cell, float size, int fall, float dens, int row) {
+  bool bar = H > 60.0 && p.y > TB;                      // the open card's toolbar row
+  bool tz = inTextZone(p) || bar;
   float vy = float(fall) * cell * 8.0 / T;
   float vx = float(fall / 2 + 1) * cell * 16.0 / T;
-  vec2 p = gl + vec2(vx * t, vy * t);
-  vec2 id = floor(p / cell);
-  vec2 f = p - id * cell;
+  vec2 pp = gl + vec2(vx * t, vy * t);
+  vec2 id = floor(pp / cell);
+  vec2 f = pp - id * cell;
   int hx = int(mod(id.x, 16.0)) + 16 * int(mod(id.y, 8.0));
   vec4 h = hash(hx, row);
-  if (h.a > dens * mix(0.3, 1.0, under) * mix(0.33, 1.0, frame)) return vec4(0.0);
-  float keep = mix(0.55, 1.0, frame);
+  if (h.a > dens * mix(0.3, 1.0, under) * (tz ? 0.25 : 1.0)) return vec4(0.0);
   vec4 g = hash(hx + 128, row);
   float phase = h.b * TAU;
   vec2 ctr = cell * (0.3 + 0.4 * h.rg) + vec2(sin(t * TAU * 36.0 / T + phase), cos(t * TAU * 22.0 / T + phase)) * cell * 0.12;
@@ -133,8 +161,8 @@ vec4 petals(vec2 gl, float under, float t, float cell, float size, int fall, flo
   float s = size * (0.6 + 0.8 * g.b);
   float notch = length(q - vec2(0.0, s * 1.02)) - s * 0.28;
   float d = max(length(vec2(q.x / 0.62, q.y)) - s, -notch) * tumble;
-  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * 0.92 * keep;
-  vec3 col = mix(vec3(0.93, 0.62, 0.74), vec3(0.99, 0.86, 0.90), tumble);
+  float a = (1.0 - smoothstep(-AA * 0.6, AA * 0.6, d)) * (bar ? 0.15 : tz ? 0.45 : 0.92);
+  vec3 col = tz ? textTone(tumble, 0.5) : mix(vec3(0.93, 0.62, 0.74), vec3(0.99, 0.86, 0.90), tumble);
   return vec4(col * a, a);
 }
 
@@ -144,32 +172,32 @@ void main() {
   vec2 p = vec2(gl.x, res.y - gl.y);
   W = res.x;
   H = res.y;
+  DARK = u_darkTheme > 0.5;
   float t = u_time;
   AA = 0.8 / u_pixelRatio;
-  RD = H > 60.0 ? min(H - 56.0, 44.0) : 0.0;          // fixed: never deeper than 44px
   ER = W * 0.5;
   EL = W * 0.2;
+  IX = W * (W < 500.0 ? 0.18 : 0.24);
+  TB = H > 60.0 ? H - 50.0 : H;                         // the toolbar row starts ~47-53px from the bottom
+  IY = min(56.0, TB);                                   // fixed depth; never deeper than 56px
   float rc = W - p.x;
 
   vec4 col = vec4(0.0);
-  if (p.y < max(RD, BY) + 10.0) {
-    vec4 back = dabs(p + vec2(1.7, 1.3), 4.5, 1.25, -0.25, 31);     // shaded mass behind
-    vec4 front = dabs(p, 3.5, 1.1, 0.3, 47);                         // lit dabs on top
-    vec4 wood = branches(p) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0);
+  if (p.y < IY + 10.0) {
+    vec4 back = dabs(p + vec2(1.7, 1.3), p, 4.5, 1.25, -0.25, 31);  // shaded mass behind
+    vec4 front = dabs(p, p, 3.5, 1.1, 0.3, 47);                      // lit dabs on top
+    vec4 wood = branches(p) * (back.a > 0.2 || front.a > 0.2 ? 0.85 : 0.0) * (inTextZone(p) ? 0.0 : 1.0);
     col = over(col, back);
     col = over(col, wood);
     col = over(col, front);
   }
-  // hard frame: the top padding, the corner bulge and the right padding down to RD; never the text
-  float frame = max(max(1.0 - smoothstep(TOP - 1.0, TOP, p.y),
-    step(length(vec2(rc / (BX + 3.0), p.y / BY)), 1.0)),
-    (1.0 - smoothstep(SIDE - 0.5, SIDE + 0.5, rc)) * step(p.y, RD + 3.0));
+  // hard frame: the top padding, and the right-side mass down to IY (never the toolbar row)
+  float frame = max(1.0 - smoothstep(TOP - 1.0, TOP, p.y),
+    step(length(vec2(rc / (IX * 1.12), p.y / (IY + 2.0))), 1.0) * step(p.y, IY + 1.0));
   col *= frame;
   float under = max(1.0 - smoothstep(ER * 0.6, ER * 1.6, rc), 1.0 - smoothstep(EL * 0.5, EL * 1.4, p.x));
-  // over the open card's toolbar row petals are only a faint shimmer: controls keep their contrast
-  float keepOut = H > 60.0 && p.y > H - 50.0 ? 0.25 : 1.0;
-  col = over(col, petals(gl, under, t, 22.0, 1.5, 5, 0.42, 11, frame) * keepOut);
-  col = over(col, petals(gl + 9.0, under, t, 31.0, 2.4, 7, 0.34, 23, frame) * keepOut);
-  col = over(col, petals(gl + 17.0, under, t, 44.0, 3.4, 9, 0.24, 37, frame) * keepOut);
+  col = over(col, petals(gl, p, under, t, 22.0, 1.5, 5, 0.42, 11));
+  col = over(col, petals(gl + 9.0, p, under, t, 31.0, 2.4, 7, 0.34, 23));
+  col = over(col, petals(gl + 17.0, p, under, t, 44.0, 3.4, 9, 0.24, 37));
   fragColor = col;
 }

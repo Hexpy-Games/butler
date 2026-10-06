@@ -42,7 +42,7 @@ function DecorationBackground({ theme, tone, shore }: {
         {theme === "shoreline" ? (
           <Wallpaper source={SHORELINE_SOURCE} registry={SHORELINE_REGISTRY} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
         ) : (
-          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} />
+          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} dark={tone === "dark"} key={tone} />
         )}
       </div>
       {theme === "shoreline" ? <div className={styles.shoreHighlight} data-tone={tone} /> : null}
