@@ -148,9 +148,17 @@ The manual lives in `packages/butler-site`, with Korean pages in `src/content/do
 
 Specs, plans, decisions, implementation reports and experiment evidence belong in the [Project Ledger](packages/project-ledger/README.md). Write them through its CLI (`packages/project-ledger/bin/pl`) or Butler's native tools. Don't add project-management records under `docs/`. Work and Task records reference canonical record IDs. Package READMEs remain the home for usage and API notes that belong to the source.
 
+## Branches and CI
+
+Work branches use `<type>/<slug>` with type `feat`, `fix`, `perf`, `refactor`, `ci`, `build`, `docs`, `test`, `chore` or `research`. Tool-named prefixes (`codex/`, `claude/`) and `batch/` are forbidden. PRs target `main`; candidate fixes use `fix/<v>-<slug>` from `release/<v>` and target that release branch. Merge commits everywhere; the coordinator admin-merges after smoke gates pass. There is no merge queue. Fetch and merge the base before pushing; never rebase a pushed branch.
+
+PRs and main pushes run checks selected by changed paths, workspace tests, UI tests and packaging/install smoke checks, with **no E2E or perf**. Release pushes run integration: all groups, E2E, perf, live E2E (only `openai/gpt-6-luna`), Mac test packages and Windows smoke/installer builds. No nightly CI runs. After a release fix, only jobs with changed inputs or failed results run; successful unchanged jobs and matrix shards are reused through input receipts. Unchanged producer artifacts are restored for consumers. Integration receipts never reuse smoke results.
+
+Release branches are `release/X.Y.Z` or `release/X.Y.Z-preview.N`. New features stay on main. Nothing syncs automatically: when asked, cherry-pick a main change with `-x` onto a release fix branch. After tagging, merge the release branch back to main as a merge commit, then delete it. A published-preview hotfix ships as the next preview, cut from the last tag or ready main.
+
 ## Releases
 
-A release is a `vX.Y.Z` tag pushed from `main`.
+A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `release/<v>`.
 
 1. Set the new version in these files:
    - `VERSION`: the bundled agent version, also shown in the manual
@@ -161,15 +169,26 @@ A release is a `vX.Y.Z` tag pushed from `main`.
    - `packages/butler-agent/rust/crates/butler-agent/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
 3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`, and their macOS builds are not notarized.
-4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 App and Agent, Linux x64 / arm64 Agent archives and DEBs, and an Arch x64 App package. It runs release gates and smoke checks, attaches the installer and consolidated checksums, then publishes the release after the required assets exist. Hyphenated tags are prereleases; stable tags feed `releases/latest`. The npm job then publishes `@hexpygames/butler` (`latest` for stable, `next` for previews).
+4. Merge the notes/version changes into main, then cut `release/<v>` from `origin/main` (hotfixes may start from the last tag). The push starts integration and derives both test-build versions from the release branch.
+5. The owner installs the Mac and Windows test builds while integration runs. Fix failures through `fix/<v>-<slug>` PRs into the candidate. Do not rerun passing jobs with unchanged inputs or retry flaky tests to get green; search existing issues first and link an open issue.
+6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
+7. The tag builds all release platforms and publishes only after the assets and checksums exist. The owner publishes npm locally. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
+
+Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
+
+```json
+{"kind":"integration-waiver","candidate":"0.1.0-preview.11","sha":"<full commit SHA>","workflow":"rust-quality.yml","job":"linux-perf/perf-idle","issue":123,"reason":"Known flaky failure; evidence linked in this issue"}
+```
+
+The proof reads issue comments, checks the open linked issue, the comment author's repository write/maintain/admin permission and their membership in the comma-separated repository variable `BUTLER_RELEASE_COORDINATORS` (the owner is also allowed), and scopes approval to the exact candidate, SHA, workflow and failed job. Missing or cancelled evidence cannot be waived. For stable waivers, the repository variable `BUTLER_RELEASE_OWNER` must name the owner who posts the approval. The coordinator tells the owner afterwards, using the waiver links printed in the release run. The proof also requires the aggregate gate (including complete Windows evidence) to pass; an aggregate failure needs a separately named `gate` waiver.
 
 The app release gate fails when the bundled agent version changes and the app version doesn't. The gates are also available locally as the `release:*` scripts in `package.json`.
 
-Windows has compile-check coverage, but no release package.
+Windows preview releases include the unsigned Agent and Squirrel App installer.
 
 ### Recovering a failed release
 
-Run `gh workflow run release.yml --ref main -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
+Run `gh workflow run release.yml --ref release/<v> -f reuse_run_id=RUN_ID -f tag=vX.Y.Z` after the original run completes.
 The optional tag must match that run; recovery verifies its commit and requires every platform artifact (including Windows for previews).
 It skips builds, signing and smoke checks, then repeats manifest merging, npm packing, checksums and publication with asset replacement.
 Stable npm publication skips an already published version; previews keep owner-controlled npm publication. Artifacts must still be retained; older runs without `app-darwin-arm64` cannot be recovered.

@@ -7,6 +7,7 @@ jobs = json.loads(os.environ['RESULTS'])
 assert jobs['changes']['result'] == 'success', jobs
 outputs = jobs['changes']['outputs']
 for name, groups in json.loads(os.environ['CHECK_GROUPS']).items():
-    expected = 'success' if any(outputs[group] == 'true' for group in groups) else 'skipped'
+    enabled = json.loads(outputs['jobs'])[name] if outputs.get('tier') == 'integration' else any(outputs[group] == 'true' for group in groups)
+    expected = 'success' if enabled else 'skipped'
     assert jobs[name]['result'] == expected, f'{name}: {jobs[name]["result"]}, expected {expected}'
 print('All selected checks passed.')

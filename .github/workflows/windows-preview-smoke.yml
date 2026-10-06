@@ -1,7 +1,8 @@
 name: Unsigned Windows preview smoke
 
 on:
-  pull_request:
+  push:
+    branches: ['release/**']
   workflow_dispatch:
     inputs:
       native-cache:
@@ -30,7 +31,7 @@ defaults:
 
 concurrency:
   group: windows-preview-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
 
 jobs:
   changes:
@@ -41,7 +42,7 @@ jobs:
   build:
     needs: changes
     name: Build unsigned Windows preview
-    if: ${{ needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -68,7 +69,7 @@ jobs:
   stub:
     needs: changes
     name: Platform contracts and debug stub chat
-    if: ${{ needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
@@ -275,8 +276,8 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
-    if: ${{ !inputs.native-loop }}
-    needs: [build, stub]
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    needs: [changes, build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -360,7 +361,7 @@ jobs:
           name: windows-completed-installed
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
       - name: Remove temporary verification profiles
         if: always()
         run: |
@@ -371,20 +372,14 @@ jobs:
 
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: ${{ !inputs.native-loop }}
-    needs: stub
+    if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && (!inputs.native-loop)))
+    needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
-          - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
-          - {shard: data, tests: 'cli_surface,migration,durable_configuration,project_workspace,queue_notifications'}
-          - {shard: basics, tests: 'windows_commands'}
-    env:
-      BUTLER_E2E_TIER: stub
+        include: ${{ fromJSON(needs.changes.outputs.parts).hosted }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -413,7 +408,7 @@ jobs:
           name: windows-completed-${{ matrix.shard }}
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
       - name: Preserve hosted failure fixtures
         if: failure()
         run: |
@@ -448,11 +443,11 @@ jobs:
           CHECK_GROUPS: '{"build":["package"],"stub":["package"],"release":["package"],"hosted":["package"]}'
         run: python .github/scripts/isolated.py python .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
-        if: needs.changes.outputs.package == 'true'
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
         with:
           results: ${{ toJSON(needs) }}
       - name: Publish successful inputs
-        if: success() && needs.changes.result == 'success'
+        if: always() && needs.changes.result == 'success'
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}

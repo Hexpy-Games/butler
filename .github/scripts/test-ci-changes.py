@@ -110,34 +110,51 @@ class Paths(unittest.TestCase):
 class Trust(unittest.TestCase):
     # test-category: security
     def test_receipt_history_is_scoped_to_the_pr_branch(self):
-        with patch.object(changes, 'command', return_value='{"workflow_runs":[]}') as api:
-            self.assertEqual(list(changes.previous('owner/repo', 12, 'rust-quality.yml', 'codex/a&b')), [])
+        with patch.object(changes, 'command', return_value='[{"workflow_runs":[]}]') as api:
+            self.assertEqual(list(changes.previous('owner/repo', 12, 'rust-quality.yml', 'ci/a&b')), [])
         url = api.call_args.args[2]
-        self.assertTrue(url.endswith('event=pull_request&per_page=100&branch=codex%2Fa%26b'), url)
+        self.assertTrue(url.endswith('event=pull_request&per_page=100&branch=ci%2Fa%26b'), url)
 
     # test-category: pure-logic
-    def test_non_pr_events_keep_existing_full_coverage(self):
-        for event_name in ['push', 'merge_group', 'schedule', 'workflow_dispatch']:
-            with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
-                env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REPOSITORY='owner/repo',
+    def test_pr_main_release_tiers_and_zero_base(self):
+        for event_name, ref, event, expected in [
+            ('pull_request', 'refs/pull/12/merge', {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}, 'smoke'),
+            ('push', 'refs/heads/main', {'before': 'base'}, 'smoke'),
+            ('push', 'refs/heads/release/0.1.0-preview.11', {'before': 'base'}, 'integration'),
+            ('workflow_dispatch', 'refs/heads/release/0.1.0', {}, 'integration'),
+            ('push', 'refs/heads/main', {'before': '0' * 40}, 'smoke'),
+        ]:
+            with tempfile.TemporaryDirectory() as temporary:
+                env = dict(GITHUB_EVENT_NAME=event_name, GITHUB_REF=ref, GITHUB_REPOSITORY='owner/repo',
                            GITHUB_RUN_ID='2', GITHUB_OUTPUT=str(Path(temporary) / 'output'),
                            GITHUB_STEP_SUMMARY=str(Path(temporary) / 'summary'))
                 with patch.dict(os.environ, env), patch.object(changes, 'command', return_value='checkout'), \
+                     patch.object(changes, 'changed', return_value=['packages/butler-app/client/ui/src/app.tsx']), \
+                     patch.object(changes, 'previous', return_value=iter([])), \
                      patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
-                    changes.select({'before': 'base'}, 'rust-quality.yml')
+                    changes.select(event, 'rust-quality.yml')
                 output = (Path(temporary) / 'output').read_text()
-                for group in changes.GROUPS:
-                    self.assertIn(group + '=' + ('false' if group == 'package' else 'true'), output)
+                self.assertIn('tier=' + expected, output)
+                full = expected == 'integration' or event.get('before') == '0' * 40
+                self.assertIn('rust=' + str(full).lower(), output)
+                self.assertIn('ui=true', output)
+
+    # test-category: security
+    def test_invalid_candidate_fails_closed(self):
+        for ref in ['refs/heads/release/latest', 'refs/heads/release/0.1.0-beta.1', 'refs/heads/release/0.1.0-preview.11/extra']:
+            with patch.dict(os.environ, GITHUB_EVENT_NAME='push', GITHUB_REF=ref):
+                with self.assertRaises(ValueError):
+                    changes.tier()
 
     # test-category: security
     def test_every_selected_gate_check_is_owned_by_a_receipt_group(self):
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
-        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs:")[0]
+        policy = (ROOT / 'check-gate.py').read_text().split("if 'lint' in jobs")[0]
         flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
-            outputs = dict(zip(flags, values))
+            outputs = dict(zip(flags, values), tier='smoke', workflows='false')
             jobs = {'changes': {'result': 'success', 'outputs': outputs}}
             with patch.dict(os.environ, RESULTS=json.dumps(jobs), EVENT='pull_request'):
                 scope = {}

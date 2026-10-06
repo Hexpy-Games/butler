@@ -41,6 +41,7 @@ jobs:
           BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
           # Preserve the original release/perf configuration. Ordinary E2Es
           # retain their debug hooks and assertions in the other shared archive.
           feature=prebuilt-ort
@@ -55,13 +56,14 @@ jobs:
           RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.1.0-preview.99' || github.ref_name }}
         run: |
           version="$RELEASE_VERSION"
+          if [[ "$version" == release/* ]]; then version="v${version#release/}"; fi
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/agent-payload" "$PLATFORM" "$ORT_MODE" release "${version#v}"
       - uses: actions/upload-artifact@v4
         with:
           name: agent-payload-${{ inputs.platform }}
           path: ${{ runner.temp }}/agent-payload/*
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 14 }}
           compression-level: 0
           if-no-files-found: error
       - name: Publish the small identity manifest for release lookup
@@ -69,7 +71,7 @@ jobs:
         with:
           name: agent-provenance-${{ inputs.platform }}
           path: ${{ runner.temp }}/agent-payload/provenance.json
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 14 }}
           if-no-files-found: error
       - name: Preserve successful Cargo outputs outside the shared cache quota
         id: cargo-cache
