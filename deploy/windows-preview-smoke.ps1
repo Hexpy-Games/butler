@@ -70,7 +70,7 @@ $env:BUTLER_SECRET_STORE = 'file'
 $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 # Do not turn the service-manager capability off: the real Windows path must work.
 New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:APPDATA,$env:BUTLER_DATA | Out-Null
-"WINDOWS_PREVIEW_TEMP_ROOT=$root" >> $env:GITHUB_ENV
+"WINDOWS_PREVIEW_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $env:WINDOWS_PREVIEW_TEMP_ROOT = $root
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
 $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
@@ -147,7 +147,7 @@ try {
     $status = (& $launcher status --json | ConvertFrom-Json)
     if (!$status.ok -or $status.data.services.summary.online -ne 0) { throw 'Service remained online' }
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
-    "BUTLER_E2E_INSTALLED_ROOT=$env:LOCALAPPDATA/Butler/agent/$current" >> $env:GITHUB_ENV
+    "BUTLER_E2E_INSTALLED_ROOT=$env:LOCALAPPDATA/Butler/agent/$current" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     'PASS installed ZIP: version, start, single instance, status, browser UI/assets, cookie auth, private DATA/tokens, restart, stop'
 } finally {
     if (Test-Path $launcher) { & $launcher stop --json | Out-Null }

@@ -52,9 +52,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oras-project/setup-oras@v1
-      with:
-        version: 1.2.3
+    - uses: ./.github/actions/setup-oras
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:

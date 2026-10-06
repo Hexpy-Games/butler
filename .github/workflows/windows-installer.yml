@@ -55,7 +55,7 @@ jobs:
           owner-runner: 'true'
           version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
-        shell: pwsh
+        shell: powershell
         run: |
           Move-Item dist/release/app-windows dist/release/app-windows-first
           Move-Item dist/release/agent dist/release/agent-first
@@ -71,10 +71,10 @@ jobs:
           owner-runner: 'true'
           version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
-        shell: pwsh
+        shell: powershell
         run: ./deploy/windows-installer-contracts.ps1 -Mode Build
       - name: Pack every installer fixture with complete checksums
-        shell: pwsh
+        shell: powershell
         run: python .github/scripts/isolated.py python deploy/windows-installer-transport.py pack dist/release dist/release/installer-transport
       - uses: actions/upload-artifact@v4
         with:
@@ -84,7 +84,7 @@ jobs:
           compression-level: 0
       - name: Verify owner registration and clean job profile
         if: always()
-        shell: pwsh
+        shell: powershell
         run: ./deploy/windows-owner-cleanup.ps1
 
   verify:

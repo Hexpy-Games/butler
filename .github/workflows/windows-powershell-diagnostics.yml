@@ -10,7 +10,7 @@ permissions:
   actions: read
 defaults:
   run:
-    shell: pwsh
+    shell: powershell
 jobs:
   diagnose-native:
     name: Isolated native PowerShell startup probe
