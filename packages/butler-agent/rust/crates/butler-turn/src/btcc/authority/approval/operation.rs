@@ -15,6 +15,18 @@ pub struct ApprovalOperation {
     pub allow_conversation: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub browser_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub browser_steps: Vec<BrowserApprovalStep>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserApprovalStep {
+    pub action: String,
+    pub role: String,
+    pub name: String,
+    pub frame: String,
+    pub value_preview: Option<String>,
+    pub addons: Vec<String>,
 }
 
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
@@ -32,6 +44,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             command: None,
             allow_conversation: Some(false),
             browser_mode: None,
+            browser_steps: Vec::new(),
         };
     }
     let command = input["command"].as_str().map(str::to_owned);
@@ -81,6 +94,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         command,
         allow_conversation: None,
         browser_mode: None,
+        browser_steps: Vec::new(),
     }
 }
 
@@ -101,29 +115,28 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
             .unwrap_or(facts.target)
             .to_owned(),
     ];
-    for step in facts.input["resolved_steps"]
+    let browser_steps = facts.input["resolved_steps"]
         .as_array()
         .into_iter()
         .flatten()
-    {
-        let hit = step.get("hit").unwrap_or(&Value::Null);
-        let mut text = format!(
-            "{} · {} {} · {}",
-            step["action"].as_str().unwrap_or(""),
-            hit["role"].as_str().unwrap_or(""),
-            hit["name"].as_str().unwrap_or(""),
-            hit["frame"].as_str().unwrap_or("")
-        );
-        if let Some(value) = step["value_preview"].as_str() {
-            text.push_str(&format!(" · {value}"));
-        }
-        for addon in step["addons"].as_array().into_iter().flatten() {
-            if let Some(addon) = addon.as_str() {
-                text.push_str(&format!(" · checked: {addon}"));
+        .map(|step| {
+            let hit = &step["hit"];
+            BrowserApprovalStep {
+                action: step["action"].as_str().unwrap_or("").into(),
+                role: hit["role"].as_str().unwrap_or("").into(),
+                name: hit["name"].as_str().unwrap_or("").into(),
+                frame: hit["frame"].as_str().unwrap_or("").into(),
+                value_preview: step["value_preview"].as_str().map(str::to_owned),
+                addons: step["addons"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
             }
-        }
-        targets.push(text);
-    }
+        })
+        .collect();
     if let Some(dialog) = facts.input.get("dialog") {
         targets.push(format!(
             "{} · {}",
@@ -138,5 +151,6 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
+        browser_steps,
     }
 }

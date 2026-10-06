@@ -24,9 +24,12 @@ export function rectangle(element) {
   let left = Math.max(0, box.left), top = Math.max(0, box.top);
   let right = Math.min(innerWidth, box.right), bottom = Math.min(innerHeight, box.bottom);
   for (let parent = parentElementOf(element); parent; parent = parentElementOf(parent)) {
+    const clipsX = /(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowX"));
+    const clipsY = /(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowY"));
+    if (!clipsX && !clipsY) continue;
     const bounds = boxOf(parent);
-    if (/(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowX"))) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
-    if (/(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowY"))) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+    if (clipsX) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+    if (clipsY) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
   }
   const rect={ x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
   cache?.set(element,rect);
@@ -47,6 +50,7 @@ export function paintState(element) {
 export function rendering(element) {
   const paint=paintState(element);
   if(paint.invisible || paint.opacity<.1) return "invisible";
+  if (fullyClipped(element)) return "invisible";
   const box = rectangle(element);
   if (box.width < 4 || box.height < 4) return "tiny";
   if (parseFloat(styleValue(element,"fontSize")) < 6 && element.textContent?.trim()) return "tiny";
@@ -75,12 +79,12 @@ export function contrast(element) {
 export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
   const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: "canvas", summary: "button" }[tag])
-    ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : "");
+    ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
   const clickable = Boolean(role || element.hasAttribute("onclick") || discoverPointer && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
   if (!clickable && !/^h[1-6]$/u.test(tag)) return { clickable: false };
-  const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id)?.textContent ?? "").join(" ");
+  const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
   const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
-  let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || element.textContent?.trim() || element.getAttribute("placeholder") || "";
+  let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
@@ -92,6 +96,8 @@ export function hitAt(root, x, y) {
   return hit;
 }
 export function visiblePoint(element) {
+  const modal = modalLayer();
+  if (modal && modal !== element && !modal.contains(element)) return { blocker: modal };
   const b = rectangle(element), root = element.getRootNode();
   const points = [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]];
   let blocker = null;
@@ -127,4 +133,59 @@ export function currentAddons() {
   return [...document.querySelectorAll('input[type="checkbox"],input[type="radio"]')]
     .filter(element=>(element.checked || element.defaultChecked) && !paintState(element).invisible && paintState(element).opacity>=.1)
     .map(element=>semantic(element)).filter(meaning=>!meaning.secure).map(meaning=>meaning.name);
+}
+
+/** CSS clip is independent of layout dimensions and inherited through containers. */
+export function fullyClipped(element) {
+  const cache = globalThis.__butlerPerceptionCache?.clips;
+  if (cache?.has(element)) return cache.get(element);
+  const parent = parentElementOf(element), box = boxOf(element);
+  const clip = styleValue(element, "clip").match(/^rect\((.*)\)$/u);
+  const edges = clip?.[1].split(/[ ,]+/u).map(value => value === "auto" ? null : parseFloat(value));
+  const clipped = Boolean(parent && fullyClipped(parent)) || Boolean(edges &&
+    ((edges[1] ?? box.width) <= (edges[3] ?? 0) || (edges[2] ?? box.height) <= (edges[0] ?? 0)));
+  cache?.set(element, clipped);
+  return clipped;
+}
+
+/** Accessible names never inherit invisible descendants' page text. */
+export function visibleLabel(element) {
+  if (rendering(element)) return "";
+  if (!element.children.length) return element.textContent?.trim() ?? "";
+  const text = [], walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode, parent = node.parentElement;
+    if (!parent || parent.closest("script,style,noscript") || rendering(parent)) continue;
+    text.push(node.textContent);
+  }
+  return text.join(" ").replace(/\s+/gu, " ").trim();
+}
+
+/** Respect native/ARIA modality and large fixed dialog surfaces used by older sites. */
+export function modalLayer() {
+  const cache = globalThis.__butlerPerceptionCache;
+  if (cache && "modal" in cache) return cache.modal;
+  const declared = [...document.querySelectorAll('dialog[open],[aria-modal="true"]')]
+    .filter(element => !paintState(element).invisible && paintState(element).opacity >= .1);
+  let modal = declared.at(-1) ?? null;
+  for (const [x,y] of [[innerWidth/2,innerHeight/2],[innerWidth/4,innerHeight/4],[innerWidth*3/4,innerHeight*3/4]]) {
+    for (let hit = hitAt(document,x,y); hit; hit = parentElementOf(hit)) {
+      if (styleValue(hit,"position") !== "fixed" || Number(styleValue(hit,"zIndex")) <= 0) continue;
+      const box = rectangle(hit);
+      if (box.width * box.height < innerWidth * innerHeight / 2 || paintState(hit).opacity < .1) continue;
+      if (!modal || Number(styleValue(hit,"zIndex")) > Number(styleValue(modal,"zIndex"))) modal = hit;
+    }
+  }
+  if (cache) cache.modal = modal;
+  return modal;
+}
+
+/** A virtualized container must have a ref so ordinary scroll/re-observe can reach new rows. */
+export function scrollRegion(element) {
+  const box = boxOf(element);
+  if (box.width < 4 || box.height < 4 || box.top >= innerHeight || box.bottom <= 0) return false;
+  const vertical = /^(auto|scroll)$/u.test(styleValue(element,"overflowY"));
+  const horizontal = /^(auto|scroll)$/u.test(styleValue(element,"overflowX"));
+  return vertical && element.scrollHeight > element.clientHeight
+    || horizontal && element.scrollWidth > element.clientWidth;
 }

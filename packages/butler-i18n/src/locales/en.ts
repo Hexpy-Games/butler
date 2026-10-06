@@ -458,7 +458,11 @@ export const enUsCopy: AppCopy = {
     grantedItems: count => `${count} allowed items`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
-      browserMode: { signed_out: "Signed out", signed_in: "Signed in" },
+      browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
+      browserStep: (action, role, name, frame) => {
+        const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll" };
+        return `${actions[action] ?? action} the ‘${name}’ ${role} · ${frame}`;
+      },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "Read only" : "Change"}?`,
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,

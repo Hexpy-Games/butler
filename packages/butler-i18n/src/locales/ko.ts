@@ -458,7 +458,12 @@ export const koKrCopy: AppCopy = {
     grantedItems: count => `허용한 항목 ${count}개`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
-      browserMode: { signed_out: "로그아웃 사용", signed_in: "로그인 사용" },
+      browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
+      browserStep: (action, role, name, frame) => {
+        const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤" };
+        const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란" };
+        return `‘${name}’ ${roles[role] ?? role} ${actions[action] ?? action} · ${frame}`;
+      },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,

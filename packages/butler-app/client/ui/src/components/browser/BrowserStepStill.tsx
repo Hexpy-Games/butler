@@ -43,7 +43,7 @@ export function BrowserStepStill({ turnId, callId, resultId, content }: { turnId
   return <Stack cross="start" data-test-class="browser-step-still">
     {images.filter(item=>/^\/message-files\/file-[0-9a-f-]{36}$/iu.test(item.still_file.url)).map(item=>{
       const src=absoluteGatewayUrl(messageFileSource(item.still_file) ?? item.still_file.url);
-      return <Clickable key={item.still_file.url} aria-label={appCopy.browser.still} onClick={()=>void focusBrowserTab(item.tab,sessionId,src)}>
+      return <Clickable variant="text" key={item.still_file.url} aria-label={appCopy.browser.still} onClick={()=>void focusBrowserTab(item.tab,sessionId,src)}>
         <ArtifactPreviewImage src={src} alt={appCopy.browser.still} width={320} />
       </Clickable>;
     })}

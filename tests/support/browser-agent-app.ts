@@ -61,6 +61,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     })()`);
     const call = async <T>(op: string, input: unknown = {}) => page!.expression<T>(`window.butlerBrowser.call(${JSON.stringify(op)},${JSON.stringify(input)})`);
     const shot = async (name: string) => {
+      await main(`${win}.webContents.invalidate()`);
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
       await main(`(async()=>{const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && !tab.view.webContents.isDestroyed() && tab.attached===${win})await tab.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")})()`);
       await page!.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>img.decode()))");
@@ -68,6 +69,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       writeFileSync(join(evidence,`${name}-capture.json`),JSON.stringify(facts));
       const capture = process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE; assert.ok(capture);
       const source = await main<string>(`${win}.getMediaSourceId()`);
+      writeFileSync(join(evidence, `${name}-renderer.png`), await page!.screenshot());
       const result = Bun.spawnSync([capture, source.split(":")[1]!, join(evidence, `${name}.png`)]);
       assert.equal(result.exitCode, 0, result.stderr.toString());
       const compositor=await main<{blue:number}>(`(()=>{const t=globalThis.browserAgentSubject?.tabs.get(globalThis.browserAgentSubject.activeId);const png=${module}('electron').nativeImage.createFromPath(${JSON.stringify(join(evidence,`${name}.png`))});const size=png.getSize(),b=png.getBitmap(),bounds=t?.bounds;let blue=0;if(bounds)for(let y=Math.ceil(bounds.y*size.width/1440);y<(bounds.y+bounds.height)*size.width/1440;y++)for(let x=Math.ceil(bounds.x*size.width/1440);x<(bounds.x+bounds.width)*size.width/1440;x++){const n=(y*size.width+x)*4;if(b[n]>180 && b[n+1]<150 && b[n+2]<120)blue++}return {size,blue,attached:t?.attached===${win},covered:t?.covered,holder:t?.holder,bounds}})()`);

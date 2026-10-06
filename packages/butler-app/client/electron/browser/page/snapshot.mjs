@@ -5,7 +5,7 @@ import { resolveRef, selectValue } from "./refs.mjs";
 function collect(root, elements, candidates) {
   for (const label of root.querySelectorAll("label")) {
     const control=label.control, labels=globalThis.__butlerPerceptionCache.labels;
-    if(control && !labels.has(control)) labels.set(control,label.textContent);
+    if(control && !labels.has(control)) labels.set(control,visibleLabel(label));
   }
   for (const element of root.querySelectorAll('button,a,select,textarea,canvas,summary,input,[role],[onclick],h1,h2,h3,h4,h5,h6,[contenteditable],[contenteditable] *')) candidates.add(element);
   for (const element of root.querySelectorAll("*")) {
@@ -14,7 +14,7 @@ function collect(root, elements, candidates) {
   }
 }
 function snapshot(options) {
-  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map(),labels:new WeakMap()};
+  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map(),labels:new WeakMap()};
   const start = performance.now(), elements = [], nodes = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const candidates = new WeakSet();
   collect(document, elements, candidates);
@@ -30,6 +30,13 @@ function snapshot(options) {
   const seen = new Set();
   const emit = (element, fromGrid = false) => {
     if (seen.has(element)) return;
+    const modal = modalLayer();
+    if (element.closest("[inert]") && modal && !modal.contains(element)) {
+      if (!candidates.has(element)) return;
+      seen.add(element); hidden.invisible++;
+      nodes.push({ ref: reference(element), targetId: element.id || undefined, frameOrigin: location.origin, role: "unavailable", name: "", interactive: false, actionable: false, coveredBy: reference(modal), coveredTargetId: modal.id || undefined });
+      return;
+    }
     const meaning = semantic(element, fromGrid);
     if (!meaning.clickable && !/^h[1-6]$/u.test(element.localName)) return;
     seen.add(element);
@@ -46,7 +53,7 @@ function snapshot(options) {
   };
   const gridCandidates=[];
   const emitStart = performance.now();
-  for (const element of elements) if (options.full_grid || candidates.has(element)) emit(element);
+  for (const element of elements) if (options.full_grid || candidates.has(element) || scrollRegion(element)) emit(element);
   const emitMs = performance.now() - emitStart;
   for (const element of elements) {
     if (seen.has(element)) continue;

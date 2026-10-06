@@ -4,7 +4,7 @@ use crate::gateway::application::storage::CachedSql;
 mod artifacts;
 mod message_rows;
 mod plan;
-pub(super) use message_rows::streaming_message;
+pub(super) use message_rows::{exact_message, streaming_message};
 
 use std::collections::{BTreeMap, HashMap};
 

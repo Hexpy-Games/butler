@@ -87,6 +87,19 @@ try {
     summaries.push({name:row.safe_tool_name,input:row.safe_input_label,keys:raw?Object.keys(JSON.parse(raw.content)):[],hasStill:raw?.content.includes('still_file'),size:raw?.content.length});
   }
   writeFileSync(join(evidence,"timeline-projection.json"),JSON.stringify(summaries,null,2));
+  await settings("en", "light");
+  await waitBrowser(()=>app.page.expression("Boolean(document.querySelector('[data-test-class=browser-step-still] img'))"), "real browser still before geometry");
+  await app.page.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>img.decode()))");
+  const stillGeometry = await app.page.expression<Array<{ width: number; height: number; boxWidth: number; boxHeight: number }>>("[...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>{const r=img.getBoundingClientRect(),p=img.parentElement.getBoundingClientRect();return {width:r.width,height:r.height,boxWidth:p.width,boxHeight:p.height}})");
+  assert.ok(stillGeometry.length);
+  for (const geometry of stillGeometry) {
+    assert.ok(geometry.width <= 320 && geometry.width > 0);
+    assert.ok(Math.abs(geometry.height - geometry.width * 800 / 1280) < 2);
+    assert.ok(Math.abs(geometry.boxWidth - geometry.width) < 2 && Math.abs(geometry.boxHeight - geometry.height) < 2, "still box follows the image");
+  }
+  writeFileSync(join(evidence,"still-geometry.json"),JSON.stringify(stillGeometry));
+  writeFileSync(join(evidence,"address-row-dom.json"),JSON.stringify(await app.page.expression("(()=>{const input=document.querySelector('#browser-address');const row=input?.parentElement?.parentElement?.parentElement;return {html:row?.outerHTML,text:row?.textContent,breadcrumbs:row?.querySelectorAll('[data-slot=breadcrumb]').length}})()")));
+
   writeFileSync(join(evidence,"native-capture.json"),JSON.stringify(await app.main(`(async()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)});const i=await t.view.webContents.capturePage(undefined,{stayHidden:true});return {size:i.getSize(),empty:i.isEmpty(),jpeg320:i.resize({width:320}).toJPEG(70).length,epoch:t.epoch,holder:t.holder,stills:t.stills}})()`)));
   await app.shot("timeline-debug");
   writeFileSync(join(evidence,"timeline-dom.json"),JSON.stringify(await app.page.expression(`({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})`)));
@@ -144,7 +157,13 @@ try {
       await phone.getByRole("button",{name:language==="ko"?"사이드바 보기":"Show sidebar",exact:true}).click();
       await phone.getByText(language==="ko"?"일반":"General",{exact:true}).first().click();
       await phone.getByRole("button",{name:language==="ko"?"이번만 허용":"Allow once",exact:true}).waitFor();
-      await phone.getByText(language==="ko"?"127.0.0.1 · 로그아웃 사용":"127.0.0.1 · Signed out",{exact:true}).waitFor();
+      await phone.getByText(language==="ko"?"127.0.0.1 · 로그인 없이":"127.0.0.1 · Without signing in",{exact:true}).waitFor();
+      const cardText = await phone.locator('[data-test-class="composer-authority-decision"]').innerText();
+      assert.ok(cardText.includes(language === "ko" ? "‘Confirm’ 버튼 클릭 · 127.0.0.1" : "Click the ‘Confirm’ button · 127.0.0.1"));
+      assert.ok(!cardText.includes("click · button"));
+      const authority = await app.gateway.api<any>("/authority-requests?session_id=general");
+      const risk = authority.requests[0].approval.risk;
+      assert.notEqual(risk,"high","plain click is outside always-confirm class");
       await phone.evaluate(()=>document.fonts.ready.then(()=>undefined));
       await phone.waitForFunction(()=>{
         const card=document.querySelector('[data-test-class="composer-authority-decision"]');

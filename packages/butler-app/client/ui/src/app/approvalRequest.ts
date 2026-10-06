@@ -68,12 +68,26 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   };
 }
 
+type BrowserStep = NonNullable<NonNullable<ApprovalSummary["operation"]>["browser_steps"]>[number];
+function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((step): BrowserStep[] => {
+    if (!isRecord(step) || typeof step.action !== "string" || typeof step.role !== "string"
+      || typeof step.name !== "string" || typeof step.frame !== "string" || !Array.isArray(step.addons)
+      || !step.addons.every((addon): addon is string => typeof addon === "string")) return [];
+    return [{action: step.action, role: step.role, name: step.name, frame: step.frame,
+      ...(typeof step.value_preview === "string" ? {value_preview: step.value_preview} : {}), addons: step.addons}];
+  });
+}
+
 function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   if (!isRecord(value) || typeof value.tool !== "string" || !value.tool.trim()
     || (value.access !== "read_only" && value.access !== "change")) return undefined;
   const targets = (Array.isArray(value.targets) ? value.targets : [])
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
+  const browser_steps = normalizeBrowserSteps(value.browser_steps);
   return { tool: value.tool, access: value.access, targets,
+    ...(browser_steps ? { browser_steps } : {}),
     ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
     ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
@@ -107,7 +121,8 @@ export function approvalRequestView(
   return {
     title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
-    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target)]
+    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+      ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
       : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)

@@ -1823,7 +1823,7 @@ export type ApprovalRisk = "low" | "medium" | "high";
  */
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
-  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_mode?: "signed_out" | "signed_in" };
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_mode?: "signed_out" | "signed_in"; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */

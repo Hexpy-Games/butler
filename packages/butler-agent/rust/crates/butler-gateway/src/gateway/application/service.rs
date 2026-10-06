@@ -117,11 +117,8 @@ impl AppApplication {
                 // A delegated steward result is model input, never a bubble:
                 // it gets no live message event.
                 if !message_visibility::is_delegated_result(db, &message)? {
-                    let message_view = read_model::list_messages(db, &chat, 0.0, 200)?
-                        .messages
-                        .into_iter()
-                        .find(|row| row.id == message)
-                        .ok_or_else(|| {
+                    let message_view =
+                        read_model::exact_message(db, &chat, &message)?.ok_or_else(|| {
                             AppStorageError::new(
                                 AppStorageCode::AcceptedMessageMissing,
                                 "Accepted message was not found.",
@@ -136,10 +133,8 @@ impl AppApplication {
                         &now,
                     )?;
                 }
-                let turn_view = read_model::list_turns(db, &chat, 0.0)?
-                    .turns
-                    .into_iter()
-                    .find(|row| row.id == turn)
+                let turn_view = read_model::exact_turn(db, &turn)?
+                    .filter(|row| row.chat_id == chat)
                     .ok_or_else(|| {
                         AppStorageError::new(
                             AppStorageCode::AcceptedTurnMissing,

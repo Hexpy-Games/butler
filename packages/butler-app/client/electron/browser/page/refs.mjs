@@ -1,5 +1,5 @@
 export function resolveRef({ ref, obs, epoch, scroll = false }) {
-  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
+  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
   const state = globalThis.__butlerObservation;
   if (!state || state.obs !== obs || state.epoch !== epoch) return { reason: "stale_ref" };
   const element = state.refs.get(ref)?.deref();
@@ -8,7 +8,7 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
     const raw=boxOf(element),visible=rectangle(element);
     if (visible.width<raw.width || visible.height<raw.height) {
       element.scrollIntoView({ block: "nearest", inline: "nearest" });
-      globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
+      globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
     }
   }
   const hidden = rendering(element), meaning = semantic(element);

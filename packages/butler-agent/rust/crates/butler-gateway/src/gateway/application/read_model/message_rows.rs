@@ -52,3 +52,29 @@ pub(in crate::gateway::application) fn streaming_message(
     })
     .transpose()
 }
+
+/// Project one accepted row by its primary key, with the same visibility and decoration.
+pub(in crate::gateway::application) fn exact_message(
+    db: &Connection,
+    chat_id: &str,
+    id: &str,
+) -> Result<Option<MessageRecord>, AppStorageError> {
+    let query = format!(
+        "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,safe_error_code,retryable,plan_json FROM messages m WHERE id=?1 AND chat_id=?2 AND {}",
+        owner_visible!()
+    );
+    let row = db
+        .query_row_cached(&query, params![id, chat_id], read)
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let ids = vec![id.to_owned()];
+    let attachments = attachments(db, &ids)?;
+    let changed = changed_files(db, &ids)?;
+    let mut messages = vec![message(row, &attachments, &changed)?];
+    let progress = progress_for_messages(db, &messages)?;
+    super::super::message_projection::decorate(db, &mut messages, &progress)?;
+    Ok(messages.pop())
+}

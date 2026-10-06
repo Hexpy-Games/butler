@@ -7,6 +7,9 @@ use super::contracts::{
 use super::identity::{canonical, digest};
 use butler_core::tool_protocol::ToolName;
 
+type KeyComparisons =
+    std::cell::RefCell<std::collections::HashMap<(String, String), std::cmp::Ordering>>;
+
 pub(super) fn for_admission(
     input: &AuthorityAdmissionInput,
     collation: &butler_core::locale::LocaleCollation,
@@ -114,6 +117,7 @@ fn permission_scope_key(
     facts: PermissionFacts<'_>,
     file_edit: bool,
     command: bool,
+    comparisons: Option<&KeyComparisons>,
 ) -> AuthorityResult<String> {
     let PermissionFacts {
         capability,
@@ -142,7 +146,18 @@ fn permission_scope_key(
     } else {
         json!({"kind":"effect","capability":capability,"target":target,"input":input})
     };
-    Ok(digest(&canonical(&scope, collation)?))
+    let encoded = if let Some(comparisons) = comparisons {
+        butler_core::json::stringify_sorted(&scope, &|a, b| {
+            let mut cache = comparisons.borrow_mut();
+            *cache
+                .entry((a.into(), b.into()))
+                .or_insert_with(|| collation.compare(a, b))
+        })
+        .map_err(|error| AuthorityError::policy(format!("authority_json: {error}")))?
+    } else {
+        canonical(&scope, collation)?
+    };
+    Ok(digest(&encoded))
 }
 
 fn permission_identity(
@@ -156,7 +171,7 @@ fn permission_identity(
         collation,
         ..
     } = facts;
-    let scope_key = permission_scope_key(facts, file_edit, command)?;
+    let scope_key = permission_scope_key(facts, file_edit, command, None)?;
     let grant_ref = format!(
         "permission-{}",
         &digest(&canonical(
@@ -171,6 +186,7 @@ pub(super) fn for_source(
     source: &PermissionSource<'_>,
     collation: &butler_core::locale::LocaleCollation,
     prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    comparisons: &KeyComparisons,
 ) -> AuthorityResult<PermissionTarget> {
     let input: Value = serde_json::from_str(source.input_json)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
@@ -192,7 +208,7 @@ pub(super) fn for_source(
         source.capability,
         "run_command" | "run_command_remote_observation"
     );
-    let scope_key = permission_scope_key(facts, file_edit, command)?;
+    let scope_key = permission_scope_key(facts, file_edit, command, Some(comparisons))?;
     // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
     if !prefixes
         .get(source.owner)

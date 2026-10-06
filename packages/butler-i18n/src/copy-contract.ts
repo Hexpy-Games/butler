@@ -123,6 +123,7 @@ type CountFormatter = (count: number) => string;
  */
 export interface ApprovalRequestCopy {
   browserMode: { signed_out: string; signed_in: string };
+  browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;

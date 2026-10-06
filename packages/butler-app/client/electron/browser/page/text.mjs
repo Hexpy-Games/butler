@@ -13,7 +13,7 @@ export function readingText(scope, elements) {
       const value = node.textContent?.replace(/\s+/gu, " ").trim();
       if (!value || !element || seen.has(node) || element.closest("script,style,noscript,button,a,input,select,textarea,[role]") || /^h[1-6]$/u.test(element.localName)) continue;
       if (scope !== "text" && !element.closest("p,li,td,th,figcaption")) continue;
-      if (element.getBoundingClientRect().top >= innerHeight || rendering(element)) continue;
+      if (element.getBoundingClientRect().top >= innerHeight || rendering(element) || visiblePoint(element).blocker) continue;
       if (semantic(element).secure) continue;
       seen.add(node); text.push(value);
     }
