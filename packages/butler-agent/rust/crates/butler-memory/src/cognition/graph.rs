@@ -75,7 +75,7 @@ pub(in crate::cognition) struct ProjectionWindowOwner<'a> {
 }
 
 pub(super) struct GraphRepository {
-    connection: Option<Connection>,
+    connection: Option<sqlite::Connection>,
     _reader_pin: Option<super::generation::pins::GenerationPin>,
 }
 
@@ -424,6 +424,13 @@ impl GraphRepository {
         stages::save_plan(self.connection()?, job, window, nonce, output, plan)
     }
 
+    pub(super) fn sync_wal_index(&self) -> CognitionResult<()> {
+        sqlite::sync_wal_index(self.connection()?).map_err(|error| {
+            CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+                .with_source(error)
+        })
+    }
+
     pub(super) fn close(mut self) -> CognitionResult<()> {
         let Some(connection) = self.connection.take() else {
             return Ok(());
@@ -432,13 +439,13 @@ impl GraphRepository {
     }
 
     fn connection(&self) -> CognitionResult<&Connection> {
-        self.connection.as_ref().ok_or_else(|| {
+        self.connection.as_deref().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
         })
     }
 
     fn connection_mut(&mut self) -> CognitionResult<&mut Connection> {
-        self.connection.as_mut().ok_or_else(|| {
+        self.connection.as_deref_mut().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
         })
     }

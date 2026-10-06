@@ -1,3 +1,4 @@
+import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
 import { artifactBridgeInput } from "./artifactBridge.ts";
 import type {
@@ -50,6 +51,9 @@ export interface AppUpdateState {
 }
 
 interface ButlerAppBridge {
+  setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
+  recordUiCrash?: (input: unknown) => Promise<unknown>;
+  readUiCrashLog?: () => Promise<import("../../../electron/ui-crash-log.mjs").UiCrashEntry[]>;
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
   onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;
@@ -73,6 +77,8 @@ interface ButlerAppBridge {
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
   getWorkStatus?: () => Promise<WorkStatusView>;
+  getAuthorityPermissions?: () => Promise<unknown>;
+  revokeAuthorityPermissions?: (input: unknown) => Promise<unknown>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
@@ -176,7 +182,12 @@ export async function importSkillZip(file: File, projectId?: string): Promise<Sk
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.importFailed);
+  if (!response.ok) {
+    throw Object.assign(new Error(appCopy.interfaceFeedback.importFailed), {
+      code: typeof payload?.error?.code === "string" ? payload.error.code : "request_failed",
+      status: response.status,
+    });
+  }
   return payload.data as SkillImportResult;
 }
 
@@ -269,6 +280,8 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
 async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: ApiOptions = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
+  const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
+  if (graph) return await callBridge<T>(bridge, graph.method, graph.input);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
   if (method === "GET" && url.pathname === "/setup/status") return await callBridge<T>(bridge, "getSetupStatus");
   if (method === "POST" && url.pathname === "/setup/start") return await callBridge<T>(bridge, "startSetup", parseBody(options.body));
@@ -343,6 +356,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/settings") return await callBridge<T>(bridge, "getSettings");
   if (method === "GET" && url.pathname === "/app-info") return await callBridge<T>(bridge, "getAppInfo");
   if (method === "GET" && url.pathname === "/updates") return await callBridge<T>(bridge, "getUpdates");
+  if (method === "POST" && url.pathname === "/updates/cancel") return await callBridge<T>(bridge, "cancelUpdate");
   if (method === "POST" && url.pathname === "/updates/check") {
     return await callBridge<T>(bridge, "checkUpdates", parseBody(options.body));
   }
@@ -652,6 +666,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: url.searchParams.get("session_id") ?? "general",
     });
   }
+  if (method === "GET" && url.pathname === "/authority-permissions") {
+    return await callBridge<T>(bridge, "getAuthorityPermissions", {});
+  }
+  if (method === "POST" && url.pathname === "/authority-permissions/revoke") {
+    return await callBridge<T>(bridge, "revokeAuthorityPermissions", parseBody(options.body));
+  }
   if (method === "GET" && url.pathname === "/authority-requests") {
     return await callBridge<T>(bridge, "getAuthorityRequests", {
       sessionId: url.searchParams.get("session_id") ?? undefined,
@@ -960,10 +980,16 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   throw error;
 }
 
+const CODED_SETTINGS_METHODS = new Set([
+  "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
+  "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
+]);
+
 async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];
   if (typeof fn !== "function") throw new Error(`Butler desktop bridge is missing ${method}.`);
-  return await fn(input) as T;
+  const value = await fn(input);
+  return CODED_SETTINGS_METHODS.has(method) ? unwrapBridgeResult<T>(value as BridgeResult<T> | T) : value as T;
 }
 
 /**

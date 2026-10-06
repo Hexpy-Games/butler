@@ -2,7 +2,6 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
-import { PermissionsFields } from "./PermissionsFields";
 
 /**
  * The everyday Butler model sections, for surfaces outside the Models page
@@ -18,9 +17,6 @@ export function ButlerModelSettings() {
       </SettingsSection>
       <SettingsSection id="backup-models" kind="form" title={sections.backupModels}>
         <BackupModelsSummary />
-      </SettingsSection>
-      <SettingsSection id="permissions" kind="form" title={sections.permissions}>
-        <PermissionsFields />
       </SettingsSection>
     </>
   );

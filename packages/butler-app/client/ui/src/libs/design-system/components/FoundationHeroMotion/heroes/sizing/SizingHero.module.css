@@ -456,7 +456,7 @@
 }
 
 @media (width <= 640px) {
-  .stripToggle {
+  .stripToggle:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     position: absolute;
     top: var(--chrome-floating-toggle-top);
     left: var(--chrome-floating-toggle-left);
@@ -464,11 +464,14 @@
     display: inline-grid;
   }
 
-  .stripToggle button {
+  .stripToggle
+    button:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     --icon-button-size: var(--chrome-floating-toggle-size);
   }
 
-  .stripToggle button svg {
+  .stripToggle
+    button
+    svg:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     inline-size: var(--chrome-floating-toggle-icon-size);
     block-size: var(--chrome-floating-toggle-icon-size);
   }

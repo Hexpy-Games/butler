@@ -1,3 +1,4 @@
+import { setReducedMotionOverride } from "../lib/motion";
 import { useEffect, useState } from "react";
 import type { ViewerMotion, ViewerTheme } from "./viewerState";
 
@@ -39,8 +40,10 @@ export function useViewerTheme(theme: ViewerTheme, motion: ViewerMotion = "full"
   }, [chrome]);
 
   useEffect(() => {
+    // Keep the viewer's body metadata for its deep-link/navigation contract.
     document.body.dataset.motion = motion;
-    return () => { delete document.body.dataset.motion; };
+    setReducedMotionOverride(motion === "reduced");
+    return () => { delete document.body.dataset.motion; setReducedMotionOverride(false); };
   }, [motion]);
 
   return { chrome, frames };

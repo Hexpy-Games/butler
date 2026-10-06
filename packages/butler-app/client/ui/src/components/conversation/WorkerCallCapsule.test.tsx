@@ -34,7 +34,7 @@ test("Worker stays below the aggregate while its invocation is inside the expand
       id: "execution", phase: "execution", title: "구현 위임", summary: "구현 위임",
       operations: [{ id: "wait", kind: "used_tool", state: "delivered", bridge_phase: "btcc_operation", safe_tool_name: "wait_for_worker", safe_label: "워커 대기" },
         { id: "call-row", kind: "used_tool", state: "delivered", bridge_phase: "btcc_operation",
-          safe_tool_name: "delegate_to_worker", tool_call_id: "call", safe_label: "도구 사용",
+          safe_tool_name: "delegate_to_worker", tool_call_id: "call", safe_label: "작업 중",
           safe_detail_rows: [{ id: "receipt", kind: "detail", safe_label: "전달됨" }] }],
     }]} />));
     const capsule = container.querySelector('[data-test-class="worker-call-capsule"]')!;

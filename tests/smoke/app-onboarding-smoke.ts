@@ -16,13 +16,13 @@ try {
   const general = page.getByRole("button", { name: "일반", exact: true });
   await general.click();
   assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), "일반", "header shares the sidebar's localized General title");
-  await page.getByText("버틀러와 알아가기", { exact: true }).waitFor();
-  assert.equal(await page.locator('[data-slot="prompt-suggestion-title"]').first().innerText(), "버틀러와 알아가기");
+  await page.getByText("Butler와 알아가기", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-slot="prompt-suggestion-title"]').first().innerText(), "Butler와 알아가기");
   writeOnboardingComplete(server.butlerData);
   await page.reload();
   await page.locator('[data-test-class="new-chat-suggestion"]').first().waitFor();
   assert.equal(await page.locator('[data-test-class="new-chat-suggestion"]').count(), 4);
-  assert.equal(await page.getByText("버틀러와 알아가기", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Butler와 알아가기", { exact: true }).count(), 0);
   console.log(JSON.stringify({ ok: true, pendingCards: 1, completedCards: 4, modelCalls: server.stubModelCalls.length }));
 } finally {
   await browser.close();

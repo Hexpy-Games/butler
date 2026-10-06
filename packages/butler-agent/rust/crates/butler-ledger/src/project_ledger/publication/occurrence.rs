@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use butler_platform::secure_fs;
-use rusqlite::{Connection, TransactionBehavior, params};
+use rusqlite::{TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -358,7 +358,7 @@ pub(super) fn with_lock<T>(
 fn open_shard(
     canonical_root: &Path,
     logical: &Path,
-) -> Result<Connection, ProjectWorkPublicationError> {
+) -> Result<sqlite::Connection, ProjectWorkPublicationError> {
     let digest = Sha256::digest(logical.to_string_lossy().as_bytes());
     let prefix: [u8; 4] = digest
         .get(..4)

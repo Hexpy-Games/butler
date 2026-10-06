@@ -99,7 +99,8 @@ export function validateParam(raw: unknown, index: number, errors: string[]): Wa
   if (typeof raw.key !== "string" || !KEY.test(raw.key)) errors.push(`${at}.key: must match ${KEY.source}`);
   if (!validLabel(raw.label)) errors.push(`${at}.label: needs non-empty en and ko`);
   if (raw.control !== undefined && raw.type !== "number") errors.push(`${at}.control: only number params take a control`);
-  const base = { key: raw.key, label: raw.label };
+  if (raw.hidden !== undefined && typeof raw.hidden !== "boolean") errors.push(`${at}.hidden: must be a boolean`);
+  const base = { key: raw.key, label: raw.label, ...(raw.hidden === true ? { hidden: true } : {}) };
   switch (raw.type) {
     case "number": return numberParam(raw, base, errors, at);
     case "enum": return enumParam(raw, base, errors, at);

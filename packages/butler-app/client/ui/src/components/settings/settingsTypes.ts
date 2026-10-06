@@ -8,10 +8,11 @@ import type {
 import type { SettingsSectionId } from "../../app/types.ts";
 
 export type SettingsCopy = AppCopy["settings"];
-export type SettingsUpdatePayload = Omit<Partial<SettingsData>, "web_search" | "wallpaper"> & {
+export type SettingsUpdatePayload = Omit<Partial<SettingsData>, "web_search" | "wallpaper" | "composer_decoration"> & {
   web_search?: Partial<SettingsData["web_search"]> & { api_key?: string };
   /** Any subset of the setting; the gateway keeps the rest. */
   wallpaper?: Partial<SettingsData["wallpaper"]>;
+  composer_decoration?: Partial<SettingsData["composer_decoration"]>;
   default_project_folder_selection_token?: string;
 };
 export type SettingsUpdate = (partial: SettingsUpdatePayload) => Promise<void>;

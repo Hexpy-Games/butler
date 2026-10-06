@@ -163,3 +163,25 @@ pub(super) fn settle_question_followup(db: &Connection, request_ref: &str) -> Au
     db.execute("UPDATE btcc_authority_requests SET outcome='applied' WHERE request_ref=?1 AND capability='ask_user' AND outcome_receipt_json IS NOT NULL AND outcome='pending'", [request_ref]).map_err(query::sql)?;
     Ok(())
 }
+
+/// Validate owners before changing anything; retries of a revoked grant succeed.
+pub(super) fn revoke_permissions(
+    db: &mut Connection,
+    grants: &[(String, String)],
+    now: &str,
+) -> AuthorityResult<()> {
+    let tx = db
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(query::sql)?;
+    for (owner, reference) in grants {
+        let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_conversation_permissions WHERE grant_ref=?1 AND owner_session_id=?2)",
+            params![reference, owner], |row| row.get(0)).map_err(query::sql)?;
+        if !exists {
+            return Err(AuthorityError::policy("authority_permission_not_found"));
+        }
+    }
+    for (owner, reference) in grants {
+        revoke_permission(&tx, owner, reference, now)?;
+    }
+    tx.commit().map_err(query::sql)
+}

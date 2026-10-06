@@ -32,7 +32,7 @@ export async function assertFirstRunContrast(page: Page) {
         const paint = getComputedStyle(ancestor);
         opacity *= Number(paint.opacity);
         backgrounds.push(paint.backgroundColor);
-        if (ancestor.matches('[data-surface="solid"]')) break;
+        if (ancestor.matches('[data-surface="raised-opaque"]')) break;
       }
       if (!opacity) continue;
       result.push({ text: node.textContent.trim(), color: style.color, backgrounds,
@@ -62,7 +62,7 @@ export async function assertFirstRunContrast(page: Page) {
 }
 
 export async function assertFirstRunLayout(page: Page) {
-  const card = page.locator('[data-surface="solid"]');
+  const card = page.locator('[data-surface="raised-opaque"]');
   if (await card.count() !== 1) throw new Error("Expected one solid content card");
   const valid = await card.evaluate((node) => {
     const bounds = node.getBoundingClientRect();

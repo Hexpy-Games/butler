@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { apiErrorCode } from "@/app/api";
+import { settingsErrorCopy } from "@/app/settingsErrors";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
@@ -63,10 +66,12 @@ export function useLocalModelOperations({
   onCatalogChange,
   onSaved,
 }: UseLocalModelOperationsProps) {
+  const [discoveryError, setDiscoveryError] = useState<string>();
   const copy = appCopy.settings.localModels;
 
   async function discover() {
     if (!canDiscover) return;
+    setDiscoveryError(undefined);
     setBusy("discover");
     setStatus("");
     setDiscovery(null);
@@ -81,7 +86,7 @@ export function useLocalModelOperations({
       );
       setStatus(copy.discoveredStatus(result.models.length));
     } catch (error) {
-      notifyError(error, copy.errors.discover, { id: "local-model-discovery" });
+      setDiscoveryError(apiErrorCode(error) ?? "local_model_discovery_failed");
     } finally {
       setBusy(null);
     }
@@ -116,13 +121,9 @@ export function useLocalModelOperations({
       );
       onSaved?.();
     } catch (error) {
-      notifyError(
-        error,
-        isEditing ? copy.errors.update : copy.errors.register,
-        {
-          id: isEditing ? "local-model-update" : "local-model-registration",
-        },
-      );
+      notifyError(error, appCopy.settings.localModelErrors.register, {
+        id: isEditing ? "local-model-update" : "local-model-registration",
+      });
     } finally {
       setBusy(null);
     }
@@ -149,6 +150,8 @@ export function useLocalModelOperations({
   }
 
   return {
+    discoveryError: discoveryError ? settingsErrorCopy({ code: discoveryError }, appCopy.settings.localModelErrors.discover) : undefined,
+    clearDiscoveryError: () => setDiscoveryError(undefined),
     discover,
     register,
     deleteModel,

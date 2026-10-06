@@ -75,6 +75,8 @@ export interface WallpaperScheduleState {
   /** The frame-time watchdog gave up on animating this scene. */
   degraded: boolean;
   contextLost: boolean;
+  /** The context renders in software: animated modules hold still frames (each frame would be read back on the main thread). */
+  softwareRendering?: boolean;
 }
 
 /** `idle`: draw nothing. `still`: hold one frame, redraw on change. `animate`: capped loop. */
@@ -86,6 +88,7 @@ export function wallpaperFrameMode(state: WallpaperScheduleState): WallpaperFram
     state.motion === "paused" ||
     state.reducedMotion ||
     state.degraded ||
+    state.softwareRendering === true ||
     (state.pauseOnBattery && state.onBattery);
   return paused ? "still" : "animate";
 }

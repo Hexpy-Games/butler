@@ -31,7 +31,7 @@ try {
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, onboarding: { consent_version: 2, accepted_at: now, completed_at: now } }) });
       await server.signIn(page);
       await page.goto(server.url);
-      await page.getByText("버틀러와 알아가기", { exact: true }).waitFor();
+      await page.getByText("Butler와 알아가기", { exact: true }).waitFor();
       await page.evaluate(() => document.fonts.ready);
       const capture = async (surface: string) => {
         await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));

@@ -21,6 +21,9 @@ const labels = {
     smartGroupsDescription: "Automatically organize new conversations by topic. Manually moved conversations stay where you put them.",
     timezone: "Timezone",
     section: "General",
+    port: "Port",
+    portDescription: "Local port for the web app.",
+    portError: "Enter a number from 1024 to 65535.",
   },
   "ko-KR": {
     name: "표시 이름",
@@ -30,6 +33,9 @@ const labels = {
     smartGroupsDescription: "새 대화를 주제별로 자동 정리합니다. 직접 옮긴 대화는 옮긴 자리에 그대로 둡니다.",
     timezone: "시간대",
     section: "일반",
+    port: "포트",
+    portDescription: "웹 앱이 쓰는 로컬 포트입니다.",
+    portError: "1024부터 65535까지의 숫자를 입력하세요.",
   },
 } as const;
 
@@ -53,6 +59,16 @@ export const stories: ShowcaseStory[] = [
       <SettingsFieldScopeProvider>
         <SettingsField id="field-groups" label={text(context).smartGroups} description={text(context).smartGroupsDescription}
           control={<Switch id="field-groups" />} />
+      </SettingsFieldScopeProvider>
+    ),
+  },
+  {
+    name: "Error under the control",
+    states: ["invalid"],
+    render: (context) => (
+      <SettingsFieldScopeProvider>
+        <SettingsField id="field-port" label={text(context).port} description={text(context).portDescription}
+          control={<Input id="field-port" defaultValue="80" />} error={text(context).portError} />
       </SettingsFieldScopeProvider>
     ),
   },

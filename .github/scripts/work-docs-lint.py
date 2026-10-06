@@ -19,6 +19,7 @@ ALLOW = (
     'packages/project-ledger/templates/**', 'packages/project-ledger/examples/**',
     '**/fixtures/**', '**/cassettes/**', '**/tests/golden/**',
     'packages/butler-app/client/ui/index.html',
+    'packages/butler-app/client/ui/lifecycle-assets/lifecycle.html',
     'packages/butler-app/client/ui/ds-site/index.html',
     'packages/butler-app/client/ui/ds-site/host/404.html',
     # Runtime prompts/personas and machine-read contract/ratchet inputs are code assets.

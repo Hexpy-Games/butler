@@ -6,7 +6,6 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use rusqlite::Connection;
 use serde_json::{Map, Value, json};
 use sha1::{Digest as _, Sha1};
 use sha2::Sha256;
@@ -40,7 +39,10 @@ pub(super) fn contract_field_defaults() -> [(&'static str, Value); 10] {
     ]
 }
 
-pub(super) fn open_lock(root: &Path, logical: &Path) -> Result<Connection, BtccError> {
+pub(super) fn open_lock(
+    root: &Path,
+    logical: &Path,
+) -> Result<butler_platform::sqlite::Connection, BtccError> {
     let digest = format!("{:x}", Sha256::digest(logical.to_string_lossy().as_bytes()));
     let shard = u32::from_str_radix(&digest[..8], 16).unwrap_or(0) % 64;
     let directory = root.join("runtime/mutation-lock-shards");

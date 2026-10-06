@@ -5,3 +5,4 @@ export {
   type StreamChunk,
 } from "./streamingReveal";
 export * from "./MarkdownParts";
+export { MarkdownLink, type MarkdownFaviconSource } from "./MarkdownLink";

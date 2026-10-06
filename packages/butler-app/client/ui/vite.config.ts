@@ -1,3 +1,4 @@
+import { reducedMotionCss } from "./scripts/reduced-motion-css";
 import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { homedir } from "node:os";
@@ -7,6 +8,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { startupAssets } from "./scripts/startup-assets";
 import { checkWallpaperPosters } from "./scripts/check-wallpaper-posters";
 
 const srcRoot = path.resolve(process.cwd(), "src");
@@ -77,12 +79,14 @@ function thirdPartyNotices(): Plugin {
 }
 
 export default defineConfig({
+  css: { postcss: { plugins: [reducedMotionCss()] } },
   cacheDir: path.join(
     process.env.BUTLER_DATA || path.join(homedir(), ".butler"), "cache", "vite",
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
+  define: { "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
+  plugins: [startupAssets(process.cwd()), hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
     name: "wallpaper-poster-inputs",
     apply: "build",
     buildStart: () => checkWallpaperPosters(process.cwd()),

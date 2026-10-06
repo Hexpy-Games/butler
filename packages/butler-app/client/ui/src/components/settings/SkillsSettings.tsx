@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
-import { notifyError } from "@/app/notifications.ts";
-import { api, importSkillZip } from "@/app/api.ts";
+import { api, apiErrorCode, importSkillZip } from "@/app/api.ts";
+import { settingsErrorCopy } from "@/app/settingsErrors";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type {
@@ -34,6 +34,7 @@ export function SkillsSettings() {
   const [tab, setTab] = useState("default");
   const [projectId, setProjectId] = useState<string>("");
   const [importProjectId, setImportProjectId] = useState<string | undefined>();
+  const [importError, setImportError] = useState<{ code: string; project?: string }>();
   const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     void refresh();
@@ -50,16 +51,18 @@ export function SkillsSettings() {
     }
   }
   async function importSkill(project?: string) {
+    setImportError(undefined);
     setImportProjectId(project);
     inputRef.current?.click();
   }
   async function onFile(file: File | undefined) {
     if (!file) return;
+    setImportError(undefined);
     try {
       await importSkillZip(file, importProjectId);
       await refresh();
     } catch (error) {
-      notifyError(error, appCopy.interfaceFeedback.importFailed);
+      setImportError({ code: apiErrorCode(error) ?? "unknown", project: importProjectId });
     } finally {
       if (inputRef.current) inputRef.current.value = "";
       setImportProjectId(undefined);
@@ -78,6 +81,7 @@ export function SkillsSettings() {
     openSession(result.session.id);
     closeSettings();
   }
+  const importMessage = importError ? settingsErrorCopy(importError, appCopy.settings.skillErrors.import) : undefined;
   const selectedProject =
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
@@ -98,6 +102,7 @@ export function SkillsSettings() {
           <TabsContent value="default">
             <Stack gap="md">
               <SkillActions
+                error={importError && !importError.project ? importMessage : undefined}
                 onImport={() => void importSkill()}
                 onCreate={() => void createSkillChat()}
               />
@@ -123,6 +128,7 @@ export function SkillsSettings() {
               </Stack>
               <Stack gap="md" grow basis="0">
                 <SkillActions
+                  error={importError?.project === selectedProject?.id ? importMessage : undefined}
                   onImport={() => void importSkill(selectedProject?.id)}
                   onCreate={() => void createSkillChat(selectedProject)}
                 />

@@ -113,6 +113,11 @@ export function liveWallpaperScene(module: WallpaperModule, source: Extract<Wall
   return { key: wallpaperTransitionKey(source), module, values, dark: tone === "dark", image: wallpaperDefaultImageScene(module), error: null };
 }
 
+/** Whether a source draws a `transparent` module, so its canvas must be see-through (unknown modules fall back opaque). */
+export function wallpaperSourceTransparent(source: WallpaperSource, registry: WallpaperRegistry): boolean {
+  return source.kind === "live" && registry.get(source.module)?.manifest.transparent === true;
+}
+
 export function resolveWallpaperScene(
   source: WallpaperSource,
   registry: WallpaperRegistry,

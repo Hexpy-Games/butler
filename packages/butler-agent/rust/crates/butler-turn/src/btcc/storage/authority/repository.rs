@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::btcc::AuthorityError;
 use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityRecord, AuthorityRepository, AuthorityResult,
-    AuthorityResumeSource, ConversationPermission, DecisionWrite, OutcomeWrite,
+    AuthorityResumeSource, ConversationPermission, DecisionWrite, OutcomeWrite, PermissionSource,
 };
 
 use super::{close, query, write};
@@ -25,6 +25,23 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     }
     fn list_permissions(&mut self, owner: &str) -> AuthorityResult<Vec<ConversationPermission>> {
         query::list_permissions(self.db, owner)
+    }
+    fn list_all_permissions(&mut self) -> AuthorityResult<Vec<ConversationPermission>> {
+        query::list_all_permissions(self.db)
+    }
+    fn revoke_permissions(
+        &mut self,
+        grants: &[(String, String)],
+        now: &str,
+    ) -> AuthorityResult<()> {
+        write::revoke_permissions(self.db, grants, now)
+    }
+    fn permission_projection_records(
+        &mut self,
+        owners: &[String],
+        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
+    ) -> AuthorityResult<()> {
+        query::permission_projection_records(self.db, owners, visit)
     }
     fn permission_records(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::permission_records(self.db, owner)

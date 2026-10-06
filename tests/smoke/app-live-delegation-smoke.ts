@@ -28,6 +28,10 @@ try {
     console.error(JSON.stringify({ body: await page.locator("body").innerText(), calls: server.stubModelCalls.length }));
     throw error;
   }
+  const activityLabel = await card.locator('[data-test-class="steward-tool-summary"]').getAttribute("aria-label");
+  assert(activityLabel !== null && activityLabel.trim().length > 0, "delegated activity label is present");
+  assert(!/tool\s*usage|tool\s*use|use tool|working|work in progress|도구 사용|작업 중|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/iu.test(activityLabel),
+    `delegated activity names the current work without a generic label or internal id: ${activityLabel}`);
   const parent = await server.api<{ active_turn: unknown; steward_children: unknown[] }>("/session-view?session_id=general");
   assert.equal(parent.active_turn, null, "parent has ended while child runs");
   assert.equal(parent.steward_children.length, 1);

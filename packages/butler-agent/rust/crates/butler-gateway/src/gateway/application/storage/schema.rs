@@ -48,7 +48,9 @@ pub(super) fn migrate(
         .execute_batch(
             "CREATE INDEX IF NOT EXISTS events_turn_id_idx \
              ON events(turn_id,id DESC) WHERE turn_id<>''; \
-             CREATE INDEX IF NOT EXISTS projects_ledger_id_idx ON projects(ledger_project_id)",
+             CREATE INDEX IF NOT EXISTS projects_ledger_id_idx ON projects(ledger_project_id); \
+             CREATE INDEX IF NOT EXISTS idx_chats_authority_metadata ON chats(id,title,project_id); \
+             CREATE INDEX IF NOT EXISTS idx_projects_authority_metadata ON projects(id,display_name)",
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;

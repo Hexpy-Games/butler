@@ -1,6 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
+import { notifyError } from "@/app/notifications";
 import { appCopy } from "@/app/copy.ts";
 import type {
   McpServerListView,
@@ -34,14 +35,16 @@ export function McpSettings() {
     try {
       const result = await api<McpServerListView>("/mcp-servers");
       setServers(result.servers);
-    } catch {
+    } catch (error) {
       setLoadFailed(true);
+      notifyError(error, appCopy.settings.mcpErrors.unavailable);
     }
   }
   function update(patch: Partial<McpServerFormState>) {
+    clearErrors();
     setForm((current) => ({ ...current, ...patch }));
   }
-  const { save, remove, toggle, probe, busy } = useMcpSettingsActions({
+  const { save, remove, toggle, probe, busy, errors, clearErrors } = useMcpSettingsActions({
     form, editingId, setServers, setStatus,
     onSaved: () => {
       setOpen(false);
@@ -50,6 +53,7 @@ export function McpSettings() {
     },
   });
   function edit(server: McpServerView) {
+    clearErrors();
     setEditingId(server.id);
     setForm(formFromMcpServer(server));
     setOpen(true);
@@ -69,6 +73,7 @@ export function McpSettings() {
             type="button"
             size="sm"
             onClick={() => {
+              clearErrors();
               setEditingId(null);
               setForm(emptyMcpServerForm());
               setOpen(true);
@@ -96,6 +101,7 @@ export function McpSettings() {
         <SettingsSection id="mcp-server-form" kind="form" title={editingId ?? copy.actions.addMcpServer}>
           <McpServerForm
             form={form}
+            errors={errors}
             busy={busy}
             onChange={update}
             onCancel={() => setOpen(false)}

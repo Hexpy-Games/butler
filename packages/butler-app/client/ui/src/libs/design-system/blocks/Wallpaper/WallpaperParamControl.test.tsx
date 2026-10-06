@@ -4,7 +4,8 @@ import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { WallpaperParamSpec } from "./types";
 import { WallpaperParamControl } from "./WallpaperParamControl";
-import { withWallpaperParam } from "./WallpaperParamControls";
+import { SHORELINE_WALLPAPER } from "./modules";
+import { WallpaperParamControls, withWallpaperParam } from "./WallpaperParamControls";
 
 const label = { en: "Mode", ko: "방식" };
 
@@ -67,4 +68,14 @@ test("palettes offer their presets plus Custom; a hex list shows editable swatch
   expect(custom.querySelector('[aria-checked="true"]')?.textContent).toBe("Custom");
   expect([...custom.querySelectorAll<HTMLInputElement>('input[type="color"]')].map((input) => [input.value, input.getAttribute("aria-label")]))
     .toEqual([["#123456", "Colors 1"], ["#abcdef", "Colors 2"]]);
+});
+
+test("hidden params are never listed: shoreline shows the same controls as before dayClouds", () => {
+  const markup = renderToStaticMarkup(
+    <WallpaperParamControls input={{}} locale="en-US" manifest={SHORELINE_WALLPAPER.manifest} tone="light" onChange={() => undefined} />,
+  );
+  const listed = SHORELINE_WALLPAPER.manifest.params.filter((spec) => !spec.hidden).map((spec) => spec.key);
+  expect(listed).toEqual(["water", "waveFrequency", "shorePosition", "foamAmount", "realtime"]);
+  expect(markup).toContain("Real time");
+  expect(markup).not.toContain("Cloud shadows by day");
 });

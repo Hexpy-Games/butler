@@ -41,3 +41,5 @@ setup, wizard, progress, glass
 
 ## Layout and theme
 The shell sits in a `narrow` PageContainer. The title and stepper share the body's inline inset (`--setup-wizard-inset` plus the hairline border), and the scroll area fills the glass body to its bottom edge with the inset inside the scrolling content. Pass `tone="dark"` when the resolved appearance theme is dark so the wallpaper backdrop is dark.
+
+The solid content card composes the public Box raised-opaque surface and card elevation.

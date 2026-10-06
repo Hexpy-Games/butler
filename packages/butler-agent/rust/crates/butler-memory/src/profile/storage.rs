@@ -29,7 +29,10 @@ pub(super) enum Access {
     Read,
 }
 
-pub(super) fn open(data_root: &Path, access: Access) -> ProfileResult<Connection> {
+pub(super) fn open(
+    data_root: &Path,
+    access: Access,
+) -> ProfileResult<butler_platform::sqlite::Connection> {
     let create = access == Access::Write;
     let path = database_path(data_root);
     if create {

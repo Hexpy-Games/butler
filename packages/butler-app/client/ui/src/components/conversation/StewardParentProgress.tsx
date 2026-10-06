@@ -19,6 +19,7 @@ import {
   stewardCurrentActivityTitle,
   stewardToolRows,
 } from "./stewardProgressPresentation.ts";
+import { workerActivityTitle } from "./workerActivityTitle.ts";
 
 export function StewardParentProgress({
   progress,
@@ -44,6 +45,10 @@ export function StewardParentProgress({
   const toolRows = stewardToolRows(rows);
   const tools = workActivityToolsFromRows(toolRows, turn?.id);
   const toolSummary = summarizeTools(tools);
+  const activityLabel = workerActivityTitle(
+    stewardCurrentActivityTitle(child),
+    child.title,
+  );
   return (
     <SurfacePanel
       aria-label={child.title}
@@ -84,16 +89,16 @@ export function StewardParentProgress({
         </Stack>
         <Typo.Caption data-test-class="steward-progress-status">
           {stewardProgressStatus(child)}
-          {child.active_turn ? ` · ${stewardCurrentActivityTitle(child)}` : ""}
+          {child.active_turn ? ` · ${activityLabel}` : ""}
         </Typo.Caption>
         <Stack
           align="row"
-          aria-label={appCopy.interfaceDetails.toolHistory}
+          aria-label={activityLabel}
           data-test-class="steward-tool-summary"
           gap="xs"
           wrap
         >
-          <Typo.Caption tone="tertiary">{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
+          <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
           <Typo.Caption tone="secondary">
             {toolSummary || appCopy.interfaceDetails.noHistory}
           </Typo.Caption>

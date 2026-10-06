@@ -29,6 +29,20 @@ react-markdown `rehypePlugins`: recently appended chunks are wrapped in spans
 that fade in (opacity only, no layout shift) and settled text renders as
 plain markdown.
 
+Links: pass `MarkdownLink` as react-markdown `components.a` (beside
+`table: MarkdownTable`) and the favicon resolver as `faviconSrc`:
+
+```tsx
+<MarkdownContent faviconSrc={appFaviconSrc}>
+  <ReactMarkdown components={{ a: MarkdownLink, table: MarkdownTable }}>{text}</ReactMarkdown>
+</MarkdownContent>
+```
+
+http(s) links render as an external `InlineReference` (favicon or globe,
+title or domain, full URL in the tooltip, opened in the system browser).
+mailto, fragment and relative links stay plain anchors as before. Without
+`faviconSrc` every external link shows the globe.
+
 ## Wrong use cases
 Do not use it for chat message chrome or editable rich text. Use MessageRow or an editor-specific block instead.
 

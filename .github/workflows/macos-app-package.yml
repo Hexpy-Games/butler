@@ -99,6 +99,24 @@ jobs:
           bun install --frozen-lockfile --ignore-scripts
           npm --prefix packages/butler-app/client/ui run build
 
+      - name: Verify startup data-paint handoff
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          profile=$(mktemp -d)
+          export HOME="$profile/home" BUTLER_DATA="$profile/data"
+          export BUTLER_STARTUP_EVIDENCE=dist/startup-evidence
+          trap 'rm -rf "$profile"' EXIT
+          node packages/butler-app/client/electron/node_modules/electron/install.js
+          bun run tests/smoke/startup-splash.ts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-startup-evidence
+          path: dist/startup-evidence/
+          if-no-files-found: warn
+
       - name: Build the native Agent payload binary
         if: ${{ !inputs.published-candidate && inputs.agent-artifact == '' }}
         working-directory: packages/butler-agent/rust

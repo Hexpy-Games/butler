@@ -11,6 +11,7 @@ interface LocalModelApiSectionProps {
   platform: LocalModelDiscoveryRequest["platform"];
   setPlatform: (value: LocalModelDiscoveryRequest["platform"]) => void;
   serverUrl: string;
+  error?: string;
   setServerUrl: (value: string) => void;
   advancedOpen: boolean;
   setAdvancedOpen: (value: boolean) => void;
@@ -25,6 +26,7 @@ export function LocalModelApiSection({
   platform,
   setPlatform,
   serverUrl,
+  error,
   setServerUrl,
   advancedOpen,
   setAdvancedOpen,
@@ -43,6 +45,7 @@ export function LocalModelApiSection({
           setApiKey={setApiKey}
           platform={platform}
           setPlatform={setPlatform}
+          error={error}
           serverUrl={serverUrl}
           setServerUrl={setServerUrl}
           advancedOpen={advancedOpen}

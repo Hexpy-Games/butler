@@ -19,7 +19,7 @@ export function useCompactSettingsPaneEntry({
       view.kind === "settings"
         ? view.section
         : (initialSection ?? "general");
-    if (normalizeSettingsSectionId(section) !== "general") {
+    if (normalizeSettingsSectionId(section) !== "general" || new URLSearchParams(window.location.search).has("settings")) {
       setCompactPane("detail");
     }
   }, [initialSection, isActive, setCompactPane, view]);

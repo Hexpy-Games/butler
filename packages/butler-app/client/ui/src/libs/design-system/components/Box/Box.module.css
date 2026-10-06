@@ -167,3 +167,15 @@
 .box[data-padding-start="2xl"] {
   padding-inline-start: var(--space-2xl);
 }
+
+.box[data-surface="raised-opaque"] {
+  background: var(--color-surface-raised-opaque);
+}
+
+.box[data-elevation="card"] {
+  box-shadow: var(--shadow-card);
+}
+
+.box[data-elevation="none"] {
+  box-shadow: none;
+}

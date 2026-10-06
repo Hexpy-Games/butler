@@ -61,6 +61,7 @@ export function createBundledAgentSupervisor(input: {
     containmentVerified?: boolean;
     ownerDeathGuaranteed?: boolean;
     recordsProcessGroupId?: boolean;
+    foregroundHost?: boolean;
   };
   spawnProcess: (
     command: string,
@@ -75,6 +76,7 @@ export function createBundledAgentSupervisor(input: {
     once(event: "error", listener: (error: Error) => void): unknown;
     once(event: "exit", listener: (code: number | null, signal: string | null) => void): unknown;
     kill(signal: string): unknown;
+    stdin?: { writable: boolean; end(): unknown };
   };
   healthCheck: (
     localAuth?: { filePath: string; created: boolean; token: string } | null,
@@ -183,7 +185,7 @@ export function createBundledAgentSupervisor(input: {
   restart(): Promise<void>;
   resume(): Promise<void>;
   start(): Promise<void>;
-  stop(input?: { wait?: boolean; reason?: "stop" | "restart" }): Promise<{
+  stop(input?: { wait?: boolean; reason?: "stop" | "restart"; preserveWork?: boolean }): Promise<{
     stopped: boolean;
     containment_released: boolean;
     raw_text_included: false;

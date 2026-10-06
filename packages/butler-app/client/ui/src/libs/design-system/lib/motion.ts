@@ -53,15 +53,30 @@ const TRANSFORM_KEYS = new Set(["transform", "translate", "scale", "rotate", "of
 function tokenValue(name: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return "";
   try {
-    return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return window.getComputedStyle((document.getElementById?.("root") ?? document.documentElement)).getPropertyValue(name).trim();
   } catch {
     return "";
   }
 }
 
-/** The DS Viewer's motion toggle scopes reduced motion with `data-motion="reduced"` on <body>. */
+/**
+ * Forces reduced motion app-wide (`data-motion="reduced"` on the #root shell);
+ * `false` follows the OS again. The DS Viewer keeps its own body scope too.
+ */
+export function setReducedMotionOverride(reduced: boolean): void {
+  if (typeof document === "undefined") return;
+  const shell = document.getElementById?.("root") ?? document.documentElement;
+  if (reduced) shell.dataset.motion = "reduced";
+  else delete shell.dataset.motion;
+  publishReducedMotion();
+}
+
+/** A `data-motion="reduced"` scope on the shell (#root), <html> or <body> (DS Viewer toggle). */
 function reducedMotionScope(): boolean {
-  return typeof document !== "undefined" && document.body?.dataset?.motion === "reduced";
+  return typeof document !== "undefined" && (
+    document.getElementById?.("root")?.dataset.motion === "reduced" ||
+    document.documentElement?.dataset?.motion === "reduced" || document.body?.dataset?.motion === "reduced"
+  );
 }
 
 export function prefersReducedMotion(): boolean {
@@ -70,22 +85,42 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+// A plain listener set: the DS stays free of app state libraries.
+const motionListeners = new Set<(reduced: boolean) => void>();
+let reducedNow = false;
+let stopMotionSignals: (() => void) | undefined;
+
+/** Recomputes the effective preference; listeners hear only real changes. */
+function publishReducedMotion(): void {
+  const next = prefersReducedMotion();
+  if (next === reducedNow) return;
+  reducedNow = next;
+  for (const listener of [...motionListeners]) listener(next);
+}
+
 /**
- * Calls back with the current reduced-motion state whenever the OS setting or
- * the DS Viewer's data-motion scope changes. JS-driven loops (canvas marks)
- * use it to stop or restart; returns the unsubscribe function.
+ * Calls back whenever the effective reduced-motion preference changes (OS
+ * setting, the app override, or the DS Viewer scope). One shared media
+ * listener and observer serve every subscriber; returns the unsubscribe.
  */
 export function subscribeReducedMotion(callback: (reduced: boolean) => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
-  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const notify = () => callback(prefersReducedMotion());
-  media.addEventListener("change", notify);
-  const body = typeof document === "undefined" ? null : document.body;
-  const observer = body && typeof MutationObserver === "function" ? new MutationObserver(notify) : null;
-  observer?.observe(body as Node, { attributes: true, attributeFilter: ["data-motion"] });
+  if (motionListeners.size === 0) {
+    reducedNow = prefersReducedMotion();
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    media.addEventListener("change", publishReducedMotion);
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(publishReducedMotion) : null;
+    for (const node of [document.getElementById?.("root"), document.body, document.documentElement]) {
+      if (node) observer?.observe(node, { attributes: true, attributeFilter: ["data-motion"] });
+    }
+    stopMotionSignals = () => { media.removeEventListener("change", publishReducedMotion); observer?.disconnect(); };
+  }
+  // A wrapper per subscription, so one callback subscribed twice unsubscribes independently.
+  const listener = (reduced: boolean) => callback(reduced);
+  motionListeners.add(listener);
   return () => {
-    media.removeEventListener("change", notify);
-    observer?.disconnect();
+    if (!motionListeners.delete(listener)) return;
+    if (motionListeners.size === 0) { stopMotionSignals?.(); stopMotionSignals = undefined; }
   };
 }
 

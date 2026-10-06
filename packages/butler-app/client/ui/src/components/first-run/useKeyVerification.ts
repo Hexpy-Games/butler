@@ -31,6 +31,9 @@ export function useKeyVerification({ providerId, onVerified }: {
   verified.current = onVerified;
 
   useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!["idle", "checking", "valid", "saved"].includes(status)) document.getElementById("first-run-api-key")?.focus();
+  }, [status]);
 
   async function check(id: number, key: string): Promise<void> {
     setStatus("checking");
@@ -53,13 +56,11 @@ export function useKeyVerification({ providerId, onVerified }: {
 
   function change(next: string): void {
     setValue(next);
+    setStatus("idle");
     clearTimeout(timer.current);
     const id = ++sequence.current;
     const key = next.trim();
-    if (key.length < MIN_KEY_LENGTH) {
-      setStatus("idle");
-      return;
-    }
+    if (key.length < MIN_KEY_LENGTH) return;
     timer.current = setTimeout(() => void check(id, key), KEY_VERIFY_DEBOUNCE_MS);
   }
 

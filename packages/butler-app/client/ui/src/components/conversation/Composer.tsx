@@ -19,6 +19,7 @@ import { runtimeModels } from "@/app/utils.ts";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
+import { useComposerDecoration } from "./hooks/useComposerDecoration";
 import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
   scope?: ComposerDraftScope;
@@ -57,7 +58,6 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
     files,
     pendingProjectDocumentAttachment: session.pendingProjectDocumentAttachment,
   });
-
   const state = useComposerState(
     session.summary,
     session.turnProgress,
@@ -101,6 +101,7 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
     summary: session.summary,
   });
   const decision = useComposerDecision(isComposing, !scope);
+  const decoration = useComposerDecoration(decision);
   useReserveHeight(wrapRef, onReserveChange);
   useComposerStoreBridge({
     accessMenuOpen,
@@ -128,17 +129,15 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
   return (
     <ComposerCard
       {...fileDrop}
+      {...decoration}
       large={large}
       expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
       floating
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
-          <ComposerAdjunctPanels
-            showWorkers={state.workers.length > 0}
-            taskRows={state.taskRows}
-            taskTurnState={state.taskTurnState}
-          />
+          <ComposerAdjunctPanels showWorkers={state.workers.length > 0}
+            taskRows={state.taskRows} taskTurnState={state.taskTurnState} />
         ) : null
       }
       containerRef={wrapRef}

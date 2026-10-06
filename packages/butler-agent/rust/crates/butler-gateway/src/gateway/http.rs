@@ -1,4 +1,5 @@
 mod authority;
+mod authority_permissions;
 mod browser_host;
 mod content;
 mod start;
@@ -6,6 +7,7 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod favicons;
 mod hooks;
 mod latency_trace;
 mod listeners;
@@ -36,6 +38,7 @@ mod space_mutations;
 mod static_ui;
 mod subsession_result;
 mod subsessions;
+mod task_graphs;
 mod transcript_export;
 mod updates;
 mod wallpaper_modules;
@@ -81,6 +84,7 @@ struct HttpState {
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
+    favicons: Arc<favicons::Favicons>,
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
@@ -216,6 +220,7 @@ async fn route_for_client(
     }
     match (request.method(), uri.path()) {
         (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
+        (&Method::GET, "/favicons") => favicons::get(state, &uri).await,
         (&Method::GET, "/events/live") => {
             let scope = request
                 .extensions()
@@ -231,11 +236,10 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
-    if matches!(
-        uri.path(),
-        "/session-view" | "/session-summary" | "/context-details"
-    ) || uri.path().starts_with("/steward-relations/")
-    {
+    if task_graphs::matches(&uri) {
+        return task_graphs::route(state, request, &uri).await;
+    }
+    if subsessions::matches(&uri) {
         if let Some(response) = subsessions::route(state, request, &uri).await? {
             return Ok(response);
         }
@@ -301,8 +305,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/automations" || uri.path().starts_with("/automations/") {
         return automations::route(state, request, &uri).await;
     }
-    if uri.path() == "/updates" || uri.path() == "/updates/check" || uri.path() == "/updates/apply"
-    {
+    if updates::handles(uri.path()) {
         return updates::route(state, request).await;
     }
     if message_files::handles(&method, uri.path()) {
