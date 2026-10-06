@@ -150,6 +150,9 @@
     {"id": "ResumeChallenge", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_ResumeChallenge"},
     {"id": "ClickPixel", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_ClickPixel"},
     {"id": "ClickPixelEasy", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_ClickPixelEasy"},
-    {"id": "ClickPixelHard", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_ClickPixelHard"}
+    {"id": "ClickPixelHard", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_ClickPixelHard"},
+    {"id": "MazeNavigator", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamPath": "maze/*"},
+    {"id": "MazeNavigatorEasy", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_MazeNavigatorEasy", "pathSuffix": "/*"},
+    {"id": "MazeNavigatorHard", "source": "https://github.com/convergence-ai/webgames/blob/309866f64642b864414ca2c7ff956e59e01d3317/webgames/src/router/routes.ts", "upstreamTaskSymbol": "TASK_ID_MazeNavigatorHard", "pathSuffix": "/*"}
   ]
 }
