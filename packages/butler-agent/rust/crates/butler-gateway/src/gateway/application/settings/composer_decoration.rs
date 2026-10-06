@@ -46,10 +46,9 @@ pub(super) fn view(stored: Option<&Value>) -> Value {
     if let Some(stored) = stored
         .filter(|value| sanitize(value).is_ok())
         .and_then(Value::as_object)
+        && let Some(result) = result.as_object_mut()
     {
-        if let Some(result) = result.as_object_mut() {
-            result.extend(stored.clone());
-        }
+        result.extend(stored.clone());
     }
     result
 }
@@ -67,9 +66,15 @@ pub(super) fn project(current: &Value, patch: &Value, output: &mut Value) {
 /// A decoration-only PATCH with no effective change has no side effects.
 pub(super) fn unchanged(patch: &Value, current: &Value) -> bool {
     patch.as_object().is_some_and(|fields| {
-        fields.len() == 1 && fields.get(KEY).and_then(Value::as_object).is_some_and(|changes| {
-            let setting = view(current.get(KEY));
-            changes.iter().all(|(key, value)| setting.get(key) == Some(value))
-        })
+        fields.len() == 1
+            && fields
+                .get(KEY)
+                .and_then(Value::as_object)
+                .is_some_and(|changes| {
+                    let setting = view(current.get(KEY));
+                    changes
+                        .iter()
+                        .all(|(key, value)| setting.get(key) == Some(value))
+                })
     })
 }

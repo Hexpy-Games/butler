@@ -29,12 +29,22 @@ async fn composer_decoration_settings_are_validated_and_durable() -> Result<(), 
     }
     let chosen = json!({"theme":"shoreline", "character":false});
     assert_eq!(s.gw.settings().await?["composer_decoration"], chosen);
-    let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
-    let version = || db.query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0)).unwrap();
+    let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+        .unwrap();
+    let version = || {
+        db.query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0))
+            .unwrap()
+    };
     let before = version();
-    let repeated = s.gw.patch("/settings", json!({"composer_decoration":chosen})).await?;
+    let repeated =
+        s.gw.patch("/settings", json!({"composer_decoration":chosen}))
+            .await?;
     assert_eq!(repeated.status, 200, "{}", repeated.text);
-    assert_eq!(version(), before, "unchanged settings perform zero database writes");
+    assert_eq!(
+        version(),
+        before,
+        "unchanged settings perform zero database writes"
+    );
     drop(db);
     s.restart().await?;
     assert_eq!(s.gw.settings().await?["composer_decoration"], chosen);
