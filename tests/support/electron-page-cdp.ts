@@ -5,6 +5,7 @@ export interface ElectronPage {
   evaluate<T>(fn: () => T): Promise<Awaited<T>>;
   expression<T>(expression: string): Promise<T>;
   frameExpression<T>(origin: string, expression: string): Promise<T>;
+  press(key: "Escape" | "Enter"): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
@@ -13,11 +14,11 @@ export interface ElectronPage {
   close(): void;
 }
 
-export async function electronPage(port: number): Promise<ElectronPage> {
+export async function electronPage(port: number, origin = "app://butler/"): Promise<ElectronPage> {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []) as Array<{ type: string; url?: string; webSocketDebuggerUrl?: string }>;
-    const target = targets.find(t => t.type === "page" && t.url?.startsWith("app://butler/") && t.webSocketDebuggerUrl);
+    const target = targets.find(t => t.type === "page" && t.url?.startsWith(origin) && t.webSocketDebuggerUrl);
     if (target) return connect(target.webSocketDebuggerUrl!);
     await new Promise(done => setTimeout(done, 200));
   }
@@ -31,7 +32,7 @@ export async function electronFrame(port: number, origin: string): Promise<Elect
   return frame ? connect(frame.webSocketDebuggerUrl!) : null;
 }
 
-async function connect(url: string): Promise<ElectronPage> {
+async function transport(url: string) {
   const socket = new WebSocket(url);
   await new Promise<void>((done, fail) => {
     const timer = setTimeout(() => { socket.close(); fail(new Error("Electron CDP connection timed out.")); }, 10_000);
@@ -68,6 +69,11 @@ async function connect(url: string): Promise<ElectronPage> {
     setTimeout(() => { if (pending.delete(next)) reject(new Error(`Electron CDP timed out: ${method}`)); }, 10_000);
     socket.send(JSON.stringify({ id: next, method, params }));
   });
+  return { socket, send, errors, contexts };
+}
+
+async function connect(url: string): Promise<ElectronPage> {
+  const { socket, send, errors, contexts } = await transport(url);
   async function expression<T>(text: string, contextId?: number): Promise<T> {
     const result = await send("Runtime.evaluate", { expression: text, contextId, awaitPromise: true, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: T } };
     assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
@@ -89,6 +95,11 @@ async function connect(url: string): Promise<ElectronPage> {
   }
   return {
     expression, waitForFunction, diagnostics,
+    press: async key => {
+      const windowsVirtualKeyCode = key === "Escape" ? 27 : 13;
+      await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode });
+      await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode });
+    },
     frameExpression: (origin, text) => {
       const id = [...contexts].find(([, value]) => value === origin)?.[0];
       if (!id) return Promise.reject(new Error("Electron output context not ready"));
@@ -100,7 +111,7 @@ async function connect(url: string): Promise<ElectronPage> {
     },
     clickText: async (text, scope) => {
       const point = await expression<{ x:number;y:number }>(`(() => {
-        const matches=Array.from(document.querySelectorAll(${JSON.stringify(scope)})).filter(e=>e.textContent?.trim()===${JSON.stringify(text)});
+        const matches=Array.from(document.querySelectorAll(${JSON.stringify(scope)})).filter(e=>(e.getAttribute('aria-label') || e.textContent)?.trim()===${JSON.stringify(text)});
         const node=matches.find(e=>{const box=e.getBoundingClientRect();return box.y>=0 && box.bottom<=innerHeight;}) ?? matches[0];
         if (!node) throw new Error('Click target missing');
         node.scrollIntoView({block:'center'});
