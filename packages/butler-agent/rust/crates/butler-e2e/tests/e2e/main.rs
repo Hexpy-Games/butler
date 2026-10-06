@@ -139,6 +139,7 @@ mod memory_reset;
 mod memory_wiring_more;
 mod native_worker_ownership;
 mod project_artifacts;
+mod project_instructions;
 mod project_workspace;
 mod schedule_handoff;
 mod storage_concurrency;
