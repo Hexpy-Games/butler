@@ -14,9 +14,9 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
  *   offscreen or under reduced motion.
  * - Foundations chapter heroes (FoundationHeroMotion): each hero runs only
  *   CSS animations of transform/opacity and documented specimen properties,
- *   including timeline-owned SVG contour and guide strokes; holds the frame rate with no long
- *   task and a small main-thread cost per frame, pauses offscreen and in a
- *   hidden tab, and has no animation under reduced motion.
+ *   including timeline-owned SVG contour and guide strokes; holds the frame
+ *   rate with no long task and a small main-thread cost per frame, pauses
+ *   offscreen and in a hidden tab, and has no animation under reduced motion.
  * - Optional `--video`: Playwright recordings of each motion in light and dark
  *   (with `--only=heroes`: one loop of every chapter hero instead).
  *
@@ -517,8 +517,13 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
           properties.add(key);
           if (key === "strokeDashoffset") {
             const target = (animation.effect as KeyframeEffect).target;
+            const owner = target?.closest("[data-t]");
+            const scope = target?.closest("[data-hero-scope]");
+            const prefix = `${scope?.getAttribute("data-hero-scope")}-`;
             authoredSvgContourDashOnly &&= target instanceof SVGGeometryElement
-              && target.closest("[data-t]") !== null
+              && owner !== null && scope !== null && scope?.contains(owner ?? null) === true
+              && animation instanceof CSSAnimation && animation.animationName.startsWith(prefix)
+              && /^\d+$/u.test(animation.animationName.slice(prefix.length))
               && getComputedStyle(target).getPropertyValue("stroke-dasharray") !== "none";
           }
         }
@@ -605,8 +610,10 @@ async function measureHeroes(page: Page, serverUrl: string) {
     if (reportOnly) continue;
     assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
     assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
-    // The authored timeline draws SVG contours and guides with a dash offset.
-    // Allow it only on marked SVG geometry with a dash pattern; layout checks remain separate.
+    // DS motion rules allow paint-only stroke-dashoffset; heroTimeline's dash
+    // tracks draw Sketch contours and Annotations guides/leaders. Require a
+    // scoped timeline CSS animation on marked, dashed SVG geometry; keep all
+    // layout and performance gates below.
     const allowed = ["transform", "opacity", ...(playingAnimations.authoredSvgContourDashOnly ? ["strokeDashoffset"] : []), ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
     assert(playingAnimations.properties.every((property) => allowed.includes(property)),
       `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
