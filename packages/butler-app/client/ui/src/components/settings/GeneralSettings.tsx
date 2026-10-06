@@ -1,7 +1,7 @@
 import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { nativeShortcutModifier } from "@/app/nativeNotifications.ts";
+import { ConversationInputFields } from "./ConversationInputFields";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
@@ -59,28 +59,7 @@ export function GeneralSettings() {
         />
       </SettingsSection>
       <SettingsSection id="conversation-input" kind="form" title={sections.conversationInput}>
-        <SettingsSelect
-          settingId="follow-up-behavior"
-          label={fields.followUpBehavior}
-          value={draft.follow_up_behavior}
-          onChange={(value) =>
-            update({ follow_up_behavior: value as SettingsData["follow_up_behavior"] }, setSettings)}
-          options={[
-            { value: "queue", label: options.queueWhileBusy },
-            { value: "steer", label: options.steerCurrentTurn },
-          ]}
-        />
-        <SettingsSelect
-          settingId="multiline-send"
-          label={fields.multilineSend}
-          value={draft.multiline_send_behavior}
-          onChange={(value) =>
-            update({ multiline_send_behavior: value as SettingsData["multiline_send_behavior"] }, setSettings)}
-          options={[
-            { value: "modifier_enter_send_enter_newline", label: options.modifierEnterSendEnterNewline(nativeShortcutModifier()) },
-            { value: "enter_send_shift_enter_newline", label: options.enterSendShiftEnterNewline },
-          ]}
-        />
+        <ConversationInputFields />
       </SettingsSection>
       <SettingsSection id="notifications" kind="form" title={sections.notifications}>
         <SettingsSwitch

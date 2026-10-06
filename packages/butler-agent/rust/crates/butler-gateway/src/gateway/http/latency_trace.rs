@@ -2,12 +2,13 @@
 use axum::{body::Body, http::Request, response::Response};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 pub(super) fn start(request: &Request<Body>) -> Option<(u128, Instant)> {
-    if request.uri().path() != "/session-view"
-        || !matches!(
-            std::env::var("BUTLER_E2E_TIER").as_deref(),
-            Ok("stub" | "perf")
-        )
-        || std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() != Ok("1")
+    if !matches!(
+        request.uri().path(),
+        "/session-view" | "/authority-permissions"
+    ) || !matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) || std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() != Ok("1")
     {
         return None;
     }

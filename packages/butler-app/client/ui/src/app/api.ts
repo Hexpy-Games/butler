@@ -72,6 +72,8 @@ interface ButlerAppBridge {
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
   getWorkStatus?: () => Promise<WorkStatusView>;
+  getAuthorityPermissions?: () => Promise<unknown>;
+  revokeAuthorityPermissions?: (input: unknown) => Promise<unknown>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
@@ -648,6 +650,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "listSessionQueue", {
       sessionId: url.searchParams.get("session_id") ?? "general",
     });
+  }
+  if (method === "GET" && url.pathname === "/authority-permissions") {
+    return await callBridge<T>(bridge, "getAuthorityPermissions", {});
+  }
+  if (method === "POST" && url.pathname === "/authority-permissions/revoke") {
+    return await callBridge<T>(bridge, "revokeAuthorityPermissions", parseBody(options.body));
   }
   if (method === "GET" && url.pathname === "/authority-requests") {
     return await callBridge<T>(bridge, "getAuthorityRequests", {

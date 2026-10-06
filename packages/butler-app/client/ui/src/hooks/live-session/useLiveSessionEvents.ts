@@ -1,3 +1,4 @@
+import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
@@ -64,6 +65,7 @@ export function useLiveSessionEvents(): void {
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       publishMemoryEvent(event);
+      if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       if (event.type === "security.device_paired") pairedDevicesChanged();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);

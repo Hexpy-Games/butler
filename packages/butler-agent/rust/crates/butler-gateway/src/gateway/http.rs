@@ -1,4 +1,5 @@
 mod authority;
+mod authority_permissions;
 mod start;
 pub(super) use start::serve;
 mod automations;

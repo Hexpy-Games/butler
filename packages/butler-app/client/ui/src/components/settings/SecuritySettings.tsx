@@ -1,3 +1,7 @@
+import { securityAuthoritySections } from "./SecurityAuthoritySections";
+import { useButlerModels } from "./hooks/useButlerModels";
+import { useSavedKeys } from "./hooks/useSavedKeys";
+import { useGrants } from "./useGrants";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { DisclosureRow } from "@/butler-ds";
@@ -15,6 +19,9 @@ import { useSecuritySettings } from "./useSecuritySettings";
 export function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
+  const models = useButlerModels();
+  const savedKeys = useSavedKeys();
+  const grants = useGrants();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
@@ -32,6 +39,7 @@ export function SecuritySettings() {
           errorMessage={load === "admin-required" ? settingsCopy.security.adminRequired : undefined}
           onRetry={security.retry}
         />
+        {securityAuthoritySections({ models, savedKeys, grants })}
       </SettingsPage>
     );
   }
@@ -54,6 +62,7 @@ export function SecuritySettings() {
           <SecurityDevicesSection disabled={busy !== null} />
         </>
       )}
+      {securityAuthoritySections({ models, savedKeys, grants })}
       {view && (
         <SettingsSection id="security-advanced" kind="form" title={settingsCopy.security.advanced}>
           <DisclosureRow

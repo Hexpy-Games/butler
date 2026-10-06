@@ -85,7 +85,11 @@ export function useAppBootstrap() {
           hydrateFreshUiState();
         }
       } finally {
-        if (!cancelled) uiStateHydratedRef.current = true;
+        if (!cancelled) {
+          uiStateHydratedRef.current = true;
+          const section = new URLSearchParams(window.location.search).get("settings");
+          if (section) useButlerStore.getState().openSettings(section);
+        }
       }
     }
     restoreUiState();

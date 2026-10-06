@@ -46,10 +46,10 @@ pub use application::{
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppIdentityClock, AppLedgerSourceRequest,
-    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
-    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
-    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
+    AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
+    AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
     AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
     AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
     AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
@@ -383,6 +383,8 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult>;
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<AppGrantView>>;
+    fn authority_revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()>;
     fn authority_list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn authority_revoke(
         &self,

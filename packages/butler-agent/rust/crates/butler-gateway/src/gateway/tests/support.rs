@@ -285,6 +285,15 @@ impl GatewayApplication for TestApplication {
         Box::pin(async { Ok(message_result()) })
     }
 
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn authority_revoke_permissions(
+        &self,
+        _: Vec<crate::gateway::AppGrantRef>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn authority_list(&self, _: String) -> ApplicationFuture<AppAuthorityPage> {
         Box::pin(async {
             Ok(AppAuthorityPage {
