@@ -61,5 +61,5 @@ data/personas/active.md
 .codex-ledger-drafts/
 .tmp/
 .codex-tmp/
-plans/
-HANDOFF*.md
+/plans/
+/HANDOFF*.md
