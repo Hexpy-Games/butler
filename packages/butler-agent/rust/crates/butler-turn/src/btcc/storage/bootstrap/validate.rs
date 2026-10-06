@@ -1,4 +1,4 @@
-mod activated;
+pub(super) mod activated;
 mod references;
 
 pub(super) use activated::read_activated;
@@ -50,8 +50,8 @@ pub(super) fn integrity(db: &Connection) -> StorageResult<()> {
         return Err(error(StorageCode::AgentBtccStorageQuickCheckFailed));
     }
     activated::trace("quick_check_validated", started);
-    let foreign: Option<i64> = db
-        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+    let foreign: Option<()> = db
+        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
         .map_err(StorageError::sqlite)?;
     if foreign.is_some() {

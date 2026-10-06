@@ -1,6 +1,9 @@
 //! Source-compatible fresh-install BTCC publication and activation.
 
+mod health;
 mod manifest;
+pub(super) use health::migrate_current;
+pub use health::{begin_storage_startup, finish_storage_shutdown, validate_storage_background};
 mod validate;
 
 use crate::btcc::StorageCode;

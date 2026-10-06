@@ -57,4 +57,3 @@ src/host/service/ingress/bind/internal_subsession.rs	bind	87
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	213
 src/host/service/ingress/dispatch.rs	execute	127
 src/host/service/progress_publisher.rs	ProgressPublisher::publish	89
-src/host/service/restart_handoff.rs	record_helper_terminal	105

@@ -17,6 +17,7 @@ mod poll;
 mod startup;
 mod stop_signal;
 pub(crate) use startup::STARTUP_TIMEOUT;
+mod storage_health;
 mod support;
 use crate::host::{
     AgentRuntime, ProcessEnvironment, ResolvedInstallation, RuntimePaths, ServiceConfiguration,
@@ -185,7 +186,7 @@ async fn run_until_stopped(
         stop,
     )
     .await;
-    close_after_serve(runtime, &writer, result, instance).await
+    close_after_serve(runtime, &writer, result, (instance, config.data_root)).await
 }
 
 /// Admission and dispatcher tasks have ended before BTCC closes its services.
@@ -194,7 +195,10 @@ async fn close_after_serve(
     runtime: Arc<AgentRuntime>,
     writer: &TranscriptWriter,
     result: Result<String, BtccError>,
-    instance: crate::host::service::instance::InstanceGuard,
+    (instance, data_root): (
+        crate::host::service::instance::InstanceGuard,
+        std::path::PathBuf,
+    ),
 ) -> Result<String, BtccError> {
     let runtime_close =
         super::shutdown_trace::measure("runtime_close", close_runtime(runtime)).await;
@@ -204,6 +208,12 @@ async fn close_after_serve(
     let result = match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
+    };
+    let result = match result {
+        Ok(session) => storage_health::clean_shutdown(data_root)
+            .await
+            .map(|()| session),
+        Err(error) => Err(error),
     };
     // Guard release waits for the record lock; keep that wait off Tokio workers.
     tokio::task::spawn_blocking(move || drop(instance))
@@ -320,23 +330,25 @@ async fn serve(
     startup.phase("dispatch_recovery_and_instance_ready");
     log_effective_model(&gateway, logs).await?;
     let _ = ready.send(());
-    let subsessions = runtime.subsessions.repository();
-    let result = poll_service(
-        PollOwners {
-            dispatcher: &dispatcher,
-            queue: queue.clone(),
-            progress: progress.clone(),
-            config,
-            subsessions: &subsessions,
-            parent_client: &parent_client,
-            app_endpoint: &app_endpoint,
-            readiness: &readiness,
-            logs,
-        },
-        PollShutdown {
-            stop,
-            foreground_lease,
-        },
+    let result = storage_health::while_serving(
+        &config.data_root,
+        poll_service(
+            PollOwners {
+                dispatcher: &dispatcher,
+                queue: queue.clone(),
+                progress: progress.clone(),
+                config,
+                subsessions: &runtime.subsessions.repository(),
+                parent_client: &parent_client,
+                app_endpoint: &app_endpoint,
+                readiness: &readiness,
+                logs,
+            },
+            PollShutdown {
+                stop,
+                foreground_lease,
+            },
+        ),
     )
     .await;
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;

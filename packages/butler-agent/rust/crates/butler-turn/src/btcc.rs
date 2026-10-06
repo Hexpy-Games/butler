@@ -146,7 +146,8 @@ pub use storage::{
     StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
-    bootstrap_fresh_storage, read_activated_storage_manifest,
+    begin_storage_startup, bootstrap_fresh_storage, finish_storage_shutdown,
+    read_activated_storage_manifest, validate_storage_background,
 };
 pub use storage::{
     ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,

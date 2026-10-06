@@ -37,7 +37,10 @@ mod wake;
 mod work;
 
 pub(crate) use authority::SqliteAuthorityRepository;
-pub use bootstrap::{bootstrap_fresh_storage, read_activated_storage_manifest};
+pub use bootstrap::{
+    begin_storage_startup, bootstrap_fresh_storage, finish_storage_shutdown,
+    read_activated_storage_manifest, validate_storage_background,
+};
 pub use context_compactions::{ContextCompactionRecord, ContextCompactionRepository};
 pub use context_documents::{ContextDocumentInput, ContextDocumentRead};
 pub use effects::StorageEffectJournal;
@@ -301,8 +304,7 @@ fn run_connection_lane(
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
         validate_activation(&connection, activation)?;
-        schema::create_current(&connection).map_err(StorageError::sqlite)?;
-        migration::apply(&mut connection).map_err(StorageError::sqlite)?;
+        bootstrap::migrate_current(&mut connection)?;
         legacy_cutover::apply(&mut connection)?;
         let owner = RuntimeOwner::register(&mut connection, identity, liveness)?;
         Ok((connection, owner))
