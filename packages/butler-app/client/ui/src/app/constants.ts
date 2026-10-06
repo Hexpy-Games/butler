@@ -67,6 +67,7 @@ export const EMPTY_SETTINGS: SettingsView = {
     motion: "auto",
     pauseOnBattery: false,
   },
+  composer_decoration: { theme: "none", character: true },
   translucent_sidebar: true,
   smart_grouping_enabled: true,
   diagnostics_enabled: false,

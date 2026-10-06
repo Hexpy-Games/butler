@@ -116,6 +116,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "main_screen_theme_preset",
         "main_screen_theme_custom_colors",
         "wallpaper",
+        "composer_decoration",
         "translucent_sidebar",
         "smart_grouping_enabled",
         "desktop_notifications",

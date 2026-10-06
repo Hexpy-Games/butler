@@ -601,6 +601,7 @@ export interface SettingsView {
   ];
   /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
   wallpaper: WallpaperSetting;
+  composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;

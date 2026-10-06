@@ -1425,6 +1425,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaperPauseOnBattery: "Pause on battery",
       collapseMessageBox: "Collapse message box",
       reduceMotion: "Reduce motion",
+      composerDecoration: "Message box background",
+      composerCharacter: "Character",
       translucentSidebar: "Translucent sidebar",
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",
@@ -1521,6 +1523,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       reduceMotion: "When off, follows your system setting.",
       reduceMotionSystem: "On in your system settings",
       wallpaperStill: "Paused by Reduce motion",
+      composerDecoration: "Art behind your text. Follows wallpaper motion.",
+      composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,

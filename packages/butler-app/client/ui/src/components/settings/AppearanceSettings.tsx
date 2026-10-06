@@ -14,6 +14,7 @@ import {
 import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { ComposerFoldField } from "./ComposerFoldField";
 import { ReduceMotionField } from "./ReduceMotionField";
+import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export const AppearanceSettings = memo(function AppearanceSettings() {
@@ -80,6 +81,7 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
       >
         <MainScreenThemeSettings />
         <ComposerFoldField />
+        <ComposerDecorationSettings />
       </SettingsSection>
       <SettingsSection id="accessibility" kind="form" title={sections.accessibility}>
         <ReduceMotionField />

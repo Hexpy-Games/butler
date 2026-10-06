@@ -1432,6 +1432,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaperPauseOnBattery: "배터리 사용 시 멈춤",
       collapseMessageBox: "입력창 접기",
       reduceMotion: "동작 줄이기",
+      composerDecoration: "입력창 배경",
+      composerCharacter: "캐릭터",
       translucentSidebar: "투명 사이드바",
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",
@@ -1528,6 +1530,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       reduceMotion: "끄면 시스템 설정을 따릅니다.",
       reduceMotionSystem: "시스템 설정에서 켜져 있습니다",
       wallpaperStill: "동작 줄이기가 켜져 있어 멈춰 있습니다",
+      composerDecoration: "글자 뒤에 그림을 깝니다. 움직임은 월페이퍼 설정을 따릅니다.",
+      composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,

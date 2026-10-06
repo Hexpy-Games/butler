@@ -110,6 +110,10 @@ export function settingsWithDefaults(
     wallpaper:
       parseWallpaperSetting(record.wallpaper) ??
       legacyWallpaperSetting(legacyTheme),
+    composer_decoration: {
+      theme: isRecord(record.composer_decoration) && (record.composer_decoration.theme === "shoreline" || record.composer_decoration.theme === "cherry") ? record.composer_decoration.theme : "none",
+      character: isRecord(record.composer_decoration) && typeof record.composer_decoration.character === "boolean" ? record.composer_decoration.character : true,
+    },
     desktop_notifications: normalizeDesktopNotifications(
       record.desktop_notifications,
     ),

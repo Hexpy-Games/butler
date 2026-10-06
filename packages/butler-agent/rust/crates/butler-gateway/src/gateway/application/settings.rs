@@ -7,6 +7,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
 mod access;
+mod composer_decoration;
 mod controls;
 mod default_model;
 mod model;
@@ -307,7 +308,10 @@ impl super::AppApplication {
         let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
             self.project_creation.resolve_workspace_selection(token)
         })?;
-        if update::unchanged_composer_fold(&prepared.patch, &current) {
+        if prepared.workspace_root.is_none()
+            && (update::unchanged_composer_fold(&prepared.patch, &current)
+                || composer_decoration::unchanged(&prepared.patch, &current))
+        {
             return Ok((wallpaper::source(&current), current));
         }
         self.validate_wallpaper_patch(&prepared.patch).await?;
