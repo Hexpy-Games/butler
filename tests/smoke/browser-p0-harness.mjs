@@ -6,9 +6,13 @@ const { app, ipcMain, WebContentsView, webContents, contentTracing } = createReq
   new URL("../../packages/butler-app/client/electron/package.json", import.meta.url),
 )("electron");
 
-export function installBrowserP0Harness(window) {
+export function installBrowserP0Harness(window, userBrowser) {
   if (process.env.BUTLER_TEST_BROWSER_P0 !== "1" || app.isPackaged) throw new Error("P0 disabled");
   const views = new Map();
+  const partitions = new Map();
+  let sessionsCreated = 0;
+  const sessionCreated = () => { sessionsCreated++; };
+  app.on("session-created", sessionCreated);
   const gone = [];
   const crashes = [];
   const routed = { frames: 0, subresources: 0 };
@@ -28,24 +32,28 @@ export function installBrowserP0Harness(window) {
       // WebGPUService is a candidate, not a proven per-tab block: gpuPolicy must verify it.
       const gpuOff = !user && process.env.BUTLER_P0_AGENT_GPU === "off";
       const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true,
-        nodeIntegration: false, backgroundThrottling: false, webgl: webgl && !gpuOff, additionalArguments: gpuOff ? ["--disable-features=WebGPUService"] : [], partition: `p0-${id}` } });
+        nodeIntegration: false, backgroundThrottling: false, webgl: webgl && !gpuOff, additionalArguments: gpuOff ? ["--disable-features=WebGPUService"] : [], partition: process.env.BUTLER_P0_DIAGNOSE_PER_TAB === "1" ? `p0-${id}` : user ? "p0-user" : "p0-agent" } });
       view.webContents.on("render-process-gone", (_event, details) => crashes.push({ id, code: "tab_crashed", ...details }));
       view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-      // Exercise the router cost without product browser policy or API access.
-      view.webContents.session.webRequest.onBeforeRequest({ urls: [`${parsed.origin}/*`] }, (details, callback) => {
+      // Sessions live until Electron exits: scope to the two owners, not tab IDs.
+      const profile = view.webContents.session;
+      if (!partitions.has(profile)) profile.webRequest.onBeforeRequest({ urls: ["http://127.0.0.1/*", "https://www.iana.org/*"] }, (details, callback) => {
         if (!["mainFrame", "subFrame"].includes(details.resourceType)) {
           routed.subresources++; callback({ cancel: false }); return;
         }
         routed.frames++;
         callback({ cancel: false });
       });
+      partitions.set(profile, (partitions.get(profile) || 0) + 1);
       window.contentView.addChildView(view);
-      view.setBounds({ x: user ? 900 : 0, y: user ? 0 : ((views.size - 1) % 3) * 180, width: 320, height: 180 });
+      view.setBounds({ x: user ? 900 : 0, y: user ? 0 : (Math.max(0, views.size - 1) % 3) * 180, width: 320, height: 180 });
       views.set(id, view);
       await view.webContents.loadURL(url);
       return view.webContents.id;
     },
     step: id => observeActCapture(get(id)),
+    productStep: id => observeActCapture(userBrowser.tabs.get(id).view.webContents),
+    productInventory: () => ({ tabs: userBrowser.tabs.size, profiles: userBrowser.profiles.size, stillBytes: [...userBrowser.tabs.values()].reduce((n, t) => n + t.still.length, 0) }),
     navigate: (id, url) => get(id).loadURL(url),
     evaluate: (id, expression) => get(id).executeJavaScript(expression),
     paintProbe: () => paintProbe(window.webContents),
@@ -61,25 +69,28 @@ export function installBrowserP0Harness(window) {
     insertTextPaint: text => inputCapture(window.webContents, text),
     crashRenderer: id => get(id).forcefullyCrashRenderer(),
     loseGPU(id) { void get(id).loadURL("chrome://gpucrash").catch(() => {}); return true; },
-    close(id) {
+    async close(id) {
       const view = views.get(id); if (!view) throw new Error("Unknown tab");
-      view.webContents.session.webRequest.onBeforeRequest(null);
+      const profile = view.webContents.session, remaining = partitions.get(profile) - 1;
+      if (remaining) partitions.set(profile, remaining);
+      else { profile.webRequest.onBeforeRequest(null); partitions.delete(profile); }
       window.contentView.removeChildView(view);
       if (view.webContents.debugger.isAttached()) view.webContents.debugger.detach();
-      view.webContents.close(); views.delete(id);
+      const destroyed = new Promise(resolve => view.webContents.once("destroyed", resolve));
+      view.webContents.close(); views.delete(id); await destroyed;
     },
     sample() {
       return { at: performance.now(), versions: process.versions, gpu: app.getGPUFeatureStatus(), gone, crashes,
-        crashLimitDisabled: app.commandLine.hasSwitch("disable-gpu-process-crash-limit"), paths: { userData: app.getPath("userData"), sessionData: app.getPath("sessionData") }, routed, mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, metrics: app.getAppMetrics(), initial, resources: baseline(),
+        crashLimitDisabled: app.commandLine.hasSwitch("disable-gpu-process-crash-limit"), paths: { userData: app.getPath("userData"), sessionData: app.getPath("sessionData") }, routed, mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, sessionsCreated, metrics: app.getAppMetrics(), initial, resources: baseline(),
         loop: { p99Ms: delay.percentile(99) / 1e6, maxMs: delay.max / 1e6 } };
     },
     gpuPolicy: id => get(id).executeJavaScript("(async()=>({webgl:!!document.createElement('canvas').getContext('webgl'),webgl2:!!document.createElement('canvas').getContext('webgl2'),gpuPresent:!!navigator.gpu,webgpu:Boolean(await navigator.gpu?.requestAdapter())}))()"),
     resetDelay: () => delay.reset(),
     traceStart: () => contentTracing.startRecording({ included_categories: ["devtools", "devtools.timeline", "blink", "gpu", "toplevel", "disabled-by-default-memory-infra", "blink.user_timing"], memory_dump_config: { triggers: [{ mode: "light", periodic_interval_ms: 1000 }] } }),
     traceStop: path => contentTracing.stopRecording(path),
-    dispose() {
-      for (const id of [...views.keys()]) this.close(id);
-      delay.disable(); app.removeListener("child-process-gone", childGone); delete globalThis.browserP0;
+    async dispose() {
+      await Promise.all([...views.keys()].map(id => this.close(id)));
+      delay.disable(); app.removeListener("session-created", sessionCreated); app.removeListener("child-process-gone", childGone); delete globalThis.browserP0;
     },
   };
 }
@@ -101,7 +112,7 @@ async function observeActCapture(wc) {
   const jpeg = Buffer.from(data, "base64");
   if (jpeg.length < 4 || jpeg.readUInt16BE(0) !== 0xffd8 || jpeg.readUInt16BE(jpeg.length - 2) !== 0xffd9) throw new Error("Incomplete Chromium JPEG");
   const size = jpegSize(jpeg);
-  if (size.width !== expectedSize.width || size.height !== expectedSize.height) throw new Error(`Capture resolution mismatch: ${JSON.stringify({size,expectedSize})}`);
+  if (size.width !== expectedSize.width || size.height !== expectedSize.height) throw new Error(`Capture resolution mismatch: ${JSON.stringify({ size, expectedSize })}`);
   return { size, nodes: observed.count, capturedMs: performance.now() - start, jpegMs: performance.now() - start, jpegBytes: jpeg.length };
 
 }
@@ -130,7 +141,7 @@ async function paintProbe(wc) {
     await wc.executeJavaScript(`new Promise(resolve=>{
       document.getElementById('p0-paint-probe')?.remove();const c=document.createElement('canvas');c.id='p0-paint-probe';c.width=c.height=1;
       Object.assign(c.style,{position:'fixed',left:'500px',top:'100px',width:'1px',height:'1px',zIndex:'2147483647',pointerEvents:'none'});document.body.append(c);
-      const x=c.getContext('2d');x.fillStyle='rgb(${expected.slice(0,3).join(",")})';x.fillRect(0,0,1,1);
+      const x=c.getContext('2d');x.fillStyle='rgb(${expected.slice(0, 3).join(",")})';x.fillRect(0,0,1,1);
       requestAnimationFrame(()=>requestAnimationFrame(resolve));})`);
     const image = await wc.capturePage({ x: 500, y: 100, width: 1, height: 1 }, { stayHidden: true });
     pixel = [...image.toBitmap().subarray(0, 4)];

@@ -12,6 +12,7 @@ export async function snapshotFiles(app: P0App, label: string) {
   const files: Snapshot = {};
   for (const [scope, root] of Object.entries(roots)) walk(root, scope, files);
   writeFileSync(join(app.dir, `${label}-snapshot.json`), JSON.stringify(files));
+  if (process.env.BUTLER_P0_EVIDENCE) writeFileSync(join(process.env.BUTLER_P0_EVIDENCE, `${label}-snapshot.json`), JSON.stringify(files));
   return files;
 }
 

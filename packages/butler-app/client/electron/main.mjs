@@ -2745,7 +2745,7 @@ if (appSingleInstanceLock) {
       await createWindow();
       if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
         const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
-        installBrowserP0Harness(mainWindow);
+        installBrowserP0Harness(mainWindow, userBrowser);
       }
       flushPendingNativeNavigation();
     })

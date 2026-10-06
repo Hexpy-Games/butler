@@ -13,6 +13,7 @@ import { gpuCrash, gpuHang, mainLoad, rendererCrash, uiBaseline } from "./browse
 import { leakSoak } from "./browser-p0-soak.ts";
 import { sample, type Row } from "./browser-p0-measure.ts";
 
+assert.notEqual(process.env.BUTLER_P0_DIAGNOSE_PER_TAB, "1", "Per-tab partition control is diagnosis only");
 const selected = process.argv[2] || "all";
 assert(["all", "version", "policy", "normal", "renderer", "gpu-crash", "gpu-hang", "load", "baseline", "soak"].includes(selected));
 const rows: Row[] = [];

@@ -1,7 +1,7 @@
 import { quietHost } from "./browser-p0-host-load.ts";
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { budget, frames, percentile, sample, startFrames, typing, prepareTyping, attributeTrace, type P0App, type Row } from "./browser-p0-measure.ts";
 import { seedP0OwnerScale } from "./browser-p0-owner-scale.ts";
@@ -31,6 +31,10 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
   if (!user && process.env.BUTLER_P0_AGENT_GPU === "off") {
     for (const feature of ["webgl", "webgl2", "webgpu"] as const) rows.push({ test: "gpu crash", metric: `agent ${feature} disabled`, value: String(policy[feature]), budget: "false", status: policy[feature] ? "FAIL" : "PASS", attribution: "Electron per-view capability policy", mitigation: "Verify a supported per-view GPU policy before treating this as a mitigation run" });
   }
+  const evidence = process.env.BUTLER_P0_EVIDENCE;
+  assert(evidence, "BUTLER_P0_EVIDENCE required"); mkdirSync(evidence, { recursive: true });
+  await app.page.expression("(()=>{window.p0WallpaperContexts=[];for(const c of document.querySelectorAll('canvas[data-module]'))for(const name of ['webglcontextlost','webglcontextrestored'])c.addEventListener(name,()=>window.p0WallpaperContexts.push({name,at:performance.now()}))})()");
+  writeFileSync(join(evidence, `${user ? "user" : "agent"}-before.png`), await app.page.screenshot());
   await startFrames(app);
   await app.page.expression("(()=>{window.p0WallpaperDraws=0;const p=WebGL2RenderingContext.prototype,draw=p.drawArrays;p.drawArrays=function(...args){window.p0WallpaperDraws++;return draw.apply(this,args)}})()");
   await Bun.sleep(1000);
@@ -66,7 +70,9 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
     rows.push({ test: "gpu crash", metric: `GPU feature status loss ${i + 1}`, value: JSON.stringify(state.gpu), budget: JSON.stringify(before.gpu), status: JSON.stringify(state.gpu) === JSON.stringify(before.gpu) ? "PASS" : "FAIL", attribution: "GPU", mitigation: "Disable agent WebGL/WebGPU, then repeat" });
     gaps.push(...await frames(app));
     const loss = { gpuLoss: i + 1, hostLoad, gpuStatus: state.gpu, wallpaperPixelsBefore, wallpaperPixelsAfter, wallpaperDraws: wallpaperAfter - wallpaperBefore, userFrames: userAfter - userBefore, featuresUnchanged: JSON.stringify(state.gpu) === JSON.stringify(before.gpu) };
-    lossEvidence.push(loss); console.log(JSON.stringify(loss));
+    const contexts = await app.page.expression("window.p0WallpaperContexts");
+    writeFileSync(join(evidence, `${user ? "user" : "agent"}-loss-${i + 1}.png`), await app.page.screenshot());
+    lossEvidence.push({ ...loss, contexts }); console.log(JSON.stringify({ ...loss, contexts }));
   }
   // Observe the full ten-minute interval; busy admission cannot relax its limit.
   await Bun.sleep(Math.max(0, firstLoss + 600_000 - performance.now()));

@@ -44,8 +44,13 @@ export async function launchP0App({ harness = true } = {}) {
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
     BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
-  const logs: string[] = [];
-  child.stdout!.on("data", value => logs.push(String(value))); child.stderr!.on("data", value => logs.push(String(value)));
+  let logBytes = 0, logTail = "", watchdogTimeout = false, machRendezvous = false;
+  const observeLog = (value: Buffer) => {
+    logBytes += value.length; logTail = (logTail + String(value)).slice(-4096);
+    watchdogTimeout ||= /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(logTail);
+    machRendezvous ||= /Mach|rendezvous/iu.test(logTail);
+  };
+  child.stdout!.on("data", observeLog); child.stderr!.on("data", observeLog);
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   let main: Awaited<ReturnType<typeof mainInspector>> | undefined;
   async function stop() {
@@ -72,10 +77,10 @@ export async function launchP0App({ harness = true } = {}) {
     await page.expression(`window.butlerApp.updateSettings(${JSON.stringify({ language: "ko", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: at, completed_at: at }, wallpaper: { source: { kind: "live", module: "butler.silk", params: {}, paramsDark: {} }, motion: "auto", pauseOnBattery: false } })})`);
     await page.reload();
     await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="workspace"]')));
-    return { dir, data, page, main, child, stop, watchdogEvidence: () => ({ timeoutLog: /GPU.*watchdog.*timeout|GpuWatchdog.*timeout/iu.test(logs.join("")), logBytesWithheld: logs.join("").length }) };
+    return { dir, data, page, main, child, stop, watchdogEvidence: () => ({ timeoutLog: watchdogTimeout, logBytesWithheld: logBytes }) };
   } catch (error) {
     // Logs can include bearer-bearing URLs: do not print raw App logs.
-    await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logs.join("").length} log bytes withheld; Mach rendezvous=${/Mach|rendezvous/iu.test(logs.join(""))}`, { cause: error });
+    await stop(); throw new Error(`App launch failed (${child.exitCode ?? child.signalCode ?? "running"}): ${String(error)}; ${logBytes} log bytes withheld; Mach rendezvous=${machRendezvous}`, { cause: error });
   }
 }
 
