@@ -14,15 +14,13 @@ export interface ProposalState {
   composer: "rest" | "open";
   /** Shoreline readability option under review: a accept, b waterline low, c no shoreline, d exposure grade. */
   shore: ShoreOption;
-  /** Cherry canopy layout: corner (baseline), intrude (A), spill (B, recommended), frame. */
-  cherry: "corner" | "intrude" | "spill" | "frame";
   /** Live tuning of option (d), from the d_* URL params. */
   tune: ShoreParams;
 }
 
 export const DEFAULT_PROPOSAL_STATE: ProposalState = {
   decor: "cherry-blossom", character: true, theme: "both", width: "desktop", motion: "full", locale: "ko",
-  wallpaper: "butler.bloom", composer: "rest", shore: "d", cherry: "spill", tune: SHORE_PRESETS.d,
+  wallpaper: "butler.bloom", composer: "rest", shore: "d", tune: SHORE_PRESETS.d,
 };
 
 function pick<T extends string>(options: readonly T[], value: string | null, fallback: T): T {
@@ -43,7 +41,6 @@ export function readProposalState(search: string): ProposalState {
     wallpaper: pick(PAGE_WALLPAPERS, params.get("wallpaper"), d.wallpaper),
     composer: pick(["rest", "open"] as const, params.get("composer"), d.composer),
     shore: pick(SHORE_OPTIONS, params.get("shore"), d.shore),
-    cherry: pick(["corner", "intrude", "spill", "frame"] as const, params.get("cherry"), d.cherry),
     tune: readShoreParams("d", search),
   };
 }
@@ -63,7 +60,7 @@ export function proposalSearch(state: ProposalState): string {
   const entries: Array<[string, string]> = [
     ["decor", state.decor], ["character", state.character ? "on" : "off"], ["theme", state.theme], ["width", state.width],
     ["motion", state.motion], ["locale", state.locale], ["wallpaper", state.wallpaper], ["composer", state.composer],
-    ["shore", state.shore], ["cherry", state.cherry], ...shoreSearch(state.tune),
+    ["shore", state.shore], ...shoreSearch(state.tune),
   ];
   for (const [key, value] of entries) params.set(key, value);
   return params.toString();

@@ -4,75 +4,10 @@
     "en": "Cherry canopy",
     "ko": "벚꽃"
   },
-  "version": "0.6.0",
+  "version": "0.7.0",
   "engine": 1,
   "motion": "animated",
   "image": "none",
   "timePeriod": 240,
-  "params": [
-    {
-      "key": "layout",
-      "type": "enum",
-      "label": {
-        "en": "Canopy",
-        "ko": "캐노피"
-      },
-      "default": "spill",
-      "options": [
-        {
-          "value": "corner",
-          "label": {
-            "en": "Deep corner",
-            "ko": "모서리"
-          }
-        },
-        {
-          "value": "intrude",
-          "label": {
-            "en": "Into the empty side",
-            "ko": "빈 영역까지"
-          }
-        },
-        {
-          "value": "spill",
-          "label": {
-            "en": "Over the card",
-            "ko": "카드 위로"
-          }
-        },
-        {
-          "value": "frame",
-          "label": {
-            "en": "Padding only",
-            "ko": "여백만"
-          }
-        }
-      ]
-    },
-    {
-      "key": "part",
-      "type": "enum",
-      "label": {
-        "en": "Part",
-        "ko": "부분"
-      },
-      "default": "card",
-      "options": [
-        {
-          "value": "card",
-          "label": {
-            "en": "Inside the card",
-            "ko": "카드 안"
-          }
-        },
-        {
-          "value": "outside",
-          "label": {
-            "en": "Above the card",
-            "ko": "카드 위"
-          }
-        }
-      ]
-    }
-  ]
+  "params": []
 }
