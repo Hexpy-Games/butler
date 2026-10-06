@@ -13,7 +13,7 @@ export BUTLER_UPDATE_SMOKE_PROFILE="${BUTLER_UPDATE_SMOKE_PROFILE:-dev}"
 export BUTLER_UPDATE_SMOKE_BUNDLE_CACHE="$run_root/bundles"
 cd "$repo_root"
 bun install --frozen-lockfile --ignore-scripts
-node node_modules/.bun/electron@41.10.4/node_modules/electron/install.js
+bun run --cwd packages/butler-app/client/electron install-electron --no
 npm --prefix packages/butler-app/client/ui run build
 bunx playwright install chromium
 bun run tests/smoke/app-update-choice-smoke.ts

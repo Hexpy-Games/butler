@@ -60,7 +60,6 @@ export function windowsLoginItemSettings({
   if (platform !== "win32" || !isPackaged) {
     return {
       openAtLogin: openAtLogin === true,
-      openAsHidden: true,
     };
   }
   const appFolder = win32.dirname(execPath);
