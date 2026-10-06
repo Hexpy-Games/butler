@@ -35,6 +35,7 @@ fn main() -> std::process::ExitCode {
             butler_agent::BuildInfo {
                 version: env!("BUTLER_RELEASE_VERSION"),
                 build_id: env!("BUTLER_BUILD_ID"),
+                profile: env!("BUTLER_BUILD_PROFILE"),
             },
         )
         .await
