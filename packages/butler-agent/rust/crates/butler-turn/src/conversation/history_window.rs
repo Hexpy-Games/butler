@@ -46,11 +46,20 @@ pub(super) fn read(
     let sizes = completed_sizes(db, session, epoch)?;
     let summary_bytes: usize = summaries.iter().map(|s| s.summary_text.len() + 128).sum();
     let start = window_start(&sizes, cap, summary_bytes + cap / 10);
-    let ids: Vec<_> = sizes.iter().skip(start).map(|(id, _)| id.clone()).collect();
+    let ids: Vec<_> = sizes
+        .iter()
+        .skip(start)
+        .map(|(id, _, _)| id.clone())
+        .collect();
     let mut material = load::material(db, session, &ids, epoch)?;
     material.summaries = summaries;
     let late_turn_ids = late_ids(&material.turns);
-    let digest = dropped_digest(db, sizes.get(..start).unwrap_or_default(), epoch, cap / 10)?;
+    let digest = dropped_digest(
+        db,
+        session,
+        sizes.get(..start).unwrap_or_default(),
+        cap / 10,
+    )?;
     let legacy_material = load::legacy_material(db, session, cap, &material.summaries)?;
     Ok(HistoryWindow {
         material,
@@ -74,14 +83,14 @@ fn late_ids(turns: &[ConversationTurn]) -> Vec<String> {
         .collect()
 }
 
-fn window_start(sizes: &[(String, usize)], cap: usize, reserved: usize) -> usize {
+fn window_start(sizes: &[(String, usize, Option<f64>)], cap: usize, reserved: usize) -> usize {
     let mut start = 0;
     let mut used = reserved;
-    for (end, (_, size)) in sizes.iter().enumerate() {
+    for (end, (_, size, _)) in sizes.iter().enumerate() {
         used = used.saturating_add(*size);
         if used > cap && end + 1 - start > 4 {
             while used > cap * 3 / 5 && end + 1 - start > 4 {
-                let Some((_, size)) = sizes.get(start) else {
+                let Some((_, size, _)) = sizes.get(start) else {
                     break;
                 };
                 used = used.saturating_sub(*size);
@@ -96,15 +105,15 @@ fn completed_sizes(
     db: &Connection,
     session: &str,
     epoch: f64,
-) -> ConversationResult<Vec<(String, usize)>> {
+) -> ConversationResult<Vec<(String, usize, Option<f64>)>> {
     // octet_length reads SQLite's stored size, without loading overflow pages.
     // Capsules and envelopes are charged alongside the condensed tool labels.
     let mut query = db.prepare(
         "SELECT t.id,768+s.bytes+ \
          COALESCE((SELECT octet_length(evidence_refs_json)+octet_length(unresolved_obligations_json)+ \
-         COALESCE(octet_length(continuation_json),0)+512 FROM conversation_turn_outcomes o WHERE o.turn_id=t.id),0) \
+         COALESCE(octet_length(continuation_json),0)+512 FROM conversation_turn_outcomes o WHERE o.turn_id=t.id),0),s.request_seq \
          FROM (SELECT m.turn_id,SUM(CASE WHEN p.kind IN ('tool_call','tool_result') \
-         THEN 160 ELSE octet_length(p.content_json)+64 END) bytes \
+         THEN 160 ELSE octet_length(p.content_json)+64 END) bytes,MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq \
          FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
          WHERE m.session_id=?1 AND m.seq>?2 GROUP BY m.turn_id) s \
          JOIN conversation_turns t ON t.id=s.turn_id \
@@ -112,7 +121,7 @@ fn completed_sizes(
     ).map_err(ConversationError::sqlite)?;
     query
         .query_map(rusqlite::params![session, epoch], |r| {
-            Ok((r.get(0)?, r.get(1)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })
         .map_err(ConversationError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
@@ -134,8 +143,8 @@ fn valid_summaries(db: &Connection, session: &str) -> ConversationResult<Vec<Con
 
 fn dropped_digest(
     db: &Connection,
-    dropped: &[(String, usize)],
-    epoch: f64,
+    session: &str,
+    dropped: &[(String, usize, Option<f64>)],
     cap: usize,
 ) -> ConversationResult<String> {
     let mut lines = Vec::new();
@@ -143,15 +152,19 @@ fn dropped_digest(
     // Only the newest digest entries can fit; do not inspect the rest of the range.
     let mut query = db.prepare("SELECT substr(json_extract(p.content_json,'$.text'),1,160) \
         FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
-        WHERE m.turn_id=?1 AND m.seq>?2 AND m.role='user' AND p.kind='text' ORDER BY m.seq,p.part_index LIMIT 1")
+        WHERE m.session_id=?1 AND m.seq=?2 AND m.role='user' AND p.kind='text' ORDER BY p.part_index LIMIT 1")
         .map_err(ConversationError::sqlite)?;
-    for (id, _) in dropped.iter().rev() {
+    for (id, _, request_seq) in dropped.iter().rev() {
         use rusqlite::OptionalExtension;
-        let request: Option<String> = query
-            .query_row(rusqlite::params![id, epoch], |r| r.get(0))
-            .optional()
-            .map_err(ConversationError::sqlite)?
-            .flatten();
+        let request: Option<String> = if let Some(seq) = request_seq {
+            query
+                .query_row(rusqlite::params![session, seq], |r| r.get(0))
+                .optional()
+                .map_err(ConversationError::sqlite)?
+                .flatten()
+        } else {
+            None
+        };
         let text = request.unwrap_or_default().replace(['\n', '\r'], " ");
         let mut end = text.len().min(160);
         while !text.is_char_boundary(end) {
