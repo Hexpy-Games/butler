@@ -95,16 +95,16 @@ test("a DS overlay over the slot occludes it until it is removed", async () => {
   setRect(menu, { left: 900, top: 60, width: 220, height: 200 });
   view.doc.body.append(menu);
   await flush();
-  expect(view.occlusion).toEqual([true]);
+  expect(view.occlusion).toEqual([false, true]);
   menu.remove();
   await flush();
-  expect(view.occlusion).toEqual([true, false]);
+  expect(view.occlusion).toEqual([false, true, false]);
   const far = view.doc.createElement("div");
   far.setAttribute("data-slot", "tooltip-content");
   setRect(far, { left: 10, top: 10, width: 60, height: 20 });
   view.doc.body.append(far);
   await flush();
-  expect(view.occlusion).toEqual([true, false]);
+  expect(view.occlusion).toEqual([false, true, false]);
   view.tracker.destroy();
 });
 
@@ -118,11 +118,11 @@ test("a panel animating the slot's ancestor occludes it and frames stop once it 
   view.doc.getElementById("shell")!.getAnimations = () => [slide as unknown as Animation];
   view.doc.dispatchEvent(new dom.window.Event("scroll"));
   await flush(3);
-  expect(view.occlusion).toEqual([true]);
+  expect(view.occlusion).toEqual([false, true]);
   expect(frames.length).toBe(1);
   playState = "finished";
   await flush();
-  expect(view.occlusion).toEqual([true, false]);
+  expect(view.occlusion).toEqual([false, true, false]);
   expect(frames.length).toBe(0);
   view.tracker.destroy();
 });

@@ -2503,7 +2503,7 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
+  (selectActiveSessionView(state) || state.view.kind === "browser") && isServerBackedSessionId(state.activeChatId);
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>
