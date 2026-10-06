@@ -480,6 +480,9 @@ pub(super) fn resume_parity(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
 #[path = "prompt_history_perf.rs"]
 mod perf;
 
+#[path = "prompt_history_over_budget.rs"]
+mod over_budget;
+
 pub(super) fn approval_parity(
     s: &butler_e2e::e2e::scenario::Scenario,
     requests: &[Value],

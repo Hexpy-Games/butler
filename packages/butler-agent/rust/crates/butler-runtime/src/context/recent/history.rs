@@ -10,6 +10,8 @@ use std::{
 static RENDERED: LazyLock<Mutex<VecDeque<(String, String)>>> =
     LazyLock::new(|| Mutex::new(VecDeque::new()));
 const CACHE_TURNS: usize = 256;
+const VERBATIM_TURNS: usize = 4;
+const MAX_EXCERPT_CHARS: usize = 4_000;
 
 pub(super) fn render(
     window: &HistoryWindow,
@@ -32,7 +34,6 @@ pub(super) fn render(
         ));
     }
     let mut prefix = format!("{digest}{summaries}");
-    let mut extra_dropped = 0;
     let mut text = join(&prefix, &rendered);
     if charged(&text)? > cap {
         rendered = plan
@@ -44,22 +45,51 @@ pub(super) fn render(
             .collect::<ContextResult<Vec<_>>>()?;
         text = join(&prefix, &rendered);
     }
-    // Size estimates are deliberately conservative. This final check includes all
-    // envelopes, digest and capsules, rather than trusting their estimates.
-    while charged(&text)? > cap && rendered.len() > 4 {
-        if let Some(turn) = turns.get(extra_dropped) {
+
+    let mut dropped = 0;
+    while charged(&text)? > cap && rendered.len() > VERBATIM_TURNS {
+        if let Some(turn) = turns.get(dropped) {
             digest = extend_digest(&digest, turn, cap / 10);
-            prefix = format!("{digest}{summaries}");
         }
-        extra_dropped += 1;
+        dropped += 1;
         rendered.remove(0);
+        prefix = format!("{digest}{summaries}");
         text = join(&prefix, &rendered);
     }
+
+    // Keep stepping down the verbatim guarantee. Each removed turn joins the
+    // dropped-range digest, and retained turn strings remain content-local.
+    while charged(&text)? > cap && rendered.len() > 1 {
+        if let Some(turn) = turns.get(dropped) {
+            digest = extend_digest(&digest, turn, cap / 10);
+        }
+        dropped += 1;
+        rendered.remove(0);
+        prefix = format!("{digest}{summaries}");
+        text = join(&prefix, &rendered);
+    }
+
+    if charged(&text)? > cap && rendered.len() == 1 {
+        let Some(turn) = turns.last() else {
+            return Ok(String::new());
+        };
+        // Summaries are optional and must not crowd the newest request/reply.
+        summaries.clear();
+        prefix = digest.clone();
+        rendered[0] = render_excerpted(turn, window, cap)?;
+        text = join(&prefix, &rendered);
+        if charged(&text)? > cap {
+            // The digest is older context. Keep the newest turn bounded even
+            // when the digest's escaping overhead consumes the remaining room.
+            prefix.clear();
+            text = join(&prefix, &rendered);
+        }
+    }
+
     if charged(&text)? > cap {
-        return Err(ContextError::new(
-            ContextCode::ContextGroupEmpty,
-            "Required conversation history exceeds budget",
-        ));
+        // The fixed envelope itself exceeds pathological caps; do not fail prompt
+        // assembly over history size.
+        return Ok(String::new());
     }
     Ok(text)
 }
@@ -92,14 +122,7 @@ fn render_turn(
     turn: &crate::context::ConversationSemanticTurnAtom,
     completed: Option<&str>,
 ) -> ContextResult<String> {
-    let mut lines = vec![format!(
-        "turn {} status {}",
-        turn.turn_id.as_deref().unwrap_or(&turn.id),
-        turn.status
-    )];
-    if let Some(completed) = completed {
-        lines[0].push_str(&format!(" completed {completed}"));
-    }
+    let mut lines = vec![turn_header(turn, completed)];
     if let Some(outcome) = &turn.outcome {
         lines.push(crate::context::conversation::render_outcome(outcome)?);
     }
@@ -110,6 +133,127 @@ fn render_turn(
             .map(|m| format!("{}: {}", m.speaker, m.text)),
     );
     Ok(lines.join("\n"))
+}
+
+fn render_excerpted(
+    turn: &crate::context::ConversationSemanticTurnAtom,
+    window: &HistoryWindow,
+    cap: usize,
+) -> ContextResult<String> {
+    let completed = completed_at(window, turn);
+    let mut low = 0;
+    let mut high = MAX_EXCERPT_CHARS.min(cap);
+    let target = cap.saturating_sub(cap / 5);
+    while low < high {
+        let middle = low + (high - low).div_ceil(2);
+        let candidate = render_excerpted_at(turn, completed, middle)?;
+        if charged(&candidate)? <= target {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    render_excerpted_at(turn, completed, low)
+}
+
+fn render_excerpted_at(
+    turn: &crate::context::ConversationSemanticTurnAtom,
+    completed: Option<&str>,
+    max_chars: usize,
+) -> ContextResult<String> {
+    let mut lines = vec![turn_header(turn, completed)];
+    if let Some(outcome) = &turn.outcome {
+        lines.push(crate::context::conversation::render_outcome(outcome)?);
+    }
+    if let Some(request) = turn
+        .messages
+        .iter()
+        .find(|message| message.role == butler_turn::conversation::ConversationRole::User)
+    {
+        lines.push(format!(
+            "{}: {}",
+            request.speaker,
+            main_excerpt(request, max_chars)
+        ));
+    }
+    if let Some(reply) = turn
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == butler_turn::conversation::ConversationRole::Assistant)
+    {
+        lines.push(format!(
+            "{}: {}",
+            reply.speaker,
+            main_excerpt(reply, max_chars)
+        ));
+    }
+    let tool_messages = turn
+        .messages
+        .iter()
+        .filter(|message| is_tool_only(message))
+        .count();
+    if tool_messages > 0 {
+        lines.push(format!("tool: [{tool_messages} recorded tool messages]"));
+    }
+    Ok(lines.join("\n"))
+}
+
+fn turn_header(
+    turn: &crate::context::ConversationSemanticTurnAtom,
+    completed: Option<&str>,
+) -> String {
+    let mut header = format!(
+        "turn {} status {}",
+        turn.turn_id.as_deref().unwrap_or(&turn.id),
+        turn.status
+    );
+    if let Some(completed) = completed {
+        header.push_str(&format!(" completed {completed}"));
+    }
+    header
+}
+
+fn completed_at<'a>(
+    window: &'a HistoryWindow,
+    turn: &crate::context::ConversationSemanticTurnAtom,
+) -> Option<&'a str> {
+    window
+        .material
+        .turns
+        .iter()
+        .find(|candidate| Some(&candidate.id) == turn.turn_id.as_ref())
+        .filter(|candidate| window.late_turn_ids.contains(&candidate.id))
+        .and_then(|candidate| candidate.completed_at.as_deref())
+}
+
+fn is_tool_only(message: &crate::context::ConversationContextMessage) -> bool {
+    !message.parts.is_empty()
+        && message.parts.iter().all(|part| {
+            matches!(
+                part.kind,
+                butler_turn::conversation::ConversationPartKind::ToolCall
+                    | butler_turn::conversation::ConversationPartKind::ToolResult
+            )
+        })
+}
+
+fn main_excerpt(message: &crate::context::ConversationContextMessage, max_chars: usize) -> String {
+    let cost = message.text.encode_utf16().count()
+        + message.created_at.encode_utf16().count()
+        + message.conversation_message_id.encode_utf16().count()
+        + 32;
+    if cost <= max_chars {
+        return message.text.clone();
+    }
+    let units = max_chars.saturating_sub(32);
+    format!(
+        "{}...",
+        butler_core::public_text::trim_js_whitespace_end(crate::context::prefix_utf16(
+            &message.text,
+            units
+        ))
+    )
 }
 
 pub(super) async fn trace(
@@ -137,24 +281,11 @@ fn render_condensed(
     let mut turn = turn.clone();
     let mut tool_messages = 0;
     turn.messages.retain(|message| {
-        let tool_only = !message.parts.is_empty()
-            && message.parts.iter().all(|p| {
-                matches!(
-                    p.kind,
-                    butler_turn::conversation::ConversationPartKind::ToolCall
-                        | butler_turn::conversation::ConversationPartKind::ToolResult
-                )
-            });
+        let tool_only = is_tool_only(message);
         tool_messages += usize::from(tool_only);
         !tool_only
     });
-    let completed = window
-        .material
-        .turns
-        .iter()
-        .find(|t| Some(&t.id) == turn.turn_id.as_ref())
-        .filter(|t| window.late_turn_ids.contains(&t.id))
-        .and_then(|t| t.completed_at.as_deref());
+    let completed = completed_at(window, &turn);
     let mut text = render_turn(&turn, completed)?;
     if tool_messages > 0 {
         text.push_str(&format!("\ntool: [{tool_messages} recorded tool messages]"));
