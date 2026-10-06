@@ -25,8 +25,8 @@ function parseSmokeArgs(name: string): string[] {
 /** Chromium single-process cannot safely destroy and recreate contexts. Give
  * each context its own process, preserving storage isolation and all assertions.
  */
-export async function launchSmokeBrowser(): Promise<Browser> {
-  const args = smokeBrowserArgs();
+export async function launchSmokeBrowser(extraArgs: string[] = []): Promise<Browser> {
+  const args = [...smokeBrowserArgs(), ...extraArgs];
   const base = await chromium.launch({ headless: true, args });
   if (!args.includes("--single-process")) return base;
   await boundOwnedClose(base);

@@ -26,7 +26,7 @@ export async function electronPage(port: number): Promise<ElectronPage> {
 
 /** Cross-site output frames can have their own Chromium target. */
 export async function electronFrame(port: number, origin: string): Promise<ElectronPage | null> {
-  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()) as Array<{url?:string;webSocketDebuggerUrl?:string}>;
+  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()) as Array<{ url?:string;webSocketDebuggerUrl?:string }>;
   const frame = targets.find(target=>target.url?.startsWith(`${origin}/__o/`) && target.webSocketDebuggerUrl);
   return frame ? connect(frame.webSocketDebuggerUrl!) : null;
 }
@@ -95,19 +95,19 @@ async function connect(url: string): Promise<ElectronPage> {
       return expression(text, id);
     },
     screenshot: async () => {
-      const result = await send("Page.captureScreenshot", {format:"png"}) as {data:string};
-      return Buffer.from(result.data,"base64");
+      const result = await send("Page.captureScreenshot", { format:"png" }) as { data:string };
+      return Buffer.from(result.data, "base64");
     },
     clickText: async (text, scope) => {
-      const point = await expression<{x:number;y:number}>(`(() => {
+      const point = await expression<{ x:number;y:number }>(`(() => {
         const matches=Array.from(document.querySelectorAll(${JSON.stringify(scope)})).filter(e=>e.textContent?.trim()===${JSON.stringify(text)});
         const node=matches.find(e=>{const box=e.getBoundingClientRect();return box.y>=0 && box.bottom<=innerHeight;}) ?? matches[0];
         if (!node) throw new Error('Click target missing');
         node.scrollIntoView({block:'center'});
         const box=node.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};
       })()`);
-      await send("Input.dispatchMouseEvent",{type:"mousePressed",...point,button:"left",clickCount:1});
-      await send("Input.dispatchMouseEvent",{type:"mouseReleased",...point,button:"left",clickCount:1});
+      await send("Input.dispatchMouseEvent", { type:"mousePressed", ...point, button:"left", clickCount:1 });
+      await send("Input.dispatchMouseEvent", { type:"mouseReleased", ...point, button:"left", clickCount:1 });
     },
     evaluate: fn => expression(`(${fn.toString()})()`),
     reload: async () => {
