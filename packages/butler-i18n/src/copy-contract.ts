@@ -958,6 +958,10 @@ export interface AppCopy {
     copy: string;
   };
   settings: {
+    hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
+      name: string; event: string; tools: string; command: string; args: string; timeout: string;
+      failClosed: string; async: string; enabled: string; refresh: string; blocked: string; user: string; };
+
     deleteSchedule: (name: string) => string;
     deleteMcpServer: (name: string) => string;
     mcpEnabled: string;
@@ -989,6 +993,7 @@ export interface AppCopy {
       server: string;
       updates: string;
       mcp: string;
+      hooks: string;
       skills: string;
       usage: string;
       logs: string;
@@ -1007,6 +1012,7 @@ export interface AppCopy {
       server: string;
       updates: string;
       mcp: string;
+      hooks: string;
       skills: string;
       usage: string;
       logs: string;
@@ -1025,6 +1031,7 @@ export interface AppCopy {
       server: string[];
       updates: string[];
       mcp: string[];
+      hooks: string[];
       skills: string[];
       usage: string[];
       logs: string[];

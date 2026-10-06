@@ -80,7 +80,13 @@ export function useComposerSubmit({
         controlsTouched,
         activeTurn,
         attachments,
-      }), contentParts, workspaceMode: submitted.workspaceMode, onAccepted: () => {
+      }), contentParts, workspaceMode: submitted.workspaceMode, onRejected: (targetSessionId) => {
+        const current = useComposerStore.getState();
+        if (targetSessionId === sessionId || current.draftSessionId !== targetSessionId || current.text) return;
+        if (contentParts) current.setContentParts(contentParts);
+        else current.setText(draftText);
+        if (!current.attachments.length) current.setAttachments(attachments);
+      }, onAccepted: () => {
         const current = useComposerStore.getState();
         if (current.draftSessionId === sessionId && current.draftRevision === revision) {
           current.setWorkspaceMode("local");

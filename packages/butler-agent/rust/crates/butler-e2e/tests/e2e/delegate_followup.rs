@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 #[path = "delegate_followup/stub.rs"]
-mod stub;
+pub(crate) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,

@@ -63,6 +63,7 @@ macro_rules! wire_codes {
 }
 
 pub mod configuration;
+pub mod hooks;
 pub mod js_date;
 pub mod json;
 pub mod json_lines;

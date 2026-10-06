@@ -9,10 +9,10 @@ use std::{
 };
 use tokio::sync::Notify;
 
-pub(super) const OWNER: &str = "AI 연구를 조사해 주세요.";
-pub(super) const FOLLOWUP: &str = "다시 조사해줄래?";
+pub(crate) const OWNER: &str = "AI 연구를 조사해 주세요.";
+pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
@@ -20,7 +20,7 @@ pub(super) struct Script {
     pub release: Notify,
     stopped: bool,
 }
-pub(super) async fn start(
+pub(crate) async fn start(
     stopped: bool,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

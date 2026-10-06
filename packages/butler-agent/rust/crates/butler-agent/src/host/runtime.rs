@@ -276,20 +276,8 @@ impl AgentRuntime {
                 ),
             ),
         );
-        let session_worktrees = SessionWorktrees::new(
-            stores.bindings.clone(),
-            commands.clone(),
-            files.clone(),
-            host_environment.clone(),
-            paths.data_root.clone(),
-            Arc::new(SystemIdentity),
-        );
-        let workspace_recovery = SessionWorkspaceRecovery::new(
-            stores.bindings.clone(),
-            commands.clone(),
-            files.clone(),
-            host_environment.clone(),
-        );
+        let (session_worktrees, workspace_recovery) =
+            owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
@@ -303,7 +291,16 @@ impl AgentRuntime {
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
+        let hooks: Arc<dyn butler_core::hooks::HookPort> = Arc::new(
+            crate::host::hooks::Dispatcher::open(
+                paths.data_root.clone(),
+                &host_environment,
+                stop.clone(),
+            )
+            .await,
+        );
         let factory = GuidedTurnFactoryAdapter {
+            hooks: Some(hooks.clone()),
             preparation: GuidedPreparation {
                 catalog,
                 workspace: workspace_recovery.clone(),
@@ -422,6 +419,7 @@ impl AgentRuntime {
             Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
+            hooks,
             memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,
             memory_acquisition,

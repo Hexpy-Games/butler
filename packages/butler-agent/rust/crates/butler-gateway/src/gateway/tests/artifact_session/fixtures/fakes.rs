@@ -65,6 +65,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
     let root =
         std::env::temp_dir().join(format!("butler-artifact-skills-{}", uuid::Uuid::new_v4()));
     AppApplicationDependencies {
+        hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: Arc::new(
             butler_runtime::operations::AppUpdateService::new(

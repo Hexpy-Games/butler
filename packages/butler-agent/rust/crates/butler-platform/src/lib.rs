@@ -68,3 +68,5 @@ pub mod user_dirs;
 
 #[cfg(windows)]
 mod process_table;
+
+pub mod hook_process;
