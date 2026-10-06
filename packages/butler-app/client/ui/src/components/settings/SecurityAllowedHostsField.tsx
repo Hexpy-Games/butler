@@ -61,7 +61,7 @@ export function SecurityAllowedHostsField({
               id={inputId}
               autoComplete="off"
               spellCheck={false}
-              placeholder={copy.hostPlaceholder}
+              placeholder={content ? copy.contentHostPlaceholder : copy.hostPlaceholder}
               value={draft}
               aria-invalid={invalid ? true : undefined}
               aria-describedby={invalid ? errorId : undefined}
