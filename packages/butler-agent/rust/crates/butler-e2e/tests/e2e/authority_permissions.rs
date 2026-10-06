@@ -4,6 +4,7 @@ use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
+mod scale;
 mod seed;
 use seed::{COMMAND, command, reference, seed};
 
@@ -86,6 +87,14 @@ async fn approvals_owner_scale_complete_and_current() -> Result<(), HarnessError
         .expect("server timing required");
     let server_us: u64 = timing.split_once(',').unwrap().1.parse().unwrap();
     eprintln!("approvals complete HTTP roundtrip={elapsed:?} server_us={server_us}");
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.starts_with("approvals-profile"))
+    {
+        eprintln!("{line}");
+    }
     assert_eq!(listed.status, 200);
     let grants = listed.data()["permissions"].as_array().unwrap();
     assert_eq!(grants.len(), 3_000);
@@ -122,6 +131,7 @@ async fn approvals_owner_scale_complete_and_current() -> Result<(), HarnessError
         assert_eq!(grant["capability"], "run_command");
         assert_eq!(grant["cwd"], "/workspace");
     }
+    scale::measure_current(&s, grants, server_us).await?;
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(server_us),
         Duration::from_millis(50),

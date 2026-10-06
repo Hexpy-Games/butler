@@ -447,8 +447,9 @@ pub(crate) trait AuthorityRepository {
     }
     fn permission_projection_records(
         &mut self,
-        owner: &str,
-    ) -> AuthorityResult<Vec<PermissionSource>>;
+        owners: &[String],
+        visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
+    ) -> AuthorityResult<()>;
     fn revoke_permission(&mut self, owner: &str, grant_ref: &str, now: &str)
     -> AuthorityResult<()>;
     fn resume_source(

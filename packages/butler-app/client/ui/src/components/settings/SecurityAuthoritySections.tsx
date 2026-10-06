@@ -9,7 +9,7 @@ import { useGrants } from "./useGrants";
 
 /** Direct section elements for SettingsPage; data and effects stay with the page. */
 export function securityAuthoritySections({ models, savedKeys, grants }: {
-  models: ReturnType<typeof useButlerModels>; savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
+  models: Pick<ReturnType<typeof useButlerModels>, "update" | "setSettings"> & { draft: Pick<SettingsData, "access_mode" | "diagnostics_enabled"> | null }; savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
 }) {
   const { draft, update, setSettings } = models;
   const settingsCopy = appCopy.settings;

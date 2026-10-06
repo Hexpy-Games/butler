@@ -3,7 +3,8 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { createNativeAppServer } from "../support/native-app-server";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
@@ -12,7 +13,7 @@ let copy = getAppCopy("ko-KR");
 const screenshots = resolve(".tmp/settings-bugs");
 mkdirSync(screenshots, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const evidence: string[] = [];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 const toast = (page: Page) => page.locator('[data-sonner-toast][data-type="error"]').last();
@@ -23,7 +24,10 @@ async function capture(page: Page, prefix: string, state: string) {
     animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${state}: no page overflow`);
   const name = `${prefix}-${state}.png`;
-  await page.screenshot({ path: resolve(screenshots, name) });
+  console.log(`capture ${name}`);
+  await page.screenshot({ path: resolve(screenshots, name), animations: "allow", timeout: 10_000 });
+  // Sonner deliberately pauses expiry on hover; leave the toast region after capture.
+  await page.mouse.move(0, 0);
   evidence.push(name);
 }
 
@@ -243,12 +247,17 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
   await page.goto(server.url);
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   const prefix = `${width}-${language}-${theme}`;
-  await paletteChecks(page, prefix);
-  await skillChecks(page, prefix);
-  await mcpChecks(page, prefix);
-  await scheduleChecks(page, prefix);
-  assert.deepEqual(errors, [], "no unhandled renderer errors");
-  await context.close();
+  try {
+    await paletteChecks(page, prefix);
+    await skillChecks(page, prefix);
+    await mcpChecks(page, prefix);
+    await scheduleChecks(page, prefix);
+    assert.deepEqual(errors, [], "no unhandled renderer errors");
+  } catch (error) {
+    console.error(JSON.stringify({ case: prefix, url: page.url(), closed: page.isClosed(), rendererErrors: errors }));
+    if (!page.isClosed()) await page.screenshot({ path: resolve(screenshots, `${prefix}-failure.png`), animations: "allow", timeout: 10_000 }).catch(() => undefined);
+    throw error;
+  } finally { await context.close(); }
 }
 
 async function englishChecks() {

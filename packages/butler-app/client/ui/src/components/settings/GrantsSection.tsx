@@ -12,12 +12,17 @@ export function GrantsSection({ grants }: { grants: ReturnType<typeof useGrants>
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<GrantKind | "all">("all");
   const copy = appCopy.settings.grants;
-  const kinds = [...new Set(grants.rows.map(row => row.kind))];
+  const kinds = useMemo(() => [...new Set(grants.rows.map(row => row.kind))], [grants.rows]);
   const hasFilters = grants.rows.length > SEARCH_AFTER;
   const search = hasFilters ? query.trim().toLocaleLowerCase(locale) : "";
-  const visible = grants.rows.filter(row => (!hasFilters || kind === "all" || row.kind === kind) &&
-    (!search || [row.target, row.cwd ?? "", ...[...row.places.values()].map(title => title ?? copy.deletedChat), row.project ?? "", copy.kind[row.kind]]
-      .some(text => text.toLocaleLowerCase(locale).includes(search))));
+  const searchable = useMemo(() => grants.rows.map(row => ({
+    row,
+    texts: [row.target, row.cwd ?? "", ...[...row.places.values()].map(title => title ?? copy.deletedChat), row.project ?? "", copy.kind[row.kind]]
+      .map(text => text.toLocaleLowerCase(locale)),
+  })), [grants.rows, locale, copy.deletedChat, copy.kind]);
+  const visible = useMemo(() => searchable.filter(({ row, texts }) =>
+    (!hasFilters || kind === "all" || row.kind === kind) && (!search || texts.some(text => text.includes(search))))
+    .map(({ row }) => row), [searchable, hasFilters, kind, search]);
   return (
       <Stack gap="sm">
         {hasFilters && <Inline>

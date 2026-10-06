@@ -61,35 +61,31 @@ async function runLocale(locale: "ko" | "en") {
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    let refusal = "";
-    let listState = "ready";
+    const responses = { refusal: "", listState: "ready", always: undefined as GrantRecord[] | undefined, rejectRevoke: false, batchCalls: 0 };
     const pendingLoads = new Set<() => void>();
     const releaseLoading = () => { for (const done of pendingLoads) done(); pendingLoads.clear(); };
-    let always: GrantRecord[] | undefined;
-    let rejectRevoke = false;
-    let batchCalls = 0;
     const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
     const routeApi = async (route: Route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.startsWith("/events")) { await route.continue(); return; }
-      if (path === "/authority-permissions") console.log(`grants response ${locale} ${listState}`);
-      if (path === "/authority-permissions" && listState !== "ready") {
-        if (listState === "loading") await new Promise<void>(done => { pendingLoads.add(done); });
-        if (listState === "error") { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
-        if (listState === "empty") { await route.fulfill({ json: { data: { permissions: [] } } }); return; }
+      if (path === "/authority-permissions") console.log(`grants response ${locale} ${responses.listState}`);
+      if (path === "/authority-permissions" && responses.listState !== "ready") {
+        if (responses.listState === "loading") await new Promise<void>(done => { pendingLoads.add(done); });
+        if (responses.listState === "error") { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
+        if (responses.listState === "empty") { await route.fulfill({ json: { data: { permissions: [] } } }); return; }
       }
-      if (path === "/authority-permissions" && always) {
-        await route.fulfill({ status: 200, json: { protocol_version: "butler.app.v1", data: { permissions: always } } }); return;
+      if (path === "/authority-permissions" && responses.always) {
+        await route.fulfill({ status: 200, json: { protocol_version: "butler.app.v1", data: { permissions: responses.always } } }); return;
       }
       if (path === "/authority-permissions/revoke") {
-        batchCalls++;
-        if (rejectRevoke) { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
-        if (always) {
+        responses.batchCalls++;
+        if (responses.rejectRevoke) { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
+        if (responses.always) {
           const revoked = new Set(route.request().postDataJSON().grants.map((grant: GrantRecord) => grant.grant_ref));
-          always = always.filter(grant => !revoked.has(grant.grant_ref));
+          responses.always = responses.always.filter(grant => !revoked.has(grant.grant_ref));
         }
       }
-      const headers = path === "/settings" || path.startsWith("/security") && !refusal ? adminHeaders : server.authHeaders;
+      const headers = path === "/settings" || path.startsWith("/security") && !responses.refusal ? adminHeaders : server.authHeaders;
       await route.continue({ headers: { ...route.request().headers(), ...headers } });
     };
     async function configurePage() {
@@ -180,7 +176,7 @@ async function runLocale(locale: "ko" | "en") {
       if (!before) {
         for (const code of ["loopback_required", "admin_credential_required", "test_error"]) {
           console.log(`refused ${locale} ${code}`);
-          refusal = code;
+          responses.refusal = code;
           await freshPage(375);
           // Register the refusal before navigation, with a fixed response for this case.
           await page.route(`${server.url}security`, async route => {
@@ -196,19 +192,37 @@ async function runLocale(locale: "ko" | "en") {
           assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys", "diagnostics"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
         }
-        refusal = "";
+        responses.refusal = "";
         for (const state of ["loading", "error", "empty"]) {
           console.log(`grants state ${locale} ${state}`);
-          listState = state;
+          responses.listState = state;
           await freshPage(1280);
+          let entered!: () => void;
+          const intercepted = new Promise<void>(done => { entered = done; });
+          // Pin this case before navigation; earlier route callbacks must not choose its response.
+          await page.route(`${server.url}authority-permissions`, async route => {
+            if (state === "loading") {
+              await new Promise<void>(done => { pendingLoads.add(done); entered(); });
+              await route.continue({ headers: { ...route.request().headers(), ...server.authHeaders } });
+            } else {
+              entered();
+              await route.fulfill(state === "error"
+                ? { status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }
+                : { json: { data: { permissions: [] } } });
+            }
+          });
+          const requested = page.waitForRequest(request => new URL(request.url()).pathname === "/authority-permissions");
           await open(page, server.url, appCopy.settings.sections.security, 1280);
+          await requested;
+          await intercepted;
           const message = state === "loading" ? appCopy.settings.sectionState.loading : state === "error" ? appCopy.settings.grants.loadFailed : appCopy.settings.grants.empty;
           if (state === "loading") {
             await section(page, "grants").locator('[data-slot="settings-section-skeleton"]').waitFor();
           } else await section(page, "grants").getByText(message, { exact: true }).waitFor();
-          if (state === "loading") { listState = "ready"; releaseLoading(); await rows(page).first().waitFor(); }
+          if (state === "loading") { responses.listState = "ready"; releaseLoading(); await rows(page).first().waitFor(); }
+          await page.unroute(`${server.url}authority-permissions`);
         }
-        listState = "ready";
+        responses.listState = "ready";
         console.log(`revoke ${locale}`);
         await open(page, `${server.url}?settings=privacy`, appCopy.settings.sections.security, 1280);
         await page.goto(`${server.url}?settings=privacy`, { waitUntil: "domcontentloaded" });
@@ -220,33 +234,33 @@ async function runLocale(locale: "ko" | "en") {
         assert.equal(await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).count(), 1);
         await navigationSearch.fill("");
         const grouped = rows(page).filter({ has: page.getByRole("button", { name: fixture.command, exact: true }) });
-        rejectRevoke = true;
+        responses.rejectRevoke = true;
         await grouped.getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click();
         await page.getByText(appCopy.settings.grants.revokeFailed, { exact: true }).waitFor(); assert.equal(await grouped.count(), 1);
-        rejectRevoke = false;
-        const calls = batchCalls;
+        responses.rejectRevoke = false;
+        const calls = responses.batchCalls;
         await grouped.getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click();
         await page.getByText(appCopy.settings.grants.revoked, { exact: true }).waitFor();
-        assert.equal(batchCalls, calls + 1);
+        assert.equal(responses.batchCalls, calls + 1);
         const remaining = await server.api<{ permissions: GrantRecord[] }>("/authority-permissions");
         assert.equal(remaining.permissions.length, 11); assert(remaining.permissions.every(g => g.target !== fixture.command));
         // Reserved future scope: response fixture only, storage still conversation.
         for (const width of [375, 1280]) {
           console.log(`confirm ${locale} ${width}`);
-          always = (await server.api<{ permissions: GrantRecord[] }>("/authority-permissions")).permissions;
-          always[0].scope = "always";
+          responses.always = (await server.api<{ permissions: GrantRecord[] }>("/authority-permissions")).permissions;
+          responses.always[0].scope = "always";
           await freshPage(width);
           await page.goto(`${server.url}?settings=security`, { waitUntil: "domcontentloaded" });
           await section(page, "grants").getByText(appCopy.settings.grants.scope.always, { exact: true }).waitFor();
           const alwaysRow = rows(page).filter({ hasText: appCopy.settings.grants.scope.always });
-          const oldCalls = batchCalls;
+          const oldCalls = responses.batchCalls;
           await alwaysRow.getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click();
           await page.getByRole("alertdialog").getByRole("button", { name: appCopy.common.cancel, exact: true }).click();
-          assert.equal(batchCalls, oldCalls);
+          assert.equal(responses.batchCalls, oldCalls);
           await alwaysRow.getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click();
           await screenshot(page, `${locale}-confirm-${width}`, "grants");
           await Promise.all([page.waitForResponse(response => response.url().endsWith("/authority-permissions/revoke")), page.getByRole("alertdialog").getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click()]);
-          assert.equal(batchCalls, oldCalls + 1);
+          assert.equal(responses.batchCalls, oldCalls + 1);
           await alwaysRow.waitFor({ state: "hidden" });
         }
         assert.equal(await page.getByText("INTERNAL TEST MESSAGE", { exact: true }).count(), 0);

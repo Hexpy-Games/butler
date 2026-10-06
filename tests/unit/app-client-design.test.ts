@@ -983,7 +983,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   );
   const generalSettings = read(
     "packages/butler-app/client/ui/src/components/settings/GeneralSettings.tsx",
-  );
+  ) + read("packages/butler-app/client/ui/src/components/settings/generalPreferenceSections.tsx");
   const nativeNotificationStatusPanel = read(
     "packages/butler-app/client/ui/src/components/settings/NativeNotificationStatusPanel.tsx",
   );

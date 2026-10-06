@@ -27,12 +27,16 @@ export function useGrants() {
   }, []);
   useEffect(() => {
     mounted.current = true;
-    void reload();
-    let frame = 0;
+    // Schedule the initial read in a task after the screen's first paint.
+    let timer: ReturnType<typeof setTimeout>;
+    let frame = requestAnimationFrame(() => {
+      frame = 0;
+      timer = setTimeout(() => void reload(), 0);
+    });
     const unsubscribe = subscribeAuthorityPermissions(() => {
       if (!frame) frame = requestAnimationFrame(() => { frame = 0; void reload(true); });
     });
-    return () => { mounted.current = false; revision.current++; cancelAnimationFrame(frame); unsubscribe(); };
+    return () => { mounted.current = false; revision.current++; cancelAnimationFrame(frame); clearTimeout(timer); unsubscribe(); };
   }, [reload]);
 
   async function revoke(row: GrantedRow) {

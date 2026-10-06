@@ -166,40 +166,47 @@ fn permission_identity(
 }
 
 pub(super) fn for_source(
-    source: PermissionSource,
+    source: &PermissionSource<'_>,
     collation: &butler_core::locale::LocaleCollation,
-    prefixes: &mut std::collections::HashMap<(String, String), String>,
+    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
 ) -> AuthorityResult<PermissionTarget> {
-    let input: Value = serde_json::from_str(&source.input_json)
+    let input: Value = serde_json::from_str(source.input_json)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
     let facts = PermissionFacts {
-        owner: &source.owner,
-        workspace: &source.workspace,
-        capability: &source.capability,
-        target: &source.target,
+        owner: source.owner,
+        workspace: source.workspace,
+        capability: source.capability,
+        target: source.target,
         input: &input,
         title: None,
         executable: None,
         collation,
     };
     let file_edit = matches!(
-        ToolName::parse(&source.capability),
+        ToolName::parse(source.capability),
         Some(ToolName::WriteFile | ToolName::EditFile)
     );
     let command = matches!(
-        source.capability.as_str(),
+        source.capability,
         "run_command" | "run_command_remote_observation"
     );
     let scope_key = permission_scope_key(facts, file_edit, command)?;
     // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
-    let prefix = match prefixes.entry((source.owner.clone(), source.workspace.clone())) {
-        std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-        std::collections::hash_map::Entry::Vacant(entry) => {
-            let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
-            let _ = prefix.pop(); // Replace the known array terminator, preserving the shared codec's exact escaping.
-            entry.insert(prefix)
-        }
-    };
+    if !prefixes
+        .get(source.owner)
+        .is_some_and(|workspaces| workspaces.contains_key(source.workspace))
+    {
+        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
+        let _ = prefix.pop(); // Preserve the shared codec's exact array escaping.
+        prefixes
+            .entry(source.owner.to_owned())
+            .or_default()
+            .insert(source.workspace.to_owned(), prefix);
+    }
+    let prefix = prefixes
+        .get(source.owner)
+        .and_then(|workspaces| workspaces.get(source.workspace))
+        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
     let grant_ref = format!(
         "permission-{}",
         &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
@@ -210,12 +217,12 @@ pub(super) fn for_source(
         input
             .get("cwd")
             .and_then(Value::as_str)
-            .unwrap_or(&source.workspace)
+            .unwrap_or(source.workspace)
             .to_owned()
     });
     Ok(PermissionTarget {
         grant_ref,
-        capability: source.capability,
+        capability: source.capability.to_owned(),
         target,
         cwd,
     })

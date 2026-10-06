@@ -269,22 +269,35 @@ const PERMISSION_FILTER: &str = "WHERE owner_session_id=?1 AND decision='allowed
 
 pub(super) fn permission_projection_records(
     db: &Connection,
-    owner: &str,
-) -> AuthorityResult<Vec<PermissionSource>> {
-    let mut statement = db.prepare_cached(&format!("SELECT owner_session_id,workspace_path,capability,normalized_target,normalized_input_json FROM btcc_authority_requests {PERMISSION_FILTER}")).map_err(sql)?;
-    statement
-        .query_map([owner], |row| {
-            Ok(PermissionSource {
-                owner: row.get(0)?,
-                workspace: row.get(1)?,
-                capability: row.get(2)?,
-                target: row.get(3)?,
-                input_json: row.get(4)?,
-            })
-        })
-        .map_err(sql)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(sql)
+    owners: &[String],
+    visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
+) -> AuthorityResult<()> {
+    let owners = serde_json::to_string(owners)
+        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let mut statement = db.prepare_cached(
+        "SELECT a.owner_session_id,a.workspace_path,a.capability,a.normalized_target,a.normalized_input_json \
+         FROM btcc_authority_requests a INDEXED BY idx_btcc_permission_sources \
+         WHERE a.owner_session_id IN (SELECT value FROM json_each(?1)) \
+         AND a.decision='allowed' AND a.allow_scope='conversation' \
+         ORDER BY a.owner_session_id,a.created_at,a.rowid"
+    ).map_err(sql)?;
+    let mut rows = statement.query([owners]).map_err(sql)?;
+    while let Some(row) = rows.next().map_err(sql)? {
+        visit(PermissionSource {
+            owner: source_text(row, 0)?,
+            workspace: source_text(row, 1)?,
+            capability: source_text(row, 2)?,
+            target: source_text(row, 3)?,
+            input_json: source_text(row, 4)?,
+        })?;
+    }
+    Ok(())
+}
+
+fn source_text<'a>(row: &'a Row<'_>, column: usize) -> AuthorityResult<&'a str> {
+    row.get_ref(column).map_err(sql)?.as_str().map_err(|error| {
+        AuthorityError::storage("sqlite_error", error.to_string()).with_source(error)
+    })
 }
 
 pub(super) fn permission_records(
@@ -336,7 +349,7 @@ fn permission_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationPermi
 pub(super) fn list_all_permissions(
     db: &Connection,
 ) -> AuthorityResult<Vec<ConversationPermission>> {
-    let mut statement = db.prepare_cached("SELECT grant_ref,owner_session_id,workspace_path,created_at FROM btcc_conversation_permissions WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref").map_err(sql)?;
+    let mut statement = db.prepare_cached("SELECT grant_ref,owner_session_id,workspace_path,created_at FROM btcc_conversation_permissions INDEXED BY idx_btcc_permissions_active WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref").map_err(sql)?;
     statement
         .query_map([], |row| {
             Ok(ConversationPermission {
