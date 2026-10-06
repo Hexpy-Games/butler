@@ -68,9 +68,10 @@ fn messages(
          WHEN 'tool_result' THEN json_object('safeLabel',COALESCE(json_extract(p.content_json,'$.safeLabel'),json_extract(p.content_json,'$.status'), \
          CASE WHEN json_extract(p.content_json,'$.ok')=0 THEN 'failed' ELSE 'complete' END)) ELSE p.content_json END, \
          p.tool_call_id,p.parent_tool_call_id,p.provider_shape,p.status AS part_status \
-         FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx CROSS JOIN json_each(?1) j \
-         JOIN conversation_parts p ON p.message_id=m.id WHERE m.session_id=?3 AND (m.turn_id=j.value OR (m.turn_id IS NULL AND m.id=j.value)) AND m.seq>?2 \
-         AND (?4 IS NULL OR m.id IN (SELECT value FROM json_each(?4))) ORDER BY j.key,m.seq,p.part_index"
+         FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \
+         JOIN conversation_parts p ON p.message_id=m.id WHERE m.session_id=?3 \
+         AND (m.turn_id IN (SELECT value FROM json_each(?1)) OR (m.turn_id IS NULL AND m.id IN (SELECT value FROM json_each(?1)))) AND m.seq>?2 \
+         AND (?4 IS NULL OR m.id IN (SELECT value FROM json_each(?4))) ORDER BY m.seq,p.part_index"
     ).map_err(ConversationError::sqlite)?;
     let offset = query.column_count() - 9;
     let columns = codec::MessageColumns::new(&query).map_err(ConversationError::sqlite)?;

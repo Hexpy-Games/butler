@@ -3,7 +3,7 @@ use super::*;
 use std::time::Instant;
 
 #[tokio::test]
-async fn owner_scale_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
+async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     if std::env::var("BUTLER_E2E_PERF").as_deref() != Ok("1") {
         return Ok(());
@@ -99,7 +99,7 @@ async fn owner_scale_history_assembly_and_idle_writes() -> Result<(), HarnessErr
     let first = elapsed[0];
     let mut steady = elapsed[1..].to_vec();
     steady.sort_unstable();
-    let median = (steady[9] + steady[10]) / 2;
+    let median = u64::midpoint(steady[9], steady[10]);
     let p95 = steady[18];
     eprintln!(
         "PROMPT_OWNER database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",
