@@ -6,13 +6,15 @@
 // Composition, FIXED size (the canopy as drawn on a 375 card, WREF = 349px), never stretched by the
 // card's width or height, justified: the left part to the left edge, the right part to the right
 // edge; on wider cards the middle of the top edge is empty.
-//   - along the top padding from the right corner to 174.5px, a lighter mass from the top-left
-//     to 70px;
-//   - a quarter-ellipse cluster tucked into the top-right corner: IX = 50px from the right edge,
-//     IY = 56px deep (stopping above the toolbar row while open; the whole pill at rest). Fixed in
-//     px, so it stays at the same outward position at every width and height. Its outer part is a
-//     sparser fringe; the right end of long first lines may run under it (accepted by the owner).
-// Light mode: one palette everywhere. Dark mode: the corner cluster is painted in deeper roses,
+//   - right part: ONE continuous mass whose lower edge is a smooth descending curve: very thin at its
+//     inner end (174.5px from the right edge), thickening progressively along the top edge and
+//     descending ever faster toward the top-right corner, deepest at the corner (IY = 56px while
+//     open, the whole pill at rest; below the top padding only within ~50px of the right edge).
+//     No band of constant thickness, no separate corner cluster;
+//   - left part: the same logic mirrored and smaller: thin toward its inner end (70px), slightly
+//     deeper at the top-left corner, always within the top padding;
+//   - lower edges are scalloped and sparser (fringe); shading runs along the depth of the mass.
+// Light mode: one palette everywhere. Dark mode: the corner end of the right part is painted in deeper roses,
 // blended per dab with a radial falloff from the corner. Nothing else is drawn (no zones, no masks).
 //
 // Coordinates are CSS px from the card's top-left, y down. Motion is periodic in T = timePeriod.
@@ -36,7 +38,7 @@ float H;     // card height
 float AA;    // one device pixel in CSS px
 float ER;    // reach of the right-hand mass along the top edge
 float EL;    // reach of the lighter left-hand mass
-float IX;    // right-side mass width
+float IX;    // corner radius of the dark-mode deep-rose blend
 float IY;    // right-side mass depth (fixed)
 float TB;    // bottom of the text area (top of the toolbar row while open)
 bool DARK;
@@ -46,32 +48,32 @@ const float WREF = 349.0;     // the canopy width on a 375px viewport (card 351p
 const float TOP = 12.0;      // the editor content box starts 12px down
 const float SIDE = 15.0;     // text lines end 16px before the right edge
 
-float lobes(float x) { return pow(max(0.0, sin(x * 0.085 + 2.6 * vn(vec2(x * 0.03, 4.0)))), 2.0); }
+
+// The lower-edge curves (depth in px below the top edge, before scallops). One exponential
+// (log-like) sweep each: no band of constant thickness, no separate corner part.
+float rightEnv(float rc) { return 2.0 + max(IY - 2.0, 0.0) * exp(-rc / 29.0); }   // IY at the corner, ~11.6px at 50px, ~2px at the inner end
+float leftEnv(float lc) { return 2.5 + 10.0 * exp(-lc / 25.0); }                   // 12.5px at the corner, ~3px at the inner end
 
 // The mass at p (rc: px from the right edge, lc: from the left edge, y: from the top).
 // Returns (inside 0/1, light 0 underside .. 1 top, fringe 0 core .. 1 outer edge).
 vec3 mass(float rc, float lc, float y) {
-  float sway = 1.2 * (vn(vec2(rc * 0.06, 2.0)) - 0.5);
-  // Each part's inner end: on a 375 card it ends where it always did. With extra width (TAIL > 0,
-  // the gap the justified layout opens), it thins out over TAIL px past that end instead: a shrinking,
-  // scalloped edge with sparser, smaller dabs (fringe), never a straight cut.
-  float tR = 0.0, tL = 0.0;
-  float right = 0.0, left = 0.0;
-  if (rc <= ER) right = mix(TOP - 1.0, 3.0, smoothstep(IX * 0.5, ER, rc)) + 2.0 * lobes(rc) * (1.0 - smoothstep(ER * 0.5, ER, rc));
-  else if (rc < ER + TAIL) { tR = (rc - ER) / TAIL; right = 3.0 * (1.0 - smoothstep(0.0, 1.0, tR)) * (0.55 + 0.9 * lobes(rc * 1.7)); }
-  if (!RIGHT_PART) {
-    if (lc <= EL) left = mix(TOP - 5.0, 1.0, smoothstep(0.0, EL, lc)) + 1.5 * lobes(lc + 40.0);
-    else if (lc < EL + TAIL) { tL = (lc - EL) / TAIL; left = (1.0 + 1.5 * lobes(lc + 40.0)) * (1.0 - smoothstep(0.0, 1.0, tL)) * (0.7 + 0.6 * lobes(lc * 1.7)); }
+  float right = 0.0, left = 0.0, tR = 1.0, tL = 1.0;
+  // each part thins out toward its inner end; with a gap (TAIL > 0) the taper runs TAIL px further
+  if (rc < ER + TAIL) {
+    tR = smoothstep(ER * 0.7, ER + TAIL, rc);
+    float sc = 0.86 + 0.22 * vn(vec2(rc * 0.09, 5.0)) + 0.12 * vn(vec2(rc * 0.27, 6.0));
+    right = rightEnv(rc) * sc * (1.0 - tR);
   }
-  float depth = min(max(right, left), TOP) + sway;
-  float tail = right >= left ? tR : tL;
-  // with a gap, nothing between the two parts (on a 375 card the top edge is unchanged)
-  bool gap = TAIL > 0.0 && max(right, left) <= 0.0;
-  if (!gap && y <= depth) return vec3(1.0, clamp(1.0 - y / max(depth, 1.0), 0.0, 1.0), tail);
-  float wob = 1.0 + 0.16 * (vn(vec2(atan(y, rc) * 4.0, 3.0)) - 0.5) + 0.06 * lobes(y * 3.0 + rc);
-  float o = length(vec2(rc / IX, y / IY)) / wob;
-  if (o < 1.0) return vec3(1.0, clamp(1.0 - y / IY + 0.25 * (1.0 - o), 0.0, 1.0), smoothstep(0.4, 1.0, o));
-  return vec3(0.0);
+  if (!RIGHT_PART && lc < EL + TAIL) {
+    tL = smoothstep(EL * 0.6, EL + TAIL, lc);
+    float sc = 0.86 + 0.22 * vn(vec2(lc * 0.09, 7.0)) + 0.12 * vn(vec2(lc * 0.27, 8.0));
+    left = leftEnv(lc) * sc * (1.0 - tL);
+  }
+  float depth = max(right, left);
+  if (depth < 0.3 || y > depth) return vec3(0.0);
+  float s = y / depth;                                         // 0 at the top edge .. 1 at the lower edge
+  float taper = right >= left ? tR : tL;
+  return vec3(1.0, clamp(1.0 - 0.8 * s, 0.0, 1.0), max(0.6 * smoothstep(0.6, 1.0, s), taper));
 }
 
 // Full four-tone range (padding zones).
@@ -87,7 +89,7 @@ vec3 tone(float l, float n) {
 }
 
 // Dark mode only: the same four-band structure in darker deep roses (luminance <= 0.085), so white
-// text keeps >= 4.5:1 where it runs under the corner cluster.
+// text keeps >= 4.5:1 where it runs under the corner end of the mass.
 vec3 deepTone(float l, float n) {
   float k = clamp(l * 3.2 + (n - 0.5) * 1.1, 0.0, 3.0);
   vec3 a = vec3(0.30, 0.09, 0.18);
@@ -99,7 +101,7 @@ vec3 deepTone(float l, float n) {
   return mix(c, d, step(2.5, k));
 }
 
-// Dark mode only: how far a dab belongs to the corner cluster. Radial from the top-right corner,
+// Dark mode only: how far a dab belongs to the corner end. Radial from the top-right corner,
 // measured at the dab's centre (so every dab is one colour and the change happens dab by dab):
 // fully deep across the whole cluster, fading out along the top edge, no straight edge anywhere.
 float cornerWeight(vec2 ctr) {
@@ -205,7 +207,7 @@ void main() {
 
   vec4 col = vec4(0.0);
   if (p.y < IY + 10.0) {
-    // Justified: the left part stays where it is; the right part (top-edge mass + corner cluster)
+    // Justified: the left part stays where it is; the right part (one continuous mass into the corner)
     // is drawn exactly as on a 375 card and anchored to the right edge. The split sits in the middle
     // of the empty gap between them; on a 375 card the shift is 0, so it renders unchanged.
     float split = 0.5 * (EL + (W - ER));
@@ -221,9 +223,11 @@ void main() {
     col = over(col, wood);
     col = over(col, front);
   }
-  // hard frame: the top padding, and the right-side mass down to IY (never the toolbar row)
-  float frame = max(1.0 - smoothstep(TOP - 1.0, TOP, p.y),
-    step(length(vec2(rc / (IX * 1.12), p.y / (IY + 2.0))), 1.0) * step(p.y, IY + 1.0));
+  // soft frame following the same curves (dab overspill only), never a straight edge
+  float envR = rc < ER + TAIL ? rightEnv(rc) * (1.0 - smoothstep(ER * 0.7, ER + TAIL, rc)) : 0.0;
+  float envL = p.x < EL + TAIL ? leftEnv(p.x) * (1.0 - smoothstep(EL * 0.6, EL + TAIL, p.x)) : 0.0;
+  float lim = min(max(envR, envL) * 1.1 + 5.0, IY + 3.0);
+  float frame = 1.0 - smoothstep(lim - 2.0, lim, p.y);
   col *= frame;
   float under = max(1.0 - smoothstep(ER * 0.6, ER * 1.6, rc), 1.0 - smoothstep(EL * 0.5, EL * 1.4, p.x));
   col = over(col, petals(gl, p, under, t, 22.0, 1.5, 5, 0.42, 11));
