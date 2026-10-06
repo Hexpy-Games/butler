@@ -27,46 +27,23 @@ pub(super) fn corruption(error: &StorageError) -> bool {
     }
 }
 
-pub(super) fn require_healthy(path: &Path) -> StorageResult<()> {
-    use std::io::Read;
-    let file = match std::fs::File::open(sidecar(path, "corrupt")) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(io_error(error)),
-    };
-    let mut raw = String::new();
-    file.take(128).read_to_string(&mut raw).map_err(io_error)?;
-    let code = [
-        StorageCode::AgentBtccStorageQuickCheckFailed,
-        StorageCode::AgentBtccStorageForeignKeyCheckFailed,
-        StorageCode::AgentBtccMigrationReferenceCheckFailed,
-        StorageCode::SqliteError,
-    ]
-    .into_iter()
-    .find(|code| code.as_str() == raw)
-    .unwrap_or(StorageCode::AgentBtccStorageQuickCheckFailed);
-    Err(StorageError::new(
-        code,
-        "persisted corruption verdict; passing full validation required",
-    ))
+pub(super) fn needs_recheck(path: &Path) -> StorageResult<bool> {
+    match std::fs::metadata(sidecar(path, "corrupt")) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(io_error(error)),
+    }
 }
 
 pub(super) fn scan_delay(path: &Path) -> Duration {
     let Ok(raw) = std::fs::read_to_string(sidecar(path, "verified")) else {
         return Duration::ZERO;
     };
-    let Some((schema, stamp)) = raw.trim().split_once(':') else {
+    // DDL during the per-start migrations can advance schema_version. The due
+    // time is based on completed verification, not that changing counter.
+    let Some((_schema, stamp)) = raw.trim().split_once(':') else {
         return Duration::ZERO;
     };
-    let Ok(db) =
-        butler_platform::sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-    else {
-        return Duration::ZERO;
-    };
-    let version = db.pragma_query_value(None, "schema_version", |row| row.get::<_, i64>(0));
-    if version.ok().map(|v| v.to_string()).as_deref() != Some(schema) {
-        return Duration::ZERO;
-    }
     let Some(time) = stamp
         .parse::<u64>()
         .ok()
@@ -77,9 +54,7 @@ pub(super) fn scan_delay(path: &Path) -> Duration {
     let age = SystemTime::now()
         .duration_since(time)
         .unwrap_or(VERIFIED_INTERVAL);
-    VERIFIED_INTERVAL
-        .saturating_sub(age)
-        .min(Duration::from_secs(2))
+    VERIFIED_INTERVAL.saturating_sub(age)
 }
 
 pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {

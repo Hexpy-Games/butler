@@ -1,6 +1,9 @@
 //! Additive monitor indexes; deployed tables and their format remain intact.
 use rusqlite::Connection;
 
+const BACKFILL: &str =
+    "activity_worker_id != activity_role||'-'||relation_id OR activity_worker_id IS NULL";
+
 pub(super) fn indexes(db: &Connection) -> rusqlite::Result<()> {
     activity_indexes(db)?;
     db.execute_batch(
@@ -26,8 +29,15 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id)";
     let identity =
         "UPDATE btcc_session_relations SET activity_worker_id=activity_role||'-'||relation_id";
+    if needs_backfill(db)? {
+        db.execute_batch(&format!(
+            "{update} WHERE activity_worker_id IS NULL; {identity} WHERE {BACKFILL};"
+        ))?;
+    }
+    // Build after the first repair: an adopted DB leaves a sparse candidate set.
     db.execute_batch(&format!(
-        "{update} WHERE activity_worker_id IS NULL; {identity} WHERE activity_worker_id != activity_role||'-'||relation_id OR activity_worker_id IS NULL;"
+        "CREATE INDEX IF NOT EXISTS idx_btcc_activity_backfill
+         ON btcc_session_relations(relation_id) WHERE {BACKFILL};"
     ))?;
     for table in ["btcc_subsession_delegations", "btcc_steward_results"] {
         for (op, rows) in [
@@ -57,4 +67,20 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
        ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id); \
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_open_page \
        ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0;")
+}
+
+fn needs_backfill(db: &Connection) -> rusqlite::Result<bool> {
+    let indexed: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_btcc_activity_backfill')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !indexed {
+        return Ok(true);
+    }
+    db.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM btcc_session_relations WHERE {BACKFILL})"),
+        [],
+        |row| row.get(0),
+    )
 }

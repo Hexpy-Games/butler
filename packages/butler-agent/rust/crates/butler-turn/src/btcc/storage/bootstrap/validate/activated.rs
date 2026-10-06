@@ -45,6 +45,7 @@ pub(crate) fn read(
     canonical_schema(&db)?;
     trace("schema_validated", started);
     if full {
+        trace("full_validation_begin", started);
         integrity(&db)?;
         trace("integrity_validated", started);
         references::validate(&db)?;
