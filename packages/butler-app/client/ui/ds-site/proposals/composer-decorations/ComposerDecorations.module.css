@@ -157,6 +157,24 @@
   pointer-events: none;
 }
 
+/* Mock of a proposed ComposerCard change (spec §3.4): while the draft is scrolled, the editor's
+   scroll area is clipped at the top of its content box, so a scrolled line never passes through the
+   top padding the canopy lives in. At scrollTop 0 nothing is in the padding, so the clip only takes
+   effect once the draft scrolls, and it grows with the scroll by a pixel at a time (no jump). */
+.background[data-draft-scrolled="true"]
+  ~ :global([data-slot="composer-expanded-body"])
+  :global([role="textbox"]) {
+  clip-path: inset(var(--composer-inner-padding-block) 0 0 0);
+}
+
+/* Part of the same change: the caret and scrollIntoView keep a line inside the content box, so
+   moving the caret up never parks it under the clip. No effect on layout or on what is drawn. */
+.background
+  ~ :global([data-slot="composer-expanded-body"])
+  :global([role="textbox"]) {
+  scroll-padding-top: var(--composer-inner-padding-block);
+}
+
 .cherryCanvas {
   display: block;
   width: 100%;

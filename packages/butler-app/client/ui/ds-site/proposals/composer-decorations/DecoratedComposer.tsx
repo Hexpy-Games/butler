@@ -35,8 +35,24 @@ function DecorationBackground({ theme, tone, shore }: {
   tone: "light" | "dark";
   shore: ShoreParams;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Mock of the proposed ComposerCard change (spec §3.4): while the draft is scrolled, the editor's
+  // scroll area is clipped at its content box, so scrolled lines never pass through the top padding.
+  // A passive scroll listener (capture: scroll does not bubble), never on the typing path.
+  useEffect(() => {
+    const host = ref.current?.parentElement;
+    if (!host) return;
+    const onScroll = (event: Event) => {
+      const target = event.target as HTMLElement;
+      if (target.getAttribute?.("role") !== "textbox") return;
+      const scrolled = target.scrollTop > 0;
+      if ((ref.current?.dataset.draftScrolled === "true") !== scrolled) ref.current?.setAttribute("data-draft-scrolled", String(scrolled));
+    };
+    host.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => host.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
   return (
-    <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}
+    <div ref={ref} aria-hidden="true" className={styles.background} data-composer-decoration={theme}
       style={theme === "shoreline" ? shoreStyle(shore) : undefined}>
       <div className={styles.art} data-scene={theme} data-tone={tone}>
         {theme === "shoreline" ? (
