@@ -77,6 +77,7 @@ async fn group(
                 stage: stage(&kind, &source),
                 id: source,
                 text: value.clone(),
+                budget_text: charged.clone(),
             });
         }
         remaining = remaining.saturating_sub(charged.len() + 2);
@@ -178,17 +179,18 @@ pub(super) async fn read(
     ] {
         {
             let header = format!("## {title}");
-            groups.push(format!(
-                "{header}\n\n{}",
-                value
-                    .iter()
-                    .map(|section| section.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n\n")
-            ));
+            let budget = value
+                .iter()
+                .filter(|section| !section.budget_text.trim().is_empty())
+                .map(|section| section.budget_text.as_str())
+                .collect::<Vec<_>>();
+            if !budget.is_empty() {
+                groups.push(format!("{header}\n\n{}", budget.join("\n\n")));
+            }
             sections.push(DocumentSection {
                 id: title.into(),
-                text: header,
+                text: header.clone(),
+                budget_text: header,
                 stage: Stage::Stable,
             });
             sections.extend(value);
@@ -310,6 +312,7 @@ pub(super) struct DocumentSection {
     pub id: String,
     pub text: String,
     pub stage: Stage,
+    pub budget_text: String,
 }
 
 fn stage(kind: &str, id: &str) -> Stage {

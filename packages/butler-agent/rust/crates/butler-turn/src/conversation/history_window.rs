@@ -18,31 +18,45 @@ impl AgentConversationStore {
         cap: usize,
     ) -> ConversationResult<HistoryWindow> {
         let session = session.to_owned();
-        self.execute(move |db| read(db, &session, cap)).await
+        self.execute(move |db| {
+            let before = db.total_changes();
+            let window = read(db, &session, cap)?;
+            if std::env::var("BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY").as_deref() == Ok("1") {
+                eprintln!(
+                    "[history-projection-writes] changes={}",
+                    db.total_changes() - before
+                );
+            }
+            Ok(window)
+        })
+        .await
     }
 }
 
-fn read(db: &Connection, session: &str, cap: usize) -> ConversationResult<HistoryWindow> {
+pub(super) fn read(
+    db: &Connection,
+    session: &str,
+    cap: usize,
+) -> ConversationResult<HistoryWindow> {
     let summaries = valid_summaries(db, session)?;
     let epoch = summaries
         .iter()
-        .map(|s| s.covers_to_seq as u64)
-        .max()
-        .unwrap_or(0);
+        .map(|s| s.covers_to_seq)
+        .fold(0.0_f64, f64::max);
     let sizes = completed_sizes(db, session, epoch)?;
     let summary_bytes: usize = summaries.iter().map(|s| s.summary_text.len() + 128).sum();
     let start = window_start(&sizes, cap, summary_bytes + cap / 10);
-    let ids: Vec<_> = sizes[start..].iter().map(|(id, _)| id.clone()).collect();
+    let ids: Vec<_> = sizes.iter().skip(start).map(|(id, _)| id.clone()).collect();
     let mut material = load::material(db, session, &ids, epoch)?;
     material.summaries = summaries;
     let late_turn_ids = late_ids(&material.turns);
-    let digest = dropped_digest(db, &sizes[..start], epoch, cap / 10)?;
+    let digest = dropped_digest(db, sizes.get(..start).unwrap_or_default(), epoch, cap / 10)?;
     let legacy_material = load::legacy_material(db, session, cap, &material.summaries)?;
     Ok(HistoryWindow {
         material,
         digest,
-        late_turn_ids,
         legacy_material,
+        late_turn_ids,
     })
 }
 
@@ -50,7 +64,12 @@ fn late_ids(turns: &[ConversationTurn]) -> Vec<String> {
     turns
         .iter()
         .enumerate()
-        .filter(|(index, turn)| turns[..*index].iter().any(|earlier| earlier.seq > turn.seq))
+        .filter(|(index, turn)| {
+            turns
+                .iter()
+                .take(*index)
+                .any(|earlier| earlier.seq > turn.seq)
+        })
         .map(|(_, turn)| turn.id.clone())
         .collect()
 }
@@ -62,7 +81,10 @@ fn window_start(sizes: &[(String, usize)], cap: usize, reserved: usize) -> usize
         used = used.saturating_add(*size);
         if used > cap && end + 1 - start > 4 {
             while used > cap * 3 / 5 && end + 1 - start > 4 {
-                used = used.saturating_sub(sizes[start].1);
+                let Some((_, size)) = sizes.get(start) else {
+                    break;
+                };
+                used = used.saturating_sub(*size);
                 start += 1;
             }
         }
@@ -73,7 +95,7 @@ fn window_start(sizes: &[(String, usize)], cap: usize, reserved: usize) -> usize
 fn completed_sizes(
     db: &Connection,
     session: &str,
-    epoch: u64,
+    epoch: f64,
 ) -> ConversationResult<Vec<(String, usize)>> {
     // octet_length reads SQLite's stored size, without loading overflow pages.
     // Capsules and envelopes are charged alongside the condensed tool labels.
@@ -86,7 +108,7 @@ fn completed_sizes(
          FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
          WHERE m.session_id=?1 AND m.seq>?2 GROUP BY m.turn_id) s \
          JOIN conversation_turns t ON t.id=s.turn_id \
-         WHERE t.completed_at IS NOT NULL ORDER BY t.completed_at,t.seq"
+         WHERE t.completed_at IS NOT NULL ORDER BY COALESCE(t.first_completed_at,t.completed_at),t.seq"
     ).map_err(ConversationError::sqlite)?;
     query
         .query_map(rusqlite::params![session, epoch], |r| {
@@ -113,7 +135,7 @@ fn valid_summaries(db: &Connection, session: &str) -> ConversationResult<Vec<Con
 fn dropped_digest(
     db: &Connection,
     dropped: &[(String, usize)],
-    epoch: u64,
+    epoch: f64,
     cap: usize,
 ) -> ConversationResult<String> {
     let mut lines = Vec::new();

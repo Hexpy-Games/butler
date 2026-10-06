@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 6;
+pub(super) const VERSION: u64 = 7;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS conversation_bindings (
 );
 CREATE TABLE IF NOT EXISTS conversation_turns (
   id TEXT PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, actor TEXT NOT NULL,
-  status TEXT NOT NULL, request_id TEXT, started_at TEXT NOT NULL, completed_at TEXT,
+  status TEXT NOT NULL, request_id TEXT, started_at TEXT NOT NULL, completed_at TEXT, first_completed_at TEXT,
   UNIQUE (session_id, seq),
   FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE
 );
@@ -70,6 +70,9 @@ INSERT OR IGNORE INTO conversation_public_source_state (singleton, revision) VAL
 CREATE TABLE IF NOT EXISTS conversation_source_identity (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1), identity TEXT NOT NULL
 );
+DROP INDEX IF EXISTS conversation_turns_history_completion_idx;
+DROP INDEX IF EXISTS conversation_parts_message_size_idx;
+DROP INDEX IF EXISTS conversation_messages_session_turn_seq_idx;
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx ON conversation_turns(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
@@ -145,6 +148,14 @@ fn migrate(
                 ))
                 .map_err(ConversationError::sqlite)?;
         }
+    }
+    let first_completion: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversation_turns') WHERE name='first_completed_at')",
+        [], |row|row.get(0)).map_err(ConversationError::sqlite)?;
+    if !first_completion {
+        connection
+            .execute_batch("ALTER TABLE conversation_turns ADD COLUMN first_completed_at TEXT")
+            .map_err(ConversationError::sqlite)?;
     }
     connection.execute(
         "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",

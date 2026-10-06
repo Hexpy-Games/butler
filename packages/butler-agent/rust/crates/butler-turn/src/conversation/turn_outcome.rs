@@ -304,24 +304,30 @@ fn outcome_hash(capsule: &TurnOutcomeCapsule, referenced: &str) -> ConversationR
 
 pub(super) fn history_outcome_row(
     row: &rusqlite::Row<'_>,
+    prefix: &str,
 ) -> ConversationResult<TurnOutcomeCapsule> {
     let json = |key| -> ConversationResult<Value> {
         serde_json::from_str(
-            &row.get::<_, String>(key)
+            &row.get::<_, String>(format!("{prefix}{key}").as_str())
                 .map_err(ConversationError::sqlite)?,
         )
         .map_err(ConversationError::json)
     };
-    let get = |key| row.get::<_, String>(key).map_err(ConversationError::sqlite);
+    let get = |key| {
+        row.get::<_, String>(format!("{prefix}{key}").as_str())
+            .map_err(ConversationError::sqlite)
+    };
     let opt = |key| {
-        row.get::<_, Option<String>>(key)
+        row.get::<_, Option<String>>(format!("{prefix}{key}").as_str())
             .map_err(ConversationError::sqlite)
     };
     Ok(TurnOutcomeCapsule {
         id: get("id")?,
         session_id: get("session_id")?,
         turn_id: get("turn_id")?,
-        generation: row.get("generation").map_err(ConversationError::sqlite)?,
+        generation: row
+            .get(format!("{prefix}generation").as_str())
+            .map_err(ConversationError::sqlite)?,
         outcome: outcome(&get("outcome")?)?,
         source_hash: get("source_hash")?,
         request_message_id: opt("request_message_id")?,

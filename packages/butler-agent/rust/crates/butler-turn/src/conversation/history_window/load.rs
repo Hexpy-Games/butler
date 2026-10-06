@@ -6,11 +6,10 @@ pub(super) fn material(
     db: &Connection,
     session: &str,
     ids: &[String],
-    epoch: u64,
+    epoch: f64,
 ) -> ConversationResult<PromptMaterial> {
     let ids = serde_json::to_string(ids).map_err(ConversationError::json)?;
-    let turns = turns(db, &ids)?;
-    let outcomes = outcomes(db, &ids)?;
+    let (turns, outcomes) = metadata(db, &ids)?;
     let mut by_turn = messages(db, session, &ids, epoch, None)?;
     let semantic_tail = turns
         .iter()
@@ -28,32 +27,39 @@ pub(super) fn material(
     })
 }
 
-fn turns(db: &Connection, ids: &str) -> ConversationResult<Vec<ConversationTurn>> {
-    let mut query = db.prepare("SELECT t.* FROM json_each(?1) j JOIN conversation_turns t ON t.id=j.value ORDER BY j.key")
-        .map_err(ConversationError::sqlite)?;
-    query
-        .query_map([ids], turns::turn_row)
-        .map_err(ConversationError::sqlite)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(ConversationError::sqlite)
-}
-
-fn outcomes(db: &Connection, ids: &str) -> ConversationResult<Vec<TurnOutcomeCapsule>> {
-    let mut query = db.prepare("SELECT o.* FROM json_each(?1) j JOIN conversation_turn_outcomes o ON o.turn_id=j.value ORDER BY j.key")
-        .map_err(ConversationError::sqlite)?;
+fn metadata(
+    db: &Connection,
+    ids: &str,
+) -> ConversationResult<(Vec<ConversationTurn>, Vec<TurnOutcomeCapsule>)> {
+    let mut query = db.prepare("SELECT COALESCE(t.first_completed_at,t.completed_at) AS completed_at,t.*, \
+        o.id AS outcome_id,o.session_id AS outcome_session_id,o.turn_id AS outcome_turn_id, \
+        o.generation AS outcome_generation,o.outcome AS outcome_outcome,o.source_hash AS outcome_source_hash, \
+        o.request_message_id AS outcome_request_message_id,o.public_assistant_message_id AS outcome_public_assistant_message_id, \
+        o.provider_id AS outcome_provider_id,o.model_ref AS outcome_model_ref,o.evidence_refs_json AS outcome_evidence_refs_json, \
+        o.unresolved_obligations_json AS outcome_unresolved_obligations_json,o.continuation_json AS outcome_continuation_json, \
+        o.safe_code AS outcome_safe_code,o.created_at AS outcome_created_at \
+        FROM json_each(?1) j JOIN conversation_turns t ON t.id=j.value \
+        LEFT JOIN conversation_turn_outcomes o ON o.turn_id=t.id ORDER BY j.key").map_err(ConversationError::sqlite)?;
     let mut rows = query.query([ids]).map_err(ConversationError::sqlite)?;
-    let mut result = Vec::new();
+    let (mut turns, mut outcomes) = (Vec::new(), Vec::new());
     while let Some(row) = rows.next().map_err(ConversationError::sqlite)? {
-        result.push(turn_outcome::history_outcome_row(row)?);
+        turns.push(turns::turn_row(row).map_err(ConversationError::sqlite)?);
+        if row
+            .get::<_, Option<String>>("outcome_id")
+            .map_err(ConversationError::sqlite)?
+            .is_some()
+        {
+            outcomes.push(turn_outcome::history_outcome_row(row, "outcome_")?);
+        }
     }
-    Ok(result)
+    Ok((turns, outcomes))
 }
 
 fn messages(
     db: &Connection,
     session: &str,
     ids: &str,
-    epoch: u64,
+    epoch: f64,
     selected_messages: Option<&str>,
 ) -> ConversationResult<std::collections::HashMap<String, Vec<ConversationMessageWithParts>>> {
     let mut query = db.prepare(
@@ -102,9 +108,12 @@ fn push(
     turns: &mut std::collections::HashMap<String, Vec<ConversationMessageWithParts>>,
     message: Option<ConversationMessageWithParts>,
 ) {
-    if let Some(message) = message
-    {
-        let turn = message.message.turn_id.clone().unwrap_or_else(||message.message.id.clone());
+    if let Some(message) = message {
+        let turn = message
+            .message
+            .turn_id
+            .clone()
+            .unwrap_or_else(|| message.message.id.clone());
         turns.entry(turn).or_default().push(message);
     }
 }
@@ -133,17 +142,28 @@ pub(super) fn legacy_material(
     let ids: Vec<_> = pairs
         .iter()
         .rev()
-        .map(|(message, id)| id.clone().unwrap_or_else(||message.clone()))
+        .map(|(message, id)| id.clone().unwrap_or_else(|| message.clone()))
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    let selected = serde_json::to_string(&pairs.iter().map(|(id,_)|id).collect::<Vec<_>>()).map_err(ConversationError::json)?;
+    let selected = serde_json::to_string(&pairs.iter().map(|(id, _)| id).collect::<Vec<_>>())
+        .map_err(ConversationError::json)?;
     let ids = serde_json::to_string(&ids).map_err(ConversationError::json)?;
-    let turns = turns(db,&ids)?;
-    let outcomes = outcomes(db,&ids)?;
-    let semantic_tail = messages(db,session,&ids,0,Some(&selected))?.into_values().flatten().collect();
-    let mut material = PromptMaterial { session_id:session.into(), summaries:vec![], semantic_tail,
-        current_turn:vec![],turns,outcomes,token_estimate:0,provenance:vec![] };
+    let (turns, outcomes) = metadata(db, &ids)?;
+    let semantic_tail = messages(db, session, &ids, 0.0, Some(&selected))?
+        .into_values()
+        .flatten()
+        .collect();
+    let mut material = PromptMaterial {
+        session_id: session.into(),
+        summaries: vec![],
+        semantic_tail,
+        current_turn: vec![],
+        turns,
+        outcomes,
+        token_estimate: 0,
+        provenance: vec![],
+    };
     material
         .semantic_tail
         .retain(|m| message_ids.contains(m.message.id.as_str()));

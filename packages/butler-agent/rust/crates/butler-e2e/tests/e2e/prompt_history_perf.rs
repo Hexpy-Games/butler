@@ -47,27 +47,64 @@ async fn owner_scale_history_assembly_and_idle_writes() -> Result<(), HarnessErr
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(dropped,0,"prompt assembly must not compact any message");
-    assert_eq!(db.query_row::<u64,_,_>("SELECT COUNT(*) FROM conversation_summaries",[],|r|r.get(0))?,0);
+    assert_eq!(dropped, 0, "prompt assembly must not compact any message");
+    assert_eq!(
+        db.query_row::<u64, _, _>("SELECT COUNT(*) FROM conversation_summaries", [], |r| r
+            .get(0))?,
+        0
+    );
+    let mut recent = vec![
+        (
+            "owner history request 997".to_owned(),
+            "owner history reply 997".to_owned(),
+        ),
+        (
+            "owner history request 998".to_owned(),
+            "owner history reply 998".to_owned(),
+        ),
+        (
+            "owner history request 999".to_owned(),
+            "owner history reply 999".to_owned(),
+        ),
+        ("owner-scale latest request".to_owned(), "once".to_owned()),
+    ];
     for index in 0..20 {
         let start = stub.requests.lock().unwrap().len();
-        s.turn("general",&format!("steady history request {index}")).await?;
+        s.turn("general", &format!("steady history request {index}"))
+            .await?;
         let requests = stub.requests.lock().unwrap();
         let text = source(&requests[start]);
-        assert!(text.contains("owner history request 999") || text.contains("steady history request"));
-        if index > 0 { assert!(text.contains(&format!("user: steady history request {}",index-1))); }
+        let mut previous = 0;
+        for (ask, reply) in &recent {
+            let start = text.find(&format!("user: {ask}")).unwrap();
+            assert!(start >= previous, "latest four turns remain ordered");
+            let tail = &text[start..];
+            let end = tail[1..].find("\nturn ").map_or(tail.len(), |i| i + 1);
+            assert!(
+                tail[..end].contains(&format!("butler: {reply}")),
+                "latest final reply remains complete"
+            );
+            previous = start;
+        }
+        recent.remove(0);
+        recent.push((format!("steady history request {index}"), "once".into()));
     }
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
-    let elapsed: Vec<u64> = log.lines()
-        .filter_map(|line|line.split("[history-projection] elapsed_us=").nth(1))
-        .map(|line|line.split_whitespace().next().unwrap().parse().unwrap()).collect();
-    assert_eq!(elapsed.len(),21);
+    let elapsed: Vec<u64> = log
+        .lines()
+        .filter_map(|line| line.split("[history-projection] elapsed_us=").nth(1))
+        .map(|line| line.split_whitespace().next().unwrap().parse().unwrap())
+        .collect();
+    assert_eq!(elapsed.len(), 21);
     let first = elapsed[0];
     let mut steady = elapsed[1..].to_vec();
     steady.sort_unstable();
-    let median = steady[10];
+    let median = (steady[9] + steady[10]) / 2;
     let p95 = steady[18];
-    eprintln!("PROMPT_OWNER database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",started.elapsed().as_millis());
+    eprintln!(
+        "PROMPT_OWNER database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",
+        started.elapsed().as_millis()
+    );
     tokio::time::sleep(Duration::from_millis(250)).await;
     let before: u64 = db.query_row("PRAGMA data_version", [], |row| row.get(0))?;
     tokio::time::sleep(Duration::from_secs(2)).await;

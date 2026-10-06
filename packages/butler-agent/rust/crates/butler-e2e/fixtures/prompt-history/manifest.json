@@ -1,0 +1,15 @@
+{
+  "mainRevision": "13548aebca8eb131c6cd73252a2edccbdd56d8a7",
+  "normalisation": [
+    "time",
+    "temporary sandbox paths",
+    "live configuration hash"
+  ],
+  "scenarios": {
+    "heavy-false": 16,
+    "heavy-true": 16,
+    "direct": 2,
+    "resume": 2,
+    "delegated": 2
+  }
+}

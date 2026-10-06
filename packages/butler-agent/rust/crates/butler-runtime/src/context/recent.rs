@@ -1,8 +1,9 @@
 use crate::context::ContextCode;
 use crate::context::{ContextConversation, ContextResult, PromptMaterialRenderOptions};
 mod history;
-use butler_turn::btcc::{ContextAssembly, ContextSection};
+use butler_turn::btcc::ContextAssembly;
 
+#[derive(Clone, Copy)]
 pub(crate) struct RecentConversationInput<'a> {
     pub transport: &'a str,
     pub runtime_session_id: &'a str,
@@ -11,6 +12,29 @@ pub(crate) struct RecentConversationInput<'a> {
 }
 
 pub(crate) async fn include_recent_context(
+    owner: &ContextConversation,
+    input: RecentConversationInput<'_>,
+    assembly: ContextAssembly,
+) -> ContextResult<ContextAssembly> {
+    if std::env::var("BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY").as_deref() == Ok("1") {
+        let (a, b) = tokio::join!(
+            assemble(owner, input, assembly.clone()),
+            assemble(owner, input, assembly)
+        );
+        let (a, b) = (a?, b?);
+        if a != b {
+            return Err(crate::context::ContextError::new(
+                ContextCode::ContextConversationReadError,
+                "Concurrent history assemblies differ",
+            ));
+        }
+        eprintln!("[history-concurrency] identical=true");
+        return Ok(a);
+    }
+    assemble(owner, input, assembly).await
+}
+
+async fn assemble(
     owner: &ContextConversation,
     input: RecentConversationInput<'_>,
     mut assembly: ContextAssembly,
@@ -55,28 +79,9 @@ pub(crate) async fn include_recent_context(
     if content.is_empty() {
         return Ok(assembly);
     }
-    assembly.working_context.push(ContextSection {
-        id: "recent-conversation".into(),
-        title: "Recent Conversation".into(),
-        content: serde_json::to_string(&butler_turn::conversation::HistoryDocument {
-            history: content,
-            main_budget_projection: format!(
-                "## Recent Conversation\n\n{}",
-                legacy_plan
-                    .rendered
-                    .strip_prefix("## Recent Conversation")
-                    .unwrap_or(&legacy_plan.rendered)
-                    .trim()
-            ),
-        })
-        .map_err(|e| {
-            crate::context::ContextError::new(ContextCode::ContextJsonError, e.to_string())
-        })?,
-        region: Some("working_context".into()),
-        projection_class: "mandatory_hot_cache".into(),
-        scope_kind: "session".into(),
-        source: None,
-    });
+    assembly
+        .working_context
+        .push(history::document(content, &legacy_plan.rendered)?);
     history::trace(started.elapsed(), read_elapsed, summary_elapsed).await;
     Ok(assembly)
 }

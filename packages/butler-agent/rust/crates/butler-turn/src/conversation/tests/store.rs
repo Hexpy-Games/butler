@@ -393,16 +393,63 @@ fn migration_errors_are_atomic() {
 }
 
 async fn verify_readonly_history(store: &AgentConversationStore, valid: bool) {
-    store.execute(move |db| {
-        let before = db.total_changes();
-        let window = super::super::history_window::read(db,"cs_fixed",10_000)?;
-        assert_eq!(db.total_changes(),before,"assembly must perform zero writes");
-        assert_eq!(!window.material.summaries.is_empty(),valid);
-        if !valid { assert!(window.material.semantic_tail.iter().any(|m|m.message.id=="cm_request")); }
-        Ok(())
-    }).await.unwrap();
-    let (a,b) = tokio::join!(store.read_history_window("cs_fixed",10_000),store.read_history_window("cs_fixed",10_000));
-    let (a,b) = (a.unwrap(),b.unwrap());
-    assert_eq!(a.material,b.material);
-    assert_eq!(a.digest,b.digest);
+    if valid {
+        let first = store
+            .read_turn("ct_fixed")
+            .await
+            .unwrap()
+            .unwrap()
+            .completed_at;
+        let resumed = store
+            .finalize_turn(FinalizeTurnInput {
+                turn_id: "ct_fixed".into(),
+                status: None,
+                completed_at: Some("2099-01-01T00:00:00Z".into()),
+                outcome_capsule: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            resumed.completed_at.as_deref(),
+            Some("2099-01-01T00:00:00Z")
+        );
+        let saved = store.execute(|db| {
+            db.query_row(
+                "SELECT COALESCE(first_completed_at, completed_at) FROM conversation_turns WHERE id='ct_fixed'",
+                [], |row| row.get::<_, Option<String>>(0),
+            ).map_err(ConversationError::sqlite)
+        }).await.unwrap();
+        assert_eq!(saved, first, "history preserves first completion");
+    }
+
+    store
+        .execute(move |db| {
+            let before = db.total_changes();
+            let window = super::super::history_window::read(db, "cs_fixed", 10_000)?;
+            assert_eq!(
+                db.total_changes(),
+                before,
+                "assembly must perform zero writes"
+            );
+            assert_eq!(!window.material.summaries.is_empty(), valid);
+            if !valid {
+                assert!(
+                    window
+                        .material
+                        .semantic_tail
+                        .iter()
+                        .any(|m| m.message.id == "cm_request")
+                );
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let (a, b) = tokio::join!(
+        store.read_history_window("cs_fixed", 10_000),
+        store.read_history_window("cs_fixed", 10_000)
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(a.material, b.material);
+    assert_eq!(a.digest, b.digest);
 }

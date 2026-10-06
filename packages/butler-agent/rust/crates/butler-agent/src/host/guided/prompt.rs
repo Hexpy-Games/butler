@@ -65,8 +65,7 @@ fn source_prompt(
     material: &material::Material,
 ) -> Result<(String, Value), BtccError> {
     let mut entries = diagnostics::Sections::default();
-    let parent = state.phase.execution_policy.role.as_str() == "butler";
-    if parent {
+    {
         entries.documents(documents, Some(documents::Stage::Stable));
         entries.push("history-heading", "## Conversation history".into());
         entries.documents(documents, Some(documents::Stage::History));
@@ -111,9 +110,6 @@ fn source_prompt(
     }
     if let Some(plan) = &state.accepted_plan {
         entries.push("accepted-plan", render_accepted_project_plan(plan));
-    }
-    if !parent {
-        entries.documents(documents, None);
     }
     if !material.attachments.is_empty() {
         entries.push("attachments", material.attachments.clone());

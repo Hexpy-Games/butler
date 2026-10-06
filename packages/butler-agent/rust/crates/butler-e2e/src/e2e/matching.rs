@@ -16,12 +16,12 @@ pub fn key(path: &str, body: &Value, placeholders: &Placeholders) -> MatchKey {
         .or_else(|| body["messages"].as_array())
         .cloned()
         .unwrap_or_default();
-    // The user's request is the last user item carrying `User request:`;
+    // The request is the last user item carrying a structural request heading;
     // later user-role items are product context updates (e.g. "Updated
     // current Work context"), which embed ids and tool arguments.
     let last_user = items
         .iter()
-        .rposition(|item| item["role"] == "user" && text_of(item).contains("User request:"))
+        .rposition(|item| item["role"] == "user" && request_start(&text_of(item)).is_some())
         .or_else(|| items.iter().rposition(|item| item["role"] == "user"));
     let user_request = last_user
         .map(|index| user_request(&text_of(&items[index]), placeholders))
@@ -50,16 +50,25 @@ fn text_of(item: &Value) -> String {
     }
 }
 
-/// The span between `User request:` and `Current scope:` (the rest of the
-/// user message carries per-run times, hashes, ids and paths).
+/// Extract the final request block, accepting the legacy cassette layout.
 pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
-    let start = text
-        .rfind("User request:")
-        .map_or(0, |index| index + "User request:".len());
+    let start = request_start(text).unwrap_or(0);
     let rest = &text[start..];
     let end = rest.find("Current scope:").unwrap_or(rest.len());
     let span = normalize_volatile(&placeholders.hide(&rest[..end]));
     span.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn request_start(text: &str) -> Option<usize> {
+    [
+        "## Current request\n",
+        "## Delegated result\nSteward:\n",
+        "## Delegated result\nWorker:\n",
+        "User request:",
+    ]
+    .iter()
+    .filter_map(|heading| text.rfind(heading).map(|index| index + heading.len()))
+    .max()
 }
 
 /// Values the product writes into background prompts that differ on every

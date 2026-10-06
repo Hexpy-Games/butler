@@ -66,7 +66,10 @@ fn source(request: &Value) -> &str {
 fn prefix(request: &Value) -> Vec<u8> {
     let text = source(request);
     // Runtime state follows the stable documents and completion-ordered history.
-    let end = text.find("## Current turn context").or_else(||text.find("## Runtime State")).unwrap();
+    let end = text
+        .find("## Current turn context")
+        .or_else(|| text.find("## Runtime State"))
+        .unwrap();
     let mut bytes =
         serde_json::to_vec(&json!([request["instructions"], request["tools"]])).unwrap();
     bytes.extend_from_slice(text[..end].trim_end().as_bytes());
@@ -91,7 +94,11 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     let setup = Setup::new("PROMPT-HISTORY")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
+        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
+        .env(
+            "BUTLER_E2E_VERIFY_HISTORY_CONCURRENCY",
+            if verify { "1" } else { "0" },
+        );
     std::fs::write(
         setup.sandbox.data.join("history-output.txt"),
         "tool output ".repeat(1490),
@@ -124,6 +131,22 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         }
         let request = turn_requests[0].clone();
         let current = prefix(&request);
+        if verify {
+            let text = source(&request);
+            for heading in [
+                "## Conversation history",
+                "## Current turn context",
+                "## Current request",
+            ] {
+                assert_eq!(
+                    text.matches(heading).count(),
+                    1,
+                    "fixed heading {heading} at turn {index}"
+                );
+            }
+            assert!(text.ends_with(&ask));
+        }
+
         let content = history(&s.sandbox.data);
         let moved = !previous_history.is_empty() && !content.starts_with(&previous_history);
         if moved {
@@ -187,12 +210,29 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     if verify {
         compare_golden(&format!("heavy-{heavy}"), &captured)?;
     }
+    if verify {
+        let log = std::fs::read_to_string(s.sandbox.logs.join("agent-1.log"))?;
+        assert!(log.matches("[history-concurrency] identical=true").count() >= 16);
+        let changes: Vec<_> = log
+            .lines()
+            .filter_map(|line| line.split("[history-projection-writes] changes=").nth(1))
+            .collect();
+        assert!(changes.len() >= 30);
+        assert!(changes.iter().all(|line| line.trim() == "0"));
+    }
     let db = Connection::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
     let writes: u64 = db.query_row("SELECT COUNT(*) FROM conversation_summaries", [], |row| {
         row.get(0)
     })?;
-    assert_eq!(writes,0,"assembly must not create summaries");
-    assert_eq!(db.query_row::<u64,_,_>("SELECT COUNT(*) FROM conversation_messages WHERE status='compacted'",[],|r|r.get(0))?,0);
+    assert_eq!(writes, 0, "assembly must not create summaries");
+    assert_eq!(
+        db.query_row::<u64, _, _>(
+            "SELECT COUNT(*) FROM conversation_messages WHERE status='compacted'",
+            [],
+            |r| r.get(0)
+        )?,
+        0
+    );
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert_eq!(
         writes,
@@ -220,49 +260,6 @@ fn compare_golden(case: &str, requests: &[Value]) -> Result<(), HarnessError> {
     golden::compare(case, requests)
 }
 
-fn loaded_sections(
-    data: &std::path::Path,
-    request: &Value,
-    placeholders: &butler_e2e::e2e::sanitize::Placeholders,
-) -> Result<Value, HarnessError> {
-    let db = Connection::open(data.join("agent-runtime/btcc.sqlite"))?;
-    let mut query = db.prepare("SELECT source_id,content FROM btcc_context_documents WHERE rowid IN (SELECT MAX(rowid) FROM btcc_context_documents GROUP BY source_id) ORDER BY source_id")?;
-    let mut sections = serde_json::Map::new();
-    let prompt = format!(
-        "{}\n{}",
-        request["instructions"].as_str().unwrap(),
-        source(request)
-    );
-    for row in query.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (id, content) = row?;
-        if id == "recent-conversation" {
-            continue;
-        }
-        let loaded = super::agent_context::loaded_excerpt(&id, &content, &prompt);
-        let normalized = placeholders
-            .hide(&loaded)
-            .lines()
-            .map(|line| {
-                for field in [
-                    "Current Time UTC:",
-                    "Current Local Time:",
-                    "Live Configuration Hash:",
-                ] {
-                    if line.starts_with(field) {
-                        return format!("{field} {{{{PER_RUN}}}}");
-                    }
-                }
-                line.to_owned()
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        sections.insert(id, normalized.into());
-    }
-    Ok(Value::Object(sections))
-}
-
 #[tokio::test]
 async fn late_completion_is_appended_with_identity_and_timestamp() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -283,7 +280,7 @@ async fn late_completion_is_appended_with_identity_and_timestamp() -> Result<(),
     let previous = prefix(stub.requests.lock().unwrap().last().unwrap());
     let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     db.execute(
-        "UPDATE conversation_turns SET status='complete',completed_at=?1 WHERE id='ct_late'",
+        "UPDATE conversation_turns SET status='complete',completed_at=?1,first_completed_at=?1 WHERE id='ct_late'",
         [&timestamp],
     )?;
     s.turn("general", "after late completion").await?;
@@ -296,6 +293,18 @@ async fn late_completion_is_appended_with_identity_and_timestamp() -> Result<(),
     )));
     assert!(text.find("ordinary request 5").unwrap() < text.find("late user request").unwrap());
     assert!(text.contains("butler: late final reply"));
+    let before_resume = prefix(request);
+    db.execute(
+        "UPDATE conversation_turns SET completed_at='2099-01-01T00:00:00Z' WHERE id='ct_late'",
+        [],
+    )?;
+    s.turn("general", "after resumed completion").await?;
+    let requests = stub.requests.lock().unwrap().clone();
+    let resumed = requests.last().unwrap();
+    assert!(prefix(resumed).starts_with(&before_resume));
+    assert!(source(resumed).contains(&format!(
+        "turn ct_late status complete completed {timestamp}"
+    )));
     s.finish().await?;
     server.abort();
     Ok(())
@@ -444,31 +453,15 @@ pub(super) fn resume_parity(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
         );
         eprintln!("PROMPT_RESUME stable_prefix_percent=100");
     }
-    let mut placeholders = butler_e2e::e2e::sanitize::Placeholders::default();
-    placeholders.add("W", s.sandbox.workspace.display().to_string());
-    placeholders.add("D", s.sandbox.data.display().to_string());
-    placeholders.add("SANDBOX", s.sandbox.root.display().to_string());
-    let captured = requests
-        .iter()
-        .map(|request| {
-            golden::capture(
-                &s.sandbox.data,
-                std::slice::from_ref(request),
-                &placeholders,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
-        let directory = std::env::var("BUTLER_PROMPT_CAPTURE_DIR").unwrap();
-        std::fs::write(
-            std::path::Path::new(&directory).join("resume.json"),
-            serde_json::to_vec(&captured)?,
-        )?;
-    } else {
-        compare_golden("resume", &captured)?;
-    }
-    Ok(())
+    golden::parity_case(s, &requests, "delegated")
 }
 
 #[path = "prompt_history_perf.rs"]
 mod perf;
+
+pub(super) fn approval_parity(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    requests: &[Value],
+) -> Result<(), HarnessError> {
+    golden::parity_case(s, requests, "resume")
+}

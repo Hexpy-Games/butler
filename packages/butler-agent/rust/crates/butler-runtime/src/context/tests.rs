@@ -341,11 +341,24 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
         catalog,
         ContextBudgetEnvironment::default(),
     );
-    let assemble = || include_recent_context(
-        &owner, RecentConversationInput { transport:"app", runtime_session_id:"runtime",
-            model_ref:Some("google/gemini-3.5-flash"), event_id:Some("event-current") }, ContextAssembly::default());
-    let (a,b) = tokio::join!(assemble(),assemble());
-    assert_eq!(a.unwrap(),b.unwrap(),"parallel assemblies must have identical bytes");
+    let assemble = || {
+        include_recent_context(
+            &owner,
+            RecentConversationInput {
+                transport: "app",
+                runtime_session_id: "runtime",
+                model_ref: Some("google/gemini-3.5-flash"),
+                event_id: Some("event-current"),
+            },
+            ContextAssembly::default(),
+        )
+    };
+    let (a, b) = tokio::join!(assemble(), assemble());
+    assert_eq!(
+        a.unwrap(),
+        b.unwrap(),
+        "parallel assemblies must have identical bytes"
+    );
     let assembly = include_recent_context(
         &owner,
         RecentConversationInput {
