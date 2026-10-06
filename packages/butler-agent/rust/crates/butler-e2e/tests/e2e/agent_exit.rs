@@ -67,6 +67,15 @@ async fn policy_refusals_feed_back_to_model_without_interrupting_service()
             .as_str()
             .unwrap();
         assert!(feedback.contains(code), "{tool}: {feedback}");
+        assert!(feedback.contains("occurred 1 times"), "{tool}: {feedback}");
+        if code == "tool_unavailable" {
+            assert!(feedback.contains("Choose an available tool"), "{feedback}");
+        } else {
+            assert!(feedback.contains("current_state"), "{tool}: {feedback}");
+            assert!(feedback.contains("available_tools"), "{tool}: {feedback}");
+            assert!(feedback.contains("schema"), "{tool}: {feedback}");
+        }
+
         assert!(
             !s.agent
                 .logs()

@@ -146,10 +146,10 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             "write_file",
             &json!({"path":"report.html","content":"<!doctype html>\n<title>Approach B</title>\n"}),
         ),
-        7 if script.open_disposition.load(Ordering::SeqCst) => {
+        7..=11 if script.open_disposition.load(Ordering::SeqCst) => {
             message("Comparison remains unfinished.")
         }
-        7 => call(
+        7 | 12 => call(
             "close",
             "record_work_disposition",
             &json!({"work_id":work_id(body),"disposition":"completed","summary":"Approach B verified","action_updates":[{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),

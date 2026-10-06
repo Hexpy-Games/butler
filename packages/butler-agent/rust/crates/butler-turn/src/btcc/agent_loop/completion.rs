@@ -34,10 +34,17 @@ pub(super) async fn record_result(
     input: &Invocation<'_>,
     state: &mut State,
     call: &super::contracts::ModelRoundToolCall,
-    result: ToolResult,
+    mut result: ToolResult,
     iteration: u32,
     check: OutcomeCheck,
 ) -> Result<Option<ToolOutcome>, AgentLoopError> {
+    if let Some(error) = &mut result.error {
+        let identity = serde_json::json!([call.name, call.arguments, error.code]);
+        error.message = state.feedback(&format!(
+            "Tool failure for {identity}: {}. Correct the arguments, resolve prerequisites, or choose another available tool. Do not repeat an unchanged failing operation.",
+            error.message
+        ));
+    }
     state.tool_results.push(result.clone());
     let operation_call_id = input.policy.operation_result_call_id(&call.id);
     let references = if let Some(runtime) = input.operation_results {

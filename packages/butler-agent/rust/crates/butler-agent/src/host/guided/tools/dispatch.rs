@@ -60,7 +60,7 @@ pub(super) async fn execute(
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::DelegateToSteward {
-        return steward::execute(owner, invocation, call).await;
+        return Box::pin(steward::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::ListAutomations {
         return list_automations(owner, call).await;

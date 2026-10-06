@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "delegate_followup/failure.rs"]
+mod failure;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;
 use butler_e2e::e2e::{

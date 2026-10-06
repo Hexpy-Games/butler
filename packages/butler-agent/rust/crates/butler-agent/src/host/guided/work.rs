@@ -105,7 +105,16 @@ impl GuidedWorkAdapter {
                     work_id: bound.work_id.clone(),
                 })
                 .await?;
-            return Ok(CandidateDisposition::Continue(observation.into()));
+            return Ok(CandidateDisposition::Continue(format!(
+                "{observation}\nCurrent Work: {}; status: {:?}; execution_mode: {:?}; action progress: {:?}. Call record_work_disposition with work_id, disposition (completed or blocked), summary, action_updates, remaining_actions and followups. A blocked result must name the real blocker in next_condition; otherwise continue execution or wait for pending children.",
+                bound.work_id,
+                bound.status,
+                bound
+                    .current_plan
+                    .as_ref()
+                    .and_then(|plan| plan.execution_mode),
+                bound.action_progress
+            )));
         }
         let Some(bound) = bound else {
             return Ok(CandidateDisposition::Accepted(None));
@@ -169,7 +178,12 @@ impl WorkPort for GuidedWorkAdapter {
                     ToolName::parse(call.name.as_str()),
                     Some(ToolName::DelegateToSteward | ToolName::WaitForWorker)
                 )
-            }) && results.last().is_some_and(|result| result.ok);
+            }) && results.last().is_some_and(|result| {
+                result.ok
+                    || result.output.as_ref().is_some_and(|output| {
+                        output.field("wait_for_child").ok().flatten() == Some("true")
+                    })
+            });
             if waiting {
                 return Ok(BatchDisposition::Wait);
             }

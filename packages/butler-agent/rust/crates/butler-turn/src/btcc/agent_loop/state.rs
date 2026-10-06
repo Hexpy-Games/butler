@@ -88,7 +88,7 @@ impl State {
             empty_recovery_used: restored.empty_response_recovery_used,
             automatic_continuations: restored.automatic_continuations,
             stop_hook_active: restored.stop_hook_active,
-            feedback_counts: BTreeMap::new(),
+            feedback_counts: restored.feedback_counts,
             phase: LoopPhase::Working,
             resumed_batch: Some(restored.batch),
             resumed_call: prepared.resumed_tool_call.take(),

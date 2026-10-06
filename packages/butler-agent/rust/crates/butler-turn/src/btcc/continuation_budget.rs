@@ -28,17 +28,22 @@ impl TurnContinuationBudgetError {
     pub(crate) fn into_btcc_error(self) -> BtccError {
         match self {
             Self::Invalid(error) => error,
-            Self::Exhausted(state) => BtccError::detected(
-                BtccCode::TurnContinuationBudgetExhausted,
-                format!(
-                    "Turn continuation budget exhausted: {}",
-                    state
-                        .terminal
-                        .as_ref()
-                        .map(|terminal| reason_name(terminal.reason))
-                        .unwrap_or("unknown")
-                ),
-            ),
+            Self::Exhausted(state) => {
+                let reason = state.terminal.as_ref().map(|terminal| terminal.reason);
+                let code = if reason == Some(TurnContinuationBudgetTerminalReason::ModelFacingBytes)
+                {
+                    BtccCode::TurnContinuationBudgetExhausted
+                } else {
+                    BtccCode::InvalidContinuationBudget
+                };
+                BtccError::detected(
+                    code,
+                    format!(
+                        "Turn continuation admission refused: {}",
+                        reason.map(reason_name).unwrap_or("unknown")
+                    ),
+                )
+            }
         }
     }
 
@@ -60,16 +65,6 @@ pub(crate) fn transition_turn_continuation_budget(
     let now = integer(now_ms).map_err(TurnContinuationBudgetError::Invalid)?;
     if state.terminal.is_some() {
         return Err(TurnContinuationBudgetError::Exhausted(Box::new(state)));
-    }
-    if now.saturating_sub(state.started_at_ms) >= state.limits.max_elapsed_ms {
-        return exhaust(
-            state,
-            TurnContinuationBudgetTerminalReason::MaxElapsedMs,
-            now,
-        );
-    }
-    if now.saturating_sub(state.last_progress_at_ms) >= state.limits.max_idle_ms {
-        return exhaust(state, TurnContinuationBudgetTerminalReason::MaxIdleMs, now);
     }
     match event {
         TurnContinuationBudgetEvent::AdmitRequest {
@@ -97,13 +92,6 @@ pub(crate) fn transition_turn_continuation_budget(
             let output_bytes =
                 integer(output_bytes).map_err(TurnContinuationBudgetError::Invalid)?;
             state.consumed_output_bytes = safe_add(state.consumed_output_bytes, output_bytes);
-            if state.consumed_output_bytes > state.limits.max_output_bytes {
-                return exhaust(
-                    state,
-                    TurnContinuationBudgetTerminalReason::MaxOutputBytes,
-                    now,
-                );
-            }
             state
                 .completed_output_rounds
                 .push(required_text(round_id).map_err(TurnContinuationBudgetError::Invalid)?);
@@ -153,13 +141,7 @@ fn admit_request(
         integer(model_facing_bytes).map_err(TurnContinuationBudgetError::Invalid)?;
     state.consumed_model_facing_bytes =
         safe_add(state.consumed_model_facing_bytes, model_facing_bytes);
-    if state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes {
-        return exhaust(
-            state,
-            TurnContinuationBudgetTerminalReason::MaxCumulativeModelFacingBytes,
-            now,
-        );
-    }
+
     state.admitted_requests.push(TurnContinuationAdmission {
         round_id: required_text(round_id).map_err(TurnContinuationBudgetError::Invalid)?,
         request_digest: required_digest(request_digest)
@@ -208,13 +190,7 @@ fn readmit(
     }
     let increment = observed - admitted_bytes;
     state.consumed_model_facing_bytes = safe_add(state.consumed_model_facing_bytes, increment);
-    if state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes {
-        return exhaust(
-            state,
-            TurnContinuationBudgetTerminalReason::MaxCumulativeModelFacingBytes,
-            now,
-        );
-    }
+
     if let Some(item) = state
         .admitted_requests
         .iter_mut()
