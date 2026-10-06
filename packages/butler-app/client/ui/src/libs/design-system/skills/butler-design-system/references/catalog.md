@@ -72,6 +72,7 @@
 | A labelled action | `Button` | `Clickable` |
 | A labelled form control | `FieldLabel` | `Typo` |
 | A labelled progress bar in a panel | `ProgressMeter` | `ContextDonutButton` |
+| A labelled transfer whose total is not known yet (indeterminate) | `ProgressMeter` |  |
 | A list of actions for an item | `DropdownMenu` | `Dialog` |
 | A list of cards | `CardList` | `Separator` |
 | A list of finished steps | `ActivityFeed` | `RollingStatusLine` |
@@ -495,7 +496,7 @@
 | Typing a hex value precisely | `Input` | `ColorSwatchInput` |
 | UI text | `Typo` | `MarkdownContent` |
 | Under ten plain options | `Select` | `FilteredSelectPopover` |
-| Unknown duration | `Spinner` | `ProgressMeter` |
+| Unknown duration with no label (a busy button or row) | `Spinner` | `ProgressMeter` |
 | Unrelated actions | `DropdownMenu` | `SplitButton` |
 | Weeks of activity in a calendar grid | `ActivityHeatmap` | `ActivityStrip` |
 | Whenever the background comes from settings or an agent as a WallpaperSource | `Wallpaper` |  |
@@ -1769,12 +1770,13 @@ A label/value fact row with optional description, meta and a swatch bound to the
 
 `import { ProgressMeter } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ProgressMeter`
 
-A determinate progress bar (0–100) with a label row, tones and a bare track variant.
+A determinate progress bar (0–100) with a label row, tones and a bare track variant; indeterminate shows a spinner caption for an unknown total.
 
 - Use for: Show a known fraction: budget used, steps done
-- Not for: Unknown duration → `Spinner`
+- Use for: A labelled transfer whose total is not known yet (indeterminate)
+- Not for: Unknown duration with no label (a busy button or row) → `Spinner`
 - Not for: Context usage in the composer toolbar → `ContextDonutButton`
-- Tokens: `--accent`, `--color-success`, `--selection`, `--motion-deliberate`
+- Tokens: `--accent`, `--color-success`, `--selection`, `--motion-deliberate`, `--typo-caption-size`, `--typo-caption-line-height`
 
 ### UsageSummaryRows
 
