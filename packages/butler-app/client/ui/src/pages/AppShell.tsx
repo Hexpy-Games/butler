@@ -19,6 +19,7 @@ import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
+import { BrowserArea } from "@/components/browser/BrowserArea";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
@@ -227,7 +228,7 @@ function AppWorkspaceShell() {
             <Stack fill gap="none">
               <LiveConnectionNotice />
               <Stack fill gap="none">
-                {view.kind === "automations" ||
+                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
                   <AutomationsView />
                 ) : view.kind === "project-dashboard" ? (
@@ -259,7 +260,7 @@ function AppWorkspaceShell() {
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
-          <Inspector id="butler-right-inspector" />
+          {view.kind === "browser" ? <Stack fill id="butler-right-inspector"><Conversation /></Stack> : <Inspector id="butler-right-inspector" />}
         </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (
