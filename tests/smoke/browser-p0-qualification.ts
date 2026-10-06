@@ -60,7 +60,8 @@ try {
         if (name === "normal") { await run(); await app.stop(); app = undefined; continue; }
         const initial = await sample(app);
         assert.equal(initial.versions.electron, pin);
-        evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, crashLimitDisabled: initial.crashLimitDisabled, mainPID: initial.mainPID, uiPID: initial.uiPID };
+        assert(initial.domainBlockingDisabled, "Product keeps App WebGL recovery unblocked");
+        evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, crashLimitDisabled: initial.crashLimitDisabled, domainBlockingDisabled: initial.domainBlockingDisabled, mainPID: initial.mainPID, uiPID: initial.uiPID };
         await app.main.evaluate(`browserP0.open('user','${origin}/video',{user:true})`);
         await waitFor(() => app!.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "decoded user video playing");
         evidence[name] = await run();

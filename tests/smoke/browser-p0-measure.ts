@@ -2,7 +2,7 @@ import { traceProcessStats } from "./browser-p0-trace.ts";
 import { strict as assert } from "node:assert";
 import type { launchP0App } from "./browser-p0-app.ts";
 export type P0App = Awaited<ReturnType<typeof launchP0App>>;
-export type Sample = { at: number; crashLimitDisabled: boolean; mainPID: number; uiPID: number; mainRSS: number; versions: { electron: string }; gpu: Record<string, string>; metrics: Array<{ pid: number; type: string; cpu: { percentCPUUsage: number }; memory: { workingSetSize: number } }>; gone: Array<{ type: string; at: number }>; crashes: Array<{ id: string; code: string }>; initial: Resources; resources: Resources; loop: { p99Ms: number; maxMs: number } };
+export type Sample = { at: number; crashLimitDisabled: boolean; domainBlockingDisabled: boolean; mainPID: number; uiPID: number; mainRSS: number; versions: { electron: string }; gpu: Record<string, string>; metrics: Array<{ pid: number; type: string; cpu: { percentCPUUsage: number }; memory: { workingSetSize: number } }>; gone: Array<{ type: string; at: number }>; crashes: Array<{ id: string; code: string }>; initial: Resources; resources: Resources; loop: { p99Ms: number; maxMs: number } };
 type Resources = { contents: number; listeners: number; debuggers: number };
 export type Row = { test: string; metric: string; value: number | string | null; budget: number | string; status: "PASS" | "FAIL" | "UNAVAILABLE" | "DESCRIPTIVE"; attribution?: string; mitigation?: string };
 export function budget(rows: Row[], test: string, metric: string, value: number, limit: number, attribution: string, mitigation: string) {

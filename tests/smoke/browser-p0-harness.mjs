@@ -8,6 +8,18 @@ const { app, ipcMain, WebContentsView, webContents, contentTracing } = createReq
 
 export function installBrowserP0Harness(window, userBrowser) {
   if (process.env.BUTLER_TEST_BROWSER_P0 !== "1" || app.isPackaged) throw new Error("P0 disabled");
+  const productErrors = [];
+  let productErrorCount = 0;
+  const commandTab = userBrowser.commandTab.bind(userBrowser);
+  userBrowser.commandTab = (...args) => {
+    try { return commandTab(...args); }
+    catch (error) {
+      productErrorCount++; productErrors.push({ op: args[0], code: error.message });
+      if (productErrors.length > 20) productErrors.shift();
+      throw error;
+    }
+  };
+  const productTabs = new Map();
   const views = new Map();
   const partitions = new Map();
   let sessionsCreated = 0;
@@ -22,7 +34,7 @@ export function installBrowserP0Harness(window, userBrowser) {
   app.on("child-process-gone", childGone);
   const baseline = resourceInventory;
   const initial = baseline();
-  const get = id => { const view = views.get(id); if (!view) throw new Error("Unknown tab"); return view.webContents; };
+  const get = id => { const view = productTabs.has(id) ? userBrowser.tabs.get(productTabs.get(id))?.view : views.get(id); if (!view) throw new Error("Unknown tab"); return view.webContents; };
   globalThis.browserP0 = {
     async open(id, url, { webgl = true, user = false } = {}) {
       const parsed = new URL(url);
@@ -51,10 +63,22 @@ export function installBrowserP0Harness(window, userBrowser) {
       await view.webContents.loadURL(url);
       return view.webContents.id;
     },
+    async openProductGPU(id, url) {
+      await window.webContents.executeJavaScript("window.butlerBrowser.call('open')");
+      const tabId = await window.webContents.executeJavaScript(`window.butlerBrowser.call('create',${JSON.stringify({ url })})`);
+      productTabs.set(id, tabId);
+      await window.webContents.executeJavaScript(`window.butlerBrowser.call('bounds',${JSON.stringify({ id: tabId, value: { x: 900, y: 0, width: 320, height: 180, visible: true } })})`);
+      await get(id).executeJavaScript("document.readyState");
+      return tabId;
+    },
+    productBlocked: () => userBrowser.snapshot().blocked,
     step: id => observeActCapture(get(id)),
     productStep: id => observeActCapture(userBrowser.tabs.get(id).view.webContents),
+    productView: id => ({ attached: Boolean(userBrowser.tabs.get(id)?.attached), bounds: userBrowser.tabs.get(id)?.view?.getBounds() }),
+    productErrors: () => ({ count: productErrorCount, errors: productErrors }),
     productInventory: () => ({ tabs: userBrowser.tabs.size, profiles: userBrowser.profiles.size, stillBytes: [...userBrowser.tabs.values()].reduce((n, t) => n + t.still.length, 0) }),
-    navigate: (id, url) => get(id).loadURL(url),
+    navigate: (id, url) => productTabs.has(id) && userBrowser.snapshot().blocked
+      ? { blocked: true } : get(id).loadURL(url),
     evaluate: (id, expression) => get(id).executeJavaScript(expression),
     paintProbe: () => paintProbe(window.webContents),
     wallpaperFrame: () => wallpaperFrame(window.webContents),
@@ -70,6 +94,11 @@ export function installBrowserP0Harness(window, userBrowser) {
     crashRenderer: id => get(id).forcefullyCrashRenderer(),
     loseGPU(id) { void get(id).loadURL("chrome://gpucrash").catch(() => {}); return true; },
     async close(id) {
+      if (productTabs.has(id)) {
+        const tabId = productTabs.get(id);
+        await window.webContents.executeJavaScript(`window.butlerBrowser.call('close',{id:${JSON.stringify(tabId)}})`);
+        productTabs.delete(id); return;
+      }
       const view = views.get(id); if (!view) throw new Error("Unknown tab");
       const profile = view.webContents.session, remaining = partitions.get(profile) - 1;
       if (remaining) partitions.set(profile, remaining);
@@ -81,7 +110,7 @@ export function installBrowserP0Harness(window, userBrowser) {
     },
     sample() {
       return { at: performance.now(), versions: process.versions, gpu: app.getGPUFeatureStatus(), gone, crashes,
-        crashLimitDisabled: app.commandLine.hasSwitch("disable-gpu-process-crash-limit"), paths: { userData: app.getPath("userData"), sessionData: app.getPath("sessionData") }, routed, mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, sessionsCreated, metrics: app.getAppMetrics(), initial, resources: baseline(),
+        crashLimitDisabled: app.commandLine.hasSwitch("disable-gpu-process-crash-limit"), domainBlockingDisabled: app.commandLine.hasSwitch("disable-domain-blocking-for-3d-apis"), paths: { userData: app.getPath("userData"), sessionData: app.getPath("sessionData") }, routed, mainPID: process.pid, uiPID: window.webContents.getOSProcessId(), mainRSS: process.memoryUsage().rss, sessionsCreated, metrics: app.getAppMetrics(), initial, resources: baseline(),
         loop: { p99Ms: delay.percentile(99) / 1e6, maxMs: delay.max / 1e6 } };
     },
     gpuPolicy: id => get(id).executeJavaScript("(async()=>({webgl:!!document.createElement('canvas').getContext('webgl'),webgl2:!!document.createElement('canvas').getContext('webgl2'),gpuPresent:!!navigator.gpu,webgpu:Boolean(await navigator.gpu?.requestAdapter())}))()"),
@@ -89,7 +118,7 @@ export function installBrowserP0Harness(window, userBrowser) {
     traceStart: () => contentTracing.startRecording({ included_categories: ["devtools", "devtools.timeline", "blink", "gpu", "toplevel", "disabled-by-default-memory-infra", "blink.user_timing"], memory_dump_config: { triggers: [{ mode: "light", periodic_interval_ms: 1000 }] } }),
     traceStop: path => contentTracing.stopRecording(path),
     async dispose() {
-      await Promise.all([...views.keys()].map(id => this.close(id)));
+      await Promise.all([...views.keys(), ...productTabs.keys()].map(id => this.close(id)));
       delay.disable(); app.removeListener("session-created", sessionCreated); app.removeListener("child-process-gone", childGone); delete globalThis.browserP0;
     },
   };

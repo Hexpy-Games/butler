@@ -46,6 +46,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   const after = await sample(app);
   const agentAfter = agentRSS(pid);
   const productAfter = await app.main.evaluate("browserP0.productInventory()");
+  assert.equal((await app.main.evaluate<{ count: number }>("browserP0.productErrors()")).count, 0, "No rejected product lifecycle IPC during soak");
   assert.deepEqual(productAfter, productWarm, "Product tabs/profiles/stills return to warm baseline");
   assert.equal(await app.main.evaluate("browserP0.sample().sessionsCreated"), sessionsWarm, "No per-iteration Session creation");
   budget(rows, "soak", "main loop p99 ms", after.loop.p99Ms, 30, "Electron main", "Inspect product capture/router/IPC");

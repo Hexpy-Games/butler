@@ -16,7 +16,8 @@ const app = await launchP0App();
 const origin = `http://127.0.0.1:${fixture.port}`;
 try {
   if (process.argv[2] === "gpu") {
-    await app.main.evaluate(`browserP0.open('gpu','${origin}/gpu')`);
+    const user = process.env.BUTLER_P0_DIAGNOSE_GPU_SOURCE === "user";
+    await app.main.evaluate(user ? `browserP0.openProductGPU('gpu','${origin}/gpu')` : `browserP0.open('gpu','${origin}/gpu')`);
     await app.page.expression("(()=>{window.p0Contexts=[];for(const c of document.querySelectorAll('canvas[data-module]'))for(const n of ['webglcontextlost','webglcontextrestored'])c.addEventListener(n,e=>window.p0Contexts.push({event:n,at:performance.now(),status:e.statusMessage||''}));})()");
     const rows = [];
     for (let i = 0; i < 5; i++) {
@@ -29,10 +30,11 @@ try {
       const a = await app.main.evaluate("browserP0.wallpaperFrame()");
       await Bun.sleep(1000);
       const b = await app.main.evaluate("browserP0.wallpaperFrame()");
-      const row = { loss: i + 1, load1, state, pixelsChanged: a !== b };
+      const row = { source: user ? "P2a-1 USER" : "agent", loss: i + 1, load1, state, pixelsChanged: a !== b };
       rows.push(row); console.log(JSON.stringify(row));
       await app.main.evaluate(`browserP0.navigate('gpu','${origin}/gpu')`);
     }
+    if (user) assert(await app.main.evaluate("browserP0.productBlocked()"), "Product breaker trips on the fifth loss");
     writeFileSync(join(evidence, `${process.env.BUTLER_P0_LABEL || "gpu-diagnose"}.json`), JSON.stringify(rows, null, 2));
     writeFileSync(join(evidence, `${process.env.BUTLER_P0_LABEL || "gpu-diagnose"}.png`), await app.page.screenshot());
   } else if (process.argv[2] === "user") {
@@ -40,7 +42,7 @@ try {
     const rows = [];
     for (const path of ["nodes", "cpu", "network"]) rows.push(await visitUserSite(app, `${origin}/${path}`, evidence));
     rows.push(await visitUserSite(app, "https://www.iana.org/help/example-domains", evidence));
-    writeFileSync(join(evidence, "user-path.json"), JSON.stringify({ rows, product: await app.main.evaluate("browserP0.productInventory()"), load1: loadavg()[0] }, null, 2));
+    writeFileSync(join(evidence, "user-path.json"), JSON.stringify({ rows, product: await app.main.evaluate("browserP0.productInventory()"), errors: await app.main.evaluate("browserP0.productErrors()"), load1: loadavg()[0] }, null, 2));
   } else {
     const rows = [];
     rows.push(await memoryCheckpoint(app, evidence, "before", true));

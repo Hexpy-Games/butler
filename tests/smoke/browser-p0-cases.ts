@@ -23,7 +23,7 @@ export async function rendererCrash(app: P0App, origin: string, rows: Row[]) {
 
 export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
   const user = process.env.BUTLER_P0_GPU_SOURCE === "user";
-  await app.main.evaluate(`browserP0.open('gpu', '${origin}/gpu', {user:${user}})`);
+  await app.main.evaluate(user ? `browserP0.openProductGPU('gpu', '${origin}/gpu')` : `browserP0.open('gpu', '${origin}/gpu')`);
   const before = await sample(app);
   const policy = await app.main.evaluate<{ webgl: boolean; webgl2: boolean; webgpu: boolean }>("browserP0.gpuPolicy('gpu')");
   const webgpu = policy.webgpu;
@@ -59,7 +59,11 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
     const wallpaperBefore = await app.page.expression<number>("window.p0WallpaperDraws");
     const wallpaperPixelsBefore = await app.main.evaluate<string>("browserP0.wallpaperFrame()");
     await Bun.sleep(2000);
-    await app.main.evaluate(`browserP0.navigate('gpu', '${origin}/gpu')`);
+    const navigation = await app.main.evaluate<{ blocked?: boolean }>(`browserP0.navigate('gpu', '${origin}/gpu')`);
+    if (user && i === 4) {
+      assert(navigation.blocked && await app.main.evaluate("browserP0.productBlocked()"), "Real USER Browser breaker trips at five losses");
+      rows.push({ test: "gpu crash", metric: "USER five-loss breaker", value: "blocked", budget: "blocked", status: "PASS" });
+    }
     const state = await sample(app);
     const wallpaperAfter = await app.page.expression<number>("window.p0WallpaperDraws");
     const wallpaperPixelsAfter = await app.main.evaluate<string>("browserP0.wallpaperFrame()");
@@ -82,7 +86,7 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
   assert.equal(after.gone.filter(p => p.type === "GPU").length - before.gone.filter(p => p.type === "GPU").length, 5);
   await app.main.evaluate("browserP0.close('gpu')");
   budget(rows, "gpu crash", "five-loss window ms", lastLoss - firstLoss, 600_000, "Host contention may delay admission", "Wait for a quiet host");
-  return { policy, webgpu, observationMs, lossEvidence, losses: after.gone.filter(p=>p.type==="GPU"), uiMaxGapMs: Math.max(...gaps) };
+  return { source: user ? "P2a-1 USER via renderer IPC" : "agent-tab harness", policy, webgpu, observationMs, lossEvidence, losses: after.gone.filter(p=>p.type==="GPU"), uiMaxGapMs: Math.max(...gaps) };
 }
 
 export async function gpuHang(app: P0App, origin: string, rows: Row[]) {
