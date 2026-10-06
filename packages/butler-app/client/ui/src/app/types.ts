@@ -779,6 +779,7 @@ export type ComposerModelState = ModelCatalogState;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  session_hint?: string;
   work_progress?: { completed: number; total: number };
   id: string;
   kind: ChatKind;

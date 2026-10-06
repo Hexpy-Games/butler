@@ -11,6 +11,7 @@ import {
 import { useButlerStore, selectEffectiveRightOpen } from "@/app/store.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
+import { TasksPanel } from "./TasksPanel.tsx";
 import { SummaryPanel } from "./SummaryPanel.tsx";
 import { ContextPanel } from "./ContextPanel.tsx";
 import { ArtifactsPanel } from "./ArtifactsPanel.tsx";
@@ -45,6 +46,7 @@ export function Inspector({ id }: InspectorProps = {}) {
 
   const tabs: Array<[string, string, ReactElement]> = [
     ["summary", appCopy.inspector.tabs.summary, <ListFilter size="md" />],
+    ["tasks", appCopy.inspector.tabs.tasks, <Blocks size="md" />],
     ["context", appCopy.inspector.tabs.context, <Command size="md" />],
     ["artifacts", appCopy.inspector.tabs.artifacts, <FileText size="md" />],
     ["automations", appCopy.inspector.tabs.automations, <Clock3 size="md" />],
@@ -68,6 +70,7 @@ export function Inspector({ id }: InspectorProps = {}) {
           summary={summary}
         />
       )}
+      {activeTab === "tasks" && <TasksPanel />}
       {activeTab === "context" && (
         <ContextPanel context={summary?.context_details} />
       )}

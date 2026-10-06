@@ -1,3 +1,4 @@
+import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
@@ -241,6 +242,7 @@ function koreanProjectFallbackSuggestions(
 
 export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
+  taskGraph: TASK_GRAPH_COPY["ko-KR"],
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",
@@ -299,6 +301,7 @@ export const koKrCopy: AppCopy = {
     noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 Task", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },
   projectDocumentMetadata: {
+    document: "문서",
     active: "진행 중", other: "기타", roadmap: "로드맵",
     sourceDetails: "원본 식별 정보", readOnly: "원본 문서를 읽기 전용으로 보고 있습니다.", referenceAction: "대화에 참조하기",
     statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
@@ -748,7 +751,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     maxBytesUtf8: "출력 용량이 한 글자를 읽기에도 부족합니다.",
     readFailed: "파일을 읽지 못했습니다.",
     spec: "스펙",
-    task: "Task",
+    task: "작업",
     reviewNoun: "리뷰",
     report: "보고서",
     result: "결과",
@@ -1071,6 +1074,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   inspector: {
     tabs: {
+      tasks: "작업",
       summary: "요약",
       activity: "활동",
       context: "맥락",

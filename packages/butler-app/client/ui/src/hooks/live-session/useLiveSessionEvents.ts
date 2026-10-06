@@ -1,6 +1,7 @@
 import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
+import { receiveTaskGraphEvent, refreshVisibleTaskGraphs } from "@/app/taskGraphState.ts";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
@@ -70,6 +71,7 @@ export function useLiveSessionEvents(): void {
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
+      receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
@@ -171,6 +173,7 @@ export function useLiveSessionEvents(): void {
         }
       },
       onRecovered: () => {
+        refreshVisibleTaskGraphs();
         // Module changes may have been missed while disconnected.
         void userWallpaperModules.refresh();
         const view = useButlerStore.getState().view;

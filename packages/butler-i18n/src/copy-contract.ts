@@ -1,3 +1,5 @@
+import type { TaskGraphCopy } from "./task-graph-copy.ts";
+
 /** Provider cards on the first-run "Pick an AI" screen. */
 export type FirstRunProviderCardId =
   | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
@@ -213,6 +215,7 @@ interface ConversationCopy {
 
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  taskGraph: TaskGraphCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -251,7 +254,7 @@ export interface AppCopy {
     excluded: (count: number) => string; age: (days: number) => string; changes: (count: number) => string;
     sources: (count: number) => string; labels: Record<string, string>;
   };
-  projectDocumentMetadata: { active: string; other: string; roadmap: string;
+  projectDocumentMetadata: { document: string; active: string; other: string; roadmap: string;
     sourceDetails: string; readOnly: string; referenceAction: string;
     labels: Record<string, string>; statuses: Record<string, string> };
   guided: {
@@ -932,6 +935,7 @@ export interface AppCopy {
   inspector: {
     tabs: {
       summary: string;
+      tasks: string;
       activity: string;
       context: string;
       artifacts: string;
