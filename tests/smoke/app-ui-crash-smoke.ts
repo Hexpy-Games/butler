@@ -190,7 +190,9 @@ async function preloadSmoke() {
     URL, URLSearchParams, TextEncoder, console,
     process: { env: { BUTLER_APP_SERVER_URL: server.url }, argv: [], platform: process.platform },
     require: () => ({
-      contextBridge: { exposeInMainWorld(_name: string, value: typeof bridge) { bridge = value; } },
+      contextBridge: { exposeInMainWorld(name: string, value: typeof bridge) {
+        if (name === "butlerApp") bridge = value;
+      } },
       ipcRenderer: { on() {}, removeListener() {}, invoke(channel: string, input: unknown) {
         if (channel === "butler:ui-crash") return store.append(input);
         if (channel === "butler:ui-crash-log") return store.read();
