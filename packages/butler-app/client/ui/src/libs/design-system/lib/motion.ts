@@ -1,3 +1,5 @@
+import { createStore } from "zustand/vanilla";
+import { subscribeWithSelector } from "zustand/middleware";
 /**
  * The one WAAPI entry point (DS spec Motion Contract). Timing comes from the
  * --motion-* tokens and reduced motion turns every animation into an opacity
@@ -53,15 +55,26 @@ const TRANSFORM_KEYS = new Set(["transform", "translate", "scale", "rotate", "of
 function tokenValue(name: string): string {
   if (typeof window === "undefined" || typeof document === "undefined") return "";
   try {
-    return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return window.getComputedStyle((document.getElementById?.("root") ?? document.documentElement)).getPropertyValue(name).trim();
   } catch {
     return "";
   }
 }
 
-/** The DS Viewer's motion toggle scopes reduced motion with `data-motion="reduced"` on <body>. */
+/** The app shell is the CSS boundary; the viewer retains its local scope. */
+export function setReducedMotionOverride(reduced: boolean): void {
+  if (typeof document === "undefined") return;
+  const shell = document.getElementById?.("root") ?? document.documentElement;
+  if (reduced) shell.dataset.motion = "reduced";
+  else delete shell.dataset.motion;
+  publishReducedMotion();
+}
+
 function reducedMotionScope(): boolean {
-  return typeof document !== "undefined" && document.body?.dataset?.motion === "reduced";
+  return typeof document !== "undefined" && (
+    document.getElementById?.("root")?.dataset.motion === "reduced" ||
+    document.documentElement?.dataset?.motion === "reduced" || document.body?.dataset?.motion === "reduced"
+  );
 }
 
 export function prefersReducedMotion(): boolean {
@@ -70,22 +83,31 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/**
- * Calls back with the current reduced-motion state whenever the OS setting or
- * the DS Viewer's data-motion scope changes. JS-driven loops (canvas marks)
- * use it to stop or restart; returns the unsubscribe function.
- */
+const motionState = createStore(subscribeWithSelector(() => ({ reduced: false })));
+let stopMotionSignals: (() => void) | undefined;
+let motionSubscribers = 0;
+
+function publishReducedMotion(): void {
+  motionState.setState({ reduced: prefersReducedMotion() });
+}
+
+/** One shared observer and OS listener; selector notifications only on a change. */
 export function subscribeReducedMotion(callback: (reduced: boolean) => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
-  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const notify = () => callback(prefersReducedMotion());
-  media.addEventListener("change", notify);
-  const body = typeof document === "undefined" ? null : document.body;
-  const observer = body && typeof MutationObserver === "function" ? new MutationObserver(notify) : null;
-  observer?.observe(body as Node, { attributes: true, attributeFilter: ["data-motion"] });
+  if (!motionSubscribers++) {
+    publishReducedMotion();
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    media.addEventListener("change", publishReducedMotion);
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(publishReducedMotion) : null;
+    for (const node of [document.getElementById?.("root"), document.body, document.documentElement]) {
+      if (node) observer?.observe(node, { attributes: true, attributeFilter: ["data-motion"] });
+    }
+    stopMotionSignals = () => { media.removeEventListener("change", publishReducedMotion); observer?.disconnect(); };
+  }
+  const unsubscribe = motionState.subscribe((state) => state.reduced, callback);
   return () => {
-    media.removeEventListener("change", notify);
-    observer?.disconnect();
+    unsubscribe();
+    if (!--motionSubscribers) { stopMotionSignals?.(); stopMotionSignals = undefined; }
   };
 }
 

@@ -19,6 +19,7 @@ const UPDATE_KEYS: &[&str] = &[
     "follow_up_behavior",
     "multiline_send_behavior",
     "appearance_theme",
+    "reduce_motion",
     "main_screen_theme",
     "main_screen_theme_preset",
     "main_screen_theme_custom_colors",
@@ -97,7 +98,7 @@ pub(super) fn is_request(value: &Value) -> bool {
     {
         return false;
     }
-    true
+    input.get("reduce_motion").is_none_or(Value::is_boolean)
 }
 
 pub(super) fn is_iana_timezone(value: &Value) -> bool {

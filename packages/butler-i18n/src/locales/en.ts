@@ -1193,6 +1193,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "Nothing to show yet.",
     },
     pageSections: {
+      accessibility: "Accessibility",
       instructions: "Instructions",
       chatMemory: "Chat memory",
       profileMemory: "Profile",
@@ -1409,6 +1410,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "Wallpaper",
       wallpaperMotion: "Motion",
       wallpaperPauseOnBattery: "Pause on battery",
+      reduceMotion: "Reduce motion",
       translucentSidebar: "Translucent sidebar",
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",
@@ -1501,6 +1503,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "The new chat screen's background.",
       wallpaperMotion: "Animate the background.",
       wallpaperPauseOnBattery: "Hold still when unplugged.",
+      reduceMotion: "When off, follows your system setting.",
+      reduceMotionSystem: "On in your system settings",
+      wallpaperStill: "Paused by Reduce motion",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,

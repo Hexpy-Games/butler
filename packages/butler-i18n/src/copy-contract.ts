@@ -1051,7 +1051,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1198,6 +1198,7 @@ export interface AppCopy {
       wallpaper: string;
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
+      reduceMotion: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -1286,6 +1287,9 @@ export interface AppCopy {
       wallpaperMotion: string;
       wallpaperPauseOnBattery: string;
       /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
+      reduceMotion: string;
+      reduceMotionSystem: string;
+      wallpaperStill: string;
       themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;

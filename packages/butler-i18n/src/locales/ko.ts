@@ -1201,6 +1201,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       empty: "아직 표시할 항목이 없습니다.",
     },
     pageSections: {
+      accessibility: "접근성",
       instructions: "지침",
       chatMemory: "대화 기억",
       profileMemory: "프로필",
@@ -1416,6 +1417,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaper: "월페이퍼",
       wallpaperMotion: "움직임",
       wallpaperPauseOnBattery: "배터리 사용 시 멈춤",
+      reduceMotion: "동작 줄이기",
       translucentSidebar: "투명 사이드바",
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",
@@ -1508,6 +1510,9 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       wallpaper: "새 채팅 화면의 배경입니다.",
       wallpaperMotion: "배경을 천천히 움직입니다.",
       wallpaperPauseOnBattery: "전원이 연결되지 않으면 멈춥니다.",
+      reduceMotion: "끄면 시스템 설정을 따릅니다.",
+      reduceMotionSystem: "시스템 설정에서 켜져 있습니다",
+      wallpaperStill: "동작 줄이기가 켜져 있어 멈춰 있습니다",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,

@@ -104,6 +104,7 @@ export function settingsWithDefaults(
     ...EMPTY_SETTINGS,
     ...(record as Partial<SettingsView>),
     ...legacyTheme,
+    reduce_motion: record.reduce_motion === true,
     // Settings cached before the `wallpaper` key keep their legacy look.
     wallpaper:
       parseWallpaperSetting(record.wallpaper) ??

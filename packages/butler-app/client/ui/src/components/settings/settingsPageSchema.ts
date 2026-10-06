@@ -40,6 +40,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
     { id: "sidebar", kind: "form", fields: ["smart-groups"] },
     { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
+    { id: "accessibility", kind: "form", fields: ["reduce-motion"] },
   ],
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },

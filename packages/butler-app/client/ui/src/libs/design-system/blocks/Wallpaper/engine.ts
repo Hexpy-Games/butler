@@ -6,8 +6,7 @@ import { measureWallpaperFrame, readWallpaperCanvasBox } from "./measure";
 import { createWallpaperPresenter } from "./presenter";
 import { createWallpaperRenderer } from "./renderer";
 import { reportWallpaperRuntimeFailure } from "./runtimeFailure";
-import { WALLPAPER_DAY_PHASE_REFRESH_MS, advanceWallpaperClock, nextWallpaperFrameSlot, wallpaperFrameDue } from "./scheduler";
-import { wallpaperFrameMode, wallpaperRenderPolicy, wallpaperStillFrameDue, type WallpaperScheduleState } from "./scheduler";
+import { WALLPAPER_DAY_PHASE_REFRESH_MS, advanceWallpaperClock, nextWallpaperFrameSlot, wallpaperFrameDue, wallpaperFrameMode, wallpaperRenderPolicy, wallpaperStillFrameDue, type WallpaperScheduleState } from "./scheduler";
 import { watchWallpaperContext, watchWallpaperSignals, type WallpaperSignals } from "./signals";
 import { wallpaperDayPhase } from "./time";
 import type { WallpaperContentRect } from "./types";
@@ -94,6 +93,7 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
   });
 
   const update = (patch: Partial<WallpaperScheduleState>) => {
+    if (patch.reducedMotion !== undefined && patch.reducedMotion !== state.reducedMotion) dirty = true;
     state = { ...state, ...patch };
     schedule();
   };

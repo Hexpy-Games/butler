@@ -1,3 +1,4 @@
+import { startApp } from "@/app/startApp";
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -20,7 +21,8 @@ const UpdateProgressHarness = lazy(() => import("@/pages/UpdateProgressHarness")
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
 
-createRoot(rootElement).render(
+// Every wallpaper (new chat, dashboards, picker thumbnails) loads images and user modules through the gateway.
+void startApp(() => createRoot(rootElement).render(
   <ErrorBoundary>
     <WallpaperModulesProvider>
       {visualMode === "update-progress"
@@ -35,4 +37,4 @@ createRoot(rootElement).render(
     </WallpaperModulesProvider>
     <AppDialogs />
   </ErrorBoundary>,
-);
+), visualMode);

@@ -32,8 +32,8 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::update_sessio
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	81
 src/gateway/application/settings/update/patch/project.rs	project	202
-src/gateway/application/settings/update/patch/sanitize.rs	sanitize	201
-src/gateway/application/settings/view.rs	read	250
+src/gateway/application/settings/update/patch/sanitize.rs	sanitize	181
+src/gateway/application/settings/view.rs	read	224
 src/gateway/application/shell.rs	command_palette	148
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125

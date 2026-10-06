@@ -151,27 +151,7 @@ pub(super) fn sanitize(
             output.insert(key.into(), json!(normalized));
         }
     }
-    for key in [
-        "plan_mode_default",
-        "translucent_sidebar",
-        "diagnostics_enabled",
-    ] {
-        if let Some(value) = input.get(key).filter(|value| value.is_boolean()) {
-            output.insert(key.into(), value.clone());
-        }
-    }
-    if let Some(value) = input
-        .get("smart_grouping_enabled")
-        .filter(|value| value.is_boolean())
-    {
-        output.insert("smart_grouping_enabled".into(), value.clone());
-    }
-    if let Some(value) = input
-        .get("desktop_tray_enabled")
-        .filter(|value| value.is_boolean())
-    {
-        output.insert("desktop_tray_enabled".into(), value.clone());
-    }
+    boolean_settings(input, &mut output);
     if let Some(value) = input.get("main_screen_theme").and_then(Value::as_str) {
         let normalized = match value {
             "curtain" => Some("silk"),
@@ -275,6 +255,21 @@ fn sanitize_preferences(input: &Map<String, Value>, output: &mut Map<String, Val
         && validation::is_iana_timezone(&json!(value))
     {
         output.insert("timezone".into(), json!(value.trim()));
+    }
+}
+
+fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>) {
+    for key in [
+        "plan_mode_default",
+        "translucent_sidebar",
+        "reduce_motion",
+        "diagnostics_enabled",
+        "smart_grouping_enabled",
+        "desktop_tray_enabled",
+    ] {
+        if let Some(value) = input.get(key).filter(|value| value.is_boolean()) {
+            output.insert(key.into(), value.clone());
+        }
     }
 }
 
