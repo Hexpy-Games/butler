@@ -9,6 +9,8 @@ use crate::models::{
 use butler_core::locale::LocaleCollation;
 use butler_turn::btcc::ModelRoundError;
 
+#[path = "tests/catalog_cache.rs"]
+mod cache_contract;
 mod local;
 
 struct Clock;
@@ -150,6 +152,7 @@ async fn physical_config_resolves_all_provider_ids_and_registered_credentials() 
     );
 }
 
+// test-category: security
 #[tokio::test]
 async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() {
     let fixture = Fixture::new("reread");
@@ -190,7 +193,15 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
         "https://api.openai.com/v1/responses"
     );
 
+    cache_contract::fresh_secret_with_same_mask(&fixture, &owner).await;
+    cache_contract::fresh_observation_time(&owner);
+
     let first = owner.sizing_snapshot(None).unwrap();
+    let warm = owner.sizing_snapshot(None).unwrap();
+    assert_eq!(
+        serde_json::to_value(first.view()).unwrap(),
+        serde_json::to_value(warm.view()).unwrap()
+    );
     assert_eq!(
         first
             .find_model_metadata(Some("local/sized"))

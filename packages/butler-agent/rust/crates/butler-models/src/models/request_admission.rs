@@ -25,7 +25,8 @@ pub(super) struct PreparedRequestAdmission<'a> {
     requested_output_tokens: Option<f64>,
     explicit_context_window_tokens: Option<f64>,
     explicit_max_output_tokens: Option<f64>,
-    serialized: Bytes,
+    token_input: Bytes,
+    image_count: u32,
     tool_schema_bytes: usize,
     request_hash: String,
 }
@@ -58,6 +59,20 @@ impl<'a> PreparedRequestAdmission<'a> {
             .transpose()
             .map_err(serialization_failure)?
             .map_or(2, |value| value.len());
+        let mut image_count = 0;
+        let token_input = if has_image_data_url(input.body) {
+            Bytes::from(
+                butler_core::json::stringify_with_string_projection(input.body, |text| {
+                    image_data_url(text).then(|| {
+                        image_count += 1;
+                        format!("[image input bytes={}]", text.len())
+                    })
+                })
+                .map_err(serialization_failure)?,
+            )
+        } else {
+            input.serialized.clone()
+        };
         Ok(Self {
             catalog: input.catalog,
             config: input.config,
@@ -67,7 +82,8 @@ impl<'a> PreparedRequestAdmission<'a> {
             requested_output_tokens: input.requested_output_tokens,
             explicit_context_window_tokens: input.context_window_tokens,
             explicit_max_output_tokens: input.max_output_tokens,
-            serialized: input.serialized.clone(),
+            token_input,
+            image_count,
             tool_schema_bytes,
             request_hash: format!("{:x}", Sha256::digest(&input.serialized)),
         })
@@ -133,27 +149,7 @@ impl<'a> PreparedRequestAdmission<'a> {
             .or(max_output)
             .unwrap_or(0.0);
         let input_capacity = (context_window - requested_output).min(context_window);
-        let serialized = std::str::from_utf8(&self.serialized).map_err(serialization_failure)?;
-        let mut projected = None;
-        let mut image_count = 0;
-        if serialized
-            .as_bytes()
-            .windows(b"data:image/".len())
-            .any(|window| window.eq_ignore_ascii_case(b"data:image/"))
-        {
-            let body: serde_json::Value =
-                serde_json::from_slice(&self.serialized).map_err(serialization_failure)?;
-            projected = Some(
-                butler_core::json::stringify_with_string_projection(&body, |text| {
-                    image_data_url(text).then(|| {
-                        image_count += 1;
-                        format!("[image input bytes={}]", text.len())
-                    })
-                })
-                .map_err(serialization_failure)?,
-            );
-        }
-        let token_input = projected.as_deref().unwrap_or(serialized);
+        let token_input = std::str::from_utf8(&self.token_input).map_err(serialization_failure)?;
         let estimated = self
             .catalog
             .estimate_tokens(
@@ -166,8 +162,7 @@ impl<'a> PreparedRequestAdmission<'a> {
                 message: error.to_string(),
             })?
             .tokens
-            + f64::from(image_count) * IMAGE_TOKEN_ALLOWANCE;
-        drop(projected);
+            + f64::from(self.image_count) * IMAGE_TOKEN_ALLOWANCE;
         let admission = if estimated <= input_capacity {
             RequestContextAdmission::Admitted
         } else {
@@ -262,3 +257,15 @@ fn image_data_url(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+// The body is already parsed during request construction. Only strings that
+// actually begin with a supported data URL require projection; ordinary tool
+// history need not be scanned byte by byte or parsed again for admission.
+fn has_image_data_url(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(text) => image_data_url(text),
+        serde_json::Value::Array(values) => values.iter().any(has_image_data_url),
+        serde_json::Value::Object(values) => values.values().any(has_image_data_url),
+        _ => false,
+    }
+}

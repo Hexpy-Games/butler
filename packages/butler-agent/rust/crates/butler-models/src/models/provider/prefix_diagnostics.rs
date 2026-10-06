@@ -11,24 +11,31 @@ use sha2::{Digest, Sha256};
 use super::ProviderRequestConfig;
 use butler_turn::btcc::ModelRoundError;
 
+pub(super) mod components;
+
 const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 const HISTORY_SESSIONS: usize = 128;
 
 type PreviousPrefix = (String, Bytes, Arc<[u32]>);
 
 #[derive(Default)]
-pub(super) struct History(Mutex<VecDeque<PreviousPrefix>>);
+pub(super) struct History {
+    previous: Mutex<VecDeque<PreviousPrefix>>,
+    components: Mutex<components::Cache>,
+}
 
 #[derive(Clone)]
 pub(super) struct Prepared {
     prefix: Bytes,
     metadata: Value,
     tokens: Arc<[u32]>,
+    input: Option<(&'static str, std::ops::Range<usize>, bool)>,
 }
 
-pub(super) fn prepare(
+fn prepare(
     body: &Value,
     config: &ProviderRequestConfig,
+    cache: &mut components::Cache,
 ) -> Result<Prepared, ModelRoundError> {
     let mut prefix = Vec::new();
     let mut components = Vec::new();
@@ -47,29 +54,46 @@ pub(super) fn prepare(
             body.get(name).unwrap_or(&Value::Null),
             &mut prefix,
             &mut components,
+            cache,
         )?;
     }
-    let input = body
-        .get("input")
-        .or_else(|| body.get("messages"))
-        .or_else(|| body.get("contents"));
+    let input_field = ["input", "messages", "contents"]
+        .into_iter()
+        .find(|name| body.get(*name).is_some());
+    let input = input_field.and_then(|name| body.get(name));
+    let input_start = prefix.len();
     match input {
         Some(Value::Array(items)) => {
             for (index, item) in items.iter().enumerate() {
-                component("input", Some(index), item, &mut prefix, &mut components)?;
+                component(
+                    "input",
+                    Some(index),
+                    item,
+                    &mut prefix,
+                    &mut components,
+                    cache,
+                )?;
             }
         }
-        Some(item) => component("input", Some(0), item, &mut prefix, &mut components)?,
+        Some(item) => component("input", Some(0), item, &mut prefix, &mut components, cache)?,
         None => {}
     }
+    let input = input_field.map(|name| {
+        (
+            name,
+            input_start..prefix.len(),
+            matches!(input, Some(Value::Array(_))),
+        )
+    });
     let key = body
         .get("prompt_cache_key")
         .and_then(Value::as_str)
         .map(hash);
+    let prefix_hash = cache.prefix_hash(&prefix);
     Ok(Prepared {
         metadata: json!({
             "representation":"serialized-components-v1", "components":components,
-            "prefixBytes":prefix.len(), "prefixSha256":hash(&prefix),
+            "prefixBytes":prefix.len(), "prefixSha256":prefix_hash,
             "promptCacheKeySha256":key, "providerReportedCachedTokens":null,
             "providerCachedTokensFieldPresent":null,
             "providerId":config.metadata.provider_id, "authMode":format!("{:?}",config.auth.mode()),
@@ -77,6 +101,7 @@ pub(super) fn prepare(
         }),
         prefix: Bytes::from(prefix),
         tokens: Arc::from([]),
+        input,
     })
 }
 
@@ -86,20 +111,71 @@ fn component(
     value: &Value,
     prefix: &mut Vec<u8>,
     components: &mut Vec<Value>,
+    cache: &mut components::Cache,
 ) -> Result<(), ModelRoundError> {
-    let encoded = butler_core::json::stringify(value).map_err(|_| {
-        ModelRoundError::StablePrefix("prefix_diagnostic_serialization_failed".into())
-    })?;
+    let cached = cache.component(components.len(), value)?;
+    let encoded = &cached.encoded;
     let offset = prefix.len();
     prefix.extend_from_slice(encoded.as_bytes());
     // Delimit components rather than closing an input array on every request:
     // appending a conversation item preserves the previous reconstructed prefix.
     prefix.push(b'\n');
-    components.push(json!({"component":name,"index":index,"bytes":encoded.len(),"sha256":hash(&encoded),"offset":offset}));
+    components.push(json!({"component":name,"index":index,"bytes":encoded.len(),"sha256":cached.hash,"offset":offset}));
     Ok(())
 }
 
 impl Prepared {
+    #[cfg(test)]
+    pub(super) fn assert_matches(&self, other: &Self) {
+        assert_eq!(self.prefix, other.prefix);
+        assert_eq!(self.metadata, other.metadata);
+        assert_eq!(self.input, other.input);
+    }
+
+    /// Use this preparation's immutable input components in the physical body.
+    /// Both callers prepare and encode the same borrowed body before mutation.
+    pub(super) fn body_json(&self, body: &Value) -> Result<String, butler_core::json::JsonError> {
+        let (Some(object), Some((field, range, array))) = (body.as_object(), &self.input) else {
+            return butler_core::json::stringify(body);
+        };
+        // Standard provider fields are named. Preserve JS property enumeration
+        // through the shared codec for any unexpected numeric root keys.
+        if object.keys().any(|key| key.parse::<u32>().is_ok()) {
+            return butler_core::json::stringify(body);
+        }
+        let encoded = std::str::from_utf8(&self.prefix[range.clone()])
+            .map_err(butler_core::json::JsonError::callback)?;
+        let mut output = String::with_capacity(self.prefix.len());
+        output.push('{');
+        for (index, (key, value)) in object.iter().enumerate() {
+            if index > 0 {
+                output.push(',');
+            }
+            butler_core::json::write_string(key, &mut output)?;
+            output.push(':');
+            if key.as_str() == *field {
+                if *array {
+                    output.push('[');
+                }
+                // Compact JSON escapes embedded newlines. Only the component
+                // separators are literal newlines, including the final one.
+                for (index, item) in encoded.split_terminator('\n').enumerate() {
+                    if index > 0 {
+                        output.push(',');
+                    }
+                    output.push_str(item);
+                }
+                if *array {
+                    output.push(']');
+                }
+            } else {
+                butler_core::json::append_json(value, &mut output)?;
+            }
+        }
+        output.push('}');
+        Ok(output)
+    }
+
     pub(super) async fn tokenize(
         mut self,
         catalog: Arc<crate::models::ModelCatalog>,
@@ -130,13 +206,21 @@ fn failure(message: String) -> ModelRoundError {
 }
 
 impl History {
+    pub(super) fn prepare(
+        &self,
+        body: &Value,
+        config: &ProviderRequestConfig,
+    ) -> Result<Prepared, ModelRoundError> {
+        prepare(body, config, &mut self.components.lock())
+    }
+
     pub(super) fn observe(&self, scope: Option<&str>, mut current: Prepared) -> Value {
         // Unscoped calls cannot be attributed to the same session safely.
         let Some(scope) = scope else {
             return current.metadata;
         };
         let identity = hash(scope);
-        let mut history = self.0.lock();
+        let mut history = self.previous.lock();
         if let Some(index) = history.iter().position(|(key, _, _)| *key == identity)
             && let Some((_, previous, previous_tokens)) = history.remove(index)
         {

@@ -392,3 +392,6 @@ pub fn provider_http_client() -> Result<Client, reqwest::Error> {
         .redirect(reqwest::redirect::Policy::limited(20))
         .build()
 }
+
+#[cfg(test)]
+pub(in crate::models) use sse::frame_size::verify as verify_sse_frame_size;
