@@ -1,7 +1,7 @@
 # Butler Agent Rust workspace
 
 This workspace contains the native agent library and standalone `butler-agent` service under
-`agent/`, plus development quality tooling. The current executable connects the existing
+`crates/butler-agent` (the `butler-host` library) and `crates/butler-agent-cli` (the thin `butler-agent` binary), plus development quality tooling. The current executable connects the existing
 durable App input queue to canonical conversation preparation, the native provider/tool loop,
 and durable App reply/progress transcripts. It drains owned work and stores on shutdown and
 reopens an activated native data root on restart.
@@ -66,7 +66,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo run --locked -p butler-source-check -- .
 ```
 
-Use `cargo test --locked -p butler-agent <affected behavior>` for a meaningful behavior check.
+Use `cargo test --locked -p butler-host <affected behavior>` for a meaningful behavior check.
 The final migration must pass the full required checks. This checkout passed strict Clippy on
 macOS arm64 after the agent delta changes.
 

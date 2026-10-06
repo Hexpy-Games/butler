@@ -41,6 +41,8 @@ fn main() {
     println!("cargo:rustc-env=BUTLER_RELEASE_VERSION={release_version}");
     for path in [
         "src",
+        "../butler-agent/src",
+        "../butler-agent/Cargo.toml",
         "build.rs",
         "Cargo.toml",
         "../../Cargo.toml",

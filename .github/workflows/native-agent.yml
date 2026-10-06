@@ -20,15 +20,12 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: ${{ inputs.ort-mode }}
