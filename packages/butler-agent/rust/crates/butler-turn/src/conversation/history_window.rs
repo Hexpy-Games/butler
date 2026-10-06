@@ -2,12 +2,13 @@
 use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult, summaries};
 use rusqlite::Connection;
+mod budget;
 mod load;
 
 pub struct HistoryWindow {
     pub material: PromptMaterial,
     pub digest: String,
-    pub legacy_material: PromptMaterial,
+    pub budget_material: PromptMaterial,
     pub late_turn_ids: Vec<String>,
 }
 
@@ -60,11 +61,11 @@ pub(super) fn read(
         sizes.get(..start).unwrap_or_default(),
         cap / 10,
     )?;
-    let legacy_material = load::legacy_material(db, session, cap, &material.summaries)?;
+    let budget_material = load::budget_material(db, session, cap, &material.summaries)?;
     Ok(HistoryWindow {
         material,
         digest,
-        legacy_material,
+        budget_material,
         late_turn_ids,
     })
 }

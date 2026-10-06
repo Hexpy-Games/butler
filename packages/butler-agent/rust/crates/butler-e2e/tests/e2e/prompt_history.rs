@@ -113,7 +113,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     let mut captured = Vec::new();
     for index in 0..16 {
         let ask = format!(
-            "History request {index}: {}end",
+            "History request {index}: {}한글 é 😀 \"quote\" \\ end",
             "preserve this request ".repeat(40)
         );
         let request_index = stub.requests.lock().unwrap().len();
@@ -209,6 +209,22 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     }
     if verify {
         compare_golden(&format!("heavy-{heavy}"), &captured)?;
+        let btcc = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let content: String = btcc.query_row("SELECT content FROM btcc_context_documents WHERE source_id='recent-conversation' ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))?;
+        let document: Value = serde_json::from_str(
+            content
+                .strip_prefix("## Recent Conversation\n\n")
+                .unwrap_or(&content),
+        )?;
+        let budget = document["main_budget_projection"].as_str().unwrap();
+        assert!(
+            asks.iter().all(|ask| !budget.contains(ask)),
+            "budget projection must not hydrate user text"
+        );
+        assert!(
+            !source(stub.requests.lock().unwrap().last().unwrap()).contains("漢漢 é 😀"),
+            "budget surrogate must never reach the model"
+        );
     }
     if verify {
         let log = std::fs::read_to_string(s.sandbox.logs.join("agent-1.log"))?;

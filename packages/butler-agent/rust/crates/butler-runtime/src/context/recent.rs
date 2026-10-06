@@ -74,7 +74,7 @@ async fn assemble(
     let options = render_options(token_budget, input.event_id);
     let plan = crate::context::compile_prompt_material_context_plan(&window.material, &options)?;
     let legacy_plan =
-        crate::context::compile_prompt_material_context_plan(&window.legacy_material, &options)?;
+        crate::context::compile_prompt_material_context_plan(&window.budget_material, &options)?;
     let content = history::render(&window, &plan, cap)?;
     if content.is_empty() {
         return Ok(assembly);

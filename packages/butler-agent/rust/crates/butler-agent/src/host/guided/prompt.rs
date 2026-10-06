@@ -63,9 +63,12 @@ fn source_prompt(
     state: &GuidedTextState,
     documents: &documents::DocumentProjection,
     material: &material::Material,
+    budget_only: bool,
 ) -> Result<(String, Value), BtccError> {
     let mut entries = diagnostics::Sections::default();
-    {
+    if budget_only {
+        entries.push("documents", documents.context.clone());
+    } else {
         entries.documents(documents, Some(documents::Stage::Stable));
         entries.push("history-heading", "## Conversation history".into());
         entries.documents(documents, Some(documents::Stage::History));

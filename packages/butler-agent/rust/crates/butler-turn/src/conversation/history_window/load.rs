@@ -10,7 +10,7 @@ pub(super) fn material(
 ) -> ConversationResult<PromptMaterial> {
     let ids = serde_json::to_string(ids).map_err(ConversationError::json)?;
     let (turns, outcomes) = metadata(db, &ids)?;
-    let mut by_turn = messages(db, session, &ids, epoch, None)?;
+    let mut by_turn = messages(db, session, &ids, epoch, None, false)?;
     let semantic_tail = turns
         .iter()
         .flat_map(|t| by_turn.remove(&t.id).unwrap_or_default())
@@ -61,12 +61,14 @@ fn messages(
     ids: &str,
     epoch: f64,
     selected_messages: Option<&str>,
+    budget_only: bool,
 ) -> ConversationResult<std::collections::HashMap<String, Vec<ConversationMessageWithParts>>> {
     let mut query = db.prepare(
         "SELECT m.*,p.id AS part_id,p.message_id,p.part_index,p.kind, \
          CASE p.kind WHEN 'tool_call' THEN json_object('safeToolName',COALESCE(json_extract(p.content_json,'$.safeToolName'),json_extract(p.content_json,'$.toolName'),json_extract(p.content_json,'$.name'),'tool')) \
          WHEN 'tool_result' THEN json_object('safeLabel',COALESCE(json_extract(p.content_json,'$.safeLabel'),json_extract(p.content_json,'$.status'), \
-         CASE WHEN json_extract(p.content_json,'$.ok')=0 THEN 'failed' ELSE 'complete' END)) ELSE p.content_json END, \
+         CASE WHEN json_extract(p.content_json,'$.ok')=0 THEN 'failed' ELSE 'complete' END)) WHEN 'text' THEN CASE WHEN ?5 THEN json_object('text',history_budget_text(json_extract(p.content_json,'$.text'))) ELSE p.content_json END \
+         ELSE CASE WHEN ?5 THEN history_budget_json(p.content_json) ELSE p.content_json END END, \
          p.tool_call_id,p.parent_tool_call_id,p.provider_shape,p.status AS part_status \
          FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \
          JOIN conversation_parts p ON p.message_id=m.id WHERE m.session_id=?3 \
@@ -76,7 +78,13 @@ fn messages(
     let offset = query.column_count() - 9;
     let columns = codec::MessageColumns::new(&query).map_err(ConversationError::sqlite)?;
     let mut rows = query
-        .query(rusqlite::params![ids, epoch, session, selected_messages])
+        .query(rusqlite::params![
+            ids,
+            epoch,
+            session,
+            selected_messages,
+            budget_only
+        ])
         .map_err(ConversationError::sqlite)?;
     let mut turns = std::collections::HashMap::new();
     let mut current: Option<ConversationMessageWithParts> = None;
@@ -119,12 +127,13 @@ fn push(
     }
 }
 
-pub(super) fn legacy_material(
+pub(super) fn budget_material(
     db: &Connection,
     session: &str,
     cap: usize,
     summaries: &[ConversationSummary],
 ) -> ConversationResult<PromptMaterial> {
+    super::budget::register(db)?;
     let limit = cap.div_ceil(80).clamp(20, 200);
     let valid = serde_json::to_string(&summaries.iter().map(|s| &s.id).collect::<Vec<_>>())
         .map_err(ConversationError::json)?;
@@ -151,7 +160,7 @@ pub(super) fn legacy_material(
         .map_err(ConversationError::json)?;
     let ids = serde_json::to_string(&ids).map_err(ConversationError::json)?;
     let (turns, outcomes) = metadata(db, &ids)?;
-    let semantic_tail = messages(db, session, &ids, 0.0, Some(&selected))?
+    let semantic_tail = messages(db, session, &ids, 0.0, Some(&selected), true)?
         .into_values()
         .flatten()
         .collect();

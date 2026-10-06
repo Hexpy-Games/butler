@@ -63,9 +63,10 @@ fn source(
     turn: &TurnRecord,
     material: &Material,
     documents: &documents::DocumentProjection,
+    budget_only: bool,
 ) -> Result<Render, BtccError> {
     Ok((
-        super::source_prompt(turn, state, documents, material)?,
+        super::source_prompt(turn, state, documents, material, budget_only)?,
         super::skill_instructions(state, documents),
         documents.instruction_components.clone(),
     ))
@@ -77,7 +78,7 @@ pub(super) async fn render(
     material: &Material,
 ) -> Result<Render, BtccError> {
     let turn = invocation.turn;
-    let exact = source(state, turn, material, &material.documents)?;
+    let exact = source(state, turn, material, &material.documents, false)?;
     let excluded = state.continuation_budget_enabled
         && match state.phase.phase {
             GuidedPhase::Direct => {
@@ -91,10 +92,20 @@ pub(super) async fn render(
         return Ok(exact);
     }
     let documents = phase_documents(state, turn).await?;
-    let candidate = source(state, turn, material, &documents)?;
-    if super::request_bytes(invocation, &candidate.0.0, &candidate.1, &state.butler_data)?
-        < super::request_bytes(invocation, &exact.0.0, &exact.1, &state.butler_data)?
-    {
+    let candidate = source(state, turn, material, &documents, false)?;
+    let candidate_budget = source(state, turn, material, &documents, true)?;
+    let exact_budget = source(state, turn, material, &material.documents, true)?;
+    if super::request_bytes(
+        invocation,
+        &candidate_budget.0.0,
+        &candidate_budget.1,
+        &state.butler_data,
+    )? < super::request_bytes(
+        invocation,
+        &exact_budget.0.0,
+        &exact_budget.1,
+        &state.butler_data,
+    )? {
         Ok(candidate)
     } else {
         Ok(exact)

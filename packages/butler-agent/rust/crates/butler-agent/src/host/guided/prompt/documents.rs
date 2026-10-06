@@ -42,36 +42,40 @@ async fn group(
         if document.source_id == "project-instructions" {
             continue; // Exact admitted instructions are projected separately from memory.
         }
+        let history = history_document(&document);
         let content = match projected {
             Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
             None => document.content,
         };
-        documents.push((document.source_id, document.projection_class, content));
+        documents.push((
+            document.source_id,
+            document.projection_class,
+            content,
+            history,
+        ));
     }
-    documents.sort_by_key(|(source, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
+    documents.sort_by_key(|(source, _, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
     let count = documents.len();
     let mut remaining = limit;
     let mut contents = Vec::new();
-    for (index, (source, kind, content)) in documents.into_iter().enumerate() {
+    for (index, (source, kind, content, history)) in documents.into_iter().enumerate() {
         // Keep room for a deterministic omission marker for every later source.
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
         let retrieval = format!("source {source}; use recall_memory or read_file to expand");
-        let history = (source == "recent-conversation")
-            .then(|| {
-                serde_json::from_str::<butler_turn::conversation::HistoryDocument>(
-                    content
-                        .strip_prefix("## Recent Conversation\n\n")
-                        .unwrap_or(&content),
-                )
-                .ok()
-            })
-            .flatten();
-        let budget_content = history
-            .as_ref()
-            .map_or(content.as_str(), |h| h.main_budget_projection.as_str());
+        let budget_content = if projected.is_some() {
+            content.as_str()
+        } else {
+            history
+                .as_ref()
+                .map_or(content.as_str(), |h| h.main_budget_projection.as_str())
+        };
         let charged = super::excerpts::text(budget_content, allowance, &retrieval);
-        let value = history.map_or_else(|| charged.clone(), |h| h.history);
+        let value = if projected.is_some() && content.is_empty() {
+            String::new()
+        } else {
+            history.map_or_else(|| charged.clone(), |h| h.history)
+        };
         if !value.trim().is_empty() {
             contents.push(DocumentSection {
                 stage: stage(&kind, &source),
@@ -83,6 +87,22 @@ async fn group(
         remaining = remaining.saturating_sub(charged.len() + 2);
     }
     contents
+}
+
+fn history_document(
+    document: &ContextDocumentRead,
+) -> Option<butler_turn::conversation::HistoryDocument> {
+    (document.source_id == "recent-conversation")
+        .then(|| {
+            serde_json::from_str(
+                document
+                    .content
+                    .strip_prefix("## Recent Conversation\n\n")
+                    .unwrap_or(&document.content),
+            )
+            .ok()
+        })
+        .flatten()
 }
 
 fn language(candidate: &str) -> Option<String> {
