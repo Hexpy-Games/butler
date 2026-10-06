@@ -33,8 +33,15 @@ per change (resize, theme, params, image, plus every 15 minutes when they read
 DPR 2 within 4MP. Nothing renders while the document is hidden (minimized,
 occluded, background tab) or the canvas is off-screen; `motion="paused"`,
 `pauseOnBattery` on battery, reduced motion, or the frame-time watchdog hold a
-still frame. Window focus is not a pause: a visible Butler window behind
-another app keeps animating. WebGL context loss is recovered (images are
+still frame. So does software GL (a renderer string naming SwiftShader,
+llvmpipe, softpipe, lavapipe, the basic render driver or "software": a VM, a
+blocklisted GPU, headless Chromium), where compositing would read every
+animated frame back on the main thread; the canvas then carries
+`data-wallpaper-fallback="software"` from before its first frame (a test
+harness that must see live frames opts out with
+`<html data-wallpaper-software-fallback="off">`). Window
+focus is not a pause: a visible Butler window behind another app keeps
+animating. WebGL context loss is recovered (images are
 re-uploaded from cached bytes), and a module that fails to compile or link
 falls back to the default (`butler.bloom`) and reports through `onError`.
 Unmounting frees every GPU object and gives the context back
