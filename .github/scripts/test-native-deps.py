@@ -169,6 +169,52 @@ class NativeDeps(unittest.TestCase):
             mutate.assert_not_called()
 
     # test-category: security
+    def test_native_sdk_local_oci_roundtrip_and_missing_tag(self):
+        import os
+        archive = self.root / sdk.names(self.fingerprint, 'linux-x64')[1]
+        complete = self.source_cache()
+        sdk.pack(complete, archive)
+        layout = str(self.root / 'oci')
+        with patch.dict(os.environ, BUTLER_OCI_LAYOUT='1'), patch.object(sdk.ci_oci, 'REGISTRY', layout):
+            reference = f'{layout}/native-deps:linux-x64-{self.fingerprint}'
+            sdk.ci_oci.push(reference, [archive])
+            pulled = self.root / 'pulled'
+            sdk.ci_oci.checked('pull', reference, '--output', str(pulled))
+            self.assertEqual((pulled / archive.name).read_bytes(), archive.read_bytes())
+            consumer = self.root / 'consumer'
+            consumer.mkdir()
+            restored = recipe.prepare_cache(consumer, self.fingerprint, self.lock, 'linux-x64', False, True)
+            recipe.adopt(restored, self.fingerprint, self.lock, 'linux-x64')
+            self.assertEqual(recipe.verified_outputs(restored / 'build/Release', 'linux-x64'),
+                             recipe.verified_outputs(complete / 'build/Release', 'linux-x64'))
+            self.assertIsNone(sdk.release('0' * 64, 'linux-x64'))
+            with patch.object(sdk.subprocess, 'check_output', return_value=self.fingerprint), \
+                    patch.object(sdk.ci_oci, 'push', side_effect=AssertionError('overwrite')):
+                sdk.publish(recipe.SCRIPT, 'linux-x64')
+
+    # test-category: security
+    def test_migration_refuses_cleanup_before_verification_and_preserves_product_releases(self):
+        import os
+        migration_spec = importlib.util.spec_from_file_location('migration', Path(__file__).with_name('migrate-ci-releases.py'))
+        migration = importlib.util.module_from_spec(migration_spec)
+        migration_spec.loader.exec_module(migration)
+        with patch.object(migration, 'verify_native', side_effect=ValueError('SDK verification failed')), \
+                patch.object(migration.subprocess, 'run') as mutation:
+            with self.assertRaisesRegex(ValueError, 'verification failed'):
+                migration.cleanup()
+            mutation.assert_not_called()
+        releases = [[dict(tag_name=tag) for tag in [migration.NATIVE_RELEASES[0], 'cargo-target-key', 'v1.0.0', 'models-bge-m3']]]
+        refs = [[dict(ref='refs/tags/' + tag) for tag in ['cargo-target-orphan', 'v1.0.0', 'models-bge-m3']]]
+        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
+                patch.object(migration, 'verify_native'), patch.object(migration, 'gh', side_effect=[releases, refs]), \
+                patch.object(migration.subprocess, 'run') as mutation:
+            migration.cleanup()
+            self.assertEqual(mutation.call_count, 3)
+            arguments = str(mutation.call_args_list)
+            self.assertNotIn('v1.0.0', arguments)
+            self.assertNotIn('models-bge-m3', arguments)
+
+    # test-category: security
     def test_unsafe_archive_is_rejected(self):
         archive = self.root / 'unsafe.zip'
         with zipfile.ZipFile(archive, 'w') as output:

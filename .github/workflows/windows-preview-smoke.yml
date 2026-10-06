@@ -40,6 +40,10 @@ jobs:
       workflow: windows-preview-smoke.yml
 
   build:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     name: Build unsigned Windows preview
     if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['build']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
@@ -61,12 +65,29 @@ jobs:
           name: agent-windows-x64
           path: dist/release/agent/*
           if-no-files-found: error
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+        env:
+          TARGET_SNAPSHOT_PROFILE: ci-fast
+          TARGET_SNAPSHOT_FEATURES: butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          RUSTFLAGS: -C target-feature=+crt-static
+          TARGET_SNAPSHOT_RUNNER_KIND: owner
+        with:
+          platform: windows-x64
+          mode: static-ort
+          kind: native
+          producer: Build unsigned Windows preview
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
         run: ./deploy/windows-owner-cleanup.ps1
 
   stub:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     name: Platform contracts and debug stub chat
     if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (needs.changes.outputs.package == 'true' && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
@@ -284,6 +305,18 @@ jobs:
           path: ${{ env.PREVIEW_ROOT }}/logs
           if-no-files-found: warn
           retention-days: 14
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        env:
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          TARGET_SNAPSHOT_RUNNER_KIND: owner
+        with:
+          platform: windows-x64
+          mode: static-ort
+          kind: dev
+          producer: Platform contracts and debug stub chat
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .

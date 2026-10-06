@@ -77,6 +77,10 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
 
   linux-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-native']
     uses: ./.github/workflows/native-agent.yml
@@ -86,6 +90,10 @@ jobs:
       ort-mode: prebuilt-ort
 
   linux-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-archive']
     uses: ./.github/workflows/rust-archive.yml
@@ -93,6 +101,10 @@ jobs:
       ort-mode: prebuilt-ort
 
   linux-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml
@@ -123,6 +135,10 @@ jobs:
       e2e: ${{ needs.changes.outputs.tier == 'integration' }}
 
   linux-arm64-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-native']
     uses: ./.github/workflows/native-agent.yml
@@ -132,6 +148,10 @@ jobs:
       ort-mode: prebuilt-ort
 
   linux-arm64-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-archive']
     uses: ./.github/workflows/rust-archive.yml
@@ -142,6 +162,10 @@ jobs:
       clippy: true
 
   linux-arm64-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml
@@ -202,6 +226,10 @@ jobs:
 
 
   macos-native:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-native']
     uses: ./.github/workflows/native-agent.yml
@@ -216,6 +244,10 @@ jobs:
     uses: ./.github/workflows/macos-update-fixtures.yml
 
   macos-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['macos-archive']
     uses: ./.github/workflows/rust-archive.yml
@@ -226,6 +258,10 @@ jobs:
       clippy: true
 
   macos-perf-archive:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf-archive']
     uses: ./.github/workflows/rust-perf-archive.yml

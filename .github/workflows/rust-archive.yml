@@ -17,10 +17,14 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
 jobs:
   build:
     name: Build archives (${{ inputs.platform }})
     runs-on: ${{ inputs.runner }}
+    concurrency:
+      group: cargo-target-rust-archive-${{ inputs.platform }}-${{ github.event_name == 'push' && 'publisher' || github.run_id }}
+      cancel-in-progress: false
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
@@ -123,18 +127,10 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 1
-      - name: Preserve successful Cargo outputs outside the shared cache quota
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: cargo-cache
-        env:
-          CACHE_PLATFORM: ${{ inputs.platform }}
-          CACHE_MODE: ${{ inputs.ort-mode }}
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" dev
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
-          name: ${{ steps.cargo-cache.outputs.name }}
-          path: ${{ runner.temp }}/cargo-build-cache/*
-          retention-days: 2
-          compression-level: 0
-          if-no-files-found: error
+          platform: ${{ inputs.platform }}
+          mode: ${{ inputs.ort-mode }}
+          kind: dev
+          producer: Build archives (${{ inputs.platform }})

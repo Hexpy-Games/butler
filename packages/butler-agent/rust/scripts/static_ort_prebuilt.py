@@ -1,4 +1,4 @@
-"""Content-addressed native SDK release assets; published releases are never modified."""
+"""Content-addressed native SDK OCI artifacts; published keys are never modified."""
 import argparse
 import hashlib
 import json
@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 import urllib.parse
 import zipfile
+
+import ci_oci
 
 REPOSITORY = 'Hexpy-Games/butler'
 MAX_BYTES = 2 * 1024**3
@@ -48,29 +50,24 @@ def request(url, *, binary=False):
         urllib.request.Request(url, headers=headers), timeout=60)
 
 
-def release(fingerprint, target):
-    tag, asset = names(fingerprint, target)
-    url = f'https://api.github.com/repos/{REPOSITORY}/releases/tags/{tag}'
-    try:
-        with request(url) as response:
-            metadata = json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return None
-        raise RuntimeError(f'Native release lookup failed: HTTP {error.code}') from None
-    if metadata['draft']:
-        raise RuntimeError('Native release is still a draft')
-    matches = [item for item in metadata['assets'] if item['name'] == asset]
+def release(fingerprint, target, *, anonymous=True):
+    reference = f'{ci_oci.REGISTRY}/native-deps:{target}-{fingerprint}'
+    if shutil.which('oras') is None:
+        return None  # Developer builds can compile the SDK without oras installed.
+    published = ci_oci.manifest(reference, anonymous=anonymous)
+    if published is None:
+        return None
+    asset = names(fingerprint, target)[1]
+    matches = [entry for entry in published['assets'] if entry['name'] == asset]
     if len(matches) != 1:
-        raise RuntimeError('Published native release has no unique matching asset')
-    entry = matches[0]
-    digest = entry.get('digest', '')
-    if not digest.startswith('sha256:') or len(digest) != 71:
-        raise RuntimeError('Native asset has no GitHub-recorded SHA-256')
-    return entry
+        raise RuntimeError('Published native OCI artifact has no unique matching asset')
+    return matches[0]
 
 
 def download_asset(entry, destination):
+    if 'reference' in entry:
+        ci_oci.fetch(entry, destination)
+        return
     if not 0 < entry['size'] <= MAX_BYTES:
         raise RuntimeError('Native asset exceeds size bound')
     if shutil.disk_usage(destination.parent).free <= entry['size'] + 8 * 1024**3:
@@ -124,7 +121,7 @@ def restore(root, fingerprint, lock, target, adopt):
         unpack(archive, stage)
         adopt(stage, fingerprint, lock, target)
         stage.rename(root / f'ort-{fingerprint}')
-    print('Verified and extracted pinned native release asset', file=sys.stderr)
+    print('Verified and extracted pinned native OCI artifact', file=sys.stderr)
     return True
 
 
@@ -147,23 +144,23 @@ def pack(complete, destination):
 
 
 def publish(script, target):
-    """Only the producer calls this; upload to a draft, then publish once."""
+    """A serialized producer commits a complete verified artifact exactly once."""
     fingerprint = subprocess.check_output([sys.executable, str(script), '--target', target, '--fingerprint'], text=True).strip()
-    if release(fingerprint, target) is not None:
-        print('Native release already published; no build or mutation')
+    if release(fingerprint, target, anonymous=False) is not None:
+        print('Native OCI key already published; no build or mutation')
         return
     result = json.loads(subprocess.check_output([sys.executable, str(script), '--target', target, '--build-only'], text=True))
     complete = Path(result['ort_lib_path']).parent.parent
-    tag, asset = names(fingerprint, target)
+    asset = names(fingerprint, target)[1]
     with tempfile.TemporaryDirectory() as temporary:
         archive = Path(temporary) / asset
         pack(complete, archive)
-        gh = ['gh', 'release']
-        subprocess.run([*gh, 'create', tag, '--repo', REPOSITORY, '--target', os.environ['GITHUB_SHA'],
-                        '--draft', '--prerelease', '--latest=false', '--title', tag,
-                        '--notes', f'Pinned native SDK for {target}. Key: {fingerprint}.'], check=True)
-        subprocess.run([*gh, 'upload', tag, str(archive), '--repo', REPOSITORY], check=True)
-        subprocess.run([*gh, 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest=false'], check=True)
+        reference = f'{ci_oci.REGISTRY}/native-deps:{target}-{fingerprint}'
+        ci_oci.push(reference, [archive])
+        # Verify the registry's stored blob, not just the local upload descriptor.
+        entry = release(fingerprint, target, anonymous=False)
+        ci_oci.fetch(entry, Path(temporary) / 'verified.zip', anonymous=False)
+        print(f'Published verified {reference}')
 
 
 if __name__ == '__main__':

@@ -20,32 +20,34 @@ cache = snapshots.cache
 class TargetSnapshot(unittest.TestCase):
     # test-category: security
     def test_trust_rejects_pr_fork_failed_commit_and_lane(self):
-        metadata = dict(run_id=42, run_attempt=2, sha='a' * 40, identity=dict(platform='linux-x64', kind='native'))
+        metadata = dict(run_id=42, run_attempt=2, sha='a' * 40,
+                        producer_name='Build native Agent (linux-x64)',
+                        identity=dict(platform='linux-x64', kind='native'))
         run = dict(id=42, head_repository={'full_name': 'owner/repo'}, event='push', head_branch='main',
                    head_sha=metadata['sha'], status='completed', conclusion='success')
-        jobs = {'jobs': [dict(name='Build native Agent (linux-x64)', status='completed', conclusion='success')]}
+        jobs = {'jobs': [dict(name=metadata['producer_name'], status='completed', conclusion='success')]}
         with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'):
             with patch.object(snapshots, 'api', side_effect=[run, jobs]) as lookup:
                 snapshots.trusted(metadata)
                 self.assertIn('/attempts/2/jobs?', lookup.call_args.args[0])
-            for key, value in [('event', 'pull_request'), ('head_branch', 'release/1.0.0'),
+            for key, value in [('event', 'pull_request'), ('head_branch', 'feature/untrusted'),
                                ('head_sha', 'b' * 40), ('status', 'in_progress'),
                                ('head_repository', {'full_name': 'fork/repo'})]:
                 with patch.object(snapshots, 'api', return_value=dict(run, **{key: value})):
-                    with self.assertRaisesRegex(ValueError, 'main push'):
+                    with self.assertRaisesRegex(ValueError, 'main/release push'):
                         snapshots.trusted(metadata)
             with patch.object(snapshots, 'api', side_effect=[dict(run, conclusion='failure'), jobs]):
-                snapshots.trusted(metadata)  # Another failed job cannot discard a successful build.
-            main_run = dict(run, path='.github/workflows/cargo-target-main.yml')
-            lane_metadata = dict(metadata, identity=dict(metadata['identity'], profile='ci-fast', mode='static-ort'), runner_kind='owner')
-            owner_job = dict(name='Build target snapshot ci-fast static-ort owner (linux-x64)', status='completed', conclusion='success')
-            with patch.object(snapshots, 'api', side_effect=[main_run, {'jobs': [owner_job]}]):
-                snapshots.trusted(lane_metadata)
-            hosted_job = dict(owner_job, name=owner_job['name'].replace(' owner ', ' hosted '))
-            with patch.object(snapshots, 'api', side_effect=[main_run, {'jobs': [hosted_job]}]):
-                with self.assertRaisesRegex(ValueError, 'lane'):
-                    snapshots.trusted(lane_metadata)
+                snapshots.trusted(metadata)  # Other failures cannot discard a successful lane.
+            with patch.object(snapshots, 'api', side_effect=[dict(run, head_branch='release/1.0.0'), jobs]):
+                snapshots.trusted(metadata)
             with patch.object(snapshots, 'api', side_effect=[run, {'jobs': []}]):
+                with self.assertRaisesRegex(ValueError, 'lane'):
+                    snapshots.trusted(metadata)
+            active = {'jobs': [dict(jobs['jobs'][0], status='in_progress', conclusion=None)]}
+            with patch.object(snapshots, 'api', side_effect=[dict(run, status='in_progress'), active]):
+                snapshots.trusted(metadata, publishing=True)
+            failed = {'jobs': [dict(jobs['jobs'][0], conclusion='failure')]}
+            with patch.object(snapshots, 'api', side_effect=[run, failed]):
                 with self.assertRaisesRegex(ValueError, 'lane'):
                     snapshots.trusted(metadata)
 
@@ -64,16 +66,6 @@ class TargetSnapshot(unittest.TestCase):
                 self.assertNotEqual(snapshots.tag_name(expected), snapshots.tag_name(dict(expected, **{field: 'changed'})))
 
     # test-category: security
-    def test_github_digest_required_and_redirect_strips_auth(self):
-        with self.assertRaisesRegex(ValueError, 'GitHub SHA-256'):
-            snapshots.download(dict(digest=None), Path('unused'))
-        from static_ort_prebuilt import SafeRedirect
-        from urllib.request import Request
-        redirected = SafeRedirect().redirect_request(Request('https://api.github.com/a', headers={'Authorization': 'fixture'}),
-                                                       None, 302, 'Found', {}, 'https://example.org/asset')
-        self.assertFalse(redirected.has_header('Authorization'))
-
-    # test-category: security
     def test_chunk_order_roundtrip_and_retention(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -82,56 +74,53 @@ class TargetSnapshot(unittest.TestCase):
             with patch.object(snapshots, 'CHUNK_BYTES', 8):
                 chunks = snapshots.split(archive, root, '42-1')
             self.assertEqual(b''.join((root / name).read_bytes() for name in chunks), archive.read_bytes())
-            assets = [{'name': f'{run}-1{suffix}'} for run in [41, 42, 43]
-                      for suffix in ['.json', '-0000.zst', '-sources.json']]
-            assets.append({'name': '40-1-0000.zst'})  # Interrupted publication.
-            with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), patch.object(snapshots.subprocess, 'run') as delete:
-                snapshots.prune('cargo-target-fixture', {'assets': assets})
-                removed = {call.args[0][4] for call in delete.call_args_list}
-            self.assertEqual(removed, {'41-1.json', '41-1-0000.zst', '41-1-sources.json', '40-1-0000.zst'})
+            versions = [dict(id=run, metadata={'container': {'tags': [f'fixture--{run}-1']}}) for run in [41,42,43]]
+            versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
+            with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
+                    patch.object(cache, 'output', return_value=json.dumps([versions])), \
+                    patch.object(snapshots.subprocess, 'run') as delete:
+                snapshots.prune('fixture')
+                self.assertEqual(delete.call_count, 1)
+                self.assertTrue(delete.call_args.args[0][-1].endswith('/41'))
 
     # test-category: security
-    def test_publication_commits_manifest_last_and_fetch_rejects_tampering(self):
+    def test_local_oras_push_pull_verify_tamper_missing_and_write_once(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / 'cache.tar.zst').write_bytes(b'complete compressed archive')
-            (root / 'sources.json').write_text('[]')
+            layout = root / 'oci'
+            producer = root / 'producer'
+            producer.mkdir()
+            (producer / 'cache.tar.zst').write_bytes(b'complete compressed archive')
+            (producer / 'sources.json').write_text('[]')
             expected = dict(schema=2, platform='linux-x64', kind='native')
             metadata = dict(identity=expected, run_id=42, run_attempt=1, sha='a' * 40,
-                            sha256=cache.digest(root / 'cache.tar.zst'), sources_sha256=cache.digest(root / 'sources.json'))
-            (root / 'cache.json').write_text(json.dumps(metadata))
-            state = dict(draft=True, assets=[])
-            contents = {}
-            uploads = []
-            def mutate(args, **kwargs):
-                if args[2] == 'upload':
-                    path = Path(args[4])
-                    data = path.read_bytes()
-                    contents[path.name] = data
-                    uploads.append(path.name)
-                    state['assets'].append(dict(name=path.name, size=len(data), digest='sha256:' + hashlib.sha256(data).hexdigest()))
-                elif args[2] == 'edit':
-                    state['draft'] = False
-            def transfer(entry, destination):
-                data = contents[entry['name']]
-                if 'sha256:' + hashlib.sha256(data).hexdigest() != entry['digest']:
-                    raise ValueError('GitHub digest mismatch')
-                destination.write_bytes(data)
-            with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), patch.object(snapshots, 'trusted'), \
-                    patch.object(snapshots, 'release', side_effect=lambda *args, **kwargs: state), \
-                    patch.object(snapshots.subprocess, 'run', side_effect=mutate):
-                snapshots.publish(root, 42)
-            self.assertEqual(uploads[-1], '42-1.json')
-            self.assertFalse(state['draft'])
-            consumer = root / 'consumer'
-            consumer.mkdir()
-            manifest = next(entry for entry in state['assets'] if entry['name'] == '42-1.json')
-            with patch.object(snapshots, 'download', side_effect=transfer), patch.object(snapshots, 'trusted'):
-                snapshots.fetch_snapshot(state, manifest, consumer, expected)
-                self.assertEqual((consumer / 'cache.tar.zst').read_bytes(), (root / 'cache.tar.zst').read_bytes())
-                contents['42-1-0000.zst'] = b'tampered'
-                with self.assertRaisesRegex(ValueError, 'digest mismatch'):
-                    snapshots.fetch_snapshot(state, manifest, consumer, expected)
+                            sha256=cache.digest(producer / 'cache.tar.zst'), sources_sha256=cache.digest(producer / 'sources.json'))
+            (producer / 'cache.json').write_text(json.dumps(metadata))
+            with patch.dict(os.environ, BUTLER_OCI_LAYOUT='1', RUNNER_TEMP=str(root)), \
+                    patch.object(snapshots.ci_oci, 'REGISTRY', str(layout)), \
+                    patch.object(snapshots, 'trusted'), patch.object(snapshots, 'CHUNK_BYTES', 8):
+                snapshots.publish(producer, 42)
+                published = snapshots.release(snapshots.tag_name(expected))
+                consumer = root / 'consumer'
+                consumer.mkdir()
+                manifest = snapshots.generations(published['assets'])[0]
+                snapshots.fetch_snapshot(published, manifest, consumer, expected)
+                self.assertEqual((consumer / 'cache.tar.zst').read_bytes(), (producer / 'cache.tar.zst').read_bytes())
+                self.assertEqual(len(published['assets']), 6)  # Four chunks, sources, manifest.
+                snapshots.publish(producer, 42)  # An existing generation is never pushed again.
+                with patch.object(snapshots.ci_oci, 'push', side_effect=AssertionError('overwrite')):
+                    snapshots.publish(producer, 42)
+                self.assertFalse(snapshots.restore(dict(expected, platform='missing')))
+                layer = next(entry for entry in published['assets'] if entry['name'].endswith('-0000.zst'))
+                blob = layout / 'cargo-target/blobs/sha256' / layer['digest'].split(':')[1]
+                blob.chmod(0o644)
+                blob.write_bytes(b'tampered')
+                with self.assertRaisesRegex((ValueError, RuntimeError), 'mismatch|digest|size'):
+                    snapshots.fetch_snapshot(published, manifest, consumer, expected)
+                metadata['sha'] = 'b' * 40
+                (producer / 'cache.json').write_text(json.dumps(metadata))
+                with self.assertRaisesRegex(ValueError, 'cannot be overwritten'):
+                    snapshots.publish(producer, 42)
 
     # test-category: pure-logic
     def test_imports_leave_watched_recipe_directory_unchanged(self):
@@ -146,18 +135,6 @@ class TargetSnapshot(unittest.TestCase):
             self.assertEqual(module.VALUE, 'pinned recipe')
             self.assertFalse((root / '__pycache__').exists())
             self.assertEqual(recipe.parent.stat().st_mtime_ns, before)
-
-    # test-category: security
-    def test_draft_lookup_is_publisher_only_and_resumes_first_upload(self):
-        from urllib.error import HTTPError
-        draft = dict(id=7, tag_name='cargo-target-key', draft=True, assets=[])
-        with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
-                patch.object(snapshots, 'request', side_effect=HTTPError('fixture', 404, 'missing', {}, None)), \
-                patch.object(cache, 'output', side_effect=[json.dumps([[draft]]), json.dumps([[]])]) as enumerate_drafts:
-            self.assertIsNone(snapshots.release('cargo-target-key'))
-            enumerate_drafts.assert_not_called()
-            self.assertEqual(snapshots.release('cargo-target-key', allow_draft=True), draft)
-            self.assertIn('--paginate', enumerate_drafts.call_args.args)
 
     def fixture(self, root):
         (root / 'Cargo.toml').write_text('[workspace]\nmembers=["core", "gateway", "app"]\nresolver="2"\n'

@@ -52,6 +52,9 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: oras-project/setup-oras@v1
+      with:
+        version: 1.2.3
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
@@ -149,7 +152,7 @@ runs:
         fi
 
     # The quota-limited cache holds downloaded dependencies only. Persistent
-    # target outputs have one verified restore path, from main release assets.
+    # target outputs have one verified restore path, from verified GHCR OCI artifacts.
     - name: Cache Cargo downloads
       uses: Swatinem/rust-cache@v2
       with:

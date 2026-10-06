@@ -204,3 +204,33 @@ Open an issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues) a
 - for the standalone agent, the output of `butler doctor`
 
 Leave API keys, personal data and private conversation content out of issues.
+
+### CI stores in GHCR
+
+CI SDKs use `ghcr.io/hexpy-games/butler-ci/native-deps:<target>-<recipe-hash>`.
+Cargo build trees use `ghcr.io/hexpy-games/butler-ci/cargo-target:<platform>-<compatibility-key>`;
+immutable generation tags append `--<run-id>-<attempt>`. Existing build jobs
+publish on main/release pushes after building; two Cargo generations per key
+survive. SDK keys are write once. Readers use `oras` 1.2.3 anonymously and verify
+OCI SHA-256, sizes and the inner SDK/Cargo digests before adopting any output.
+Missing public keys fall back to a build (CI static SDK consumers still require
+publication). These packages are build inputs, outside the product Releases feed.
+
+After the first publish, an organization package administrator must open each
+package's **Package settings → Danger Zone → Change visibility → Public**:
+
+- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fnative-deps/settings>
+- <https://github.com/orgs/Hexpy-Games/packages/container/butler-ci%2Fcargo-target/settings>
+
+The OCI `org.opencontainers.image.source` annotation links both packages to
+`Hexpy-Games/butler`. Keep inherited repository access enabled so workflows can
+publish/prune with `GITHUB_TOKEN` and `packages: write`; no PAT or added secret
+is needed. Public visibility requires this one-time settings action because
+GitHub's documented REST package API does not expose a visibility update.
+
+Dispatch `native-deps.yml` on main and verify all four public targets first.
+Then dispatch `ci-store-maintenance.yml` on main. It anonymously downloads every
+current SDK and checks its outer and inner digests before deleting the four
+original `native-deps-*` releases/tags and any `cargo-target-*` releases/orphan
+tags. Any missing, private or corrupt SDK stops cleanup before the first deletion.
+The maintenance job leaves model mirrors and product releases untouched.

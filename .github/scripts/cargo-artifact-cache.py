@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record complete Cargo build inputs for persistent main release snapshots.
+"""Record complete Cargo build inputs for persistent CI OCI snapshots.
 
 These are build inputs, not a reusable release payload. Cargo still rebuilds
 changed sources and the Agent's tracked revision/version inputs. Only successful
@@ -170,7 +170,7 @@ def record(directory, expected, root='target', target=None):
             compress.stdin.close()
             if compress.wait() != 0:
                 raise RuntimeError('Cargo snapshot compression failed')
-    metadata = dict(runner_kind=os.environ.get('TARGET_SNAPSHOT_RUNNER_KIND', 'hosted'), run_id=os.environ.get('GITHUB_RUN_ID', '0'), run_attempt=os.environ.get('GITHUB_RUN_ATTEMPT', '1'), identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
+    metadata = dict(producer_name=os.environ.get('TARGET_SNAPSHOT_PRODUCER', ''), runner_kind=os.environ.get('TARGET_SNAPSHOT_RUNNER_KIND', 'hosted'), run_id=os.environ.get('GITHUB_RUN_ID', '0'), run_attempt=os.environ.get('GITHUB_RUN_ATTEMPT', '1'), identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
     if root == 'target':
         sources = directory / 'sources.json'
         sources.write_text(json.dumps(source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
