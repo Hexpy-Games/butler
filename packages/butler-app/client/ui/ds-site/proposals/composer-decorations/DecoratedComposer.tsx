@@ -30,12 +30,11 @@ const COMPOSER_RESERVE = 120;
  *   grades (exposure, sand highlight, a vertical tone gradient); see shoreTuning.ts.
  * - Cherry blossom: a transparent canvas; the card's own glass shows through.
  */
-function DecorationBackground({ theme, tone, shore, lush, pixel }: {
+function DecorationBackground({ theme, tone, shore, lush }: {
   theme: Exclude<DecorationTheme, "none">;
   tone: "light" | "dark";
   shore: ShoreParams;
   lush: boolean;
-  pixel: boolean;
 }) {
   return (
     <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}
@@ -44,7 +43,7 @@ function DecorationBackground({ theme, tone, shore, lush, pixel }: {
         {theme === "shoreline" ? (
           <Wallpaper source={SHORELINE_SOURCE} registry={SHORELINE_REGISTRY} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
         ) : (
-          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} lush={lush} pixel={pixel} key={`${lush}-${pixel}`} />
+          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} lush={lush} key={String(lush)} />
         )}
       </div>
       {theme === "shoreline" ? <div className={styles.shoreHighlight} data-tone={tone} /> : null}
@@ -58,7 +57,7 @@ function DecorationBackground({ theme, tone, shore, lush, pixel }: {
  * the page wallpaper, and Composer.tsx's ComposerCard (floating, large) with ComposerInputSurface
  * and ComposerToolbar's DS parts and props. Only the decoration layer and the character are new.
  */
-export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = SHORE_PRESETS.d, lush = true, pixel = false, engagedAtStart }: {
+export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = SHORE_PRESETS.d, lush = true, engagedAtStart }: {
   copy: ProposalCopy;
   theme: DecorationTheme;
   character: boolean;
@@ -66,7 +65,6 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore =
   tone: "light" | "dark";
   shore?: ShoreParams;
   lush?: boolean;
-  pixel?: boolean;
   engagedAtStart?: boolean;
 }) {
   const [draft, setDraft] = useState("");
@@ -94,7 +92,7 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore =
       <ConversationScroll masked={false} scrollable={false}>{null}</ConversationScroll>
       <ComposerCard large floating expanded={engaged} containerRef={(node) => { wrapRef.current = node; setWrap(node); }}
         onFocusCapture={() => setEngaged(true)} onSubmit={(event) => event.preventDefault()}>
-        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} shore={shore} lush={lush} pixel={pixel} />}
+        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} shore={shore} lush={lush} />}
         <ComposerCardExpandedBody>
           <ComposerCardEditor>
             <ComposerCardEditable>

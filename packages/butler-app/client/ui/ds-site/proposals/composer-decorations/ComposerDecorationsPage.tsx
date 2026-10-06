@@ -18,7 +18,7 @@ const DECISIONS = [
   "Background, not a band: the scene fills the whole card behind the text. Nothing else sits behind the text or the controls; readability comes from the art's composition. The art is the same in light and dark.",
   "No interactivity: both scenes play continuously while visible, 20fps; typing does nothing to them. Hidden or offscreen: no frames. Reduced motion: a still frame.",
   "Shoreline: the shipped module with the owner's setting as the default (waterline 19px above the bottom edge, exposure 1.22, sand highlights toned down 6%, a 30% tone gradient from 75% to 100% of the card height) and no cloud shadows by day (a proposed `dayClouds` param, mocked here). Dark mode keeps the night grade. Options a-d stay switchable for comparison.",
-  "Cherry blossom as an illustration (recommended): soft flat tones, no light and no shadow, simple notched petals with a thin rosy line, pink hearts and a few yellow stamen dots, a faint paper grain. Tight clusters of 4-6 flowers hide the branch; far clusters are paler, never darker. The mass hangs along the top edge from the corner (thickest) to 1/3 of the width. Pixel art is the alternative (2px blocks, a 7-colour palette, 8fps steps). No background; fine petals and pollen drift across, fewer and fainter over the text.",
+  "Cherry canopy, painted like the owner's anime references: soft cloud-shaped masses of blossom built from small dabs in four pinks (deep rose underside to pale highlights), scalloped edges, a few thin branch strokes peeking through. It drapes from the top-right corner along the top edge and down the right side, with a lighter mass from the top-left, framing the card; petals fall and flutter across it at varied sizes. The canopy stays in the padding frame and the corner, never over a text line or a control. No background: the card's glass shows through.",
   "Character: head behind the card, paws in front on the top edge inside its padding; never over text or controls; static.",
 ];
 
@@ -31,7 +31,7 @@ function EmbeddedScreen({ state }: { state: ProposalState }) {
   }, [tone, state.motion]);
   return (
     <div className={`${styles.embedRoot} theme-${tone}`} lang={state.locale}>
-      <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} pixel={state.cherryStyle === "pixel"} character={state.character} tone={tone}
+      <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} character={state.character} tone={tone}
         wallpaper={pageWallpaperSource(state.wallpaper)} engagedAtStart={state.composer === "open"} />
     </div>
   );
@@ -48,7 +48,7 @@ function PreviewFrames({ state }: { state: ProposalState }) {
               src={`?${proposalSearch({ ...state, theme: tone })}&embed=1`} />
           ) : (
             <div className={styles.screen}>
-              <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} pixel={state.cherryStyle === "pixel"} character={state.character} tone={tone}
+              <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} character={state.character} tone={tone}
                 wallpaper={pageWallpaperSource(state.wallpaper)} engagedAtStart={state.composer === "open"}
                 key={`${state.composer}-${state.locale}`} />
             </div>
