@@ -16,6 +16,9 @@ import time
 import uuid
 import zipfile
 
+import static_ort_host as host
+import static_ort_prebuilt as prebuilt
+
 
 SCRIPT = pathlib.Path(__file__).resolve()
 RUST_ROOT = SCRIPT.parent.parent
@@ -29,94 +32,8 @@ MAX_BUILD_SECONDS = 60 * 60
 MAX_DOWNLOAD_SECONDS = 20 * 60
 MAX_ARCHIVE_BYTES = 512 * 1024**2
 
-# Everything that differs between native targets. The pinned inputs live in
-# the lock's `targets` entry of the same name. Builds are native only: the host
-# must be the target and the pinned Rust toolchain's host triple its
-# `rust_target`.
-UNIX_DEPS = (
-    "_deps/onnx-build/libonnx.a",
-    "_deps/protobuf-build/libprotobuf-lite.a",
-    "_deps/re2-build/libre2.a",
-)
-LINUX = {
-    "curl": "/usr/bin/curl",
-    "cmake": "bin/cmake",
-    "cmake_archive": "cmake.tar.gz",
-    "exe": "",
-    "static_lib": "lib{}.a",
-    "static_glob": "*.a",
-    "dynamic_glob": "libonnxruntime*.so*",
-    # ORT always builds this loader for shared execution providers off Apple;
-    # the static CPU build neither links nor loads it.
-    "dynamic_allowed": ("libonnxruntime_providers_shared.so",),
-    "deps": UNIX_DEPS,
-    # GCC 15's libstdc++ no longer includes <cstdint> transitively, which the
-    # pinned ORT relies on; older compilers are unaffected.
-    "cmake_defines": ("CMAKE_CXX_FLAGS=-include cstdint",),
-    "cmake_cache": (),
-    # The pinned ORT predates the host GCC; its new warnings must not fail the build.
-    "build_args": ("--compile_no_warning_as_error",),
-}
-TARGETS = {
-    "macos-arm64": {
-        "host": ("darwin", ("arm64",)),
-        "curl": "/usr/bin/curl",
-        "cmake": "CMake.app/Contents/bin/cmake",
-        "cmake_archive": "cmake.tar.gz",
-        "exe": "",
-        "static_lib": "lib{}.a",
-        "static_glob": "*.a",
-        "dynamic_glob": "libonnxruntime*.dylib",
-        "dynamic_allowed": (),
-        "deps": UNIX_DEPS,
-        "cmake_defines": ("CMAKE_OSX_ARCHITECTURES=arm64",),
-        "cmake_cache": ("CMAKE_OSX_ARCHITECTURES:STRING=arm64",),
-        "build_args": (),
-    },
-    "linux-x64": {**LINUX, "host": ("linux", ("x86_64",))},
-    "linux-arm64": {**LINUX, "host": ("linux", ("aarch64", "arm64"))},
-    # CI exercises only --protoc-only. The full build must run inside a Visual
-    # Studio x64 developer environment (cl.exe on PATH) with symlink rights,
-    # under a short CARGO_TARGET_DIR (MAX_PATH).
-    "windows-x64": {
-        "host": ("win32", ("AMD64", "x86_64")),
-        "curl": str(pathlib.Path(os.environ.get("SystemRoot", "C:\\Windows")) / "System32" / "curl.exe"),
-        "cmake": "bin/cmake.exe",
-        "cmake_archive": "cmake.zip",
-        "exe": ".exe",
-        "static_lib": "{}.lib",
-        "static_glob": "*.lib",
-        "dynamic_glob": "onnxruntime*.dll",
-        "dynamic_allowed": ("onnxruntime_providers_shared.dll",),
-        "deps": (
-            "_deps/onnx-build/onnx.lib",
-            "_deps/protobuf-build/libprotobuf-lite.lib",
-            "_deps/re2-build/re2.lib",
-        ),
-        "cmake_defines": (),
-        "cmake_cache": (),
-        "build_args": ("--compile_no_warning_as_error", "--enable_msvc_static_runtime"),
-    },
-}
-
-
-def fail(message):
-    raise RuntimeError(message)
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def command(args, *, cwd=None):
-    result = subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
-    if result.returncode:
-        fail(f"{' '.join(map(str, args))} failed: {(result.stderr or result.stdout).strip()}")
-    return result.stdout.strip()
+from static_ort_targets import TARGETS
+from static_ort_host import command, fail, sha256
 
 
 def archive_names(target):
@@ -154,91 +71,6 @@ def target_lock(lock, target):
         "sources": {**lock["sources"], **entry["tools"]},
         "build": entry["build"],
     }
-
-
-def rust_identity(rust_target):
-    rustc = command(["rustc", "--version", "--verbose"], cwd=RUST_ROOT)
-    rustc_fields = dict(line.split(": ", 1) for line in rustc.splitlines() if ": " in line)
-    if rustc_fields.get("release") != "1.91.0" or rustc_fields.get("host") != rust_target:
-        fail("Static ORT preparation requires the pinned Rust 1.91.0 toolchain.")
-    return rustc
-
-
-def compiler_identity(variable, default):
-    selected = os.environ.get(variable) or default
-    resolved = shutil.which(selected)
-    if not resolved:
-        fail(f"C/C++ compiler {selected} ({variable}) is required for the static ORT build")
-    return {"path": resolved, "version": command([resolved, "--version"])}
-
-
-def os_release():
-    fields = {}
-    try:
-        text = pathlib.Path("/etc/os-release").read_text()
-    except OSError:
-        return fields
-    for line in text.splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            if key in ("ID", "VERSION_ID"):
-                fields[key] = value.strip().strip('"')
-    return fields
-
-
-def visual_studio_identity():
-    """The installed MSVC toolset, read without a developer environment."""
-    root = pathlib.Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))
-    vswhere = root / "Microsoft Visual Studio/Installer/vswhere.exe"
-    if not vswhere.is_file():
-        fail("Visual Studio (vswhere.exe) is required on a Windows host")
-    query = [str(vswhere), "-latest", "-products", "*", "-requires",
-             "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"]
-    installation = pathlib.Path(command([*query, "-property", "installationPath"]))
-    tools = installation / "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
-    return {
-        "installation_version": command([*query, "-property", "installationVersion"]),
-        "vc_tools_version": tools.read_text().strip() if tools.is_file() else "unknown",
-    }
-
-
-def host_identity(target, rust_target):
-    if host_target() != target:
-        fail(f"Static ORT preparation for {target} must run on a {target} host.")
-    if sys.version_info < (3, 9):
-        fail("Static ONNX Runtime preparation requires Python 3.9 or newer.")
-    if target == "macos-arm64":
-        clang = command(["xcrun", "--find", "clang"])
-        rustc = rust_identity(rust_target)
-        return {
-            "system": command(["sw_vers", "-productVersion"]),
-            "sdk_path": command(["xcrun", "--show-sdk-path"]),
-            "sdk_version": command(["xcrun", "--show-sdk-version"]),
-            "clang_path": clang,
-            "clang_version": command([clang, "--version"]),
-            "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-            "rustc": rustc,
-            "rust_toolchain": (RUST_ROOT / "rust-toolchain.toml").read_text(),
-        }
-    identity = {
-        "target": target,
-        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        "rustc": rust_identity(rust_target),
-        "rust_toolchain": (RUST_ROOT / "rust-toolchain.toml").read_text(),
-    }
-    if target.startswith("linux-"):
-        identity.update({
-            "system": os_release(),
-            "libc": "-".join(platform.libc_ver()),
-            "cc": compiler_identity("CC", "cc"),
-            "cxx": compiler_identity("CXX", "c++"),
-        })
-    else:
-        identity.update({
-            "system": platform.version(),
-            "msvc": visual_studio_identity(),
-        })
-    return identity
 
 
 def root_for_target():
@@ -528,6 +360,9 @@ def adopt(complete, fingerprint, lock, target):
     if not marker.is_file():
         fail(f"Incomplete static ORT cache; refusing to adopt: {complete}")
     recorded = json.loads(marker.read_text())
+    if recorded.get("lock_sha256") != hashlib.sha256(
+            json.dumps(lock, sort_keys=True).encode()).hexdigest() or recorded.get("target") != target:
+        fail("Static ORT cache pinned input mismatch")
     if recorded.get("fingerprint") != fingerprint:
         fail("Static ORT cache fingerprint mismatch")
     outputs = verified_outputs(complete / "build/Release", target)
@@ -547,6 +382,41 @@ def adopt(complete, fingerprint, lock, target):
         fail("Static ORT cache protoc mismatch")
 
 
+def prepare_cache(cache_root, fingerprint, lock, target, build_only, require_prebuilt):
+    with (cache_root / f".ort-{fingerprint}.lock").open("a+b") as guard:
+        lock_exclusive(guard)
+        complete = cache_root / f"ort-{fingerprint}"
+        if complete.exists():
+            adopt(complete, fingerprint, lock, target)
+        else:
+            restored = False if build_only else prebuilt.restore(
+                cache_root, fingerprint, lock, target, adopt)
+            if restored:
+                return complete
+            if require_prebuilt:
+                fail("Pinned native asset is absent; dispatch native-deps.yml before this CI job")
+            identity = host.host_identity(target, lock["rust_target"])
+            check_space(cache_root)
+            stage = cache_root / stage_name("ort-", fingerprint)
+            stage.mkdir()
+            try:
+                lib_path, protoc = prepare(stage, lock, target)
+                outputs = verified_outputs(lib_path, target)
+                record = {
+                    "fingerprint": fingerprint, "host": identity, "target": target,
+                    "lock_sha256": hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest(),
+                    "libraries": outputs,
+                    "archives": {name: spec["sha256"] for name, spec in lock["sources"].items()},
+                    "protoc_sha256": sha256(protoc),
+                }
+                (stage / "complete.json").write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+                stage.rename(complete)
+            finally:
+                if stage.exists():
+                    shutil.rmtree(native_path(stage))
+        return complete
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=sorted(TARGETS),
@@ -555,51 +425,30 @@ def main():
                         help="read-only inspection of an existing static ORT link directory")
     parser.add_argument("--fingerprint", action="store_true",
                         help="print the cache fingerprint without preparing anything")
+    parser.add_argument("--build-only", action="store_true", help="producer: build without downloading")
+    parser.add_argument("--require-prebuilt", action="store_true", help="fail if no published asset exists")
     parser.add_argument("--protoc-only", action="store_true",
                         help="prepare only the pinned protoc (enough for cargo check/clippy)")
     args = parser.parse_args()
     target = args.target or host_target()
+    if target != host_target():
+        fail(f"Static ORT preparation for {target} must run on a {target} host")
     if args.verify_lib_path:
         print(json.dumps({"libraries": verified_outputs(args.verify_lib_path.resolve(), target)},
                          sort_keys=True))
         return
     lock = target_lock(json.loads(LOCK.read_text()), target)
-    identity = host_identity(target, lock["rust_target"])
-    fingerprint = hashlib.sha256(json.dumps({
-        "lock": lock, "script_sha256": sha256(SCRIPT), "host": identity,
-    }, sort_keys=True).encode()).hexdigest()[:24]
+    fingerprint = prebuilt.key(SCRIPT, lock, target)
     if args.fingerprint:
         print(fingerprint)
         return
+    host.rust_identity(lock["rust_target"])
     cache_root = root_for_target()
     cache_root.mkdir(parents=True, exist_ok=True)
     if args.protoc_only:
         print(json.dumps({"protoc": str(prepare_protoc(cache_root, lock, target))}, sort_keys=True))
         return
-    guard = (cache_root / f".ort-{fingerprint}.lock").open("a+b")
-    lock_exclusive(guard)
-    complete = cache_root / f"ort-{fingerprint}"
-    if complete.exists():
-        adopt(complete, fingerprint, lock, target)
-    else:
-        check_space(cache_root)
-        stage = cache_root / stage_name("ort-", fingerprint)
-        stage.mkdir()
-        try:
-            lib_path, protoc = prepare(stage, lock, target)
-            outputs = verified_outputs(lib_path, target)
-            record = {
-                "fingerprint": fingerprint, "host": identity, "target": target,
-                "lock_sha256": hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest(),
-                "libraries": outputs,
-                "archives": {name: spec["sha256"] for name, spec in lock["sources"].items()},
-                "protoc_sha256": sha256(protoc),
-            }
-            (stage / "complete.json").write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
-            stage.rename(complete)
-        finally:
-            if stage.exists():
-                shutil.rmtree(native_path(stage))
+    complete = prepare_cache(cache_root, fingerprint, lock, target, args.build_only, args.require_prebuilt or (os.environ.get("GITHUB_ACTIONS") == "true" and not args.build_only))
     print(json.dumps({
         "ort_lib_path": str(complete / "build/Release"),
         "protoc": str(complete / f"tools/protoc/bin/protoc{TARGETS[target]['exe']}"),
