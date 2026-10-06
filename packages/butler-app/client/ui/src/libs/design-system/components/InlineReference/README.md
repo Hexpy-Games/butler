@@ -21,9 +21,9 @@ An absolute http(s) URL. It renders a real anchor (`target="_blank"`, `rel="noop
 
 - **Label**: `children` is the title. Omitted, or equal to the URL, it shows the domain without `www.` (as written, so internationalized domains stay readable).
 - **Tooltip**: the full URL, also the anchor's accessible description.
-- **Icon slot**: a fixed rounded box (1.125em). The DS globe shows at once; when `iconSrc` decodes, the favicon fades in over it on a light plate (`--favicon-plate`, readable on dark surfaces too). On error, an empty image or no load within 4 s, the globe stays. Loaded and failed sources are remembered for the session, so re-renders never flash or refetch.
+- **Icon slot**: a fixed rounded box (1.125em), `--space-1` from the label (the same gap as a mention). The DS globe shows at once; when `iconSrc` decodes, the favicon fades in over it on a light plate (`--favicon-plate`, readable on dark surfaces too). On error, an empty image or no load within 4 s, the globe stays. Loaded and failed sources are remembered for the session, so re-renders never flash or refetch.
 - **`iconSrc`** must be same-origin (the renderer CSP allows `img-src 'self' data:`): the app's favicon service, never a third-party favicon API. Leave it out for the globe.
-- **Wrapping**: it is inline text, so long titles wrap with the sentence in paragraphs, list items, table cells and headings; long domains break anywhere. A word joiner keeps the icon with the first word.
+- **Wrapping**: it is inline text, so long titles wrap with the sentence in paragraphs, list items, table cells and headings; long domains break anywhere. The icon is glued to the label's first character, so it never ends a line on its own.
 - Hover underlines the label; focus shows the DS focus ring.
 
 In markdown, use `MarkdownLink` with `MarkdownContent faviconSrc` instead of rendering this directly.
