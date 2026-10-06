@@ -1012,6 +1012,7 @@ dependencies = [
  "futures-util",
  "hmac 0.12.1",
  "http",
+ "memchr",
  "parking_lot",
  "regex",
  "reqwest 0.12.28",

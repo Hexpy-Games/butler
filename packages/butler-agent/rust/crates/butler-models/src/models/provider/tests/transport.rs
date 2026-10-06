@@ -46,6 +46,7 @@ pub(super) async fn retry_server(
 
 fn messages() -> [ModelRoundMessage; 1] {
     [ModelRoundMessage {
+        facts: Default::default(),
         role: ModelRoundRole::User,
         content: "hello".into(),
         tool_call_id: None,

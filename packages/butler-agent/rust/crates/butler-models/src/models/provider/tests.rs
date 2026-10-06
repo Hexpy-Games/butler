@@ -237,11 +237,12 @@ async fn sse_decoding_survives_chunk_boundaries() {
 }
 
 async fn hosted_sse_decodes_split_unicode_and_requires_done() {
+    let text = format!("안{}", "history ".repeat(25_000));
     let body = concat!(
-        "data: {\"id\":\"chat-1\",\"model\":\"qwen3.7-max\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"안\"}}]}\n\n",
+        "\u{feff}data: {\"id\":\"chat-1\",\"model\":\"qwen3.7-max\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"안\"}}]}\r\r",
         "data: {\"choices\":[{\"delta\":{\"content\":\"녕\"},\"finish_reason\":\"stop\"}]}\r\n\r\n",
         "data: [DONE]\n\n",
-    ).as_bytes().to_vec();
+    ).replace("\"안\"", &serde_json::to_string(&text).unwrap()).into_bytes();
     let head = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
@@ -251,12 +252,15 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         .position(|value| value == "안".as_bytes())
         .unwrap()
         + 1;
-    let (endpoint, server) = server(vec![
+    let mut chunks = vec![
         head.into_bytes(),
-        body[..split].to_vec(),
-        body[split..].to_vec(),
-    ])
-    .await;
+        body[..1].to_vec(),
+        body[1..2].to_vec(),
+        body[2..split].to_vec(),
+    ];
+    chunks.extend(body[split..body.len() - 3].chunks(1024).map(<[u8]>::to_vec));
+    chunks.extend(body[body.len() - 3..].chunks(1).map(<[u8]>::to_vec));
+    let (endpoint, server) = server(chunks).await;
     let (catalog, snapshot) = catalog();
     let metadata = snapshot
         .find_model_metadata(Some("qwen/qwen3.7-max"))
@@ -276,6 +280,7 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         Arc::new(Metrics),
     );
     let messages = [ModelRoundMessage {
+        facts: Default::default(),
         role: ModelRoundRole::User,
         content: "hello".into(),
         tool_call_id: None,
@@ -299,7 +304,7 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         .await
         .unwrap();
     server.await.unwrap();
-    assert_eq!(result.text.as_deref(), Some("안녕"));
+    assert_eq!(result.text, Some(format!("{text}녕")));
     assert_eq!(
         result.provider_identity.unwrap().reported_model,
         "qwen3.7-max"

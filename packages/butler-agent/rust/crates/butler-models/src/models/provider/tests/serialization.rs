@@ -8,6 +8,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
+        facts: Default::default(),
         role: ModelRoundRole::User,
         content: "hello".into(),
         tool_call_id: None,
@@ -129,6 +130,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
 fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fences() {
     {
         let messages = [ModelRoundMessage {
+            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "find it".into(),
             tool_call_id: None,
@@ -192,6 +194,7 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
     }
     {
         let messages = [ModelRoundMessage {
+            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "explain".into(),
             tool_call_id: None,
@@ -277,6 +280,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     }];
     let messages = [
         ModelRoundMessage {
+            facts: Default::default(),
             role: ModelRoundRole::User,
             content: "hello".into(),
             tool_call_id: None,
@@ -290,6 +294,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
             continuation_item_id: Some("turn-item-0".into()),
         },
         ModelRoundMessage {
+            facts: Default::default(),
             role: ModelRoundRole::Assistant,
             content: "ignored fallback".into(),
             tool_call_id: None,

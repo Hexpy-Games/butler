@@ -406,6 +406,7 @@ impl SummaryPort for RoundSummary<'_> {
 
 fn user_message(content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
+        facts: Default::default(),
         role: butler_turn::btcc::ModelRoundRole::User,
         content: Arc::from(content),
         tool_call_id: None,

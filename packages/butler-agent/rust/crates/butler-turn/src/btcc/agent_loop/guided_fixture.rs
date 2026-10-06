@@ -184,6 +184,7 @@ impl ToolPort for Fixture {
                 .unwrap()
                 .push(references.clone());
             Ok(ModelRoundMessage {
+                facts: Default::default(),
                 role: ModelRoundRole::Tool,
                 content: serde_json::to_string(result).unwrap().into(),
                 tool_call_id: Some(result.tool_call_id.clone()),

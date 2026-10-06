@@ -174,6 +174,8 @@ pub enum ToolCallOrigin {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundMessage {
+    #[serde(skip)]
+    pub facts: super::message_facts::MessageFacts,
     pub role: ModelRoundRole,
     pub content: Arc<str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -203,6 +205,7 @@ impl ModelRoundMessage {
     /// A user message, optionally tagged with the request segment it belongs to.
     pub fn user(content: String, segment: Option<String>) -> Self {
         Self {
+            facts: Default::default(),
             role: ModelRoundRole::User,
             content: content.into(),
             tool_call_id: None,

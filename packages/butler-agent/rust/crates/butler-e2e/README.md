@@ -313,3 +313,39 @@ run `scripts/archive-relocation.sh /tmp/e2e.tar.zst` from the Rust workspace
 (with `BUTLER_E2E_TIER=stub` and `BUTLER_E2E_BIN` naming the built agent).
 It extracts to a new directory, verifies the fixture executable belongs to the
 archive, and runs the unchanged hung-MCP shutdown assertions there.
+
+## Turn overhead at owner scale (PERF-02)
+
+`perf_turn::perf_02_round_overhead_at_large_context` scripts 60 `read_file`
+rounds with distinct 22 KB prose files, then a final answer. It measures the gap
+from the end of each provider reply to arrival of the next complete request,
+excluding synthetic-provider matching and model time. Only samples whose next
+request transcript (`input`, excluding tools and instructions) is at least
+1.4 MB enter the owner-scale p95; it must be below 20 ms.
+Every request must contain the exact results so far, with their call IDs and
+order; the final request carries all 60 files. Final delivery is checked too.
+
+This scenario uses the existing release-branch perf selector and
+`BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`. Run locally with a release agent:
+
+```sh
+BUTLER_E2E_TIER=stub BUTLER_E2E_PERF=1 BUTLER_E2E_SKIP_BUILD=1 \
+BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
+python3 ../../../.github/scripts/isolated.py cargo test -p butler-e2e \
+  --test e2e perf_02_ -- --nocapture --test-threads=1
+```
+
+Linux x86_64 release measurements on 2026-10-06, against main `c54d1b761`:
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Transcript bytes | 1,455,703 | 1,455,703 |
+| Final request bytes | 1,508,906 | 1,508,906 |
+| Owner-scale samples | 3 | 3 |
+| Per-round p50 | 141.9 ms | 148.5 ms |
+| Per-round p95 | 144.9 ms | 150.0 ms |
+
+Both runs passed every history and final-delivery assertion, then failed the
+unchanged 20 ms gate. These two fixes do not meet the overall round budget;
+this paired measurement does not show an end-to-end speedup. The other audit
+items from the closed PR are outside this change.

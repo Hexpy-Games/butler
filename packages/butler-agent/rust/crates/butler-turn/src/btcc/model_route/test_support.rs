@@ -277,6 +277,7 @@ pub(super) fn result(text: &str) -> ModelRoundResult {
 }
 pub(super) fn message(content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
+        facts: Default::default(),
         role: crate::btcc::agent_loop::ModelRoundRole::User,
         content: content.into(),
         tool_call_id: None,
