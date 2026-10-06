@@ -318,6 +318,20 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
         },
     }
 }
+pub(super) fn existing_delegation_output(
+    stored: &crate::btcc::StoredSubsessionDelegation,
+) -> Value {
+    let next = match stored.packet.child_role {
+        ChildRole::Steward => {
+            "Wait for this child's outcome through the delegation flow, or use steer_steward with this relation_id to change its instruction."
+        }
+        ChildRole::Worker => {
+            "Use wait_for_worker, or steer_worker with this relation_id to change its instruction."
+        }
+    };
+    json!({"ok":false,"wait_for_child":true,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id,
+        "error":{"code":"already_delegated","message":format!("This assignment already has a child. {next} Revise the Work/Plan for a new attempt instead of repeating the same delegation.")}})
+}
 pub(super) fn delegation_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
     json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id})
 }

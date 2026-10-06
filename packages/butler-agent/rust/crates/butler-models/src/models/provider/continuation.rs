@@ -37,7 +37,7 @@ pub(super) fn prepare(
             ModelRoundRole::Tool => {
                 tools += 1;
                 (i64::try_from(tools).unwrap_or(i64::MAX) > already_sent_tools).then(|| {
-                    serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":message.content})
+                    serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":super::output_image::response_output(message)})
                 })
             }
             ModelRoundRole::User => {

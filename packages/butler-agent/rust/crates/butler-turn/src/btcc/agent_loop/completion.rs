@@ -34,10 +34,25 @@ pub(super) async fn record_result(
     input: &Invocation<'_>,
     state: &mut State,
     call: &super::contracts::ModelRoundToolCall,
-    result: ToolResult,
+    mut result: ToolResult,
     iteration: u32,
     check: OutcomeCheck,
 ) -> Result<Option<ToolOutcome>, AgentLoopError> {
+    if let Some(error) = &mut result.error {
+        let identity = crate::btcc::identity::stable_json(&serde_json::json!([
+            call.name,
+            call.arguments,
+            error.code,
+            error.field,
+            error.message
+        ]))
+        .map_err(propagated)?;
+        let observation = format!(
+            "Tool failure for {}: {}. Correct the arguments, resolve prerequisites, or choose another available tool. Do not repeat an unchanged failing operation.",
+            call.name, error.message
+        );
+        error.message = state.feedback_for(&identity, &observation);
+    }
     state.tool_results.push(result.clone());
     let operation_call_id = input.policy.operation_result_call_id(&call.id);
     let references = if let Some(runtime) = input.operation_results {

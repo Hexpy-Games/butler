@@ -318,7 +318,7 @@ async fn native_result(
         Err(ToolExecutionError::Integrity(error))
             if super::super::feedback::solvable(error.code()) =>
         {
-            super::super::feedback::result(&error)
+            super::super::feedback::contextual_result(owner, &error).await
         }
         Err(error) => Err(error),
     }

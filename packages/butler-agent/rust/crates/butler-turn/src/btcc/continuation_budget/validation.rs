@@ -143,20 +143,6 @@ pub(super) fn validate_state(
     validate_rounds(&mut state.completed_tool_rounds)?;
     state.consumed_output_bytes = integer(state.consumed_output_bytes)?;
     state.consumed_model_facing_bytes = integer(state.consumed_model_facing_bytes)?;
-    if state.terminal.is_none() && state.consumed_output_bytes > state.limits.max_output_bytes {
-        return Err(BtccError::detected(
-            BtccCode::InvalidContinuationBudgetOutputBound,
-            "invalid_continuation_budget_output_bound",
-        ));
-    }
-    if state.terminal.is_none()
-        && state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes
-    {
-        return Err(BtccError::detected(
-            BtccCode::InvalidContinuationBudgetPromptBound,
-            "invalid_continuation_budget_prompt_bound",
-        ));
-    }
     state.started_at_ms = integer(state.started_at_ms)?;
     state.last_progress_at_ms = integer(state.last_progress_at_ms)?;
     if state.last_progress_at_ms < state.started_at_ms {

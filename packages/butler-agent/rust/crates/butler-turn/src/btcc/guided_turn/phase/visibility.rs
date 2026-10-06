@@ -19,6 +19,7 @@ const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 const NON_FULL: &[&str] = &[
+    "output_check",
     "output_publish",
     "run_command",
     "write_file",
@@ -129,6 +130,7 @@ pub(super) fn legacy_authorized<'a>(
         names.retain(|name| !catalog.project_inspection.contains(name));
     }
     names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
+    names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     apply_role(&mut names, policy);

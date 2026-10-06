@@ -117,6 +117,7 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import {
   APP_RENDERER_ORIGIN,
@@ -2088,6 +2089,11 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+const browserHost = createBrowserHost({
+  fetch: (path, init) => appServerFetch(path, init),
+  adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
+});
+
 let userBrowser;
 async function createWindow() {
   if (
@@ -2104,7 +2110,10 @@ async function createWindow() {
     await launchReconcile;
     await ensureServer();
   }
-  if (!legacyDataBlocked) void loadInitialNativeShellPreferences().catch(() => undefined);
+  if (!legacyDataBlocked) {
+    void loadInitialNativeShellPreferences().catch(() => undefined);
+    browserHost.start();
+  }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
   } else if (!legacyDataBlocked) {
@@ -2767,7 +2776,10 @@ app.on("before-quit", (event) => {
     feedbackReady = quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void Promise.resolve(feedbackReady).then(() => stopServerProcess({ reason: "app_quit" })).then(() => {
+  void Promise.resolve(feedbackReady).then(() => {
+    browserHost.stop();
+    return stopServerProcess({ reason: "app_quit" });
+  }).then(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).

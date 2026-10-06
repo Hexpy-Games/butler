@@ -12,6 +12,9 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
         for (prompt, path) in [
             ("Publish", "site"),
             ("Again", "site"),
+            ("Fix", "site"),
+            ("Checks", "site"),
+            ("Images", "site"),
             ("Traversal", "../escape"),
             ("Symlink", "linked"),
             ("Many", "many"),
@@ -23,7 +26,23 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
                 steps.push(("write_file",json!({"path":"site/index.html","content":"<!doctype html><h1>Output</h1><script src='./app.js'></script>","create_parents":true})));
                 steps.push(("write_file",json!({"path":"site/app.js","content":"localStorage.setItem('output','ready');document.querySelector('h1').textContent='Ready';","create_parents":true})));
             }
-            steps.push(("output_publish", json!({"path":path,"title":if prompt == "Spaced" { "출".repeat(200) } else { "Output".into() }})));
+            if prompt == "Fix" {
+                steps.push(("write_file",json!({"path":"site/index.html","content":"<!doctype html><h1>Fixed</h1>","create_parents":true})));
+            }
+            if prompt == "Checks" || prompt == "Images" {
+                use sha2::{Digest, Sha256};
+                let id = format!("{:x}", Sha256::digest(b"general\0site"));
+                steps.push(("tool_search", json!({"query":"output_check"})));
+                steps.push(("tool_describe", json!({"id":"native:output_check"})));
+                for _ in 0..if prompt == "Images" { 4 } else { 7 } {
+                    steps.push((
+                        "tool_call",
+                        json!({"id":"native:output_check","arguments":{"output_id":id,"include_image":prompt == "Images"}}),
+                    ));
+                }
+            } else {
+                steps.push(("output_publish", json!({"path":path,"title":if prompt == "Spaced" { "출".repeat(200) } else { "Output".into() }})));
+            }
             let mut round = vec!["user".to_owned(); history];
             for (index, (tool, args)) in steps.iter().enumerate() {
                 let mut exchange = template.exchanges[0].clone();

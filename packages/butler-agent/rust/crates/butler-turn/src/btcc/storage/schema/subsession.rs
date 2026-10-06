@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
     'worker_work_incomplete', 'worker_no_progress'
   )),
   summary TEXT NOT NULL,
+  failure_key TEXT,
   acceptance_evidence_json TEXT NOT NULL,
   changed_artifacts_json TEXT NOT NULL,
   changed_files_json TEXT NOT NULL DEFAULT '[]',

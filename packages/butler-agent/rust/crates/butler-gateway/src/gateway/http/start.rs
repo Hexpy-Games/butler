@@ -29,6 +29,7 @@ pub(in crate::gateway) fn serve(
             content_hosts: config.content_hosts.clone(),
         };
         let state = Arc::new(HttpState {
+            browser: super::browser_host::Hub::default(),
             application,
             devices,
             security: security::GatewaySecurity::new(security::SecurityConfig {

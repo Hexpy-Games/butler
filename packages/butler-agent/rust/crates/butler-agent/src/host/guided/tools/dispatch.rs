@@ -60,7 +60,7 @@ pub(super) async fn execute(
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::DelegateToSteward {
-        return steward::execute(owner, invocation, call).await;
+        return Box::pin(steward::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::ListAutomations {
         return list_automations(owner, call).await;
@@ -424,6 +424,7 @@ async fn workspace_tool(
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
     match call.name.as_str() {
+        "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),
         "read_file" | "list_files" | "grep_files" => {
             Some(file_observation::execute(owner, call, call_id).await)

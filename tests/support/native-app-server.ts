@@ -220,7 +220,7 @@ export async function freePort(): Promise<number> {
 }
 
 /** A gateway fixture needs both its API port and adjacent content port. */
-async function freeGatewayPort(): Promise<number> {
+export async function freeGatewayPort(): Promise<number> {
   for (let attempt = 0; attempt < 32; attempt++) {
     const port = 20_000 + 2 * Math.floor(Math.random() * 6_000);
     const sockets = [createNetServer(), createNetServer()];
@@ -281,7 +281,7 @@ async function completeAppOnboarding(url: string, token: string): Promise<void> 
   });
 }
 
-async function startStubModel(
+export async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
   toolReply?: NativeAppServerOptions["stubToolCall"],
