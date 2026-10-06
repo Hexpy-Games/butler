@@ -1,0 +1,29 @@
+{
+  "id": "F05",
+  "targets": [
+    "reject",
+    "task",
+    "dismiss"
+  ],
+  "decoys": [
+    "accept"
+  ],
+  "covered": {
+    "task": "newsletter",
+    "reject": "newsletter"
+  },
+  "success": {
+    "required": [
+      {
+        "target": "reject",
+        "type": "click"
+      },
+      {
+        "target": "task",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 3200
+}

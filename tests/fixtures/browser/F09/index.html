@@ -1,0 +1,9 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>F09</title><link rel="stylesheet" href="/assets/style.css"><body><h1>F09</h1><p>두 편집기에서 B3 = value. 키보드: 방향키로 선택 후 입력·Enter. 마우스: B3 선택 후 value 팔레트 클릭.</p><canvas id="keyboard-grid" width="300" height="240" tabindex="0" aria-label="Keyboard grid"></canvas><canvas id="mouse-grid" width="300" height="240"></canvas><script src="/assets/runtime.js"></script><script>
+for(const id of ["keyboard-grid","mouse-grid"]){
+ const c=document.getElementById(id),ctx=c.getContext("2d");let row=0,col=0,text="",selected=false;
+ function draw(){ctx.clearRect(0,0,300,240);ctx.font="18px Fixture";for(let r=0;r<4;r++)for(let k=0;k<3;k++){ctx.strokeRect(k*90,r*40,90,40);ctx.fillText(String.fromCharCode(65+k)+(r+1),k*90+8,r*40+25);}ctx.fillText("value",10,215);if(text)ctx.fillText(text,95,115);}
+ c.onclick=e=>{const box=c.getBoundingClientRect(),x=e.clientX-box.left,y=e.clientY-box.top;if(y<160){col=Math.floor(x/90);row=Math.floor(y/40);selected=true;}else if(id==="mouse-grid"&&y>=190&&selected&&col===1&&row===2){text="value";record(id,"state","B3="+text);draw();}};
+ if(id==="keyboard-grid")c.onkeydown=e=>{e.preventDefault();if(e.key==="ArrowDown")row=Math.min(3,row+1);else if(e.key==="ArrowRight")col=Math.min(2,col+1);else if(e.key==="Enter"){if(col===1&&row===2)record(id,"state","B3="+text);}else if(e.key.length===1){text+=e.key;draw();}};
+ document.fonts.ready.then(draw);
+}
+</script></body></html>

@@ -1,0 +1,20 @@
+{
+  "id": "F03",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "email"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

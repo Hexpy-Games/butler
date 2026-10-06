@@ -1,0 +1,92 @@
+{
+  "id": "realsite",
+  "layer": "L3",
+  "replay": false,
+  "selectionNote": "§6.6 says 12 but lists 11 flows; split Kakao/Naver Map into two tasks.",
+  "tasks": [
+    {
+      "id": "naver-organic",
+      "task": "Naver search; open second organic result",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "coupang-cheapest",
+      "task": "Coupang search and filters; cheapest non-ad item",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "news-article",
+      "task": "Ad-heavy news site; specific article",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "eu-consent",
+      "task": "EU consent wall; decline then read a fact",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "gov-service",
+      "task": "정부24; service page",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "kakao-map",
+      "task": "Kakao Map canvas; place hours",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "naver-map",
+      "task": "Naver Map canvas; place hours",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "sheets-cell",
+      "task": "Test-account Google Sheet; read and edit one cell",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "github-issue",
+      "task": "GitHub issue search",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "infinite-scroll",
+      "task": "Korean webtoon or shop; Nth item",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "booking-date",
+      "task": "Set exact booking date; stop before confirmation",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    },
+    {
+      "id": "daum-postcode",
+      "task": "Fixture shop; Daum postcode address fill",
+      "source": "report-browser-control-research §6.6",
+      "parameters": "bind explicit query/date/expected answer before execution",
+      "policy": "read-only or stop at confirm card"
+    }
+  ]
+}

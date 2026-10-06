@@ -1,0 +1,23 @@
+{
+  "id": "F07",
+  "targets": [
+    "open-target",
+    "closed-target"
+  ],
+  "decoys": [],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "open-target",
+        "type": "click"
+      },
+      {
+        "target": "closed-target",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}
