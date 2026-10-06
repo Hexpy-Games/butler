@@ -82,7 +82,14 @@ async function launch(): Promise<Page> {
   connected = page;
   await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);
   assert.match(await main<string>("process.versions.electron"), /^44\./u);
-  await main(`(() => {
+  await main(`(async () => {
+    const module=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/browser/tabs.mjs"))});
+    const dummy=module.createUserBrowser({getPath:()=>${JSON.stringify(join(dir, "profile"))},on:()=>{}},()=>null);
+    const prototype=Object.getPrototypeOf(dummy);const snapshot=prototype.snapshot;
+    prototype.snapshot=function(){
+      globalThis.browserDebug={areaVisible:this.areaVisible,nativeCovers:this.nativeCovers,tabs:[...this.tabs.values()].map(t=>({id:t.id,status:t.status,covered:t.covered,bounds:t.bounds,attached:Boolean(t.attached),destroyed:t.view?.webContents.isDestroyed()}))};
+      return snapshot.call(this);
+    };
     globalThis.browserTrace=[];globalThis.quitTrace=[];
     for(const event of ['before-quit','will-quit','quit']) ${electronModule}.app.on(event,(_event,code)=>{globalThis.quitTrace.push({event,code,at:Date.now(),windows:${electronModule}.BrowserWindow.getAllWindows().length,contents:${electronModule}.webContents.getAllWebContents().map(w=>w.getType())});process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(join(evidence!, "quit-events.json"))},JSON.stringify(globalThis.quitTrace))});
     const handlers=${electronModule}.ipcMain._invokeHandlers;
@@ -275,7 +282,7 @@ try {
   const heavyTicks = await main<number>(`${win}.contentView.children.find(v=>'webContents' in v && v.webContents!==${win}.webContents).webContents.executeJavaScript('window.heavyTicks')`);
   assert.ok(heavyTicks > 0, "heavy page actually executes work");
   assert.ok(loop.p99Ms <= 30 && loop.maxMs <= 200, JSON.stringify(loop));
-  if (loadStart > cpus().length) {
+  if (Math.max(loadStart, loadBefore) > cpus().length) {
     const repeatLoad = loadavg()[0];
     await main("(() => {globalThis.browserLoop.reset();globalThis.browserLoop.enable()})()");
     await new Promise(done=>setTimeout(done, 10_000));
@@ -298,8 +305,10 @@ try {
   await click(page, "Reload"); await waitTitle(page, "Second");
   await artifact(page);
   await call(page, "activate", { id:first });
-  const ownedPids = await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`);
-  await idleWrites(main, join(dir, "profile"), evidence, [...new Set([...ownedPids, ...liveTrackedProcessIds()])]);
+  await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
+  await shot(page, "after-artifact-return");
+  const ownedPids = async () => [...new Set([...await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`), ...liveTrackedProcessIds()])];
+  await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch();
@@ -325,13 +334,15 @@ try {
   }
   writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, logs, tabs: (await state(page)).tabs.length }));
 } catch (error) {
+  writeFileSync(join(evidence, "electron-failure.txt"), `${String(error)}\n${logs.join("\n")}`);
   if (gateway) {
     const publication = await gateway.api<{ latest_turn?: { state: string } }>("/session-view?session_id=general").then(view=>({ state:view.latest_turn?.state })).catch(error=>({ error:String(error) }));
     writeFileSync(join(evidence, "publication-failure.json"), JSON.stringify(publication));
   }
-  writeFileSync(join(evidence, "quit-trace.json"), JSON.stringify(await main("globalThis.quitTrace").catch(()=>null)));
+  writeFileSync(join(evidence, "browser-private-debug.json"), JSON.stringify(await main("globalThis.browserDebug").catch(()=>null) ?? null));
+  writeFileSync(join(evidence, "quit-trace.json"), JSON.stringify(await main("globalThis.quitTrace").catch(()=>null) ?? null));
   if (connected) {
-    writeFileSync(join(evidence, "failure-ipc.json"), JSON.stringify(await main("globalThis.browserTrace").catch(()=>null)));
+    writeFileSync(join(evidence, "failure-ipc.json"), JSON.stringify(await main("globalThis.browserTrace").catch(()=>null) ?? null));
     writeFileSync(join(evidence, "failure-dom.json"), JSON.stringify(await connected.expression("({text:document.body.innerText,focus:document.activeElement?.outerHTML,overlays:Array.from(document.querySelectorAll('[data-slot=dialog-overlay],[data-slot=dialog-content],[data-slot=native-view-slot]')).map(e=>({html:e.outerHTML.slice(0,1000),rect:e.getBoundingClientRect().toJSON()}))})").catch(()=>null)));
     await shot(connected, "electron-failure-screen").catch(()=>{});
   }

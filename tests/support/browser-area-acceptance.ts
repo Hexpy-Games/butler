@@ -6,6 +6,7 @@ import { writeFileSync } from "node:fs";
 import type { ElectronPage } from "./electron-page-cdp";
 
 type Main = <T>(expression: string) => Promise<T>;
+type Io = { pid: number; write_bytes: number | null; status: string; process_start?: string; error?: string };
 export async function alignment(page: ElectronPage, main: Main, win: string, evidence: string) {
   const samples: unknown[] = [];
   const rightOpen = await page.expression("Boolean(document.querySelector('button[aria-label=\"Hide right panel\"]'))");
@@ -33,7 +34,7 @@ export async function alignment(page: ElectronPage, main: Main, win: string, evi
 }
 
 /** Change observation plus exact metadata snapshots; no periodic whole-file reads. */
-export async function idleWrites(main: Main, profile: string, evidence: string, pids: number[], repeated = false) {
+export async function idleWrites(main: Main, profile: string, evidence: string, getPids: () => Promise<number[]>, repeated = false) {
   await new Promise(done=>setTimeout(done, 3000));
   await main(`(() => {
     const fs=process.getBuiltinModule('node:fs');
@@ -43,13 +44,17 @@ export async function idleWrites(main: Main, profile: string, evidence: string, 
     globalThis.browserIdle={events:[],before:{size:stat.size,mtime:stat.mtimeMs,content:fs.readFileSync(path,'utf8')}};
     globalThis.browserIdle.watcher=fs.watch(directory,(event,file)=>globalThis.browserIdle.events.push({event,file}));
   })()`);
+  const pids = await getPids();
   const ioBefore = processIo(pids);
+  assert.ok(ioBefore.every(sample=>sample.write_bytes!==null), "all initial process counters available");
+  const ioSamples = [ioBefore];
   const loadStart = loadavg()[0];
   const started = Date.now();
   const loads = [loadStart];
   // Keep this a real ten-minute window; callers may not shorten acceptance.
   for (let minute = 0; minute < 10; minute++) {
     await new Promise(done=>setTimeout(done, 60_000));
+    ioSamples.push(processIo(pids, ioBefore));
     loads.push(loadavg()[0]);
     console.log(`Browser idle ${minute + 1}/10 min; load1m=${loads.at(-1)}`);
   }
@@ -59,16 +64,24 @@ export async function idleWrites(main: Main, profile: string, evidence: string, 
     const idle=globalThis.browserIdle;idle.watcher.close();const stat=fs.statSync(path);
     return {events:idle.events,before:idle.before,after:{size:stat.size,mtime:stat.mtimeMs,content:fs.readFileSync(path,'utf8')}};
   })()`);
-  const ioAfter = processIo(pids);
+  const ioAfter = processIo(pids, ioBefore);
+  ioSamples.push(ioAfter);
+  const deltas = ioBefore.map((before, index) => {
+    const last = ioSamples.map(samples=>samples[index]!).findLast(sample=>sample.write_bytes!==null)!;
+    const after = ioAfter[index]!;
+    return { pid:before.pid, writeBytes:after.write_bytes===null ? null : after.write_bytes-before.write_bytes!,
+      observedWriteBytes:last.write_bytes!-before.write_bytes!, status:after.status, error:after.error };
+  });
   assert.deepEqual(result.events, [], "no browser restore writes during idle");
   assert.deepEqual(result.after, result.before, "complete ordered restore state unchanged");
   const measurement = JSON.stringify({ durationMs: Date.now()-started,
-    loadAverage1m: loadStart, loadAverage1mAfter: loadavg()[0], loadAverage1mSamples: loads, browserRestoreWriteBytes: 0, processWriteBytes: ioAfter.reduce((sum, sample)=>sum+sample.write_bytes, 0)-ioBefore.reduce((sum, sample)=>sum+sample.write_bytes, 0), ioBefore, ioAfter, ...result });
+    loadAverage1m: loadStart, loadAverage1mAfter: loadavg()[0], loadAverage1mSamples: loads, browserRestoreWriteBytes: 0, processWriteBytes: deltas.every(sample=>sample.writeBytes!==null) ? deltas.reduce((sum, sample)=>sum+sample.writeBytes!, 0) : null,
+    processWriteBytesLowerBound: deltas.reduce((sum, sample)=>sum+sample.observedWriteBytes, 0), deltas, ioSamples, ioBefore, ioAfter, ...result });
   writeFileSync(join(evidence, "idle-writes.json"), measurement);
   if (Math.max(...loads) > cpus().length && !repeated) {
     writeFileSync(join(evidence, `idle-writes-high-load-${started}.json`), measurement);
     console.log("Repeating ten-minute idle measurement after high shared-machine load");
-    await idleWrites(main, profile, evidence, pids, true);
+    await idleWrites(main, profile, evidence, getPids, true);
   }
 }
 
@@ -84,12 +97,12 @@ export function publicationStub() {
   };
 }
 
-function processIo(pids: number[]): Array<{ pid: number; write_bytes: number }> {
+function processIo(pids: number[], baseline?: Io[]): Io[] {
   const executable = process.env.BUTLER_PROCESS_USAGE_EXECUTABLE;
   assert.ok(executable, "BUTLER_PROCESS_USAGE_EXECUTABLE must name the platform process-usage example");
-  const result = Bun.spawnSync([executable, ...pids.map(String)]);
+  const result = Bun.spawnSync([executable, ...pids.map((pid, index)=>baseline?.[index]?.process_start ? `${pid}@${baseline[index]!.process_start}` : String(pid))]);
   assert.equal(result.exitCode, 0, result.stderr.toString());
-  const samples = JSON.parse(result.stdout.toString()) as Array<{ pid: number; write_bytes: number }>;
+  const samples = JSON.parse(result.stdout.toString()) as Io[];
   assert.deepEqual(samples.map(sample=>sample.pid), pids, "all owned process counters returned");
   return samples;
 }

@@ -19,7 +19,7 @@ export function BrowserArea() {
   useEffect(() => {
     connectBrowser(); void browserCall("open");
     document.getElementById("butler-browser-area")?.focus();
-    return () => { void browserCall("hide"); };
+    return () => { covering.current += 1; void browserCall("hide"); };
   }, []);
   const groups: TabStripGroup[] = [];
   for (const item of state.tabs) {
@@ -33,6 +33,7 @@ export function BrowserArea() {
     const generation = ++covering.current;
     if (value) {
       const src = await call("still");
+      if (generation !== covering.current) return;
       if (typeof src === "string" && tab) setStill({ id: tab.id, src });
       // The still snapshot is painted before the native view detaches.
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
