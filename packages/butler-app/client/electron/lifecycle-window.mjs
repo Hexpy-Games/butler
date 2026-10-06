@@ -41,7 +41,7 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
     roundedCorners: true, closable: kind !== "quit", title: "Butler",
     backgroundColor: appearance.averageColor ?? manifest.surfaceBase[appearance.theme],
     webPreferences: { preload: join(directory, "lifecycle-preload.cjs"), sandbox: true,
-      contextIsolation: true, nodeIntegration: false, devTools: !app.isPackaged },
+      contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, devTools: !app.isPackaged },
   });
   const updateTitle = () => window.setTitle(copy[state.locale.startsWith("ko") ? "ko" : "en"][kind].title);
   updateTitle();
@@ -54,7 +54,8 @@ export function createLifecycleWindow({ BrowserWindow, kind, bounds, locale, onA
   let fallback;
   const reveal = () => {
     if (shown || window.isDestroyed()) return;
-    shown = true; clearTimeout(fallback); window.show(); onPainted?.(window);
+    shown = true; clearTimeout(fallback); window.show();
+    window.webContents.setBackgroundThrottling(true); onPainted?.(window);
   };
   const surface = { window, state: () => state, action: (action) => onAction?.(action, state),
     painted() { timing(kind === "startup" ? "splash_painted" : "quit_painted"); reveal(); },

@@ -23,6 +23,7 @@ writeFileSync(config, "{invalid config");
 const debugPort = await freePort();
 const env = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort) };
 let application: ElectronApplication | undefined;
+let originalProcess: ReturnType<ElectronApplication["process"]> | undefined;
 let successor: Browser | undefined;
 let successorPid: number | undefined;
 async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<NonNullable<T>> {
@@ -36,11 +37,12 @@ async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<No
 }
 try {
   application = await _electron.launch({ executablePath, args: [...smokeBrowserArgs(), directory], env, timeout: 30_000 });
-  const originalPid = application.process().pid;
+  originalProcess = application.process();
+  const originalPid = originalProcess.pid;
   const splash = await application.firstWindow();
   await splash.getByRole("alert").waitFor();
   const log = splash.getByRole("button", { name: /로그 열기|Open log/u });
-  const retry = splash.getByRole("button", { name: /다시 시도|Retry/u });
+  const retry = splash.getByRole("button", { name: /다시 시도|Try again/u });
   await log.waitFor(); await retry.waitFor();
   await splash.screenshot({ path: join(output, "error.png") });
   await log.click();
@@ -51,10 +53,10 @@ try {
   assert.ok(report.failedStage);
   assert.ok(Array.isArray(report.timings));
   writeFileSync(config, validConfig);
-  const originalExit = new Promise<void>((done) => application!.process().once("exit", () => done()));
+  const originalExit = new Promise<void>((done) => originalProcess!.once("exit", () => done()));
   await retry.click();
   await originalExit;
-  assert.equal(application.process().exitCode, 0);
+  assert.equal(originalProcess.exitCode, 0);
   successorPid = await waitFor(() => {
     try {
       const record = JSON.parse(readFileSync(join(diagnostics, "instance.json"), "utf8"));
@@ -76,6 +78,6 @@ try {
 } finally {
   await successor?.close().catch(() => undefined);
   if (successorPid) { try { process.kill(successorPid, "SIGKILL"); } catch { /* already exited */ } }
-  if (application?.process().exitCode === null) await application.close();
+  if (originalProcess?.exitCode === null) await application?.close();
   fixture.cleanup();
 }

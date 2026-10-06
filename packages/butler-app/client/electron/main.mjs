@@ -2719,12 +2719,13 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   // Visible feedback precedes any I/O. The Agent owns shutdown interruption
   // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
+  let feedbackReady;
   if (app.isReady() && !isMenuBarHelperProcess) {
     quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage, () => bundledAgentSupervisor.diagnostics());
-    quitFeedback.begin(mainWindow);
+    feedbackReady = quitFeedback.begin(mainWindow);
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void stopServerProcess({ reason: "app_quit" }).then(() => {
+  void Promise.resolve(feedbackReady).then(() => stopServerProcess({ reason: "app_quit" })).then(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).

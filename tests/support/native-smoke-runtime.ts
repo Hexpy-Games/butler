@@ -11,7 +11,7 @@ export async function nativeSmokeRuntime(entry: string): Promise<number | null> 
   const temporary = mkdtempSync(join(resolve(".tmp"), "native-smoke-"));
   try {
     const output = join(temporary, "smoke.mjs");
-    const build = await Bun.build({ entrypoints: [fileURLToPath(entry)], target: "node", format: "esm", packages: "external" });
+    const build = await Bun.build({ entrypoints: [fileURLToPath(entry)], target: "node", format: "esm", packages: "external", external: ["node:sqlite"] });
     if (!build.success) throw new Error(build.logs.join("\n"));
     await Bun.write(output, build.outputs[0]!);
     const child = spawn("node", [output, ...process.argv.slice(2)], { stdio: "inherit", env: process.env });

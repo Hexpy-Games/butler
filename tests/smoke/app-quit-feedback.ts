@@ -4,7 +4,6 @@
 import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { DatabaseSync as Database } from "node:sqlite";
 import { _electron, type ElectronApplication } from "playwright";
 import { quitFixture } from "./app-quit-fixture.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser-args.ts";
@@ -13,6 +12,7 @@ import { quitPhaseReport } from "./quit-phase-report.ts";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
 const nativeExitCode = await nativeSmokeRuntime(import.meta.url);
 if (nativeExitCode !== null) process.exit(nativeExitCode);
+const { DatabaseSync: Database } = await import("node:sqlite");
 
 const baseline = process.argv.includes("--baseline");
 const blocked = process.argv.includes("--blocked");
@@ -89,6 +89,8 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
   await released;
   assert.equal(process.exitCode, 0);
   const total = performance.now() - started;
+  console.log(JSON.stringify({ scenario: baseline ? "before" : "after", blocked: holdStorage, quit_to_exit_ms: total, ...timing }));
+  console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
   if (!baseline) {
     assert(timing.hidden_ms >= 0 && timing.hidden_ms <= 200, JSON.stringify(timing));
     assert(timing.feedback_ms >= 0 && timing.feedback_ms <= 200, JSON.stringify(timing));
@@ -98,8 +100,6 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
     assert.equal(fixture.lastExit().process_tree_dead, true);
     if (holdStorage) assert(/평소보다 오래|longer than usual/u.test(slowStatus), slowStatus);
   }
-  console.log(JSON.stringify({ scenario: baseline ? "before" : "after", blocked: holdStorage, quit_to_exit_ms: total, ...timing }));
-  console.log(JSON.stringify({ phases: quitPhaseReport(phaseLog) }));
 }
 
 try {

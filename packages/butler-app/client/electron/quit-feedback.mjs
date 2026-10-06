@@ -6,8 +6,9 @@ export const QUIT_BUDGET_MS = 15_000;
 export function createQuitFeedback(BrowserWindow, language = "en", diagnostics = () => ({})) {
   let surface;
   let started;
+  let paintResolve;
+  const firstPaint = new Promise((resolve) => { paintResolve = resolve; });
   let timer;
-  let hideTimer;
   let stageTimer;
   let shown = false;
   let displayedAt = 0;
@@ -23,18 +24,19 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
   };
   return {
     begin(mainWindow) {
-      if (started !== undefined) return;
+      if (started !== undefined) return firstPaint;
       started = performance.now(); startupTiming("quit_start");
       const hideMain = () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); trace("main_hidden", started); };
+      hideMain();
       surface = createLifecycleWindow({ BrowserWindow, kind: "quit", locale: language,
         bounds: mainWindow?.getBounds(), timing: startupTiming,
         onPainted() { shown = true; displayedAt = performance.now(); displayedStage = state.stage;
-          clearTimeout(hideTimer); trace("window_shown", started); startupTiming("quit_shown"); hideMain(); },
+          trace("window_shown", started); startupTiming("quit_shown"); paintResolve(); },
         onAction(action) { if (action === "log") return openLifecycleLog(state, startupTimings(), diagnostics()); },
       });
-      hideTimer = setTimeout(hideMain, 300);
       timer = setTimeout(() => { clearTimeout(stageTimer); state.state = "timeout"; surface.update(state);
         displayedAt = performance.now(); displayedStage = state.stage; trace("budget_exceeded", started); }, QUIT_BUDGET_MS);
+      return firstPaint;
     },
     phase(phase, edge = "event") {
       if (!surface) return;
@@ -53,7 +55,7 @@ export function createQuitFeedback(BrowserWindow, language = "en", diagnostics =
       publish();
     },
     failed() { clearTimeout(timer); clearTimeout(stageTimer); state.state = "failed"; surface?.update(state); },
-    destroy() { clearTimeout(timer); clearTimeout(hideTimer); clearTimeout(stageTimer); surface?.destroy(); startupTiming("quit_end"); },
+    destroy() { clearTimeout(timer); clearTimeout(stageTimer); surface?.destroy(); startupTiming("quit_end"); },
   };
 }
 function trace(phase, started) {
