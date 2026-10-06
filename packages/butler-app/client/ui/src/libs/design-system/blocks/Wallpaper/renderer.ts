@@ -7,21 +7,11 @@ import { wallpaperParamUniforms } from "./glsl";
 import { WALLPAPER_IMAGE_MODULE } from "./modules";
 import { BUILTIN_WALLPAPERS, defaultWallpaperModule, type WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
+import { clearTransparent, wallpaperContextAttributes } from "./glContext";
 import { isSoftwareWallpaperRenderer, wallpaperRendererName, wallpaperSoftwareFallbackAllowed } from "./softwareGl";
 import { resolveWallpaperValues } from "./values";
 
 export type { WallpaperDrawFrame } from "./glDraw";
-
-const CONTEXT_ATTRIBUTES: WebGLContextAttributes = {
-  alpha: false,
-  antialias: false,
-  depth: false,
-  stencil: false,
-  desynchronized: true,
-  // No copy per frame: the crossfade repaints the frame right before it snapshots it.
-  preserveDrawingBuffer: false,
-  powerPreference: "low-power",
-};
 
 export interface WallpaperRenderer {
   /** Picks the scene's programs (linked once per module source) and its uniform values. */
@@ -52,11 +42,22 @@ export interface WallpaperRenderer {
   dispose(): void;
 }
 
+export interface WallpaperRendererOptions {
+  onError: (error: WallpaperError) => void;
+  fallback?: WallpaperModule;
+  /**
+   * A see-through canvas for `transparent` modules, fixed for the canvas's
+   * life (context attributes cannot change). A module that fails to link
+   * there draws nothing instead of the opaque fallback.
+   */
+  transparent?: boolean;
+}
+
 export function createWallpaperRenderer(
   canvas: HTMLCanvasElement,
-  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS) }: { onError: (error: WallpaperError) => void; fallback?: WallpaperModule },
+  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS), transparent = false }: WallpaperRendererOptions,
 ): WallpaperRenderer | null {
-  const gl = canvas.getContext("webgl2", CONTEXT_ATTRIBUTES) as WebGL2RenderingContext | null;
+  const gl = canvas.getContext("webgl2", wallpaperContextAttributes(transparent)) as WebGL2RenderingContext | null;
   if (!gl) return null;
   const software = isSoftwareWallpaperRenderer(wallpaperRendererName(gl)) && wallpaperSoftwareFallbackAllowed();
   let resources = createWallpaperResources(gl);
@@ -77,6 +78,12 @@ export function createWallpaperRenderer(
     let result = first.result;
     if (!result.ok) {
       if (first.fresh) onError({ reason: result.stage, module: module.manifest.id, message: result.log });
+      // A see-through canvas never shows an opaque stand-in: it stays empty.
+      if (transparent) {
+        revision += 1;
+        active = null;
+        return;
+      }
       // A broken filter falls back to the plain image; a broken live module to the default.
       module = image ? WALLPAPER_IMAGE_MODULE : fallback;
       values = resolveWallpaperValues(module.manifest, {}, tone);
@@ -99,18 +106,22 @@ export function createWallpaperRenderer(
     setImage: (asset, variant, bitmap) => resources.images.upload(asset, variant, bitmap),
     imageVariant: (asset) => resources.images.get(asset)?.variant ?? null,
     retainImages: (assets) => resources.images.retain(assets),
-    motion: () => active?.module.manifest.motion ?? scene?.module.manifest.motion ?? "static",
+    // An empty transparent canvas (its module failed) holds still rather than clearing 20 times a second.
+    motion: () => active?.module.manifest.motion ?? (transparent ? "static" : scene?.module.manifest.motion ?? "static"),
     pixelRatio: () => active?.module.manifest.pixelRatio ?? "default",
     drawnModule: () => active?.module.manifest.id ?? null,
     softwareRendering: () => software,
     usesDayPhase: () => uses("usesDayPhase"),
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {
-      if (!active) return;
+      if (!active && !transparent) return;
       if (canvas.width !== frame.width) canvas.width = frame.width;
       if (canvas.height !== frame.height) canvas.height = frame.height;
-      drawWallpaperScene(gl, resources, active, frame);
-      signalWallpaperPaint(canvas, active.module.manifest.id, active.dark ? "dark" : "light");
+      if (transparent) clearTransparent(gl, frame);
+      if (active) {
+        drawWallpaperScene(gl, resources, active, frame);
+        signalWallpaperPaint(canvas, active.module.manifest.id, active.dark ? "dark" : "light");
+      }
     },
     restore() {
       resources = createWallpaperResources(gl);

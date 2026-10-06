@@ -39,7 +39,7 @@ try {
       const { renderWallpaperStill } = await import(/* @vite-ignore */ stillPath);
       const results = [];
       for (const module of BUILTIN_WALLPAPERS.list()) {
-        if (module.manifest.image === "required" && !module.defaultImage) continue;
+        if ((module.manifest.image === "required" && !module.defaultImage) || module.manifest.decoration) continue;
         const size = { width: 320, height: 200 };
         const blob = await renderWallpaperStill(module, size, tone);
         const bytes = await blob.arrayBuffer();

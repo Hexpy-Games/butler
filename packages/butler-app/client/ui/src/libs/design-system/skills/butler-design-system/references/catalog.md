@@ -254,6 +254,7 @@
 | Any region that scrolls inside a fixed height or width | `ScrollArea` |  |
 | Any select whose list needs search | `FilteredSelectPopover` |  |
 | Any visible text in product UI | `Typo` |  |
+| Art on a card (a decoration module such as butler.cherry-blossom): its transparent canvas leaves the glass visible | `Wallpaper` |  |
 | Artifacts attached to an assistant message | `ArtifactList` |  |
 | Artifacts in the inspector | `DocumentTile` | `ArtifactList` |
 | Artifacts in the inspector | `DocumentTile` |  |
@@ -1397,6 +1398,7 @@ The app wallpaper: a live WebGL2 shader module (built-in bloom and silk, or a us
 - Use for: Behind a whole screen (new chat, setup wizard) with the default viewport scope
 - Use for: Behind a content area such as a dashboard with scope="container"
 - Use for: Whenever the background comes from settings or an agent as a WallpaperSource
+- Use for: Art on a card (a decoration module such as butler.cherry-blossom): its transparent canvas leaves the glass visible
 - Not for: A translucent surface over the wallpaper → `TintedGlass`
 - Not for: Letting the user choose a wallpaper → `WallpaperPicker`
 - Not for: The new-chat prompt screen (pass its wallpaper prop instead) → `PromptSuggestionList`

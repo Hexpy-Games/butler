@@ -1,11 +1,25 @@
+/* Rows: the notice, then the card; edge layers share the card's row so they
+   anchor to the form's top. */
 .wrap {
   position: relative;
+  display: grid;
+  grid-template-areas:
+    "notice"
+    "card";
+  grid-template-columns: minmax(0, 1fr);
   container-name: composer;
   container-type: inline-size;
   width: min(100%, var(--conversation-content-width, 760px));
   max-width: 920px;
   margin: 0 auto;
   transition: translate var(--motion-base) var(--motion-ease-standard);
+}
+
+/* An edge character rises above the card: the wrap reserves that room on top,
+   so whatever measures the wrap (the conversation's composer reserve) counts it.
+   A floating wrap grows upward; the card stays put. */
+.wrap[data-edge-reserve] {
+  padding-top: var(--composer-edge-reserve, 0);
 }
 
 .floating {
@@ -26,6 +40,7 @@
 }
 
 .notice {
+  grid-area: notice;
   margin-bottom: var(--space-sm);
   pointer-events: auto;
 }
@@ -46,7 +61,10 @@
   --composer-inner-padding-block: var(--space-3);
   --composer-inner-padding-inline: var(--space-4);
 
+  position: relative;
+  isolation: isolate;
   display: grid;
+  grid-area: card;
   width: 100%;
   border-radius: var(--adaptive-composer-radius);
   pointer-events: auto;
@@ -58,6 +76,27 @@
     0 0 0 3px var(--ring),
     var(--tinted-glass-shadow),
     inset 0 1px 0 var(--tinted-glass-highlight);
+}
+
+/* The decoration slot: fills the card, clipped by its radius, above the glass
+   fill and below every editor and toolbar node. No scrim. */
+.background {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Edge layers: a zero-height strip on the form's top edge. The one before the
+   form paints under the card, the one after it over the top edge. */
+.edge {
+  position: relative;
+  grid-area: card;
+  align-self: start;
+  height: 0;
+  pointer-events: none;
 }
 
 /* Height and opacity reveal come from the DS Collapsible (keepMounted). */
@@ -106,6 +145,18 @@
   overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Decorated cards (art in the top padding): the caret and scrollIntoView keep
+   a line inside the content box, and while the draft is scrolled the editor is
+   clipped at the top of its content box, so a scrolled line never passes
+   through the art. At scrollTop 0 nothing is in the padding: no visible change. */
+.card[data-decorated] .editor .textarea {
+  scroll-padding-top: var(--composer-inner-padding-block);
+}
+
+.card[data-draft-scrolled="true"] .editor .textarea {
+  clip-path: inset(var(--composer-inner-padding-block) 0 0 0);
 }
 
 .editor .textarea p {

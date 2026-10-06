@@ -21,8 +21,8 @@ export type { WallpaperEngine, WallpaperEngineOptions } from "./engineTypes";
  * (reported through onError).
  */
 export function createWallpaperEngine(canvas: HTMLCanvasElement, options: WallpaperEngineOptions): WallpaperEngine | null {
-  const { onError } = options;
-  const renderer = createWallpaperRenderer(canvas, { onError });
+  const { onError, transparent } = options;
+  const renderer = createWallpaperRenderer(canvas, { onError, transparent });
   if (!renderer) {
     resetWallpaperPaint(canvas, "unsupported");
     onError({ reason: "unsupported", module: "", message: "WebGL2 is unavailable" });

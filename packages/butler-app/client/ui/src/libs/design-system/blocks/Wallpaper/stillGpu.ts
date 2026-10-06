@@ -1,29 +1,12 @@
-// The one offscreen WebGL2 context behind every wallpaper still (picker thumbnails) and module check.
+// Wallpaper stills (picker thumbnails) and module checks, drawn on the shared offscreen contexts (stillContext).
 import { linkWallpaperModule, type WallpaperModuleProgramsResult } from "./glModule";
-import { createWallpaperResources, type WallpaperGpuResources } from "./glResources";
 import { drawWallpaperScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
 import { loadWallpaperImageBytes } from "./imageCache";
+import { clearTransparentStill, stillGpu as gpu, stillModeOf as modeOf, type StillCanvas, type StillGpu } from "./stillContext";
 import { resolveWallpaperValues } from "./values";
 import type { WallpaperImageScene, WallpaperScene } from "./registry";
 import type { WallpaperImageLoader, WallpaperModule } from "./types";
-
-type StillCanvas = OffscreenCanvas | HTMLCanvasElement;
-
-interface StillGpu {
-  canvas: StillCanvas;
-  gl: WebGL2RenderingContext;
-  resources: WallpaperGpuResources;
-}
-
-const ATTRIBUTES: WebGLContextAttributes = {
-  alpha: false,
-  antialias: false,
-  depth: false,
-  stencil: false,
-  preserveDrawingBuffer: true,
-  powerPreference: "low-power",
-};
 
 // A still is one moment: the module's still clock, midday and a fixed seed keep it stable across renders.
 const STILL_FRAME = { pixelRatio: 1, dayPhase: 0.5, seed: 0.5 };
@@ -41,22 +24,7 @@ const PROBE_SIZE = 32;
 
 const NO_LOADER: WallpaperImageLoader = () => Promise.reject(new Error("Stills draw module default images only"));
 
-let shared: StillGpu | null = null;
 let revision = 0;
-
-function createCanvas(): StillCanvas | null {
-  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(1, 1);
-  return typeof document === "undefined" ? null : document.createElement("canvas");
-}
-
-/** The shared context, created on first use and again after a context loss. Wallpaper instances never dispose it. */
-function gpu(): StillGpu | null {
-  if (shared && !shared.gl.isContextLost()) return shared;
-  const canvas = createCanvas();
-  const gl = (canvas?.getContext("webgl2", ATTRIBUTES) ?? null) as WebGL2RenderingContext | null;
-  shared = canvas && gl ? { canvas, gl, resources: createWallpaperResources(gl) } : null;
-  return shared;
-}
 
 function encode(canvas: StillCanvas): Promise<Blob> {
   if ("convertToBlob" in canvas) return canvas.convertToBlob({ type: "image/png" });
@@ -88,7 +56,7 @@ function linked({ resources }: StillGpu, module: WallpaperModule): WallpaperModu
  * source; its stills reuse the programs). Null when WebGL2 is unavailable.
  */
 export function compileWallpaperStillProgram(module: WallpaperModule): WallpaperModuleProgramsResult | null {
-  const context = gpu();
+  const context = gpu(modeOf(module));
   return context ? linked(context, module) : null;
 }
 
@@ -103,7 +71,8 @@ export function hasWallpaperStillGpu(): boolean {
  * does so here, inside the module's check, not first on the wallpaper.
  */
 export function probeWallpaperStillDraw(module: WallpaperModule): void {
-  const context = gpu();
+  const mode = modeOf(module);
+  const context = gpu(mode);
   if (!context) return;
   const result = linked(context, module);
   if (!result.ok) return;
@@ -113,6 +82,7 @@ export function probeWallpaperStillDraw(module: WallpaperModule): void {
   const uniforms = wallpaperParamUniforms(module.manifest, resolveWallpaperValues(module.manifest, {}, "light"));
   revision += 1;
   const drawn = { compiled: result.base, overlay: result.overlay, module, uniforms, dark: false, image: null, revision };
+  clearTransparentStill(context, mode, canvas);
   drawWallpaperScene(gl, resources, drawn, { width: PROBE_SIZE, height: PROBE_SIZE, ...STILL_FRAME, timeMs: 0 });
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 }
@@ -137,9 +107,10 @@ async function ensureImage(image: WallpaperImageScene): Promise<void> {
  * two-pass module draws its base and overlay at its still clock.
  */
 export async function drawWallpaperStill(scene: WallpaperScene, size: { width: number; height: number }): Promise<Blob> {
-  if (!gpu()) throw new Error("WebGL2 is unavailable");
+  const mode = modeOf(scene.module);
+  if (!gpu(mode)) throw new Error("WebGL2 is unavailable");
   if (scene.image) await ensureImage(scene.image);
-  const context = gpu();
+  const context = gpu(mode);
   if (!context) throw new Error("WebGL2 is unavailable");
   const { canvas, gl, resources } = context;
   const screen = { width: Math.max(size.width, STILL_SCREEN_WIDTH), height: Math.max(size.height, Math.round((STILL_SCREEN_WIDTH * size.height) / size.width)) };
@@ -150,6 +121,7 @@ export async function drawWallpaperStill(scene: WallpaperScene, size: { width: n
   const uniforms = wallpaperParamUniforms(scene.module.manifest, scene.values);
   revision += 1;
   const drawn = { compiled: result.base, overlay: result.overlay, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
+  clearTransparentStill(context, mode, screen);
   drawWallpaperScene(gl, resources, drawn, { ...screen, ...STILL_FRAME, timeMs: (scene.module.stillTime ?? 0) * 1000 });
   return encodeScaled(canvas, size);
 }
