@@ -31,8 +31,14 @@ async function waitForOutput(server: NativeAppServerHandle): Promise<{ id: strin
 async function openViewer(page: Page, server: NativeAppServerHandle) {
   await page.goto(server.url, { waitUntil:"commit" });
   const general = page.locator('[data-test-class="app-sidebar"]').getByText(appCopy.space.general, { exact: true });
-  if (page.viewportSize()!.width === 390) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact:true }).click();
-  await general.click();
+  const showSidebar = page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true });
+  await showSidebar.or(page.getByRole("button", { name:appCopy.titlebar.hideLeftPanel, exact:true })).waitFor();
+  if (await showSidebar.isVisible()) await showSidebar.click();
+  try { await general.click(); } catch (error) {
+    await capture(page, "failed-sidebar");
+    console.log("Sidebar was not ready at the unchanged deadline.");
+    throw error;
+  }
   const chip = page.locator('[data-test-class="message-artifact-list"]').getByText("Output", { exact: true }).first();
   try { await chip.waitFor(); } catch (error) {
     await capture(page, "failed-viewer");
@@ -81,12 +87,46 @@ async function remoteClients(server: NativeAppServerHandle, language: string, ad
     await server.api("/settings", { method:"PATCH", headers:adminHeaders, body:JSON.stringify({ security:{ remote_access_enabled:true, allowed_hosts:[proxy.apiHost], content_hosts:[proxy.contentHost] } }) });
     await openViewer(tunnel, { ...server, url:`https://${proxy.apiHost}/` });
     await capture(tunnel, `tunnel-${language}-390`);
-  } finally { await tunnel.close(); proxy.stop(); }
+  } finally { try { await tunnel.close(); } finally { proxy.stop(); } }
 
 }
 async function capture(page: Page, name: string) {
   await page.evaluate(() => document.fonts.ready);
   if (screenshots) await page.screenshot({ path: resolve(screenshots, `${baseline ? "before" : "after"}-${name}.png`) });
+}
+
+async function captureCell(server: NativeAppServerHandle, secret: string, language: string, width: number, theme: string, wallpaper: boolean) {
+  await server.api("/settings", { method:"PATCH", body:JSON.stringify({ appearance_theme:theme, wallpaper:{ source:wallpaper ? { kind:"live", module:"butler.bloom", params:{ colors:"monochrome" } } : { kind:"none" } } }) });
+  // Each visual cell owns fresh client state; Settings navigation is not carried
+  // into a later locale/theme/viewport cell.
+  const page = await browser.newPage({ viewport:{ width, height:1000 }, reducedMotion:"reduce" });
+  try {
+    await server.signIn(page);
+    await page.route(`${server.url}**`, async route => {
+      const path = new URL(route.request().url()).pathname;
+      const headers = path.startsWith("/security") || path === "/settings" ? { ...server.authHeaders, "x-butler-admin":secret } : server.authHeaders;
+      await route.continue({ headers:{ ...route.request().headers(), ...headers } });
+    });
+
+    await openViewer(page, server);
+    if (!baseline && width === 1440 && theme === "light" && !wallpaper) {
+      await page.getByRole("combobox", { name:appCopy.artifacts.revision }).selectOption("1");
+      await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("heading", { name:"Ready", exact:true }).waitFor();
+      await page.getByRole("button", { name:appCopy.artifacts.reload, exact:true }).click();
+      await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("heading", { name:"Ready", exact:true }).waitFor();
+      await page.getByRole("combobox", { name:appCopy.artifacts.revision }).selectOption("2");
+    }
+    await capture(page, `viewer-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);
+    if (width === 390) {
+      await page.locator('[data-test-class="right-panel-overlay-close"]').click();
+      await page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true }).click();
+    }
+    await page.getByRole("button", { name:appCopy.sidebar.settings, exact:true }).click();
+    await page.getByRole("button", { name:appCopy.settings.sections.security, exact:true }).click();
+    try { await page.locator('[data-test-class="settings-security-advanced"]').click(); } catch (error) { await capture(page,"failed-settings"); throw error; }
+    if (!baseline) await page.getByText(appCopy.settings.security.contentHosts, { exact:true }).waitFor();
+    await capture(page, `settings-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);
+  } finally { await page.close(); }
 }
 
 async function electronClient(server: NativeAppServerHandle, language: string) {
@@ -169,36 +209,9 @@ try {
       }
       const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
       if (!electronOnly) {
-      const page = await browser.newPage({ viewport: { width:1440, height:1000 }, reducedMotion:"reduce" });
-      await server.signIn(page);
-      await page.route(`${server.url}**`, async route => {
-        const path = new URL(route.request().url()).pathname;
-        const headers = path.startsWith("/security") || path === "/settings" ? { ...server.authHeaders, "x-butler-admin":secret } : server.authHeaders;
-        await route.continue({ headers:{ ...route.request().headers(), ...headers } });
-      });
-      for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
-        await server.api("/settings", { method:"PATCH", body:JSON.stringify({ appearance_theme:theme, wallpaper:{ source:wallpaper ? { kind:"live", module:"butler.bloom", params:{ colors:"monochrome" } } : { kind:"none" } } }) });
-        await page.setViewportSize({ width, height:1000 });
-        await openViewer(page, server);
-        if (!baseline && width === 1440 && theme === "light" && !wallpaper) {
-          await page.getByRole("combobox", { name:appCopy.artifacts.revision }).selectOption("1");
-          await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("heading", { name:"Ready", exact:true }).waitFor();
-          await page.getByRole("button", { name:appCopy.artifacts.reload, exact:true }).click();
-          await page.frameLocator('[data-test-class="artifact-viewer"] iframe').getByRole("heading", { name:"Ready", exact:true }).waitFor();
-          await page.getByRole("combobox", { name:appCopy.artifacts.revision }).selectOption("2");
+        for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
+          await captureCell(server, secret, language, width, theme, wallpaper);
         }
-        await capture(page, `viewer-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);
-        if (width === 390) {
-          await page.locator('[data-test-class="right-panel-overlay-close"]').click();
-          await page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true }).click();
-        }
-        await page.getByRole("button", { name:appCopy.sidebar.settings, exact:true }).click();
-        await page.getByRole("button", { name:appCopy.settings.sections.security, exact:true }).click();
-        await page.locator('[data-test-class="settings-security-advanced"]').click();
-        if (!baseline) await page.getByText(appCopy.settings.security.contentHosts, { exact:true }).waitFor();
-        await capture(page, `settings-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);
-      }
-      await page.close();
       }
       if (!baseline) await electronClient(server, language);
       if (!baseline && !electronOnly) await remoteClients(server, language, { ...server.authHeaders, "x-butler-admin":secret });

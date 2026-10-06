@@ -44,24 +44,41 @@ fn open_components(root: &Path, relative: &Path) -> io::Result<File> {
 }
 #[cfg(windows)]
 fn open_components(root: &Path, relative: &Path) -> io::Result<File> {
+    // Hold every ancestor without write/delete sharing until the final file
+    // is open. Windows file IDs are unavailable; metadata comparisons cannot
+    // fence a parent swap. OPEN_REPARSE_POINT inspects the entry itself.
+    let mut guards = Vec::new();
+    for parent in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
+        guards.push(windows_guard(parent, true)?);
+    }
     let mut path = root.to_path_buf();
-    let mut parents = Vec::new();
-    for component in relative.components() {
+    let mut components = relative.components().peekable();
+    while let Some(component) = components.next() {
         path.push(component);
-        let metadata = std::fs::symlink_metadata(&path)?;
-        if metadata.file_type().is_symlink() {
-            return Err(io::Error::other("output_symlink_refused"));
+        let directory = components.peek().is_some();
+        let file = windows_guard(&path, directory)?;
+        if !directory {
+            return Ok(file);
         }
-        parents.push((path.clone(), super::identity(&metadata)));
+        guards.push(file);
     }
-    let file = super::open_read_no_follow(&path)?;
-    if !file.metadata()?.is_file() {
+    Err(io::Error::other("unsafe_output_path"))
+}
+#[cfg(windows)]
+fn windows_guard(path: &Path, directory: bool) -> io::Result<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).share_mode(1).custom_flags(0x0220_0000);
+    if directory {
+        options.access_mode(0);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if metadata.file_attributes() & 0x400 != 0
+        || (directory && !metadata.is_dir())
+        || (!directory && !metadata.is_file())
+    {
         return Err(io::Error::other("output_regular_files_only"));
-    }
-    for (path, before) in parents {
-        if super::identity(&std::fs::symlink_metadata(path)?) != before {
-            return Err(io::Error::other("output_path_changed"));
-        }
     }
     Ok(file)
 }
