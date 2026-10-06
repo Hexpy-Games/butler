@@ -58,9 +58,9 @@ async fn favicon_endpoint_rejects_unsafe_hosts_and_serves_immutable_cache()
         "example.com:443",
         "example.com@evil.com",
         "127.0.0.1",
-        "10.0.0.1",
-        "172.16.0.1",
-        "192.168.0.1",
+        "10.0.0.1",    // privacy-hygiene: allow-private-ip (unsafe-host classification)
+        "172.16.0.1",  // privacy-hygiene: allow-private-ip (unsafe-host classification)
+        "192.168.0.1", // privacy-hygiene: allow-private-ip (unsafe-host classification)
         "169.254.169.254",
         "100.64.0.1",
         "224.0.0.1",
