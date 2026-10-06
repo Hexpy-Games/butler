@@ -99,31 +99,21 @@ async fn synthesize_answer(
     Ok((!synthesized.trim().is_empty()).then_some(synthesized))
 }
 
-/// Every automatic answer correction has a durable transcript reason and a bound.
+/// Corrections are observations, never authority to stop the actor.
 pub(super) async fn continue_answer(
     input: &Invocation<'_>,
     state: &mut State,
     prepared: &PreparedPolicy,
     reason: &str,
 ) -> Result<Step, AgentLoopError> {
-    const MAX_AUTOMATIC_CONTINUATIONS: u32 = 3;
     reject_round_text(prepared);
-    if state.automatic_continuations >= MAX_AUTOMATIC_CONTINUATIONS {
-        return finish_limit(
-            input,
-            state,
-            "the automatic continuation limit was reached before a final answer",
-        )
-        .await
-        .map(Step::finished);
-    }
-    state.automatic_continuations += 1;
+    state.automatic_continuations = state.automatic_continuations.saturating_add(1);
     // A report correction cannot reopen settled execution. Explicit user
     // steering reopens it through append_observations instead.
     record_continuation(input, state, "turn.continuation.requested", reason).await;
     let observation = state.feedback(reason);
     state.messages.push(ModelRoundMessage::user(
-        format!("{observation}\nAutomatic continuation {}/{}: the turn has no accepted final answer yet.", state.automatic_continuations, MAX_AUTOMATIC_CONTINUATIONS),
+        observation,
         Some("automatic_continuation".into()),
     ));
     Ok(Step::Continue)
@@ -136,11 +126,8 @@ pub(super) async fn finish_limit(
     reason: &str,
 ) -> Result<AgentLoopResult, AgentLoopError> {
     record_continuation(input, state, "turn.continuation.limit_reached", reason).await;
-    let content = format!(
-        "I could not complete this request: {reason}. This is a limit status, not a completed result. Recorded {} tool results; the request may still have unfinished work.",
-        state.tool_results.len(),
-    );
-    let mut result = finish(input, state, Ending::Answer(&content)).await?;
+    let content = "The required input cannot fit the model context. Reduce the required attachments or split the request into smaller parts so I can continue.";
+    let mut result = finish(input, state, Ending::Answer(content)).await?;
     result.terminal_outcome = Some(crate::btcc::TerminalOutcome::Failed);
     Ok(result)
 }

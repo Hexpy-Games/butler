@@ -210,7 +210,16 @@ impl SubsessionService {
         let identity = packets::steward_identity(&request, reviewed, (plan, review));
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
-            return Ok(delegation_output(&existing));
+            if self
+                .repository
+                .result_for_relation(existing.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .is_some()
+            {
+                return self.closed_feedback(&existing).await;
+            }
+            return Ok(helpers::existing_delegation_output(&existing));
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();

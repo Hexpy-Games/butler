@@ -33,6 +33,8 @@ pub struct AuthorityLoopContinuation {
     /// A Stop hook previously requested continuation in this turn.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub stop_hook_active: bool,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub feedback_counts: std::collections::BTreeMap<String, u64>,
     pub tool_results: Vec<ToolResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub presentation: Option<GuidedPresentation>,
@@ -59,6 +61,7 @@ impl AuthorityLoopContinuation {
             empty_response_recovery_used: false,
             automatic_continuations: 0,
             stop_hook_active: false,
+            feedback_counts: Default::default(),
             tool_results: Vec::new(),
             presentation: None,
             batch: AuthorityBatch::default(),

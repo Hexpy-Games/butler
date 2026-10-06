@@ -96,7 +96,7 @@ impl State {
             empty_recovery_used: restored.empty_response_recovery_used,
             automatic_continuations: restored.automatic_continuations,
             stop_hook_active: restored.stop_hook_active,
-            feedback_counts: BTreeMap::new(),
+            feedback_counts: restored.feedback_counts,
             phase: LoopPhase::Working,
             resumed_batch: Some(restored.batch),
             resumed_call: prepared.resumed_tool_call.take(),
@@ -107,7 +107,11 @@ impl State {
     }
 
     pub(super) fn feedback(&mut self, observation: &str) -> String {
-        let key = crate::btcc::digest_identity(observation);
+        self.feedback_for(observation, observation)
+    }
+
+    pub(super) fn feedback_for(&mut self, identity: &str, observation: &str) -> String {
+        let key = crate::btcc::digest_identity(identity);
         let count = self.feedback_counts.entry(key).or_default();
         *count = count.saturating_add(1);
         format!(

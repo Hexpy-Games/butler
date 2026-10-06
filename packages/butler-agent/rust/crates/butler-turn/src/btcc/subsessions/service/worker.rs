@@ -28,9 +28,18 @@ impl SubsessionService {
         let identity = packets::worker_identity(&request, &profile);
         let delegation_id = delegation::delegation_id(&delegation::WORKER, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
-            return Ok(
-                json!({"ok":true,"status":"queued","relation_id":existing.relation_id,"child_session_id":existing.child_session_id,"task_id":existing.task_id}),
-            );
+            if let Some(result) = self
+                .repository
+                .result_for_relation(existing.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+            {
+                return Ok(
+                    json!({"ok":false,"relation_id":existing.relation_id,"result":result,
+                    "error":{"code":"delegation_already_finished","message":"This child has already returned its outcome. Resolve the reported blocker or revise the Plan/action and implementation approach before starting a new attempt. Do not wait for a terminal child."}}),
+                );
+            }
+            return Ok(super::helpers::existing_delegation_output(&existing));
         }
         let ids = delegation::DelegationIds::derive(&delegation::WORKER, delegation_id);
         let now = (self.now)();
