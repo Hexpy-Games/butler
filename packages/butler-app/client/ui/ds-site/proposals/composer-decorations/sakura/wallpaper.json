@@ -1,45 +1,75 @@
 {
   "id": "proposal.cherry-blossom",
   "name": {
-    "en": "Cherry blossom",
+    "en": "Cherry canopy",
     "ko": "벚꽃"
   },
-  "version": "0.4.0",
+  "version": "0.6.0",
   "engine": 1,
   "motion": "animated",
   "image": "none",
   "timePeriod": 240,
   "params": [
     {
-      "key": "lush",
-      "type": "boolean",
-      "label": {
-        "en": "Lush corner",
-        "ko": "풍성한 모서리"
-      },
-      "default": true
-    },
-    {
-      "key": "style",
+      "key": "layout",
       "type": "enum",
       "label": {
-        "en": "Style",
-        "ko": "스타일"
+        "en": "Canopy",
+        "ko": "캐노피"
       },
-      "default": "illustrated",
+      "default": "spill",
       "options": [
         {
-          "value": "illustrated",
+          "value": "corner",
           "label": {
-            "en": "Illustrated",
-            "ko": "일러스트"
+            "en": "Deep corner",
+            "ko": "모서리"
           }
         },
         {
-          "value": "pixel",
+          "value": "intrude",
           "label": {
-            "en": "Pixel art",
-            "ko": "픽셀 아트"
+            "en": "Into the empty side",
+            "ko": "빈 영역까지"
+          }
+        },
+        {
+          "value": "spill",
+          "label": {
+            "en": "Over the card",
+            "ko": "카드 위로"
+          }
+        },
+        {
+          "value": "frame",
+          "label": {
+            "en": "Padding only",
+            "ko": "여백만"
+          }
+        }
+      ]
+    },
+    {
+      "key": "part",
+      "type": "enum",
+      "label": {
+        "en": "Part",
+        "ko": "부분"
+      },
+      "default": "card",
+      "options": [
+        {
+          "value": "card",
+          "label": {
+            "en": "Inside the card",
+            "ko": "카드 안"
+          }
+        },
+        {
+          "value": "outside",
+          "label": {
+            "en": "Above the card",
+            "ko": "카드 위"
           }
         }
       ]

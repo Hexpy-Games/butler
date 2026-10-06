@@ -18,7 +18,7 @@ const DECISIONS = [
   "Background, not a band: the scene fills the whole card behind the text. Nothing else sits behind the text or the controls; readability comes from the art's composition. The art is the same in light and dark.",
   "No interactivity: both scenes play continuously while visible, 20fps; typing does nothing to them. Hidden or offscreen: no frames. Reduced motion: a still frame.",
   "Shoreline: the shipped module with the owner's setting as the default (waterline 19px above the bottom edge, exposure 1.22, sand highlights toned down 6%, a 30% tone gradient from 75% to 100% of the card height) and no cloud shadows by day (a proposed `dayClouds` param, mocked here). Dark mode keeps the night grade. Options a-d stay switchable for comparison.",
-  "Cherry blossom as an illustration (recommended): soft flat tones, no light and no shadow, simple notched petals with a thin rosy line, pink hearts and a few yellow stamen dots, a faint paper grain. Tight clusters of 4-6 flowers hide the branch; far clusters are paler, never darker. The mass hangs along the top edge from the corner (thickest) to 1/3 of the width. Pixel art is the alternative (2px blocks, a 7-colour palette, 8fps steps). No background; fine petals and pollen drift across, fewer and fainter over the text.",
+  "Cherry canopy, painted like the owner's anime references: soft cloud-shaped masses of blossom built from small dabs in four pinks (deep rose underside to pale highlights), scalloped edges, thin branch strokes peeking through, petals falling across at varied sizes. Recommended (B) over the card: the big masses drape outside and above the card and wrap its top corners; inside, only a light fringe, so nothing sits under text (the conversation reserves 56px / 44px above the composer). (A) lets paler, sparser masses into the empty right side; long drafts run under them, which fails in dark mode. Deep corner is the conservative baseline. No background.",
   "Character: head behind the card, paws in front on the top edge inside its padding; never over text or controls; static.",
 ];
 
@@ -31,7 +31,7 @@ function EmbeddedScreen({ state }: { state: ProposalState }) {
   }, [tone, state.motion]);
   return (
     <div className={`${styles.embedRoot} theme-${tone}`} lang={state.locale}>
-      <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} pixel={state.cherryStyle === "pixel"} character={state.character} tone={tone}
+      <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} canopy={state.cherry} character={state.character} tone={tone}
         wallpaper={pageWallpaperSource(state.wallpaper)} engagedAtStart={state.composer === "open"} />
     </div>
   );
@@ -48,7 +48,7 @@ function PreviewFrames({ state }: { state: ProposalState }) {
               src={`?${proposalSearch({ ...state, theme: tone })}&embed=1`} />
           ) : (
             <div className={styles.screen}>
-              <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} lush={state.cherry === "lush"} pixel={state.cherryStyle === "pixel"} character={state.character} tone={tone}
+              <NewChatScreen copy={COPY[state.locale]} theme={effectiveDecor(state)} shore={currentShore(state)} canopy={state.cherry} character={state.character} tone={tone}
                 wallpaper={pageWallpaperSource(state.wallpaper)} engagedAtStart={state.composer === "open"}
                 key={`${state.composer}-${state.locale}`} />
             </div>
@@ -91,7 +91,7 @@ export function ComposerDecorationsPage() {
               <PreviewFrames state={state} />
             </Stack>
           </Section>
-          <Section title="Measured contrast" titleAs="h2" description="The shipped shoreline setting, cherry blossom in both styles, and plain glass, light and dark. Nothing sits behind the text.">
+          <Section title="Measured contrast" titleAs="h2" description="The shipped shoreline setting, the cherry canopy layouts (long drafts), and plain glass, light and dark. No layer sits behind the text.">
             <ShoreContrastTable />
           </Section>
           <Section title="Settings" titleAs="h2" description="Settings → Appearance, under the wallpaper fields.">

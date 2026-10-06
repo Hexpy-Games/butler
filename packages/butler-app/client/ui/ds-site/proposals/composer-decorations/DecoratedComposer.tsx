@@ -6,7 +6,7 @@ import {
   ComposerSendButton, ConversationScroll, ConversationShell, IconButton, Plus, Popover, PopoverTrigger, ShieldQuestion, Wallpaper,
   type WallpaperSource,
 } from "@/butler-ds";
-import { CherryCanvas } from "./CherryCanvas";
+import { CherryCanvas, type CanopyLayout } from "./CherryCanvas";
 import type { ProposalCopy } from "./copy";
 import { CHERRY_BLOSSOM_MODULE, SHORELINE_REGISTRY, SHORELINE_SOURCE, type DecorationTheme } from "./decorationScenes";
 import { SHORE_PRESETS, shoreStyle, type ShoreParams } from "./shoreTuning";
@@ -30,12 +30,11 @@ const COMPOSER_RESERVE = 120;
  *   grades (exposure, sand highlight, a vertical tone gradient); see shoreTuning.ts.
  * - Cherry blossom: a transparent canvas; the card's own glass shows through.
  */
-function DecorationBackground({ theme, tone, shore, lush, pixel }: {
+function DecorationBackground({ theme, tone, shore, canopy }: {
   theme: Exclude<DecorationTheme, "none">;
   tone: "light" | "dark";
   shore: ShoreParams;
-  lush: boolean;
-  pixel: boolean;
+  canopy: CanopyLayout;
 }) {
   return (
     <div aria-hidden="true" className={styles.background} data-composer-decoration={theme}
@@ -44,7 +43,7 @@ function DecorationBackground({ theme, tone, shore, lush, pixel }: {
         {theme === "shoreline" ? (
           <Wallpaper source={SHORELINE_SOURCE} registry={SHORELINE_REGISTRY} scope="container" tone={tone} pauseOnBattery dataTestClass="composer-decoration-scene" />
         ) : (
-          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} lush={lush} pixel={pixel} key={`${lush}-${pixel}`} />
+          <CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} layout={canopy} key={canopy} />
         )}
       </div>
       {theme === "shoreline" ? <div className={styles.shoreHighlight} data-tone={tone} /> : null}
@@ -58,15 +57,14 @@ function DecorationBackground({ theme, tone, shore, lush, pixel }: {
  * the page wallpaper, and Composer.tsx's ComposerCard (floating, large) with ComposerInputSurface
  * and ComposerToolbar's DS parts and props. Only the decoration layer and the character are new.
  */
-export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = SHORE_PRESETS.d, lush = true, pixel = false, engagedAtStart }: {
+export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore = SHORE_PRESETS.d, canopy = "spill", engagedAtStart }: {
   copy: ProposalCopy;
   theme: DecorationTheme;
   character: boolean;
   wallpaper: WallpaperSource;
   tone: "light" | "dark";
   shore?: ShoreParams;
-  lush?: boolean;
-  pixel?: boolean;
+  canopy?: CanopyLayout;
   engagedAtStart?: boolean;
 }) {
   const [draft, setDraft] = useState("");
@@ -94,7 +92,7 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore =
       <ConversationScroll masked={false} scrollable={false}>{null}</ConversationScroll>
       <ComposerCard large floating expanded={engaged} containerRef={(node) => { wrapRef.current = node; setWrap(node); }}
         onFocusCapture={() => setEngaged(true)} onSubmit={(event) => event.preventDefault()}>
-        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} shore={shore} lush={lush} pixel={pixel} />}
+        {theme === "none" ? null : <DecorationBackground key={theme} theme={theme} tone={tone} shore={shore} canopy={canopy} />}
         <ComposerCardExpandedBody>
           <ComposerCardEditor>
             <ComposerCardEditable>
@@ -127,6 +125,9 @@ export function NewChatScreen({ copy, theme, character, wallpaper, tone, shore =
         </ComposerCardToolbar>
         <input hidden multiple type="file" tabIndex={-1} aria-hidden="true" />
       </ComposerCard>
+      {theme === "cherry-blossom" && canopy === "spill" && wrap
+        ? createPortal(<CherryCanvas fragment={CHERRY_BLOSSOM_MODULE.fragment} layout="spill" part="outside" key="spill" />, wrap)
+        : null}
       {character && wrap ? createPortal(<CharacterHead kind={kind} />, wrap) : null}
       {character && wrap ? createPortal(<CharacterPaws kind={kind} />, wrap) : null}
     </ConversationShell>
