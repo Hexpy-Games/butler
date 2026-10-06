@@ -104,7 +104,8 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
         _ => error.message(),
     };
     let mut value = json!({"ok":false,"error":{
-        "code":error.code(),"message":message,"recoverable":true
+        "code":error.code(),"message":message,"recoverable":true,
+        "next_action":"Inspect the current Work, Plan execution_mode, action status and dependency results in context. Correct the named field using the tool schema (or describe_tools for a discovered tool). Resolve pending dependencies first; choose a permitted action or revise the Plan before retrying. Wait for an active child through the existing delegation flow, using wait_for_worker when it is available. Ask the user only for an input or decision that they alone can provide."
     }});
     if error.code().starts_with("effect_") {
         value["error"]["next_action"] = repair(error.code()).into();
@@ -118,6 +119,37 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             .with_source(source),
         )
     })
+}
+
+/// Include the live state needed to repair a refusal, using the existing indexed Work lookup.
+pub(super) async fn contextual_result(
+    owner: &super::GuidedTools,
+    error: &BtccError,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let receipt = result(error)?;
+    let mut value: serde_json::Value =
+        serde_json::from_str(receipt.as_str()).map_err(|source| {
+            ToolExecutionError::Integrity(
+                BtccError::relayed("guided_tool_result_json", "Invalid tool feedback")
+                    .with_source(source),
+            )
+        })?;
+    let work = owner
+        .work
+        .bound_work()
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    value["current_state"] = json!({
+        "access_mode":owner.binding.access_mode,
+        "work_id":work.as_ref().map(|work| &work.work_id),
+        "work_status":work.as_ref().map(|work| work.status),
+        "execution_mode":work.as_ref().and_then(|work| work.current_plan.as_ref()).and_then(|plan| plan.execution_mode),
+        "action_progress":work.as_ref().map(|work| &work.action_progress),
+        "dependencies":work.as_ref().and_then(|work| work.current_plan.as_ref()).map(|plan|
+            plan.actions.iter().map(|action| json!({"action_key":action.action_key,"dependency_keys":action.dependency_keys})).collect::<Vec<_>>()),
+        "available_tools":owner.binding.surface.iter().map(|tool| &tool.name).collect::<Vec<_>>()
+    });
+    super::dispatch::encoded(&value)
 }
 
 /// Invalid adapter input is corrected in place, independently of Work tracking.

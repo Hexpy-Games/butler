@@ -30,7 +30,15 @@ pub(super) fn prepare<'a>(
             call.arguments.clone(),
             Some(tool_error(
                 "tool_unavailable",
-                format!("No such tool available: {}", call.name),
+                format!(
+                    "No such tool available: {}. Choose an available tool: {}.",
+                    call.name,
+                    tools
+                        .iter()
+                        .map(|tool| tool.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 None,
             )),
         ),
@@ -38,7 +46,10 @@ pub(super) fn prepare<'a>(
             call.arguments.clone(),
             Some(tool_error(
                 "invalid_arguments",
-                "Tool arguments must be a JSON object".into(),
+                format!(
+                    "Tool arguments must be a JSON object matching this schema: {}",
+                    serde_json::to_string(&tool.map(|t| &t.parameters)).unwrap_or_default()
+                ),
                 None,
             )),
         ),
@@ -102,7 +113,7 @@ pub(super) async fn execute<'a>(
         return Ok(result);
     }
     let denied = super::hooks::pre_tool(policy, invocation, &prepared.call).await;
-    let result = if let Some(message) = denied {
+    let mut result = if let Some(message) = denied {
         ToolResult {
             tool_call_id: prepared.call.id.clone(),
             name: prepared.call.name.clone(),
@@ -113,6 +124,7 @@ pub(super) async fn execute<'a>(
     } else {
         execute_validated(policy, invocation, prepared).await?
     };
+    enrich_rejection(&mut result, prepared);
     if result
         .error
         .as_ref()
@@ -142,6 +154,16 @@ pub(super) async fn execute<'a>(
     )
     .await;
     Ok(result)
+}
+
+fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
+    if let Some(error) = &mut result.error {
+        let schema = prepared.tool.map(|tool| &tool.parameters);
+        error.message.push_str(&format!(
+            " Correct the input using this schema: {}. Resolve prerequisites from the returned state, choose another available tool, or wait for an active dependency; do not repeat the unchanged failure.",
+            serde_json::to_string(&schema).unwrap_or_default()
+        ));
+    }
 }
 
 fn denied_operation(
@@ -222,7 +244,10 @@ fn validate_required(
         if !arguments.contains_key(field) {
             return Some(tool_error(
                 "invalid_arguments",
-                format!("Missing required field: {field}"),
+                format!(
+                    "Missing required field: {field}. Supply it using this tool schema: {}",
+                    serde_json::to_string(schema).unwrap_or_default()
+                ),
                 Some(field.into()),
             ));
         }

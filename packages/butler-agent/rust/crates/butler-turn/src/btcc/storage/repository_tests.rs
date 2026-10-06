@@ -123,8 +123,9 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     repositories.close().await.expect("close repository");
 }
 
+// test-category: race
 #[tokio::test]
-async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() {
+async fn model_journal_abandons_restarted_attempt_and_output_accounting_commits() {
     let fixture = Fixture::activated();
     let limits = TurnContinuationBudgetLimits {
         max_model_requests: 2,
@@ -232,7 +233,7 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .as_ref()
         .expect("budget")
         .started_at_ms;
-    let error = repositories
+    let accounted = repositories
         .transition_continuation_budget(crate::btcc::ContinuationBudgetTransition {
             binding,
             event: crate::btcc::TurnContinuationBudgetEvent::RecordOutput {
@@ -242,22 +243,16 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
             now_ms: now + 1,
         })
         .await
-        .expect_err("output limit must exhaust");
-    assert_eq!(error.code(), "turn_continuation_budget_exhausted");
+        .expect("output accounting must not stop the turn");
+    assert_eq!(accounted.consumed_output_bytes, 4);
     let persisted = repositories
         .find_turn("turn-model")
         .await
         .expect("load turn")
         .expect("turn");
-    assert_eq!(
-        persisted
-            .continuation_budget
-            .expect("budget")
-            .terminal
-            .expect("terminal")
-            .reason,
-        crate::btcc::TurnContinuationBudgetTerminalReason::MaxOutputBytes
-    );
+    let budget = persisted.continuation_budget.expect("budget");
+    assert_eq!(budget.consumed_output_bytes, 4);
+    assert!(budget.terminal.is_none());
     repositories.close().await.expect("close repository");
 }
 

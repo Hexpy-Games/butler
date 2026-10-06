@@ -5,6 +5,7 @@ use super::repository_tests::prepared;
 use super::{BtccRepositories, BtccStorage, TestStorageFixture};
 use crate::btcc::{GuidedContinuationBudgetFactory, TurnContinuationBudgetLimits, TurnStore};
 
+// test-category: race
 #[tokio::test]
 async fn guided_budget_uses_real_claim_and_persists_once_without_retained_history() {
     let fixture = TestStorageFixture::activated();
@@ -91,8 +92,10 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
             .unwrap(),
         persisted
     );
-    let exhausted = budget.record_output("round-2", 7).await.unwrap_err();
-    assert_eq!(exhausted.code(), "turn_continuation_budget_exhausted");
+    budget.record_output("round-2", 7).await.unwrap();
+    now.store(started + 20_001, Ordering::SeqCst);
+    budget.admit_request("round-2", &digest, 30).await.unwrap();
+    budget.record_output("round-3", 9).await.unwrap();
     let terminal = repository
         .find_turn(&turn.turn_id)
         .await
@@ -101,8 +104,14 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
         .continuation_budget
         .map(|budget| serde_json::to_value(budget).unwrap())
         .unwrap();
-    assert_eq!(terminal["terminal"]["reason"], "max_output_bytes");
-    assert_eq!(terminal["consumedOutputBytes"], 11);
+    assert!(terminal["terminal"].is_null());
+    assert_eq!(terminal["consumedOutputBytes"], 20);
+    assert_eq!(terminal["consumedModelFacingBytes"], 80);
+    assert_eq!(terminal["admittedRequests"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        terminal["completedOutputRounds"],
+        serde_json::json!(["round-1", "round-2", "round-3"])
+    );
     drop(budget);
     assert!(final_owner.upgrade().is_none());
     // Dropping the Turn owner never closes the shared repository.

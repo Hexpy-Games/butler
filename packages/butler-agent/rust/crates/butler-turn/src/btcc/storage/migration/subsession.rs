@@ -27,6 +27,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let recommendations = source(db, "follow_up_recommendations_json", "'[]'")?;
     let refs = source(db, "detail_refs_json", "'[]'")?;
     let direction = source(db, "direction_revision", "0")?;
+    let failure_key = source(db, "failure_key", "NULL")?;
     let code = if definition.contains("'task_needs_split'") && code == "code" {
         "CASE WHEN code='task_needs_split' THEN NULL ELSE code END"
     } else {
@@ -41,10 +42,10 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         "INSERT INTO btcc_steward_results (result_id, relation_id, task_id, child_session_id, \
          child_turn_id, status, code, summary, acceptance_evidence_json, changed_artifacts_json, \
          changed_files_json, commits_json, tests_json, remaining_risks_json, \
-         follow_up_recommendations_json, detail_refs_json, direction_revision, created_at) SELECT result_id, \
+         follow_up_recommendations_json, detail_refs_json, direction_revision, failure_key, created_at) SELECT result_id, \
          relation_id, task_id, child_session_id, child_turn_id, status, {code}, summary, \
          acceptance_evidence_json, changed_artifacts_json, {changed_files}, {commits}, {tests}, \
-         {risks}, {recommendations}, {refs}, {direction}, created_at FROM btcc_steward_results_ss02_success; \
+         {risks}, {recommendations}, {refs}, {direction}, {failure_key}, created_at FROM btcc_steward_results_ss02_success; \
          DROP TABLE btcc_steward_results_ss02_success"
     ))?;
         add_result_columns(db)?;
@@ -102,6 +103,7 @@ fn add_result_columns(db: &Connection) -> rusqlite::Result<()> {
         ("detail_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("changed_files_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("direction_revision", "INTEGER NOT NULL DEFAULT 0"),
+        ("failure_key", "TEXT"),
     ] {
         ensure_column(db, "btcc_steward_results", name, declaration)?;
     }
@@ -127,7 +129,8 @@ fn migrate_followup_results(db: &Connection) -> rusqlite::Result<()> {
     }
     db.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_steward_results_relation \
-         ON btcc_steward_results(relation_id)",
+         ON btcc_steward_results(relation_id); \
+         CREATE INDEX IF NOT EXISTS idx_steward_results_failure ON btcc_steward_results(failure_key)",
     )
 }
 

@@ -175,7 +175,7 @@ async fn dispatch_result(
     match Box::pin(super::question::dispatch(owner, invocation, call, call_id)).await {
         Ok(result) => Ok(result),
         Err(ToolExecutionError::Integrity(error)) if super::feedback::solvable(error.code()) => {
-            super::feedback::result(&error)
+            super::feedback::contextual_result(owner, &error).await
         }
         Err(ToolExecutionError::Integrity(error)) => {
             butler_core::diagnostic!(

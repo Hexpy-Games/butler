@@ -25,15 +25,10 @@ pub(super) async fn setup(
     HarnessError,
 > {
     let (url, script, server) = stub::start(mode).await?;
-    let mut setup = Setup::new("TURN-CONTINUATION")?
+    let setup = Setup::new("TURN-CONTINUATION")?
         .access(access)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
-    if matches!(mode, stub::Mode::Limit) {
-        setup = setup
-            .env("BUTLER_BOUNDED_STATELESS_CONTEXT", "1")
-            .env("BUTLER_CONTINUATION_MAX_OUTPUT_BYTES", "1");
-    }
     Ok((setup.start().await?, script, server))
 }
 
@@ -84,7 +79,7 @@ async fn checkpoint_open_disposition_and_progress_continue_until_work_is_done()
     );
     s.finish().await?;
     server.abort();
-    super::steward_presentation::unfinished_disposition_delivers_failure().await?;
+    super::steward_presentation::unfinished_disposition_recovers_in_child().await?;
     Ok(())
 }
 #[tokio::test]
@@ -203,9 +198,10 @@ async fn pending_question_pauses_and_answer_resumes_same_turn() -> Result<(), Ha
 }
 
 #[tokio::test]
-async fn empty_recovery_and_budget_limit_report_honest_status() -> Result<(), HarnessError> {
+async fn empty_and_text_calls_receive_feedback_until_the_model_recovers() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
-    for mode in [stub::Mode::Empty, stub::Mode::Prose, stub::Mode::Limit] {
+    for mode in [stub::Mode::Empty, stub::Mode::Prose] {
         let (s, script, server) = setup(mode, Access::FullAccess).await?;
         let (_, turn) = s.turn("general", stub::REQUEST).await?;
         assert_eq!(turn_state(&turn), "delivered", "{turn}");
@@ -213,20 +209,10 @@ async fn empty_recovery_and_budget_limit_report_honest_status() -> Result<(), Ha
         let answer = messages.iter().find(|m| m["role"] == "assistant").unwrap()["text"]
             .as_str()
             .unwrap();
-        assert!(answer.contains("could not complete"), "{answer}");
-        assert!(answer.contains("limit"), "{answer}");
+        assert_eq!(answer, "The total is 42.");
         let requests = script.requests.lock().unwrap().clone();
-        assert_eq!(
-            requests.len(),
-            if matches!(mode, stub::Mode::Limit) {
-                1
-            } else {
-                4
-            }
-        );
-        if matches!(mode, stub::Mode::Empty) {
-            assert!(requests[3].to_string().contains("occurred 3 times"));
-        }
+        assert_eq!(requests.len(), 6);
+        assert!(requests[5].to_string().contains("occurred 5 times"));
         s.finish().await?;
         server.abort();
     }
@@ -234,7 +220,7 @@ async fn empty_recovery_and_budget_limit_report_honest_status() -> Result<(), Ha
 }
 
 #[tokio::test]
-async fn approval_resume_preserves_the_automatic_continuation_bound() -> Result<(), HarnessError> {
+async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskFirst).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
@@ -263,16 +249,13 @@ async fn approval_resume_preserves_the_automatic_continuation_bound() -> Result<
     assert_eq!(turn_state(&done), "delivered");
     assert_eq!(
         script.requests.lock().unwrap().len(),
-        5,
-        "approval reset the continuation counter"
+        6,
+        "approval must preserve feedback without stopping the actor"
     );
     let messages = s.gw.messages("general").await?;
-    assert!(messages.iter().any(|m| {
-        m["role"] == "assistant"
-            && m["text"]
-                .as_str()
-                .is_some_and(|text| text.contains("automatic continuation limit"))
-    }));
+    assert!(messages.iter().any(|m| m["text"] == "The total is 42."));
+    let requests = script.requests.lock().unwrap().clone();
+    assert!(requests[5].to_string().contains("occurred 4 times"));
     s.finish().await?;
     server.abort();
     Ok(())
@@ -293,7 +276,6 @@ mod stub {
         Commentary,
         Approval,
         Question,
-        Limit,
         Todo,
         Prose,
         ApprovalRecovery,
@@ -350,11 +332,12 @@ mod stub {
                 Mode::Batched => {
                     super::super::token_cache::batched_reply(step, &body, progress, command, call)
                 }
-                Mode::Prose => {
+                Mode::Prose if step < 5 => {
                     message("<tool_call>call: read_file {requests:[{path:\"source\"}]}</tool_call>")
                 }
                 Mode::ApprovalRecovery if step == 1 => command(true),
-                Mode::Empty | Mode::ApprovalRecovery => message(""),
+                Mode::Empty | Mode::ApprovalRecovery if step < 5 => message(""),
+                Mode::Empty | Mode::ApprovalRecovery | Mode::Prose => message("The total is 42."),
                 Mode::Reasoning if step == 0 => {
                     json!({"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need to calculate the result."}]})
                 }
@@ -368,14 +351,10 @@ mod stub {
                     "ask_user",
                     &json!({"questions":[{"id":"format","eyebrow":"Output","title":"Which format?","kind":"single","allow_custom":true,"options":[{"id":"brief","label":"Brief","recommended":true},{"id":"full","label":"Full"}]}]}),
                 ),
-                Mode::Approval | Mode::Limit if step == 0 => {
-                    command(matches!(script.mode, Mode::Approval))
+                Mode::Approval if step == 0 => command(matches!(script.mode, Mode::Approval)),
+                Mode::Approval | Mode::Question | Mode::Reasoning | Mode::Commentary => {
+                    message("The total is 42.")
                 }
-                Mode::Approval
-                | Mode::Question
-                | Mode::Limit
-                | Mode::Reasoning
-                | Mode::Commentary => message("The total is 42."),
                 Mode::Todo => match step {
                     0 => call(
                         "todo",

@@ -1,4 +1,4 @@
-//! Result outcome comes from the delivered payload, independently of Work.
+//! Preserve the canonical child outcome while projecting delivery details.
 use serde_json::Value;
 
 pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
@@ -17,6 +17,8 @@ pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
         || payload["executionOutcome"] == "failed"
     {
         "failed"
+    } else if result["status"] == "blocked" || payload["workStatus"] == "blocked" {
+        "blocked"
     } else {
         "success"
     };
