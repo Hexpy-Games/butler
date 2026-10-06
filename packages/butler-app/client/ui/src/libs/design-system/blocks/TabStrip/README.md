@@ -1,7 +1,7 @@
 # TabStrip
 
 ## What is this component
-The Browser area's tab row. Tabs have a favicon slot, a truncating title and a close button. They shrink from `--tab-strip-tab-max-width` to `--tab-strip-tab-min-width`; past that the row scrolls sideways with edge fades and keeps the active tab in view. Narrow tabs drop the close button (except the selected tab), then the title.
+The Browser area's tab row. Tabs have a favicon slot, a truncating title and a close button. They shrink from `--tab-strip-tab-max-width` to `--tab-strip-tab-min-width`; past that the row scrolls sideways with edge fades and keeps the active tab in view. The minimum keeps the favicon and about five Korean characters readable. Near the minimum, unselected tabs drop their close button; the selected tab keeps it. Group chips are secondary: their label is capped at `--tab-strip-chip-max-width` (a folded chip is narrower) and truncates, and the chip's tooltip shows the full name and group state.
 
 Tabs come in groups: "my tabs" (`kind: "mine"`) and one group per conversation (`kind: "conversation"`, muted). A group shows a labelled chip that folds and unfolds it. The `mine` chip only appears beside other groups. Group state (`working`, `waiting`, `crashed`) shows on the chip: the Butler thinking mark, a warning shield or a danger alert. Tab state (`loading`, `working`, `crashed`) replaces the favicon with a Spinner, the thinking mark or an alert.
 

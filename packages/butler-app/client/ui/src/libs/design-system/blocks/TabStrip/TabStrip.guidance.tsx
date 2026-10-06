@@ -54,7 +54,7 @@ export const guidance: ShowcaseGuidance = {
     "Each open group is a role=tablist named by its label; tabs are role=tab with aria-selected and aria-controls (panelId).",
     "One tab stop: arrows move across chips and tabs (wrapping), Home/End jump, Enter/Space activate, Delete/Backspace close.",
     "Cmd/Ctrl+Shift+Left/Right moves the focused tab, also into the neighbor group; moves are announced politely.",
-    "Group chips are buttons with aria-expanded; their names include the tab count and the group state.",
+    "Group chips are buttons with aria-expanded; their names include the tab count and the group state. The tooltip shows the full, untruncated label.",
   ],
   tokens: [
     "--tab-strip-tab-min-width", "--tab-strip-tab-max-width", "--tab-strip-chip-max-width", "--selection-strong",

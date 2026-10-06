@@ -48,9 +48,7 @@
 /* The selected tab stops shrinking earlier, so a few letters of its title stay
    readable beside its close button. */
 .slot[data-active] {
-  min-width: calc(
-    var(--tab-strip-tab-min-width) + var(--space-3xl) + var(--space-lg)
-  );
+  min-width: calc(var(--tab-strip-tab-min-width) + var(--space-2xl));
 }
 
 .slot[data-dragging] {
@@ -133,8 +131,10 @@
   flex: none;
 }
 
-/* Narrow tabs drop the close button (except the selected tab), then the title. */
-@container (max-width: 99px) {
+/* Near the minimum, unselected tabs drop the close button so the title keeps
+   the room (middle-click and Delete still close); a tab narrower than the
+   minimum token allows would drop the title last. */
+@container (max-width: 127px) {
   .slot:not([data-active]) .close {
     display: none;
   }
@@ -154,11 +154,16 @@
 /* A chip opens its group: wider space before it, a step after it. */
 .chipSlot {
   display: flex;
-  /* Chips give way more slowly than tabs and keep a few letters of label
-     (.chipLabel min-width sets the chip's minimum). */
+  /* Chips are secondary to tabs: capped (the label truncates, its tooltip
+     keeps the full name) and never shrink further, so tabs keep the room. */
   max-width: var(--tab-strip-chip-max-width);
-  flex: 0 0.4 auto;
+  flex: none;
   margin-inline: var(--space-sm) var(--space-xs);
+}
+
+/* A folded chip stays compact: label, count, chevron. */
+.chipSlot[data-collapsed] {
+  max-width: calc(var(--tab-strip-chip-max-width) - var(--space-xl));
 }
 
 .scroller > .group:first-child > .chipSlot {

@@ -159,10 +159,12 @@
   /* StatusCapsule part caps (composer work capsules). */
   --status-capsule-title-max: min(34vw, 240px);
   --status-capsule-detail-max: min(30vw, 220px);
-  /* TabStrip: the shrink-to-fit range of one tab and the group chip label cap. */
-  --tab-strip-tab-min-width: 44px;
+  /* TabStrip: one tab shrinks from max to min (favicon + about five Korean
+     characters stay readable) before the strip scrolls; group chips are capped
+     so tabs keep the room. */
+  --tab-strip-tab-min-width: 96px;
   --tab-strip-tab-max-width: 200px;
-  --tab-strip-chip-max-width: 160px;
+  --tab-strip-chip-max-width: 120px;
   --spinner-easing: linear(
     0,
     0.0363,

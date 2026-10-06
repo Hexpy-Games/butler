@@ -54,8 +54,11 @@ function TabStripChip({ group, scope }: { group: TabStripGroup; scope: TabStripS
     </Clickable>
   );
   return (
-    <div ref={ref} className={styles.chipSlot} data-test-class="tab-strip-chip">
-      {group.state ? <Tooltip label={scope.labels[group.state]}>{chip}</Tooltip> : chip}
+    <div ref={ref} className={styles.chipSlot} data-collapsed={group.collapsed || undefined} data-test-class="tab-strip-chip">
+      {/* The capped label truncates; the tooltip keeps the full name and the group state. */}
+      <Tooltip label={[groupLabel(group, scope.labels), group.state ? scope.labels[group.state] : null].filter(Boolean).join(" · ")}>
+        {chip}
+      </Tooltip>
     </div>
   );
 }
