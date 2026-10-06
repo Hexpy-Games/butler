@@ -65,9 +65,9 @@ fn messages(
 ) -> ConversationResult<std::collections::HashMap<String, Vec<ConversationMessageWithParts>>> {
     let mut query = db.prepare(
         "SELECT m.*,p.id AS part_id,p.message_id,p.part_index,p.kind, \
-         CASE p.kind WHEN 'tool_call' THEN json_object('safeToolName',COALESCE(json_extract(p.content_json,'$.safeToolName'),json_extract(p.content_json,'$.toolName'),json_extract(p.content_json,'$.name'),'tool')) \
-         WHEN 'tool_result' THEN json_object('safeLabel',COALESCE(json_extract(p.content_json,'$.safeLabel'),json_extract(p.content_json,'$.status'), \
-         CASE WHEN json_extract(p.content_json,'$.ok')=0 THEN 'failed' ELSE 'complete' END)) WHEN 'text' THEN CASE WHEN ?5 THEN json_object('text',history_budget_text(json_extract(p.content_json,'$.text'))) ELSE p.content_json END \
+         CASE p.kind WHEN 'tool_call' THEN json_object('safeToolName',json_extract(p.content_json,'$.safeToolName'),'toolName',json_extract(p.content_json,'$.toolName'),'name',json_extract(p.content_json,'$.name')) \
+         WHEN 'tool_result' THEN json_object('safeLabel',json_extract(p.content_json,'$.safeLabel'),'status',json_extract(p.content_json,'$.status'),'ok', \
+         json(CASE WHEN json_type(p.content_json,'$.ok')='false' THEN 'false' ELSE 'true' END)) WHEN 'text' THEN CASE WHEN ?5 THEN json_object('text',history_budget_text(json_extract(p.content_json,'$.text'))) ELSE p.content_json END \
          ELSE CASE WHEN ?5 THEN history_budget_json(p.content_json) ELSE p.content_json END END, \
          p.tool_call_id,p.parent_tool_call_id,p.provider_shape,p.status AS part_status \
          FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \

@@ -134,6 +134,9 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         if verify {
             let text = source(&request);
             for heading in [
+                "## Recent conversation and feedback",
+                "## Required working context",
+                "## Optional working context",
                 "## Conversation history",
                 "## Current turn context",
                 "## Current request",
@@ -216,7 +219,9 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
                 .strip_prefix("## Recent Conversation\n\n")
                 .unwrap_or(&content),
         )?;
-        let budget = document["main_budget_projection"].as_str().unwrap();
+        let budget = document["mainBudgetProjection"]
+            .as_str()
+            .expect("history document carries the camelCase main budget projection");
         assert!(
             asks.iter().all(|ask| !budget.contains(ask)),
             "budget projection must not hydrate user text"

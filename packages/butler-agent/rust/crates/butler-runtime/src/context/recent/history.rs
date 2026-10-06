@@ -170,10 +170,11 @@ pub(super) fn document(
         history,
         main_budget_projection: format!(
             "## Recent Conversation\n\n{}",
-            legacy
-                .strip_prefix("## Recent Conversation")
-                .unwrap_or(legacy)
-                .trim()
+            butler_core::public_text::trim_js_whitespace(
+                legacy
+                    .strip_prefix("## Recent Conversation")
+                    .unwrap_or(legacy)
+            )
         ),
     };
     let content = serde_json::to_string(&document)

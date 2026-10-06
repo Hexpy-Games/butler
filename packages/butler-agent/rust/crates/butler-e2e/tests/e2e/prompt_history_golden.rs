@@ -79,6 +79,19 @@ fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value 
             "prior-tools",
             "## Previously recorded tool calls for this turn",
         ),
+        (
+            "branch-seed",
+            "This conversation was explicitly branched from another answer.",
+        ),
+        (
+            "session-references",
+            "Explicit user-selected conversation references (read context only;",
+        ),
+        (
+            "delegated-tools",
+            "Granted tools in this delegated session (complete callable set;",
+        ),
+        ("accepted-plan", "Accepted Project Ledger Plan:"),
         ("request", "User request:"),
         ("request", "## Current request"),
         ("request", "## Delegated result"),
@@ -86,7 +99,7 @@ fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value 
         ("documents", "## Required working context"),
         ("documents", "## Optional working context"),
     ];
-    for (id, marker) in markers.iter().take(7) {
+    for (id, marker) in markers.iter().take(11) {
         let block = text
             .find(marker)
             .map(|start| {

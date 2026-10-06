@@ -43,10 +43,21 @@ impl Sections {
             "current-request",
             format!(
                 "{}\n{}",
-                match trigger(turn) {
-                    "steward-result" => "## Delegated result\nSteward:",
-                    "worker-result" => "## Delegated result\nWorker:",
-                    _ => "## Current request",
+                // A resumed user request remains a user request even while a
+                // worker suspension is recorded. Label the actual input identity.
+                if turn
+                    .context
+                    .get("subsessionResult")
+                    .is_some_and(Value::is_object)
+                {
+                    "## Delegated result\nSteward:"
+                } else if turn
+                    .original_message_id
+                    .starts_with("worker-result-message:")
+                {
+                    "## Delegated result\nWorker:"
+                } else {
+                    "## Current request"
                 },
                 turn.original_message
             ),

@@ -304,10 +304,17 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
         now: None,
         parts: None,
     };
-    conversation
-        .append_user_message(append("old", "remember me", "event-old"))
-        .await
-        .unwrap();
+    let mut old = append("old", "remember me", "event-old");
+    old.parts = Some([
+        (ConversationPartKind::Text, json!({"text":"remember me 한글 é 😀 \"quote\" \\ end"})),
+        (ConversationPartKind::ToolCall, json!({"safeToolName":"\u{feff}","toolName":"search","arguments":"must-not-render"})),
+        (ConversationPartKind::ToolResult, json!({"safeLabel":" ","ok":false,"private":"must-not-render"})),
+        (ConversationPartKind::Text, json!({"text":"tail\u{85}"})),
+    ].into_iter().map(|(kind, content_json)| MessagePartInput {
+        kind, content_json, tool_call_id: Some("call-1".into()), parent_tool_call_id: None,
+        provider_shape: None, status: None,
+    }).collect());
+    conversation.append_user_message(old).await.unwrap();
     conversation
         .append_user_message(append("current", "exclude me", "event-current"))
         .await
@@ -321,6 +328,39 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
         })
         .await
         .unwrap();
+    let window = conversation
+        .read_history_window("session", 16_000)
+        .await
+        .unwrap();
+    let raw = conversation
+        .read_prompt_material("session", Some(16_000.0))
+        .await
+        .unwrap();
+    let options = PromptMaterialRenderOptions {
+        max_tokens: 16_000.0,
+        exclude_source_ref: Some("event-current".into()),
+        exclude_turn_id: None,
+        include_summaries: None,
+        include_tools: None,
+        current_request: None,
+    };
+    let main = compile_prompt_material_context_plan(&raw, &options)
+        .unwrap()
+        .rendered;
+    let budget = compile_prompt_material_context_plan(&window.budget_material, &options)
+        .unwrap()
+        .rendered;
+    assert_eq!(
+        butler_core::json::stringify(&json!(main)).unwrap().len(),
+        butler_core::json::stringify(&json!(budget)).unwrap().len(),
+        "main budget geometry including Unicode and escapes"
+    );
+    let kept = compile_prompt_material_context_plan(&window.material, &options)
+        .unwrap()
+        .rendered;
+    assert!(kept.contains("[tool_call:search:call-1]"));
+    assert!(kept.contains("[tool_result:failed:call-1]"));
+    assert!(!kept.contains("must-not-render"));
     let catalog = Arc::new(ModelCatalog::new().unwrap());
     let locale = Arc::new(LocaleCollation::new("en-US").unwrap());
     let configuration = Arc::new(
@@ -372,6 +412,21 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
     .await
     .unwrap();
     assert_eq!(assembly.working_context.len(), 1);
+    let document: HistoryDocument =
+        serde_json::from_str(&assembly.working_context[0].content).unwrap();
+    let expected = format!(
+        "## Recent Conversation\n\n{}",
+        butler_core::public_text::trim_js_whitespace(
+            main.strip_prefix("## Recent Conversation").unwrap()
+        )
+    );
+    assert_eq!(
+        serde_json::to_string(&document.main_budget_projection)
+            .unwrap()
+            .len(),
+        serde_json::to_string(&expected).unwrap().len(),
+        "main uses JS whitespace, including NEL preservation"
+    );
     assert!(assembly.working_context[0].content.contains("remember me"));
     assert!(!assembly.working_context[0].content.contains("exclude me"));
     let read = owner
