@@ -16,32 +16,30 @@ pub(super) async fn gate(
     input: &Value,
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
-    if let Some(reference) = owner.binding.authority_request_ref.as_ref().filter(|_| {
-        owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-            && !*owner.authority_consumed.lock()
-    }) {
+    if let Some(reference) = resume_reference(owner, occurrence) {
         let stored = owner
             .authority
             .execution(AuthorityExecutionInput {
                 owner_session_id: owner.binding.owner_session_id.clone(),
-                request_ref: reference.clone(),
+                request_ref: reference.to_owned(),
                 source_session_id: Some(owner.binding.source_session_id.clone()),
                 client_message_id: None,
                 turn_id: owner.binding.turn_id.clone(),
             })
             .await
             .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
-        if stored.decision != RequestDecision::Allowed
-            || stored.capability != call.name
-            || stored.normalized_input != *input
-            || stored.normalized_target != target
-            || stored.source_call_id.as_deref() != Some(occurrence)
-        {
+        let belongs = stored.decision == RequestDecision::Allowed
+            && stored.capability == call.name
+            && stored.source_call_id.as_deref() == Some(occurrence);
+        if !belongs || stored.normalized_input != *input || stored.normalized_target != target {
+            if belongs {
+                super::settle(owner, Some(reference.to_owned()), "unknown").await?;
+            }
             return Ok(Gate::Pending(
-                json!({"ok":false,"error":"authority_request_identity_mismatch"}),
+                json!({"ok":false,"status":"unknown","observe_required":true,"error":"authority_request_identity_mismatch"}),
             ));
         }
-        return Ok(Gate::Allowed(Some(reference.clone())));
+        return Ok(Gate::Allowed(Some(reference.to_owned())));
     }
     let admitted = owner
         .authority
@@ -97,4 +95,41 @@ pub(super) async fn act_gate(
     } else {
         Ok(Gate::Allowed(None))
     }
+}
+
+fn resume_reference<'a>(owner: &'a GuidedTools, occurrence: &str) -> Option<&'a str> {
+    owner.binding.authority_request_ref.as_deref().filter(|_| {
+        owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
+            && !*owner.authority_consumed.lock()
+    })
+}
+
+/// Revalidation cannot prove whether a previous interrupted attempt dispatched.
+/// Settle only this bound allowed source call, preserving that uncertainty.
+pub(super) async fn refuse_resume(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+) -> Result<(), ToolExecutionError> {
+    let Some(reference) = resume_reference(owner, occurrence) else {
+        return Ok(());
+    };
+    let stored = owner
+        .authority
+        .execution(AuthorityExecutionInput {
+            owner_session_id: owner.binding.owner_session_id.clone(),
+            request_ref: reference.to_owned(),
+            source_session_id: Some(owner.binding.source_session_id.clone()),
+            client_message_id: None,
+            turn_id: owner.binding.turn_id.clone(),
+        })
+        .await
+        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    if stored.decision == RequestDecision::Allowed
+        && stored.capability == call.name
+        && stored.source_call_id.as_deref() == Some(occurrence)
+    {
+        super::settle(owner, Some(reference.to_owned()), "unknown").await?;
+    }
+    Ok(())
 }

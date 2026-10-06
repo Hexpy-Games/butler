@@ -77,6 +77,16 @@ export function viewedTab(browser, tab, visible) {
   armExpiry(browser, tab);
 }
 export async function executeBrowser(browser, frame) {
+  const result = await executeFrame(browser, frame);
+  const count = frame.op === "tab.act" ? frame.args?.steps?.length : 0;
+  if (count >= 1 && count <= 10 && !Array.isArray(result.steps) && result.status !== "dialog_pending") {
+    const status = result.status === "unknown" ? "unknown" : "not_dispatched";
+    result.steps = Array.from({length: count}, (_, index) => ({index, status, reason: result.reason ?? "browser_refused"}));
+    if (status === "unknown") result.observe_required = true;
+  }
+  return result;
+}
+async function executeFrame(browser, frame) {
   if (!browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };

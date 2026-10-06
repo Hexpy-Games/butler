@@ -58,3 +58,26 @@ async function dragTo(app:App,kind:string,evidence:string) {
   const after=await app.page.expression(`({dragging:document.querySelector('[data-dragging="true"]')?.outerHTML,text:document.querySelector('[data-test-class="browser-area"]')?.innerText})`);
   writeFileSync(join(evidence,`drag-${kind}-after.json`),JSON.stringify(after));
 }
+
+/** Real App presentation of the native crashed-state snapshot, including folded groups. */
+export async function browserGroupSnapshotChecks(app:App,tab:string,language:string,theme:string,evidence:string) {
+  await app.main(`(()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)});t.status='crashed';b.sync(t);b.publish()})()`);
+  const selector='[data-test-class="tab-strip-chip"] [data-kind="conversation"][data-state="crashed"]';
+  try {
+    await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="tab-strip-chip"] [data-kind="conversation"][data-state="crashed"]')));
+    const label=await app.page.expression<string>(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-label')`);
+    assert.ok(label.includes(language==='ko'?'탭 1개':'Tabs: 1'));
+    assert.ok(label.includes(language==='ko'?'탭이 중단됨':'Tab crashed'));
+    await app.click(label);
+    assert.equal(await app.page.expression(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`),'false');
+    await app.shot(`${language}-${theme}-folded-crashed-snapshot-1440`);
+    const foldedLabel=await app.page.expression<string>(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-label')`);
+    assert.ok(foldedLabel.includes(language==='ko'?'탭이 중단됨':'Tab crashed'));
+    await app.page.clickText(foldedLabel,selector);
+    assert.equal(await app.page.expression(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`),'true');
+    writeFileSync(join(evidence,`${language}-${theme}-group-snapshot.json`),JSON.stringify({label,foldedState:'crashed',scenario:'native snapshot projection',rendererKilled:false}));
+  } catch(error) {
+    writeFileSync(join(evidence,`${language}-${theme}-group-failure.json`),JSON.stringify(await app.page.expression(`({buttons:[...document.querySelectorAll('button,[role="button"]')].map(node=>({label:node.getAttribute('aria-label'),disabled:node.getAttribute('aria-disabled'),width:node.getBoundingClientRect().width,animations:node.getAnimations().map(a=>a.playState)})),html:document.querySelector('[data-test-class="browser-area"]')?.outerHTML})`)));
+    throw error;
+  } finally {await app.main(`(()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)});t.status='idle';b.sync(t);b.publish()})()`);}
+}

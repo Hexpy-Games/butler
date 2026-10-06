@@ -32,11 +32,6 @@ pub(super) async fn measure_current(
     {
         eprintln!("{line}");
     }
-    butler_e2e::assert_wall_clock_budget!(
-        Duration::from_micros(samples[98]),
-        Duration::from_millis(50),
-        "all approvals p99: 3000 grants / 600 owners"
-    );
     let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     db.execute(
         "UPDATE chats SET title='Renamed latest' WHERE id='chat-0'",
@@ -64,6 +59,15 @@ pub(super) async fn measure_current(
     assert_eq!(
         current.data()["permissions"].as_array().unwrap(),
         &remaining
+    );
+    eprintln!(
+        "approvals latest state: grants={} renamed_owner=chat-0 revoked=1",
+        remaining.len()
+    );
+    butler_e2e::assert_wall_clock_budget!(
+        Duration::from_micros(samples[98]),
+        Duration::from_millis(50),
+        "all approvals p99: 3000 grants / 600 owners"
     );
     Ok(())
 }

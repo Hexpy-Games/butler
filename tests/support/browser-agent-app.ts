@@ -70,6 +70,9 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       const source = await main<string>(`${win}.getMediaSourceId()`);
       const result = Bun.spawnSync([capture, source.split(":")[1]!, join(evidence, `${name}.png`)]);
       assert.equal(result.exitCode, 0, result.stderr.toString());
+      const compositor=await main<{blue:number}>(`(()=>{const t=globalThis.browserAgentSubject?.tabs.get(globalThis.browserAgentSubject.activeId);const png=${module}('electron').nativeImage.createFromPath(${JSON.stringify(join(evidence,`${name}.png`))});const size=png.getSize(),b=png.getBitmap(),bounds=t?.bounds;let blue=0;if(bounds)for(let y=Math.ceil(bounds.y*size.width/1440);y<(bounds.y+bounds.height)*size.width/1440;y++)for(let x=Math.ceil(bounds.x*size.width/1440);x<(bounds.x+bounds.width)*size.width/1440;x++){const n=(y*size.width+x)*4;if(b[n]>180 && b[n+1]<150 && b[n+2]<120)blue++}return {size,blue,attached:t?.attached===${win},covered:t?.covered,holder:t?.holder,bounds}})()`);
+      writeFileSync(join(evidence,`${name}-compositor.json`),JSON.stringify(compositor));
+      if ((facts as {nativePixels?:{blue:number}}).nativePixels?.blue) assert.ok(compositor.blue>0,'native page is present in the complete App window screenshot');
     };
     const click = async (name: string) => {
       await main(`${win}.webContents.focus()`);

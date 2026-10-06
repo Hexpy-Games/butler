@@ -46,6 +46,25 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
             .await?;
         assert_eq!(response.status, 200, "{}", response.text);
         assert!(response.text.contains(reason), "{}", response.text);
+        let response = admin
+            .send(
+                Method::POST,
+                "/internal/browser/calls",
+                Some(json!({
+                    "op":"tab.act","session":"general","tab":tab,
+                    "args":{"steps":[{"action":"click","ref":"e1"},{"action":"click","ref":"e2"}]}
+                })),
+                &[],
+            )
+            .await?;
+        assert_eq!(response.status, 200, "{}", response.text);
+        let result: serde_json::Value = serde_json::from_str(&response.text).unwrap();
+        let steps = result["steps"].as_array().expect("one receipt per step");
+        assert_eq!(steps.len(), 2);
+        for step in steps {
+            assert_eq!(step["status"], "not_dispatched");
+            assert_eq!(step["reason"], reason);
+        }
     }
     for url in [
         "file:///etc/passwd",

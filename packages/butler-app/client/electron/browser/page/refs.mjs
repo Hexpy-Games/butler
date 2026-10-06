@@ -4,7 +4,13 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
   if (!state || state.obs !== obs || state.epoch !== epoch) return { reason: "stale_ref" };
   const element = state.refs.get(ref)?.deref();
   if (!element?.isConnected) return { reason: "stale_ref" };
-  if (scroll) element.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (scroll) {
+    const raw=boxOf(element),visible=rectangle(element);
+    if (visible.width<raw.width || visible.height<raw.height) {
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
+      globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
+    }
+  }
   const hidden = rendering(element), meaning = semantic(element);
   if (meaning.secure) return { reason: "secure_field" };
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable" };

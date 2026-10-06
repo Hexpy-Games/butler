@@ -9,6 +9,11 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let op = frame["op"].as_str().unwrap_or("").to_owned();
     let session = frame["session"].as_str().unwrap_or("").to_owned();
     validate(&state, &mut frame, &op, &session)?;
+    let count = if op == "tab.act" {
+        frame["args"]["steps"].as_array().map_or(0, Vec::len)
+    } else {
+        0
+    };
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
@@ -23,10 +28,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
         {
-            return super::super::json(
-                StatusCode::OK,
-                json!({"status":"not_dispatched","reason":reason}),
-            );
+            return response(count, json!({"status":"not_dispatched","reason":reason}));
         }
         if matches!(
             op.as_str(),
@@ -40,18 +42,15 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
                 .as_str()
                 .is_some_and(|url| !permitted_url(&state, url))
             {
-                return super::super::json(
-                    StatusCode::OK,
+                return response(
+                    count,
                     json!({"status":"not_dispatched","reason":"navigation_denied"}),
                 );
             }
             frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(&state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS});
         }
         let Some(host) = hub.host.as_ref() else {
-            return super::super::json(
-                StatusCode::OK,
-                json!({"status":"unavailable","reason":"no_browser"}),
-            );
+            return response(count, json!({"status":"unavailable","reason":"no_browser"}));
         };
         if hub.pending.len() >= 8 {
             return Err(error(429, "browser_busy"));
@@ -76,7 +75,13 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     };
     enforce_result_policy(&state, &session, &op, &mut result);
     store_still(&state, &session, &mut result).await?;
-    super::super::json(StatusCode::OK, result)
+    response(count, result)
+}
+fn response(count: usize, value: Value) -> Result<Response, HttpError> {
+    super::super::json(
+        StatusCode::OK,
+        butler_runtime::browser::batch_receipts(count, value),
+    )
 }
 fn permitted_url(state: &HttpState, raw: &str) -> bool {
     butler_runtime::browser::public_url(raw).is_ok()
@@ -277,6 +282,16 @@ async fn upload_still(
     let Some(still) = result.as_object_mut().and_then(|r| r.remove("still")) else {
         return Ok(());
     };
+    {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        if hub
+            .tabs
+            .check(session, result["tab"].as_str().unwrap_or(""), "tab.observe")
+            .is_err()
+        {
+            return Ok(());
+        }
+    }
     let Some(raw) = still["base64"].as_str().filter(|s| s.len() <= 32768) else {
         return Ok(());
     };

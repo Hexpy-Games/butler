@@ -245,7 +245,7 @@ export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
-  browser: { "signedIn": "로그인됨", "stills": "단계 이미지", "agentControl": "버틀러가 사용 중", "userControl": "직접 조작 중", "takeOver": "직접 조작", "handBack": "돌려주기", "waiting": "승인 대기", "still": "브라우저 단계", "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "버틀러 업데이트 필요", "restartRequired": "버틀러 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
+  browser: { "tabCount": "탭 {count}개", "tabMoved": "{title}: {group}, {position}번째", "signedIn": "로그인됨", "stills": "단계 이미지", "agentControl": "버틀러가 사용 중", "userControl": "직접 조작 중", "takeOver": "직접 조작", "handBack": "돌려주기", "waiting": "승인 대기", "still": "브라우저 단계", "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "버틀러 업데이트 필요", "restartRequired": "버틀러 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",

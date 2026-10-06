@@ -28,6 +28,7 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let args = Value::Object(call.arguments.clone());
     if std::env::var_os("BUTLER_BROWSER_DISABLED").is_some()
         || owner
             .binding
@@ -35,12 +36,14 @@ pub(super) async fn execute(
             .as_ref()
             .is_some_and(|names| !names.iter().any(|name| name == &call.name))
     {
-        return encoded(&json!({"status":"not_dispatched","reason":"tool_not_admitted"}));
+        return finish_batch(
+            &args,
+            json!({"status":"not_dispatched","reason":"tool_not_admitted"}),
+        );
     }
     let Some(client) = client::Client::new(owner).await else {
-        return encoded(&json!({"status":"unavailable","reason":"no_browser"}));
+        return finish_batch(&args, json!({"status":"unavailable","reason":"no_browser"}));
     };
-    let args = Value::Object(call.arguments.clone());
     if call.name == "browser_act" {
         return act(owner, invocation, call, occurrence, client, args).await;
     }
@@ -81,7 +84,10 @@ async fn act(
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if owner.binding.access_mode == AccessMode::ReadOnly {
-        return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
+        return finish_batch(
+            &args,
+            json!({"status":"not_dispatched","reason":"read_only"}),
+        );
     }
     let mut prepared = client
         .call("tab.prepare", &args["tab"], &args, invocation.cancellation)
@@ -93,7 +99,11 @@ async fn act(
         .await;
     }
     if prepared["status"] != "ok" {
-        return encoded(&prepared);
+        authority::refuse_resume(owner, call, occurrence).await?;
+        client
+            .waiting(&args["tab"], false, invocation.cancellation)
+            .await;
+        return finish_batch(&args, prepared);
     }
     let scope = butler_runtime::browser::site_scope(prepared["url"].as_str().unwrap_or(""))
         .unwrap_or_default();
@@ -101,9 +111,13 @@ async fn act(
     let approval = match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
         authority::Gate::Pending(value) => {
             client
-                .waiting(&args["tab"], true, invocation.cancellation)
+                .waiting(
+                    &args["tab"],
+                    value["authority_pending"] == true,
+                    invocation.cancellation,
+                )
                 .await;
-            return encoded(&value);
+            return finish_batch(&args, value);
         }
         authority::Gate::Allowed(reference) => reference,
     };
@@ -133,7 +147,11 @@ async fn act(
         result["status"].as_str().unwrap_or("unknown"),
     )
     .await?;
-    encode_page_data(result)
+    finish_batch(&args, result)
+}
+pub(super) fn finish_batch(args: &Value, value: Value) -> Result<JsonDocument, ToolExecutionError> {
+    let count = args["steps"].as_array().map_or(0, Vec::len);
+    encode_page_data(butler_runtime::browser::batch_receipts(count, value))
 }
 fn encode_page_data(mut value: Value) -> Result<JsonDocument, ToolExecutionError> {
     if let Some(tabs) = value.get_mut("tabs").and_then(Value::as_array_mut) {

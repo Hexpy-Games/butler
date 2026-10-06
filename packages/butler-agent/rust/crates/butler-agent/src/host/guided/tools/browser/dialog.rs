@@ -1,6 +1,6 @@
 //! Always-confirm dialogs continue the original call without replaying its click.
 use super::super::GuidedTools;
-use super::{ApprovedBatch, authority, client, dispatch_effect, encode_page_data, encoded, settle};
+use super::{ApprovedBatch, authority, client, dispatch_effect, finish_batch, settle};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
@@ -17,7 +17,7 @@ pub(super) async fn finish(
         .unwrap_or_default();
     let input = json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"dialog":pending["dialog"],"site":scope,"mode":"signed_out","always_confirm":true});
     let approval = match authority::gate(owner, call, occurrence, &input, &scope).await? {
-        authority::Gate::Pending(value) => return encoded(&value),
+        authority::Gate::Pending(value) => return finish_batch(args, value),
         authority::Gate::Allowed(reference) => reference,
     };
     let dispatch = json!({"tab":args["tab"],"dialog":pending["dialog"]["id"],"accept":true});
@@ -44,5 +44,5 @@ pub(super) async fn finish(
         result["status"].as_str().unwrap_or("unknown"),
     )
     .await?;
-    encode_page_data(result)
+    finish_batch(args, result)
 }

@@ -11,7 +11,7 @@ import { soakBrowser } from "../support/browser-agent-soak";
 import { browserBoundaryChecks } from "../support/browser-agent-boundaries";
 import { browserAuthorityChecks } from "../support/browser-agent-authority";
 import { browserArchiveCheck } from "../support/browser-agent-lifecycle";
-import { browserUiChecks, browserOutputEntry } from "../support/browser-agent-ui";
+import { browserUiChecks, browserOutputEntry, browserGroupSnapshotChecks } from "../support/browser-agent-ui";
 import { browserContextCheck } from "../support/browser-agent-context";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
@@ -98,6 +98,7 @@ try {
   await app.call("activate", { id: agentTab.id });
   for (const language of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     await settings(language, theme);
+    await browserGroupSnapshotChecks(app,agentTab.id,language,theme,evidence);
     await app.call("control", { id: agentTab.id, holder: "agent" });
     await app.shot(`${language}-${theme}-agent-1440`);
     await app.call("control", { id: agentTab.id, holder: "user", sticky: true });
@@ -158,7 +159,7 @@ try {
     await phone.getByRole("button", { name: "Allow once", exact:true }).click();
     await delivered(); await context.close();
   } finally { await browser.close(); }
-  await browserAuthorityChecks(app,stub,agentTab.id,send,delivered);
+  await browserAuthorityChecks(app,stub,agentTab.id,send,delivered,evidence);
   await browserUiChecks(app,agentTab.id,evidence);
   await browserArchiveCheck(app,view.url,evidence);
   assert.ok(!stub.results.some(item=>item && typeof item==="object" && "stubFailure" in item),"all guided stub steps completed");

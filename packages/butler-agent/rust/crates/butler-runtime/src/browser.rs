@@ -137,3 +137,37 @@ pub fn payment_host(host: &str) -> bool {
 pub const SECURE_KEYPAD_MARKERS: &[&str] = &[
     "transkey", "nxkey", "nprotect", "anysign", "wizvera", "touchen",
 ];
+
+/// Preserve batch cardinality when a fence or lost host prevents native receipts.
+pub fn batch_receipts(count: usize, mut result: Value) -> Value {
+    if !(1..=10).contains(&count)
+        || result["steps"].is_array()
+        || result["authority_pending"] == true
+        || result["status"] == "dialog_pending"
+    {
+        return result;
+    }
+    let status = if result["status"] == "unknown" {
+        "unknown"
+    } else {
+        "not_dispatched"
+    };
+    let reason = result
+        .get("reason")
+        .or_else(|| result.get("error"))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!("browser_refused"));
+    result["steps"] = Value::Array(
+        (0..count)
+            .map(|index| {
+                serde_json::json!({
+                    "index": index, "status": status, "reason": reason
+                })
+            })
+            .collect(),
+    );
+    if status == "unknown" {
+        result["observe_required"] = Value::Bool(true);
+    }
+    result
+}

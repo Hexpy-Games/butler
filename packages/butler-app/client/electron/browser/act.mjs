@@ -57,7 +57,7 @@ export async function actBatch(tab, args, session) {
         steps.at(-1).still = await stepStill(tab);
         if(tab.dialog) {steps[steps.length-1]={status:"unknown",reason:"dialog_pending",hit:target.hit};failed=true;}
       }
-    } catch { steps.push({ status: "unknown", reason: "dispatch_interrupted" }); failed = true; }
+    } catch { steps[index] = { status: "unknown", reason: "dispatch_interrupted" }; failed = true; }
   }
   if (tab.dialog) { tab.pendingBatch=steps; return {status:"dialog_pending",tab:tab.id,url:tab.url,epoch:tab.epoch,dialog:tab.dialog,steps}; }
   return { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch };

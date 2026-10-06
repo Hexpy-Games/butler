@@ -55,7 +55,7 @@ impl Client {
             .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id}))
             .timeout(std::time::Duration::from_secs(31))
             .send();
-        tokio::select! {
+        let result = tokio::select! {
             ()=signal.cancelled()=>{
                 let _ = self.client.post(format!("{}/internal/browser/calls",self.base))
                     .bearer_auth(&self.bearer).header("x-butler-admin",&self.admin)
@@ -65,9 +65,16 @@ impl Client {
             },
             result=request=>match result {
                 Ok(response) if response.status().is_success()=>response.json::<Value>().await.unwrap_or_else(|_|json!({"status":"unknown","reason":"invalid_result"})),
+                Ok(response) if response.status().is_server_error()=>json!({"status":"unknown","reason":"browser_result_unknown"}),
                 Ok(_)=>json!({"status":"not_dispatched","reason":"browser_refused"}),
                 Err(_)=>json!({"status":"unknown","reason":"browser_host_lost"}),
             }
-        }
+        };
+        let count = if op == "tab.act" {
+            args["steps"].as_array().map_or(0, Vec::len)
+        } else {
+            0
+        };
+        butler_runtime::browser::batch_receipts(count, result)
     }
 }

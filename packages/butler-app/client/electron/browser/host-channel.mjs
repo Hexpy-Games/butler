@@ -7,39 +7,31 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, snap
   let running = false;
   let stateTimer = null;
   let stateFlush = Promise.resolve();
+  let revision=0,published=-1;
   const flushState = () => {
     stateFlush = stateFlush.catch(() => {}).then(async () => {
-      if (running && controller && !controller.signal.aborted && snapshot?.()) {
-        await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs }) });
+      if (running && controller && !controller.signal.aborted && snapshot && revision!==published) {
+        const current=revision;
+        const response=await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs }) });
+        if(response.ok) published=current;
       }
     });
     return stateFlush;
   };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
-  async function storeStills(frame, result) {
-    let latest;
-    for (const step of [result,...result.steps ?? []]) {
-      const still=step.still;delete step.still;
-      if (!still) continue;
-      const response=await request("/internal/browser-host/stills",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({session:frame.session,tab:result.tab,still})});
-      if (response.ok) { const payload=await response.json();step.tab=result.tab;step.still_file=payload.data?.still_file ?? payload.still_file;latest=step.still_file; }
-    }
-    if(latest) result.still_file=latest;
-  }
   async function execute(frame) {
     await flushState();
     let result;
     try { result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" }; }
     catch { result = { status: "unknown", reason: "executor_error" }; }
     await flushState();
-    await storeStills(frame,result);
     await request(`/internal/browser-host/results/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });
   }
   async function connect() {
-    controller = new AbortController();
+    controller = new AbortController();published=-1;
     try {
       const response = await request("/internal/browser-host");
       if (!response.ok) throw new Error("host_unavailable");
@@ -63,6 +55,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, snap
   return {
     start() { if (!running && enabled()) { running = true; void connect(); } },
     changed() {
+      revision++;
       if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
     },
     stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); closeOutputChecks(); },

@@ -41,7 +41,7 @@ function snapshot(options) {
     const coveredBy = point.blocker ? reference(point.blocker) : undefined;
     nodes.push({ ref, targetId: element.id || undefined, frameOrigin: location.origin, role: meaning.role,
       name: meaning.name, interactive: meaning.clickable, secure: meaning.secure, ad: meaning.ad, checked: meaning.checked, preselected: meaning.preselected,
-      actionable: meaning.clickable && !coveredBy && !element.disabled && !meaning.secure,
+      actionable: meaning.clickable && !coveredBy && !element.disabled && element.getAttribute("aria-disabled") !== "true" && !meaning.secure,
       coveredBy, coveredTargetId: point.blocker?.id || undefined });
   };
   const gridCandidates=[];

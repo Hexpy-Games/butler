@@ -30,6 +30,7 @@ export function BrowserArea() {
     let group = groups.find((entry) => entry.id === item.owner);
     if (!group) { group = { id: item.owner, kind: item.owner === "mine" ? "mine" : "conversation", label: item.owner === "mine" ? copy.myTabs : activeChatFromNavigation(navigation, item.owner.slice(13)).shortTitle, collapsed: collapsed[item.owner], tabs: [] }; groups.push(group); }
     if (item.waiting) group.state = "waiting"; else if (item.busy) group.state ??= "working";
+    if (item.status === "crashed") group.state ??= "crashed";
     group.tabs.push({ id: item.id, title: item.title, faviconSrc: item.favicon,
       state: item.busy ? "working" : item.status === "idle" ? undefined : item.status });
   }
@@ -55,7 +56,9 @@ export function BrowserArea() {
     }}>
     <TabStrip groups={groups} activeTabId={state.activeId} panelId="browser-page"
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
-        untitled: copy.newTab, loading: copy.loading, crashed: copy.crashed }}
+        untitled: copy.newTab, loading: copy.loading, working: copy.agentControl, waiting: copy.waiting, crashed: copy.crashed,
+        tabCount: (count) => copy.tabCount.replace("{count}", String(count)),
+        moved: (title, group, position) => copy.tabMoved.replace("{title}", title).replace("{group}", group).replace("{position}", String(position)) }}
       onActivate={(id) => void browserCall("activate", { id })} onClose={(id) => void browserCall("close", { id })}
       onToggleGroup={(id, value) => setCollapsed((current) => ({ ...current, [id]: value }))}
       onNewTab={state.enabled ? () => void browserCall("create") : undefined}
