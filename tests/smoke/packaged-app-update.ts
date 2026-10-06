@@ -10,7 +10,7 @@ import { verifyMacFrameworkLinks, verifyMacPackageMetadata } from "../../deploy/
 import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
 import { normalizeMacBundle, signMacBundle } from "../../packages/butler-app/scripts/release/native-mac-signing.ts";
 import { updateWorkFixture } from "../support/update-work-fixture.ts";
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { smokeElectronArgs } from "../support/smoke-browser.ts";
 import { freePort } from "../support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
@@ -198,7 +198,7 @@ async function smoke() {
     return;
   }
   const debugPort = await freePort(), agentPort = await freePort();
-  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs()], { env: {
+  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs()], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
     BUTLER_APP_UPDATE_MANIFEST: discovery ? "" : process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
     ...(discovery ? { BUTLER_UPDATE_MANIFEST: "", BUTLER_UPDATE_RELEASES_API: "" } : {}),

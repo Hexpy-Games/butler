@@ -78,7 +78,7 @@ export function verifyProductionInventory(catalog, lock = readLock()) {
 export function validateLicense(component) {
   // Supplier's complete, version-pinned distribution notices include custom
   // grants and licenses for Node/Chromium native libraries. Review on upgrade.
-  if (component.id === "runtime:Electron Chromium Node suppliers@41.10.4"
+  if (component.id === "runtime:Electron Chromium Node suppliers@44.5.1"
       && component.license === "LicenseRef-Electron-ThirdParty") return;
   const expression = component.license?.replaceAll("/", " OR ").trim();
   if (!expression) throw new Error(`Unknown license: ${component.id}`);

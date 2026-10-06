@@ -1,5 +1,8 @@
 # Butler App
 
+The desktop shell uses Electron 44 (Chromium 152, Node.js 24). The macOS App
+requires macOS 13 or later; Windows packages target x64.
+
 `packages/butler-app/` contains the recommended desktop product. Butler App is
 the Electron shell, renderer UI, bundled-Agent lifecycle surface, and app-owned
 tooling; the HTTP app gateway is owned and run by Butler Agent. In development,
