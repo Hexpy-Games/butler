@@ -124,9 +124,7 @@ fn source_prompt(
     if let Some(plan) = &state.accepted_plan {
         entries.push(render_accepted_project_plan(plan));
     }
-    if !documents.context.is_empty() {
-        entries.push(documents.context.clone());
-    }
+    entries.extend(documents.prompt_context());
     if !attachments.is_empty() {
         entries.push(attachments.to_owned());
     }
