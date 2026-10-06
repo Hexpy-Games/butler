@@ -32,10 +32,12 @@ try {
       await page.setViewportSize({ width: 296, height });
       await page.evaluate(async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); });
       const audit = await page.evaluate(() => {
-        const mark = document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!;
+        const canvas = document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!;
+        const rest = document.querySelector<SVGElement>('[data-slot="mark-rest"]')!;
+        const mark = rest.hasAttribute("hidden") ? canvas : rest;
         const visible = Array.from(document.querySelectorAll<HTMLElement>("[data-slot]"))
-          .filter((element) => element.getBoundingClientRect().height > 0 && element.dataset.slot !== "mark" && element.dataset.slot !== "rolling-swap" && element.dataset.slot !== "actions");
-        return { images: document.images.length, surface: getComputedStyle(document.body.firstElementChild!).backgroundColor, mark: { width: mark.width, height: mark.height, visible: mark.getBoundingClientRect().width === 48 }, overflow: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+          .filter((element) => element.getBoundingClientRect().height > 0 && element.dataset.slot !== "mark" && element.dataset.slot !== "mark-rest" && element.dataset.slot !== "rolling-swap" && element.dataset.slot !== "actions");
+        return { images: document.images.length, surface: getComputedStyle(document.body.firstElementChild!).backgroundColor, mark: { width: mark.getBoundingClientRect().width, height: mark.getBoundingClientRect().height, visible: mark.getBoundingClientRect().width === 48 }, overflow: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
           elements: visible.map((element) => {
             const rect = element.getBoundingClientRect();
             const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -48,7 +50,7 @@ try {
       assert.equal(audit.surface, theme === "light" ? "color(srgb 1 1 1)" : "color(srgb 0.137255 0.141176 0.152941)");
       assert.ok(audit.mark.width > 0 && audit.mark.height > 0 && audit.mark.visible);
       assert.deepEqual(audit.overflow, [296, height], `${kind}/${state}/${theme}/${locale}/${forceQuit}`);
-      assert.deepEqual(audit.scripts, [{ src: "mark.js", type: "" }, { src: "state.js", type: "" }]);
+      assert.deepEqual(audit.scripts, [{ src: "state.js", type: "" }, { src: "mark.js", type: "" }]);
       assert.ok(audit.elements.some((element) => element.slot === "title"), "Card title remains visible");
       assert.equal(audit.status, "polite");
       assert.equal(audit.titleRole, ["error", "failed"].includes(state) ? "alert" : "heading");

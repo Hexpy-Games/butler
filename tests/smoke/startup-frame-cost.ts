@@ -27,7 +27,7 @@ for (let round = 0; round < 5; round++) {
       const result = await page.evaluate(() => ({
         marks: Object.fromEntries(performance.getEntriesByType("mark").map(({ name, startTime }) => [name, startTime])),
         images: document.images.length, font: document.fonts.check('14px "Pretendard Variable"'),
-        mark: document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!.width,
+        mark: document.querySelector<SVGElement>('[data-slot="mark-rest"]')!.getBoundingClientRect().width || document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!.width,
         title: document.querySelector('[data-slot="title"]')!.textContent,
         line: document.querySelector('[data-slot="line"]')!.textContent,
         overflow: document.documentElement.scrollWidth > innerWidth,

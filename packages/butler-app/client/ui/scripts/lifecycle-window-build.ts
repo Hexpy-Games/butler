@@ -4,6 +4,7 @@ import { resolve, relative, join } from "node:path";
 import subsetFont from "subset-font";
 import { lifecycleBrowser, uiRoot } from "./lifecycle-browser";
 import { captureLifecycleCss } from "./lifecycle-css";
+import { lifecycleRestMark } from "./lifecycle-mark";
 import { lifecycleCopy } from "../../../../butler-i18n/src/lifecycle";
 
 export const lifecycleOutput = resolve(uiRoot, "lifecycle-assets");
@@ -36,12 +37,17 @@ async function capture() {
     await page.goto(host.url);
     await page.locator("[data-slot=primary]").waitFor();
     const css = await page.evaluate(captureLifecycleCss, (await page.locator("#root > *").elementHandle())!);
-    const view = await page.evaluate((css) => {
+    const view = await page.evaluate(({ css, rest }) => {
       const root = document.querySelector("#root > *")!.cloneNode(true) as Element;
       const primary = root.querySelector("[data-slot=primary]")!;
       const destructive = root.querySelector("[data-slot=destructive]")!;
       const mark = root.querySelector('[data-test-class="lifecycle-mark"] canvas')!;
       mark.setAttribute("data-slot", "mark");
+      mark.setAttribute("hidden", "");
+      mark.insertAdjacentHTML("beforebegin", rest);
+      const fallback = root.querySelector("[data-slot=mark-rest]")!;
+      fallback.setAttribute("class", mark.className);
+      fallback.setAttribute("color", fallback.getAttribute("data-light")!);
       const classes: Record<string, string> = { primary: primary.className, destructive: destructive.className };
       const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
       for (const name of ["outgoing", "incoming"]) {
@@ -61,7 +67,7 @@ async function capture() {
         surface[theme] = `#${Array.from(sample.getImageData(0, 0, 1, 1).data).slice(0, 3).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
       }
       return { html, css, classes, surface, initialHeight: Math.ceil(root.getBoundingClientRect().height) };
-    }, css);
+    }, { css, rest: lifecycleRestMark() });
     return view;
   } finally { await host.close(); }
 }
@@ -81,7 +87,7 @@ export async function buildLifecycleAssets(check = false) {
   const manifest = { surface: view.surface, sceneTones, initialHeight: view.initialHeight };
   const css = `${view.css}[hidden]{display:none!important}`;
   const prefix = `<!doctype html><html data-copy='${JSON.stringify(lifecycleCopy).replaceAll("'", "&#39;")}' data-classes='${JSON.stringify(view.classes)}'><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: file:; font-src data:; connect-src 'none'"><title>Butler</title><style>${css}html,body{margin:0;width:100%;height:auto;min-height:0}body>div{width:100%}`;
-  const suffix = `</style></head><body>${view.html}<script src="mark.js"></script><script src="state.js"></script></body></html>`;
+  const suffix = `</style></head><body>${view.html}<script src="state.js"></script></body></html>`;
   const html = `${prefix}@font-face{font-family:"Pretendard Variable";font-weight:100 900;font-display:block;src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format("woff2")}${suffix}`;
   const sizes = { html: Buffer.byteLength(prefix + suffix), font: fontBytes.length, mark: Buffer.byteLength(mark), state: Buffer.byteLength(state) };
   for (const [name, budget] of Object.entries({ html: 20_480, font: 40_960, mark: 10_240, state: 3072 })) {
