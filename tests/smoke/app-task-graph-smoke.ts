@@ -95,9 +95,23 @@ try {
               (a.effect as KeyframeEffect).getKeyframes().every(frame => !("transform" in frame)))), "reduced motion kept a graph ring or geometry moving");
           if (width === 1280 && tasks > 1) await verifyGraphFades(page);
           const selected = page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]');
-          const expected = ["running", "failed", "blocked"].map(status => snapshots.flatMap(g => g.nodes).find(n => n.status === status)).find(Boolean)
-            ?? snapshots.flatMap(g => g.nodes).filter(n => n.status === "completed" || n.status === "cancelled").at(-1) ?? snapshots[0]!.nodes[0]!;
-          assert.equal(await selected.getAttribute("data-task-id"), expected.task_id);
+          const orderedGraphs = ordered.map(graph => snapshots.find(snapshot => snapshot.graph_id === graph.graph_id)!);
+          let candidates = expectedDefaultCandidates(orderedGraphs);
+          let defaultSelectedId = await selected.getAttribute("data-task-id");
+          assert(candidates.some(node => node.task_id === defaultSelectedId),
+            `default selection follows running, failed, blocked, then last finished for ${states.length} graphs`);
+          if (output && matrix) await page.screenshot({ path: `${output}/after-${states.length}-${width}-${theme}-${language}.png`, animations: "disabled" });
+          if (!matrix && states.length === 1 && states[0] === "running" && tasks === 1) {
+            await verifyStoppedGraphs(page, server, snapshots, session.session_hint);
+            const refreshed = await Promise.all(list.graphs.map(graph => server.api<TaskGraphSnapshot>(`/plans/${graph.graph_id}/task-graph`)));
+            candidates = expectedDefaultCandidates(refreshed);
+            const candidateIds = candidates.map(node => node.task_id);
+            await page.waitForFunction(ids => ids.includes(document.querySelector('[data-test-class="task-graph-card"][aria-pressed="true"]')?.getAttribute("data-task-id") ?? ""), candidateIds);
+            defaultSelectedId = await page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]').getAttribute("data-task-id");
+            assert(candidateIds.includes(defaultSelectedId!),
+              "an untouched default selection follows the last finished task after running work completes");
+          }
+          const expected = candidates.find(node => node.task_id === defaultSelectedId)!;
           await selected.focus();
           const owner = snapshots.find(g => g.nodes.some(n => n.task_id === expected.task_id))!;
           const last = owner.nodes.at(-1)?.task_id === expected.task_id;
@@ -133,7 +147,7 @@ try {
           await page.getByRole("dialog").getByRole("heading", { name: language === "ko" ? "목표" : "Goal", exact: true }).waitFor();
           if (output) await page.screenshot({ path: `${output}/document-${states.length}-${width}-${theme}-${language}.png` });
           await page.keyboard.press("Escape");
-          await verifyPendingSelection(page, open[0]!);
+          const explicitSelection = await verifyPendingSelection(page, open[0]!);
           if (states.length > 1) {
             const group = groups.first();
             await group.locator('[aria-expanded="true"]').click();
@@ -144,10 +158,11 @@ try {
           }
           assert(!/\bWork\b|Steward|스튜어드|위임|delegate_to_/u.test(await page.locator('[data-test-class="task-graph-section"]').innerText()));
           if (matrix && width === 1280 && theme === "light" && language === "en") await assertTaskGraphClocks(page, snapshots.filter(g => g.counts.running > 0).length);
-          if (output) await page.screenshot({ path: `${output}/after-${states.length}-${width}-${theme}-${language}.png` });
           if (width === 375 && theme === "dark" && language === "en") {
             await verifyGraphRevision(page, server, open[0]!.graph_id, session.session_hint);
             await verifyStoppedGraphs(page, server, snapshots, session.session_hint);
+            if (explicitSelection) assert.equal(await page.locator('[data-test-class="task-graph-card"][aria-pressed="true"]').getAttribute("data-task-id"), explicitSelection,
+              "an explicit user selection survives later graph revisions");
           }
           console.log(JSON.stringify({ graphs: states.length, width, theme, language, cards: open.reduce((n, g) => n + g.totals.nodes, 0), edges: open.reduce((n, g) => n + g.totals.edges, 0) }));
         } finally { await page.close(); }
@@ -156,3 +171,20 @@ try {
   }
   assert.deepEqual(pageErrors, [], "the graph and its dialogs must render without page errors");
 } finally { await context.close(); await browser.close(); }
+
+function expectedDefaultCandidates(graphs: TaskGraphSnapshot[]): TaskGraphSnapshot["nodes"] {
+  const nodes = graphs.flatMap(graph => graph.nodes);
+  for (const status of ["running", "failed", "blocked"] as const) {
+    const candidates = nodes.filter(node => node.status === status);
+    if (candidates.length) return candidates;
+  }
+  const finished = nodes.filter(node => node.status === "completed" || node.status === "cancelled");
+  if (!finished.length) return [nodes[0]!];
+  const latest = Math.max(...finished.map(node => finishedTime(node.finished_at)));
+  return finished.filter(node => finishedTime(node.finished_at) === latest);
+}
+
+function finishedTime(value: string | null): number {
+  const parsed = Date.parse(value ?? "1970-01-01");
+  return Number.isFinite(parsed) ? parsed : 0;
+}

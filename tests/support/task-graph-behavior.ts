@@ -8,14 +8,33 @@ import { assertTaskGraphIdle } from "./task-graph-idle.ts";
 import { finishGraphWorkers } from "./task-graph-seed.ts";
 
 export async function verifyGraphFades(page: Page) {
-  const canvas = page.locator('[data-test-class="task-graph-canvas"]').first();
-  await canvas.evaluate(el => { el.scrollLeft = 0; });
-  await page.waitForFunction(() => document.querySelector('[data-test-class="task-graph-canvas"]')?.getAttribute("data-at-start") === "true");
-  assert.equal(await canvas.getAttribute("data-at-end"), "false");
-  await canvas.evaluate(el => { el.scrollLeft = el.scrollWidth; });
-  await page.waitForFunction(() => document.querySelector('[data-test-class="task-graph-canvas"]')?.getAttribute("data-at-end") === "true");
-  assert.equal(await canvas.getAttribute("data-at-start"), "false");
-  await canvas.evaluate(el => { el.scrollLeft = 0; });
+  const canvases = page.locator('[data-test-class="task-graph-canvas"]');
+  const count = await canvases.count();
+  await canvases.evaluateAll(items => items.forEach(el => { el.scrollLeft = 0; }));
+  await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('[data-test-class="task-graph-canvas"]')].every(el => el.dataset.atStart === "true"));
+  const rightFades = await canvases.evaluateAll(items => items.map(el => ({
+    axis: el.dataset.scrollFade, overflowing: el.dataset.overflowing, atEnd: el.dataset.atEnd,
+    size: getComputedStyle(el).getPropertyValue("--scroll-fade-end").trim(), mask: getComputedStyle(el).maskImage,
+  })));
+  assert.equal(rightFades.length, count);
+  for (const fade of rightFades) {
+    assert.equal(fade.axis, "x");
+    assert.equal(fade.overflowing, "true");
+    assert.equal(fade.atEnd, "false");
+    assert.notEqual(fade.size, "0px", "the clipped right edge has an active fade");
+    assert.notEqual(fade.mask, "none", "the canvas fade mask is applied");
+  }
+  await canvases.evaluateAll(items => items.forEach(el => { el.scrollLeft = el.scrollWidth; }));
+  await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('[data-test-class="task-graph-canvas"]')].every(el => el.dataset.atEnd === "true"));
+  const leftFades = await canvases.evaluateAll(items => items.map(el => ({
+    atStart: el.dataset.atStart, size: getComputedStyle(el).getPropertyValue("--scroll-fade-start").trim(),
+  })));
+  for (const fade of leftFades) {
+    assert.equal(fade.atStart, "false");
+    assert.notEqual(fade.size, "0px", "the clipped left edge has an active fade");
+  }
+  await canvases.evaluateAll(items => items.forEach(el => { el.scrollLeft = 0; }));
+  await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('[data-test-class="task-graph-canvas"]')].every(el => el.dataset.atStart === "true"));
 }
 
 export async function verifyGraphRevision(page: Page, server: NativeAppServerHandle, graphId: string, runtimeId: string) {
@@ -58,11 +77,12 @@ async function emitGraph(page: Page, graph: TaskGraphSnapshot, runtimeId: string
   }), { graph, runtimeId });
 }
 
-export async function verifyPendingSelection(page: Page, graph: TaskGraphSnapshot) {
+export async function verifyPendingSelection(page: Page, graph: TaskGraphSnapshot): Promise<string | undefined> {
   const pending = graph.nodes.find(n => n.session_id === null);
   if (!pending) return;
   const card = page.locator(`[data-task-id="${pending.task_id}"]`);
   await card.click();
   assert.equal(await card.getAttribute("aria-pressed"), "true");
   assert.equal(await page.getByRole("dialog").count(), 0, "an unassigned card only selects");
+  return pending.task_id;
 }

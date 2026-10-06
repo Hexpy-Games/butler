@@ -6,6 +6,7 @@ export interface TaskGraphViewState {
   summaries: TaskGraphSummary[];
   graphs: TaskGraphSnapshot[];
   selected: string | null;
+  selectionExplicit: boolean;
   open: Record<string, boolean>;
   loading: boolean;
   error: boolean;
@@ -14,7 +15,7 @@ interface TaskGraphsState {
   taskGraphs: Record<string, TaskGraphViewState>;
   update: (sessionId: string, patch: Partial<TaskGraphViewState>) => void;
 }
-export const EMPTY_TASK_GRAPHS: TaskGraphViewState = { summaries: [], graphs: [], selected: null, open: {}, loading: false, error: false };
+export const EMPTY_TASK_GRAPHS: TaskGraphViewState = { summaries: [], graphs: [], selected: null, selectionExplicit: false, open: {}, loading: false, error: false };
 export const useTaskGraphs = create<TaskGraphsState>((set) => ({
   taskGraphs: {},
   update: (sessionId, patch) => set(state => ({ taskGraphs: { ...state.taskGraphs,
@@ -96,10 +97,12 @@ async function loadSessionGraphs(sessionId: string) {
     }));
     const current = view(sessionId);
     const graphs = current.graphs.filter(g => !known.has(g.graph_id) || summaries.some(s => s.graph_id === g.graph_id));
-    const selected = graphs.some(g => g.nodes.some(n => n.task_id === current.selected)) ? current.selected : defaultTask(graphs);
+    const selectedExists = graphs.some(g => g.nodes.some(n => n.task_id === current.selected));
+    const keepSelection = current.selectionExplicit && selectedExists;
+    const selected = keepSelection ? current.selected : defaultTask(graphs);
     const open = { ...current.open };
     if (!initialized && !Object.values(open).some(Boolean) && graphs[0]?.state === "waiting") open[graphs[0].graph_id] = true;
-    update(sessionId, { graphs, selected, open });
+    update(sessionId, { graphs, selected, selectionExplicit: keepSelection, open });
   } catch { update(sessionId, { error: true }); }
 }
 
@@ -123,7 +126,8 @@ export function receiveTaskGraphEvent(event: TimelineEvent): void {
   if (current?.graph_revision === payload?.graph_revision) return;
   void refreshGraph(sessionId, planId).then(() => {
     const state = view(sessionId);
-    if (!state.graphs.some(g => g.nodes.some(n => n.task_id === state.selected))) update(sessionId, { selected: defaultTask(state.graphs) });
+    const selectedExists = state.graphs.some(g => g.nodes.some(n => n.task_id === state.selected));
+    if (!state.selectionExplicit || !selectedExists) update(sessionId, { selected: defaultTask(state.graphs), selectionExplicit: false });
   });
 }
 
