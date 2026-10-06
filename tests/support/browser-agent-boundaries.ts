@@ -76,8 +76,9 @@ async function checkRefScrolling(app:App,tab:string,evidence:string) {
 }
 
 async function checkDeniedReceipts(app:App,tab:string,evidence:string) {
-  const results=await app.main<any>(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)}),args={steps:[{action:'click',ref:'e1'},{action:'click',ref:'e2'}]};const wrong=await b.execute({op:'tab.act',session:'other',tab:t.id,args});const original=t.holder;try{t.holder='user';return {wrong,user:await b.execute({op:'tab.act',session:'general',tab:t.id,args})}}finally{t.holder=original}})()`);
-  for(const [name,result] of Object.entries(results) as [string,any][]) {
+  const results=await app.main<any>(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)}),args={steps:[{action:'click',ref:'e1'},{action:'click',ref:'e2'}]};const wrong=await b.execute({op:'tab.act',session:'other',tab:t.id,args});const original=t.holder;try{t.holder='user';return {wrong,user:await b.execute({op:'tab.act',session:'general',tab:t.id,args}),close:await b.execute({op:'tab.close',session:'general',tab:t.id,args:{}})}}finally{t.holder=original}})()`);
+  assert.equal(results.close.reason,'user_control');
+  for(const [name,result] of Object.entries(results).filter(([name])=>name!=='close') as [string,any][]) {
     assert.equal(result.steps.length,2);
     for(const step of result.steps){assert.equal(step.status,'not_dispatched');assert.equal(step.reason,name==='wrong'?'not_your_tab':'user_control');}
   }

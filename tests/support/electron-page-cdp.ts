@@ -8,6 +8,7 @@ export interface ElectronPage {
   press(key: "Escape" | "Enter"): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
+  clickSelector(selector: string): Promise<void>;
   drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
@@ -117,6 +118,18 @@ async function connect(url: string): Promise<ElectronPage> {
     screenshot: async () => {
       const result = await send("Page.captureScreenshot", { format:"png" }) as { data:string };
       return Buffer.from(result.data, "base64");
+    },
+    clickSelector: async selector => {
+      const point = await expression<{x:number;y:number}>(`(() => {
+        const node=document.querySelector(${JSON.stringify(selector)});
+        if(!node || node.disabled || node.getAttribute('aria-disabled')==='true')throw new Error('Click target unavailable');
+        node.scrollIntoView({block:'center'});
+        const box=node.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2;
+        if(!box.width || !box.height || !node.contains(document.elementFromPoint(x,y)))throw new Error('Click target not hit-testable');
+        return {x,y};
+      })()`);
+      await send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1});
+      await send("Input.dispatchMouseEvent", {type:"mouseReleased",...point,button:"left",clickCount:1});
     },
     clickText: async (text, scope) => {
       const point = await expression<{ x:number;y:number }>(`(() => {

@@ -61,6 +61,20 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
         let result: serde_json::Value = serde_json::from_str(&response.text).unwrap();
         let steps = result["steps"].as_array().expect("one receipt per step");
         assert_eq!(steps.len(), 2);
+        if tab != "private" {
+            let close = admin
+                .send(
+                    Method::POST,
+                    "/internal/browser/calls",
+                    Some(json!({
+                        "op":"tab.close","session":"general","tab":tab,"args":{}
+                    })),
+                    &[],
+                )
+                .await?;
+            assert_eq!(close.status, 200);
+            assert!(close.text.contains(reason), "{}", close.text);
+        }
         for step in steps {
             assert_eq!(step["status"], "not_dispatched");
             assert_eq!(step["reason"], reason);

@@ -68,12 +68,12 @@ export async function browserGroupSnapshotChecks(app:App,tab:string,language:str
     const label=await app.page.expression<string>(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-label')`);
     assert.ok(label.includes(language==='ko'?'탭 1개':'Tabs: 1'));
     assert.ok(label.includes(language==='ko'?'탭이 중단됨':'Tab crashed'));
-    await app.click(label);
+    await app.page.clickSelector(selector);
     assert.equal(await app.page.expression(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`),'false');
     await app.shot(`${language}-${theme}-folded-crashed-snapshot-1440`);
     const foldedLabel=await app.page.expression<string>(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-label')`);
     assert.ok(foldedLabel.includes(language==='ko'?'탭이 중단됨':'Tab crashed'));
-    await app.page.clickText(foldedLabel,selector);
+    await app.page.clickSelector(selector);
     assert.equal(await app.page.expression(`document.querySelector(${JSON.stringify(selector)}).getAttribute('aria-expanded')`),'true');
     writeFileSync(join(evidence,`${language}-${theme}-group-snapshot.json`),JSON.stringify({label,foldedState:'crashed',scenario:'native snapshot projection',rendererKilled:false}));
   } catch(error) {

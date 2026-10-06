@@ -96,12 +96,12 @@ async function executeFrame(browser, frame) {
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
-  if (op === "tab.close") return requestClose(browser,tab);
   if (tab.profile === "signed_in") return { status: "refused", reason: "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
   if (op === "tab.wait") { tab.waiting = tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
   if (op === "tab.waiting") { tab.waiting = args.value === true; browser.publish(); return { status: "ok" }; }
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
+  if (op === "tab.close") return requestClose(browser,tab);
   if (op === "tab.dialog") return answerDialog(browser,tab,args);
   if (tab.dialog) return pendingDialog(tab);
   touch(browser, tab);
