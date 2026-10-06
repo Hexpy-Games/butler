@@ -220,14 +220,16 @@ async function scheduleChecks(page: Page, prefix: string) {
   await detail.waitFor();
   let deletes = 0;
   page.on("request", (request) => { if (request.method() === "DELETE" && request.url().includes("/automations/")) deletes += 1; });
-  await detail.getByRole("button", { name: copy.common.delete, exact: true }).click();
+  await detail.getByRole("button", { name: copy.common.more, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.common.delete, exact: true }).click();
   const confirm = page.getByRole("alertdialog", { name: copy.common.delete, exact: true });
   await confirm.getByText(copy.settings.deleteSchedule("삭제 검증"), { exact: true }).waitFor();
   await capture(page, prefix, "schedule-delete-confirm");
   assert.equal(deletes, 0);
   await page.keyboard.press("Escape");
   assert.equal(deletes, 0, "dismissal sends no DELETE");
-  await detail.getByRole("button", { name: copy.common.delete, exact: true }).click();
+  await detail.getByRole("button", { name: copy.common.more, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.common.delete, exact: true }).click();
   await confirm.getByRole("button", { name: copy.common.delete, exact: true }).click();
   await detail.waitFor({ state: "hidden" });
   assert.equal(deletes, 1, "confirmation deletes once");
