@@ -1,3 +1,6 @@
+import { readUiCrashLog } from "@/app/uiCrashReporting.ts";
+import { notifyStatus } from "@/app/notifications.ts";
+import { Button } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
@@ -44,6 +47,9 @@ export function securityAuthoritySections({ models, savedKeys, grants }: {
     )}
     {draft && <>
       <SettingsSection id="diagnostics" kind="form" title={settingsCopy.pageSections.diagnostics}>
+        <Button size="sm" variant="outline" onClick={() => void copyDiagnostics()}>
+          {appCopy.interfacePanels.copyDiagnostics}
+        </Button>
         <SettingsSwitch
           settingId="diagnostics"
           label={fields.diagnostics}
@@ -53,4 +59,13 @@ export function securityAuthoritySections({ models, savedKeys, grants }: {
       </SettingsSection>
     </>}
   </>;
+}
+
+async function copyDiagnostics(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({ ui_crashes: await readUiCrashLog() }, null, 2));
+    notifyStatus(appCopy.firstRun.reportCopied, { id: "ui-crash-export", tone: "ok" });
+  } catch {
+    notifyStatus(appCopy.firstRun.reportUnavailable, { id: "ui-crash-export", tone: "error" });
+  }
 }

@@ -1,6 +1,7 @@
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
+import { createUiCrashStore } from "./ui-crash-store.mjs";
 import {
   app,
   BrowserWindow,
@@ -137,6 +138,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
+const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
@@ -2345,9 +2347,15 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
   firstRunSetupBridge.cancel(),
 );
 
-ipcMain.handle("butler:first-run-setup-diagnostics", () =>
-  firstRunSetupBridge.diagnostics(),
-);
+ipcMain.handle("butler:ui-crash", (event, input) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("invalid_crash_sender");
+  return uiCrashStore.append(input);
+});
+ipcMain.handle("butler:ui-crash-log", () => uiCrashStore.read());
+
+ipcMain.handle("butler:first-run-setup-diagnostics", async () => ({
+  ...firstRunSetupBridge.diagnostics(), ui_crashes: await uiCrashStore.read(),
+}));
 
 ipcMain.handle("butler:agent-service-status", () =>
   agentServiceControl.getAgentServiceStatus(),
@@ -2381,9 +2389,9 @@ ipcMain.handle("butler:agent-runtime-update-rollback", (_event, input = {}) =>
   agentServiceControl.rollbackAgentRuntimeUpdate(input ?? {}),
 );
 
-ipcMain.handle("butler:agent-service-diagnostics", () =>
-  agentServiceControl.readAgentServiceDiagnostics(),
-);
+ipcMain.handle("butler:agent-service-diagnostics", async () => ({
+  ...await agentServiceControl.readAgentServiceDiagnostics(), ui_crashes: await uiCrashStore.read(),
+}));
 
 ipcMain.handle("butler:quit-app", () => {
   app.quit();
