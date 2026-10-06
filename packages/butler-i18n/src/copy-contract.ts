@@ -212,6 +212,7 @@ interface ConversationCopy {
 }
 
 export interface AppCopy {
+  browser: { title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -960,7 +961,8 @@ export interface AppCopy {
   settings: {
     hooks: { add: string; edit: string; test: string; remove: string; recent: string; empty: string;
       name: string; event: string; tools: string; command: string; args: string; timeout: string;
-      failClosed: string; async: string; enabled: string; refresh: string; blocked: string; user: string; };
+      failClosed: string; async: string; enabled: string; refresh: string; blocked: string; editTitle: string; disabled: string; emptyRuns: string; testSuccess: string; testFailure: string;
+      exitCode: string; commandDisabled: string; commandRequired: string; deleteConfirm: (name: string) => string; };
 
     deleteSchedule: (name: string) => string;
     deleteMcpServer: (name: string) => string;

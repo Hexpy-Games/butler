@@ -1,7 +1,7 @@
 import { notifyError } from "@/app/notifications.ts";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, Field, FieldLabel, Input, NativeSelect, NativeSelectOption, Stack, Switch } from "@/butler-ds";
+import { Button, ButtonContainer, Field, FieldLabel, Input, NativeSelect, NativeSelectOption, Stack, Switch, Tooltip } from "@/butler-ds";
 import { blockingEvent, HOOK_EVENTS, type HookDefinition, type HookEvent } from "./hooksTypes";
 export function HookForm({ hook, busy, onSave, onCancel }: {
   hook: HookDefinition; busy: boolean; onSave: (hook: HookDefinition) => void; onCancel: () => void;
@@ -34,8 +34,8 @@ export function HookForm({ hook, busy, onSave, onCancel }: {
         tools: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
       } })} /></Field> : null}
     <Field><FieldLabel htmlFor="hook-command">{copy.command}</FieldLabel>
-      <Input id="hook-command" value={form.command ?? ""} disabled={Boolean(argv.trim())}
-        onChange={(e) => update({ command: e.target.value })} /></Field>
+      <Tooltip label={argv.trim() ? copy.commandDisabled : undefined}><Input id="hook-command" value={form.command ?? ""} disabled={Boolean(argv.trim())}
+        onChange={(e) => update({ command: e.target.value })} /></Tooltip></Field>
     <Field><FieldLabel htmlFor="hook-args">{copy.args}</FieldLabel>
       <Input id="hook-args" value={argv} onChange={(e) => setArgv(e.target.value)} /></Field>
     <Field><FieldLabel htmlFor="hook-timeout">{copy.timeout}</FieldLabel>
@@ -47,7 +47,7 @@ export function HookForm({ hook, busy, onSave, onCancel }: {
         <Switch id="hook-async" checked={form.async} onCheckedChange={(async) => update({ async })} /></Field>}
     <ButtonContainer size="default" justify="end">
       <Button variant="outline" disabled={busy} onClick={onCancel}>{appCopy.common.cancel}</Button>
-      <Button disabled={busy || (!argv.trim() && !form.command?.trim())} onClick={save}>{appCopy.common.save}</Button>
+      <Tooltip label={busy ? appCopy.settings.saving : !argv.trim() && !form.command?.trim() ? copy.commandRequired : undefined}><Button disabled={busy || (!argv.trim() && !form.command?.trim())} onClick={save}>{appCopy.common.save}</Button></Tooltip>
     </ButtonContainer>
   </Stack>;
 }

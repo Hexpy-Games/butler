@@ -8,7 +8,7 @@ import styles from "./NativeViewSlot.module.css";
 export interface NativeViewSlotProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children"> {
   /** Where to put the native view; called at most once per frame, only on change. */
   onBoundsChange: (bounds: NativeViewBounds) => void;
-  /** True while a DS overlay overlaps the slot or a panel animates across it. */
+  /** Reports initial and changed coverage: true while a DS overlay overlaps or a panel animates. */
   onOcclusion?: (occluded: boolean) => void;
   /** No native view right now (no tab, crashed page): reports visible=false and shows `children`. */
   hidden?: boolean;

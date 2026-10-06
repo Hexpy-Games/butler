@@ -240,6 +240,7 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
+  browser: { "title": "Browser", "myTabs": "My tabs", "newTab": "New tab", "closeTab": "Close tab", "address": "Address", "addressPlaceholder": "Search or enter URL", "back": "Back", "forward": "Forward", "reload": "Reload", "stop": "Stop", "loading": "Loading", "crashed": "Tab crashed", "empty": "Open a new tab", "updateRequired": "Update Butler", "restartRequired": "Restart Butler", "failed": "Could not open page", "openOutput": "Open in Browser", "output": "Output" },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",
@@ -1089,7 +1090,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     copy: "Copy",
   },
   settings: {
-    hooks: { add: "Add hook", edit: "Edit", test: "Test", remove: "Delete", recent: "Recent runs", empty: "No hooks", name: "Name", event: "Event", tools: "Tools", command: "Command", args: "Args (JSON)", timeout: "Timeout (ms)", failClosed: "Block on error", async: "Background", enabled: "Enabled", refresh: "Refresh", blocked: "Blocked by hook", user: "User" },
+    hooks: { add: "Add hook", edit: "Edit", test: "Test", remove: "Delete", recent: "Recent runs", empty: "No hooks", name: "Name", event: "Event", tools: "Tools", command: "Command", args: "Args (JSON)", timeout: "Timeout (ms)", failClosed: "Block on error", async: "Background", enabled: "Enabled", refresh: "Refresh", blocked: "Blocked by hook", editTitle: "Edit hook", disabled: "Disabled", emptyRuns: "No runs yet", testSuccess: "Run succeeded", testFailure: "Run failed", exitCode: "Exit code", commandDisabled: "Using arguments.", commandRequired: "Enter a command or arguments.", deleteConfirm: name => `Delete hook "${name}".` },
     deleteSchedule: name => `Delete schedule "${name}".`,
     deleteMcpServer: name => `Delete MCP server "${name}" and its saved credentials.`,
     mcpEnabled: "Enabled", mcpDisabled: "Disabled",
@@ -1139,7 +1140,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       server: "Configure the Butler server connection and new project folder.",
       updates: "Check and update Butler App.",
       mcp: "Manage MCP servers and their connection settings.",
-      hooks: "User command hooks.",
+      hooks: "Run your own commands on Butler events.",
       skills: "Manage built-in and project skills.",
       usage: "Review model and tool usage.",
       logs: "Inspect model requests and responses in developer mode.",
