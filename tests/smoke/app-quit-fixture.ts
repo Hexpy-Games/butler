@@ -22,6 +22,7 @@ export async function quitFixture() {
   cpSync(resolve("packages/butler-app/client/ui/dist"), join(install, "resources/app-client/dist"), { recursive: true });
   writeOnboardingComplete(data);
   let calls = 0;
+  let streamingCalls = 0;
   const model = createServer(async (request, response) => {
     if (request.method === "GET") {
       response.setHeader("content-type", "application/json");
@@ -31,14 +32,17 @@ export async function quitFixture() {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk);
     const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean };
-    const first = ++calls === 1;
-    const base = { id: `quit-${calls}`, object: "chat.completion.chunk", model: "stub" };
-    const delta = (text: string) => `data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { content: text } }] })}\n\n`;
+    calls++;
     if (!body.stream) {
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "waiting" }, finish_reason: "stop" }] }));
       return;
     }
+    // Title/maintenance requests also use the model. Only turn streams choose
+    // the held active response and count toward exactly-once queue delivery.
+    const first = ++streamingCalls === 1;
+    const base = { id: `quit-${calls}`, object: "chat.completion.chunk", model: "stub" };
+    const delta = (text: string) => `data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { content: text } }] })}\n\n`;
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.write(delta(first ? "one" : "waiting"));
     if (!first) response.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
@@ -74,7 +78,7 @@ export async function quitFixture() {
     return (await response.json() as { data: Record<string, any> }).data;
   };
   return {
-    root, data, env, api, calls: () => calls,
+    root, data, env, api, calls: () => calls, streamingCalls: () => streamingCalls,
     lastExit: () => JSON.parse(readFileSync(join(data, "app/runtime/foreground/last-exit.json"), "utf8")),
     cleanup() { model.closeAllConnections(); model.close(); rmSync(root, { recursive: true, force: true }); },
   };

@@ -127,7 +127,8 @@ try {
   const messages = (await fixture.api("/messages?chat_id=general")).messages;
   assert.equal(messages.filter((message: any) => message.role === "user").length, 2);
   assert.equal(messages.filter((message: any) => message.role === "assistant" && message.text?.trim() === "waiting").length, 1);
-  assert.equal(fixture.calls(), 2);
+  console.log(JSON.stringify({ model_calls: fixture.calls(), turn_streams: fixture.streamingCalls() }));
+  assert.equal(fixture.streamingCalls(), 2);
   await quit(restarted, false);
   application = undefined;
   console.log("PASS: active input retryable, follow-up delivered once, queue unpaused");

@@ -88,3 +88,26 @@ original `codex/lifecycle-windows-impl` branch had already been deleted, so no
 existing-ref fallback was available. No PR, tag, merge or hosted Windows CI
 was created. Native verification used a Git bundle in the task-owned Windows
 worktree while publication was unavailable.
+
+The latest Windows UI build passed (7.36 s). Ten SSH-launched native Electron
+runs completed with a task-built static Agent and no live model calls:
+
+| Windows direct Electron | Runs | app_ready median / p95 (ms) | splash_painted - app_ready median / p95 (ms) |
+| --- | ---: | ---: | ---: |
+| Cold isolated profile | 5 | 207.164 / 220.763 | 1274.114 / 1335.422 |
+| Warm same profile | 5 | 113.939 / 136.483 | 411.691 / 424.657 |
+
+These fail the 300 ms paint budget. Raw events are in
+`plans/lifecycle/evidence/startup-windows.json`; they do not prove interactive
+desktop presentation or Squirrel/Defender install timings. No Task Scheduler
+entry was created on the owner PC.
+
+Windows Quit hid the main window in 1.341 ms, showed feedback in 98.675 ms
+and exited in 209.764 ms. The restart assertions confirmed one delivered
+follow-up, one retryable interrupted input, and an unpaused queue. Its final
+model-call count failed (8 versus 2): the fixture counted non-streaming title
+and maintenance requests as turn streams. The fixture now retains total calls
+separately and applies the unchanged exactly-two assertion to turn streams.
+The blocked smoke exited before the 15.5 s observation; Retry did not exit
+the failed process within 30 s. The owner protocol snapshot remained identical
+after final cleanup, which reaped four recorded task-owned PIDs.
