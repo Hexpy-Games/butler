@@ -31,4 +31,6 @@ export function rendererMimeType(filePath: string): string;
 
 export function createAppRendererProtocolHandler(options: {
   distRoot: string;
+  noticesFile?: string | null;
+  fetchFavicon?: ((path: string) => Promise<Response>) | null;
 }): (request: Request) => Promise<Response>;

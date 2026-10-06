@@ -33,6 +33,8 @@ pub struct GatewayConfig {
     pub signed_url_ttl: std::time::Duration,
     pub message_rate_limit_max: u64,
     pub message_rate_limit_window: std::time::Duration,
+    /// Site icon cache, normally BUTLER_DATA/cache/favicons.
+    pub favicon_cache_root: Option<std::path::PathBuf>,
     pub static_ui_root: Option<std::path::PathBuf>,
 }
 
@@ -49,6 +51,7 @@ impl Default for GatewayConfig {
             message_rate_limit_max: 60,
             message_rate_limit_window: std::time::Duration::from_secs(60),
             static_ui_root: None,
+            favicon_cache_root: None,
         }
     }
 }

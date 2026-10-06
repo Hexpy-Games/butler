@@ -24,6 +24,7 @@ bytes.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 http-body-util.workspace = true

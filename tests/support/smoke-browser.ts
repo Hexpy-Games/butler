@@ -95,10 +95,13 @@ async function boundOwnedClose(browser: Browser): Promise<void> {
   let closing: Promise<void> | undefined;
   browser.close = (options) => closing ??= (async () => {
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const stalled = new Promise<never>((_, reject) => {
+    const stalled = new Promise<void>((done, reject) => {
       deadline = setTimeout(() => {
         try { process.kill(owner.id, "SIGKILL"); }
-        catch (error) { reject(error); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") { done(); return; }
+          reject(error); return;
+        }
         reject(new Error(`Owned smoke browser ${owner.id} did not close`));
       }, 10_000);
     });

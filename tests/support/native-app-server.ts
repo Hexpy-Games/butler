@@ -48,6 +48,8 @@ export type CookieJar = {
 export type NativeAppServerHandle = {
   url: string;
   port: number;
+  /** Owned gateway PID for native resource measurements. */
+  pid: number;
   butlerData: string;
   stubModelCalls: StubModelRequest[];
   /** The gateway's local bearer token (read from the temp BUTLER_DATA). */
@@ -412,6 +414,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     },
     url,
     port,
+    pid: gateway.pid,
     butlerData,
     stubModelCalls,
     token: token!,

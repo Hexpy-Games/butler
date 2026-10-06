@@ -213,11 +213,36 @@ async function checkActivityTurns(page: Page, baseUrl: string): Promise<void> {
     "each completed turn keeps one footer");
 }
 
+async function checkExternalReferences(page: Page, baseUrl: string): Promise<void> {
+  const stories = [
+    ["components/InlineReference", "External links"],
+    ["components/InlineReference", "Long titles and URLs wrap"],
+    ["components/InlineReference", "Favicon fallback"],
+    ["blocks/MarkdownContent", "Links in a reply"],
+  ] as const;
+  for (const locale of ["en", "ko"]) for (const theme of ["light", "dark"]) for (const width of ["375", "app"]) {
+    for (const [entry, name] of stories) {
+      const params = new URLSearchParams({ visual: "design-system", page: entry, theme, locale, width });
+      await page.goto(`${baseUrl}?${params}`);
+      const story = page.locator(`[data-ds-story="${name}"]`).first();
+      await story.waitFor();
+      await story.scrollIntoViewIfNeeded();
+      const frame = story.locator("[data-ds-theme]").first();
+      assert(await frame.locator('a[data-kind="external"]').count() > 0, `${name}: no external reference`);
+      assert(await frame.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `${name}: overflow`);
+      assert(await frame.locator('a[data-kind="external"]').evaluateAll(links => links.every(link =>
+        link.getAttribute("target") === "_blank" && link.getAttribute("rel")?.includes("noopener"))), `${name}: unsafe target`);
+      await story.screenshot({ path: join(screenshotDir, `external-${name.replaceAll(" ", "-")}-${locale}-${theme}-${width}.png`) });
+    }
+  }
+}
+
 const server = await createNativeAppServer({ uiRoot });
 const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);
+  await checkExternalReferences(page, server.url);
   await checkActivityTurns(page, server.url);
   await checkWorkActivity(page, server.url);
   await checkInlineDisclosure(page, server.url);
@@ -228,6 +253,7 @@ try {
     ok: true,
     service: "butler-ds-conversation-stories-smoke",
     checks: [
+      "external-reference-stories-en-ko-light-dark-mobile-desktop", "external-reference-wrap-target",
       "running-activity-order", "completed-activity-expand", "completed-turn-list",
       "work-block-plain-surface", "work-title-weight-wrap-tone", "work-dot-marker", "work-content-starts-align",
       "tool-row-outlined-capped-pointer", "tool-group-counted-summary", "tool-row-operation-label", "tool-rows-keyboard-expand", "tool-details-muted", "inline-disclosure-unpadded-underline-hover",

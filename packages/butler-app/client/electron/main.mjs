@@ -1090,6 +1090,7 @@ function prepareAppRendererProtocol() {
       APP_RENDERER_SCHEME,
       createAppRendererProtocolHandler({
         distRoot: staticRendererDistRoot,
+        fetchFavicon: (path) => appServerFetch(path),
         noticesFile: app.isPackaged ? join(process.resourcesPath, "bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz") : null,
       }),
     );
