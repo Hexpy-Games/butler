@@ -103,7 +103,8 @@ async function runLocale(locale: "ko" | "en") {
     async function freshPage(width: number) {
       releaseLoading();
       await page.unrouteAll({ behavior: "ignoreErrors" });
-      await page.goto("about:blank", { waitUntil: "commit" });
+      await page.goto("about:blank", { waitUntil: "domcontentloaded" });
+      await page.locator('[data-settings-section-id]').first().waitFor({ state: "detached" });
       await page.setViewportSize({ width, height: 900 });
       page.removeAllListeners("pageerror");
       page.removeAllListeners("response");
@@ -179,8 +180,8 @@ async function runLocale(locale: "ko" | "en") {
       if (!before) {
         for (const code of ["loopback_required", "admin_credential_required", "test_error"]) {
           console.log(`refused ${locale} ${code}`);
-          await freshPage(375);
           refusal = code;
+          await freshPage(375);
           // Register the refusal before navigation, with a fixed response for this case.
           await page.route(`${server.url}security`, async route => {
             if (code === "admin_credential_required") await route.continue({ headers: { ...route.request().headers(), ...server.authHeaders } });
@@ -198,8 +199,8 @@ async function runLocale(locale: "ko" | "en") {
         refusal = "";
         for (const state of ["loading", "error", "empty"]) {
           console.log(`grants state ${locale} ${state}`);
-          await freshPage(1280);
           listState = state;
+          await freshPage(1280);
           await open(page, server.url, appCopy.settings.sections.security, 1280);
           const message = state === "loading" ? appCopy.settings.sectionState.loading : state === "error" ? appCopy.settings.grants.loadFailed : appCopy.settings.grants.empty;
           if (state === "loading") {
@@ -232,9 +233,9 @@ async function runLocale(locale: "ko" | "en") {
         // Reserved future scope: response fixture only, storage still conversation.
         for (const width of [375, 1280]) {
           console.log(`confirm ${locale} ${width}`);
-          await freshPage(width);
           always = (await server.api<{ permissions: GrantRecord[] }>("/authority-permissions")).permissions;
           always[0].scope = "always";
+          await freshPage(width);
           await page.goto(`${server.url}?settings=security`, { waitUntil: "domcontentloaded" });
           await section(page, "grants").getByText(appCopy.settings.grants.scope.always, { exact: true }).waitFor();
           const alwaysRow = rows(page).filter({ hasText: appCopy.settings.grants.scope.always });
