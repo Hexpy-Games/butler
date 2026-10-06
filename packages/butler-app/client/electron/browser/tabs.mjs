@@ -159,7 +159,11 @@ class UserBrowser {
   }
   commandTab(op, id, value) {
     const tab = this.tabs.get(id);
-    if (!tab) throw new Error("unknown_tab");
+    if (!tab) {
+      // Slot teardown reports hidden or uncovered after the tab has been closed.
+      if (op === "bounds" || op === "covered") return;
+      throw new Error("unknown_tab");
+    }
     if (op === "bounds") {
       if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width < 0 || value.height < 0) throw new Error("invalid_bounds");
       tab.bounds = value; this.sync(tab); return;
