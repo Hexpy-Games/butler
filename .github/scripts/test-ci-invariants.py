@@ -117,7 +117,7 @@ class WindowsSafety(unittest.TestCase):
             workflow = root / '.github/workflows/fixture.yml'
             job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
                    '    steps:\n      - uses: ./.github/actions/setup\n')
-            for unsafe in ['shell: pwsh', 'uses: oras-project/setup-oras@v1']:
+            for unsafe in ['shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
                 action.write_text('runs:\n  using: composite\n  steps:\n    - ' + unsafe + '\n')
                 workflow.write_text(job)
                 self.assertTrue(windows_safety.audit(root)[1], unsafe)
@@ -130,7 +130,7 @@ class WindowsSafety(unittest.TestCase):
                 self.assertTrue(windows_safety.audit(root)[1])
             workflow.write_text('defaults:\n  run:\n    shell: pwsh\n' + job)
             self.assertTrue(windows_safety.audit(root)[1])
-            workflow.write_text(job + '      - shell: powershell\n        run: echo safe\n')
+            workflow.write_text(job + '      - shell: powershell -NoProfile -ExecutionPolicy Bypass -File "{0}"\n        run: echo safe\n')
             self.assertEqual(windows_safety.audit(root)[1], [])
 
 

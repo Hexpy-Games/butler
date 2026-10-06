@@ -10,7 +10,7 @@ permissions:
   actions: read
 defaults:
   run:
-    shell: powershell
+    shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
 jobs:
   diagnose-native:
     name: Isolated native PowerShell startup probe

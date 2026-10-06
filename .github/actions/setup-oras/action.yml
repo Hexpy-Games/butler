@@ -5,7 +5,7 @@ runs:
   steps:
     - name: Install ORAS on Windows
       if: runner.os == 'Windows'
-      shell: powershell
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: python "$env:GITHUB_WORKSPACE/.github/scripts/setup-oras.py"
     - name: Install ORAS on Unix
       if: runner.os != 'Windows'
