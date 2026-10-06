@@ -71,7 +71,7 @@ class Paths(unittest.TestCase):
                 git('init', '-q')
                 git('config', 'user.email', 'ci@example.invalid')
                 git('config', 'user.name', 'CI test')
-                rust = root / 'packages/butler-agent/rust/src/main.rs'
+                rust = root / 'packages/butler-agent/rust/crates/butler-agent-cli/src/main.rs'
                 rust.parent.mkdir(parents=True)
                 rust.write_text('rust input')
                 ui = root / 'packages/butler-app/client/ui/src/app.ts'
