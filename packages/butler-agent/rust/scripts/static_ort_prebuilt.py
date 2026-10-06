@@ -92,6 +92,8 @@ def unpack(archive, stage):
     with zipfile.ZipFile(archive) as source:
         members = source.infolist()
         total = sum(item.file_size for item in members)
+        if sys.platform == 'win32':
+            total += sum(item.file_size for item in members if item.filename.startswith('build/Release/_deps/'))
         if total > 4 * 1024**3 or shutil.disk_usage(stage).free <= total + 8 * 1024**3:
             raise RuntimeError('Native asset expansion exceeds disk bound')
         for item in members:
@@ -106,7 +108,44 @@ def unpack(archive, stage):
             path = stage / item.filename
             if path.is_file():
                 path.chmod((item.external_attr >> 16) & 0o777 or 0o644)
-    (stage / 'build/_deps').symlink_to('Release/_deps', target_is_directory=True)
+    create_deps_alias(stage / 'build')
+
+
+def create_deps_alias(build_root):
+    """ort-sys expects _deps beside Release; Windows needs no link privilege."""
+    if sys.platform == 'win32':
+        shutil.copytree(build_root / 'Release/_deps', build_root / '_deps')
+    else:
+        (build_root / '_deps').symlink_to('Release/_deps', target_is_directory=True)
+
+
+def deps_content(root):
+    """Compare all paths and bytes, including empty directories; reject links."""
+    if not root.is_dir() or root.is_symlink():
+        raise RuntimeError('ORT dependency copy is missing or linked')
+    content = {}
+    for path in root.rglob('*'):
+        if path.is_symlink():
+            raise RuntimeError('Unexpected link in ORT dependency copy')
+        name = path.relative_to(root).as_posix()
+        if path.is_dir():
+            content[name] = None
+        else:
+            digest = hashlib.sha256()
+            with path.open('rb') as source:
+                while block := source.read(1024 * 1024):
+                    digest.update(block)
+            content[name] = digest.hexdigest()
+    return content
+
+
+def verify_deps_alias(lib_path):
+    alias = lib_path.parent / '_deps'
+    if sys.platform == 'win32':
+        if deps_content(alias) != deps_content(lib_path / '_deps'):
+            raise RuntimeError('ORT dependency copy content mismatch')
+    elif not alias.is_symlink() or alias.resolve() != (lib_path / '_deps').resolve():
+        raise RuntimeError('ort-sys _deps link does not point to Release/_deps')
 
 
 def restore(root, fingerprint, lock, target, adopt):
