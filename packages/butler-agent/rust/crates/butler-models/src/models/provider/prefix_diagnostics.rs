@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::ProviderRequestConfig;
 use butler_turn::btcc::ModelRoundError;
 
-mod components;
+pub(super) mod components;
 
 const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 const HISTORY_SESSIONS: usize = 128;
@@ -89,10 +89,11 @@ fn prepare(
         .get("prompt_cache_key")
         .and_then(Value::as_str)
         .map(hash);
+    let prefix_hash = cache.prefix_hash(&prefix);
     Ok(Prepared {
         metadata: json!({
             "representation":"serialized-components-v1", "components":components,
-            "prefixBytes":prefix.len(), "prefixSha256":hash(&prefix),
+            "prefixBytes":prefix.len(), "prefixSha256":prefix_hash,
             "promptCacheKeySha256":key, "providerReportedCachedTokens":null,
             "providerCachedTokensFieldPresent":null,
             "providerId":config.metadata.provider_id, "authMode":format!("{:?}",config.auth.mode()),

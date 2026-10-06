@@ -396,6 +396,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
 
 fn compiled_body_matches(config: &ProviderRequestConfig) {
     let history = super::super::prefix_diagnostics::History::default();
+    let mut sizing = super::super::prefix_diagnostics::components::Cache::default();
     for body in [
         serde_json::json!({"model":"gpt-6-luna","input":[]}),
         serde_json::json!({"model":"gpt-6-luna","input":"single\n한글"}),
@@ -411,6 +412,12 @@ fn compiled_body_matches(config: &ProviderRequestConfig) {
         serde_json::from_str(r#"{"input":[{"role":"user","content":"old"}]}"#).unwrap(),
     ] {
         for _ in 0..2 {
+            if let Some(items) = body.get("input").and_then(serde_json::Value::as_array) {
+                assert_eq!(
+                    sizing.array_json(items).unwrap(),
+                    butler_core::json::stringify(&serde_json::Value::Array(items.clone())).unwrap()
+                );
+            }
             let compiled = history.prepare(&body, config).unwrap();
             compiled.assert_matches(
                 &super::super::prefix_diagnostics::History::default()

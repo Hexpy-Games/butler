@@ -219,6 +219,7 @@ pub(super) fn request_json(
     Ok(output)
 }
 
+#[cfg(test)]
 pub(super) fn request_for_messages(
     instructions: Option<&str>,
     tools: &[ModelRoundTool],

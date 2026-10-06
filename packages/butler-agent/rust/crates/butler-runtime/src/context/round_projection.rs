@@ -4,6 +4,7 @@ mod atomic_units;
 mod bounded;
 mod compaction;
 mod measurement;
+mod request_cache;
 mod serialization;
 mod summary;
 
@@ -21,7 +22,7 @@ use butler_turn::btcc::{
 };
 
 use compaction::CompactionState;
-use serialization::{request_for_messages, request_json};
+use serialization::request_json;
 use summary::{SummaryPort, SummaryRequest, SummarySizing};
 
 pub struct ContextPortAdapter {
@@ -66,6 +67,7 @@ impl ContextPort for ContextPortAdapter {
                 repository: self.compactions.clone(),
                 state,
                 budget,
+                request_cache: parking_lot::Mutex::new(request_cache::Cache::default()),
             }) as Box<dyn TurnContextProjection>)
         })
     }
@@ -76,6 +78,7 @@ struct TurnContext {
     repository: Option<ContextCompactionRepository>,
     state: Option<Mutex<CompactionState>>,
     budget: Option<Arc<dyn TurnContinuationBudgetPort>>,
+    request_cache: parking_lot::Mutex<request_cache::Cache>,
 }
 
 impl TurnContextProjection for TurnContext {
@@ -135,14 +138,7 @@ impl TurnContext {
             } else {
                 input.transport_messages
             });
-        let request = request_for_messages(
-            input.instructions,
-            input.tools,
-            input.tool_choice,
-            projected,
-        )
-        .map_err(ContextProjectionError::Contract)?;
-        let request_digest = serialization::digest(&request);
+        let request_digest = self.request_digest(&input, projected)?;
         let model_facing_bytes = u64::try_from(overhead.saturating_add(projected_message_bytes))
             .map_err(|_| {
                 ContextProjectionError::Contract(BtccError::relayed(
@@ -179,6 +175,17 @@ impl TurnContext {
                 (true, true) => ContextRebase::RequiredWithSteeringRecheck,
             },
         })
+    }
+
+    fn request_digest(
+        &self,
+        input: &ContextProjectionInput<'_>,
+        messages: &[ModelRoundMessage],
+    ) -> Result<String, ContextProjectionError> {
+        self.request_cache
+            .lock()
+            .digest(input.instructions, input.tools, input.tool_choice, messages)
+            .map_err(ContextProjectionError::Contract)
     }
 
     fn bounded(

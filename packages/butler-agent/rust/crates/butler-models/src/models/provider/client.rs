@@ -36,6 +36,7 @@ pub struct ModelProvider {
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
     pub(super) prefix_history: Arc<super::prefix_diagnostics::History>,
+    sizing_cache: Arc<super::sizing::Cache>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
@@ -58,6 +59,7 @@ impl ModelProvider {
             clock,
             prompt_metrics,
             prefix_history: Arc::new(super::prefix_diagnostics::History::default()),
+            sizing_cache: Arc::new(super::sizing::Cache::default()),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
             quota: None,
@@ -386,11 +388,12 @@ impl ModelRoundPort for ModelProvider {
         let max_message_bytes = ((context - output - fixed) * 2.0).max(1.0);
         let catalog = Arc::clone(&self.catalog);
         let model = request.model.to_owned();
+        let cache = Arc::clone(&self.sizing_cache);
         Ok(Some(butler_turn::btcc::ContextSizing {
             max_output_tokens: metadata.max_output_tokens,
             max_message_bytes,
             measure: Box::new(move |messages| {
-                super::sizing::measure(&catalog, &snapshot, &model, messages)
+                super::sizing::measure(&catalog, &snapshot, &model, messages, &cache)
             }),
         }))
     }

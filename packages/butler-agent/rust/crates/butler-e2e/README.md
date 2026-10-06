@@ -394,3 +394,27 @@ Remaining after-profile work includes string escaping (11.59%), fresh-block BPE
 (10.14%), SQLite statement preparation (12.32%), and SHA-256 (7.97%). Catalog
 construction was 6.90% before its reuse; the final cache path is 0.72%. SQLite
 and catalog state still remain current on each round.
+
+Landing verification on the same Linux x86_64 host, with both agent and harness
+in release mode and fresh HOME/BUTLER_DATA per run, initially failed at
+20.1 ms p95. Subsequent serialization-only and diagnostic-hash changes still
+failed at 20.4 and 20.5 ms. Reprofiling identified remaining string escaping
+and SHA-256 work. Context sizing now reuses ordered serialized components;
+diagnostic prefixes extend an exact SHA state after comparing all old bytes;
+and the turn-owned request-digest cache reuses unchanged plain-message bytes
+and extends the digest before the final array/object delimiters. Passthrough
+JSON always uses the original request writer. All caches are bounded, and
+mutations/truncations restart digest computation.
+
+The final three consecutive unprofiled runs passed the unchanged 20 ms gate:
+
+| Run | p95 per round | Transcript bytes | Final request bytes |
+| --- | ---: | ---: | ---: |
+| 1 | 18.6 ms | 1,455,703 | 1,508,906 |
+| 2 | 17.5 ms | 1,455,703 | 1,508,906 |
+| 3 | 18.1 ms | 1,455,703 | 1,508,906 |
+
+Each run passed exact history, order/call-ID, final-delivery and independently
+reconstructed prefix hash/token assertions. Existing format pins also compare
+cached request digests with fresh serialization after append, mutation,
+truncation and reordered passthrough JSON.

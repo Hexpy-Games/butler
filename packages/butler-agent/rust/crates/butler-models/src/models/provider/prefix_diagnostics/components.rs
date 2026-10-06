@@ -2,27 +2,64 @@
 use std::sync::Arc;
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use butler_turn::btcc::ModelRoundError;
 
 const CACHE_BYTES: usize = 32 * 1024 * 1024;
 const CACHE_ITEMS: usize = 4096;
 
-pub(super) struct Component {
+pub(in crate::models::provider) struct Component {
     source: Option<Value>,
-    pub(super) encoded: String,
-    pub(super) hash: String,
+    pub(in crate::models::provider) encoded: String,
+    pub(in crate::models::provider) hash: String,
     bytes: usize,
 }
 
 #[derive(Default)]
-pub(super) struct Cache {
+pub(in crate::models::provider) struct Cache {
     items: Vec<Option<Arc<Component>>>,
     bytes: usize,
+    prefix: Vec<u8>,
+    prefix_hash: Sha256,
 }
 
 impl Cache {
-    pub(super) fn component(
+    /// Extend a digest only after comparing every previously hashed byte.
+    /// Mutation, truncation and interleaved sessions restart the exact digest.
+    pub(in crate::models::provider) fn prefix_hash(&mut self, prefix: &[u8]) -> String {
+        const PREFIX_BYTES: usize = 16 * 1024 * 1024;
+        if prefix.len() > PREFIX_BYTES {
+            self.prefix = Vec::new();
+            self.prefix_hash = Sha256::new();
+            return super::hash(prefix);
+        }
+        if !prefix.starts_with(&self.prefix) {
+            self.prefix.clear();
+            self.prefix_hash = Sha256::new();
+        }
+        let appended = &prefix[self.prefix.len()..];
+        self.prefix_hash.update(appended);
+        self.prefix.extend_from_slice(appended);
+        format!("{:x}", self.prefix_hash.clone().finalize())
+    }
+
+    pub(in crate::models::provider) fn array_json(
+        &mut self,
+        items: &[Value],
+    ) -> Result<String, ModelRoundError> {
+        let mut output = String::from("[");
+        for (index, value) in items.iter().enumerate() {
+            if index > 0 {
+                output.push(',');
+            }
+            output.push_str(&self.component(index, value)?.encoded);
+        }
+        output.push(']');
+        Ok(output)
+    }
+
+    pub(in crate::models::provider) fn component(
         &mut self,
         index: usize,
         value: &Value,
