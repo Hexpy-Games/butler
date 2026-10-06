@@ -875,7 +875,7 @@ One surface: padding, radius, background and border from tokens, with no tone or
 - Not for: A card that can be selected or clicked → `Card`
 - Not for: A floating translucent surface → `TintedGlass`
 - Not for: A settings or inspector panel → `SurfacePanel`
-- Tokens: `--space-sm`, `--radius-panel`, `--surface-raised`, `--line`
+- Tokens: `--space-sm`, `--radius-panel`, `--surface-raised`, `--color-surface-raised-opaque`, `--shadow-card`, `--line`
 
 ### Card
 

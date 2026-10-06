@@ -190,7 +190,12 @@ are cached (most recently used, 48 entries) by `wallpaperStillKey`: the
 source's content key (a module keys like its bare source), the module's
 content revision (an edited shader renders again), tone and size; a failed
 render is not cached. Pickers use it for thumbnails; no wallpaper
-instance ever disposes the shared context.
+instance ever disposes the shared context. The target can also be an image
+source (drawn through its filter, or `butler.image`). Lifecycle windows
+render a still at their own geometry through optional size fields:
+`compositionWidth` (compose at the window width instead of 1440),
+`pixelRatio`, `contentRect`, `dayPhase` and `imageLoader`; all of them are
+part of the cache key. Picker thumbnails omit them and keep the defaults.
 
 A param with `"hidden": true` is internal: it keeps its uniform and default,
 but `WallpaperParamControls` and pickers never list it; only code that knows
@@ -262,5 +267,3 @@ in the container (settings, project preferences, agent tools).
 ## Tags
 
 wallpaper, background, shader, webgl, theme, new-chat, dashboard
-
-`renderWallpaperStill` is public. Lifecycle sizes can specify compositionWidth, pixelRatio, contentRect, dayPhase and imageLoader; ordinary picker stills keep their existing defaults.
