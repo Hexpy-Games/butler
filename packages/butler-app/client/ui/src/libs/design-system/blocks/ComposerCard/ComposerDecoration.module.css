@@ -1,0 +1,130 @@
+/* Composer card scenes (ComposerCard `decoration`) and edge characters (`edge`).
+   The owner-approved shoreline grade lives here so product code passes no numbers. */
+
+.root {
+  --shore-top: calc(100% - 19px);
+  --shore-exposure: 1.22;
+  --shore-highlight: 6%;
+  --shore-gradient: 30%;
+  --shore-gradient-start: 75%;
+  --shore-gradient-end: 100%;
+
+  position: absolute;
+  inset: 0;
+}
+
+/* A canvas at least 360px tall whose middle (the waterline) sits 19px above
+   the card's bottom edge; the scale never changes as the card grows. */
+.art {
+  position: absolute;
+  top: var(--shore-top);
+  right: 0;
+  left: 0;
+  height: max(100%, 360px);
+  transform: translateY(-50%);
+}
+
+/* Light: a natural daylight exposure of the day grade. */
+.root[data-tone="light"] .art {
+  filter: brightness(var(--shore-exposure));
+}
+
+/* Light: the sand above the waterline toned down (multiply, fading out toward
+   the waterline). Dark keeps the night grade as drawn. */
+.highlight {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(
+        in srgb,
+        var(--grayscale-12) var(--shore-highlight),
+        var(--neutral-white)
+      )
+      0,
+    color-mix(
+        in srgb,
+        var(--grayscale-12) var(--shore-highlight),
+        var(--neutral-white)
+      )
+      calc(var(--shore-top) - 16px),
+    var(--neutral-white) var(--shore-top)
+  );
+  mix-blend-mode: multiply;
+}
+
+.root[data-tone="dark"] .highlight {
+  display: none;
+}
+
+/* Both tones: a soft vertical gradient toward the theme's glass tint over the
+   whole scene. */
+.gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent var(--shore-gradient-start),
+    color-mix(
+        in srgb,
+        var(--tinted-glass-tint) var(--shore-gradient),
+        transparent
+      )
+      var(--shore-gradient-end)
+  );
+}
+
+/* Edge character, inside ComposerCard's zero-height edge strips: the head rises
+   from 8px below the top edge (the card covers that part), the claws rest 5px
+   over it. */
+.head,
+.paws {
+  position: absolute;
+  right: 14%;
+  width: 44px;
+}
+
+.head {
+  bottom: -8px;
+  height: 34px;
+}
+
+.paws {
+  top: -5px;
+  height: 10px;
+}
+
+.head svg,
+.paws svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.eye {
+  fill: var(--grayscale-11);
+}
+
+.stalk {
+  fill: none;
+  stroke: var(--red-08);
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.eyeWhite {
+  fill: var(--neutral-white);
+  stroke: var(--red-08);
+  stroke-width: 1;
+}
+
+.shell {
+  fill: var(--red-05);
+  stroke: var(--red-08);
+  stroke-width: 1;
+}
+
+.shellSpot {
+  fill: var(--red-03);
+}

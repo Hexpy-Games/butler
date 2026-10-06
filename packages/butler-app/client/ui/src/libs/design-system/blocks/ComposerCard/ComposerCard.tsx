@@ -7,6 +7,16 @@ import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
 import { dsClass } from "../../lib/internal";
 
+/**
+ * An edge character on the card's top edge, anchored to the form's top (not the
+ * wrap, so a notice above never moves it): `behind` paints under the card (it
+ * hides the part below the edge), `front` over its top edge. Decorative only.
+ */
+export interface ComposerCardEdge {
+  behind?: ReactNode;
+  front?: ReactNode;
+}
+
 export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   large?: boolean;
   floating?: boolean;
@@ -16,6 +26,13 @@ export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFo
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
+  /**
+   * Art behind the card's content (e.g. `ComposerDecoration`): fills the card,
+   * clipped by its radius, above the glass and below every editor and toolbar
+   * node. The slot adds no scrim; the glass top highlight stays on top.
+   */
+  decoration?: ReactNode;
+  edge?: ComposerCardEdge;
 }
 
 const ComposerExpandedContext = createContext(true);
@@ -30,6 +47,8 @@ export function ComposerCard({
   className,
   containerRef,
   expanded = true,
+  decoration,
+  edge,
   ...props
 }: ComposerCardProps) {
   return (
@@ -43,6 +62,7 @@ export function ComposerCard({
           {notice}
         </div>
       ) : null}
+      {edge?.behind ? <div aria-hidden="true" className={styles.edge} data-slot="composer-edge-behind">{edge.behind}</div> : null}
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
@@ -51,6 +71,11 @@ export function ComposerCard({
         data-test-class="composer-card"
         {...props}
       >
+        {decoration ? (
+          <div aria-hidden="true" className={styles.background} data-slot="tinted-glass-decoration" data-test-class="composer-decoration-slot">
+            {decoration}
+          </div>
+        ) : null}
         {adjunct ? (
           <div className={styles.adjunct} data-test-class="composer-adjunct-slot">
             {adjunct}
@@ -58,6 +83,7 @@ export function ComposerCard({
         ) : null}
         <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
       </form>
+      {edge?.front ? <div aria-hidden="true" className={styles.edge} data-slot="composer-edge-front">{edge.front}</div> : null}
     </div>
   );
 }

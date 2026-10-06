@@ -1,0 +1,13 @@
+/* DS Viewer: the decorated composer on each theme's conversation background,
+   with room above the card for the edge character. */
+.tones {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tone {
+  padding: var(--space-6) var(--space-3) var(--space-3);
+  border-radius: var(--radius-panel);
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+}

@@ -16,9 +16,12 @@ import {
   ComposerCardTextarea,
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,
+  ComposerDecoration,
+  ComposerEdgeCharacter,
   ComposerPlanToggle,
   ComposerSendButton,
 } from "./index";
+import styles from "./ComposerCard.showcase.module.css";
 
 export const meta: ShowcaseMeta = {
   title: "ComposerCard",
@@ -48,15 +51,20 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
+// The shoreline scene with its crab on the top edge (composerDecorationEdge("shoreline") returns the same parts).
+const SHORELINE = <ComposerDecoration scene="shoreline" />;
+const CRAB = { behind: <ComposerEdgeCharacter kind="crab" part="behind" />, front: <ComposerEdgeCharacter kind="crab" part="front" /> };
+
 /** The product composer: editor, toolbar controls, context donut and send. */
-function Composer({ context, large, mode = "send", busy, blocked }: {
-  context: ShowcaseRenderContext; large?: boolean; mode?: "send" | "stop"; busy?: boolean; blocked?: boolean;
+function Composer({ context, large, mode = "send", busy, blocked, decorated }: {
+  context: ShowcaseRenderContext; large?: boolean; mode?: "send" | "stop"; busy?: boolean; blocked?: boolean; decorated?: boolean;
 }) {
   const copy = text(context);
   const [plan, setPlan] = useState(false);
   const [draft, setDraft] = useState("");
   return (
-    <ComposerCard large={large} onSubmit={(event) => event.preventDefault()}>
+    <ComposerCard decoration={decorated ? SHORELINE : undefined} edge={decorated ? CRAB : undefined} large={large}
+      onSubmit={(event) => event.preventDefault()}>
       <ComposerCardExpandedBody>
         <ComposerCardEditor>
           <ComposerCardEditable>
@@ -82,8 +90,20 @@ function Composer({ context, large, mode = "send", busy, blocked }: {
   );
 }
 
+/** The decorated new-chat composer in both themes. */
+function DecoratedComposers({ context }: { context: ShowcaseRenderContext }) {
+  return (
+    <div className={styles.tones}>
+      {(["light", "dark"] as const).map((tone) => (
+        <div className={`${styles.tone} theme-${tone}`} key={tone}><Composer context={context} decorated large /></div>
+      ))}
+    </div>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "New chat (large)", widths: ["375", "app", "wide"], render: (context) => <Composer context={context} large /> },
+  { name: "New chat with the shoreline decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} /> },
   { name: "Follow-up while a turn runs (stop)", states: ["busy"], render: (context) => <Composer context={context} mode="stop" /> },
   { name: "Reconnecting (busy send)", states: ["loading"], render: (context) => <Composer context={context} busy /> },
   // ComposerToolbar: an attached image the selected model refuses blocks send; the tooltip says why in a few words.

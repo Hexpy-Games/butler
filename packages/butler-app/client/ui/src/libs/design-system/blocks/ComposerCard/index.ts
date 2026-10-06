@@ -9,8 +9,17 @@ export {
 } from "./ComposerCard";
 export { ComposerSendButton } from "./ComposerSendButton";
 export type {
+  ComposerCardEdge,
   ComposerCardProps,
 } from "./ComposerCard";
+export {
+  COMPOSER_DECORATION_SCENES,
+  ComposerDecoration,
+  composerDecorationEdge,
+  type ComposerDecorationProps,
+  type ComposerDecorationScene,
+} from "./ComposerDecoration";
+export { ComposerEdgeCharacter, type ComposerEdgeCharacterKind, type ComposerEdgeCharacterProps } from "./ComposerEdgeCharacter";
 export type { ComposerSendButtonProps } from "./ComposerSendButton";
 export { ComposerPlanToggle } from "./ComposerPlanToggle";
 export { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } from "./ComposerCardEditor";
