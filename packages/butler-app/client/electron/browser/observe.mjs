@@ -4,12 +4,14 @@ import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.m
 
 export async function observeTab(tab, args = {}) {
   const obs = randomUUID(), epoch = tab.epoch, frames = await frameWorlds(tab);
+  const selected=frames.map((frame,index)=>({frame,index})).filter(({index})=>args.frame===undefined || args.frame===`f${index}`);
+  if(!selected.length) return {status:"refused",reason:"frame_unavailable"};
   const text = [], nodes = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const bindings = new Map(), paymentFrames = new Set();
   let scriptMs = 0, gridSampleMs = 0, below = 0, interactive = 0, payment = false;
   const addons = [];
-  for (const [index, frame] of frames.entries()) {
-    const result = await evaluateWorld(frame, perceptionSource({ obs, epoch, scope: args.scope, prefix: `f${index}-` }));
+  for (const {index,frame} of selected) {
+    const result = await evaluateWorld(frame, perceptionSource({ obs, epoch, scope: args.scope, secureKeypads: tab.policy?.secure_keypads ?? args.policy?.secure_keypads ?? [], prefix: `f${index}-` }));
     for (const node of result.nodes) { bindings.set(node.ref, frame); const { targetId: _targetId, coveredTargetId: _covered, ...publicNode } = node; nodes.push(publicNode); }
     if (result.payment) paymentFrames.add(frame);
     text.push(result.text);
@@ -22,7 +24,7 @@ export async function observeTab(tab, args = {}) {
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return { status: "refused", reason: "observation_budget_exceeded", totals: { interactive, below_fold: below } };
   tab.observation = { obs, epoch, main:frames[0], bindings, nodes, payment, paymentFrames, addons };
-  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: frames.map(frame => frame.url).filter(url => url !== "about:blank"), text: full, nodes, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons };
+  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({frame,index})=>({id:`f${index}`,url:frame.url})), text: full, nodes, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons };
 }
 export async function resolveStep(tab, obs, step, scroll = false) {
   if (!tab.observation || tab.observation.obs !== obs || tab.observation.epoch !== tab.epoch) return { reason: "stale_ref" };
@@ -36,7 +38,7 @@ export async function resolveStep(tab, obs, step, scroll = false) {
     if(!point) return {reason:"blocked_by"};
     resolved.x=point.x;resolved.y=point.y;
   }
-  return { ...resolved, frame_payment: Boolean(frame.parent) && tab.observation.paymentFrames.has(frame), payment: resolved.payment || tab.observation.payment, addons: tab.observation.addons };
+  return { ...resolved, frame_payment: Boolean(frame.parent) && tab.observation.paymentFrames.has(frame), payment: resolved.payment || tab.observation.payment, addons: resolved.addons ?? [] };
 }
 export function selectStep(tab, obs, step) {
   return evaluateWorld(tab.observation.bindings.get(step.ref), selectSource({ ref: step.ref, obs, epoch: tab.epoch, value: step.value }));

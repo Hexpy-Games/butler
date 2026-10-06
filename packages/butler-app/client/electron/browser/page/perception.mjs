@@ -79,7 +79,7 @@ export function semantic(element, discoverPointer = true) {
   const clickable = Boolean(role || element.hasAttribute("onclick") || discoverPointer && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
   if (!clickable && !/^h[1-6]$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id)?.textContent ?? "").join(" ");
-  const secure = /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
+  const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || element.textContent?.trim() || element.getAttribute("placeholder") || "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
   const parent = parentElementOf(element);
@@ -109,4 +109,22 @@ export function visiblePoint(element) {
     }
   }
   return { blocker };
+}
+
+/** Policy markers come from Rust, and cover every descendant of a keypad. */
+export function secureKeypad(element) {
+  const markers=globalThis.__butlerObservation?.secureKeypads ?? [];
+  if(!markers.length) return false;
+  for(let node=element;node;node=parentElementOf(node)) {
+    const label=`${node.id} ${node.getAttribute("class") ?? ""} ${node.getAttribute("name") ?? ""}`.toLowerCase();
+    if(markers.some(marker=>label.includes(marker))) return true;
+  }
+  return false;
+}
+
+/** Exact approval metadata is reread immediately before every dispatch. */
+export function currentAddons() {
+  return [...document.querySelectorAll('input[type="checkbox"],input[type="radio"]')]
+    .filter(element=>(element.checked || element.defaultChecked) && !paintState(element).invisible && paintState(element).opacity>=.1)
+    .map(element=>semantic(element)).filter(meaning=>!meaning.secure).map(meaning=>meaning.name);
 }

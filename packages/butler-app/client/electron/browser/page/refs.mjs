@@ -13,6 +13,7 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
   if (point.blocker) return { reason: "blocked_by", hit: semantic(point.blocker) };
   return { x: point.x, y: point.y, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
     payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
+    addons: currentAddons(),
     upload: element.localName === "input" && element.type === "file",
     submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name) };
 }

@@ -5779,7 +5779,7 @@
       "definition": {
         "type": "function",
         "name": "browser_observe",
-        "description": "Observe visible, hit-tested targets. New refs are bound to this tab and observation; no images in this slice.",
+        "description": "Observe visible, hit-tested targets in every frame or one frame id. New refs are bound to this tab and observation; no images in this slice.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5793,6 +5793,10 @@
                 "interactive",
                 "text"
               ]
+            },
+            "frame": {
+              "type": "string",
+              "description": "Optional observed frame id (f0 is the main frame); omitted observes every frame."
             }
           },
           "required": [
@@ -10476,7 +10480,7 @@
     "browser_observe": {
       "type": "function",
       "name": "browser_observe",
-      "description": "Observe visible, hit-tested targets. New refs are bound to this tab and observation; no images in this slice.",
+      "description": "Observe visible, hit-tested targets in every frame or one frame id. New refs are bound to this tab and observation; no images in this slice.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10490,6 +10494,10 @@
               "interactive",
               "text"
             ]
+          },
+          "frame": {
+            "type": "string",
+            "description": "Optional observed frame id (f0 is the main frame); omitted observes every frame."
           }
         },
         "required": [

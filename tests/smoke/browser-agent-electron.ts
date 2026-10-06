@@ -166,6 +166,7 @@ try {
   writeFileSync(join(evidence,"acceptance.json"),JSON.stringify(traces,null,2));
   console.log(JSON.stringify({ status:"passed", loadAverage1m:loadavg()[0] }));
 } finally {
+  try {
   const oopifDiagnostic=await app.main("globalThis.oopifProof").catch(()=>null);if(oopifDiagnostic)writeFileSync(join(evidence,"oopif-diagnostic.json"),JSON.stringify(oopifDiagnostic,null,2));
   const db=new Database(join(app.gateway.butlerData,"agent-runtime/btcc.sqlite"),{readonly:true});
   const turns=db.query("SELECT turn_id,semantic_state,suspension_reason,revision FROM btcc_turns ORDER BY rowid DESC LIMIT 3").all();
@@ -188,5 +189,6 @@ try {
     if(value) inbound.push({queue:event.metadata.queueId,folder,terminalClaim:value.metadata?.terminalClaimId,failure:value.metadata?.failure?.code});
   }
   writeFileSync(join(evidence,"inbound-claims.json"),JSON.stringify(inbound,null,2));
-  await app.stop();
+  } catch(error) {writeFileSync(join(evidence,"diagnostics-error.json"),JSON.stringify({error:String(error)}));}
+  finally {await app.stop();}
 }

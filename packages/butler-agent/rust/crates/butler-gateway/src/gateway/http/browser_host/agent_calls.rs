@@ -45,7 +45,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
                     json!({"status":"not_dispatched","reason":"navigation_denied"}),
                 );
             }
-            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(&state))});
+            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(&state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS});
         }
         let Some(host) = hub.host.as_ref() else {
             return super::super::json(
@@ -98,9 +98,12 @@ fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mu
             .get("frames")
             .and_then(Value::as_array)
             .is_some_and(|frames| {
-                frames
-                    .iter()
-                    .any(|frame| frame.as_str().is_none_or(|url| !permitted_url(state, url)))
+                frames.iter().any(|frame| {
+                    frame
+                        .as_str()
+                        .or_else(|| frame["url"].as_str())
+                        .is_none_or(|url| !permitted_url(state, url))
+                })
             });
     if !denied {
         return;
@@ -155,7 +158,7 @@ fn validate(
             None => butler_runtime::browser::public_url(raw)
                 .map_err(|_| error(400, "navigation_denied"))?,
         };
-        frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(state)),"sites":[butler_runtime::browser::site_scope(url.as_str()).map_err(|_|error(400,"navigation_denied"))?]});
+        frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS,"sites":[butler_runtime::browser::site_scope(url.as_str()).map_err(|_|error(400,"navigation_denied"))?]});
     }
     if op == "tab.act"
         && frame["args"]["steps"]

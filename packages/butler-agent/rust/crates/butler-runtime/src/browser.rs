@@ -132,3 +132,8 @@ pub fn payment_host(host: &str) -> bool {
         .iter()
         .any(|site| host == *site || host.ends_with(&format!(".{site}")))
 }
+
+/// Native security keypad containers remain under human control.
+pub const SECURE_KEYPAD_MARKERS: &[&str] = &[
+    "transkey", "nxkey", "nprotect", "anysign", "wizvera", "touchen",
+];
