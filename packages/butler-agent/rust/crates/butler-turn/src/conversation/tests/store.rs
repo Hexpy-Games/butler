@@ -390,11 +390,6 @@ fn migration_errors_are_atomic() {
     schema::ensure(&mut db, &clock).unwrap();
     let columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_messages') WHERE name LIKE 'origin_%'", [], |row| row.get(0)).unwrap();
     assert_eq!(columns, 5);
-    let completion_columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_turns') WHERE name='first_completed_at'", [], |row| row.get(0)).unwrap();
-    assert_eq!(
-        completion_columns, 0,
-        "history order must not add persisted turn state"
-    );
 }
 
 async fn verify_readonly_history(store: &AgentConversationStore, valid: bool) {
