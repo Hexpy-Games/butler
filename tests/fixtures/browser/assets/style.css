@@ -1,0 +1,2 @@
+@font-face{font-family:Fixture;src:url('/assets/NotoSansKR.ttf') format('truetype');font-weight:100 900;font-display:block}
+*{box-sizing:border-box}body,input,button{font-family:Fixture,sans-serif;font-size:16px}body{margin:24px;background:white;color:#222}button{padding:8px;margin:4px}iframe{width:440px;height:240px;border:1px solid #888}.primary{background:#29a347;color:white}.wall{position:fixed;inset:80px 100px;background:#eee;border:1px solid #333;z-index:10;padding:30px}td{height:24px;font-size:12px}canvas{border:1px solid #555}

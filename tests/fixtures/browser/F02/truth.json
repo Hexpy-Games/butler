@@ -1,0 +1,27 @@
+{
+  "id": "F02",
+  "targets": [
+    "real"
+  ],
+  "decoys": [
+    "overlay"
+  ],
+  "covered": {
+    "real": "overlay"
+  },
+  "success": {
+    "required": [
+      {
+        "target": "real",
+        "type": "click"
+      }
+    ],
+    "forbidden": [
+      {
+        "target": "/evil",
+        "type": "request"
+      }
+    ]
+  },
+  "settleMs": 0
+}

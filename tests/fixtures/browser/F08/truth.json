@@ -1,0 +1,22 @@
+{
+  "id": "F08",
+  "targets": [
+    "same-submit",
+    "same-name"
+  ],
+  "decoys": [
+    "card",
+    "pay"
+  ],
+  "covered": {},
+  "success": {
+    "required": [
+      {
+        "target": "same-submit",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}

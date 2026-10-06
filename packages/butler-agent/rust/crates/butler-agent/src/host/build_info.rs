@@ -9,6 +9,8 @@ pub struct BuildInfo {
     pub version: &'static str,
     /// Source revision and dirty marker used by lifecycle diagnostics.
     pub build_id: &'static str,
+    /// Cargo build profile of the executable, used to qualify perf measurements.
+    pub profile: &'static str,
 }
 
 static BUILD_INFO: OnceLock<BuildInfo> = OnceLock::new();
@@ -22,5 +24,6 @@ pub(super) fn current() -> BuildInfo {
     BUILD_INFO.get().copied().unwrap_or(BuildInfo {
         version: concat!(env!("CARGO_PKG_VERSION"), "-dev"),
         build_id: "source-archive",
+        profile: "unknown",
     })
 }

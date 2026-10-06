@@ -1,0 +1,24 @@
+{
+  "id": "F06",
+  "targets": [
+    "correct"
+  ],
+  "decoys": [
+    "background",
+    "lower-action"
+  ],
+  "covered": {
+    "lower-action": "upper",
+    "background": "upper"
+  },
+  "success": {
+    "required": [
+      {
+        "target": "correct",
+        "type": "click"
+      }
+    ],
+    "forbidden": []
+  },
+  "settleMs": 0
+}
