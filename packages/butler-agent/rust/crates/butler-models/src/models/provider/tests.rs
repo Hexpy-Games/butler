@@ -231,6 +231,7 @@ fn request<'a>(
 // test-category: pure-logic
 #[tokio::test]
 async fn sse_decoding_survives_chunk_boundaries() {
+    crate::models::transport::verify_sse_frame_size();
     hosted_sse_decodes_split_unicode_and_requires_done().await;
     transport::hosted_sse_eof_without_done_is_interrupted().await;
     crate::mcp_client::parses_fragmented_multiline_events();

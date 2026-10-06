@@ -406,7 +406,8 @@ and extends the digest before the final array/object delimiters. Passthrough
 JSON always uses the original request writer. All caches are bounded, and
 mutations/truncations restart digest computation.
 
-The final three consecutive unprofiled runs passed the unchanged 20 ms gate:
+The first qualifying three consecutive unprofiled runs passed the unchanged
+20 ms gate before CI exposed the fragmented-stream scan:
 
 | Run | p95 per round | Transcript bytes | Final request bytes |
 | --- | ---: | ---: | ---: |
@@ -418,3 +419,18 @@ Each run passed exact history, order/call-ID, final-delivery and independently
 reconstructed prefix hash/token assertions. Existing format pins also compare
 cached request digests with fresh serialization after append, mutation,
 truncation and reordered passthrough JSON.
+
+CI then exposed the expanded 200 KB fragmented SSE test timing out on both
+Linux and macOS. Delimiter search now remembers its cursor and frame-size
+validation counts only new UTF-8 bytes, retaining incomplete sequences and
+exact lossy-decoder semantics. The local test fell from 1.33 to 0.68 seconds
+without changing its content or timeout. After that change, PERF-02 passed
+18.5/18.1 ms but failed its third run at 32.1 ms. A new profile identified
+unchanged-block hash-table lookups; bounded ordered token chains now compare
+complete bytes at the same position instead of rehashing unchanged blocks.
+
+Final-tree verification passed three consecutive unprofiled release runs at
+**19.5 / 18.5 / 17.5 ms p95**, each with the same 1,455,703-byte transcript,
+1,508,906-byte request and all correctness assertions above. Format, strict
+Clippy, source-check, touched-crate tests, runtime integration tests and the
+12 existing context/token/tool/branch stub E2Es passed on this tree.
