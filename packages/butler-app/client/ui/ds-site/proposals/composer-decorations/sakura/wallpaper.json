@@ -4,7 +4,7 @@
     "en": "Cherry blossom",
     "ko": "벚꽃"
   },
-  "version": "0.3.0",
+  "version": "0.4.0",
   "engine": 1,
   "motion": "animated",
   "image": "none",
@@ -18,6 +18,31 @@
         "ko": "풍성한 모서리"
       },
       "default": true
+    },
+    {
+      "key": "style",
+      "type": "enum",
+      "label": {
+        "en": "Style",
+        "ko": "스타일"
+      },
+      "default": "illustrated",
+      "options": [
+        {
+          "value": "illustrated",
+          "label": {
+            "en": "Illustrated",
+            "ko": "일러스트"
+          }
+        },
+        {
+          "value": "pixel",
+          "label": {
+            "en": "Pixel art",
+            "ko": "픽셀 아트"
+          }
+        }
+      ]
     }
   ]
 }
