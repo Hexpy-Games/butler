@@ -117,6 +117,10 @@ async fn a_result_delivered_to_an_idle_parent_is_not_a_bubble() -> Result<(), Ha
     s.turn(CHAT, OWNER).await?;
     deliver_result(&s, "steward-result-1").await?;
     assert_result_is_hidden(&s, "steward-result-1").await?;
+    super::prompt_history::resume_parity(&s)?;
+    if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
+        return s.finish().await;
+    }
     let starts: Vec<Value> = std::fs::read_to_string(
         s.sandbox
             .data

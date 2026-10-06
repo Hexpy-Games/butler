@@ -1,5 +1,6 @@
 use crate::context::ContextCode;
 use crate::context::{ContextConversation, ContextResult, PromptMaterialRenderOptions};
+mod history;
 use butler_turn::btcc::{ContextAssembly, ContextSection};
 
 pub(crate) struct RecentConversationInput<'a> {
@@ -9,15 +10,12 @@ pub(crate) struct RecentConversationInput<'a> {
     pub event_id: Option<&'a str>,
 }
 
-pub(crate) fn recent_conversation_tail_limit(token_budget: f64) -> f64 {
-    (token_budget / 80.0).ceil().clamp(20.0, 200.0)
-}
-
 pub(crate) async fn include_recent_context(
     owner: &ContextConversation,
     input: RecentConversationInput<'_>,
     mut assembly: ContextAssembly,
 ) -> ContextResult<ContextAssembly> {
+    let started = std::time::Instant::now();
     let Some(session) = owner
         .store()
         .get_session_by_gateway_binding(input.transport, input.runtime_session_id)
@@ -34,12 +32,10 @@ pub(crate) async fn include_recent_context(
     };
     let snapshot = owner.budget().snapshot().await?;
     let token_budget = snapshot.default_recent_conversation_token_budget(input.model_ref);
-    let material = owner
+    let cap = butler_core::json::saturating_usize(token_budget);
+    let window = owner
         .store()
-        .read_prompt_material(
-            &session.id,
-            Some(recent_conversation_tail_limit(token_budget)),
-        )
+        .read_history_window(&session.id, cap)
         .await
         .map_err(|e| {
             crate::context::ContextError::new(
@@ -48,10 +44,14 @@ pub(crate) async fn include_recent_context(
             )
             .with_source(e)
         })?;
+    let read_elapsed = started.elapsed();
+    let window = history::summarize(owner, window, cap, &snapshot).await?;
+    let summary_elapsed = started.elapsed().saturating_sub(read_elapsed);
+    let material = &window.material;
     let plan = crate::context::compile_prompt_material_context_plan(
-        &material,
+        material,
         &PromptMaterialRenderOptions {
-            max_tokens: token_budget,
+            max_tokens: f64::MAX,
             exclude_source_ref: input.event_id.map(str::to_owned),
             exclude_turn_id: None,
             include_summaries: None,
@@ -59,7 +59,15 @@ pub(crate) async fn include_recent_context(
             current_request: None,
         },
     )?;
-    let content = strip_heading(&plan.rendered);
+    let mut content = strip_heading(&plan.rendered);
+    for turn in &material.turns {
+        if window.late_turn_ids.contains(&turn.id)
+            && let Some(timestamp) = &turn.completed_at
+        {
+            let header = format!("turn {} status {}", turn.id, turn.status);
+            content = content.replacen(&header, &format!("{header} completed {timestamp}"), 1);
+        }
+    }
     if content.is_empty() {
         return Ok(assembly);
     }
@@ -72,6 +80,7 @@ pub(crate) async fn include_recent_context(
         scope_kind: "session".into(),
         source: None,
     });
+    history::trace(started.elapsed(), read_elapsed, summary_elapsed).await;
     Ok(assembly)
 }
 

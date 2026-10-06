@@ -164,7 +164,7 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-fn require_release_agent(setup: &Setup) -> Result<(), HarnessError> {
+pub(super) fn require_release_agent(setup: &Setup) -> Result<(), HarnessError> {
     let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
     let output = launch.command().args(["--version", "--json"]).output()?;
     let version: serde_json::Value = serde_json::from_slice(&output.stdout)?;

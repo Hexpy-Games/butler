@@ -5,6 +5,7 @@ mod codec;
 mod error;
 mod historical_origin;
 mod historical_recovery;
+mod history_window;
 mod messages;
 mod schema;
 mod sessions;
@@ -28,6 +29,7 @@ pub use historical_recovery::{
     HistoricalRecoveryInput, plan_historical_recovery, read_historical_app_rows,
     read_historical_transcript_rows,
 };
+pub use history_window::HistoryWindow;
 pub use source::{
     Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
     MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
@@ -35,6 +37,13 @@ pub use source::{
 };
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;
+
+/// Hash already loaded canonical messages with the existing summary source contract.
+pub fn summary_source_hash(
+    messages: &[ConversationMessageWithParts],
+) -> Result<String, ConversationError> {
+    codec::source_hash(messages)
+}
 
 use butler_platform::sqlite;
 use std::cmp::Ordering;

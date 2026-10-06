@@ -57,7 +57,11 @@ async fn group(
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
         let retrieval = format!("source {source}; use recall_memory or read_file to expand");
-        let value = super::excerpts::text(&content, allowance, &retrieval);
+        let value = if source == "recent-conversation" {
+            content
+        } else {
+            super::excerpts::text(&content, allowance, &retrieval)
+        };
         if !value.trim().is_empty() {
             contents.push(DocumentSection {
                 stage: stage(&kind, &source),
@@ -172,15 +176,10 @@ pub(super) async fn read(
                     .collect::<Vec<_>>()
                     .join("\n\n")
             ));
-            let stage = value
-                .iter()
-                .map(|section| section.stage)
-                .min()
-                .unwrap_or(Stage::Volatile);
             sections.push(DocumentSection {
                 id: title.into(),
                 text: header,
-                stage,
+                stage: Stage::Stable,
             });
             sections.extend(value);
         }
@@ -346,5 +345,4 @@ async fn exact_project_instructions(
         contents.push(document.content);
     }
     Ok(contents.join("\n\n"))
-
 }
