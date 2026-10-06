@@ -192,6 +192,13 @@ async fn app_quit_waits_past_budget_and_preserves_the_full_queue() -> Result<(),
     }
     assert!(s.agent.is_running());
     assert!(!s.agent.logs().contains("deadline_exit"));
+    // Hold beyond multiple SQLite busy waits and the App's slow-quit status.
+    tokio::time::sleep(Duration::from_secs(11)).await;
+    assert!(
+        s.agent.is_running(),
+        "storage close abandoned an external writer"
+    );
+    assert!(!s.agent.logs().contains("deadline_exit"));
     db.execute_batch("ROLLBACK")
         .map_err(|e| HarnessError(e.to_string()))?;
     drop(db);
