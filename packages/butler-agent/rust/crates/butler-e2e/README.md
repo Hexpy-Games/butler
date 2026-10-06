@@ -51,7 +51,8 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
 | `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; both default to `openai/gpt-6-luna@max` (owner decision: automated real calls never use gpt-6-sol or -astra) |
 | `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile, the default live credential (default `~/.butler-e2e-auth/auth/openai-codex.json`); refreshable, so LIVE-10 runs against it |
-| `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Fallback when no test profile exists: Codex CLI auth file (default `~/.codex/auth.json`), passed by path, read-only; never read by the harness |
+| `BUTLER_E2E_CODEX_AUTH_JSON` | Dedicated Codex-format `auth.json`, passed by path and refreshed atomically in place; never copied by the harness |
+| `CODEX_AUTH_JSON` | Read-only Codex CLI fallback (default `~/.codex/auth.json`); never read by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |
 | `BUTLER_E2E_BASE_URL` | upstream override |
 | `BUTLER_E2E_RECORD=1` | record mode |
@@ -63,11 +64,13 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 The live tier passes the test profile to the agent as an absolute
 `BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
 never reads the token values) and runs without `OPENAI_API_KEY`, so the
-subscription is used. The profile comes from a separate test-only login
-(`butler auth login --data ~/.butler-e2e-auth`, owner's browser); without
-it the harness falls back to the read-only Codex CLI file and LIVE-10 is
-SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
-one profile cannot race.
+subscription is used. CI uses the dedicated Codex login described in
+[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-windows-owner-runner),
+selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
+(`butler auth login --data ~/.butler-e2e-auth`) also works. Without either,
+the harness falls back to the read-only Codex CLI file and LIVE-10 is
+SKIPPED. Run the live tier with `--test-threads=1`; CI also serializes live
+jobs across release branches so refreshes of the one profile cannot race.
 
 ## Quota polling
 

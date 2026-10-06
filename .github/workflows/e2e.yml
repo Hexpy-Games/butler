@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: e2e-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -31,90 +31,101 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tier == 'integration'
     name: E2E live tier
-    runs-on: macos-latest
+    runs-on: [self-hosted, Windows, X64, butler-win]
     timeout-minutes: 150
     environment: live-e2e
+    concurrency:
+      group: butler-live-e2e-oauth-profile
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: packages/butler-agent/rust
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     env:
       BUTLER_E2E_PROVIDER: openai-subscription
       BUTLER_E2E_MODEL: openai/gpt-6-luna@max
       BUTLER_E2E_MODEL_MATRIX: openai/gpt-6-luna@max
       BUTLER_E2E_LIVE_MAX_TURNS: "40"
     steps:
-      - name: Check for a live credential
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: e2e-live
+
+      - name: Install the live credential
         id: credential
         working-directory: ${{ github.workspace }}
         env:
           CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
         run: |
-          if [ -n "$CODEX_AUTH_SECRET" ] || [ -n "$API_KEY_SECRET" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::Live E2E credentials are required for integration"
+          $profile = Join-Path $env:USERPROFILE '.butler-e2e-auth/auth.json'
+          if (Test-Path -LiteralPath $profile -PathType Leaf) {
+            # Mask before exporting; the dedicated file is refreshed in place.
+            Write-Output "::add-mask::$profile"
+            Write-Output 'Persistent live OAuth profile exists'
+            "BUTLER_E2E_CODEX_AUTH_JSON=$profile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } elseif ($env:CODEX_AUTH_SECRET) {
+            $path = Join-Path $env:OWNER_JOB_ROOT 'codex-auth.json'
+            [IO.File]::WriteAllText($path, $env:CODEX_AUTH_SECRET, (New-Object Text.UTF8Encoding($false)))
+            "BUTLER_E2E_CODEX_AUTH_JSON=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } elseif ($env:API_KEY_SECRET) {
+            Write-Output "::add-mask::$env:API_KEY_SECRET"
+            @('BUTLER_E2E_PROVIDER=openai', 'BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE',
+              "BUTLER_E2E_API_KEY_VALUE=$env:API_KEY_SECRET") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            Write-Output '::error::Live E2E requires credentials. One-time PowerShell setup: $env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login'
             exit 1
-          fi
+          }
+          'available=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - uses: actions/checkout@v4
-        if: steps.credential.outputs.available == 'true'
-
-      - name: Set up Rust and prebuilt ONNX Runtime
-        if: steps.credential.outputs.available == 'true'
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: e2e
-          artifact-cache-kind: dev
-
-      - name: Install the credential
-        if: steps.credential.outputs.available == 'true'
+      - name: Restore Windows debug snapshot
         env:
-          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
-          API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
-        run: |
-          umask 077
-          if [ -n "$CODEX_AUTH_SECRET" ]; then
-            printf '%s' "$CODEX_AUTH_SECRET" > "$RUNNER_TEMP/codex-auth.json"
-            echo "BUTLER_E2E_CODEX_AUTH_JSON=$RUNNER_TEMP/codex-auth.json" >> "$GITHUB_ENV"
-          fi
-          if [ -n "$API_KEY_SECRET" ]; then
-            echo "::add-mask::$API_KEY_SECRET"
-            echo "BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE" >> "$GITHUB_ENV"
-            echo "BUTLER_E2E_API_KEY_VALUE=$API_KEY_SECRET" >> "$GITHUB_ENV"
-          fi
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
 
       - name: Build the agent binary under test
-        if: steps.credential.outputs.available == 'true'
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked -p butler-agent --bin butler-agent
+        run: |
+          $env:RUSTFLAGS = '-C target-feature=+crt-static'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "BUTLER_E2E_BIN=$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload Cargo build timings
         if: ${{ always() && steps.credential.outputs.available == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: cargo-timings-e2e-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ env.CARGO_TARGET_DIR || 'packages/butler-agent/rust/target' }}/cargo-timings/*.html
+          path: ${{ env.CARGO_TARGET_DIR }}/cargo-timings/*.html
           if-no-files-found: error
           retention-days: 14
+
       - name: Run the live tier
-        if: steps.credential.outputs.available == 'true'
         env:
           BUTLER_E2E_TIER: live
           BUTLER_E2E_SKIP_BUILD: "1"
-          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-live-report.txt
+          BUTLER_E2E_REPORT: ${{ env.OWNER_JOB_ROOT }}/e2e-live-report.txt
+          RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
 
       - name: Summarize
         if: always() && steps.credential.outputs.available == 'true'
         run: |
-          {
-            echo "### E2E live tier ($BUTLER_E2E_PROVIDER, $BUTLER_E2E_MODEL)"
-            sed 's/^/    /' "$RUNNER_TEMP/e2e-live-report.txt" 2>/dev/null || echo "no report"
-          } >> "$GITHUB_STEP_SUMMARY"
+          "### E2E live tier ($env:BUTLER_E2E_PROVIDER, $env:BUTLER_E2E_MODEL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          $report = Join-Path $env:OWNER_JOB_ROOT 'e2e-live-report.txt'
+          if (Test-Path $report) {
+            Get-Content $report | ForEach-Object { "    $_" } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          } else {
+            'no report' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
 
-      - name: Remove the credential
-        if: always()
+      - name: Check owner registration and remove job profile
+        if: always() && env.OWNER_JOB_ROOT != ''
         working-directory: ${{ github.workspace }}
-        run: rm -f "$RUNNER_TEMP/codex-auth.json"
+        run: ./deploy/windows-owner-cleanup.ps1
