@@ -27,8 +27,10 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     return null;
   }
   const seed = Math.random();
+  const softwareRendering = renderer.softwareRendering();
+  if (softwareRendering) canvas.dataset.wallpaperFallback = "software"; // Before the first frame; smokes assert it.
   let state: WallpaperScheduleState = {
-    ...readWallpaperSignals(), moduleMotion: "static", motion: "auto", pauseOnBattery: false, degraded: false, contextLost: false,
+    ...readWallpaperSignals(), moduleMotion: "static", motion: "auto", pauseOnBattery: false, degraded: false, contextLost: false, softwareRendering,
   };
   let hasScene = false;
   let contentRect: WallpaperContentRect | null = null;
