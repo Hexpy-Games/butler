@@ -62,10 +62,13 @@ try {
       });
       await page.route("**/favicons?host=failed.invalid", route => route.fulfill({ status: 404, headers: { "cache-control": "private, no-store" } }));
       await page.goto(server.url, { waitUntil: "load" });
-      const callsBefore = server.stubModelCalls.length;
-      const repliesBefore = await page.locator('[data-test-class="markdown-document"]').count();
       const editor = page.locator('[contenteditable="true"]').first();
       await editor.fill("Show external references");
+      const send = page.locator('[data-test-class="composer-send-button"]');
+      console.log(JSON.stringify({ language, theme, width, sendWasDisabled: await send.isDisabled() }));
+      await page.locator('[data-test-class="composer-send-button"]:not([disabled])').waitFor();
+      const callsBefore = server.stubModelCalls.length;
+      const repliesBefore = await page.locator('[data-test-class="markdown-document"]').count();
       await editor.press("ControlOrMeta+Enter");
       await page.waitForFunction(count => document.querySelectorAll('[data-test-class="markdown-document"]').length > count, repliesBefore);
       assert(server.stubModelCalls.length > callsBefore, "turn did not reach the stub model");
