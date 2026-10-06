@@ -55,8 +55,7 @@ async function open(page: Page, url: string, name: string, width: number) {
   await page.setViewportSize({ width, height: 900 });
 }
 
-try {
-  for (const locale of ["ko", "en"]) {
+async function runLocale(locale: "ko" | "en") {
     setAppCopyLanguage(locale);
     const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0" } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
@@ -73,6 +72,7 @@ try {
     const routeApi = async (route: Route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.startsWith("/events")) { await route.continue(); return; }
+      if (path === "/authority-permissions") console.log(`grants response ${locale} ${listState}`);
       if (path === "/authority-permissions" && listState !== "ready") {
         if (listState === "loading") await new Promise<void>(done => { pendingLoads.add(done); });
         if (listState === "error") { await route.fulfill({ status: 503, json: { error: { code: "authority_unavailable", message: "INTERNAL TEST MESSAGE" } } }); return; }
@@ -253,6 +253,8 @@ try {
       assert.equal(server.stubModelCalls.length, 0);
     } catch (error) { console.error(error); await page.screenshot({ path: join(output, `${locale}-failure.png`), animations: "allow", timeout: 10_000 }); console.error(error); throw error; }
     finally { releaseLoading(); try { await page.unrouteAll({ behavior: "ignoreErrors" }); await page.goto("about:blank", { waitUntil: "commit" }); await page.close(); } finally { await server.stop(); } }
-  }
+}
+try {
+  for (const locale of ["ko", "en"] as const) await runLocale(locale);
   console.log(JSON.stringify({ ok: true, before, locales: ["ko", "en"], widths: [375, 1280], screenshots: screenshots.length, modelCalls: 0 }));
 } finally { await browser.close(); }
