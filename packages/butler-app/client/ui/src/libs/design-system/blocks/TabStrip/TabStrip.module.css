@@ -1,0 +1,232 @@
+/* Tabs share one row: they shrink from --tab-strip-tab-max-width down to
+   --tab-strip-tab-min-width, then the row scrolls sideways with edge fades. */
+.root {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.scroller {
+  --scroll-fade-size: var(--space-2xl);
+
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  padding: var(--focus-ring-width);
+  overflow: auto hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.scroller[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* Groups and their tablists keep their semantics but not their boxes: every
+   chip and tab is a flex item of the scroller, so all tabs shrink together. */
+.group,
+.tabs {
+  display: contents;
+}
+
+.slot {
+  position: relative;
+  width: var(--tab-strip-tab-max-width);
+  min-width: var(--tab-strip-tab-min-width);
+  flex: 0 1 auto;
+  container-type: inline-size;
+}
+
+/* The selected tab stops shrinking earlier, so a few letters of its title stay
+   readable beside its close button. */
+.slot[data-active] {
+  min-width: calc(
+    var(--tab-strip-tab-min-width) + var(--space-3xl) + var(--space-lg)
+  );
+}
+
+.slot[data-dragging] {
+  z-index: 1;
+}
+
+.slot > .tab[data-slot="clickable"] {
+  min-height: var(--control-height-md);
+  padding-inline: var(--space-sm) var(--space-xs);
+  gap: var(--space-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-tight);
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* Conversation tabs are quieter than the user's own tabs until selected. */
+.group[data-kind="conversation"] .slot > .tab[data-slot="clickable"] {
+  color: var(--text-secondary);
+}
+
+.slot > .tab[data-slot="clickable"]:hover:not([aria-selected="true"]) {
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
+}
+
+/* Selected is a flat fill, like an active NavRow. */
+.slot > .tab[data-slot="clickable"][aria-selected="true"],
+.slot[data-dragging] > .tab[data-slot="clickable"] {
+  background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.slot > .tab[aria-selected="true"] .title {
+  font-weight: var(--font-weight-medium);
+}
+
+.slot[data-dragging] > .tab[data-slot="clickable"] {
+  box-shadow: var(--shadow-drag-lift);
+}
+
+.slot > .tab[data-entering] {
+  animation: tab-strip-enter var(--motion-base) var(--motion-ease-enter);
+}
+
+@keyframes tab-strip-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-sm));
+  }
+}
+
+.favicon {
+  display: inline-grid;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  flex: none;
+  place-items: center;
+}
+
+.favicon img {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.favicon[data-state="crashed"],
+.stateMark[data-state="crashed"] {
+  color: var(--color-danger-text);
+}
+
+.title {
+  flex: 1 1 auto;
+}
+
+.close {
+  flex: none;
+}
+
+/* Narrow tabs drop the close button (except the selected tab), then the title. */
+@container (max-width: 99px) {
+  .slot:not([data-active]) .close {
+    display: none;
+  }
+}
+
+@container (max-width: 71px) {
+  .title {
+    display: none;
+  }
+
+  .slot > .tab[data-slot="clickable"] {
+    justify-content: center;
+    padding-inline: var(--space-xs);
+  }
+}
+
+/* A chip opens its group: wider space before it, a step after it. */
+.chipSlot {
+  display: flex;
+  /* Chips give way more slowly than tabs and keep a few letters of label
+     (.chipLabel min-width sets the chip's minimum). */
+  max-width: var(--tab-strip-chip-max-width);
+  flex: 0 0.4 auto;
+  margin-inline: var(--space-sm) var(--space-xs);
+}
+
+.scroller > .group:first-child > .chipSlot {
+  margin-inline-start: 0;
+}
+
+.chipSlot .chip[data-slot="clickable"] {
+  max-width: 100%;
+  min-height: var(--control-height-sm);
+  padding-inline: var(--space-sm);
+  gap: var(--space-xs);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-tight);
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    border-color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+.chipSlot .chip[data-kind="conversation"] {
+  color: var(--text-secondary);
+}
+
+.chipSlot .chip[data-active-within] {
+  background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.chipSlot .chip[data-over][data-slot="clickable"] {
+  border-color: var(--accent);
+  background: var(--selection-strong);
+}
+
+.chipSlot .chip .chipLabel {
+  min-width: 2em;
+  flex: 0 1 auto;
+}
+
+.stateMark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+.stateMark[data-state="waiting"] {
+  color: var(--color-warning-text);
+}
+
+.chevron {
+  flex: none;
+  opacity: 0.72;
+  transition: rotate var(--motion-fast) var(--motion-ease-standard);
+}
+
+.chip[aria-expanded="false"] .chevron {
+  rotate: -90deg;
+}
+
+/* Reduced motion: the chevron turns at once (the tab entrance is token-only and fades). */
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.newTab {
+  flex: none;
+}
