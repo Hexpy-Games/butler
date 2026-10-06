@@ -15,6 +15,7 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "archives",
   "about",
   "mcp",
+  "hooks",
   "skills",
   "server",
 ];

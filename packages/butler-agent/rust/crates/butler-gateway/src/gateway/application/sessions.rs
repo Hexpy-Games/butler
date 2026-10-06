@@ -177,12 +177,14 @@ impl AppApplication {
         &self,
         id: String,
     ) -> Result<(), GatewayApplicationError> {
+        let hook_id = id.clone();
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| write::publish(db, &subscribers, &id, clock.as_ref()))
             .await
-            .map_err(app_error)
+            .map_err(app_error)?;
+        self.session_start_hook(hook_id, "created").await
     }
 
     pub(crate) async fn rollback_session_creation(

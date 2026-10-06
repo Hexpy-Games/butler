@@ -198,6 +198,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     ));
     let work_streams = Arc::new(crate::host::WorkStreams::open(scratch.0.clone()).unwrap());
     let factory = GuidedTurnFactoryAdapter {
+        hooks: None,
         preparation,
         documents: documents.clone(),
         effects: Arc::new(StorageEffectJournal::new(

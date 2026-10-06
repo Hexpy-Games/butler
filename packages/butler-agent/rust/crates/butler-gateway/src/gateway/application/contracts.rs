@@ -262,6 +262,8 @@ pub struct VisualAdmissionRequest {
     pub files: Vec<AppMessageFileSnapshot>,
 }
 pub struct AppApplicationDependencies {
+    /// User lifecycle hooks, absent for applications without the host dispatcher.
+    pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
     /// Process stop fences queue admission before active turns are interrupted.
     pub service_shutdown: tokio_util::sync::CancellationToken,
     pub updates: Arc<butler_runtime::operations::AppUpdateService>,

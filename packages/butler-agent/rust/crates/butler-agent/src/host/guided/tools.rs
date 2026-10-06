@@ -6,6 +6,7 @@ mod dispatch;
 mod effect;
 mod execute;
 mod feedback;
+mod hooks;
 mod image;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
@@ -343,6 +344,15 @@ impl GuidedTools {
 }
 
 impl ToolPort for GuidedTools {
+    fn hook_tool_name<'a>(&self, call: &'a ModelRoundToolCall) -> std::borrow::Cow<'a, str> {
+        hooks::name(call)
+    }
+    fn hook_tool_input<'a>(
+        &self,
+        call: &'a ModelRoundToolCall,
+    ) -> &'a serde_json::Map<String, serde_json::Value> {
+        hooks::input(call)
+    }
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

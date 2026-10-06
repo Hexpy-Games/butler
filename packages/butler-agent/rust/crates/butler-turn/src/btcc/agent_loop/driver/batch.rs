@@ -292,6 +292,7 @@ pub(super) async fn suspend_for_authority(
         iteration: batch.iteration,
         empty_response_recovery_used: state.empty_recovery_used,
         automatic_continuations: state.automatic_continuations,
+        stop_hook_active: state.stop_hook_active,
         tool_results: std::mem::take(&mut state.tool_results),
         presentation,
         batch: AuthorityBatch {

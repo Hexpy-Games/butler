@@ -48,6 +48,18 @@ pub(super) async fn settle_answer(
             let content = replacement
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or(text);
+            if let Some(reason) = super::super::hooks::stop(
+                input.policy,
+                GuidedInvocation::from(input),
+                &content,
+                state.stop_hook_active,
+                iteration,
+            )
+            .await
+            {
+                state.stop_hook_active = true;
+                return continue_answer(input, state, prepared, &reason).await;
+            }
             finish(input, state, Ending::Answer(&content))
                 .await
                 .map(Step::finished)

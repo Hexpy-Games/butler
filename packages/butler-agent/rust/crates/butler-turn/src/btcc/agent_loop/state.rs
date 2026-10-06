@@ -26,6 +26,7 @@ pub(super) struct State {
     pub iteration: u32,
     pub empty_recovery_used: bool,
     pub automatic_continuations: u32,
+    pub stop_hook_active: bool,
     // Independent of projected messages, so compaction never resets repetition facts.
     pub feedback_counts: BTreeMap<String, u64>,
     pub phase: LoopPhase,
@@ -50,6 +51,7 @@ impl State {
             iteration: 0,
             empty_recovery_used: false,
             automatic_continuations: 0,
+            stop_hook_active: false,
             feedback_counts: BTreeMap::new(),
             phase: LoopPhase::Working,
             resumed_batch: None,
@@ -93,6 +95,7 @@ impl State {
             iteration: restored.iteration,
             empty_recovery_used: restored.empty_response_recovery_used,
             automatic_continuations: restored.automatic_continuations,
+            stop_hook_active: restored.stop_hook_active,
             feedback_counts: BTreeMap::new(),
             phase: LoopPhase::Working,
             resumed_batch: Some(restored.batch),

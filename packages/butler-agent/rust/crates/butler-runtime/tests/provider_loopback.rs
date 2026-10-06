@@ -291,6 +291,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
             ModelRouteRetryConfig::new(0.0),
         )),
         GuidedPolicyDependencies {
+            hooks: None,
             prompt: policy_fixture.clone(),
             authority: policy_fixture.clone(),
             context,

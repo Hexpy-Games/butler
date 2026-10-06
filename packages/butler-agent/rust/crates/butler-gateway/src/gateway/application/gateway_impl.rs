@@ -1,6 +1,9 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
+    fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
+        self.dependencies.hooks.clone()
+    }
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.usage_monitor_query(query)
     }
