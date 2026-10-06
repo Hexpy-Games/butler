@@ -86,7 +86,11 @@ async function measure(mode, run, env) {
   const elapsed = (name) => events.find((event) => event.stage === name)?.elapsed_ms;
   if (!events.some((event) => event.stage === "window_ready")) console.log(JSON.stringify({ failure: "window_not_ready", mode, run, exitCode: child.exitCode, events }));
   if (!events.some((event) => event.stage === "window_ready")) throw new Error(`${mode}/${run}: main window did not become ready`);
-  if (forcedStop) throw new Error(`${mode}/${run}: forced_stop`);
+  if (forcedStop) {
+    const output = option("--json");
+    if (output) writeFileSync(resolve(output), JSON.stringify({ runs, samples, failure: { mode, run, forcedStop, events, profiles } }, null, 2));
+    throw new Error(`${mode}/${run}: forced_stop`);
+  }
   const metrics = Object.fromEntries(events.filter((event) => event.elapsed_ms !== null).map((event) => [event.stage, event.elapsed_ms]));
   metrics.splash_after_ready = elapsed("splash_painted") - elapsed("app_ready");
   if (!Number.isFinite(metrics.splash_after_ready)) throw new Error(`${mode}/${run}: missing splash_painted or app_ready timing`);

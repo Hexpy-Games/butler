@@ -1,7 +1,7 @@
 import type { LifecycleCopy } from "../../../../../../butler-i18n/src/lifecycle";
 import type { startMarkLoop } from "../../libs/design-system/components/ButlerThinkingMark/markLoop";
 type State = { kind?: string; state?: string; stage?: string; theme?: "light" | "dark"; locale?: string; motion?: string; reducedMotion?: boolean; forceQuit?: boolean; failedStage?: string; copy: { ko: LifecycleCopy; en: LifecycleCopy } };
-type Bridge = { state(): Promise<State>; action(action: string): void; onState(listener: (state: Partial<State>) => void): void; painted(): void };
+type Bridge = { state(): Promise<State>; action(action: string): void; onState(listener: (state: Partial<State>) => void): void; painted(): void; layout?(height: number): void };
 const runtime = window as unknown as { butlerLifecycle?: Bridge; startMarkLoop: typeof startMarkLoop };
 
 performance.mark("state_start");
@@ -67,6 +67,7 @@ function apply(next: Partial<State>) {
   }
   canvas.dataset.breathe = reduced && working ? "on" : "";
   loop?.start();
+  bridge?.layout?.(Math.ceil(document.body.getBoundingClientRect().height));
   if (failed) (values.primary ? slots.primary : slots.secondary)!.focus();
 }
 slots.secondary!.onclick = () => bridge?.action("log");
@@ -75,19 +76,12 @@ document.addEventListener("keydown", (event) => { if (event.key === "Escape" && 
 Object.assign(window, { lifecycleState: apply });
 bridge?.onState(apply);
 void (async () => {
-  if (bridge) apply(await bridge.state());
+  apply({ copy: JSON.parse(document.documentElement.dataset.copy!) });
+  if (bridge) void bridge.state().then(apply);
   performance.mark("copy_ready");
-  if (query.get("still")) {
-    const image = document.createElement("img");
-    image.alt = "";
-    image.className = classes.backdrop;
-    image.src = query.get("still")!;
-    document.querySelector("[data-surface=base]")!.prepend(image);
-    await image.decode().catch(() => image.remove());
-  }
-  performance.mark("image_ready");
   await document.fonts.ready;
   performance.mark("font_ready");
+  bridge?.layout?.(Math.ceil(document.body.getBoundingClientRect().height));
   await new Promise(requestAnimationFrame);
   await new Promise(requestAnimationFrame);
   document.documentElement.dataset.painted = "true";

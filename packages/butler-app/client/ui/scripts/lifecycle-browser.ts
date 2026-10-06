@@ -29,7 +29,7 @@ export async function lifecycleBrowser(entry = "/scripts/lifecycle-render.tsx", 
     plugins: [{ name: "lifecycle-before", enforce: "pre", load(id) { return baseline.get(id.split("?")[0]!); } }, react(), { name: "lifecycle-page", configureServer(server) {
       server.middlewares.use("/__lifecycle", async (_request, response) => {
         response.setHeader("Content-Type", "text/html");
-        const frame = entry.endsWith("lifecycle-render.tsx") ? "display:flex;width:360px;height:264px" : "";
+        const frame = entry.endsWith("lifecycle-render.tsx") ? "width:296px" : "";
         response.end(await server.transformIndexHtml("/__lifecycle", `<!doctype html><html><body><div id="root" style="${frame}"></div><script type="module" src="${entry}"></script></body></html>`));
       });
     } }],

@@ -1,56 +1,55 @@
-/** Local-file first-frame proxy, paired complete production poster vs a one-pixel control. */
+/** Complete static card first frames and Chromium parse/style/script trace. */
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { smokeBrowserArgs } from "../support/smoke-browser";
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 
-const dist = resolve("packages/butler-app/client/ui/lifecycle-assets");
-const stills = resolve("packages/butler-app/client/ui/src/components/lifecycle/stills");
-const copy = JSON.parse(readFileSync(join(dist, "copy.json"), "utf8"));
-const keys = JSON.parse(readFileSync(join(stills, "keys.json"), "utf8")).stills as Record<string, { file: string }>;
 const output = resolve(".tmp/startup-evidence");
 mkdirSync(output, { recursive: true });
 const samples: Record<string, number[]> = {};
-const control = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQV1D+DwACJgFiaSS5mgAAAABJRU5ErkJggg==";
-{
-  for (let round = 0; round < 5; round++) {
-    for (const poster of ["control", ...Object.values(keys).map((entry) => entry.file)]) {
-      const browser = await chromium.launch({ channel: "chromium", headless: true, args: smokeBrowserArgs() });
-      try {
-      const context = await browser.newContext({ viewport: { width: 360, height: 264 } });
-      const page = await context.newPage();
+for (let round = 0; round < 5; round++) {
+  for (const theme of ["light", "dark"]) for (const kind of ["startup", "quit"]) {
+  const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+  try {
+      const page = await browser.newPage({ viewport: { width: 296, height: 264 } });
+      const session = await page.context().newCDPSession(page);
+      const events: Array<{ name: string; dur?: number }> = [];
+      session.on("Tracing.dataCollected", ({ value }) => events.push(...value as unknown as Array<{ name: string; dur?: number }>));
+      await session.send("Tracing.start", { categories: "devtools.timeline,blink.user_timing,v8", transferMode: "ReportEvents" });
       const requests: string[] = [];
       page.on("request", (request) => requests.push(request.url()));
-      await page.addInitScript((copy) => {
-        (window as any).butlerLifecycle = { state: async () => ({ kind: "startup", stage: "prepare", theme: "light", locale: "ko", copy }), onState: () => undefined,
-          painted: () => { (window as any).firstFrameMs = performance.now(); } };
-      }, copy);
-      const url = pathToFileURL(join(dist, "lifecycle.html"));
-      url.searchParams.set("still", poster === "control" ? control : pathToFileURL(join(stills, poster)).href);
+      const url = pathToFileURL(resolve("packages/butler-app/client/ui/lifecycle-assets/lifecycle.html"));
+      url.search = new URLSearchParams({ kind, theme, locale: "ko", motion: "reduced" }).toString();
       await page.goto(url.href);
-      await page.waitForFunction(() => (window as any).firstFrameMs > 0);
-      const result = await page.evaluate(() => ({ ms: (window as any).firstFrameMs as number,
-        image: (document.querySelector("img") as HTMLImageElement).naturalWidth,
-        src: (document.querySelector("img") as HTMLImageElement).src,
-        mark: (document.querySelector('[data-slot="mark"]') as HTMLCanvasElement).width,
-        status: document.querySelector('[data-slot="line"]')?.textContent,
-        overflow: document.documentElement.scrollWidth > innerWidth }));
-      assert.ok(result.image > 0 && result.mark > 0 && result.status === "준비하는 중…" && !result.overflow);
-      assert.ok(poster === "control" ? result.src === control : result.src.endsWith(poster), "requested poster really decoded; no silent fallback");
-      assert.ok(requests.every((url) => url.startsWith("data:") || url.startsWith("file:") && ["lifecycle.html", "mark.js", "state.js", poster].includes(new URL(url).pathname.split("/").pop()!)), "only the lifecycle page, two scripts, inline font and selected still load");
-      (samples[poster] ??= []).push(result.ms);
-      if (round === 0 && poster === "butler.shoreline.light.0.webp") await page.screenshot({ path: join(output, "static-shoreline.png") });
-      await context.close();
-      } finally { await browser.close(); }
-    }
+      await page.locator("html[data-painted=true]").waitFor();
+      const result = await page.evaluate(() => ({
+        marks: Object.fromEntries(performance.getEntriesByType("mark").map(({ name, startTime }) => [name, startTime])),
+        images: document.images.length, font: document.fonts.check('14px "Pretendard Variable"'),
+        mark: document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!.width,
+        title: document.querySelector('[data-slot="title"]')!.textContent,
+        line: document.querySelector('[data-slot="line"]')!.textContent,
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      }));
+      assert.equal(result.images, 0);
+      assert.ok(result.font && result.mark > 0 && !result.overflow);
+      assert.equal(result.title, kind === "startup" ? "Butler 시작 중…" : "Butler 종료 중…");
+      assert.equal(result.line, kind === "startup" ? "준비하는 중…" : "작업을 저장하는 중…");
+      assert.ok(requests.every((url) => url.startsWith("data:") || url.startsWith("file:") && ["lifecycle.html", "mark.js", "state.js"].includes(new URL(url).pathname.split("/").pop()!)));
+      (samples[`${kind}/${theme}`] ??= []).push(result.marks.first_frame!);
+      const ended = new Promise<void>((done) => session.once("Tracing.tracingComplete", () => done()));
+      await session.send("Tracing.end"); await ended;
+      if (round === 0) {
+        const breakdown = Object.fromEntries(["ParseHTML", "UpdateLayoutTree", "EvaluateScript", "Paint", "Layout"].map((name) => [name, events.filter((event) => event.name === name).reduce((total, event) => total + (event.dur ?? 0) / 1000, 0)]));
+        writeFileSync(join(output, `renderer-${kind}-${theme}.json`), JSON.stringify({ marks: result.marks, breakdown }, null, 2));
+      }
+  } finally { await browser.close(); }
   }
-  const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
-  const controlMs = median(samples.control!);
-  const rows = Object.entries(samples).map(([poster, values]) => ({ poster, n: values.length,
-    medianMs: Number(median(values).toFixed(2)), maxMs: Number(Math.max(...values).toFixed(2)),
-    deltaMedianMs: Number((median(values) - controlMs).toFixed(2)) }));
-  console.table(rows);
-  writeFileSync(join(output, "background-cost.json"), JSON.stringify({ method: "fresh Chromium contexts, local files, decoded poster+mark+status then two rAF; not OS presentation or Electron launch", rows }, null, 2));
 }
+const rows = Object.entries(samples).map(([surface, values]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return { surface, n: values.length, medianMs: sorted[2], p95Ms: sorted[4] };
+});
+console.table(rows);
+writeFileSync(join(output, "card-frame-cost.json"), JSON.stringify({ method: "fresh Chromium pages; complete font, mark and localized text; not native window presentation", rows }, null, 2));

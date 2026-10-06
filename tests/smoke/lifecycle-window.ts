@@ -12,7 +12,7 @@ const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs()
 let cases = 0;
 mkdirSync(".tmp/lifecycle/static", { recursive: true });
 try {
-  const page = await browser.newPage({ viewport: { width: 360, height: 264 } });
+  const page = await browser.newPage({ viewport: { width: 296, height: 264 } });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => assert.ok(request.url().startsWith("file:") || request.url().startsWith("data:"), "No network"));
@@ -28,11 +28,13 @@ try {
       await page.goto(`${pathToFileURL(join(directory, "lifecycle.html"))}?${query}`);
       await page.locator("html[data-painted=true]").waitFor();
       await page.evaluate((forceQuit) => (window as unknown as { lifecycleState(state: unknown): void }).lifecycleState({ forceQuit }), forceQuit);
+      const height = await page.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height));
+      await page.setViewportSize({ width: 296, height });
       const audit = await page.evaluate(() => {
         const mark = document.querySelector<HTMLCanvasElement>('[data-slot="mark"]')!;
         const visible = Array.from(document.querySelectorAll<HTMLElement>("[data-slot]"))
           .filter((element) => element.getBoundingClientRect().height > 0 && element.dataset.slot !== "mark" && element.dataset.slot !== "rolling-swap" && element.dataset.slot !== "actions");
-        return { mark: { width: mark.width, height: mark.height, visible: mark.getBoundingClientRect().width === 48 }, overflow: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+        return { images: document.images.length, surface: getComputedStyle(document.body.firstElementChild!).backgroundColor, mark: { width: mark.width, height: mark.height, visible: mark.getBoundingClientRect().width === 48 }, overflow: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
           elements: visible.map((element) => {
             const rect = element.getBoundingClientRect();
             const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -41,8 +43,10 @@ try {
           }), scripts: Array.from(document.scripts, (script) => ({ src: script.src.split("/").pop(), type: script.type })),
           status: document.querySelector('[role="status"]')?.getAttribute("aria-live"), titleRole: document.querySelector('[data-slot="title"]')!.getAttribute("role") };
       });
+      assert.equal(audit.images, 0, "Lifecycle has no wallpaper or still");
+      assert.equal(audit.surface, theme === "light" ? "color(srgb 1 1 1)" : "color(srgb 0.137255 0.141176 0.152941)");
       assert.ok(audit.mark.width > 0 && audit.mark.height > 0 && audit.mark.visible);
-      assert.deepEqual(audit.overflow, [360, 264], `${kind}/${state}/${theme}/${locale}/${forceQuit}`);
+      assert.deepEqual(audit.overflow, [296, height], `${kind}/${state}/${theme}/${locale}/${forceQuit}`);
       assert.deepEqual(audit.scripts, [{ src: "mark.js", type: "" }, { src: "state.js", type: "" }]);
       assert.equal(audit.status, "polite");
       assert.equal(audit.titleRole, ["error", "failed"].includes(state) ? "alert" : "heading");

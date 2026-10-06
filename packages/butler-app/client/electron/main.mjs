@@ -1,4 +1,3 @@
-import { installLifecycleStillBridge } from "./lifecycle-still.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import {
   app,
@@ -262,7 +261,6 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
-installLifecycleStillBridge(() => mainWindow);
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;

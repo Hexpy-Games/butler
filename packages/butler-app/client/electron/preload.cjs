@@ -588,7 +588,6 @@ function writeAppUiStateCache(snapshot) {
 
 const butlerApp = Object.freeze({
   protocolVersion: "butler.app.v1",
-  saveLifecycleStill: (input) => ipcRenderer.invoke("butler:lifecycle-still", input),
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   get serverUrl() {
     return cachedServerUrl;

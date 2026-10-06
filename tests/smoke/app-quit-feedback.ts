@@ -80,8 +80,11 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
       main.once("hide", () => { hidden = performance.now() - start; complete(); });
       app.once("browser-window-created", (_event, feedback) => {
         feedback.once("show", () => {
-          shown = performance.now() - start;
-          void feedback.webContents.executeJavaScript("document.querySelector('[role=status]').textContent").then((text: string) => { status = text; complete(); });
+          const timer = setInterval(() => {
+            void feedback.webContents.executeJavaScript("document.documentElement.dataset.painted === 'true' ? document.querySelector('[role=status]').textContent : ''").then((text: string) => {
+              if (text) { clearInterval(timer); shown = performance.now() - start; status = text; complete(); }
+            }).catch(() => undefined);
+          }, 5);
         });
       });
       void main.webContents.executeJavaScript("window.butlerApp.quitApp({confirmed:true})");

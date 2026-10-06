@@ -1,4 +1,3 @@
-import { useLifecycleStill } from "@/hooks/useLifecycleStill";
 import { startupPaintReady } from "@/app/startupReady";
 import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -149,7 +148,6 @@ function AppWorkspaceShell() {
   const systemPrefersDark = useSystemThemePreference();
   // A real-time wallpaper may set light/dark (its scene tone) over the setting.
   useWallpaperAppearance();
-  useLifecycleStill();
   const appearance = useAppearanceTheme();
   const themeSettings = appearance === settings.appearance_theme ? settings : { ...settings, appearance_theme: appearance };
   useNativeAppearanceTheme(appearance);

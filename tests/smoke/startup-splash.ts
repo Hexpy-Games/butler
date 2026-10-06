@@ -68,7 +68,7 @@ try {
   assert.deepEqual(await main.evaluate(() => {
     const bridge = window.butlerApp as any;
     return [typeof bridge.signalStartupReady, typeof bridge.saveLifecycleStill];
-  }), ["function", "function"], "Lifecycle methods must be exposed before freezing the bridge");
+  }), ["function", "undefined"], "Lifecycle methods must be exposed before freezing the bridge");
   await main.locator("[data-test-class=app-boot]").waitFor({ state: "hidden" });
   assert.ok((await main.locator("#root").innerText()).length > 0, "ready renderer has content");
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.isVisible()).length), 1);
