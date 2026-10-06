@@ -41,6 +41,7 @@ struct SecurityView {
     lan_urls: Vec<String>,
     /// Extra host names the gateway answers (tunnels, reverse proxies).
     allowed_hosts: Vec<String>,
+    content_hosts: Vec<String>,
     /// Compatibility with the existing UI: always null; no token metadata.
     connection_code: Option<ConnectionCodeView>,
 }
@@ -66,6 +67,7 @@ pub(super) struct SecurityPatch {
     remote_access_enabled: Option<bool>,
     /// Replaces the list.
     allowed_hosts: Option<Vec<String>>,
+    content_hosts: Option<Vec<String>>,
 }
 
 /// The `security` object `GET`/`PATCH /settings` answer local clients.
@@ -73,6 +75,7 @@ pub(super) struct SecurityPatch {
 struct SecuritySettings {
     remote_access_enabled: bool,
     allowed_hosts: Vec<String>,
+    content_hosts: Vec<String>,
 }
 
 pub(super) async fn route(
@@ -177,6 +180,7 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
             .map(|authority| format!("http://{authority}"))
             .collect(),
         allowed_hosts: remote.exposure.allowed_hosts,
+        content_hosts: remote.exposure.content_hosts,
         connection_code,
     })
 }
@@ -240,6 +244,9 @@ pub(super) fn parse_patch(value: Value) -> Result<SecurityPatch, HttpError> {
     if let Some(hosts) = patch.allowed_hosts.take() {
         patch.allowed_hosts = Some(normalized_hosts(&hosts)?);
     }
+    if let Some(hosts) = patch.content_hosts.take() {
+        patch.content_hosts = Some(normalized_hosts(&hosts)?);
+    }
     Ok(patch)
 }
 
@@ -253,6 +260,16 @@ pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Resul
     }
     if let Some(hosts) = patch.allowed_hosts {
         exposure.allowed_hosts = hosts;
+    }
+    if let Some(hosts) = patch.content_hosts {
+        exposure.content_hosts = hosts;
+    }
+    if exposure
+        .content_hosts
+        .iter()
+        .any(|h| exposure.allowed_hosts.contains(h))
+    {
+        return Err(invalid_security("Content host must use a separate origin."));
     }
     if let Some(store) = &state.security_store {
         store.save_exposure(exposure.clone()).await?;
@@ -270,6 +287,7 @@ pub(super) fn add_to_settings(state: &HttpState, client: Option<&Client>, settin
     let security = SecuritySettings {
         remote_access_enabled: exposure.remote_access_enabled,
         allowed_hosts: exposure.allowed_hosts,
+        content_hosts: exposure.content_hosts,
     };
     if let Ok(value) = serde_json::to_value(security) {
         object.insert("security".into(), value);

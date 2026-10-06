@@ -1,4 +1,5 @@
 mod authority;
+mod content;
 mod start;
 pub(super) use start::serve;
 mod automations;
@@ -79,6 +80,7 @@ struct HttpState {
     shutdown: CancellationToken,
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
+    output_data: Option<PathBuf>,
 }
 
 /// Who sent an authorized request (a request extension for the routes).
@@ -124,7 +126,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             payload_too_large_response()
         }
     } else {
-        match authorized_route(state, request, &origin).await {
+        match authorized_route(state.clone(), request, &origin).await {
             Ok(response) => response,
             Err(error) => {
                 if html_connect_form {
@@ -135,6 +137,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             }
         }
     };
+    content::admit_ui_frames(&state, &mut response);
     latency_trace::finish(timing, &mut response);
     security::apply_cors(&mut response, &origin);
     response
@@ -193,6 +196,12 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
+    if uri.path().starts_with("/__o/") {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    if uri.path().starts_with("/outputs/") {
+        return content::view(state, request).await;
+    }
     if uri.path() == "/security" || uri.path().starts_with("/security/") {
         return security_settings::route(state, request).await;
     }

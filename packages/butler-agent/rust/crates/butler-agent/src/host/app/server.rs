@@ -321,6 +321,7 @@ fn gateway_config(
 ) -> GatewayConfig {
     let mut config = app_config.gateway_config();
     config.local_auth = local_auth;
+    config.output_data = Some(data_root.to_path_buf());
     config.static_ui_root = Some(installation.resources().join("app-client/dist"));
     config.security_store = Some(Arc::new(AppSecurityStore::new(
         data_root.to_path_buf(),

@@ -1226,6 +1226,15 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/artifacts?${params.toString()}`);
   },
+  getOutputView: ({ outputId, revision } = {}) => {
+    if (typeof outputId !== "string" || !/^[a-f0-9]{64}$/u.test(outputId)) throw new Error("Invalid output");
+    const params = new URLSearchParams();
+    if (revision !== undefined) {
+      if (!Number.isSafeInteger(Number(revision)) || Number(revision) < 1) throw new Error("Invalid revision");
+      params.set("revision", String(revision));
+    }
+    return requestBridgeResult(`/outputs/${outputId}/view?${params.toString()}`);
+  },
   exportTranscript: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/transcript-export?${params.toString()}`);

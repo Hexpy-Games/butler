@@ -12,6 +12,7 @@ pub(crate) use memory_write::MemoryWriteServices;
 mod message;
 mod monitoring;
 mod occurrence;
+mod outputs;
 mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
@@ -265,6 +266,7 @@ impl GuidedTools {
                     | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile
+                    | ToolName::OutputPublish
                     | ToolName::EditFile
                     | ToolName::GrepFiles
                     | ToolName::ReadToolOutputArtifact

@@ -77,7 +77,7 @@ impl Launch {
             home: sandbox.home.clone(),
             tmp,
             logs: sandbox.logs.clone(),
-            port: 0,
+            port: free_port()?,
             token,
             env: vec![
                 // Child commands clear inherited environment. The product's
@@ -106,8 +106,14 @@ impl Launch {
     }
 
     pub fn set_env(&mut self, key: &str, value: impl Into<String>) {
+        let value = value.into();
+        if key == "BUTLER_APP_SERVER_PORT"
+            && let Ok(port) = value.parse()
+        {
+            self.port = port;
+        }
         self.env.retain(|(existing, _)| existing != key);
-        self.env.push((key.to_owned(), value.into()));
+        self.env.push((key.to_owned(), value));
     }
 
     pub fn remove_env(&mut self, key: &str) {

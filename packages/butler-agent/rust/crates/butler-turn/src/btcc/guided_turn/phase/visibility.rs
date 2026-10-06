@@ -19,6 +19,7 @@ const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 const NON_FULL: &[&str] = &[
+    "output_publish",
     "run_command",
     "write_file",
     "edit_file",
@@ -74,6 +75,7 @@ const SCHEDULE_WRITES: &[&str] = &[
     "delete_automation",
 ];
 const ASK_FIRST_WRITES: &[&str] = &[
+    "output_publish",
     "run_command",
     "set_wallpaper",
     "save_wallpaper_module",
@@ -257,7 +259,9 @@ fn apply_access_mode(
                 names.insert(tool.name.clone());
             }
         }
-        names.extend(["run_command", "write_file", "edit_file"].map(str::to_owned));
+        names.extend(
+            ["run_command", "write_file", "edit_file", "output_publish"].map(str::to_owned),
+        );
         if scope.has_project {
             names.insert("bind_session_git_worktree".into());
         }

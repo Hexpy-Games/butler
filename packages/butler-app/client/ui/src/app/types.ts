@@ -611,6 +611,7 @@ export interface OnboardingSettingsView {
 export interface SecuritySettingsView {
   remote_access_enabled: boolean;
   allowed_hosts: string[];
+  content_hosts?: string[];
 }
 
 /**
@@ -625,6 +626,7 @@ export interface SecurityView {
   lan_urls: string[];
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
+  content_hosts?: string[];
 }
 
 export interface ModelFallbackSettingsView {

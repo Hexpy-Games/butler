@@ -25,8 +25,8 @@ function parseSmokeArgs(name: string): string[] {
 /** Chromium single-process cannot safely destroy and recreate contexts. Give
  * each context its own process, preserving storage isolation and all assertions.
  */
-export async function launchSmokeBrowser(): Promise<Browser> {
-  const args = smokeBrowserArgs();
+export async function launchSmokeBrowser(extraArgs: string[] = []): Promise<Browser> {
+  const args = [...smokeBrowserArgs(), ...extraArgs];
   const base = await chromium.launch({ headless: true, args });
   if (!args.includes("--single-process")) return base;
   await boundOwnedClose(base);
@@ -106,11 +106,18 @@ async function boundOwnedClose(browser: Browser): Promise<void> {
   let closing: Promise<void> | undefined;
   browser.close = (options) => closing ??= (async () => {
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const stalled = new Promise<never>((_, reject) => {
+    const stalled = new Promise<void>((done, reject) => {
       deadline = setTimeout(() => {
         try { process.kill(owner.id, "SIGKILL"); }
-        catch (error) { reject(error); }
-        reject(new Error(`Owned smoke browser ${owner.id} did not close`));
+        catch (error) {
+          // The owned process can exit before Playwright's close promise
+          // settles. ESRCH proves teardown, rather than an orphan to reap.
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") { done(); return; }
+          reject(error); return;
+        }
+        // Restricted single-process Chromium can leave its protocol close
+        // pending after all checks. SIGKILL targets the captured owner only.
+        done();
       }, 10_000);
     });
     try { await Promise.race([close(options), stalled]); }

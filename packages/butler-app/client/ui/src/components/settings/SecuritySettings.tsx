@@ -72,6 +72,12 @@ export function SecuritySettings() {
             disabled={busy !== null}
             onSave={security.saveAllowedHosts}
           />
+          <SecurityAllowedHostsField
+            content
+            hosts={view.content_hosts ?? []}
+            disabled={busy !== null}
+            onSave={security.saveContentHosts}
+          />
         </SettingsSection>
       )}
     </SettingsPage>
