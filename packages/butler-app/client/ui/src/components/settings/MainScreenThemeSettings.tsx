@@ -2,9 +2,10 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { uploadedWallpaperSource } from "@/app/wallpaperAssets.ts";
-import { SettingsField, WallpaperPicker } from "@/butler-ds";
+import { FieldError, SettingsField, Stack, WallpaperPicker } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { useWallpaperAssets } from "./hooks/useWallpaperAssets";
+import { WallpaperImportError } from "@/components/settings/WallpaperImportError";
 import { useWallpaperModules } from "./hooks/useWallpaperModules";
 import { useWallpaperSourceSave } from "./hooks/useWallpaperSourceSave";
 import { SettingsSwitch } from "./SettingsFormComponents";
@@ -19,7 +20,7 @@ export function MainScreenThemeSettings() {
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
   const saveSource = useWallpaperSourceSave();
-  const images = useWallpaperAssets();
+  const images = useWallpaperAssets("settings-main-screen-wallpaper-picker");
   const modules = useWallpaperModules();
   const copy = appCopy.settings;
 
@@ -44,10 +45,11 @@ export function MainScreenThemeSettings() {
         label={copy.fields.wallpaper}
         description={copy.descriptions.wallpaper}
         control={
-          <WallpaperPicker
+          <Stack gap="sm"><WallpaperPicker
             dataTestClass="settings-main-screen-wallpaper-picker"
             images={images.assets}
             importingModule={modules.importing}
+            importError={modules.importError ? <WallpaperImportError message={modules.importError} replace={modules.replaceImport} /> : undefined}
             labels={wallpaperPickerLabels()}
             locale={locale}
             uploading={images.uploading}
@@ -60,6 +62,8 @@ export function MainScreenThemeSettings() {
             onImportModule={(file) => void importModule(file)}
             onUpload={(file) => void upload(file)}
           />
+          {images.uploadError ? <FieldError id={images.uploadErrorId}>{images.uploadError}</FieldError> : null}
+          </Stack>
         }
       />
       {source.kind === "none" ? null : (

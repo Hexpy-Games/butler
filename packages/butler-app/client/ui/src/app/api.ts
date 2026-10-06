@@ -176,7 +176,12 @@ export async function importSkillZip(file: File, projectId?: string): Promise<Sk
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.importFailed);
+  if (!response.ok) {
+    throw Object.assign(new Error(appCopy.interfaceFeedback.importFailed), {
+      code: typeof payload?.error?.code === "string" ? payload.error.code : "request_failed",
+      status: response.status,
+    });
+  }
   return payload.data as SkillImportResult;
 }
 
@@ -954,10 +959,16 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   throw error;
 }
 
+const CODED_SETTINGS_METHODS = new Set([
+  "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
+  "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
+]);
+
 async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];
   if (typeof fn !== "function") throw new Error(`Butler desktop bridge is missing ${method}.`);
-  return await fn(input) as T;
+  const value = await fn(input);
+  return CODED_SETTINGS_METHODS.has(method) ? unwrapBridgeResult<T>(value as BridgeResult<T> | T) : value as T;
 }
 
 /**

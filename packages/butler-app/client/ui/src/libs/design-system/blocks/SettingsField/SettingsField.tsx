@@ -1,5 +1,6 @@
 import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
-import { useId, type HTMLAttributes, type ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type HTMLAttributes, type ReactNode } from "react";
+import { FieldError } from "../../components/Field";
 import { Field } from "../../components/Field";
 import { Label } from "../../components/Label";
 import { Typo } from "../../components/Typo";
@@ -13,6 +14,7 @@ export interface SettingsFieldProps extends DsPrivateStyleProps, DsBaseProps<HTM
   label: ReactNode;
   description?: ReactNode;
   control: ReactNode;
+  error?: ReactNode;
   meta?: ReactNode;
   descriptionId?: string;
   controlWidth?: "default" | "full";
@@ -26,6 +28,7 @@ export function SettingsField({
   description,
   descriptionId,
   control,
+  error,
   meta,
   controlWidth = "default",
   settingId,
@@ -39,9 +42,18 @@ export function SettingsField({
   const generatedDescriptionId = useId();
   const effectiveDescriptionId = descriptionId ?? generatedDescriptionId;
 
+  const errorId = `${effectiveDescriptionId}-error`;
+  const controlProps = isValidElement(control) ? control.props as Record<string, unknown> : {};
+  const describedBy = [controlProps["aria-describedby"], description ? effectiveDescriptionId : undefined, error ? errorId : undefined].filter(Boolean).join(" ") || undefined;
+  const accessibleControl = isValidElement(control) && (error || description)
+    ? cloneElement(control as React.ReactElement<Record<string, unknown>>, {
+      "aria-invalid": error ? true : controlProps["aria-invalid"], "aria-describedby": describedBy,
+    }) : control;
+
   return (
     <Field
       className={dsClass(styles.field, className)}
+      data-invalid={Boolean(error)}
       data-control-width={controlWidth}
       data-settings-field=""
       data-setting-id={settingId}
@@ -59,7 +71,8 @@ export function SettingsField({
         ) : null}
       </div>
       <div className={styles.control}>
-        {control}
+        {accessibleControl}
+        {error ? <FieldError id={errorId}>{error}</FieldError> : null}
         {meta ? (
           <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>
         ) : null}

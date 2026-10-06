@@ -76,6 +76,9 @@ export type KeyCheckFailure =
   | "invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest" | "savefailed";
 
 const KEY_CHECK_FAILURES: Record<string, KeyCheckFailure> = {
+  provider_auth_error: "invalid", credential_key_invalid: "invalid",
+  provider_permission_error: "noaccess", provider_quota_exhausted: "noaccess",
+  provider_network_error: "network", provider_timeout: "network",
   invalid_key: "invalid",
   no_access: "noaccess",
   network: "network",

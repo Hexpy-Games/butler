@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useState } from "react";
+import { notifyError } from "@/app/notifications";
 import { api } from "@/app/api.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -34,12 +35,16 @@ export function ArchivesSettings() {
 
   const loadMore = async () => {
     if (!archives) return;
-    const next = await loadPage(archiveItems(archives).length);
-    setArchives({
-      ...next,
-      projects: [...archives.projects, ...next.projects],
-      sessions: [...archives.sessions, ...next.sessions],
-    });
+    try {
+      const next = await loadPage(archiveItems(archives).length);
+      setArchives({
+        ...next,
+        projects: [...archives.projects, ...next.projects],
+        sessions: [...archives.sessions, ...next.sessions],
+      });
+    } catch (error) {
+      notifyError(error, appCopy.settings.archiveErrors.loadMore);
+    }
   };
 
   useEffect(() => {
@@ -59,6 +64,8 @@ export function ArchivesSettings() {
         },
       );
       await refresh();
+    } catch (error) {
+      notifyError(error, appCopy.settings.archiveErrors.restore);
     } finally {
       setBusyId(null);
     }

@@ -253,7 +253,7 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
         tone: "ok",
       });
     } catch (error) {
-      notifyError(error, appCopy.settings.errors.updateSettings, {
+      notifyError(error, appCopy.settings.errors.saveFailed, {
         id: "settings-update",
       });
       if (apiErrorCode(error) === "settings_model_unavailable") {

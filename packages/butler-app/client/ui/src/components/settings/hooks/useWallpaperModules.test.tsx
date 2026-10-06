@@ -82,7 +82,7 @@ test("importing installs the module and refreshes the store; no toast", async ()
   }
 });
 
-test("an import failure shows the gateway message's first line", async () => {
+test("an import failure exposes localized inline feedback", async () => {
   const errorToast = spyOn(toast, "error");
   const view = await mount(null, {
     "POST /wallpaper-modules/import": () => new Response(
@@ -96,21 +96,23 @@ test("an import failure shows the gateway message's first line", async () => {
       installed = await view.api().importModule(new File(["z"], "bad.zip"));
     });
     expect(installed).toBeNull();
-    expect(errorToast.mock.calls.map(([message]) => message)).toEqual(["shader.frag: missing"]);
+    expect(view.api().importError).toBe("That wallpaper file isn't valid.");
+    expect(errorToast).not.toHaveBeenCalled();
   } finally {
     errorToast.mockRestore();
     await view.cleanup();
   }
 });
 
-test("an import failure without a message falls back to the canned copy", async () => {
+test("an import failure without a message maps its code to inline feedback", async () => {
   const errorToast = spyOn(toast, "error");
   const view = await mount(null, {
     "POST /wallpaper-modules/import": () => new Response(JSON.stringify({ error: { code: "wallpaper_module_archive_too_large" } }), { status: 413 }),
   });
   try {
     await view.act(() => view.api().importModule(new File(["z"], "big.zip")));
-    expect(errorToast.mock.calls.map(([message]) => message)).toEqual(["Module import failed."]);
+    expect(view.api().importError).toBe("Modules up to 2 MB.");
+    expect(errorToast).not.toHaveBeenCalled();
   } finally {
     errorToast.mockRestore();
     await view.cleanup();
