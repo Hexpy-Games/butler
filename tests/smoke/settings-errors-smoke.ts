@@ -85,7 +85,13 @@ async function toast(page: Page, expected: string) {
 }
 async function tileField(page: Page, selector: string, expected: string) {
   const button = page.locator(selector);
-  await page.waitForFunction(selector => document.querySelector(selector)?.getAttribute("aria-invalid") === "true", selector);
+  await page.waitForFunction(selector => document.querySelector(selector)?.getAttribute("aria-invalid") === "true", selector).catch(async cause => {
+    await page.screenshot({ path: join(output, "failure-import.png"), fullPage: true });
+    const controls = await page.locator("button[aria-invalid]").evaluateAll(buttons => buttons.map(button => ({
+      label: button.textContent, invalid: button.getAttribute("aria-invalid"), visible: button.getBoundingClientRect().height > 0,
+    })));
+    throw new Error(JSON.stringify({ selector, code, controls, requests: requests.slice(-5) }), { cause });
+  });
   const errorId = await button.getAttribute("aria-describedby"); assert(errorId);
   const error = page.locator(`[id="${errorId}"]`);
   await page.waitForFunction(({ id, expected }) => {
