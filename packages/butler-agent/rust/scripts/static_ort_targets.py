@@ -71,4 +71,3 @@ TARGETS = {
         "build_args": ("--compile_no_warning_as_error", "--enable_msvc_static_runtime"),
     },
 }
-

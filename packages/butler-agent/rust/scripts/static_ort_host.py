@@ -110,5 +110,3 @@ def host_identity(target, rust_target):
             "msvc": visual_studio_identity(),
         })
     return identity
-
-
