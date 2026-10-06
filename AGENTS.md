@@ -34,10 +34,10 @@ This routine requires Ledger access and publication authorization. Codex workers
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
 - **Before pushing:**
-  - `git fetch origin` and merge `origin/main` if it moved;
+  - `git fetch origin` and merge your base (`origin/main` or the named `origin/release/<v>`) if it moved;
   - run `cargo fmt`, `clippy -D warnings` on touched crates, and `cargo run -p butler-source-check -- .`;
   - if TS or UI changed, run `bun install --frozen-lockfile --ignore-scripts && bun run check`, isolated as above.
-- **Pushing.** Push only when the task allows it. After pushing, confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
+- **Pushing.** Push only when the task allows it. When the task includes a PR, after pushing confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
 - **Final message:**
   - what changed;
   - each check and test you ran, with its result;
@@ -45,6 +45,17 @@ This routine requires Ledger access and publication authorization. Codex workers
   - anything left undone, with file:line.
 
   Don't leave scratch files such as a PR body or notes in the tree.
+
+## Branches and pushing
+
+- Branch from `origin/main` as `<type>/<slug>`: `feat`, `fix`, `perf`, `refactor`, `ci`, `build`, `docs`, `test`, `chore` or `research`. Name the work, never the tool; `codex/`, `claude/` and other agent prefixes are forbidden. `branch-name` checks every PR head, including forks. There are no bot exceptions in this repo.
+- Only when the task names a release branch, branch from `origin/release/<v>` as `fix/<v>-<slug>`. Release branches are `release/<v>`, where `<v>` is `X.Y.Z` or `X.Y.Z-preview.N`.
+- Push only your own branch. Never push to `main` or `release/**`, create or delete release branches or `v*` tags, or merge PRs.
+- Open a PR only when the task asks. Its base is `main`, or the release branch named in the task; otherwise the coordinator batches branches.
+- Before pushing, fetch and merge your base if it moved. Never rebase a pushed branch.
+- PRs and main pushes run smoke CI, without E2E or perf. Run the existing stub E2E and perf tests covering your changed paths locally, isolated, and report every result.
+- Cherry-pick into a release fix only when asked, with `-x`. Release fixes return to main through a merge-back PR, using a merge commit.
+- Never add workflow branch allowlists or advisory flags. A coordinator can waive a named known-flaky failure for a preview in an open issue, then notify the owner. Stable waivers require the owner's approval. Follow the waiver record format in CONTRIBUTING.md.
 
 ## Recurring mistakes (feedback log)
 

@@ -67,8 +67,10 @@ fn prepare<'a>(
     .unwrap()
 }
 
+// test-category: pure-logic
 #[test]
-fn image_inputs_are_projected_and_output_overflow_cannot_fit() {
+fn exact_token_counts_image_projection_and_output_overflow() {
+    crate::models::tokenizer::verification::exact_encoding();
     let (catalog, config) = source();
     let image = json!({"model":"gpt-5.5","input":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]});
     let admitted = prepare(&catalog, &config, "openai/gpt-5.5", &image, 64.0)

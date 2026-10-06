@@ -11,6 +11,7 @@ mod result;
 mod round_usage;
 mod route;
 mod serialize;
+mod sizing;
 mod visual;
 mod visual_capability;
 

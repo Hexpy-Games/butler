@@ -114,7 +114,7 @@ jobs:
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
 
   # The release workflow merges the per-platform manifests on a tag; check it here.
   merge-manifests:

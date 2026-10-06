@@ -7,6 +7,21 @@ on:
         type: string
         required: true
     outputs:
+      parts:
+        description: Selected matrix jobs
+        value: ${{ jobs.paths.outputs.parts }}
+      artifacts:
+        description: CI artifacts
+        value: ${{ jobs.paths.outputs.artifacts }}
+      jobs:
+        description: CI jobs
+        value: ${{ jobs.paths.outputs.jobs }}
+      candidate:
+        description: CI candidate
+        value: ${{ jobs.paths.outputs.candidate }}
+      tier:
+        description: CI tier
+        value: ${{ jobs.paths.outputs.tier }}
       rust:
         description: Selected rust inputs
         value: ${{ jobs.paths.outputs.rust }}
@@ -50,6 +65,11 @@ jobs:
   paths:
     runs-on: ubuntu-latest
     outputs:
+      parts: ${{ steps.paths.outputs.parts }}
+      jobs: ${{ steps.paths.outputs.jobs }}
+      artifacts: ${{ steps.paths.outputs.artifacts }}
+      candidate: ${{ steps.paths.outputs.candidate }}
+      tier: ${{ steps.paths.outputs.tier }}
       rust: ${{ steps.paths.outputs.rust }}
       ui: ${{ steps.paths.outputs.ui }}
       site: ${{ steps.paths.outputs.site }}
@@ -70,3 +90,26 @@ jobs:
         id: paths
         with:
           workflow: ${{ inputs.workflow }}
+
+  artifacts:
+    needs: paths
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        artifact: ${{ fromJSON(needs.paths.outputs.artifacts) [0] && fromJSON(needs.paths.outputs.artifacts) || fromJSON('[{"name":"","run":0}]') }}
+    steps:
+      - uses: actions/download-artifact@v4
+        if: matrix.artifact.name != ''
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.artifact.run }}
+          name: ${{ matrix.artifact.name }}
+          path: ${{ runner.temp }}/receipt-artifact
+      - uses: actions/upload-artifact@v4
+        if: matrix.artifact.name != ''
+        with:
+          name: ${{ matrix.artifact.name }}
+          path: ${{ runner.temp }}/receipt-artifact
+          if-no-files-found: error
+          retention-days: 30
