@@ -50,6 +50,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: packages/butler-agent/rust
           shared-key: macos-process-identity
       - name: Prove live identity and unreaped exit behavior
@@ -226,13 +227,13 @@ jobs:
       - name: Check the tag against the Agent version
         run: |
           set -euo pipefail
-          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent/Cargo.toml | head -n 1)"
+          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml | head -n 1)"
           tag_version="${GITHUB_REF_NAME#v}"
           # Preview tags share the base Cargo Agent version; keep the full tag
           # for release URLs and the npm next dist-tag.
           release_version="${tag_version%%-*}"
           if [ "$release_version" != "$agent_version" ]; then
-            printf 'Tag %s does not match the Agent version %s in crates/butler-agent/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
+            printf 'Tag %s does not match the Agent version %s in crates/butler-agent-cli/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
             exit 1
           fi
 

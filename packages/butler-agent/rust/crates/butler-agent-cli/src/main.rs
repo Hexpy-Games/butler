@@ -30,6 +30,13 @@ fn main() -> std::process::ExitCode {
             eprintln!("app_update_recovery_failed: {recovery:?}");
             return std::process::ExitCode::FAILURE;
         }
-        butler_agent::main(std::env::args_os().skip(1).collect()).await
+        butler_agent::main(
+            std::env::args_os().skip(1).collect(),
+            butler_agent::BuildInfo {
+                version: env!("BUTLER_RELEASE_VERSION"),
+                build_id: env!("BUTLER_BUILD_ID"),
+            },
+        )
+        .await
     })
 }

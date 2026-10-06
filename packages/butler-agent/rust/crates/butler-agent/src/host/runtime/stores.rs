@@ -130,7 +130,7 @@ async fn open_btcc(
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
     let bootstrap = tokio::task::spawn_blocking(move || {
-        prepare_btcc_storage(&root, env!("BUTLER_RELEASE_VERSION"))
+        prepare_btcc_storage(&root, crate::host::build_info::current().version)
     })
     .await
     .map_err(|e| error("storage_bootstrap_worker_failed", e))?

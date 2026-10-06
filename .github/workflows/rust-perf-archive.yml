@@ -18,14 +18,11 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: protoc
