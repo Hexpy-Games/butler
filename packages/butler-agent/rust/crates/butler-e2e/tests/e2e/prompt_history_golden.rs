@@ -40,7 +40,7 @@ fn capture_frame(
 fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> String {
     paths
         .hide(text)
-        .lines()
+        .split_inclusive('\n')
         .map(|line| {
             for field in [
                 "Current Time UTC:",
@@ -48,13 +48,19 @@ fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Str
                 "Live Configuration Hash:",
             ] {
                 if line.starts_with(field) {
-                    return format!("{field} {{{{PER_RUN}}}}");
+                    let ending = if line.ends_with("\r\n") {
+                        "\r\n"
+                    } else if line.ends_with('\n') {
+                        "\n"
+                    } else {
+                        ""
+                    };
+                    return format!("{field} {{{{PER_RUN}}}}{ending}");
                 }
             }
             line.to_owned()
         })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .collect::<String>()
 }
 
 fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value {
@@ -107,13 +113,8 @@ fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value 
     ]
     .iter()
     .find_map(|marker| {
-        text.split_once(marker).map(|(_, tail)| {
-            tail.split("\n\nCurrent scope:")
-                .next()
-                .unwrap()
-                .trim()
-                .to_owned()
-        })
+        text.split_once(marker)
+            .map(|(_, tail)| tail.split("\n\nCurrent scope:").next().unwrap().to_owned())
     })
     .unwrap_or_default();
     result.insert("current-request".into(), normalize(&current, paths).into());
@@ -195,23 +196,7 @@ fn loaded_sections(
             continue;
         }
         let loaded = super::super::agent_context::loaded_excerpt(&id, &content, &prompt);
-        let normalized = placeholders
-            .hide(&loaded)
-            .lines()
-            .map(|line| {
-                for field in [
-                    "Current Time UTC:",
-                    "Current Local Time:",
-                    "Live Configuration Hash:",
-                ] {
-                    if line.starts_with(field) {
-                        return format!("{field} {{{{PER_RUN}}}}");
-                    }
-                }
-                line.to_owned()
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        let normalized = normalize(&loaded, placeholders);
         if sections
             .get(&id)
             .and_then(Value::as_str)

@@ -67,7 +67,14 @@ fn source_prompt(
 ) -> Result<(String, Value), BtccError> {
     let mut entries = diagnostics::Sections::default();
     if budget_only {
-        entries.push("documents", documents.context.clone());
+        for (id, text) in [
+            ("project-instructions", &documents.project_instructions),
+            ("documents", &documents.context),
+        ] {
+            if !text.is_empty() {
+                entries.push(id, text.clone());
+            }
+        }
     } else {
         entries.documents(documents, Some(documents::Stage::Stable));
         entries.push("history-heading", "## Conversation history".into());

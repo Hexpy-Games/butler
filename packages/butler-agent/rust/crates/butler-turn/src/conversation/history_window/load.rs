@@ -133,7 +133,6 @@ pub(super) fn budget_material(
     cap: usize,
     summaries: &[ConversationSummary],
 ) -> ConversationResult<PromptMaterial> {
-    super::budget::register(db)?;
     let limit = cap.div_ceil(80).clamp(20, 200);
     let valid = serde_json::to_string(&summaries.iter().map(|s| &s.id).collect::<Vec<_>>())
         .map_err(ConversationError::json)?;

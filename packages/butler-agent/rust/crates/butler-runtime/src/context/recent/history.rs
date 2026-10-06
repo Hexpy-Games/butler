@@ -220,7 +220,12 @@ fn extend_digest(
         .map(str::to_owned)
         .chain(std::iter::once(line))
         .collect();
-    while lines.iter().map(|s| s.len() + 1).sum::<usize>() > cap {
+    while lines
+        .iter()
+        .map(|s| serde_json::to_string(s).map_or(usize::MAX, |v| v.len() + 1))
+        .sum::<usize>()
+        > cap
+    {
         lines.pop_front();
     }
     lines.into_iter().collect::<Vec<_>>().join("\n")

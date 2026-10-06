@@ -39,6 +39,7 @@ pub(super) fn read(
     session: &str,
     cap: usize,
 ) -> ConversationResult<HistoryWindow> {
+    budget::register(db)?;
     let summaries = valid_summaries(db, session)?;
     let epoch = summaries
         .iter()
@@ -172,10 +173,14 @@ fn dropped_digest(
             end -= 1;
         }
         let line = format!("dropped turn {id}: {}", &text[..end]);
-        if used + line.len() + 1 > cap {
+        let bytes = serde_json::to_string(&line)
+            .map_err(ConversationError::json)?
+            .len()
+            + 1;
+        if used + bytes > cap {
             break;
         }
-        used += line.len() + 1;
+        used += bytes;
         lines.push(line);
     }
     lines.reverse();
