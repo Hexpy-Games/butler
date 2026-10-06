@@ -437,6 +437,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
     }
+    fn task_graph_read(&self, query: AppTaskGraphQuery) -> ApplicationFuture<Value> {
+        super::task_graphs::read(self, query)
+    }
     fn subsession_projection(&self, session_id: String) -> ApplicationFuture<Value> {
         self.dependencies.subsessions.projection(session_id, None)
     }

@@ -76,13 +76,14 @@ pub use application::{
     AppSessionWorkspaceSnapshot, AppSettingsFacts, AppSettingsFactsProvider,
     AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest, AppSpaceCommand,
     AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
-    AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
-    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppTaskGraphQuery, AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact,
+    AppWorkProgress, AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest,
+    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
+    task_graph_response,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -185,23 +186,8 @@ pub trait GatewayProjectDashboard: Send + Sync {
 }
 
 /// Session controls and Plan decisions use the App revision and Project Ledger owners.
-pub trait GatewaySessionControls: Send + Sync {
-    fn get_session_controls_view(
-        &self,
-        session_id: String,
-    ) -> ApplicationFuture<AppSessionControlsView>;
-    fn update_session_controls_view(
-        &self,
-        session_id: String,
-        update: AppSessionControlUpdate,
-    ) -> ApplicationFuture<AppSessionControlsView>;
-    fn decide_session_plan(
-        &self,
-        session_id: String,
-        plan_id: String,
-        request: AppPlanDecisionRequest,
-    ) -> ApplicationFuture<AppPlanDecisionResult>;
-}
+mod session_controls_contract;
+pub use session_controls_contract::GatewaySessionControls;
 
 /// The durable application operations consumed by the HTTP adapter.
 ///
@@ -440,6 +426,9 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn subsession_projection(&self, _session_id: String) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

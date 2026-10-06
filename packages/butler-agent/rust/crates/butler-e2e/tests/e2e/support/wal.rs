@@ -7,21 +7,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) struct Wal {
-    pub(super) name: String,
+pub(crate) struct Wal {
+    pub(crate) name: String,
     path: PathBuf,
     _reader: Connection,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Sample {
+pub(crate) struct Sample {
     salt: [u8; 8],
-    pub(super) bytes: u64,
-    pub(super) commits: usize,
+    pub(crate) bytes: u64,
+    pub(crate) commits: usize,
 }
 
 impl Wal {
-    pub(super) fn pin(data: &Path, relative: &str) -> Result<Self, HarnessError> {
+    pub(crate) fn pin(data: &Path, relative: &str) -> Result<Self, HarnessError> {
         let database = data.join(relative);
         let reader = Connection::open_with_flags(&database, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         reader.execute_batch("BEGIN; SELECT rootpage FROM sqlite_master LIMIT 1;")?;
@@ -32,7 +32,7 @@ impl Wal {
         })
     }
 
-    pub(super) fn sample(&self) -> Result<Sample, HarnessError> {
+    pub(crate) fn sample(&self) -> Result<Sample, HarnessError> {
         let raw = match fs::read(&self.path) {
             Ok(raw) => raw,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
@@ -76,7 +76,7 @@ impl Wal {
         })
     }
 
-    pub(super) fn delta(&self, before: Sample) -> Result<(u64, usize), HarnessError> {
+    pub(crate) fn delta(&self, before: Sample) -> Result<(u64, usize), HarnessError> {
         let after = self.sample()?;
         if before.bytes > 0 {
             assert_eq!(

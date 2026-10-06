@@ -6,6 +6,7 @@ use tokio::sync::broadcast::error::RecvError;
 use super::{AppApplication, events, service};
 
 pub(super) fn start(application: &AppApplication) {
+    super::task_graphs::start_events(application);
     let Some(mut changes) = application.dependencies.subsessions.changes() else {
         return;
     };

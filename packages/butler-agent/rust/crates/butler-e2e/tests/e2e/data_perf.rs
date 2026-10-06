@@ -15,7 +15,7 @@ use super::memory_fixture;
 #[path = "support/transcript_scale.rs"]
 mod transcripts;
 #[path = "support/wal.rs"]
-mod wal;
+pub(super) mod wal;
 
 use butler_e2e::e2e::{
     HarnessError,
