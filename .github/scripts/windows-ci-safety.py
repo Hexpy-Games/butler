@@ -36,7 +36,8 @@ RULES = {
         r'\bSet-ItemProperty\b[^\n]*(?:HKLM|HKCU|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\b|'
         r'\b(?:rustup(?:\.exe)?\s+(?:toolchain\s+install|default|update)|rustup-init)\b|'
         r'\b(?:pip|pip3)(?:\.exe)?\s+install\b|\bpython\s+-m\s+pip\s+install\b|'
-        r'\bGITHUB_PATH\b'),
+        r'\bSetEnvironmentVariable\b[^\n]*[\x22\x27](?:Machine|User)[\x22\x27]'),
+    'non-job-scoped PATH modification': r'\bGITHUB_PATH\b',
     'machine mutation or installer smoke': (
         r'\b(?:winget|choco)\s+install\b|\bnpm(?:\.cmd)?\s+(?:i|install)\s+(-g|--global)\b|'
         r'\b(?:Register-ScheduledTask|New-Service|Set-Service)\b|'
@@ -120,6 +121,9 @@ def hazards(source):
         if action and not ALLOWED_ACTIONS.fullmatch(action[1]):
             findings.append((number, 'action not allowed on owner runner: ' + action[1]))
         for kind, pattern in RULES.items():
+            if kind == 'non-job-scoped PATH modification' and re.search(
+                    r'\|\s*Out-File -FilePath \$env:GITHUB_PATH -Encoding utf8 -Append\s*$', line, re.I):
+                continue  # GitHub runner command file, never persistent host PATH.
             if kind == 'owner profile write path' and 'Get-ChildItem' in line and '\\Downloads' in line:
                 continue  # Existing owner-profile observation is read-only.
             if re.search(pattern, line, re.I):
