@@ -22,7 +22,7 @@ def authenticate():
     """Keep both login and publisher subprocesses in the same native profile."""
     config = str(Path(os.environ['HOME']) / 'oras-auth.json')
     os.environ['BUTLER_OCI_AUTH_CONFIG'] = config
-    result = subprocess.run(['oras', 'login', 'ghcr.io', '--registry-config', config,
+    result = subprocess.run([os.environ.get('BUTLER_ORAS_EXECUTABLE', 'oras'), 'login', 'ghcr.io', '--registry-config', config,
                              '--username', os.environ['GITHUB_ACTOR'], '--password-stdin'],
                             input=os.environ['GH_TOKEN'], text=True, capture_output=True, timeout=60)
     if result.returncode:
@@ -41,7 +41,7 @@ def command(*args, anonymous=True, cwd=None):
             if not config:
                 raise RuntimeError('Publisher requires an isolated OCI credential file')
             options += ['--registry-config', config]
-        return subprocess.run(['oras', *args, *options], cwd=cwd, text=True,
+        return subprocess.run([os.environ.get('BUTLER_ORAS_EXECUTABLE', 'oras'), *args, *options], cwd=cwd, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1200)
 
 

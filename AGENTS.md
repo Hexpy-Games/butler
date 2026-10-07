@@ -11,6 +11,7 @@ This file holds the standing repository and agent rules. Each feedback-log entry
 - **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
 - **Security:** never print tokens or widen access defaults. Approval cards show the exact action.
 - **Native dependencies:** static ORT recipe: [Rust README](packages/butler-agent/rust/README.md) and #293.
+- **Windows owner runners:** `butler-win` uses only the existing toolchain and job files in the workspace or `RUNNER_TEMP`; never run installer/setup actions, machine/user package installs, or registry, startup, service or PATH writes. Missing required tools must fail clearly, without installation.
 - **Owner-machine procedure:** touch the live install, owner data, or port 18765 only when explicitly requested and the owner is present. Back up DBs first; stop gracefully with `butler-agent stop --data ~/.butler`. Never `pkill`/`killall`.
 
 ## Documents
@@ -60,6 +61,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 ## Recurring mistakes (feedback log)
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
+
+- **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**
+  - What happened: `actions/setup-python` tried to rewrite Python registry registrations on the owner PC, logged a permission error and hung until the 90-minute job timeout (run 37560002889).
 
 - **2026-10-06: Work documents belong only in the Project Ledger.**
   - What happened: work docs accumulated in `plans/`, root and `rust/docs`; moved to the ledger.

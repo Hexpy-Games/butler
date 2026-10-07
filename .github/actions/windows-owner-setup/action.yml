@@ -11,10 +11,13 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/setup-oras
-    - uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+    - name: Require existing owner tools
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        foreach ($tool in @('python', 'cargo', 'rustc', 'cl', 'oras', 'bun', 'node')) {
+          if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
+        }
+        @('RUSTUP_AUTO_INSTALL=0', 'RUSTUP_TOOLCHAIN=1.91.0') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     - name: Isolate job profile and snapshot protocol registration
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: ${{ github.workspace }}

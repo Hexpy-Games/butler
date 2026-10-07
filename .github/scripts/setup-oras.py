@@ -39,8 +39,8 @@ def install():
     target.write_bytes(executable)
     target.chmod(0o755)
     subprocess.run([str(target), 'version'], check=True, timeout=30)
-    with open(os.environ['GITHUB_PATH'], 'a', encoding='utf-8') as output:
-        output.write(str(root) + '\n')
+    with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+        output.write('BUTLER_ORAS_EXECUTABLE=' + str(target) + '\n')
     archive.unlink()
     print(f'Installed {asset}; SHA-256 verified: {actual}')
 
