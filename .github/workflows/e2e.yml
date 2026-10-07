@@ -9,6 +9,11 @@ on:
   push:
     branches: ['release/**']
   workflow_dispatch:
+    inputs:
+      record_cassettes:
+        description: Record the LIVE-09 baseline on the owner integration runner
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,7 +34,8 @@ jobs:
 
   e2e-live:
     needs: changes
-    if: needs.changes.outputs.tier == 'integration'
+    # Explicit recording dispatch is an integration operation, never PR smoke.
+    if: needs.changes.outputs.tier == 'integration' || (github.event_name == 'workflow_dispatch' && inputs.record_cassettes)
     name: E2E live tier
     runs-on: [self-hosted, Windows, X64, butler-win]
     timeout-minutes: 150
@@ -111,17 +117,55 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Inspect the dedicated profile gate
+        if: github.event_name == 'workflow_dispatch' && inputs.record_cassettes
+        run: |
+          $path = $env:BUTLER_E2E_CODEX_AUTH_JSON + '.lock'
+          if (Test-Path -LiteralPath $path) {
+            $item = Get-Item -LiteralPath $path -Force
+            "OAuth gate: directory=$($item.PSIsContainer) attributes=$($item.Attributes)"
+            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+            $acl = Get-Acl -LiteralPath $path
+            "OAuth gate: owner_is_runner=$($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $sid.Value)"
+            try {
+              $file = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]'ReadWrite, Delete')
+              try { $file.Lock(0, [long]::MaxValue); 'OAuth gate: open and lock succeeded' }
+              finally { $file.Dispose() }
+            } catch { "OAuth gate: open/lock HRESULT=$($_.Exception.HResult)" }
+          } else { 'OAuth gate: missing' }
+
       - name: Run the live tier
         env:
+          BUTLER_E2E_RECORD: ${{ github.event_name == 'workflow_dispatch' && inputs.record_cassettes && '1' || '0' }}
+          BUTLER_E2E_RECORD_OUTPUT: ${{ env.OWNER_JOB_ROOT }}/recorded-cassettes/LIVE-09
           BUTLER_E2E_TIER: live
           BUTLER_E2E_SKIP_BUILD: "1"
           BUTLER_E2E_REPORT: ${{ env.OWNER_JOB_ROOT }}/e2e-live-report.txt
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
           $ErrorActionPreference = 'Continue'
-          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
+          $filter = 'live::'
+          if ($env:BUTLER_E2E_RECORD -eq '1') { $filter = 'live::live_09_cassette_drift' }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e $filter -- --ignored --test-threads=1
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify cassette scrub before upload
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.record_cassettes
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/cassette-scrub.py" "$env:OWNER_JOB_ROOT/recorded-cassettes/LIVE-09"
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload recorded cassettes only
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.record_cassettes
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-09-cassettes
+          path: ${{ env.OWNER_JOB_ROOT }}/recorded-cassettes/LIVE-09/*.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize
         if: always() && steps.credential.outputs.available == 'true'
