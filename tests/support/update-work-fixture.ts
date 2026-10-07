@@ -4,19 +4,24 @@ import type { ElectronPage } from "./electron-page-cdp.ts";
 type AcceptedWork = {
   turn_id?: string;
   turn?: { id?: string; turn_id?: string };
-  queued?: { id: string; turn_id?: string };
+  queued?: { id: string; turn_id?: string; client_message_id?: string };
 };
 
 async function dispatchedUpdateTurn(page: ElectronPage, chat: string, accepted: AcceptedWork, isHeld: () => boolean) {
   let turn = accepted.turn_id ?? accepted.turn?.id ?? accepted.turn?.turn_id ?? accepted.queued?.turn_id;
   const queuedId = accepted.queued?.id;
-  assert.ok(turn || queuedId, "The send must return a turn or an exact queued receipt.");
+  const messageId = accepted.queued?.client_message_id;
+  assert.ok(turn || (queuedId && messageId), "The send must return a turn or an exact queued receipt.");
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (!turn) {
-      const queue = await page.expression<{ queued_messages: Array<{ id: string; turn_id?: string }> }>(
-        `window.butlerApp.listSessionQueue(${JSON.stringify({ sessionId: chat })})`);
-      turn = queue.queued_messages.find(message => message.id === queuedId)?.turn_id;
+      // Pending queue views omit dispatched entries. The receipt retains the
+      // canonical user-message identity, which the public turn view preserves.
+      const { turns } = await page.expression<{ turns: Array<{ id: string; user_message_id?: string }> }>(
+        `window.butlerApp.listTurns(${JSON.stringify({ chatId: chat })})`);
+      const matches = turns.filter(candidate => candidate.user_message_id === messageId);
+      assert.ok(matches.length <= 1, "The accepted message must dispatch exactly once.");
+      turn = matches[0]?.id;
     }
     if (turn && isHeld()) return turn;
     await new Promise(done => setTimeout(done, 100));
