@@ -14,11 +14,17 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum RequestKind {
+    Parent,
+    Delegated,
+    Resume,
+    Ping,
+}
 #[derive(Clone)]
 pub(super) struct Observation {
     pub started_ms: i64,
-    pub resume: bool,
-    pub delegated: bool,
+    pub kind: RequestKind,
     pub failed: bool,
 }
 pub(super) type Observations = Arc<Mutex<Vec<Observation>>>;
@@ -52,8 +58,7 @@ async fn forward(State(state): State<Proxy>, headers: HeaderMap, body: Bytes) ->
     if value["model"] != "gpt-6-luna" || state.calls.fetch_add(1, Ordering::SeqCst) >= 30 {
         state.observations.lock().unwrap().push(Observation {
             started_ms: chrono::Utc::now().timestamp_millis(),
-            resume: false,
-            delegated: false,
+            kind: RequestKind::Parent,
             failed: true,
         });
         return Response::builder()
@@ -70,13 +75,40 @@ async fn forward(State(state): State<Proxy>, headers: HeaderMap, body: Bytes) ->
                 .iter()
                 .any(|item| item["role"] == "user" && item.to_string().contains("Delegated result"))
         });
+    let ping = value["input"]
+        .as_array()
+        .and_then(|a| a.last())
+        .and_then(|v| v.pointer("/content/0/text"))
+        .and_then(Value::as_str)
+        .is_some_and(|text| text.starts_with("Cache keepalive."));
+    let kind = if ping {
+        RequestKind::Ping
+    } else if resume {
+        RequestKind::Resume
+    } else if delegated {
+        RequestKind::Delegated
+    } else {
+        RequestKind::Parent
+    };
+    eprintln!(
+        "KEEPALIVE-LIVE request kind={} calls={}",
+        if ping {
+            "ping"
+        } else if resume {
+            "resume"
+        } else if delegated {
+            "worker"
+        } else {
+            "parent"
+        },
+        state.calls.load(Ordering::SeqCst)
+    );
     let index = {
         let mut rows = state.observations.lock().unwrap();
         let index = rows.len();
         rows.push(Observation {
             started_ms: chrono::Utc::now().timestamp_millis(),
-            resume,
-            delegated,
+            kind,
             failed: false,
         });
         index

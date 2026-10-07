@@ -44,7 +44,7 @@ async fn measure(
     let accepted = s.gw.say("general", prompt).await?;
     butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    wait_resume(mode, &db, &observations).await?;
+    wait_resume(mode, &s, &db, &observations).await?;
     let view =
         s.gw.get("/session-view?session_id=general")
             .await?
@@ -60,6 +60,7 @@ async fn measure(
 }
 async fn wait_resume(
     mode: &str,
+    s: &butler_e2e::e2e::scenario::Scenario,
     db: &rusqlite::Connection,
     observations: &proxy::Observations,
 ) -> Result<(), HarnessError> {
@@ -79,13 +80,36 @@ async fn wait_resume(
             eprintln!("KEEPALIVE-LIVE {mode}: parent waiting for delegated sleep");
             announced = true;
         }
-        let resumed = observations.lock().unwrap().iter().any(|o| o.resume);
+        let resumed = observations
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|o| o.kind == proxy::RequestKind::Resume);
         if resumed {
             break;
         }
         if observations.lock().unwrap().iter().any(|o| o.failed) {
             return Err(HarnessError(
                 "live provider request failed; no retry measurement".into(),
+            ));
+        }
+        let view =
+            s.gw.get("/session-view?session_id=general")
+                .await?
+                .data()
+                .clone();
+        if matches!(
+            view["latest_turn"]["state"].as_str(),
+            Some("failed" | "runtime_fault" | "cancelled")
+        ) {
+            return Err(HarnessError(format!(
+                "live parent failed; physical_calls={}",
+                observations.lock().unwrap().len()
+            )));
+        }
+        if !announced && view["latest_turn"]["state"] == "delivered" && !waiting {
+            return Err(HarnessError(
+                "live parent completed without delegation".into(),
             ));
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -108,8 +132,14 @@ fn report(
         .map_err(|_| HarnessError("invalid completion timestamp".into()))?
         .timestamp_millis();
     let rows = observations.lock().unwrap().clone();
-    let resume = rows.iter().find(|r| r.resume).expect("resume observation");
-    let delegated: Vec<_> = rows.iter().filter(|r| r.delegated).collect();
+    let resume = rows
+        .iter()
+        .find(|r| r.kind == proxy::RequestKind::Resume)
+        .expect("resume observation");
+    let delegated: Vec<_> = rows
+        .iter()
+        .filter(|r| r.kind == proxy::RequestKind::Delegated)
+        .collect();
     let gap = delegated
         .windows(2)
         .map(|pair| pair[1].started_ms - pair[0].started_ms)
@@ -148,7 +178,7 @@ fn report(
     let input = resumed["promptTokens"].as_f64().unwrap();
     let cached = resumed["cachedTokens"].as_f64().unwrap_or(0.0);
     let report = json!({"mode":mode,"resume_input":input,"resume_cached":cached,
-        "hit_percent":100.0*cached/input,"pings":pings.len(),"ping_input":sum("promptTokens"),
+        "hit_percent":100.0*cached/input,"pings":pings.len(),"pings_sent":rows.iter().filter(|r| r.kind == proxy::RequestKind::Ping).count(),"ping_input":sum("promptTokens"),
         "ping_cached":sum("cachedTokens"),"ping_output":sum("totalTokens")-sum("promptTokens"),
         "completion_to_resume_ms":resume.started_ms-completed_ms,"worker_gap_ms":gap,"calls":rows.len()});
     eprintln!("KEEPALIVE-LIVE {report}");

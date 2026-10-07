@@ -291,9 +291,13 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
             1
         );
     }
-    if mode == "cap" { assert_eq!(pings, 1); }
+    if mode == "cap" {
+        assert_eq!(pings, 1);
+    }
     // At an equal interval/cap deadline the biased stop may win before the ping.
-    if mode == "capfloor" { assert!(pings <= 1); }
+    if mode == "capfloor" {
+        assert!(pings <= 1);
+    }
     let completed = if matches!(mode, "failure" | "inflight") {
         0
     } else {
