@@ -9,6 +9,7 @@ import { freeGatewayPort, freePort, startStubModel, writeOnboardingComplete, typ
 import { electronPage, type ElectronPage } from "../support/electron-page-cdp";
 import { electronMain } from "../support/electron-main-cdp";
 import { smokeElectronArgs } from "../support/smoke-browser";
+import { IdleWriteAttribution } from "../support/idle-write-attribution";
 
 const root = process.cwd();
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
@@ -201,21 +202,33 @@ async function idle() {
   const events: unknown[] = [];
   const appPids = await main<number[]>(`[...new Set([process.pid,...${electronModule}.app.getAppMetrics().map(metric=>metric.pid)])]`);
   const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
+  measurements.menu_bar_helper_pid = null;
+  try {
+    const helperPid = Number(readFileSync(join(data, "app/runtime/menu-bar-helper.pid"), "utf8").trim());
+    assert.ok(Number.isSafeInteger(helperPid) && helperPid > 0);
+    appPids.push(helperPid);
+    measurements.menu_bar_helper_pid = helperPid;
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const pids = [...new Set([...appPids, instance.agent_host_pid as number])];
   const ioBefore = processIo(pids), ioSamples = [ioBefore];
   const loads = [loadavg()[0]], started = Date.now();
+  measurements.idle_processes = await main(`({pid:process.pid,isPackaged:${electronModule}.app.isPackaged,metrics:${electronModule}.app.getAppMetrics(),paths:{userData:${electronModule}.app.getPath('userData'),sessionData:${electronModule}.app.getPath('sessionData')}})`);
+  const attribution = new IdleWriteAttribution({ data, profile, home }, join(dir, "idle-copies"), evidence!);
+  attribution.sample(0, ioBefore, loads[0]!);
   const watcher = watch(outputs, { recursive: true }, (event, file) => events.push({ event, file }));
   try {
-    for (let minute = 0; minute < 10; minute++) {
-      await new Promise(done => setTimeout(done, 60_000)); loads.push(loadavg()[0]);
+    for (let sample = 0; sample < 20; sample++) {
+      await new Promise(done => setTimeout(done, Math.max(0, started + (sample + 1) * 30_000 - Date.now()))); loads.push(loadavg()[0]);
       ioSamples.push(processIo(pids, ioBefore));
-      console.log(`P1b App idle ${minute + 1}/10 min; load1m=${loads.at(-1)}`);
+      attribution.sample(sample + 1, ioSamples.at(-1), loads.at(-1)!);
+      console.log(`P1b App idle ${(sample + 1) / 2}/10 min; load1m=${loads.at(-1)}`);
     }
-    assert.deepEqual([snapshot(outputs), snapshot(partitions)], before);
-    assert.deepEqual(events, [], "zero output-owned write notifications");
     const deltas = ioSamples.at(-1)!.map((sample, index) => ({ pid: sample.pid, write_bytes: sample.write_bytes! - ioBefore[index]!.write_bytes! }));
     measurements.idle = { elapsed_ms: Date.now() - started, writes: events.length, output_files: before[0]!.length, loadAverage1m: loads, process_io: { deltas, samples: ioSamples } };
+    assert.deepEqual([snapshot(outputs), snapshot(partitions)], before);
+    assert.deepEqual(events, [], "zero output-owned write notifications");
     assert.ok(deltas.every(sample => sample.write_bytes === 0), JSON.stringify(deltas));
+    attribution.assertUnchanged();
   } finally { watcher.close(); }
 }
 async function recovery() {
@@ -247,7 +260,12 @@ try {
   const created = await page!.expression<{ session: { id: string } }>("window.butlerApp.createSession({kind:'chat',title:'P1b acceptance'})");
   sessionId = created.session.id;
   await checkPublished();
-  await idle();
+  let idleFailure: Error | undefined;
+  try { await idle(); }
+  catch (error) {
+    idleFailure = error instanceof Error ? error : new Error(String(error));
+    measurements.idle_failure = idleFailure.message;
+  }
   await recovery();
   await quitApp();
   // Same native Agent without an App host: publication still succeeds truthfully.
@@ -259,6 +277,7 @@ try {
   const absent = await send("Fix no App"); await delivered(absent);
   assert.deepEqual(publication(absent).check, { status: "unavailable", reason: "no_browser" });
   measurements.no_app = publication(absent).check;
+  if (idleFailure) throw idleFailure;
   writeFileSync(join(evidence, "app-acceptance.json"), JSON.stringify(measurements, null, 2));
   console.log("P1b real App acceptance passed");
 } finally {
