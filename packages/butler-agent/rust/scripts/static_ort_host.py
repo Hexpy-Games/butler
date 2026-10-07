@@ -4,6 +4,7 @@ import subprocess
 import os
 import pathlib
 import platform
+import re
 import shutil
 import sys
 
@@ -23,7 +24,7 @@ def sha256(path):
 
 
 def command(args, *, cwd=None):
-    result = subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
+    result = subprocess.run(args, cwd=cwd, encoding="utf-8", errors="replace", capture_output=True, check=False)
     if result.returncode:
         fail(f"{' '.join(map(str, args))} failed: {(result.stderr or result.stdout).strip()}")
     return result.stdout.strip()
@@ -59,17 +60,40 @@ def os_release():
     return fields
 
 
+def toolset_version(tools):
+    """Use locale-independent developer environment metadata, then STL macros."""
+    selected = os.environ.get("VCToolsVersion", "").strip()
+    directory = tools.name
+    if selected:
+        if re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", directory) and directory != selected:
+            fail("VCToolsVersion does not match VCToolsInstallDir")
+        return selected
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", directory):
+        return directory
+    header = tools / "include/yvals_core.h"
+    try:
+        contents = header.read_bytes()
+    except OSError as error:
+        fail(f"Missing MSVC toolset identity: cannot read yvals_core.h: {error}")
+    for macro in (b"_MSVC_STL_UPDATE", b"_MSVC_STL_VERSION"):
+        match = re.search(rb"(?m)^\s*#\s*define\s+" + macro + rb"\s+([0-9]+)[uUlL]*\b", contents)
+        if match:
+            return macro.decode("ascii") + "=" + match[1].decode("ascii")
+    fail("Missing MSVC toolset identity: VCToolsVersion, versioned VCToolsInstallDir "
+         "or _MSVC_STL_UPDATE/_MSVC_STL_VERSION in yvals_core.h is required")
+
+
 def visual_studio_identity():
     """Fingerprint the selected developer environment, never a newer installation."""
-    required = ("VCToolsVersion", "VCToolsInstallDir", "UCRTVersion", "UniversalCRTSdkDir")
+    required = ("VCToolsInstallDir", "UCRTVersion", "UniversalCRTSdkDir")
     if any(not os.environ.get(name) for name in required):
-        fail("Static Windows SDK selection requires an initialized MSVC developer environment")
+        missing = ", ".join(name for name in required if not os.environ.get(name))
+        fail(f"Static Windows SDK selection requires an initialized MSVC developer environment: {missing}")
     tools = pathlib.Path(os.environ["VCToolsInstallDir"])
     compiler = shutil.which("cl")
     if not compiler or not pathlib.Path(compiler).resolve().is_relative_to(tools.resolve()):
         fail("Selected cl.exe does not belong to VCToolsInstallDir")
-    if tools.name != os.environ["VCToolsVersion"].strip():
-        fail("VCToolsVersion does not match VCToolsInstallDir")
+    vc_version = toolset_version(tools)
     ucrt = pathlib.Path(os.environ["UniversalCRTSdkDir"])
     version = os.environ["UCRTVersion"]
     files = {
@@ -85,14 +109,11 @@ def visual_studio_identity():
         "ucrt_import": ucrt / f"Lib/{version}/ucrt/x64/ucrt.lib",
     }
     identity = {
-        "vc_tools_version": os.environ["VCToolsVersion"].strip(),
+        "vc_tools_version": vc_version,
         "ucrt_version": version,
         "compiler_sha256": sha256(pathlib.Path(compiler)),
         "stl_crt_sha256": {name: sha256(path) for name, path in files.items()},
     }
-    # cl without input prints its exact version without compiling anything.
-    banner = subprocess.run([compiler], text=True, capture_output=True, check=False)
-    print((banner.stdout + banner.stderr).strip(), file=sys.stderr)
     print(f"Windows SDK toolset: VCToolsVersion={identity['vc_tools_version']} "
           f"UCRTVersion={version}; STL/CRT digests={identity['stl_crt_sha256']}", file=sys.stderr)
     return identity

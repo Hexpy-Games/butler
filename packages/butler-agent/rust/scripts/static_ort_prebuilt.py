@@ -172,11 +172,11 @@ def pack(complete, destination):
 
 def publish(script, target):
     """A serialized producer commits a complete verified artifact exactly once."""
-    fingerprint = subprocess.check_output([sys.executable, str(script), '--target', target, '--fingerprint'], text=True).strip()
+    fingerprint = subprocess.check_output([sys.executable, str(script), '--target', target, '--fingerprint'], encoding="utf-8", errors="replace").strip()
     if release(fingerprint, target, anonymous=False) is not None:
         print('Native OCI key already published; no build or mutation')
         return
-    result = json.loads(subprocess.check_output([sys.executable, str(script), '--target', target, '--build-only'], text=True))
+    result = json.loads(subprocess.check_output([sys.executable, str(script), '--target', target, '--build-only'], encoding="utf-8", errors="replace"))
     complete = Path(result['ort_lib_path']).parent.parent
     asset = names(fingerprint, target)[1]
     with tempfile.TemporaryDirectory() as temporary:

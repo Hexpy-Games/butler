@@ -7,6 +7,7 @@ import io
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -327,8 +328,40 @@ class NativeDeps(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'does not match'):
                     host.visual_studio_identity()
             with patch.dict(os.environ, VCToolsVersion=''):
-                with self.assertRaisesRegex(RuntimeError, 'initialized MSVC'):
-                    host.visual_studio_identity()
+                self.assertEqual(host.visual_studio_identity()['vc_tools_version'], tools.name)
+            banner.assert_not_called()
+
+    # test-category: pure-logic
+    def test_toolset_version_fallback_reads_korean_header_as_bytes(self):
+        tools = self.root / 'selected-toolset'
+        (tools / 'include').mkdir(parents=True)
+        header = tools / 'include/yvals_core.h'
+        with patch.dict(os.environ, VCToolsVersion=''):
+            for macro in ('_MSVC_STL_UPDATE', '_MSVC_STL_VERSION'):
+                header.write_bytes('한국어 주석'.encode('cp949') +
+                                   f'\n#define {macro} 202506L\n'.encode('ascii'))
+                self.assertEqual(sdk.host.toolset_version(tools), f'{macro}=202506')
+            header.write_bytes(b'no version macros')
+            with self.assertRaisesRegex(RuntimeError, 'Missing MSVC toolset identity'):
+                sdk.host.toolset_version(tools)
+            header.unlink()
+            with self.assertRaisesRegex(RuntimeError, 'cannot read yvals_core.h'):
+                sdk.host.toolset_version(tools)
+        with patch.dict(os.environ, VCToolsVersion='14.44.35207'):
+            self.assertEqual(sdk.host.toolset_version(tools), '14.44.35207')
+
+    # test-category: pure-logic
+    def test_subprocess_korean_banner_ignores_locale_codepage(self):
+        # Monkeypatch the process boundary with both UTF-8 and cp949 banner bytes.
+        for stream in ('한국어 Microsoft C/C++ 컴파일러'.encode('utf-8'),
+                       '한국어 Microsoft C/C++ 컴파일러'.encode('cp949')):
+            def run(args, **kwargs):
+                self.assertEqual(kwargs['encoding'], 'utf-8')
+                self.assertEqual(kwargs['errors'], 'replace')
+                output = stream.decode(kwargs['encoding'], kwargs['errors'])
+                return subprocess.CompletedProcess(args, 0, output, '')
+            with patch.object(sdk.host.subprocess, 'run', side_effect=run):
+                self.assertIn('Microsoft C/C++', sdk.host.command(['cl.exe']))
 
     # test-category: security
     def test_inner_archive_and_protoc_digests_remain_required(self):
