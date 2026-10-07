@@ -78,6 +78,8 @@ class WindowsSafety(unittest.TestCase):
         self.assertIn("RUSTUP_AUTO_INSTALL: '0'", owner_job)
         self.assertIn('no installation attempted', owner_job)
         self.assertIn('Verify existing owner toolchain', owner_job)
+        self.assertLess(owner_job.index('uses: ./.github/actions/windows-owner-discovery'),
+                        owner_job.index('name: Verify existing owner toolchain'))
         owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]
         self.assertIn('native-deps $env:NATIVE_TARGET', owner)
         self.assertIn('if ($LASTEXITCODE -ne 0)', owner)
@@ -130,6 +132,17 @@ class WindowsSafety(unittest.TestCase):
         for action in ['checkout', 'upload-artifact', 'download-artifact', 'cache']:
             self.assertEqual(windows_safety.hazards(f'uses: actions/{action}@v4'), [])
         self.assertEqual(windows_safety.hazards('uses: ./.github/actions/owner-tools'), [])
+
+    # test-category: security
+    def test_job_path_additions_do_not_allow_persistent_path_writes(self):
+        allowed = '$directory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+        self.assertEqual(windows_safety.hazards(allowed), [])
+        for unsafe in ['setx PATH value',
+                       "[Environment]::SetEnvironmentVariable('PATH', $value, 'Machine')",
+                       "[Environment]::SetEnvironmentVariable('PATH', $value, 'User')",
+                       r'Set-ItemProperty HKCU:\Environment -Name PATH -Value $value',
+                       allowed + '; setx PATH value']:
+            self.assertTrue(windows_safety.hazards(unsafe), unsafe)
 
     # test-category: security
     def test_hosted_guard_requires_literal_owner_binding(self):
