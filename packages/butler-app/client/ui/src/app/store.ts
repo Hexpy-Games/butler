@@ -1,3 +1,4 @@
+import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
@@ -23,6 +24,7 @@ import {
   readCachedMessageListSync,
   readCachedMessageList,
   writeCachedMessageList,
+  clearCachedMessageList,
 } from "./messageCache.ts";
 import { APP_CACHE_BUDGET, cacheEntryBytes } from "./cacheBudget.ts";
 import {
@@ -142,6 +144,7 @@ interface ButlerStore {
   view: AppView;
   settingsReturnView: AppView;
   activeChatId: string;
+  activeChatTitle?: string;
   navigation: NavigationView;
   navigationGeneration: number;
   messages: MessageRecord[];
@@ -225,7 +228,7 @@ interface ButlerStore {
   setCommandOpen: (commandOpen: boolean) => void;
   setRenameProject: (renameProject: ProjectSummary | null) => void;
   setRenameSession: (renameSession: SessionSummary | null) => void;
-  openSession: (chatId: string) => void;
+  openSession: (chatId: string, sessionTitle?: string) => void;
   openNewChat: () => void;
   openNewProjectChat: (projectId: string) => void;
   startProjectChatWithDocument: (
@@ -282,6 +285,7 @@ interface ButlerStore {
     project: ProjectSummary,
     action: ProjectAction,
   ) => Promise<void>;
+  resetGeneralConversation: (eventId: number) => void;
   runSessionAction: (
     session: SessionSummary,
     action: SessionAction,
@@ -929,6 +933,8 @@ function beginSessionViewRequest(
     latestSessionViewRequestByChat.get(chatId) === requestToken;
 }
 
+let lastGeneralClearEvent = 0;
+
 const initialSettings = readCachedSettings();
 setAppCopyLanguage(initialSettings.language);
 
@@ -1263,7 +1269,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setRenameProject: (renameProject) => set({ renameProject }),
   setRenameSession: (renameSession) => set({ renameSession }),
 
-  openSession: (chatId) =>
+  openSession: (chatId, sessionTitle) =>
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
       const storedSessionView = state.sessionViews[chatId] ?? null;
@@ -1285,6 +1291,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,
         observerSessionId: null,
@@ -2268,6 +2275,23 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
+  resetGeneralConversation: (eventId) => {
+    if (eventId <= lastGeneralClearEvent) return;
+    lastGeneralClearEvent = eventId;
+    generalChatCleared();
+    latestSessionViewRequestByChat.delete("general");
+    void clearCachedMessageList("general");
+    set((state) => {
+      const sessionViews = { ...state.sessionViews };
+      delete sessionViews.general;
+      const sessionMessageViews = { ...state.sessionMessageViews };
+      delete sessionMessageViews.general;
+      return { sessionViews, sessionMessageViews, ...(state.activeChatId === "general" ? {
+        messages: [], summary: null, turnProgress: {}, sessionView: null,
+        sessionQueue: [], authorityApprovals: null, messageLoadPending: false,
+      } : {}) };
+    });
+  },
   runSessionAction: async (session, action) => {
     try {
       if (action === "rename") {

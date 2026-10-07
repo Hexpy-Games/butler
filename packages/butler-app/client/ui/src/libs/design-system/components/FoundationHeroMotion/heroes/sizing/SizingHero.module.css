@@ -234,7 +234,7 @@
 }
 
 .readToken {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -287,7 +287,7 @@
   display: grid;
   row-gap: var(--space-xs);
   margin-inline-start: calc(var(--space-4xl) * 1.6);
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -364,7 +364,7 @@
   position: absolute;
   top: 50%;
   right: calc(100% + var(--space-sm));
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -444,7 +444,7 @@
 
 .caption {
   justify-self: center;
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;

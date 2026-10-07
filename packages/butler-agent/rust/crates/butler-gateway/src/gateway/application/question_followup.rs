@@ -49,11 +49,7 @@ impl AppApplication {
         input: super::AppAuthorityDecisionInput,
     ) -> Result<super::AppAuthorityDecision, GatewayApplicationError> {
         let question = input.action == "answer";
-        let session = input
-            .owner_session_id
-            .strip_prefix("butler/app-")
-            .unwrap_or(&input.owner_session_id)
-            .to_owned();
+        let session = self.owner_chat(input.owner_session_id.clone()).await?;
         let result = self.dependencies.authority_handoff.decide(input).await?;
         if let Some(followup) = &result.question_followup {
             super::question_followup::send(self, &session, &result.request_ref, followup).await?;

@@ -271,24 +271,24 @@ fn a_new_install_asks_first_until_it_saves_a_mode() {
     migrate(&mut connection, None).unwrap();
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::AskFirst,
+        AccessMode::AskExceptReads,
         "new install: the default is ask first"
     );
     schedule(&connection, "unset");
     migrate(&mut connection, None).unwrap();
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::AskFirst,
+        AccessMode::AskExceptReads,
         "new install: a later start keeps ask first"
     );
     assert_eq!(
         schedule_access(&connection, "unset"),
-        "ask_first",
+        "ask_except_reads",
         "new install: a schedule of an unsaved conversation fills ask first"
     );
     assert_eq!(
         conversation_access_mode(&connection, "unset").unwrap(),
-        AccessMode::AskFirst,
+        AccessMode::AskExceptReads,
         "new install: an unsaved conversation asks first"
     );
 }

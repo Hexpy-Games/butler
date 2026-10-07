@@ -6,7 +6,7 @@ use super::super::{
     AppApplication, AppRelocationCanonicalUpdate, AppRelocationWorkspacePlan, app_error,
 };
 use super::records::{self, Row};
-use crate::gateway::{GatewayApplicationError, app_session_hint};
+use crate::gateway::GatewayApplicationError;
 
 pub(super) async fn recover_one(
     app: &AppApplication,
@@ -23,7 +23,7 @@ pub(super) async fn recover_one(
     if before.owner_pid != std::process::id() && process_is_alive(before.owner_pid) {
         return Ok(());
     }
-    let runtime_session_id = app_session_hint(&row.session_id);
+    let runtime_session_id = app.runtime_hint(&row.session_id).await?;
     let snapshot = app
         .dependencies
         .relocation_host
@@ -125,7 +125,7 @@ async fn cleanup_plan(app: &AppApplication, row: Row) -> Result<(), GatewayAppli
         return Err(GatewayApplicationError::internal());
     };
     if plan.operation_id != row.operation_id
-        || plan.runtime_session_id != app_session_hint(&row.session_id)
+        || plan.runtime_session_id != app.runtime_hint(&row.session_id).await?
     {
         return Err(GatewayApplicationError::internal());
     }

@@ -1,3 +1,4 @@
+// test-category: security
 import { expect, test } from "bun:test";
 import { HARNESS_NAVIGATION } from "../fixtures";
 import { projectSpace, spaceChildren } from "./projection";

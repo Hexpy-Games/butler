@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 mod profile;
 mod scale;
-mod seed;
+pub(super) mod seed;
 mod source_order;
 pub(super) use seed::history as seed_settled_history;
 use seed::{COMMAND, command, reference, seed};

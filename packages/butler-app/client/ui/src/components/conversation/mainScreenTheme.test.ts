@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import type { NavigationView, ProjectWallpaper, SettingsView } from "@/app/types.ts";

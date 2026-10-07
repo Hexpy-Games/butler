@@ -68,6 +68,11 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
+      if (event.type === "session.cleared" && typeof event.id === "number") {
+        useButlerStore.getState().resetGeneralConversation(event.id);
+        navigationReconciliation.requestRefresh();
+        reconciliation.requestRefresh();
+      }
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();

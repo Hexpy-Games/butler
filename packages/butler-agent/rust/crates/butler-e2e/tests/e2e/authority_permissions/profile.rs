@@ -61,12 +61,11 @@ pub(super) fn explain(db: &rusqlite::Connection) -> Result<(), rusqlite::Error> 
 
 pub(super) fn explain_metadata(db: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
     let mut query = db.prepare(
-        "EXPLAIN QUERY PLAN SELECT owner.value,c.title,c.project_id,p.display_name \
-         FROM json_each(?1) owner CROSS JOIN chats c INDEXED BY idx_chats_authority_metadata \
-         ON c.id=CASE WHEN substr(owner.value,1,11)='butler/app-' THEN substr(owner.value,12) ELSE owner.value END \
-         LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id",
+        "EXPLAIN QUERY PLAN SELECT c.title,c.project_id,p.display_name \
+         FROM chats c INDEXED BY idx_chats_authority_metadata \
+         LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id WHERE c.id=?1",
     )?;
-    for detail in query.query_map(["[\"butler/app-chat-0\"]"], |row| row.get::<_, String>(3))? {
+    for detail in query.query_map(["chat-0"], |row| row.get::<_, String>(3))? {
         eprintln!("approvals-plan metadata {}", detail?);
     }
     Ok(())

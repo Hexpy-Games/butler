@@ -13,7 +13,7 @@ pub(super) fn list(
         .prepare_cached(
             "WITH latest_messages AS ( \
                SELECT rowid AS message_rowid,id,chat_id,turn_id,role,safe_error_code \
-               FROM messages \
+               FROM app_owned_messages \
                WHERE chat_id=?1 \
                  AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
                    safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \

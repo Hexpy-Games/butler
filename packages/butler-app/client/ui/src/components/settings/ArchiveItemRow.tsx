@@ -12,11 +12,13 @@ import { archiveSubtitle, type ArchiveItem } from "./archiveSettingsUtils";
 export function ArchiveItemRow({
   item,
   busy,
+  onOpen,
   onRestore,
   onRemove,
 }: {
   item: ArchiveItem;
   busy: boolean;
+  onOpen?: () => void;
   onRestore: () => void;
   onRemove: () => void;
 }) {
@@ -24,7 +26,7 @@ export function ArchiveItemRow({
   return (
       <Stack align="row" cross="center" gap="md" justify="between" wrap>
         <Stack gap="xs">
-          <Typo.Body as="div">{item.title}</Typo.Body>
+          <Typo.Body as="div">{onOpen ? <Button size="sm" variant="link" onClick={onOpen}>{item.title}</Button> : item.title}</Typo.Body>
           <Typo.Caption>
             {archiveSubtitle(item)} · {relativeAge(item.updatedAt)}
           </Typo.Caption>

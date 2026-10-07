@@ -109,7 +109,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--font-size-1);
   translate: -50% 0;
@@ -134,7 +134,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--font-size-1);
   white-space: nowrap;

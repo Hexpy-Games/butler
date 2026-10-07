@@ -27,7 +27,7 @@ async function settle(page: Page) {
 
 async function openDialog(page: Page) {
   await page.getByRole("button", { name: "스페이스 메뉴", exact: true }).click();
-  assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["새 그룹", "새 프로젝트"]);
+  assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["새 그룹", "새 프로젝트", "아카이브"]);
   await page.getByRole("menuitem", { name: "새 프로젝트", exact: true }).click();
   await page.getByRole("dialog").waitFor();
   await settle(page);
@@ -66,7 +66,7 @@ async function captureMatrix(page: Page) {
       ["새 대화", "검색", "예약 작업"]);
     await shot("header"); await shot("top-nav");
     await page.getByRole("button", { name: "스페이스 메뉴", exact: true }).click();
-    assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["새 그룹", "새 프로젝트"]);
+    assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["새 그룹", "새 프로젝트", "아카이브"]);
     await shot("menu");
     await page.getByRole("menuitem", { name: "새 프로젝트", exact: true }).click();
     await page.getByRole("dialog").waitFor();

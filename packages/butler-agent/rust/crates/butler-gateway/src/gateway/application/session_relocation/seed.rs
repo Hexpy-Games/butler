@@ -54,7 +54,7 @@ impl AppApplication {
                     .flatten();
                 let (workspace_path, ledger_project_id) = project.unwrap_or((data_root, None));
                 Ok(AppRelocationBindingSeed {
-                    runtime_session_id: crate::gateway::app_session_hint(&session.id),
+                    runtime_session_id: session.session_hint.clone(),
                     project_id: session.project_id,
                     ledger_project_id,
                     workspace_path,

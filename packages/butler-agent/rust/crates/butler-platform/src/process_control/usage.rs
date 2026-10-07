@@ -13,7 +13,10 @@ pub fn load_average() -> io::Result<Option<[f64; 3]>> {
             .map(str::parse::<f64>)
             .collect::<Result<Vec<_>, _>>()
             .map_err(io::Error::other)?;
-        Ok(Some([values[0], values[1], values[2]]))
+        let values = <[f64; 3]>::try_from(values.as_slice()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "expected three load averages")
+        })?;
+        Ok(Some(values))
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {

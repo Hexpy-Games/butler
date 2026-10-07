@@ -61,7 +61,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
-    if access == Access::AskFirst && !refused {
+    if access == Access::AskAlways && !refused {
         approve_exact(&s, &id, &command).await?;
     }
     let turn =
@@ -190,7 +190,7 @@ async fn observation_ask_first_approves_exact_command_then_lists_downloads()
         !butler_platform::command_sandbox::READ_ONLY_SANDBOX,
         "host has read-only sandbox"
     );
-    run(Access::AskFirst, None).await
+    run(Access::AskAlways, None).await
 }
 
 #[tokio::test]
@@ -211,7 +211,7 @@ async fn observation_data_uses_normal_approval_and_credentials_stay_refused()
         !butler_platform::command_sandbox::READ_ONLY_SANDBOX,
         "host has read-only sandbox"
     );
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         for target in ["data", "credentials"] {
             run(access, Some(target)).await?;
         }

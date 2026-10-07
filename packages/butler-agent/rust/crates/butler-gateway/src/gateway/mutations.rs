@@ -29,6 +29,7 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
         id: String,
         title: Option<String>,
     ) -> ApplicationFuture<AppSessionActionResult>;
+    fn clear_general(&self, title: String) -> ApplicationFuture<serde_json::Value>;
     fn delete_session(
         &self,
         id: String,

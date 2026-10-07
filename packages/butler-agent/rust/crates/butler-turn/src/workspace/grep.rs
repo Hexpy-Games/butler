@@ -30,6 +30,8 @@ pub struct GrepMatch {
 /// A listed file to search within deadline and budgets.
 pub struct GrepCandidate {
     pub root: PathBuf,
+    pub path_form: super::PathForm,
+    pub protected_roots: Vec<PathBuf>,
     pub path: String,
     pub bytes: u64,
     pub matcher: Arc<Regex>,
@@ -117,6 +119,23 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
         return Err(GrepRead::skipped_unread("max_bytes_per_file"));
     }
     let absolute = input.root.join(&input.path);
+    let absolute = if input.path_form == super::PathForm::Contained {
+        let guard =
+            super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+                root: &input.root,
+                requested: &input.path,
+                path_form: input.path_form,
+                allow_directories: false,
+                protected_roots: &input.protected_roots,
+            })
+            .map_err(|_| GrepRead::skipped_unread("io_error"))?;
+        if let Some(reason) = guard.reason {
+            return Err(GrepRead::skipped_unread(reason));
+        }
+        guard.real.unwrap_or(absolute)
+    } else {
+        absolute
+    };
     match std::fs::symlink_metadata(&absolute) {
         Ok(metadata) if !metadata.is_file() => return Err(GrepRead::skipped_unread("symlink")),
         Ok(metadata) if metadata.len() > cap => {

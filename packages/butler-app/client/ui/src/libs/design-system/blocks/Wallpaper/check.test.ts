@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { checkWallpaperModule, trimWallpaperShaderLog } from "./check";
