@@ -94,7 +94,7 @@ pub(super) fn retry_snapshot(
     })?;
     let (message_chat, message_turn, role, text): (String, Option<String>, String, String) = db
         .query_row(
-            "SELECT chat_id,turn_id,role,text FROM messages WHERE id=?1",
+            "SELECT chat_id,turn_id,role,text FROM app_owned_messages WHERE id=?1",
             [&user_message_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
@@ -228,7 +228,7 @@ pub(super) fn current_controls_retry_source(
     })?;
     let (message_chat, message_turn, role, text): (String, Option<String>, String, String) = db
         .query_row(
-            "SELECT chat_id,turn_id,role,text FROM messages WHERE id=?1",
+            "SELECT chat_id,turn_id,role,text FROM app_owned_messages WHERE id=?1",
             [&user_message_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )

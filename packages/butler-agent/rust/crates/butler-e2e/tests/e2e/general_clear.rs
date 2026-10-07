@@ -7,6 +7,7 @@ use butler_platform::sqlite;
 use rusqlite::{OpenFlags, params};
 use serde_json::json;
 use std::time::{Duration, Instant};
+mod ownership;
 mod support;
 use support::{
     ordered_message_ids, seed_interrupted_output_transfer, seed_scale, verify_rotated_permissions,
@@ -19,6 +20,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let server = FakeServer::local_models(ChatBehavior::default()).await?;
     let setup = Setup::new("GENERAL-CLEAR")?
         .fixture(Fixture::Empty)
+        .env("BUTLER_CLEAR_PROFILE", "1")
         .env("BUTLER_OLLAMA_BASE_URL", server.base_url.clone());
     fixtures::onboarding_complete(&setup.sandbox.data)?;
     fixtures::scheduler_ran_today(&setup.sandbox.data, fixtures::FIXTURE_TIME)?;
@@ -107,6 +109,8 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     assert_eq!(redundant, 0);
     let ordered_before = ordered_message_ids(&db, "general")?;
     let db_bytes = std::fs::metadata(s.sandbox.data.join("app-server/butler-client.sqlite"))?.len();
+    let probe =
+        support::WriteProbe::start(s.sandbox.data.join("app-server/butler-client.sqlite")).await?;
     let start = Instant::now();
     let cleared =
         s.gw.post(
@@ -114,11 +118,24 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
             json!({"title":"General · 10/7/2026"}),
         )
         .await?;
+    let write_lock = probe.finish().await?;
+    eprintln!(
+        "GENERAL-CLEAR max_write_lock_ms={:.3}",
+        write_lock.as_secs_f64() * 1000.0
+    );
     assert_eq!(cleared.status, 200, "{}", cleared.text);
     eprintln!(
         "GENERAL-CLEAR messages=100002 transport_rows=2000000 db_bytes={db_bytes} elapsed={:?}",
         start.elapsed()
     );
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.contains("CLEAR-PROFILE"))
+    {
+        eprintln!("{line}");
+    }
     let archived = cleared.data()["archived_session"]["id"].as_str().unwrap();
     assert!(s.gw.messages("general").await?.is_empty());
     assert_eq!(ordered_message_ids(&db, archived)?, ordered_before);
@@ -145,20 +162,20 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let archived_messages = s.gw.messages(archived).await?;
     assert!(!archived_messages.is_empty());
     let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM messages WHERE chat_id=?1",
+        "SELECT COUNT(*) FROM app_owned_messages WHERE chat_id=?1",
         [archived],
         |row| row.get(0),
     )?;
     assert_eq!(count, 100_000 + i64::try_from(old.len()).unwrap());
     for original in &old {
         let text: String = db.query_row(
-            "SELECT text FROM messages WHERE id=?1 AND chat_id=?2",
+            "SELECT text FROM app_owned_messages WHERE id=?1 AND chat_id=?2",
             params![original["id"].as_str().unwrap(), archived],
             |row| row.get(0),
         )?;
         assert_eq!(text, original["text"].as_str().unwrap());
     }
-    let corrupt: i64 = db.query_row("SELECT COUNT(*) FROM messages WHERE chat_id=?1 AND id LIKE 'scale-%' AND text != 'Scale message '||substr(id,7)", [archived], |row| row.get(0))?;
+    let corrupt: i64 = db.query_row("SELECT COUNT(*) FROM app_owned_messages WHERE chat_id=?1 AND id LIKE 'scale-%' AND text != 'Scale message '||substr(id,7)", [archived], |row| row.get(0))?;
     assert_eq!(corrupt, 0);
     for table in [
         "projected_transport_events",
@@ -168,7 +185,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
             &format!(
                 "SELECT COUNT(*) FROM {table} WHERE chat_id=?1 AND action_id LIKE 'scale-action-%'"
             ),
-            [archived],
+            ["general"],
             |r| r.get(0),
         )?;
         let kept: i64 = db.query_row(
@@ -179,7 +196,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         assert_eq!((moved, kept), (100_000, 900_000));
     }
     let indexed: i64 = db.query_row(
-        "SELECT COUNT(*) FROM messages_fts f JOIN messages m ON m.rowid=f.rowid WHERE m.chat_id=?1",
+        "SELECT COUNT(*) FROM messages_fts f JOIN app_owned_messages m ON m.rowid=f.rowid WHERE m.chat_id=?1",
         [archived],
         |row| row.get(0),
     )?;
@@ -219,7 +236,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         "SELECT conversation_session_id FROM conversation_bindings WHERE gateway='app' AND external_session_id=?1", [&preserved_hint], |row| row.get(0),
     )?;
     assert_eq!(preserved, before);
-    let found: String = db.query_row("SELECT m.chat_id FROM messages_fts f JOIN messages m ON m.rowid=f.rowid WHERE messages_fts MATCH ?1", ["cleararchiveunique"], |row| row.get(0))?;
+    let found: String = db.query_row("SELECT m.chat_id FROM messages_fts f JOIN app_owned_messages m ON m.rowid=f.rowid WHERE messages_fts MATCH ?1", ["cleararchiveunique"], |row| row.get(0))?;
     assert_eq!(found, archived);
     let archives = s.gw.get("/archives").await?;
     assert!(archives.text.contains(archived));
@@ -269,6 +286,11 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     assert_eq!(again.status, 200, "{}", again.text);
     assert!(s.gw.messages("general").await?.is_empty());
     assert_ne!(again.data()["archived_session"]["id"], archived);
+    butler_e2e::assert_wall_clock_budget!(
+        write_lock,
+        Duration::from_millis(500),
+        "General clear writer exclusion"
+    );
     drop(canonical);
     drop(db);
     s.finish().await

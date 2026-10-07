@@ -36,7 +36,8 @@ pub(super) fn ordered_message_ids(
     db: &rusqlite::Connection,
     chat: &str,
 ) -> Result<Vec<String>, HarnessError> {
-    let mut rows = db.prepare("SELECT id FROM messages WHERE chat_id=?1 ORDER BY rowid")?;
+    let mut rows =
+        db.prepare("SELECT id FROM app_owned_messages WHERE chat_id=?1 ORDER BY rowid")?;
     Ok(rows
         .query_map([chat], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?)
@@ -107,4 +108,64 @@ pub(super) async fn verify_rotated_permissions(
         title
     );
     Ok(())
+}
+
+/// Observe SQLite writer exclusion from a separate connection, including outer commit.
+pub(super) struct WriteProbe {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    task: Option<tokio::task::JoinHandle<Result<std::time::Duration, HarnessError>>>,
+}
+impl WriteProbe {
+    pub(super) async fn start(path: std::path::PathBuf) -> Result<Self, HarnessError> {
+        let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        db.busy_timeout(std::time::Duration::ZERO)?;
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = stop.clone();
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+        let task = tokio::task::spawn_blocking(move || {
+            use std::time::{Duration, Instant};
+            let mut ready = Some(ready_tx);
+            let mut available = Instant::now();
+            let mut longest = Duration::ZERO;
+            while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+                let sample = Instant::now();
+                match db.execute_batch("BEGIN IMMEDIATE; ROLLBACK") {
+                    Ok(()) => {
+                        longest = longest.max(available.elapsed());
+                        available = sample;
+                    }
+                    Err(rusqlite::Error::SqliteFailure(error, _))
+                        if error.code == rusqlite::ErrorCode::DatabaseBusy => {}
+                    Err(error) => return Err(error.into()),
+                }
+                if let Some(sender) = ready.take() {
+                    let _ = sender.send(());
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            // Include both sampling gaps around a reservation, rather than
+            // undercounting a lock acquired between two probes.
+            Ok(longest.max(available.elapsed()))
+        });
+        let probe = Self {
+            stop,
+            task: Some(task),
+        };
+        ready_rx.await.map_err(|e| HarnessError(e.to_string()))?;
+        Ok(probe)
+    }
+    pub(super) async fn finish(mut self) -> Result<std::time::Duration, HarnessError> {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.task
+            .take()
+            .expect("probe task")
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?
+    }
+}
+
+impl Drop for WriteProbe {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 }

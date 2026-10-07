@@ -13,7 +13,6 @@ src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtim
 src/gateway/application/projects/dashboard/board.rs	board_cards	95
 src/gateway/application/projects/dashboard/board.rs	get	119
 src/gateway/application/projects/dashboard/briefing/pack.rs	build	247
-src/gateway/application/projects/dashboard/briefing/pack/feedback.rs	read_followups	89
 src/gateway/application/projects/dashboard/briefing/store.rs	finish_generation	97
 src/gateway/application/projects/dashboard/history.rs	get	106
 src/gateway/application/projects/dashboard/history.rs	read_ledger_events	113

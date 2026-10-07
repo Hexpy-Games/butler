@@ -336,7 +336,7 @@ pub(super) const RESTORE_CLAIM_SQL: &str = "UPDATE session_queued_messages SET s
      WHERE chat_id=?2 AND turn_id=?3 AND state='queued' AND claim_id IS NULL \
        AND claim_owner IS NULL AND lease_expires_at IS NULL \
        AND terminal_result_message_id IS NULL AND dispatched_message_id=?4 \
-       AND EXISTS (SELECT 1 FROM turns t JOIN messages m ON m.id=t.user_message_id \
+       AND EXISTS (SELECT 1 FROM turns t JOIN app_owned_messages m ON m.id=t.user_message_id \
          WHERE t.id=?3 AND t.chat_id=?2 \
            AND (t.state='thinking' OR (?5=1 AND t.state IN ('accepted','retrying'))) \
            AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent') \
@@ -371,7 +371,7 @@ fn restore_claim(
         let content_matches: bool = connection
             .query_row_cached(
                 "SELECT m.text=q.text AND m.content_parts_json IS q.content_parts_json \
-             FROM session_queued_messages q JOIN messages m ON m.id=q.dispatched_message_id \
+             FROM session_queued_messages q JOIN app_owned_messages m ON m.id=q.dispatched_message_id \
              WHERE q.chat_id=?1 AND q.turn_id=?2 AND q.claim_id=?3",
                 params![chat_id, turn_id, original_claim],
                 |row| row.get(0),

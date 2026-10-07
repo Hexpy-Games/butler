@@ -43,7 +43,7 @@ pub(super) fn workspace_project(
 const SESSION_SELECT: &str = concat!(
     r"
 SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
- (SELECT m.text FROM messages m WHERE m.chat_id=c.id
+ (SELECT m.text FROM app_owned_messages m WHERE m.chat_id=c.id
    AND NOT(m.role='assistant' AND m.safe_error_code IS NOT NULL
      AND m.safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete'))
    AND ",

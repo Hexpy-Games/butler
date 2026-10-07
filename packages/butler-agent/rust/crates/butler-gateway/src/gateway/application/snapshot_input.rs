@@ -108,7 +108,7 @@ fn claimed_snapshot(
          t.execution_controls_json,q.project_source_refs_json,m.content_parts_json,\
          q.control_resolution_json,c.kind,c.project_id,p.workspace_path,p.ledger_project_id,\
          b.seed_json,q.attachments_json,c.runtime_session_hint FROM session_queued_messages q \
-         JOIN turns t ON t.id=q.turn_id JOIN messages m ON m.id=q.dispatched_message_id \
+         JOIN turns t ON t.id=q.turn_id JOIN app_owned_messages m ON m.id=q.dispatched_message_id \
          JOIN chats c ON c.id=q.chat_id LEFT JOIN projects p ON p.id=c.project_id \
          LEFT JOIN app_session_branches b ON b.target_session_id=c.id AND b.state='ready' \
          WHERE q.id=?1 AND q.state='dispatching' AND q.claim_id=?2",

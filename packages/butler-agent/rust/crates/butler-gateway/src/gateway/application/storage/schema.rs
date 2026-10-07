@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod core;
+mod message_ownership;
 mod migration;
 mod monitoring;
 mod project_ledger_bindings;
@@ -74,6 +75,7 @@ pub(super) fn migrate(
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
+    message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
     Ok(())
 }

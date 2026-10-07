@@ -124,7 +124,7 @@ pub(super) fn selected_message(
     let row = db
         .query_row(
             "SELECT rowid,id,chat_id,conversation_session_id,conversation_message_id,role,status \
-             FROM messages WHERE chat_id=?1 AND role='assistant' \
+             FROM app_owned_messages WHERE chat_id=?1 AND role='assistant' \
              AND status IN ('delivered','completed','sent') AND (?2 IS NULL OR id=?2 OR conversation_message_id=?2) \
              ORDER BY rowid DESC LIMIT 1",
             params![session_id, requested_id],
@@ -151,7 +151,7 @@ pub(super) fn unique_message_for_turn(
     let mut statement = db
         .prepare(
             "SELECT rowid,id,chat_id,conversation_session_id,conversation_message_id,role,status \
-             FROM messages WHERE chat_id=?1 AND turn_id=?2 \
+             FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 \
              AND role='assistant' AND status IN ('delivered','completed','sent') \
              AND NOT(role='assistant' AND safe_error_code IS NOT NULL \
                  AND safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) LIMIT 2",
@@ -172,7 +172,7 @@ pub(super) fn app_context(
     let mut statement = db
         .prepare(
             concat!(
-                "SELECT role,text FROM messages m WHERE chat_id=?1 AND rowid<=?2 \
+                "SELECT role,text FROM app_owned_messages m WHERE chat_id=?1 AND rowid<=?2 \
                  AND role IN ('user','assistant') AND NOT(role='assistant' AND safe_error_code IS NOT NULL \
                      AND safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
                  AND ",

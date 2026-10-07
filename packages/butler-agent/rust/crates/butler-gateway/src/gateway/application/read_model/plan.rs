@@ -12,7 +12,7 @@ pub(in crate::gateway::application) fn latest_plan_document_status(
     super::require_chat(connection, chat_id)?;
     let mut statement = connection
         .prepare(
-            "SELECT plan_json FROM messages WHERE chat_id=?1 AND role='assistant' \
+            "SELECT plan_json FROM app_owned_messages WHERE chat_id=?1 AND role='assistant' \
              AND plan_json IS NOT NULL AND NOT (safe_error_code IS NOT NULL AND \
              safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
              ORDER BY rowid DESC",
