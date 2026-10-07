@@ -24,6 +24,20 @@ for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup'
 
 class WindowsSafety(unittest.TestCase):
     # test-category: security
+    def test_owner_jobs_reject_github_cli_requirement(self):
+        for source in ['gh api repos/owner/repo', "cache.output('gh', 'api', endpoint)",
+                       "subprocess.run(['gh', 'api', endpoint])"]:
+            self.assertTrue(any('GitHub CLI' in hazard for _, hazard in windows_safety.hazards(source)))
+        workflow = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
+        self.assertEqual(workflow.count('uses: ./.github/actions/publish-windows-target\n        continue-on-error: true'), 2)
+        setup = (ROOT.parent / 'actions/windows-owner-setup/action.yml').read_text()
+        for entry in ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=$workspace']:
+            self.assertIn(entry, setup)
+        self.assertIn("$env:GITHUB_WORKSPACE.Replace('\\', '/')", setup)
+        publisher = (ROOT.parent / 'actions/publish-cargo-target/action.yml').read_text()
+        self.assertIn('::warning::Cargo snapshot publish failed', publisher)
+
+    # test-category: security
     def test_recursive_provider_operations_are_rejected(self):
         for command in ['Copy-Item $failures $destination -Recurse',
                         'Remove-Item -Recurse -Force $env:OWNER_JOB_ROOT',

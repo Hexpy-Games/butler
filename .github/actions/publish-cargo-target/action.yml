@@ -43,4 +43,7 @@ runs:
         $ErrorActionPreference = 'Continue'
         python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/ci-store-publish.py" cargo-target $env:CACHE_PLATFORM $env:CACHE_MODE $env:CACHE_KIND
         $ErrorActionPreference = 'Stop'
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if ($LASTEXITCODE -ne 0) {
+          Write-Output '::warning::Cargo snapshot publish failed; the completed build and tests are unaffected.'
+          exit $LASTEXITCODE
+        }
