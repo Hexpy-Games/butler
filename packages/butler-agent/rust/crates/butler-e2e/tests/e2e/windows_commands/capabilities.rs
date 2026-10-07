@@ -403,14 +403,10 @@ async fn setup(
     let cases = cases(&setup.sandbox.data);
     let (url, script, server) = provider::start(cases[0].clone()).await?;
     let home = setup.sandbox.home.clone();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(access)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", port)
         .env("USERPROFILE", home.display().to_string())
         .env(
             "LOCALAPPDATA",

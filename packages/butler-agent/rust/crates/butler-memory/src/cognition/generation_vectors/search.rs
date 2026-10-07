@@ -92,10 +92,9 @@ impl VectorTable {
             data_root,
             &[&generation.root, &root, &root.join("butler_memory.lance")],
         )?;
-        let connection = crate::cognition::lance_store::connect(&root)
-            .await
-            .map_err(unavailable)?;
-        let table = crate::cognition::lance_store::open(&connection, "butler_memory")
+        // Reuse the generation's bounded session/index cache, as its writer
+        // does. Read consistency remains zero: every read checks new commits.
+        let table = crate::cognition::lance_store::shared(&root, "butler_memory")
             .await
             .map_err(unavailable)?;
         let schema = table.schema().await.map_err(unavailable)?;

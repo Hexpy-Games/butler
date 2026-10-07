@@ -26,7 +26,7 @@ permissions:
 
 defaults:
   run:
-    shell: pwsh
+    shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     working-directory: packages/butler-agent/rust
 
 concurrency:
@@ -92,38 +92,10 @@ jobs:
       - uses: ./.github/actions/windows-owner-setup
         with:
           workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
-      - name: Isolate runtime and check directories
-        run: |
-          $root = $env:OWNER_JOB_ROOT
-          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          # Keep toolchain/cache locations while every check gets a fresh HOME.
-          "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
-          "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
-      - name: Restore main debug test snapshot
+      - name: Windows native stderr, formatting, clippy and source policy
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SNAPSHOT_PROFILE: debug
-          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
-          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
-        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
-      - name: Windows formatting, clippy and source policy
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo fmt --all -- --check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-host -p butler-agent -p butler-e2e --tests -- -D warnings
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo run --locked -p butler-source-check -- .
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: ../../../deploy/windows-preview-quality.ps1
       - name: Diagnose original ACL writer and checker
         run: ../../../deploy/windows-acl-diagnosis.ps1
       - name: Platform and portable crate tests
@@ -132,8 +104,10 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core -p butler-models 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/crate-tests.log"
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Keep ACL and contract evidence before the full build
         if: always()
@@ -152,9 +126,11 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
             --test e2e --no-run --message-format=json 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the stub harness
         id: build
@@ -163,8 +139,10 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
           cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Cargo build timings
         if: ${{ always() }}
@@ -181,9 +159,23 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
             turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Dedicated OAuth profile and existing OAuth regressions (stub/replay)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e setup_oauth:: -- --test-threads=1
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e quota:: -- --test-threads=1
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Terminal settlement without filesystem notifications
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
@@ -192,8 +184,10 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e projection_settlement:: `
             -- --test-threads=1 --nocapture
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Stub chat and durable config under a long data path
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
@@ -202,9 +196,11 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e long_paths:: `
             -- --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/long-paths.log"
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # Command matrix is read-only outside its own isolated fixtures. Run it
       # natively before the disposable hosted installer/registry confirmation.
@@ -215,8 +211,10 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           $env:BUTLER_E2E_PERF = '1'
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/command-matrix.log"
+          $ErrorActionPreference = 'Stop'
           Remove-Item Env:BUTLER_E2E_PERF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Selected project workspace and approval E2E
@@ -225,7 +223,9 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e project_workspace:: -- --test-threads=8 --nocapture
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Read-only real-profile Downloads command
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
@@ -239,15 +239,21 @@ jobs:
           $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
           $env:BUTLER_E2E_PERF = '1'
           try {
+            $ErrorActionPreference = 'Continue'
             cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
               windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
               -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
       - name: Prepare verified embedding assets for native memory qualification
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         working-directory: .
-        run: python .github/scripts/isolated.py python .github/scripts/prepare-native-embedding.py
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python .github/scripts/isolated.py python .github/scripts/prepare-native-embedding.py
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Native service recovery, full shutdown queue and memory reset
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
@@ -267,8 +273,10 @@ jobs:
               'memory-recall-judge' { 'memory::recall_judge::' }
               default { "$test`::" }
             }
+            $ErrorActionPreference = 'Continue'
             cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e $filter `
               -- --test-threads=8 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/$test.log"
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
       - name: Export compiled verification harnesses
@@ -325,8 +333,8 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
         run: ./deploy/windows-preview-smoke.ps1
@@ -419,9 +427,9 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
-          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
-          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" >> $env:GITHUB_ENV
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run every existing selected harness
         env:
           SELECTED_HARNESSES: ${{ matrix.tests }}

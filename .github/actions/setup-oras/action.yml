@@ -1,0 +1,17 @@
+name: Install verified ORAS
+description: Install the pinned official executable without extensionless ZIP extraction
+runs:
+  using: composite
+  steps:
+    - name: Install ORAS on Windows
+      if: runner.os == 'Windows'
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        python "$env:GITHUB_WORKSPACE/.github/scripts/setup-oras.py"
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Install ORAS on Unix
+      if: runner.os != 'Windows'
+      shell: bash
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/setup-oras.py"

@@ -251,3 +251,91 @@ async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
     );
     s.finish().await
 }
+
+/// Dedicated Codex auth.json rotates in place, preserving its format and
+/// unknown fields. Restarting the real agent reuses the rotated login.
+#[tokio::test]
+async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let token = FakeServer::oauth_token().await?;
+    let setup = Setup::new("CODEX-PERSISTENT-REFRESH")?
+        .cassette("USE-02")
+        .quota_polling();
+    let folder = setup.sandbox.home.join(".butler-e2e-auth");
+    std::fs::create_dir_all(&folder)?;
+    let path = folder.join("auth.json");
+    let expired = format!(
+        "e30.{}.signature",
+        base64url(json!({"exp":1}).to_string().as_bytes())
+    );
+    std::fs::write(
+        &path,
+        serde_json::to_vec(&json!({
+            "auth_mode":"chatgpt", "OPENAI_API_KEY":null, "unknown":"keep",
+            "last_refresh":"original",
+            "tokens":{"access_token":expired, "refresh_token":"original-refresh",
+                "id_token":"original-id", "account_id":OAUTH_ACCOUNT_ID,
+                "unknown_token_field":"keep"}
+        }))?,
+    )?;
+    let original: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    // An aborted forced refresh must restore the missing expiry field without
+    // changing any credentials or unknown Codex fields (never print them).
+    drop(super::live::profile::ExpiryProbe::begin(path.clone())?);
+    let restored: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    assert!(
+        restored == original,
+        "aborted expiry probe changed the profile"
+    );
+    let probe = super::live::profile::ExpiryProbe::begin(path.clone())?;
+    let mut s = setup
+        .env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string())
+        .env(
+            "BUTLER_CODEX_OAUTH_TOKEN_URL",
+            format!("{}/oauth/token", token.base_url),
+        )
+        .start()
+        .await?;
+    let reply =
+        s.gw.get("/provider-quota?provider_id=openai&refresh=1")
+            .await?;
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.data()["available"], true);
+    probe.verify(
+        chrono::DateTime::parse_from_rfc3339(butler_e2e::e2e::fixtures::FIXTURE_TIME)
+            .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?
+            .timestamp_millis(),
+    )?;
+    let saved = std::fs::read(&path)?;
+    let auth: Value = serde_json::from_slice(&saved)?;
+    assert_ne!(auth["tokens"]["access_token"], expired);
+    assert_eq!(auth["tokens"]["refresh_token"], "e2e-refresh-token");
+    assert_ne!(auth["tokens"]["id_token"], "original-id");
+    assert_eq!(auth["tokens"]["account_id"], OAUTH_ACCOUNT_ID);
+    assert_eq!(auth["tokens"]["unknown_token_field"], "keep");
+    assert_eq!(auth["unknown"], "keep");
+    assert_eq!(auth["auth_mode"], "chatgpt");
+    assert!(auth["OPENAI_API_KEY"].is_null());
+    assert_ne!(auth["last_refresh"], "original");
+    assert!(auth["accessToken"].is_null(), "Codex format must survive");
+    let exchanges = token.seen();
+    assert_eq!(exchanges.len(), 1);
+    assert_eq!(
+        form_value(&exchanges[0].body, "grant_type"),
+        Some("refresh_token")
+    );
+    assert_eq!(
+        form_value(&exchanges[0].body, "refresh_token"),
+        Some("original-refresh")
+    );
+    s.restart().await?;
+    let after = s.gw.get("/provider-quota?provider_id=openai").await?;
+    assert_eq!(after.data()["available"], true);
+    assert_eq!(std::fs::read(&path)?, saved);
+    assert_eq!(
+        token.seen().len(),
+        1,
+        "restart must reuse the rotated token"
+    );
+    s.finish().await
+}

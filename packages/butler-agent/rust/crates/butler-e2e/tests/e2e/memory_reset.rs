@@ -250,6 +250,9 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
             .1["state"],
         "delivered"
     );
+    // Delivery precedes the independent memory projection. Restart only after
+    // every canonical source is committed, as the chat-reset fixture does.
+    super::memory_fixture::settle(&s.sandbox.data).await?;
     support::cycle(&mut s).await?;
     let memory = s.sandbox.data.join("cognition/memory");
     let rules = memory.join("rules");
@@ -291,6 +294,9 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
     let general_count = count(&old, general_sql);
     let canonical = s.sandbox.data.join("runtime/conversation-store.sqlite");
     let chat_count = count(&canonical, "SELECT COUNT(*) FROM conversation_messages");
+    // The maintenance receipt can precede FTS drain and writer release. Take
+    // one inventory only after that work settles; never retry a stale reset.
+    super::memory_fixture::settle(&s.sandbox.data).await?;
     let checked = s.gw.post("/memory/inventory/check", json!({})).await?;
     let id = uuid::Uuid::new_v4().to_string();
     let input = json!({"operation_id":id, "inventory_revision":checked.data()["revision"]});

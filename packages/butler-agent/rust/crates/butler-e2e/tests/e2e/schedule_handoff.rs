@@ -20,13 +20,9 @@ async fn missing_child_capability_returns_structurally_and_parent_completes()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
     let mut s = Setup::new("SCHEDULE-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", &url)
-        .env("BUTLER_APP_SERVER_PORT", &port)
         .start()
         .await?;
     assert_eq!(

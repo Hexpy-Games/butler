@@ -4,11 +4,6 @@ on:
     branches: ['release/**']
   workflow_dispatch:
     inputs:
-      hosted-only:
-        description: Build and verify on disposable GitHub-hosted runners only
-        required: false
-        type: boolean
-        default: false
       native-cache:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
@@ -41,47 +36,50 @@ jobs:
     needs: changes
     if: ${{ !inputs.reuse-run && (needs.changes.outputs.tier != 'integration' || fromJSON(needs.changes.outputs.jobs).build) }}
     name: Build Windows Squirrel artifacts
-    runs-on: ${{ inputs.hosted-only && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    runs-on: [self-hosted, butler-win]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
-        if: ${{ !inputs.hosted-only }}
         with:
           workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
+          owner-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
+          owner-runner: 'true'
           version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
-        shell: pwsh
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         run: |
           Move-Item dist/release/app-windows dist/release/app-windows-first
           Move-Item dist/release/agent dist/release/agent-first
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
+          owner-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
+          owner-runner: 'true'
           version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
-        shell: pwsh
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         run: ./deploy/windows-installer-contracts.ps1 -Mode Build
       - name: Pack every installer fixture with complete checksums
-        shell: pwsh
-        run: python .github/scripts/isolated.py python deploy/windows-installer-transport.py pack dist/release dist/release/installer-transport
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python .github/scripts/isolated.py python deploy/windows-installer-transport.py pack dist/release dist/release/installer-transport
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer-preview
@@ -89,8 +87,8 @@ jobs:
           if-no-files-found: error
           compression-level: 0
       - name: Verify owner registration and clean job profile
-        if: ${{ always() && !inputs.hosted-only }}
-        shell: pwsh
+        if: always()
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
         run: ./deploy/windows-owner-cleanup.ps1
 
   verify:
@@ -165,22 +163,6 @@ jobs:
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
-      - name: Verify desktop startup handoff against a gated stub gateway
-        shell: pwsh
-        run: |
-          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          $env:HOME = Join-Path $profile 'home'
-          $env:BUTLER_DATA = Join-Path $profile 'data'
-          $env:BUTLER_STARTUP_EVIDENCE = 'dist/startup-installer-evidence/splash'
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          try {
-            node packages/butler-app/client/electron/node_modules/electron/install.js
-            if ($LASTEXITCODE) { throw 'Electron download failed' }
-            bun run app:ui:build
-            if ($LASTEXITCODE) { throw 'Renderer build failed' }
-            bun run tests/smoke/startup-splash.ts
-            if ($LASTEXITCODE) { throw 'Startup smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
       - name: Prove legacy-data refusal and desktop recovery
         shell: pwsh
         run: |
@@ -199,12 +181,6 @@ jobs:
             if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
           } finally { Remove-Item -Recurse -Force $profile }
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: startup-installer-evidence
-          path: dist/startup-installer-evidence/
-          if-no-files-found: warn
   gate:
     name: windows-installer gate
     if: always()

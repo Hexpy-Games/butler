@@ -22,6 +22,49 @@ use std::time::{Duration, Instant};
 mod diagnostics;
 
 #[tokio::test]
+async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    use butler_platform::instance::{InstanceLock, LockError};
+    let mut s = Setup::new("PORT-PAIR-RESTART")?.start().await?;
+    let port = s.agent.launch.port;
+    let path = std::env::temp_dir()
+        .join("butler-e2e/port-pairs")
+        .join(format!("{port}.lock"));
+    let contended = || {
+        matches!(
+            InstanceLock::try_exclusive(
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&path)
+                    .unwrap()
+            ),
+            Err(LockError::Busy)
+        )
+    };
+    assert!(contended(), "running Agent lost its port-pair reservation");
+    s.agent.terminate().await?;
+    let socket = std::net::TcpListener::bind(("127.0.0.1", port))?;
+    let content = std::net::TcpListener::bind(("127.0.0.1", port + 1))?;
+    assert!(contended(), "shutdown released the restart reservation");
+    drop((socket, content));
+    s.gw = s.agent.start_again().await?;
+    assert!(contended(), "restart lost the port-pair reservation");
+    assert_eq!(s.gw.get("/health").await?.status, 200);
+    s.finish().await?;
+    assert!(
+        InstanceLock::try_exclusive(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&path)?
+        )
+        .is_ok()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
