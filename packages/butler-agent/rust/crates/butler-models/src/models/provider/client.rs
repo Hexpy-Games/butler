@@ -1,4 +1,6 @@
 mod admission;
+mod dispatch;
+use dispatch::{DispatchedRound, RoundDispatch};
 
 use std::sync::Arc;
 
@@ -12,7 +14,7 @@ use super::contracts::{
     ProviderAuth, ProviderAuthMode, ProviderClock, ProviderConfigRequest, ProviderObservation,
     ProviderObservationSink, ProviderRequestConfigPort, ProviderVisualCapabilityPort,
 };
-use super::local_stream::{self, LocalStreaming, StreamWatch};
+use super::local_stream::LocalStreaming;
 use super::result;
 pub(super) use super::route::{authorize, carrier};
 use super::serialize;
@@ -36,6 +38,7 @@ pub struct ModelProvider {
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
     pub(super) prefix_history: Arc<super::prefix_diagnostics::History>,
+    pub(super) keepalive: Arc<super::keepalive::Keepalive>,
     sizing_cache: Arc<super::sizing::Cache>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
@@ -59,6 +62,7 @@ impl ModelProvider {
             clock,
             prompt_metrics,
             prefix_history: Arc::new(super::prefix_diagnostics::History::default()),
+            keepalive: Arc::new(super::keepalive::Keepalive::default()),
             sizing_cache: Arc::new(super::sizing::Cache::default()),
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
@@ -87,74 +91,40 @@ impl ModelProvider {
         request: ModelRoundRequest<'_>,
         local_stream: bool,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        let config = self.round_config(&request).await?;
+        self.keepalive.stop_scope(request.cache_scope);
+        let config = Arc::new(self.round_config(&request).await?);
         let (carrier, mode, api) =
             self.local_streaming
                 .carrier(&config, carrier(&config), local_stream);
         let (mut body, continuation) =
             serialize::body_with_continuation(&request, &config, carrier)?;
         super::visual::apply(&mut body, &request, carrier).await?;
-        let prefix = self.prefix_history.prepare(&body, &config)?.attribute(
-            request.usage_attribution,
-            request
-                .messages
-                .first()
-                .map(|message| message.content.as_ref()),
-        );
-        let serialized = prefix.body_json(&body).map_err(|error| {
-            ModelRoundError::Provider(Box::new(diagnostics::network(
-                &config.metadata.provider_id,
-                api,
-                &error.to_string(),
-            )))
-        })?;
-        let provider_cache_identity =
-            serialize::provider_cache_identity(&body, &serialized, &request, &config)?;
-        let serialized = Bytes::from(serialized);
-        let physical_admission =
-            self.admission(&request, &config, &body, serialized.clone(), carrier)?;
-        let serialized_bytes = serialized.len();
-        let http = self.round_request(&config, mode, carrier, serialized);
-        let http = super::route::cache_affinity(http, &config.auth, body);
-        let trace = super::request_trace::RequestTrace::round(self, prefix, &request).await?;
-        let watch = StreamWatch::new(request.stream_observer);
-        let observe_request = || {
-            self.observations.request(ProviderObservation {
-                request_bytes: serialized_bytes,
-            });
-        };
-        let response = transport::execute(transport::RequestExecution {
-            request: http,
-            provider: &config.metadata.provider_id,
-            api,
-            policy: config.policy,
-            external: request.cancellation.clone(),
-            mode,
-            stream_observer: Some(&watch),
-            attempts: request
-                .provider_retry_attempts
-                .unwrap_or(config.retry_attempts),
-            admission: request.provider_body_admission,
-            physical_admission: Some(&physical_admission),
-            serialized_bytes,
-            guard_start: if config.metadata.provider_id == "openai" {
-                transport::GuardStart::AfterAdmission
-            } else {
-                transport::GuardStart::BeforeAdmission
-            },
-            request_observer: &observe_request,
-            trace: &trace,
-            clock: self.clock.as_ref(),
-            quota: self.quota.as_deref(),
-        })
-        .await
-        .inspect_err(|error| watch.discard_after(error));
-        let prefix = trace.latest();
+        let dispatch::EncodedRequest {
+            prefix,
+            serialized,
+            provider_cache_identity,
+        } = self.encode_request(&request, &config, &body, api)?;
+        let DispatchedRound {
+            response,
+            prefix,
+            stream_refused,
+        } = self
+            .dispatch_round(
+                &request,
+                &config,
+                RoundDispatch {
+                    body,
+                    carrier,
+                    mode,
+                    api,
+                    serialized,
+                    prefix,
+                },
+            )
+            .await?;
         let response = match response {
             Ok(value) => value,
-            Err(ModelRoundError::Provider(error))
-                if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
-            {
+            Err(ModelRoundError::Provider(_error)) if local_stream && stream_refused => {
                 if let Some(prefix) = &prefix {
                     super::round_usage::record(self, &request, None, &config, prefix)?;
                 }
@@ -329,6 +299,20 @@ pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {
 }
 
 impl ModelRoundPort for ModelProvider {
+    fn worker_wait(&self, session: &str, turn: &str, waiting: bool) {
+        if waiting {
+            self.keepalive.start(session, turn);
+        } else {
+            self.keepalive.stop_turn(turn);
+        }
+    }
+    fn stop_cache_wait(&self, turn: &str) {
+        self.keepalive.stop_turn(turn);
+    }
+    fn close_cache_waits(&self) {
+        self.keepalive.close();
+    }
+
     fn context_sizing<'a>(
         &'a self,
         request: butler_turn::btcc::ContextSizingRequest<'a>,

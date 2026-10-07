@@ -16,6 +16,8 @@ use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, DeliveredOutcome, ProgressDestination, TurnOutcome, TurnOutcomeKind};
 
 mod authority;
+mod cache_wait;
+use cache_wait::{CacheWaitGuard, validate_suspension};
 
 pub(super) struct TurnRuntime {
     store: Arc<dyn TurnStore>,
@@ -97,14 +99,20 @@ impl TurnRuntime {
         Ok((project_terminal(&delivered)?, fresh))
     }
 
+    pub(super) fn close_cache_waits(&self) {
+        self.agent.close_cache_waits();
+    }
+
     pub(super) fn interrupt(&self, turn_id: &str) {
         // A process-local fence also covers preparation and session-tail waits.
         // Keep durable state for the existing turn_interrupted retry path.
+        self.agent.stop_cache_wait(turn_id);
         self.supervisor.install_stop(turn_id);
     }
 
     pub(super) async fn stop(&self, turn_id: &str) -> Result<TurnOutcome, BtccError> {
         // The synchronous fence precedes the first repository await.
+        self.agent.stop_cache_wait(turn_id);
         let ticket = self.supervisor.install_stop(turn_id);
         match self.store.stop(turn_id).await {
             Ok(outcome) => {
@@ -135,6 +143,11 @@ impl TurnRuntime {
         destination: &ProgressDestination,
         recovery_attempt: u32,
     ) -> Result<TurnRecord, BtccError> {
+        let mut cache_wait = CacheWaitGuard {
+            agent: self.agent.as_ref(),
+            turn: &turn.turn_id,
+            waiting: false,
+        };
         let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
         let claim = self.store.acquire_state_claim(&turn).await?;
         let progress = self.progress_scope(conversation, &turn, destination);
@@ -165,13 +178,14 @@ impl TurnRuntime {
         super::super::agent_loop::authority_batch(&progress, &transition, committed.is_ok()).await;
         committed?;
         let committed = self.store.activate_successor(&turn.turn_id).await?;
-        if let TurnTransition::Suspend { reason, .. } = transition {
-            if committed.suspension != Some(reason) {
-                return Err(BtccError::detected(
-                    BtccCode::SuspensionNotPersisted,
-                    "BTCC suspension commit did not persist its reason",
-                ));
-            }
+        validate_suspension(&transition, &committed)?;
+        cache_wait.waiting = committed.suspension == Some(SuspensionReason::WaitingForWorker);
+        self.agent.worker_wait(
+            &turn.session_id,
+            &turn.turn_id,
+            committed.suspension == Some(SuspensionReason::WaitingForWorker),
+        );
+        if matches!(transition, TurnTransition::Suspend { .. }) {
             return Ok(committed);
         }
         self.publish_state(conversation, &committed, destination)

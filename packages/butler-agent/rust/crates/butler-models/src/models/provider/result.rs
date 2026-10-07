@@ -447,7 +447,7 @@ fn provider_usage(
     )
 }
 
-fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
+pub(super) fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
     let prompt = number(value.pointer("/usage/input_tokens"))
         .or_else(|| number(value.pointer("/usage/prompt_tokens")));
     let total = number(value.pointer("/usage/total_tokens"));

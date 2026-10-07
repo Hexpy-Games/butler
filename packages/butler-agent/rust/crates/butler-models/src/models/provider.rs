@@ -2,6 +2,7 @@
 
 mod continuation;
 mod contracts;
+mod keepalive;
 mod local_stream;
 mod output_image;
 mod prefix_diagnostics;

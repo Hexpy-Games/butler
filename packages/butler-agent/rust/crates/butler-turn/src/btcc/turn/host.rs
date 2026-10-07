@@ -170,6 +170,7 @@ impl Coordinator {
                 (close.clone(), false, Vec::new())
             } else {
                 state.closing = true;
+                self.facade.close_cache_waits();
                 let close = Arc::new(Flight::new());
                 let active = state
                     .active

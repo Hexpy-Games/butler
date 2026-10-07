@@ -115,7 +115,7 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
     root: &Path,
     envelope: JsonDocument,
     metadata: Map<String, Value>,
-) -> QueueResult<QueuedInboundEvent> {
+) -> QueueResult<(QueuedInboundEvent, bool)> {
     let id = identity(&envelope)?;
     let claim = id.routing_hints.and_then(|hints| hints.app_queue_claim_id);
     let queue_id = canonical_id(&id.event_id);
@@ -131,11 +131,11 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
                 existing.envelope =
                     patch_envelope(&existing.envelope, None, Some(next_claim), None)?;
                 atomic_write(&record_path(root, "pending", &queue_id), &existing)?;
-                return Ok(existing);
+                return Ok((existing, true));
             }
             let new_id = reconciliation_id(&id.event_id, next_claim);
             if let Some((record, _)) = find_queue_id(root, &new_id)? {
-                return Ok(record);
+                return Ok((record, false));
             }
             let replacement_event = format!("{}:claim:{}", id.event_id, next_claim);
             let patched = patch_envelope(
@@ -149,13 +149,13 @@ pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
                 .metadata
                 .insert("reconciliationOfEventId".into(), id.event_id.into());
             atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
-            return Ok(record);
+            return Ok((record, true));
         }
-        return Ok(existing);
+        return Ok((existing, false));
     }
     let record = fresh(queue_id, envelope, metadata);
     atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
-    Ok(record)
+    Ok((record, true))
 }
 
 fn fresh(

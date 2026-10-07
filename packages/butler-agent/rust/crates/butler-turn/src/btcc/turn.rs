@@ -75,6 +75,10 @@ pub(super) struct TurnFacade {
 }
 
 impl TurnFacade {
+    pub(super) fn close_cache_waits(&self) {
+        self.runtime.close_cache_waits();
+    }
+
     pub(super) fn new(dependencies: &TurnFacadeDependencies) -> Self {
         let supervisor = TurnExecutionSupervisor::default();
         Self {

@@ -279,7 +279,7 @@ impl AgentRuntime {
         let (session_worktrees, workspace_recovery) =
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
         let work_service = Arc::new(DurableWorkService::new(work_repository));
-        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
+        let inbound_queue = models.inbound_queue(&paths.data_root);
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),

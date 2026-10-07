@@ -22,6 +22,21 @@ must remain unchanged. For local runs, use an **isolated** `BUTLER_DATA` and the
 under `runtime/inbound-events`, rather than a new stdin protocol. Stop it with SIGINT/SIGTERM
 or its existing `locks/butler-shutdown` flag. Existing installed processes are not replaced.
 
+While a session waits for a delegated worker, OpenAI routes keep their last request prefix
+warm with invisible one-word requests. The default interval is four minutes and the wait cap
+is 45 minutes. Set `BUTLER_PROMPT_CACHE_KEEPALIVE=off` to disable, or set
+`BUTLER_PROMPT_CACHE_KEEPALIVE_INTERVAL_SECONDS` and
+`BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS` to positive seconds (at most 86400).
+Snapshots stay in memory, limited to 128 sessions and a 32 MiB retention charge
+(four times serialized request bytes). Maintenance is skipped when that capacity is exceeded.
+Each completed ping appends usage to `metrics/prompt-cache-usage.jsonl` with
+`prefixDiagnostics.trigger=keepalive`. Inputs, cancellation, session close and shutdown stop
+maintenance immediately; a failed ping stops that wait without retries. Local and Anthropic
+routes do not send maintenance requests. Existing fields before input remain unchanged;
+API-key requests append or lower an output cap after input to 16 tokens (preserving a smaller
+existing cap), while Codex uses the one-word
+instruction because it rejects output caps.
+
 Development and CI builds use the official prebuilt ONNX Runtime binaries provided by `ort`.
 Release package builds explicitly select the repository-owned [static dependency recipe](scripts/STATIC_ORT.md)
 and build ONNX Runtime from its pinned source inputs. The existing Electron native producer

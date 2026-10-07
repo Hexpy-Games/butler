@@ -9,7 +9,7 @@ mod storage;
 mod tests;
 
 pub use error::{InboundQueueCode, InboundQueueError};
-pub use observers::InboundSettlementListener;
+pub use observers::{InboundEnqueueListener, InboundSettlementListener};
 pub use record::{ClaimedInboundEvent, QueuedInboundEvent};
 
 use parking_lot::Mutex;
@@ -31,6 +31,7 @@ pub struct InboundQueue {
     lane: Arc<Mutex<()>>,
     enqueue_wake: Arc<Notify>,
     settlements: Arc<observers::Observers>,
+    enqueues: Arc<observers::EnqueueObservers>,
 }
 
 pub(crate) type QueueResult<T> = Result<T, InboundQueueError>;
@@ -97,6 +98,7 @@ impl InboundQueue {
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
             settlements: Arc::default(),
+            enqueues: Arc::default(),
         }
     }
 
@@ -122,6 +124,10 @@ impl InboundQueue {
         self.enqueue_wake.notified().await;
     }
 
+    pub fn observe_enqueues(&self, listener: InboundEnqueueListener) {
+        self.enqueues.add(listener);
+    }
+
     pub fn observe_settlements(&self, listener: InboundSettlementListener) {
         self.settlements.add(listener);
     }
@@ -139,9 +145,12 @@ impl InboundQueue {
         let result = storage::enqueue_idempotent(&self.root, envelope, metadata);
         if result.is_ok() {
             // The durable queue write precedes this coalesced in-process wake.
+            if let Ok((record, true)) = &result {
+                self.enqueues.enqueued(&record.envelope);
+            }
             self.enqueue_wake.notify_one();
         }
-        result
+        result.map(|(record, _changed)| record)
     }
 
     pub fn find_idempotent(

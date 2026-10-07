@@ -16,6 +16,7 @@ pub(crate) struct AuthorityHandoff {
     authority: Arc<PrincipalAuthority>,
     queue: Arc<InboundQueue>,
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
+    cache_provider: Option<std::sync::Weak<butler_models::models::ModelProvider>>,
 }
 
 impl AuthorityHandoff {
@@ -28,7 +29,32 @@ impl AuthorityHandoff {
             authority,
             queue,
             now_iso,
+            cache_provider: None,
         }
+    }
+
+    pub(crate) fn for_runtime(
+        runtime: &crate::host::AgentRuntime,
+        queue: Arc<InboundQueue>,
+    ) -> Self {
+        Self::new(
+            runtime.authority.clone(),
+            queue,
+            Arc::new(|| {
+                butler_models::models::ModelConfigurationClock::now_iso(
+                    &crate::host::SystemIdentity,
+                )
+            }),
+        )
+        .with_cache_provider(&runtime.models.provider)
+    }
+
+    pub(crate) fn with_cache_provider(
+        mut self,
+        provider: &Arc<butler_models::models::ModelProvider>,
+    ) -> Self {
+        self.cache_provider = Some(Arc::downgrade(provider));
+        self
     }
 
     async fn enqueue(&self, request_ref: &str) -> Result<(), GatewayApplicationError> {
@@ -117,6 +143,13 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         runtime_session_id: String,
         reason: String,
     ) -> ApplicationFuture<()> {
+        if let Some(provider) = self
+            .cache_provider
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+        {
+            provider.stop_session_cache_wait(&runtime_session_id);
+        }
         let authority = self.authority.clone();
         Box::pin(async move {
             authority

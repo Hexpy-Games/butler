@@ -96,6 +96,11 @@ pub enum TransitionCommitError {
 
 /// Runs the model/tool loop of an admitted turn.
 pub trait AgentLoop: Send + Sync {
+    /// Reports the committed worker wait to the model owner.
+    fn worker_wait(&self, _session: &str, _turn: &str, _waiting: bool) {}
+    fn stop_cache_wait(&self, _turn: &str) {}
+    fn close_cache_waits(&self) {}
+
     /// Runs the turn under its claim until it answers, suspends or fails.
     fn run<'a>(
         &'a self,

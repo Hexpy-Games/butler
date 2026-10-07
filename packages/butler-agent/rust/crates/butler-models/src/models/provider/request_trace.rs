@@ -26,10 +26,26 @@ pub(crate) struct RequestTrace {
     phase: String,
     round: Option<f64>,
     kind: String,
+    transient: bool,
     latest: Mutex<Option<Value>>,
 }
 
 impl RequestTrace {
+    pub(super) fn ephemeral(prepared: Prepared, sink: Arc<dyn PromptUsageMetricSink>) -> Self {
+        Self {
+            prepared,
+            sink,
+            history: Arc::default(),
+            scope: None,
+            data: None,
+            phase: "keepalive".into(),
+            round: None,
+            kind: "parent".into(),
+            transient: true,
+            latest: Mutex::new(None),
+        }
+    }
+
     pub(super) async fn round(
         provider: &ModelProvider,
         prepared: Prepared,
@@ -71,11 +87,15 @@ impl RequestTrace {
             phase: phase.unwrap_or("background").into(),
             round,
             kind: kind.into(),
+            transient: false,
             latest: Mutex::new(None),
         })
     }
 
     pub(crate) async fn start(&self) -> Result<(), ModelRoundError> {
+        if self.transient {
+            return Ok(());
+        }
         let prepared = self.prepared.clone();
         let history = self.history.clone();
         let sink = self.sink.clone();

@@ -154,6 +154,7 @@ mod project_workspace;
 mod schedule_handoff;
 mod storage_concurrency;
 mod supervisor_ownership;
+mod worker_wait_keepalive;
 
 #[path = "support/memory_reset_support.rs"]
 mod memory_reset_support;

@@ -124,6 +124,16 @@ impl ProductionAgentLoop {
 }
 
 impl AgentLoop for ProductionAgentLoop {
+    fn worker_wait(&self, session: &str, turn: &str, waiting: bool) {
+        self.model.worker_wait(session, turn, waiting);
+    }
+    fn stop_cache_wait(&self, turn: &str) {
+        self.model.stop_cache_wait(turn);
+    }
+    fn close_cache_waits(&self) {
+        self.model.close_cache_waits();
+    }
+
     fn run<'a>(
         &'a self,
         turn: &'a TurnRecord,

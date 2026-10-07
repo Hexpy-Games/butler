@@ -31,7 +31,6 @@ use crate::host::{
     AppBranchSummarizerAdapter, AppContextRead, AppIngress, AppModelCatalog, AppMonitoring,
     AppQueueOwnerLivenessAdapter, AppReadiness, AppSessionProgress, AppSessionWorkspaces,
     AppSettingsFactsAdapter, AppSettingsMutation, AuthorityHandoff, ResolvedInstallation,
-    SystemIdentity,
 };
 use security_store::AppSecurityStore;
 #[cfg(debug_assertions)]
@@ -181,12 +180,9 @@ impl AppServer {
             identity_clock,
             approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
             queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
-            authority_handoff: Arc::new(AuthorityHandoff::new(
-                runtime.authority.clone(),
+            authority_handoff: Arc::new(AuthorityHandoff::for_runtime(
+                runtime,
                 owners.queue.clone(),
-                Arc::new(|| {
-                    butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
-                }),
             )),
             session_workspaces: session_workspaces.clone(),
             relocation_host: session_workspaces,

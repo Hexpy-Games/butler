@@ -7,7 +7,6 @@ src/models/configuration/environment.rs	merge_private_auth_environment	105
 src/models/configuration/provider.rs	ModelConfiguration::resolve_request	111
 src/models/configuration/provider/endpoint.rs	resolve	96
 src/models/diagnostics.rs	http	86
-src/models/provider/client.rs	ModelProvider::run	113
 src/models/provider/prompt.rs	run	119
 src/models/provider/prompt/serialize.rs	responses	112
 src/models/provider/prompt/serialize/compatible.rs	chat	95

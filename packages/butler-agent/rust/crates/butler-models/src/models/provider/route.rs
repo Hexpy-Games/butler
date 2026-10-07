@@ -107,14 +107,22 @@ pub(in crate::models::provider) fn cache_affinity(
     auth: &ProviderAuth,
     body: Value,
 ) -> RequestBuilder {
-    let request = if matches!(auth, ProviderAuth::Codex { .. })
+    let request = cache_affinity_ref(request, auth, &body);
+    drop(body);
+    request
+}
+
+pub(in crate::models::provider) fn cache_affinity_ref(
+    request: RequestBuilder,
+    auth: &ProviderAuth,
+    body: &Value,
+) -> RequestBuilder {
+    if matches!(auth, ProviderAuth::Codex { .. })
         && let Some(key) = body.get("prompt_cache_key").and_then(Value::as_str)
         && let Ok(value) = reqwest::header::HeaderValue::from_str(key)
     {
         request.header("session-id", value)
     } else {
         request
-    };
-    drop(body);
-    request
+    }
 }

@@ -80,6 +80,13 @@ pub(crate) type ContextProjectionFuture<'a> =
 
 /// Sends one model round to a provider.
 pub trait ModelRoundPort: Send + Sync {
+    /// Starts or releases ephemeral cache maintenance after a committed turn.
+    fn worker_wait(&self, _session: &str, _turn: &str, _waiting: bool) {}
+    /// Cancels maintenance without waiting for network I/O.
+    fn stop_cache_wait(&self, _turn: &str) {}
+    /// Stops all ephemeral provider work on host shutdown.
+    fn close_cache_waits(&self) {}
+
     /// How much message context the model can take for a request, if known.
     fn context_sizing<'a>(
         &'a self,

@@ -27,6 +27,25 @@ pub(crate) struct ProcessModels {
 }
 
 impl ProcessModels {
+    pub(crate) fn inbound_queue(
+        &self,
+        data_root: &std::path::Path,
+    ) -> Arc<butler_gateway::gateway::InboundQueue> {
+        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(data_root));
+        let cache_provider = Arc::downgrade(&self.provider);
+        inbound_queue.observe_enqueues(Arc::new(move |document| {
+            if let Ok(envelope) = document.read::<serde_json::Value>()
+                && let Some(session) = envelope
+                    .pointer("/routingHints/sessionId")
+                    .and_then(serde_json::Value::as_str)
+                && let Some(provider) = cache_provider.upgrade()
+            {
+                provider.stop_session_cache_wait(session);
+            }
+        }));
+        inbound_queue
+    }
+
     #[cfg(test)]
     pub(crate) fn new(
         data_root: PathBuf,

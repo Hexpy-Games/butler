@@ -19,6 +19,11 @@ pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
+    pub ping_headers: Mutex<Vec<String>>,
+    pub ping_times: Mutex<Vec<std::time::Instant>>,
+    pub fail_ping: AtomicBool,
+    pub hold_ping: AtomicBool,
+    pub ping_release: Notify,
     pub held: Notify,
     pub release: Notify,
     pub failing: AtomicBool,
@@ -47,11 +52,48 @@ pub(crate) async fn start(
 }
 async fn reply(
     State(script): State<Arc<Script>>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
+    if body["input"]
+        .as_array()
+        .and_then(|a| a.last())
+        .and_then(|v| v.pointer("/content/0/text"))
+        .and_then(Value::as_str)
+        .is_some_and(|v| v.starts_with("Cache keepalive."))
+    {
+        script.ping_headers.lock().unwrap().push(
+            headers
+                .get_all("session-id")
+                .iter()
+                .map(|v| v.to_str().unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        script
+            .ping_times
+            .lock()
+            .unwrap()
+            .push(std::time::Instant::now());
+        if script.fail_ping.load(Ordering::SeqCst) {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({"error":{"code":"invalid_request","message":"Stub ping failure"}})),
+            )
+                .into_response();
+        }
+        if script.hold_ping.load(Ordering::SeqCst) {
+            script.ping_release.notified().await;
+        }
+        return (
+            [("content-type", "text/event-stream")],
+            wire(message("OK"), Some(80)),
+        )
+            .into_response();
+    }
     let child = key.user_request.starts_with("role: steward");
     let kind = if child {
         "child"
@@ -144,7 +186,7 @@ async fn reply(
     } else {
         item
     };
-    ([("content-type", "text/event-stream")], wire(item)).into_response()
+    ([("content-type", "text/event-stream")], wire(item, None)).into_response()
 }
 fn work_id(body: &Value) -> String {
     body["input"]
@@ -165,7 +207,7 @@ fn message(text: &str) -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
 }
 
-fn wire(item: Value) -> String {
+fn wire(item: Value, cached: Option<u32>) -> String {
     let items = if let Some(batch) = item.as_array() {
         let mut items = vec![message("이전 결과를 바탕으로 다시 조사하겠습니다.")];
         items.extend(batch.iter().cloned());
@@ -188,7 +230,11 @@ fn wire(item: Value) -> String {
         }
         events.push(json!({"type":"response.output_item.done","output_index":index,"item":item}));
     }
-    events.push(json!({"type":"response.completed","response":{"id":"stub","object":"response","status":"completed","model":"gpt-6-luna","output":items,"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}));
+    let mut usage = json!({"input_tokens":100,"output_tokens":20,"total_tokens":120});
+    if let Some(cached) = cached {
+        usage["input_tokens_details"] = json!({"cached_tokens":cached});
+    }
+    events.push(json!({"type":"response.completed","response":{"id":"stub","object":"response","status":"completed","model":"gpt-6-luna","output":items,"usage":usage}}));
     events
         .into_iter()
         .enumerate()

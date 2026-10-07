@@ -136,6 +136,23 @@ fn component(
 }
 
 impl Prepared {
+    pub(super) fn extension_diagnostic(&self, next: &Self) -> Result<Value, ModelRoundError> {
+        if !next.prefix.starts_with(&self.prefix)
+            || next.metadata["promptCacheKeySha256"] != self.metadata["promptCacheKeySha256"]
+        {
+            return Err(ModelRoundError::StablePrefix(
+                "keepalive_prefix_changed".into(),
+            ));
+        }
+        let mut metadata = next.metadata.clone();
+        metadata["trigger"] = "keepalive".into();
+        metadata["previousPrefixBytes"] = self.prefix.len().into();
+        metadata["lcpBytes"] = self.prefix.len().into();
+        metadata["appendOnly"] = true.into();
+        metadata["lcpPercent"] = serde_json::json!(100);
+        Ok(metadata)
+    }
+
     #[cfg(test)]
     pub(super) fn assert_matches(&self, other: &Self) {
         assert_eq!(self.prefix, other.prefix);

@@ -23,6 +23,7 @@ pub(crate) struct AppSubsessions {
     progress: StorageProgressPublication,
     btcc: butler_turn::btcc::Btcc,
     settings: Arc<super::runtime_ports::AppSettingsFactsAdapter>,
+    cache_provider: std::sync::Weak<butler_models::models::ModelProvider>,
     shutdown: tokio_util::sync::CancellationToken,
 }
 
@@ -37,6 +38,7 @@ impl AppSubsessions {
             progress: runtime.progress.clone(),
             btcc: runtime.btcc.clone(),
             settings,
+            cache_provider: Arc::downgrade(&runtime.models.provider),
             shutdown: runtime.service_shutdown.clone(),
         }
     }
@@ -142,6 +144,9 @@ impl AppSubsessionPort for AppSubsessions {
         parent_session_id: String,
         relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
+        if let Some(provider) = self.cache_provider.upgrade() {
+            provider.stop_session_cache_wait(&parent_session_id);
+        }
         let service = self.service.clone();
         let btcc = self.btcc.clone();
         Box::pin(async move {
