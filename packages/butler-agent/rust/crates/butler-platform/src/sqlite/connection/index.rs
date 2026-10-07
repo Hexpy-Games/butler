@@ -49,7 +49,11 @@ impl IndexFile {
             // Darwin's delayed writeback. MS_SYNC finishes them during work.
             mapped.flush()?;
         }
-        self.file.sync_all()
+        // The WAL-index is rebuildable shared memory, not durable DB content.
+        // MS_SYNC above finishes delayed mapped writeback before idle. An extra
+        // sync_all invokes macOS F_FULLFSYNC on every read/write completion and
+        // serializes unrelated database work behind a device-cache flush.
+        Ok(())
     }
 }
 impl IndexOwner {
