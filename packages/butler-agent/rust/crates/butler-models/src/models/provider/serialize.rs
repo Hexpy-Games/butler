@@ -1,3 +1,4 @@
+mod input;
 mod messages;
 mod reasoning;
 mod stable;
@@ -71,9 +72,42 @@ pub(super) fn body_with_continuation(
 fn responses(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
-    mut continuation: Option<&mut LegacyPreparation>,
+    continuation: Option<&mut LegacyPreparation>,
 ) -> Result<Value, butler_turn::btcc::ModelRoundError> {
-    let model = &config.wire_model;
+    let mut body = response_controls(request, config);
+    if !request.tools.is_empty() {
+        body.insert(
+            "tools".into(),
+            Value::Array(request.tools.iter().map(response_tool).collect()),
+        );
+    }
+    body.insert("tool_choice".into(), choice(request.tool_choice).into());
+    if let Some(reasoning) = reasoning::effort(request) {
+        body.insert("reasoning".into(), serde_json::json!({"effort":reasoning}));
+    }
+    if let Some(response_id) = request
+        .continuation
+        .filter(|value| continuation::is_openai(value))
+        .and_then(|value| value.get("responseId"))
+        .and_then(Value::as_str)
+    {
+        body.insert("previous_response_id".into(), response_id.into());
+    }
+    body.insert(
+        "input".into(),
+        input::response_input(request, config, continuation)?,
+    );
+    if let Some(stable) = request.stable_provider_cache_prefix {
+        body = stable::order(body, stable, request.instructions)?;
+    }
+    apply_codex_controls(&mut body, request, config);
+    Ok(Value::Object(body))
+}
+
+fn response_controls(
+    request: &ModelRoundRequest<'_>,
+    config: &ProviderRequestConfig,
+) -> Map<String, Value> {
     let mut body = Map::new();
     if let Some(max) = request
         .max_output_tokens
@@ -81,7 +115,7 @@ fn responses(
     {
         body.insert("max_output_tokens".into(), max.into());
     }
-    body.insert("model".into(), model.as_str().into());
+    body.insert("model".into(), config.wire_model.as_str().into());
     if config.metadata.provider_id == "openai" {
         body.insert("store".into(), true.into());
         if let Some(prefix) = config.prompt_cache.key_prefix.as_deref() {
@@ -115,56 +149,25 @@ fn responses(
     {
         body.insert("instructions".into(), value.into());
     }
-    if !request.tools.is_empty() {
-        body.insert(
-            "tools".into(),
-            Value::Array(request.tools.iter().map(response_tool).collect()),
-        );
-    }
-    body.insert("tool_choice".into(), choice(request.tool_choice).into());
-    if let Some(reasoning) = reasoning::effort(request) {
-        body.insert("reasoning".into(), serde_json::json!({"effort":reasoning}));
-    }
-    if let Some(response_id) = request
-        .continuation
-        .filter(|value| continuation::is_openai(value))
-        .and_then(|value| value.get("responseId"))
-        .and_then(Value::as_str)
-    {
-        body.insert("previous_response_id".into(), response_id.into());
-    }
-    let input = if config.metadata.provider_id == "openai" {
-        continuation
-            .as_deref_mut()
-            .map(|value| std::mem::take(&mut value.request_items))
-            .unwrap_or(openai_input(request)?)
-    } else {
-        Value::Array(messages::response_items(request))
-    };
-    body.insert("input".into(), input);
-    if config.metadata.provider_id == "openai"
-        && matches!(
-            config.auth.mode(),
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        )
-    {
-        body.insert(
-            "__butler_codex_stateless_input".into(),
-            continuation
-                .map(|value| Value::Array(value.successful.stateless_request_input.clone()))
-                .unwrap_or_else(|| Value::Array(messages::bounded_items(request.messages))),
-        );
-    }
-    if let Some(stable) = request.stable_provider_cache_prefix {
-        body = stable::order(body, stable, request.instructions)?;
-    }
+    body
+}
+
+fn apply_codex_controls(
+    body: &mut Map<String, Value>,
+    request: &ModelRoundRequest<'_>,
+    config: &ProviderRequestConfig,
+) {
     if matches!(
         config.auth.mode(),
         ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
     ) {
         body.insert(
             "model".into(),
-            model.strip_suffix("-codex").unwrap_or(model).into(),
+            config
+                .wire_model
+                .strip_suffix("-codex")
+                .unwrap_or(&config.wire_model)
+                .into(),
         );
         if request
             .instructions
@@ -180,99 +183,12 @@ fn responses(
         body.shift_remove("prompt_cache_retention");
         body.shift_remove("max_output_tokens");
         body.shift_remove("previous_response_id");
-        if let Some(stateless) = body.shift_remove("__butler_codex_stateless_input") {
-            body.insert("input".into(), stateless);
-        }
         body.entry("text")
             .or_insert_with(|| serde_json::json!({"verbosity":"medium"}));
     }
-    Ok(Value::Object(body))
 }
 
 pub(super) use stable::identity as provider_cache_identity;
-
-fn openai_input(
-    request: &ModelRoundRequest<'_>,
-) -> Result<Value, butler_turn::btcc::ModelRoundError> {
-    if let Some(bounded) = request.bounded_continuation {
-        let response = bounded
-            .get("responseItemId")
-            .and_then(Value::as_str)
-            .and_then(|value| messages::turn_item_ordinal(Some(value)))
-            .ok_or_else(|| continuation_error("bounded_continuation_turn_item_identity_missing"))?;
-        let previous = request
-            .continuation
-            .filter(|value| continuation::is_openai(value));
-        if previous.is_some_and(|value| value.get("deliveredThroughOrdinal").is_none()) {
-            return Err(continuation_error("bounded_continuation_watermark_missing"));
-        }
-        let delivered = previous
-            .map(|value| {
-                value
-                    .get("deliveredThroughOrdinal")
-                    .and_then(Value::as_u64)
-                    .filter(|value| *value <= 1_000_000)
-                    .ok_or_else(|| continuation_error("bounded_continuation_watermark_invalid"))
-            })
-            .transpose()?
-            .map_or(-1_i64, |value| i64::try_from(value).unwrap_or(i64::MAX));
-        let (items, ordinals) = messages::bounded_items_with_ordinals(request.messages)
-            .ok_or_else(|| continuation_error("bounded_continuation_turn_item_identity_missing"))?;
-        if i64::try_from(response).unwrap_or(i64::MAX) <= delivered
-            || ordinals.iter().any(|value| *value >= response)
-            || ordinals.windows(2).any(|pair| pair[1] < pair[0])
-        {
-            return Err(continuation_error(
-                "bounded_continuation_item_identity_invalid",
-            ));
-        }
-        return Ok(Value::Array(
-            items
-                .into_iter()
-                .zip(ordinals)
-                .filter_map(|(item, ordinal)| {
-                    (i64::try_from(ordinal).unwrap_or(i64::MAX) > delivered).then_some(item)
-                })
-                .collect(),
-        ));
-    }
-    if let Some(previous) = request.continuation
-        && continuation::is_openai(previous)
-    {
-        let sent_tools = previous
-            .pointer("/sent/toolMessages")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        let sent_users = previous
-            .pointer("/sent/userMessages")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        let mut tools = 0;
-        let mut users = 0;
-        let items = request.messages.iter().filter_map(|message| match message.role {
-            ModelRoundRole::Tool => {
-                tools += 1;
-                (tools > sent_tools).then(|| serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":super::output_image::response_output(message)}))
-            }
-            ModelRoundRole::User => {
-                users += 1;
-                (users > sent_users).then(|| serde_json::json!({"role":"user","content":[{"type":"input_text","text":message.content}]}))
-            }
-            _ => None,
-        }).collect();
-        return Ok(Value::Array(items));
-    }
-    Ok(request
-        .messages
-        .iter()
-        .find(|message| message.role == ModelRoundRole::User)
-        .map(|message| Value::String(message.content.as_ref().to_owned()))
-        .unwrap_or(Value::String(String::new())))
-}
-
-fn continuation_error(code: &'static str) -> butler_turn::btcc::ModelRoundError {
-    butler_turn::btcc::ModelRoundError::Integrity(butler_turn::btcc::BtccError::relayed(code, code))
-}
 
 fn cache_scope(value: Option<&str>) -> String {
     let mut output = String::new();
