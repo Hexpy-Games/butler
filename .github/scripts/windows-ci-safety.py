@@ -20,6 +20,7 @@ ALLOWED_ACTIONS = re.compile(
     r'\./\.github/actions/[\w/-]+)\Z')
 
 RULES = {
+    'GitHub CLI required on owner runner': r"(?:\bgh(?:\.exe)?\s+(?:api|auth|run|release)\b|['\"]gh['\"]\s*,)",
     'MAX_PATH-unsafe recursive job tree operation': r'\b(?:Copy-Item|Remove-Item)\b[^\n]*-(?:Recurse|r|rec)\b',
     'owner Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
