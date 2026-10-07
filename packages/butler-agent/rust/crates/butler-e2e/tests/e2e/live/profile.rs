@@ -16,12 +16,20 @@ pub(crate) struct ExpiryProbe {
 
 impl ExpiryProbe {
     pub(crate) fn begin(path: PathBuf) -> Result<Self, HarnessError> {
-        let _lock = lock(&path)?;
+        let lock_guard = lock(&path)?;
         let before: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        if !before.is_object() {
+            return Err(harness_error("OAuth profile must be a JSON object"));
+        }
         let mut expired = before.clone();
         expired["expiresAt"] = json!(1);
-        write(&path, &expired)?;
-        Ok(Self { path, before })
+        let probe = Self { path, before };
+        let written = write(&probe.path, &expired);
+        // A post-rename sync error also needs restoration. Release the gate
+        // before the guard can run on an error return.
+        drop(lock_guard);
+        written?;
+        Ok(probe)
     }
 
     pub(crate) fn verify(&self, now_epoch_millis: i64) -> Result<(), HarnessError> {

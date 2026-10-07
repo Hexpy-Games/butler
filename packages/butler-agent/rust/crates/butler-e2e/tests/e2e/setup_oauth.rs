@@ -302,7 +302,8 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
     assert_eq!(reply.status, 200);
     assert_eq!(reply.data()["available"], true);
     probe.verify(
-        chrono::DateTime::parse_from_rfc3339(butler_e2e::e2e::fixtures::FIXTURE_TIME)?
+        chrono::DateTime::parse_from_rfc3339(butler_e2e::e2e::fixtures::FIXTURE_TIME)
+            .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?
             .timestamp_millis(),
     )?;
     let saved = std::fs::read(&path)?;
