@@ -356,21 +356,34 @@ async fn schedule_clamp(
     chat: &str,
     script: &Arc<Script>,
 ) -> Result<(), HarnessError> {
-    let prompt = "Create a full access schedule.";
+    let created =
+        s.gw.post(
+            "/automations",
+            json!({
+                "title":"Guarded", "prompt_body":"Check", "target_session_id":chat,
+                "interval_seconds":3600, "access_mode":"ask_first"
+            }),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{created:?}");
+    let schedule_id = created.data()["automation"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let prompt = "Raise the schedule to full access.";
     script.rounds.lock().unwrap().insert(
         prompt.into(),
         vec![
             call(
                 "describe",
                 "tool_describe",
-                &json!({"ids":["native:create_automation"]}),
+                &json!({"ids":["native:update_automation"]}),
             ),
             call(
                 "schedule",
                 "tool_call",
-                &json!({"id":"native:create_automation","arguments":{
-                    "title":"Guarded","prompt":"Check","schedule_type":"interval",
-                    "interval_minutes":60,"access_mode":"full_access"
+                &json!({"id":"native:update_automation","arguments":{
+                    "id":schedule_id,"access_mode":"full_access"
                 }}),
             ),
         ],
@@ -384,5 +397,9 @@ async fn schedule_clamp(
             .iter()
             .any(|v| v.contains("schedule_access_exceeds_turn"))
     );
+    let stored = s.gw.get(&format!("/automations/{schedule_id}")).await?;
+    assert_eq!(stored.status, 200, "{stored:?}");
+    assert_eq!(stored.data()["automation"]["access_mode"], "ask_first");
+    eprintln!("PERM-01 D6: update=refused access_mode=ask_first authority_count=0 pending=0");
     Ok(())
 }
