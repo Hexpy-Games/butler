@@ -68,6 +68,8 @@ test("model settings stay on the Models page and old links still resolve", () =>
     ["server", "server"],
     ["Server/Bridge", "server"],
     ["system-events", "system"],
+    ["default-permission", "general"],
+    ["access-mode", "general"],
   ] as const) {
     expect(normalizeSettingsSectionId(link), link).toBe(section);
   }
@@ -86,7 +88,6 @@ test("model settings stay on the Models page and old links still resolve", () =>
     ["remote-access", false],
     ["device-pairing", true],
     ["paired-devices", true],
-    ["permissions", false],
     ["grants", false],
     ["saved-keys", false],
     ["diagnostics", false],

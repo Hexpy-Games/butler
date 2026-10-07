@@ -845,13 +845,20 @@ export interface AppCopy {
       modifyInvalid: string;
     };
   };
+  /** Access modes. `askAlways` labels wire `ask_first`; `askFirst` labels wire `ask_except_reads`. */
   permissions: {
     fullAccess: string;
     fullAccessDesc: string;
+    askAlways: string;
+    askAlwaysDesc: string;
     askFirst: string;
     askFirstDesc: string;
+    auto: string;
+    autoDesc: string;
     readOnly: string;
     readOnlyDesc: string;
+    /** Tag on the recommended mode in access menus. */
+    recommended: string;
   };
   automations: {
     saved: string;
@@ -1068,7 +1075,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1208,7 +1215,8 @@ export interface AppCopy {
       consolidationModel: string;
       localReasoningBudget: string;
       contextLimit: string;
-      access: string;
+      /** Settings → General → Default permission: the new-chat field. */
+      chatAccess: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1306,6 +1314,7 @@ export interface AppCopy {
     };
     descriptions: {
       runtimeSupportedModelsOnly: string;
+      chatAccess: string;
       language: string;
       timezone: string;
       consolidationModel: string;

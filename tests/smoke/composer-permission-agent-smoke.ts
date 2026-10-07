@@ -84,7 +84,7 @@ try {
     await waitFor(async () => (await api(`/sessions/${session.id}/controls`)).controls.access_mode === mode, "agent session mode");
     await page.screenshot({ path: join(output, `${mode}.png`), fullPage: true });
   };
-  for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "먼저 확인"]]) {
+  for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "모두 확인"]]) {
     await choose(mode!, label!);
     toolPath = join(process.env.HOME!, `${mode}.txt`);
     step = 0;

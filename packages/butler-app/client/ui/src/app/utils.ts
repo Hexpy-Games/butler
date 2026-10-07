@@ -1822,6 +1822,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
+  if (section.includes("default-permission") || section.includes("access-mode") || section.includes("기본 권한")) return "general";
   if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||
@@ -1897,18 +1898,6 @@ export function tokenWindowLabel(tokens?: number): string {
   if (tokens >= 1_000_000)
     return `${Number((tokens / 1_000_000).toFixed(2))}M API context`;
   return `${Math.round(tokens / 1000)}k API context`;
-}
-
-export function accessLabel(value: string): string {
-  if (value === "ask_first") return appCopy.permissions.askFirst;
-  if (value === "read_only") return appCopy.permissions.readOnly;
-  return appCopy.permissions.fullAccess;
-}
-
-export function accessDescription(value: string): string {
-  if (value === "ask_first") return appCopy.permissions.askFirstDesc;
-  if (value === "read_only") return appCopy.permissions.readOnlyDesc;
-  return appCopy.permissions.fullAccessDesc;
 }
 
 export function reasoningLabel(value: ReasoningEffort | string): string {
