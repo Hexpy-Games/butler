@@ -1,4 +1,4 @@
-// UI smoke: real agent controls, tool authority and original permission menu and next-tool authority.
+// UI smoke: real agent controls, the shipped permission menu and next-tool authority.
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -76,7 +76,7 @@ try {
     await editor.fill("권한 검증");
     await page.locator('[data-test-class="access-button"]').click();
     const menu = page.locator('[data-test-class="composer-menu"]');
-    assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 3);
+    assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4);
     await page.screenshot({ path: join(output, `${mode}-menu.png`), fullPage: true });
     await menu.getByRole("button").filter({ has: page.getByText(label, { exact: true }) }).click();
     await page.waitForFunction(label => document.querySelector('[data-test-class="access-button"]')?.getAttribute("aria-label")?.includes(label), label);
@@ -84,7 +84,8 @@ try {
     await waitFor(async () => (await api(`/sessions/${session.id}/controls`)).controls.access_mode === mode, "agent session mode");
     await page.screenshot({ path: join(output, `${mode}.png`), fullPage: true });
   };
-  for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "먼저 확인"]]) {
+  let grantsStoredAndHidden = 0;
+  for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "모두 확인"], ["ask_except_reads", "먼저 확인"]]) {
     await choose(mode!, label!);
     toolPath = join(process.env.HOME!, `${mode}.txt`);
     step = 0;
@@ -105,17 +106,18 @@ try {
       await api(`/authority-requests/${ref}/allow?session_id=${session.id}`, "POST", { scope: "conversation" });
       await waitFor(() => existsSync(toolPath), "approved write");
       assert.equal(readFileSync(toolPath, "utf8"), "permission-smoke");
-      await waitFor(async () => (await api(`/authority-requests?session_id=${session.id}`)).permissions.length === 1, "grant");
+      grantsStoredAndHidden += 1;
+      await waitFor(async () => (await api(`/authority-requests?session_id=${session.id}`)).permissions.length === grantsStoredAndHidden, "grant");
       await page.locator('[data-test-class="access-button"]').click();
       const menu = page.locator('[data-test-class="composer-menu"]');
-      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 3, "grant does not add menu items");
-      assert.equal(await page.locator('[data-test-class="access-button"]').getAttribute("aria-label"), "권한: 먼저 확인", "grant does not add pill count");
+      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4, "grant does not add menu items");
+      assert.equal(await page.locator('[data-test-class="access-button"]').getAttribute("aria-label"), `권한: ${label}`, "grant does not add pill count");
       assert(!(await menu.innerText()).includes("허용한"), "no grant section");
-      await page.screenshot({ path: join(output, "grant-hidden.png"), fullPage: true });
+      await page.screenshot({ path: join(output, `${mode}-grant-hidden.png`), fullPage: true });
       await page.keyboard.press("Escape");
     }
   }
-  console.log(JSON.stringify({ ok: true, modes: 3, nextToolChecks: 3, grantsStoredAndHidden: 1, agentPid: agent.pid }));
+  console.log(JSON.stringify({ ok: true, modes: 4, nextToolChecks: 4, grantsStoredAndHidden, agentPid: agent.pid }));
 } finally {
   await browser?.close(); provider.stop(true);
   spawnSync(binary, ["stop", "--data", data, "--quiet"], { stdio: "ignore" });

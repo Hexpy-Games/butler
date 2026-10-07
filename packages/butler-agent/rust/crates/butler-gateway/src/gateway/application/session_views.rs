@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 
 use super::{
     AppApplication, AppSessionBranchQuery, AppSessionViewPage, AppWorkStreamQuery,
-    GatewayApplicationError, app_session_hint,
+    GatewayApplicationError,
 };
 use crate::gateway::{TurnRecord, protocol::APP_PROTOCOL_VERSION};
 use helpers::*;
@@ -322,11 +322,11 @@ impl AppApplication {
     /// when they cannot be read, so the rest of the view still renders.
     async fn parent_subsessions(&self, session_id: &str) -> Value {
         let _measurement = self.storage.measure_view("children");
-        let projection = self
-            .dependencies
-            .subsessions
-            .projection(app_session_hint(session_id), None)
-            .await;
+        let projection = async {
+            let hint = self.runtime_hint(session_id).await?;
+            self.dependencies.subsessions.projection(hint, None).await
+        }
+        .await;
         let mut projection = projection.unwrap_or_else(|error| {
             butler_core::diagnostic!(
                 "[gateway] session view without subsessions: {error} cause={:?}",

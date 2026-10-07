@@ -63,8 +63,12 @@ pub(super) fn context(input: &CapabilityInvocation<'_>, root: PathBuf) -> Mutati
 }
 
 /// Absolute paths use OS permissions; relative paths resolve against the session workspace.
-pub(super) fn path_form(_input: &CapabilityInvocation<'_>) -> butler_turn::workspace::PathForm {
-    butler_turn::workspace::PathForm::RelativeOrAbsolute
+pub(super) fn path_form(input: &CapabilityInvocation<'_>) -> butler_turn::workspace::PathForm {
+    if input.contained {
+        butler_turn::workspace::PathForm::Contained
+    } else {
+        butler_turn::workspace::PathForm::RelativeOrAbsolute
+    }
 }
 
 pub(super) fn allowed(input: &CapabilityInvocation<'_>, effect: &str) -> bool {
@@ -173,4 +177,24 @@ fn parse_number(value: &str) -> f64 {
         return u64::from_str_radix(digits, 8).map_or(f64::NAN, |number| number as f64);
     }
     value.parse::<f64>().unwrap_or(f64::NAN)
+}
+
+/// Contained reads protect the installation at the open/traversal boundary.
+pub(super) fn read_protected_roots(input: &CapabilityInvocation<'_>) -> Vec<PathBuf> {
+    let mut roots = input.protected_ledger_roots.to_vec();
+    if input.contained
+        && let Some(root) = input.installation_root
+    {
+        roots.push(root.to_path_buf());
+    }
+    roots
+}
+
+pub(super) fn read_context(input: &CapabilityInvocation<'_>, root: PathBuf) -> MutationContext {
+    MutationContext {
+        root,
+        path_form: path_form(input),
+        installation_root: None,
+        protected_roots: read_protected_roots(input),
+    }
 }

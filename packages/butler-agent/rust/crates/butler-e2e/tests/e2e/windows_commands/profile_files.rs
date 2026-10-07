@@ -90,7 +90,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         script.select(case.clone());
         let accepted = s.gw.say("general", "다운로드 폴더 정리해줘").await?;
         let id = accepted_turn_id(&accepted)?;
-        if access == Access::AskFirst {
+        if access == Access::AskAlways {
             super::file_paths::approve(&s, &id, &case, &script).await?;
         }
         let turn =
@@ -167,7 +167,7 @@ async fn owner_downloads_file_tool_replay_in_both_access_modes() -> Result<(), H
     let Some(path) = std::env::var_os("BUTLER_E2E_DOWNLOADS_REAL_PATH") else {
         return Ok(());
     };
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(Path::new(&path), access).await?;
     }
     Ok(())

@@ -351,7 +351,7 @@ fn placeholder_message(
     message_id: &str,
 ) -> Result<MessageRecord, AppStorageError> {
     db.query_row(
-        "SELECT rowid,id,chat_id,text,status,created_at,updated_at,safe_error_code,retryable FROM messages WHERE id=?1",
+        "SELECT rowid,id,chat_id,text,status,created_at,updated_at,safe_error_code,retryable FROM app_owned_messages WHERE id=?1",
         [message_id],
         |row| {
             let status: String = row.get(4)?;

@@ -16,6 +16,7 @@ async fn rust(
         .invoke(
             name,
             CapabilityInvocation {
+                contained: false,
                 call,
                 workspace_reference: None,
                 workspace_path: Some(&fixture.root),

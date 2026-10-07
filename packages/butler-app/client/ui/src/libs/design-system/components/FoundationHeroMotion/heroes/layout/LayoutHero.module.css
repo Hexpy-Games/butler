@@ -82,7 +82,7 @@
 
 .dim {
   position: absolute;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* A measure: a hairline with an end tick at each end. */

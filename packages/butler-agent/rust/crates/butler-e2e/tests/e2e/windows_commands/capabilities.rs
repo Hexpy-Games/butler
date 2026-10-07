@@ -184,7 +184,7 @@ async fn operation(
     let turn = turn?;
     if turn_state(&turn) == "waiting_for_form" {
         assert!(!case.refused, "Refused operation must not request approval");
-        assert_eq!(access, Access::AskFirst);
+        assert_eq!(access, Access::AskAlways);
         let cards = s.gw.approval_requests(chat).await?;
         let card = cards
             .iter()
@@ -262,7 +262,7 @@ async fn operation(
             )
             .await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
-    } else if access == Access::AskFirst && !case.refused {
+    } else if access == Access::AskAlways && !case.refused {
         panic!(
             "Mutation/command must show an approval card: {turn}; result={:?}",
             script.result.lock().unwrap()
@@ -456,7 +456,7 @@ async fn real_profile_like_basic_capabilities_in_both_access_modes() -> Result<(
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows capability suite"
     );
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         run(access).await?;
     }
     Ok(())
@@ -469,7 +469,7 @@ async fn delegated_file_approval_is_visible_in_parent() -> Result<(), HarnessErr
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows child approval"
     );
-    let (s, chat, script, server) = setup(Access::AskFirst).await?;
+    let (s, chat, script, server) = setup(Access::AskAlways).await?;
     delegation::approve(&s, &chat, &script).await?;
     s.finish().await?;
     server.abort();

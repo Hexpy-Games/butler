@@ -1,9 +1,12 @@
+// test-category: pure-logic
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkDist } from "./check-dist";
+import { SITE_ROOT } from "./check-token-sync";
 
+describe("check-dist.test.ts", () => {
 let dir: string;
 
 function put(path: string, text = "<!doctype html>"): void {
@@ -118,4 +121,19 @@ describe("checkDist", () => {
     put("pagefind/pagefind-entry.json", JSON.stringify({ languages: { ko: {} } }));
     expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([]);
   });
+});
+});
+
+describe("site-fonts.test.ts", () => {
+// The manual uses the app's bundled faces (DS spec Typeface Contract), not a copy.
+test("base.css loads the app's bundled fonts.css, which exists", () => {
+  const base = readFileSync(join(SITE_ROOT, "src", "ds", "base.css"), "utf8");
+  const ref = /@import url\("([^"]*fonts\/fonts\.css)"\);/u.exec(base)?.[1];
+  expect(ref).toBe("../../../butler-app/client/ui/src/libs/design-system/fonts/fonts.css");
+  expect(existsSync(join(SITE_ROOT, "src", "ds", ref!))).toBe(true);
+});
+
+test("the site root ships the fonts' OFL notices", () => {
+  expect(readFileSync(join(SITE_ROOT, "scripts", "build-ds.ts"), "utf8")).toContain("THIRD_PARTY_NOTICES.txt");
+});
 });

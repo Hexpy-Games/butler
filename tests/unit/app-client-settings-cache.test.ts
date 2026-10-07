@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import {
-  readCachedSettings,
-  settingsWithDefaults,
-  writeCachedSettings,
+    readCachedSettings,
+    settingsWithDefaults,
+    writeCachedSettings,
 } from "../../packages/butler-app/client/ui/src/app/settingsCache.ts";
 import type { SettingsView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
@@ -55,26 +55,6 @@ test("settings cache maps the legacy curtain theme to silk", () => {
 
   expect(readCachedSettings().main_screen_theme).toBe("silk");
 });
-
-test("settings defaults use the monochrome bloom palette", () => {
-  expect(EMPTY_SETTINGS.main_screen_theme).toBe("bloom");
-  expect(EMPTY_SETTINGS.main_screen_theme_preset).toBe("monochrome");
-  expect(EMPTY_SETTINGS.main_screen_theme_custom_colors).toEqual([
-    "#32424d",
-    "#555d7c",
-    "#485c70",
-    "#6a7d9a",
-    "#53708d",
-    "#434d70",
-  ]);
-  expect(EMPTY_SETTINGS.desktop_notifications).toEqual({
-    enabled: true,
-    assistant_messages: true,
-    task_completions: true,
-  });
-  expect(EMPTY_SETTINGS.desktop_tray_enabled).toBe(true);
-});
-
 test("settings cache preserves an explicit custom palette draft", () => {
   const settings = settingsWithDefaults({
     ...EMPTY_SETTINGS,

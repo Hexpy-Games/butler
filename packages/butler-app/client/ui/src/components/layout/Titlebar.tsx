@@ -37,6 +37,7 @@ export function Titlebar() {
   const storeView = useButlerStore((state) => state.view);
   const storeNavigation = useButlerStore((state) => state.navigation);
   const storeActiveChatId = useButlerStore((state) => state.activeChatId);
+  const storeActiveChatTitle = useButlerStore((state) => state.activeChatTitle);
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
@@ -49,9 +50,10 @@ export function Titlebar() {
         activeChatFromNavigation(
           storeNavigation,
           storeActiveChatId,
+          storeActiveChatTitle,
         ) as ActiveChatView,
       ),
-    [storeActiveChatId, storeNavigation, storeView],
+    [storeActiveChatId, storeActiveChatTitle, storeNavigation, storeView],
   );
   const activeSession =
     storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId)

@@ -25,8 +25,10 @@ const MODEL: &str = "openai/gpt-6-luna";
 #[tokio::test]
 async fn schedule_override_never_becomes_the_mode_of_turns_without_controls() {
     for (conversation, schedule) in [
-        (AccessMode::AskFirst, AccessMode::FullAccess),
-        (AccessMode::FullAccess, AccessMode::AskFirst),
+        (AccessMode::AskAlways, AccessMode::FullAccess),
+        (AccessMode::AskExceptReads, AccessMode::FullAccess),
+        (AccessMode::FullAccess, AccessMode::AskExceptReads),
+        (AccessMode::FullAccess, AccessMode::AskAlways),
         (AccessMode::ReadOnly, AccessMode::FullAccess),
     ] {
         let root = std::env::temp_dir().join(format!(

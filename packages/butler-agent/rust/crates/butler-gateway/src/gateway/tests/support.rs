@@ -97,6 +97,9 @@ impl GatewayMutationCommands for TestApplication {
     ) -> ApplicationFuture<AppSessionActionResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn clear_general(&self, _: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn delete_session(&self, _: String, _: bool) -> ApplicationFuture<AppSessionActionResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

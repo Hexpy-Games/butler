@@ -28,12 +28,7 @@ impl GuidedTurnFactoryAdapter {
                 .to_string_lossy()
                 .into_owned()
         });
-        let access_mode = match policy.access_mode {
-            butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-            butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-            butler_turn::btcc::AccessMode::FullAccess => "full_access",
-        }
-        .into();
+        let access_mode = policy.access_mode.as_str().into();
         Ok(Some(butler_turn::btcc::GuidedHookBinding {
             port,
             parent_session_id: parent,

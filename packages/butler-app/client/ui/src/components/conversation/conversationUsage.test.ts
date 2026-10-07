@@ -1,3 +1,4 @@
+// test-category: race
 import { afterEach, describe, expect, test } from "bun:test";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { conversationUsageSummary, usageTime } from "./conversationUsage";

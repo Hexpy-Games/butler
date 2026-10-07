@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";

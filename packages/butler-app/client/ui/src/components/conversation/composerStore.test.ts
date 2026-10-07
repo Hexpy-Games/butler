@@ -1,3 +1,4 @@
+// test-category: race
 import { beforeEach, expect, test } from "bun:test";
 import { useComposerStore } from "./composerStore.ts";
 
@@ -9,8 +10,8 @@ beforeEach(() => {
   });
 });
 
-test("composer starts in ask_first before settings load", () => {
-  expect(useComposerStore.getInitialState().accessMode).toBe("ask_first");
+test("composer starts in ask_except_reads before settings load", () => {
+  expect(useComposerStore.getInitialState().accessMode).toBe("ask_except_reads");
 });
 
 test("composer store activates and restores independent session drafts", () => {

@@ -106,7 +106,7 @@ async fn replay(
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
-    if access == Access::AskFirst {
+    if access == Access::AskAlways {
         super::observation::approve_exact(&s, &id, &command).await?;
     }
     let turn =
@@ -262,7 +262,7 @@ async fn profile_downloads_with_external_data_in_both_access_modes() -> Result<(
     // Opt-in only: keep CODEX_HOME, all data and caches in the sandbox even
     // when HOME/USERPROFILE describe the real read-only Downloads proof.
     let real = std::env::var("BUTLER_E2E_DOWNLOADS_REAL_PROFILE").ok();
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(access, false, real.as_deref()).await?;
     }
     Ok(())
@@ -276,7 +276,7 @@ async fn profile_downloads_with_default_dot_butler_layout_in_both_access_modes()
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows profile replay"
     );
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(access, true, None).await?;
     }
     Ok(())
@@ -291,7 +291,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         "Windows path syntax"
     );
     let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
-    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskFirst);
+    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskAlways);
     let (url, script, server) = provider::start(command).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)

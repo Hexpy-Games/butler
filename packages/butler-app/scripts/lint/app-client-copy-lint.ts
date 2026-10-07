@@ -1,3 +1,4 @@
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -84,6 +85,65 @@ for (const file of localizedComponentFiles) {
       });
     }
   });
+}
+
+
+type Copy = ReturnType<typeof getAppCopy>;
+
+const locales = ["en-US", "ko-KR"] as const;
+
+/** Agent internals that the default UI must not name. */
+const INTERNAL_TERMS = [/Steward/u, /Ledger/u, /원장/u, /Gateway/u, /Worker/iu, /automation/iu, /자동화/u];
+
+function strings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(strings);
+  if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+  return [];
+}
+
+function offending(texts: string[], terms: RegExp[]): string[] {
+  return texts.filter((text) => terms.some((term) => term.test(text)));
+}
+
+/** Copy on screens every user sees before turning on developer mode. */
+function defaultSurfaceCopy(copy: Copy): string[] {
+  return strings([
+    copy.inspector.tabs.summary,
+    copy.inspector.tabs.artifacts,
+    copy.inspector.tabs.automations,
+    copy.automations.inspector.empty,
+    copy.interfacePanels.progress,
+    copy.interfacePanels.noProgress,
+    copy.interfacePanels.noPlans,
+    copy.interfacePanels.noSpecs,
+    copy.composer.gitMissingTitle,
+    copy.composer.gitMissingMessage,
+    copy.interfaceFeedback.stewardStopFailed,
+    copy.interfaceFeedback.stewardResumeFailed,
+    copy.projectSignpost,
+    copy.projectStatistics,
+  ]);
+}
+
+
+for (const locale of locales) {
+  for (const text of offending(defaultSurfaceCopy(getAppCopy(locale)), INTERNAL_TERMS)) {
+    localizedFindings.push({ path: "packages/butler-i18n/src/locales/" + locale, line: 1, text, reason: "default surfaces must avoid agent internal names" });
+  }
+}
+const collectStrings = (value: unknown): string[] => {
+  if (typeof value === "string") return [value];
+  if (typeof value === "function" && value.length === 0) return collectStrings(value());
+  return value && typeof value === "object" ? Object.values(value).flatMap(collectStrings) : [];
+};
+for (const text of collectStrings(getAppCopy("ko-KR"))) {
+  if (!/워커|작업자|버틀러|타임존|보관함|Butler App|자동화/u.test(text)) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text, reason: "use the approved Korean glossary (Worker, Butler, 시간대, 아카이브, 예약 작업)" });
+}
+for (const text of collectStrings(getAppCopy("en-US"))) {
+  if (!/\bautomations?\b|\bscheduled tasks?\b/iu.test(text)) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/en.ts", line: 1, text, reason: "use schedule for the scheduled-run feature" });
 }
 
 if (findings.length > 0 || localizedFindings.length > 0) {

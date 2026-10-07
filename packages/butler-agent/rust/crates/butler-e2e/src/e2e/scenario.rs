@@ -48,7 +48,8 @@ pub enum Fixture {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Access {
     FullAccess,
-    AskFirst,
+    AskAlways,
+    AskExceptReads,
 }
 
 impl Access {
@@ -56,7 +57,8 @@ impl Access {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FullAccess => "full_access",
-            Self::AskFirst => "ask_first",
+            Self::AskAlways => "ask_first",
+            Self::AskExceptReads => "ask_except_reads",
         }
     }
 }

@@ -3,7 +3,8 @@ import type { ReactElement, ReactNode } from "react";
 import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
-export type AccessMode = "full_access" | "ask_first" | "read_only";
+/** Wire values. `ask_first` asks before every action (모두 확인); `ask_except_reads` asks before changes and commands (먼저 확인). */
+export type AccessMode = "read_only" | "ask_first" | "ask_except_reads" | "auto" | "full_access";
 export type ChatKind = "chat" | "project";
 export type StatusTone = "ok" | "muted" | "error";
 export type SettingsSectionId =
@@ -843,6 +844,7 @@ export interface ProjectSummary {
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
 
 export interface NavigationView {
+  archive_count?: number;
   space: import("../../../shared/app-contracts.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
