@@ -1,4 +1,4 @@
-//! Ask-first access (owner decision #236): ask-first is the default and asks
+//! Legacy ask_first (Ask every time, owner decision #236) asks
 //! before every effect except three actions, which proceed without an
 //! approval: first-conversation onboarding (ACC-01), memory save (ACC-02)
 //! and analysis of an image the user attached. An MCP tool still asks
@@ -12,7 +12,7 @@
 //! read-only: `guided/tools/image/tests.rs`). ACC-03 is the native-vision
 //! smoke test next to them.
 //!
-//! Ask-first is the default of a new install; an install from before it
+//! New installs use ask_except_reads (Ask first). An install from before #236
 //! that never saved an access mode keeps full access (ACC-05).
 #![allow(
     clippy::unwrap_used,
@@ -66,7 +66,7 @@ async fn acc_01_onboarding_saves_without_approval_in_ask_first() -> Result<(), H
     let s = Setup::new("ACC-01")?
         .cassette("ACC-01")
         .fixture(Fixture::FirstConversation)
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .placeholder("NONCE", &name)
         .start()
         .await?;
@@ -101,7 +101,7 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
     let code = nonce();
     let setup = Setup::new("ACC-02")?
         .cassette("ACC-02")
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .placeholder("NONCE", &code);
     let recall = fixtures::embedding_assets(&setup.sandbox.data)?;
     let s = setup.start().await?;
@@ -156,7 +156,7 @@ async fn acc_03_attached_image_reaches_native_vision_in_ask_first() -> Result<()
     butler_e2e::gate!();
     let s = Setup::new("ACC-03")?
         .cassette("ACC-03")
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .start()
         .await?;
     // No 8: in this pixel font it reads as a 3.
@@ -200,7 +200,7 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
     let token = nonce();
     let s = Setup::new("ACC-04")?
         .cassette("ACC-04")
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .placeholder("NONCE", &token)
         .start()
         .await?;
@@ -258,7 +258,7 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
 }
 
 /// ACC-05 — Existing installs (owner decision #236: saved settings are not
-/// migrated). A new install asks first. An install from before ask-first
+/// migrated). A new install uses ask_except_reads; stored ask_first still asks every time. An install from before ask-first
 /// that never saved an access mode keeps full access after the upgrade: in
 /// its settings, its conversations, the schedules the upgrade fills and new
 /// schedules. A mode the user then saves is what it runs with, across a
@@ -272,12 +272,12 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
     let mut s = setup.start().await?;
     assert_eq!(
         s.gw.settings().await?["access_mode"],
-        "ask_first",
+        "ask_except_reads",
         "new install"
     );
-    assert_eq!(chat_access(&s, "general").await?, "ask_first");
+    assert_eq!(chat_access(&s, "general").await?, "ask_except_reads");
     let stored = schedule(&s).await?;
-    assert_eq!(stored["access_mode"], "ask_first", "{stored}");
+    assert_eq!(stored["access_mode"], "ask_except_reads", "{stored}");
     let stored = stored["id"].as_str().unwrap().to_owned();
 
     // The data folder as the release before ask-first left it: no recorded
@@ -359,7 +359,7 @@ async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError>
     butler_e2e::gate!();
     let s = Setup::new("ACC-07")?
         .cassette("ACC-07")
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .start()
         .await?;
     let before = s.gw.settings().await?["wallpaper"].clone();
@@ -395,7 +395,7 @@ async fn acc_07_allow_applies_the_wallpaper_change() -> Result<(), HarnessError>
     butler_e2e::gate!();
     let mut s = Setup::new("ACC-07-ALLOW")?
         .cassette("ACC-07-ALLOW")
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .start()
         .await?;
     let before = s.gw.settings().await?["wallpaper"].clone();

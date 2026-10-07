@@ -4,7 +4,7 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
-pub(super) fn cassette() -> Result<Cassette, HarnessError> {
+pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut c = Cassette::load("TOOL-01")?;
     c.exchanges.clear();

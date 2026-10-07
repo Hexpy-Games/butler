@@ -35,6 +35,7 @@ pub struct Capabilities {
 
 #[derive(Clone, Debug)]
 pub struct CapabilityInvocation<'a> {
+    pub contained: bool,
     pub call: &'a Value,
     pub workspace_reference: Option<&'a WorkspaceReference>,
     pub workspace_path: Option<&'a std::path::Path>,

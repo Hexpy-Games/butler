@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 
 import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
@@ -98,7 +99,7 @@ test("a new schedule preselects the target conversation's current access mode an
 test("a new schedule falls back to ask first when the target conversation's mode is unknown", async () => {
   installBridge({ getSessionControls: controlsFor({}) });
   await useAutomationStore.getState().initialize("new", sessions, noop);
-  expect(useAutomationStore.getState().accessMode).toBe("ask_first");
+  expect(useAutomationStore.getState().accessMode).toBe("ask_except_reads");
 });
 
 test("changing the target follows that conversation's mode until the user picks one", async () => {

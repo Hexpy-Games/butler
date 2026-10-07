@@ -449,8 +449,13 @@ impl super::AppApplication {
         &self,
         mut query: AppUsageMonitorQuery,
     ) -> crate::gateway::ApplicationFuture<Value> {
-        // The runtime id is derived from the App id, without a catalog read.
-        query.runtime_session_id = query.session_id.as_deref().map(super::app_session_hint);
-        self.dependencies.monitoring.usage_monitor(query)
+        let this = self.clone_handle();
+        Box::pin(async move {
+            query.runtime_session_id = match query.session_id.as_deref() {
+                Some(chat) => Some(this.runtime_hint(chat).await?),
+                None => None,
+            };
+            this.dependencies.monitoring.usage_monitor(query).await
+        })
     }
 }

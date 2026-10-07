@@ -107,7 +107,7 @@ async fn run(
     let deadline = started + Duration::from_secs(300);
     let mut timed_out = false;
     loop {
-        if access == Access::AskFirst {
+        if access == Access::AskAlways {
             approvals(&s).await?;
         }
         let answer = proposal(&s).await?;
@@ -191,7 +191,7 @@ async fn owner_downloads_six_real_chats() -> Result<(), HarnessError> {
             .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?,
     );
     let mut completed = 0;
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         for repeat in 1..=3 {
             completed += usize::from(run(access, repeat, &profile, &downloads).await?);
         }
@@ -223,7 +223,7 @@ async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
     }
     let profile = setup.sandbox.home.to_str().unwrap();
     assert!(
-        run(Access::AskFirst, 1, profile, &downloads).await?,
+        run(Access::AskAlways, 1, profile, &downloads).await?,
         "Released real chat must list the complete folder and request approval before moving files"
     );
     Ok(())

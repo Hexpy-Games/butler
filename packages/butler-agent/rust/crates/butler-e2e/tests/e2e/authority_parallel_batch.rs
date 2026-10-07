@@ -17,7 +17,7 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
         let modify = decision == "modify";
         let (mut s, script, server) = super::turn_continuation::setup(
             super::turn_continuation::Mode::ParallelFiles,
-            Access::AskFirst,
+            Access::AskAlways,
         )
         .await?;
         for i in 0..3 {
@@ -153,7 +153,7 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
     script.parallel_files.store(true, Ordering::SeqCst);
     script.terminal_fault.store(fault, Ordering::SeqCst);
     let setup = Setup::new("AUTHORITY-PARALLEL-CHILD")?
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
     *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -335,7 +335,7 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
     for allow_first in [false, true] {
         let (mut s, script, server) = super::turn_continuation::setup(
             super::turn_continuation::Mode::ParallelFiles,
-            Access::AskFirst,
+            Access::AskAlways,
         )
         .await?;
         for i in 0..3 {

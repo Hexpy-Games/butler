@@ -40,7 +40,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   context_window_tokens: 258_000,
   worker_profiles: [],
   max_simultaneous_workers: 10,
-  access_mode: "ask_first",
+  access_mode: "ask_except_reads",
   plan_mode_default: false,
   follow_up_behavior: "queue",
   multiline_send_behavior: "modifier_enter_send_enter_newline",

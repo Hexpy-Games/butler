@@ -16,7 +16,7 @@ const DEFAULT_ACCESS_MODE_KEY: &str = "default-access-mode";
 
 /// The access mode a new install runs with until the user saves one: ask
 /// first (#236).
-const NEW_INSTALL_ACCESS_MODE: AccessMode = AccessMode::AskFirst;
+const NEW_INSTALL_ACCESS_MODE: AccessMode = AccessMode::AskExceptReads;
 
 /// The access mode an install from before ask-first (#236) keeps until the
 /// user saves one: full access, the default it has been running with. Saved
@@ -91,9 +91,5 @@ pub(in crate::gateway::application) fn conversation_access_mode(
 
 /// The stored and wire name of `mode`.
 pub(in crate::gateway::application) fn access_mode_name(mode: &AccessMode) -> &'static str {
-    match mode {
-        AccessMode::FullAccess => "full_access",
-        AccessMode::AskFirst => "ask_first",
-        AccessMode::ReadOnly => "read_only",
-    }
+    mode.as_str()
 }

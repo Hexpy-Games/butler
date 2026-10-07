@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import { BUILTIN_WALLPAPERS, GRAIN_WALLPAPER, STIPPLE_WALLPAPER, createWallpaperRegistry, defineWallpaperModule } from "../Wallpaper";

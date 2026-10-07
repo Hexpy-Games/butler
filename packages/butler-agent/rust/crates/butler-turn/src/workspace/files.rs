@@ -142,7 +142,7 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
         protected_roots: &input.protected_roots,
     })?;
     let Some((_, file)) = guard.accepted() else {
-        let safe = if input.path_form == super::PathForm::RelativeOnly {
+        let safe = if input.path_form.contained() {
             guard.safe_path().unwrap_or_else(|| ".".into())
         } else {
             input.path.clone()

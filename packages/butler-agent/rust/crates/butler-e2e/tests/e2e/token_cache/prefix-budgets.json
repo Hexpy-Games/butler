@@ -19,5 +19,11 @@
   "legacy|butler|read_only|none": 2454,
   "phase_minimal|butler|direct": 182,
   "phase_minimal|butler|execution": 774,
-  "phase_minimal|butler|read_only": 707
+  "phase_minimal|butler|read_only": 707,
+  "delegated|steward|ask_except_reads|mutation": 807,
+  "delegated|steward|ask_except_reads|read_only": 801,
+  "delegated|worker|ask_except_reads": 162,
+  "legacy|butler|ask_except_reads|ledger": 2519,
+  "legacy|butler|ask_except_reads|local": 2456,
+  "legacy|butler|ask_except_reads|none": 2456
 }

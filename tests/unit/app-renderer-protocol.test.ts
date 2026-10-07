@@ -203,3 +203,11 @@ test("main process loads production UI through the app protocol", () => {
   expect(main).not.toContain("pathToFileURL(indexPath)");
   expect(main).not.toContain('renderer.protocol === "file:"');
 });
+
+// test-category: security
+test("renderer webPreferences retain isolation and sandboxing", () => {
+  const main = readFileSync("packages/butler-app/client/electron/main.mjs", "utf8");
+  expect(main).toContain("contextIsolation: true");
+  expect(main).toContain("nodeIntegration: false");
+  expect(main).toContain("sandbox: true");
+});

@@ -89,7 +89,7 @@ pub(super) async fn execute(
             root: PathBuf::from(&workspace_root),
             requested_root: root,
             path_form: super::arguments::path_form(&input),
-            protected_roots: input.protected_ledger_roots.to_vec(),
+            protected_roots: super::arguments::read_protected_roots(&input),
             include_globs: include.clone(),
             exclude_globs: exclude.clone(),
             after_path: position.map(|cursor| cursor.marker),

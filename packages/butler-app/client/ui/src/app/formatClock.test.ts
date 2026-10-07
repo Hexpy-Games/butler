@@ -1,3 +1,4 @@
+// test-category: security
 import { expect, test } from "bun:test";
 import { formatClock } from "./formatClock";
 

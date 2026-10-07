@@ -1,3 +1,4 @@
+// test-category: race
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useComposerSubmit } from "./useComposerSubmit";

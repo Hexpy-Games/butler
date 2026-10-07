@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -97,7 +96,7 @@ pub(super) fn fit(mut item: GrepMatch, available: usize) -> (GrepMatch, usize, b
 
 pub(super) async fn execute(
     owner: &WorkspaceFiles,
-    root: PathBuf,
+    scope: butler_turn::workspace::MutationContext,
     listed: &WorkspaceListResult,
     matcher: Arc<Regex>,
     options: &super::args::Options,
@@ -145,18 +144,14 @@ pub(super) async fn execute(
             break;
         }
         let reads = futures_util::future::join_all(batch.iter().map(|entry| {
-            owner.grep_candidate(GrepCandidate {
-                root: root.clone(),
-                path: entry.path.clone(),
-                bytes: entry.bytes,
-                matcher: Arc::clone(&matcher),
-                context_lines: options.context_lines,
-                max_bytes_per_file: options.max_bytes_per_file,
-                max_matches: options.max_matches,
-                max_output_bytes: options.max_output_bytes,
-                after_line: after.and_then(|(path, line)| (path == entry.path).then_some(line)),
+            owner.grep_candidate(candidate(
+                &scope,
+                entry,
+                &matcher,
+                options,
+                after.and_then(|(path, line)| (path == entry.path).then_some(line)),
                 deadline,
-            })
+            ))
         }))
         .await;
         for (entry, read) in batch.iter().zip(reads) {
@@ -219,4 +214,28 @@ pub(super) async fn execute(
         .and_then(|index| candidates.get(index))
         .map(|entry| entry.path.clone());
     Ok(result)
+}
+
+fn candidate(
+    scope: &butler_turn::workspace::MutationContext,
+    entry: &WorkspaceListEntry,
+    matcher: &Arc<Regex>,
+    options: &super::args::Options,
+    after_line: Option<usize>,
+    deadline: Instant,
+) -> GrepCandidate {
+    GrepCandidate {
+        root: scope.root.clone(),
+        path_form: scope.path_form,
+        protected_roots: scope.protected_roots.clone(),
+        path: entry.path.clone(),
+        bytes: entry.bytes,
+        matcher: Arc::clone(matcher),
+        context_lines: options.context_lines,
+        max_bytes_per_file: options.max_bytes_per_file,
+        max_matches: options.max_matches,
+        max_output_bytes: options.max_output_bytes,
+        after_line,
+        deadline,
+    }
 }

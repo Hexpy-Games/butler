@@ -1,3 +1,4 @@
+// test-category: pure-logic
 import { describe, expect, test } from "bun:test";
 import {
   indexTaskGraph, laneTaskGraph, layoutTaskGraph, rollupTaskGraphStatus, taskGraphEdgeState, taskGraphRanks,

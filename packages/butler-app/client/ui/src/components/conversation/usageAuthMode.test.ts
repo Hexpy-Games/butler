@@ -1,3 +1,4 @@
+// test-category: race
 import { describe, expect, test } from "bun:test";
 import type { AppModelSummary, ContextDetailsView } from "@/app/types.ts";
 import { contextModel, usageAuthMode } from "./usageAuthMode";

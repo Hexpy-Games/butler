@@ -30,6 +30,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send", "plan-mode-default"] },
+    { id: "default-permission", kind: "form", fields: ["access-mode"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
@@ -85,7 +86,6 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },
-    { id: "permissions", kind: "form", fields: ["access-mode"] },
     { id: "grants", kind: "list", fields: [] },
     { id: "saved-keys", kind: "list", fields: [] },
     { id: "diagnostics", kind: "form", fields: ["diagnostics"] },

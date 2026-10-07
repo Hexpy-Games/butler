@@ -265,7 +265,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         script.select(case.clone());
         let accepted = s.gw.say("general", provider::PROMPT).await?;
         let id = accepted_turn_id(&accepted)?;
-        if access == Access::AskFirst {
+        if access == Access::AskAlways {
             approve(&s, &id, case, &script).await?;
         }
         let turn =
@@ -331,7 +331,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             script.select(continued.clone());
             let accepted = s.gw.say("general", provider::PROMPT).await?;
             let id = accepted_turn_id(&accepted)?;
-            if access == Access::AskFirst {
+            if access == Access::AskAlways {
                 approve(&s, &id, &continued, &script).await?;
             }
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))
@@ -361,7 +361,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
 async fn absolute_file_tools_outside_data_workspace_in_both_access_modes()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for access in [Access::FullAccess, Access::AskFirst] {
+    for access in [Access::FullAccess, Access::AskAlways] {
         run(access).await?;
     }
     Ok(())
