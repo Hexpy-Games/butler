@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 /// listeners too when remote access is enabled.
 pub(in crate::gateway) fn serve(
     listener: TcpListener,
-    content_listener: TcpListener,
+    content_listener: Option<TcpListener>,
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
@@ -56,7 +56,9 @@ pub(in crate::gateway) fn serve(
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
-        super::content::spawn(content_listener, state.clone(), shutdown.clone());
+        if let Some(content_listener) = content_listener {
+            super::content::spawn(content_listener, state.clone(), shutdown.clone());
+        }
         listeners::spawn(listener, state, shutdown)
             .await
             .map_err(std::io::Error::other)?

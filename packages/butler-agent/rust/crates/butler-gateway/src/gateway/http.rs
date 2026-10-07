@@ -140,7 +140,9 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
             }
         }
     };
-    content::admit_ui_frames(&state, &mut response);
+    if butler_core::product_features::BROWSER {
+        content::admit_ui_frames(&state, &mut response);
+    }
     latency_trace::finish(timing, &mut response);
     security::apply_cors(&mut response, &origin);
     response
@@ -199,6 +201,11 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
+    if !butler_core::product_features::BROWSER
+        && (uri.path().starts_with("/internal/browser") || uri.path().starts_with("/outputs/"))
+    {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
     if uri.path().starts_with("/internal/browser") {
         return browser_host::route(state, request, &client).await;
     }

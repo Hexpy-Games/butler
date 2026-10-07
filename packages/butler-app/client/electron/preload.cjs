@@ -1345,7 +1345,7 @@ const butlerApp = Object.freeze({
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
 
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
-contextBridge.exposeInMainWorld("butlerBrowser", {
+if (!process.argv.includes("--butler-browser-disabled")) contextBridge.exposeInMainWorld("butlerBrowser", {
   call: browserCall,
   subscribe: (handler) => {
     const listener = (_event, state) => handler(state);

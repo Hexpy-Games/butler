@@ -30,6 +30,9 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: ./.github/actions/product-features
+      with:
+        tag: ${{ inputs.version && format('v{0}', inputs.version) || '' }}
     - uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
