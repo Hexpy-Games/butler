@@ -2615,6 +2615,7 @@ ipcMain.handle("butler:select-project-folder", async () => {
   return {
     cancelled: false,
     display_name: basename(folderPath) || "Project",
+    folder_path: folderPath,
     folder_selection_token: createProjectFolderSelectionToken(
       folderPath,
       projectFolderTokenSecret,
