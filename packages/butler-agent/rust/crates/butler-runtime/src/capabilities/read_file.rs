@@ -116,7 +116,7 @@ pub(super) async fn execute(
                 root: root.clone(),
                 path: request.path.clone(),
                 path_form: super::arguments::path_form(&input),
-                protected_roots: input.protected_ledger_roots.to_vec(),
+                protected_roots: super::arguments::read_protected_roots(&input),
                 start_line: request.start_line,
                 limit_lines: request.limit_lines,
                 max_bytes: request.max_bytes,

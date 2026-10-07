@@ -335,7 +335,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row_cached(
-        "SELECT id,status FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
+        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),

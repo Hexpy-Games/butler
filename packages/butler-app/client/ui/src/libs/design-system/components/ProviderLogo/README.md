@@ -25,7 +25,7 @@ import { IconTile, ProviderLogo } from "@/butler-ds";
 - The files come from `@lobehub/icons-static-svg` 1.95.1 (MIT). Only these ten
   files are vendored; the package is not a dependency. `logos/NOTICE` carries
   the license and the trademark note.
-- `providerLogoSvgs.ts` holds the same bytes as strings; `ProviderLogo.test.tsx`
+Vendored SVG bytes and license notices are verified by the asset tests; rendered logos are checked in the DS Viewer.
   fails if a string drifts from its file.
 - Kimi uses the monochrome file: the color file has white lettering that
   disappears on light surfaces.

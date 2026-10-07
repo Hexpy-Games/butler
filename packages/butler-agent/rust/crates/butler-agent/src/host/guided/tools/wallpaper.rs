@@ -30,9 +30,7 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
-use butler_turn::btcc::{
-    AccessMode, BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
-};
+use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
 use crate::host::ActiveAppEndpoint;
@@ -86,7 +84,12 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if is_write(&call.name) && owner.binding.access_mode == AccessMode::AskFirst {
+    if is_write(&call.name)
+        && matches!(
+            settings_decision(owner),
+            butler_turn::btcc::AccessDecision::Ask(_)
+        )
+    {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     let signal = invocation.cancellation;
@@ -117,7 +120,10 @@ async fn write(
     current_project: Option<&str>,
     signal: &CancellationToken,
 ) -> Value {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if matches!(
+        settings_decision(owner),
+        butler_turn::btcc::AccessDecision::Deny(_)
+    ) {
         return failure(
             "read_only",
             "This Turn has read-only access; no change was applied.",
@@ -437,4 +443,8 @@ async fn app_json_at(
             code: "wallpaper_response_invalid",
             sent: true,
         })
+}
+
+fn settings_decision(owner: &GuidedTools) -> butler_turn::btcc::AccessDecision {
+    super::access::for_kind(owner, butler_turn::btcc::CapabilityKind::SettingsWrite)
 }

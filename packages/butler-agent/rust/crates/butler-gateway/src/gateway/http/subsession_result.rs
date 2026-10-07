@@ -39,7 +39,7 @@ pub(super) async fn post(
     let model = required("model_ref")?;
     let reasoning = required("reasoning_effort")?;
     let access = required("access_mode")?;
-    if !matches!(access.as_str(), "full_access" | "ask_first" | "read_only") {
+    if butler_turn::btcc::AccessMode::parse(&access).is_none() {
         return Err(invalid_request());
     }
     let client = format!(

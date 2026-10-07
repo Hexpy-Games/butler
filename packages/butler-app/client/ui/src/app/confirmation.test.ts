@@ -1,3 +1,4 @@
+// test-category: security
 import { afterAll, afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { confirmAction, useConfirmationStore } from "./confirmation.ts";

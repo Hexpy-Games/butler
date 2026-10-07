@@ -2,7 +2,7 @@
 use super::{GuidedTools, encoded, file_capability};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
-    AccessMode, AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
+    AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
     AuthorityOutcomeInput, BtccError, ModelRoundToolCall, RequestDecision, ToolExecutionError,
 };
 use serde_json::{Value, json};
@@ -14,7 +14,12 @@ pub(super) async fn execute(
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let args = normalized(owner, call)?;
-    let approval = if owner.binding.access_mode == AccessMode::AskFirst {
+    let decision = super::super::access::decision(owner, call, &args)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    let gated = matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
+        || super::super::access::resumes(owner, occurrence);
+    let approval = if gated {
         match gate(owner, call, occurrence, &args).await? {
             Gate::Pending(result) => return encoded(&result),
             Gate::Allowed(reference) => reference,
@@ -22,7 +27,13 @@ pub(super) async fn execute(
     } else {
         None
     };
-    let result = file_capability(owner, call, &args).await;
+    let result = file_capability(
+        owner,
+        call,
+        &args,
+        !gated && owner.binding.access_mode.reviews_effects(),
+    )
+    .await;
     if let Some(request_ref) = approval {
         owner
             .authority

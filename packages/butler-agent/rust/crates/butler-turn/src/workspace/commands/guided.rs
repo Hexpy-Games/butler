@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
-use butler_platform::command_sandbox::{self, SandboxError, ShellAccess};
+use butler_platform::command_sandbox::{self, ShellAccess};
 use butler_platform::process_control;
 use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
@@ -162,15 +162,16 @@ async fn prepare_command(
         ));
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
-    let invocation = invocation(input)?;
-    let (environment, process_cwd) = tokio::task::spawn_blocking({
+    let (invocation, environment, process_cwd) = tokio::task::spawn_blocking({
+        let input = input.clone();
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
         let cwd = cwd.clone();
         move || {
+            let invocation = invocation(&input)?;
             let environment = guided_environment(&host, &butler_data)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
-            Ok::<_, CommandError>((environment, process_cwd))
+            Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
     })
     .await
@@ -387,15 +388,26 @@ pub(super) fn guarded_directory(
 fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
     let access = match input.access {
         GuidedAccess::FullAccessContained => ShellAccess::Full,
-        GuidedAccess::ReadOnlyObservation => ShellAccess::ReadOnly,
+        GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
+            ShellAccess::ReadOnly
+        }
     };
-    let invocation = command_sandbox::login_shell(&input.command, access, &input.host_environment)
-        .map_err(|SandboxError::ReadOnlyUnavailable| {
-            CommandError::new(
-                CommandCode::CommandObservationIsolationUnavailable,
-                "This host cannot enforce the admitted read-only local command boundary.",
-            )
-        })?;
+    let shell = if input.access == GuidedAccess::ContainedObservation {
+        command_sandbox::login_shell_contained(
+            &input.command,
+            &input.host_environment,
+            &[input.butler_data.as_path()],
+            &[input.workspace_root.as_path()],
+        )
+    } else {
+        command_sandbox::login_shell(&input.command, access, &input.host_environment)
+    };
+    let invocation = shell.map_err(|error| {
+        CommandError::new(
+            CommandCode::CommandObservationIsolationUnavailable,
+            error.to_string(),
+        )
+    })?;
     Ok(invocation)
 }
 

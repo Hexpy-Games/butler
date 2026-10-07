@@ -477,7 +477,7 @@ When the pattern is domain-specific, create a domain component under `packages/b
 
 Run the smallest gate set that covers the change:
 
-- Documentation or skill map changes: `bun test tests/unit/app-client-design.test.ts`
+- Documentation or skill map changes: `bun run lint:ds && bun run app:design-system:smoke`
   and Project Ledger check.
 - Primitive or block API changes: design test, typecheck, `bun run lint:design`,
   and the component's `bun run render <Name>` screenshot.

@@ -236,7 +236,7 @@ fn delete_assistant_messages(
 ) -> Result<(), AppStorageError> {
     let mut statement = db
         .prepare(
-            "SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
+            "SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
              ORDER BY rowid DESC",
         )
         .map_err(AppStorageError::sqlite)?;

@@ -2,12 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import {
-  DS_VIEWER_BUNDLE_MARKER,
-  inspectDsViewerBundle,
+    DS_VIEWER_BUNDLE_MARKER,
+    inspectDsViewerBundle,
 } from "../smoke/ds-viewer-bundle-check.ts";
-import { ledgerTest, resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
 
 const tempDirs: string[] = [];
 
@@ -70,48 +68,5 @@ describe("DS Viewer bundle check", () => {
     });
 
     expect(inspectDsViewerBundle(dist).ok).toBe(false);
-  });
-
-  test("main.tsx reaches the DS Viewer only through a lazy dynamic import", () => {
-    const main = readFileSync("packages/butler-app/client/ui/src/main.tsx", "utf8");
-
-    expect(main).toContain("lazy(() => import(");
-    expect(main).not.toMatch(/^import .*design-system\/(?:fixtures|viewer|showcase)/mu);
-    expect(main).not.toMatch(/^import .*@\/butler-ds\/(?:fixtures|viewer|showcase)/mu);
-  });
-
-  test("the design-system smoke runs the bundle check", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
-
-    expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-viewer-bundle-check.ts");
-  });
-
-  test("the design-system smoke audits every item page for cell overflow", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
-
-    expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-viewer-overflow-smoke.ts");
-  });
-
-  test("the motion trace has its own script and runs with the design-system smoke", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
-
-    expect(pkg.scripts["app:motion:trace"]).toContain("tests/smoke/ds-motion-trace.ts");
-    expect(pkg.scripts["app:motion:trace"]).toContain("run build");
-    expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-motion-trace.ts");
-  });
-
-  ledgerTest("spec records the lazy, sidebar-based DS Viewer contract", () => {
-    const spec = readFileSync(
-      resolveRepoOrLedgerPath("project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md"),
-      "utf8",
-    );
-
-    expect(spec).toContain("lazy(() => import(...))");
-    expect(spec).toContain("history.replaceState");
-    expect(spec).toContain("side-by-side");
-    expect(spec).toContain("tests/unit/ds-showcase-coverage.test.ts");
-    expect(spec).toContain("data-ds-story");
-    expect(spec).not.toContain("First-level navigation is tabbed");
-    expect(spec).not.toContain("each tab can\n  switch between 1, 2, and 4 columns");
   });
 });

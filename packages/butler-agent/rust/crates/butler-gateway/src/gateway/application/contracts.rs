@@ -450,6 +450,7 @@ pub struct ClaimedNativeSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct AppReferencedChatSnapshot {
+    pub runtime_session_hint: String,
     pub id: String,
     pub title: String,
 }

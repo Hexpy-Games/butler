@@ -33,7 +33,7 @@ pub(super) fn stream_delta(event: &TranscriptEvent) -> bool {
         )
 }
 pub(super) fn projected_work_outcome(
-    chat_id: &str,
+    _chat_id: &str,
     event: &TranscriptEvent,
 ) -> Option<AppWorkStreamTurnOutcome> {
     let metadata = event.payload.get("metadata")?.as_object()?;
@@ -44,7 +44,7 @@ pub(super) fn projected_work_outcome(
         _ => return None,
     };
     Some(AppWorkStreamTurnOutcome {
-        session_id: super::super::app_session_hint(chat_id),
+        session_id: event.session_id.clone(),
         turn_id: metadata.get("turnId")?.as_str()?.to_owned(),
         outcome: outcome.into(),
         status_note: status_note.into(),

@@ -1,5 +1,6 @@
 //! All current scenarios share one integration-test link.
 mod access;
+mod access_tiers;
 mod agent_context;
 mod agent_exit;
 mod alias_index_drop;
@@ -34,6 +35,7 @@ mod gateway_remote;
 mod gateway_rotation;
 mod gateway_security;
 mod gateway_tunnel;
+mod general_clear;
 mod harness_hygiene;
 mod hooks;
 mod idle_resources;

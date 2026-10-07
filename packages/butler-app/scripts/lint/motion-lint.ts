@@ -1,3 +1,4 @@
+import { motionAudit } from "./motion/reduced-motion.ts";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { compareRatchet, ratchetFailures, shrinkBaseline, type FileCounts } from "./butler-ds/ratchet.ts";
@@ -13,6 +14,7 @@ export const MOTION_RULES = [
   "transition-property",
   "waapi-outside-helper",
   "canvas-motion",
+  "reduced-motion",
 ] as const;
 
 export type MotionRule = (typeof MOTION_RULES)[number];
@@ -345,7 +347,13 @@ export function collectMotionFindings(repoRoot: string): MotionFinding[] {
   const scripts: Record<string, string> = {};
   const findings = walk(sourceRoot).flatMap((absolute) => {
     const path = relative(sourceRoot, absolute).split("\\").join("/");
-    if (path.endsWith(".css")) return lintMotionCss(path, readFileSync(absolute, "utf8"));
+    if (path.endsWith(".css")) {
+      const source = readFileSync(absolute, "utf8");
+      const audit = motionAudit(source);
+      const reduced: MotionFinding[] = path.startsWith(DS_PREFIX) && audit.moves && !audit.reducedRule && !audit.tokenOnly
+        ? [{ rule: "reduced-motion", path, line: 1, message: "moving styles need reduced motion or token-only transforms" }] : [];
+      return [...lintMotionCss(path, source), ...reduced];
+    }
     if (/\.(?:ts|tsx)$/u.test(path) && !/\.test\.tsx?$/u.test(path) && !path.endsWith(".d.ts")) {
       scripts[path] = readFileSync(absolute, "utf8");
       return lintMotionScript(path, scripts[path]);

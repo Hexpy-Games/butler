@@ -1,3 +1,4 @@
+// test-category: security
 /// <reference types="bun" />
 import { expect, setSystemTime, test } from "bun:test";
 import { BUILTIN_WALLPAPERS, type WallpaperModule, type WallpaperModuleCheck } from "@/butler-ds";

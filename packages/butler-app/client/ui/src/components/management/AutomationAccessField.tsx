@@ -31,7 +31,7 @@ export function AutomationAccessField() {
     state.saveError?.field === "accessMode" ? state.saveError.message : undefined,
   );
   const settings = useButlerStore((state) => state.settings);
-  const showHint = accessMode === "ask_first";
+  const showHint = accessMode === "ask_except_reads";
   const describedBy = [showHint ? hintId : "", error ? errorId : ""].filter(Boolean).join(" ");
 
   return (

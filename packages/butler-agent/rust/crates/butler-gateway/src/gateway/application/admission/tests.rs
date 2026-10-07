@@ -13,6 +13,7 @@ fn retry_attachment_reuse_requires_the_exact_user_message_in_the_same_chat() {
                  control_resolution_json TEXT,attachments_json TEXT
              );
              CREATE TABLE messages(id TEXT PRIMARY KEY,chat_id TEXT,role TEXT);
+             CREATE VIEW app_owned_messages AS SELECT rowid,* FROM messages;
              CREATE TABLE message_files(
                  id TEXT PRIMARY KEY,owner_session_id TEXT,message_id TEXT,kind TEXT,
                  mime_type TEXT,safe_name TEXT,size_bytes INTEGER,sha256 TEXT,

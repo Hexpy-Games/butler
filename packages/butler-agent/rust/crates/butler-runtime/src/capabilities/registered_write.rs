@@ -47,6 +47,7 @@ impl RegisteredWritePort for RegisteredWrite {
                 .invoke(
                     "write_file",
                     CapabilityInvocation {
+                        contained: false,
                         call: &call,
                         workspace_reference: self.context.workspace_reference.as_ref(),
                         workspace_path: Some(&self.context.workspace_path),

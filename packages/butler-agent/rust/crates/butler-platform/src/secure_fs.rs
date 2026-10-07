@@ -473,7 +473,7 @@ pub fn path_is_within(target: &Path, root: &Path) -> bool {
 }
 
 mod path_compare;
-pub use path_compare::relative_path;
+pub use path_compare::{ambiguous_path, relative_path, windows_ambiguous_spelling};
 
 /// An equivalent native path spelling for public-path regression scenarios.
 #[cfg(feature = "test-support")]

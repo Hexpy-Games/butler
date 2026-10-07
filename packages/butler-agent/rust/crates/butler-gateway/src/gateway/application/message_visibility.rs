@@ -46,7 +46,7 @@ pub(super) fn is_delegated_result(
             concat!(
                 "SELECT NOT (",
                 owner_visible!(),
-                ") FROM messages m WHERE m.id=?1"
+                ") FROM app_owned_messages m WHERE m.id=?1"
             ),
             [message_id],
             |row| row.get(0),

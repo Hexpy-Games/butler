@@ -37,41 +37,39 @@ impl AppApplication {
             .into_iter()
             .map(str::to_owned)
             .collect();
-        let owners =
-            serde_json::to_string(&owners).map_err(GatewayApplicationError::internal_from)?;
         let metadata = self
             .storage
             .read(move |db| {
                 let started = std::time::Instant::now();
                 // Stale one-chat statistics must not turn this batch into 600 table scans.
-                let mut query = db.prepare_cached(
-                "SELECT owner.value,c.title,c.project_id,p.display_name FROM json_each(?1) owner \
-                 CROSS JOIN chats c INDEXED BY idx_chats_authority_metadata \
-                 ON c.id=CASE WHEN substr(owner.value,1,11)='butler/app-' \
-                 THEN substr(owner.value,12) ELSE owner.value END \
-                 LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id"
-            ).map_err(AppStorageError::sqlite)?;
-                let metadata = query
-                    .query_map([owners], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            (
-                                row.get::<_, String>(1)?,
-                                row.get::<_, Option<String>>(2)?,
-                                row.get::<_, Option<String>>(3)?,
-                            ),
-                        ))
-                    })
-                    .map_err(AppStorageError::sqlite)?
-                    .collect::<Result<HashMap<_, _>, _>>()
-                    .map_err(AppStorageError::sqlite);
+                let mut metadata = HashMap::new();
+                let mut query = db
+                    .prepare_cached(
+                        "SELECT c.title,c.project_id,p.display_name FROM chats c INDEXED BY idx_chats_authority_metadata \
+                     LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id WHERE c.id=?1",
+                    )
+                    .map_err(AppStorageError::sqlite)?;
+                for owner in owners {
+                    if let Some(chat) = super::sessions::identity::resolve_owner(db, &owner)? {
+                        let row = query
+                            .query_row([chat], |row| {
+                                Ok((
+                                    row.get::<_, String>(0)?,
+                                    row.get::<_, Option<String>>(1)?,
+                                    row.get::<_, Option<String>>(2)?,
+                                ))
+                            })
+                            .map_err(AppStorageError::sqlite)?;
+                        metadata.insert(owner, row);
+                    }
+                }
                 if std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1") {
                     eprintln!(
                         "approvals-profile metadata_sql_us={}",
                         started.elapsed().as_micros()
                     );
                 }
-                metadata
+                Ok(metadata)
             })
             .await
             .map_err(app_error)?;

@@ -11,7 +11,12 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     context: &ProjectionContext,
     chat_id: &str,
 ) -> Result<bool, GatewayApplicationError> {
-    let session_id = crate::gateway::application::snapshot_input::session_hint(chat_id);
+    let chat = chat_id.to_owned();
+    let session_id = context
+        .storage
+        .read(move |db| super::super::sessions::identity::runtime_hint(db, &chat))
+        .await
+        .map_err(app_error)?;
     let path = context
         .butler_data
         .join("transcripts")

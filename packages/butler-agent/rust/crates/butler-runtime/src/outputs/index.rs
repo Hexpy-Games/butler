@@ -112,3 +112,19 @@ pub(super) fn messages(
         .collect::<Result<Vec<_>, _>>()
         .map_err(std::io::Error::other)
 }
+
+pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut db = butler_platform::sqlite::open(path).map_err(std::io::Error::other)?;
+    let tx = db.transaction().map_err(std::io::Error::other)?;
+    for table in ["outputs", "output_refs"] {
+        tx.execute(
+            &format!("UPDATE {table} SET session=?2 WHERE session=?1"),
+            params![source, target],
+        )
+        .map_err(std::io::Error::other)?;
+    }
+    tx.commit().map_err(std::io::Error::other)
+}

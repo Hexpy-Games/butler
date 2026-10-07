@@ -4,12 +4,7 @@ use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 use butler_turn::btcc::AccessMode;
 
 pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
-    match value {
-        "ask_first" => Some(AccessMode::AskFirst),
-        "read_only" => Some(AccessMode::ReadOnly),
-        "full_access" => Some(AccessMode::FullAccess),
-        _ => None,
-    }
+    AccessMode::parse(value)
 }
 
 pub(super) fn json_type(value: Option<&Value>) -> &'static str {

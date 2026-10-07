@@ -179,7 +179,7 @@ impl AppApplication {
         session_id: &str,
         reason: &str,
     ) -> Result<(), GatewayApplicationError> {
-        let runtime_session_id = crate::gateway::app_session_hint(session_id);
+        let runtime_session_id = self.runtime_hint(session_id).await?;
         self.dependencies
             .authority_handoff
             .close_self_session(runtime_session_id.clone(), reason.to_owned())

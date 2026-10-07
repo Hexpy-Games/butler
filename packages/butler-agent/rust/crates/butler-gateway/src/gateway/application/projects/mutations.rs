@@ -106,7 +106,7 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         for session_id in sessions {
-            let runtime_session_id = crate::gateway::app_session_hint(&session_id);
+            let runtime_session_id = self.runtime_hint(&session_id).await?;
             self.dependencies
                 .authority_handoff
                 .close_self_session(

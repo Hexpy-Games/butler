@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
 use butler_runtime::context::ToolOutput;
-use butler_turn::btcc::{AccessMode, BtccError};
+use butler_turn::btcc::BtccError;
 use butler_turn::workspace::{
     Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
     WorkspaceReference,
@@ -36,12 +36,19 @@ pub(crate) struct GuidedCommand {
     jobs: CommandJobs,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommandExecution {
+    Sandboxed,
+    Registered,
+}
+
 #[derive(Clone)]
 pub(crate) struct CommandScope<'a> {
     pub workspace_reference: Option<&'a WorkspaceReference>,
     pub workspace_path: &'a Path,
     pub butler_data: &'a Path,
-    pub access_mode: AccessMode,
+    pub execution: CommandExecution,
+    pub contained_reads: bool,
     pub abort: CancellationToken,
     pub allowed_tools_and_effects: Option<&'a [String]>,
     pub installation_root: Option<&'a Path>,
@@ -87,7 +94,7 @@ impl GuidedCommand {
                 "command_mutation_requires_typed_effect"
             }));
         }
-        let registered = scope.access_mode == AccessMode::FullAccess;
+        let registered = scope.execution == CommandExecution::Registered;
         if registered
             && scope
                 .allowed_tools_and_effects
@@ -211,7 +218,7 @@ impl GuidedCommand {
             workspace_root: root.clone(),
             butler_data: scope.butler_data.to_path_buf(),
             timeout_ms,
-            access: GuidedAccess::ReadOnlyObservation,
+            access: observation_access(scope.contained_reads),
             host_environment: (*self.host_environment).clone(),
             abort: scope.abort,
         };
@@ -270,4 +277,12 @@ fn registered_timeout(value: Option<&Value>) -> f64 {
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
+}
+
+fn observation_access(contained: bool) -> GuidedAccess {
+    if contained {
+        GuidedAccess::ContainedObservation
+    } else {
+        GuidedAccess::ReadOnlyObservation
+    }
 }
