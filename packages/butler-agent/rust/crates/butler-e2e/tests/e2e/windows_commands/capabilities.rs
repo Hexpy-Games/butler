@@ -276,15 +276,7 @@ async fn operation(
     }
     let terminal = s.gw.wait_terminal(chat, &id, Duration::from_secs(15)).await;
     if terminal.is_err() {
-        eprintln!(
-            "Windows capability pending approvals: {:?}",
-            s.gw.approval_requests(chat).await?
-        );
-        for line in s.agent.logs().lines().filter(|line| {
-            line.contains("command_phase_timing") || line.contains("command_process_timing")
-        }) {
-            eprintln!("{line}");
-        }
+        super::log_approval_timeout_diagnostics(s, chat, &id).await?;
     }
     let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");

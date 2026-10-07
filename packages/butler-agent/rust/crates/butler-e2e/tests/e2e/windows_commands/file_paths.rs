@@ -271,9 +271,13 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         if access == Access::AskAlways {
             approve(&s, &id, case, &script).await?;
         }
-        let turn =
+        let terminal =
             s.gw.wait_terminal("general", &id, Duration::from_secs(15))
-                .await?;
+                .await;
+        if terminal.is_err() {
+            super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+        }
+        let turn = terminal?;
         assert_eq!(turn_state(&turn), "delivered");
         let (output, elapsed) = script
             .result
@@ -337,8 +341,13 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             if access == Access::AskAlways {
                 approve(&s, &id, &continued, &script).await?;
             }
-            s.gw.wait_terminal("general", &id, Duration::from_secs(15))
-                .await?;
+            let terminal =
+                s.gw.wait_terminal("general", &id, Duration::from_secs(15))
+                    .await;
+            if terminal.is_err() {
+                super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+            }
+            terminal?;
             let (next, elapsed) = script.result.lock().unwrap().clone().unwrap();
             assert_eq!(next["ok"], true);
             assert_ne!(next["error"], "invalid_cursor");

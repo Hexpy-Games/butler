@@ -109,9 +109,13 @@ async fn replay(
     if access == Access::AskAlways {
         super::observation::approve_exact(&s, &id, &command).await?;
     }
-    let turn =
+    let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(turn_timeout()))
-            .await?;
+            .await;
+    if terminal.is_err() {
+        super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+    }
+    let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered", "chat must finish");
     let requests = script.requests.lock().unwrap().clone();
     let received = requests
@@ -290,7 +294,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows path syntax"
     );
-    let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
+    let command = r#"powershell.exe -NoProfile -NonInteractive -Command "$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'""#;
     let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskAlways);
     let (url, script, server) = provider::start(command).await?;
     let s = setup
@@ -307,9 +311,13 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
     super::observation::approve_exact(&s, &id, command).await?;
-    let turn =
+    let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(15))
-            .await?;
+            .await;
+    if terminal.is_err() {
+        super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+    }
+    let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered");
     let requests = script.requests.lock().unwrap().clone();
     let output = requests

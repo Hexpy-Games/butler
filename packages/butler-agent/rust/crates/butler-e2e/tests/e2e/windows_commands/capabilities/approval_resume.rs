@@ -12,7 +12,7 @@ async fn command_approval_resumes_the_exact_operation() -> Result<(), HarnessErr
     let command = if butler_platform::command_sandbox::POSIX_SHELL {
         "printf approved > approved-command.txt"
     } else {
-        "Set-Content -NoNewline -LiteralPath approved-command.txt -Value approved"
+        r#"powershell.exe -NoProfile -NonInteractive -Command "Set-Content -NoNewline -LiteralPath 'approved-command.txt' -Value 'approved'""#
     };
     let case = Case {
         tool: "run_command",
