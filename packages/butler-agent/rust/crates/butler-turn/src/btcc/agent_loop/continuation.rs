@@ -88,6 +88,19 @@ pub struct AuthorityBatch {
     pub calls: Vec<ModelRoundToolCall>,
     pub next_call_index: usize,
     pub results: Vec<ToolResult>,
+    /// Results already produced by a concurrent batch, indexed like `calls`.
+    /// Pending entries are replayed only with their own authority decision.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub concurrent_results: Vec<ToolResult>,
+    /// Durable operation identities for siblings not executed again on resume.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub concurrent_call_ids: Vec<String>,
+    /// User modifications follow all tool results, even across multiple parks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_modifications: Vec<String>,
+    /// The first settled sibling's outcome survives subsequent authority parks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_suspension: Option<crate::btcc::SuspensionReason>,
 }
 
 /// The guided activity presentation at suspension, restored on resume so the

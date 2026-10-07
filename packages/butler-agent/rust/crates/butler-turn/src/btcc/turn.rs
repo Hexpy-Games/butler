@@ -142,6 +142,18 @@ impl TurnFacade {
             let Some(destination) = destination else {
                 return Ok(fenced(turn_id));
             };
+            if let Some(continuation) = &turn.authority_continuation {
+                for event in super::agent_loop::authority_cancellation_events(continuation).await {
+                    self.progress
+                        .append(ProgressWrite {
+                            session_id: turn.session_id.clone(),
+                            turn_id: turn.turn_id.clone(),
+                            destination: destination.clone(),
+                            event,
+                        })
+                        .await?;
+                }
+            }
             self.progress
                 .append(ProgressWrite {
                     session_id: turn.session_id,

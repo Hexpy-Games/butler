@@ -37,6 +37,7 @@ pub(super) async fn record_result(
     mut result: ToolResult,
     iteration: u32,
     check: OutcomeCheck,
+    restored_call_id: Option<&str>,
 ) -> Result<Option<ToolOutcome>, AgentLoopError> {
     if let Some(error) = &mut result.error {
         let identity = crate::btcc::identity::stable_json(&serde_json::json!([
@@ -54,7 +55,11 @@ pub(super) async fn record_result(
         error.message = state.feedback_for(&identity, &observation);
     }
     state.tool_results.push(result.clone());
-    let operation_call_id = input.policy.operation_result_call_id(&call.id);
+    let operation_call_id = input.policy.operation_result_call_id(&call.id).or_else(|| {
+        restored_call_id
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned)
+    });
     let references = if let Some(runtime) = input.operation_results {
         runtime
             .references_for_call(&call.name, operation_call_id.as_deref())
@@ -124,6 +129,11 @@ pub(super) async fn finish(
 ) -> Result<AgentLoopResult, AgentLoopError> {
     let (content, suspension, authority_continuation) = match ending {
         Ending::Answer(content) => (content, None, None),
+        Ending::Suspend(SuspensionReason::AuthorityPending) => {
+            return Err(propagated(super::invalid_contract(
+                crate::btcc::BtccCode::AuthorityContinuationMissing,
+            )));
+        }
         Ending::Suspend(reason) => ("", Some(reason), None),
         Ending::AwaitAuthority(continuation) => (
             "",

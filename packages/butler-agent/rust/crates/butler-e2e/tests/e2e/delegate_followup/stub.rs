@@ -23,6 +23,9 @@ pub(crate) struct Script {
     pub release: Notify,
     pub failing: AtomicBool,
     pub duplicate: AtomicBool,
+    pub parallel_files: AtomicBool,
+    pub terminal_fault: AtomicBool,
+    pub file_root: Mutex<String>,
     stopped: bool,
 }
 pub(crate) async fn start(
@@ -68,6 +71,11 @@ async fn reply(
         *index += 1;
         step
     };
+    if child && step == 3 && script.terminal_fault.load(Ordering::SeqCst) {
+        return (axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"error":{"code":"invalid_request","message":"Stub terminal provider failure"}})))
+            .into_response();
+    }
     if child
         && step == 2
         && script.stopped
@@ -80,7 +88,12 @@ async fn reply(
     }
     let replay: Value = serde_json::from_str(include_str!("replay.json")).unwrap();
     let items = replay[kind].as_array().unwrap();
-    let mut template = items[step.min(items.len() - 1)].clone();
+    let replay_step = if child && script.parallel_files.load(Ordering::SeqCst) && step > 2 {
+        step - 1
+    } else {
+        step
+    };
+    let mut template = items[replay_step.min(items.len() - 1)].clone();
     if script.failing.load(Ordering::SeqCst) {
         if child {
             template = match step {
@@ -118,7 +131,12 @@ async fn reply(
     } else {
         message(template["text"].as_str().unwrap())
     };
-    let item = if script.duplicate.load(Ordering::SeqCst) && kind == "parent" && step == 3 {
+    let item = if child && script.parallel_files.load(Ordering::SeqCst) && step == 2 {
+        json!((0..3).map(|i| json!({"type":"function_call","id":format!("file-{i}"),
+            "call_id":format!("file-{i}"),"name":"list_files","status":"completed",
+            "arguments":json!({"root":format!("{}/lookup-{i}", script.file_root.lock().unwrap())}).to_string()
+        })).collect::<Vec<_>>())
+    } else if script.duplicate.load(Ordering::SeqCst) && kind == "parent" && step == 3 {
         let mut duplicate = item.clone();
         duplicate["id"] = "duplicate-delegate".into();
         duplicate["call_id"] = "duplicate-delegate".into();
