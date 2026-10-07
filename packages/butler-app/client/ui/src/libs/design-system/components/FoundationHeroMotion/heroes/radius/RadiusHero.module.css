@@ -84,7 +84,7 @@
 
 .stack {
   display: inline-grid;
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-h5-size);
 }
@@ -125,7 +125,7 @@
 
 .wornValue {
   align-self: end;
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-body-size);
   line-height: var(--line-height-none);
@@ -217,7 +217,7 @@
 
 .nestNote {
   position: absolute;
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--font-size-1);
   white-space: nowrap;
@@ -253,7 +253,7 @@
 }
 
 .levelToken {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
 }
