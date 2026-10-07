@@ -373,6 +373,15 @@ pub(super) async fn suspend_for_authority(
         .await
         .map_err(propagated)?
         .or_else(|| state.presentation.take());
+    let mut extensions = serde_json::Map::new();
+    if let Some(diagnostics) = prepared
+        .request
+        .usage_attribution
+        .as_ref()
+        .and_then(|usage| usage.prompt_diagnostics.clone())
+    {
+        extensions.insert("promptDiagnostics".into(), diagnostics);
+    }
     let continuation = AuthorityLoopContinuation {
         request_ref: parked.request_ref,
         call_id,
@@ -403,7 +412,7 @@ pub(super) async fn suspend_for_authority(
             pending_modifications: parked.pending_modifications,
             first_suspension: parked.first_suspension,
         },
-        extensions: Default::default(),
+        extensions,
     };
     finish(input, state, Ending::AwaitAuthority(Box::new(continuation))).await
 }

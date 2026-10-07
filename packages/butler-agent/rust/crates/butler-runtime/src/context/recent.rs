@@ -1,7 +1,9 @@
 use crate::context::ContextCode;
 use crate::context::{ContextConversation, ContextResult, PromptMaterialRenderOptions};
-use butler_turn::btcc::{ContextAssembly, ContextSection};
+mod history;
+use butler_turn::btcc::ContextAssembly;
 
+#[derive(Clone, Copy)]
 pub(crate) struct RecentConversationInput<'a> {
     pub transport: &'a str,
     pub runtime_session_id: &'a str,
@@ -9,15 +11,20 @@ pub(crate) struct RecentConversationInput<'a> {
     pub event_id: Option<&'a str>,
 }
 
-pub(crate) fn recent_conversation_tail_limit(token_budget: f64) -> f64 {
-    (token_budget / 80.0).ceil().clamp(20.0, 200.0)
+pub(crate) async fn include_recent_context(
+    owner: &ContextConversation,
+    input: RecentConversationInput<'_>,
+    assembly: ContextAssembly,
+) -> ContextResult<ContextAssembly> {
+    assemble(owner, input, assembly).await
 }
 
-pub(crate) async fn include_recent_context(
+async fn assemble(
     owner: &ContextConversation,
     input: RecentConversationInput<'_>,
     mut assembly: ContextAssembly,
 ) -> ContextResult<ContextAssembly> {
+    let started = std::time::Instant::now();
     let Some(session) = owner
         .store()
         .get_session_by_gateway_binding(input.transport, input.runtime_session_id)
@@ -34,12 +41,10 @@ pub(crate) async fn include_recent_context(
     };
     let snapshot = owner.budget().snapshot().await?;
     let token_budget = snapshot.default_recent_conversation_token_budget(input.model_ref);
-    let material = owner
+    let cap = butler_core::json::saturating_usize(token_budget);
+    let window = owner
         .store()
-        .read_prompt_material(
-            &session.id,
-            Some(recent_conversation_tail_limit(token_budget)),
-        )
+        .read_history_window(&session.id, cap)
         .await
         .map_err(|e| {
             crate::context::ContextError::new(
@@ -48,36 +53,27 @@ pub(crate) async fn include_recent_context(
             )
             .with_source(e)
         })?;
-    let plan = crate::context::compile_prompt_material_context_plan(
-        &material,
-        &PromptMaterialRenderOptions {
-            max_tokens: token_budget,
-            exclude_source_ref: input.event_id.map(str::to_owned),
-            exclude_turn_id: None,
-            include_summaries: None,
-            include_tools: None,
-            current_request: None,
-        },
-    )?;
-    let content = strip_heading(&plan.rendered);
+    let read_elapsed = started.elapsed();
+
+    let summary_elapsed = started.elapsed().saturating_sub(read_elapsed);
+    let options = render_options(token_budget, input.event_id);
+    let plan = crate::context::compile_prompt_material_context_plan(&window.material, &options)?;
+    let content = history::render(&window, &plan, cap)?;
     if content.is_empty() {
         return Ok(assembly);
     }
-    assembly.working_context.push(ContextSection {
-        id: "recent-conversation".into(),
-        title: "Recent Conversation".into(),
-        content,
-        region: Some("working_context".into()),
-        projection_class: "mandatory_hot_cache".into(),
-        scope_kind: "session".into(),
-        source: None,
-    });
+    assembly.working_context.push(history::document(content)?);
+    history::trace(started.elapsed(), read_elapsed, summary_elapsed).await;
     Ok(assembly)
 }
 
-fn strip_heading(value: &str) -> String {
-    let value = value
-        .strip_prefix("## Recent Conversation")
-        .unwrap_or(value);
-    butler_core::public_text::trim_js_whitespace(value).to_owned()
+fn render_options(max_tokens: f64, event_id: Option<&str>) -> PromptMaterialRenderOptions {
+    PromptMaterialRenderOptions {
+        max_tokens,
+        exclude_source_ref: event_id.map(str::to_owned),
+        exclude_turn_id: None,
+        include_summaries: None,
+        include_tools: None,
+        current_request: None,
+    }
 }

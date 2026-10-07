@@ -262,6 +262,16 @@ fn write_value(
 
 /// Appends `value` as a JSON string literal.
 pub fn write_string(value: &str, output: &mut String) -> Result<(), JsonError> {
+    if value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte >= 0x20 && byte != b'"' && byte != b'\\')
+    {
+        output.push('"');
+        output.push_str(value);
+        output.push('"');
+        return Ok(());
+    }
     serde_json::to_writer(Utf8Output(output), value).map_err(JsonError::from)
 }
 

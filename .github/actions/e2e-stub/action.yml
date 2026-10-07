@@ -133,6 +133,7 @@ runs:
         ARCHIVE_FILE: ${{ inputs.archive-file }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
+        BUTLER_PROMPT_MAIN_RECORD: "0"
         BUTLER_E2E_SKIP_BUILD: "1"
         BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
@@ -248,6 +249,7 @@ runs:
         BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
+        BUTLER_PROMPT_MAIN_RECORD: "0"
         BUTLER_E2E_SKIP_BUILD: "1"
       run: |
         isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"

@@ -1,7 +1,7 @@
 //! Request-only cache diagnostics. No content, session names, endpoints or keys
 //! enter the metric. Prior bytes exist only in a bounded in-memory LRU.
 
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, sync::Arc, time::Instant};
 
 use bytes::Bytes;
 use parking_lot::Mutex;
@@ -16,7 +16,7 @@ pub(super) mod components;
 const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 const HISTORY_SESSIONS: usize = 128;
 
-type PreviousPrefix = (String, Bytes, Arc<[u32]>);
+type PreviousPrefix = (String, Bytes, Arc<[u32]>, Instant);
 
 #[derive(Default)]
 pub(super) struct History {
@@ -29,6 +29,7 @@ pub(super) struct Prepared {
     prefix: Bytes,
     metadata: Value,
     tokens: Arc<[u32]>,
+    source_index: Option<usize>,
     input: Option<(&'static str, std::ops::Range<usize>, bool)>,
 }
 
@@ -89,18 +90,22 @@ fn prepare(
         .get("prompt_cache_key")
         .and_then(Value::as_str)
         .map(hash);
-    let prefix_hash = cache.prefix_hash(&prefix);
     Ok(Prepared {
         metadata: json!({
             "representation":"serialized-components-v1", "components":components,
-            "prefixBytes":prefix.len(), "prefixSha256":prefix_hash,
+            "inputSections":layout_sections(&components, None, None), "turnId":null, "trigger":"other",
+            "instructionComponents":{"persona":null,"onboarding":null,"reminders":null},
+            "prefixBytes":prefix.len(),
             "promptCacheKeySha256":key, "providerReportedCachedTokens":null,
             "providerCachedTokensFieldPresent":null,
             "providerId":config.metadata.provider_id, "authMode":format!("{:?}",config.auth.mode()),
+            "model":config.wire_model, "authRoute":auth_route(config.auth.mode()),
+            "idleGapMs":null,
             "endpointSha256":hash(config.endpoint.as_str()),
         }),
         prefix: Bytes::from(prefix),
         tokens: Arc::from([]),
+        source_index: source_index(body),
         input,
     })
 }
@@ -113,14 +118,20 @@ fn component(
     components: &mut Vec<Value>,
     cache: &mut components::Cache,
 ) -> Result<(), ModelRoundError> {
-    let cached = cache.component(components.len(), value)?;
+    let include_hash = !matches!(name, "input" | "instructions");
+    let cached = cache.component(components.len(), value, include_hash)?;
     let encoded = &cached.encoded;
     let offset = prefix.len();
     prefix.extend_from_slice(encoded.as_bytes());
     // Delimit components rather than closing an input array on every request:
     // appending a conversation item preserves the previous reconstructed prefix.
     prefix.push(b'\n');
-    components.push(json!({"component":name,"index":index,"bytes":encoded.len(),"sha256":cached.hash,"offset":offset}));
+    let mut diagnostic =
+        json!({"component":name,"index":index,"bytes":encoded.len(),"offset":offset});
+    if let Some(hash) = &cached.hash {
+        diagnostic["sha256"] = hash.clone().into();
+    }
+    components.push(diagnostic);
     Ok(())
 }
 
@@ -176,6 +187,35 @@ impl Prepared {
         Ok(output)
     }
 
+    pub(super) fn attribute(
+        mut self,
+        attribution: Option<&butler_turn::btcc::UsageAttribution>,
+        first_prompt: Option<&str>,
+    ) -> Self {
+        if let Some(attribution) = attribution {
+            self.metadata["turnId"] = attribution.turn_id.clone().into();
+            if let Some(Value::Object(fields)) = &attribution.prompt_diagnostics {
+                for name in ["trigger", "instructionComponents"] {
+                    if let Some(value) = fields.get(name) {
+                        self.metadata[name] = value.clone();
+                    }
+                }
+                let source = first_prompt
+                    .filter(|prompt| fields.get("sourcePromptBytes") == Some(&json!(prompt.len())))
+                    .and_then(|_| fields.get("inputSections"))
+                    .and_then(Value::as_array);
+                self.metadata["inputSections"] = layout_sections(
+                    self.metadata["components"]
+                        .as_array()
+                        .map_or(&[][..], Vec::as_slice),
+                    source,
+                    self.source_index,
+                );
+            }
+        }
+        self
+    }
+
     pub(super) async fn tokenize(
         mut self,
         catalog: Arc<crate::models::ModelCatalog>,
@@ -221,9 +261,13 @@ impl History {
         };
         let identity = hash(scope);
         let mut history = self.previous.lock();
-        if let Some(index) = history.iter().position(|(key, _, _)| *key == identity)
-            && let Some((_, previous, previous_tokens)) = history.remove(index)
+        let now = Instant::now();
+        if let Some(index) = history.iter().position(|(key, _, _, _)| *key == identity)
+            && let Some((_, previous, previous_tokens, started)) = history.remove(index)
         {
+            // Request-to-request gap; no timer or idle persistence is needed.
+            current.metadata["idleGapMs"] =
+                json!(now.duration_since(started).as_secs_f64() * 1000.0);
             let lcp = previous
                 .iter()
                 .zip(current.prefix.iter())
@@ -260,16 +304,16 @@ impl History {
         if current_bytes <= HISTORY_BYTES {
             let mut bytes = history
                 .iter()
-                .map(|(_, prefix, tokens)| prefix.len() + tokens.len() * 4)
+                .map(|(_, prefix, tokens, _)| prefix.len() + tokens.len() * 4)
                 .sum::<usize>();
             while history.len() >= HISTORY_SESSIONS || bytes + current_bytes > HISTORY_BYTES {
-                if let Some((_, evicted, evicted_tokens)) = history.pop_front() {
+                if let Some((_, evicted, evicted_tokens, _)) = history.pop_front() {
                     bytes -= evicted.len() + evicted_tokens.len() * 4;
                 } else {
                     break;
                 }
             }
-            history.push_back((identity, current.prefix, current.tokens));
+            history.push_back((identity, current.prefix, current.tokens, now));
         }
         current.metadata
     }
@@ -352,4 +396,58 @@ pub(super) fn reported_usage(prefix: &mut Value, response: &Value) {
     .find_map(|path| response.pointer(path).filter(|value| value.is_number()))
     .cloned()
     .unwrap_or(Value::Null);
+}
+
+fn auth_route(mode: super::ProviderAuthMode) -> &'static str {
+    use super::ProviderAuthMode;
+    match mode {
+        ProviderAuthMode::ApiKey => "api_key",
+        ProviderAuthMode::CodexSubscription => "codex_subscription",
+        ProviderAuthMode::CodexOauth => "oauth",
+        ProviderAuthMode::None => "other",
+    }
+}
+
+// Provider components are encoded JSON; source sections are exact UTF-8 text.
+fn layout_sections(
+    components: &[Value],
+    source: Option<&Vec<Value>>,
+    source_index: Option<usize>,
+) -> Value {
+    let mut sections = Vec::new();
+    let absent = hash("null");
+    for component in components {
+        if component["sha256"] == absent {
+            continue;
+        }
+        let name = component["component"].as_str().unwrap_or_default();
+        if name == "input"
+            && component["index"]
+                .as_u64()
+                .and_then(|index| usize::try_from(index).ok())
+                == source_index
+            && source.is_some()
+        {
+            sections.extend(source.into_iter().flatten().cloned());
+        } else if matches!(
+            name,
+            "tools" | "instructions" | "system" | "systemInstruction" | "input"
+        ) {
+            let mut section = json!({"id":name, "index":component["index"],
+                "bytes":component["bytes"], "representation":"serialized_json"});
+            if let Some(hash) = component.get("sha256") {
+                section["sha256"] = hash.clone();
+            }
+            sections.push(section);
+        }
+    }
+    Value::Array(sections)
+}
+
+fn source_index(body: &Value) -> Option<usize> {
+    ["input", "messages", "contents"]
+        .into_iter()
+        .find_map(|name| body.get(name).and_then(Value::as_array))?
+        .iter()
+        .position(|item| item["role"] == "user")
 }

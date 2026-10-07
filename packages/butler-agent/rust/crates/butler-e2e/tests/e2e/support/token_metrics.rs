@@ -63,18 +63,19 @@ pub(crate) fn report(
             };
             let encoded = value.to_string();
             assert_eq!(item["bytes"], encoded.len());
-            assert_eq!(
-                item["sha256"],
-                format!("{:x}", Sha256::digest(encoded.as_bytes()))
-            );
+            if matches!(field, "input" | "instructions") {
+                assert!(item.get("sha256").is_none());
+            } else {
+                assert_eq!(
+                    item["sha256"],
+                    format!("{:x}", Sha256::digest(encoded.as_bytes()))
+                );
+            }
             prefix.extend_from_slice(encoded.as_bytes());
             prefix.push(b'\n');
         }
         assert_eq!(diagnostic["prefixBytes"], prefix.len());
-        assert_eq!(
-            diagnostic["prefixSha256"],
-            format!("{:x}", Sha256::digest(&prefix))
-        );
+        assert!(diagnostic.get("prefixSha256").is_none());
         assert_eq!(
             diagnostic["promptCacheKeySha256"],
             format!(

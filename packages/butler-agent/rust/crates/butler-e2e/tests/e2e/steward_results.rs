@@ -29,6 +29,24 @@ const RESULT: &str = "Reply with exactly the word: paused";
 const RELATION: &str = "relation-00c0ffee";
 const CHAT: &str = "general";
 
+fn request_text(request: &Value) -> String {
+    request["input"]
+        .as_array()
+        .or_else(|| request["messages"].as_array())
+        .into_iter()
+        .flatten()
+        .flat_map(|item| match &item["content"] {
+            Value::String(text) => vec![text.clone()],
+            Value::Array(parts) => parts
+                .iter()
+                .filter_map(|part| part["text"].as_str().map(str::to_owned))
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 async fn start() -> Result<Scenario, HarnessError> {
     Setup::new("STEWARD-RESULT")?
         .cassette("Q-02-CANCEL")
@@ -72,7 +90,7 @@ async fn wait_turns(s: &Scenario, count: usize) -> Result<Vec<Value>, HarnessErr
 
 /// Everything the owner can read about the result turn stays free of the
 /// result text, while the turn keeps the marker the steward views read.
-async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<(), HarnessError> {
+async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<String, HarnessError> {
     let turns = wait_turns(s, 2).await?;
     let marker = &turns[1]["execution_controls"]["subsession_result"];
     assert_eq!(marker["result_id"], result_id, "marker lost: {}", turns[1]);
@@ -86,7 +104,7 @@ async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<(), Ha
         .collect();
     assert_eq!(asked, [OWNER], "the result is visible: {messages:?}");
 
-    let result_turn = turn_id_of(&turns[1]).unwrap();
+    let result_turn = turn_id_of(&turns[1]).unwrap().to_owned();
     let events = s.gw.events_since(0).await?;
     let user_bubbles = events.iter().filter(|event| {
         event["type"] == "message.created" && event["payload"]["message"]["role"] == "user"
@@ -95,7 +113,7 @@ async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<(), Ha
     assert!(
         events.iter().any(|event| {
             event["type"] == "turn.state_changed"
-                && event["payload"]["turn"]["id"].as_str() == Some(result_turn)
+                && event["payload"]["turn"]["id"].as_str() == Some(result_turn.as_str())
         }),
         "the result turn is not announced"
     );
@@ -106,7 +124,7 @@ async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<(), Ha
     assert_eq!(export.status, 200, "{}", export.text);
     assert!(export.text.contains("one to twelve"), "{}", export.text);
     assert!(!export.text.contains("exactly the word"), "{}", export.text);
-    Ok(())
+    Ok(result_turn)
 }
 
 /// The parent is idle: the result starts a turn at once.
@@ -116,7 +134,39 @@ async fn a_result_delivered_to_an_idle_parent_is_not_a_bubble() -> Result<(), Ha
     let s = start().await?;
     s.turn(CHAT, OWNER).await?;
     deliver_result(&s, "steward-result-1").await?;
-    assert_result_is_hidden(&s, "steward-result-1").await?;
+    let result_turn = assert_result_is_hidden(&s, "steward-result-1").await?;
+    super::prompt_history::resume_parity(&s, &result_turn)?;
+    let model_input = request_text(s.provider()?.requests().last().unwrap());
+    assert!(
+        model_input.contains("## Delegated result\nfrom: delegated task"),
+        "delegated result heading missing from model input: {model_input}"
+    );
+    assert!(!model_input.contains("## Delegated result\nSteward:"));
+    if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
+        return s.finish().await;
+    }
+    let starts: Vec<Value> = std::fs::read_to_string(
+        s.sandbox
+            .data
+            .join("metrics/request-prefix-diagnostics.jsonl"),
+    )?
+    .lines()
+    .map(serde_json::from_str)
+    .collect::<Result<Vec<_>, _>>()?;
+    let result = starts
+        .iter()
+        .rev()
+        .find(|row| row["requestStarted"] == true && row["sessionKind"] == "parent")
+        .unwrap();
+    assert_eq!(result["trigger"], "steward-result");
+    assert_eq!(
+        result["inputSections"].as_array().unwrap().last().unwrap()["id"],
+        "current-request"
+    );
+    eprintln!(
+        "DELEGATED_LAYOUT prefix_bytes={} byte_prefix_percent={} token_prefix_percent={}",
+        result["prefixBytes"], result["lcpPercent"], result["lcpTokenPercent"]
+    );
     s.finish().await
 }
 
