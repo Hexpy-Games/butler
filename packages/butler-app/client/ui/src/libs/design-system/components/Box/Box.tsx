@@ -6,7 +6,7 @@ import styles from "./Box.module.css";
 
 export type BoxSpace = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type BoxRadius = "none" | "control" | "panel" | "popover" | "pill";
-export type BoxSurface = "none" | "base" | "raised" | "overlay" | "muted";
+export type BoxSurface = "none" | "base" | "raised" | "raised-opaque" | "overlay" | "muted";
 export type BoxBorder = "none" | "hairline" | "strong";
 type BoxElement = "div" | "section" | "article" | "aside" | "header" | "footer" | "span" | "li";
 
@@ -22,6 +22,7 @@ export interface BoxProps extends LayoutItemProps, DsBaseProps<HTMLAttributes<HT
   radius?: BoxRadius;
   surface?: BoxSurface;
   border?: BoxBorder;
+  elevation?: "none" | "card";
 }
 
 export function Box(allProps: BoxProps) {
@@ -36,6 +37,7 @@ export function Box(allProps: BoxProps) {
     radius,
     surface,
     border,
+    elevation,
     className,
     ...props
   }] = splitLayoutItemProps(allProps);
@@ -50,6 +52,7 @@ export function Box(allProps: BoxProps) {
       data-radius={radius}
       data-surface={surface}
       data-border={border}
+      data-elevation={elevation}
       {...itemAttributes}
       {...props}
     >

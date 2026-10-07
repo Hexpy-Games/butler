@@ -49,7 +49,7 @@ pub struct CognitionWriteLease {
     lock_path: PathBuf,
     registration_id: String,
     owner: LockInfo,
-    connection: Option<Connection>,
+    connection: Option<butler_platform::sqlite::Connection>,
 }
 
 impl CognitionWriteCoordinator {
@@ -258,7 +258,10 @@ impl CoordinatorInner {
     }
 
     /// Opens the coordinator database inside an exclusive transaction.
-    fn begin(&self, request: &CognitionWriteAcquire) -> CoordinationResult<Option<Connection>> {
+    fn begin(
+        &self,
+        request: &CognitionWriteAcquire,
+    ) -> CoordinationResult<Option<butler_platform::sqlite::Connection>> {
         let Some(connection) = busy_as_none(open_readwrite(&coordinator_path(&request.lock_path)))?
         else {
             return Ok(None);

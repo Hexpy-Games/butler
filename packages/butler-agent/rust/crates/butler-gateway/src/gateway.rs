@@ -47,10 +47,10 @@ pub use application::{
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppIdentityClock, AppLedgerSourceRequest,
-    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
-    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
-    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
+    AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
+    AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
     AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
     AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
     AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
@@ -77,13 +77,14 @@ pub use application::{
     AppSessionWorkspaceSnapshot, AppSettingsFacts, AppSettingsFactsProvider,
     AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest, AppSpaceCommand,
     AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
-    AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
-    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppTaskGraphQuery, AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact,
+    AppWorkProgress, AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest,
+    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
+    task_graph_response,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -115,7 +116,7 @@ pub use protocol::{
     SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
     TurnProgressSnapshotView, TurnRecord, TurnState,
 };
-pub use published_event::PublishedEvent;
+pub use published_event::{EventSubscription, PublishedEvent};
 pub use security_settings::{
     ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
     MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
@@ -186,23 +187,8 @@ pub trait GatewayProjectDashboard: Send + Sync {
 }
 
 /// Session controls and Plan decisions use the App revision and Project Ledger owners.
-pub trait GatewaySessionControls: Send + Sync {
-    fn get_session_controls_view(
-        &self,
-        session_id: String,
-    ) -> ApplicationFuture<AppSessionControlsView>;
-    fn update_session_controls_view(
-        &self,
-        session_id: String,
-        update: AppSessionControlUpdate,
-    ) -> ApplicationFuture<AppSessionControlsView>;
-    fn decide_session_plan(
-        &self,
-        session_id: String,
-        plan_id: String,
-        request: AppPlanDecisionRequest,
-    ) -> ApplicationFuture<AppPlanDecisionResult>;
-}
+mod session_controls_contract;
+pub use session_controls_contract::GatewaySessionControls;
 
 /// The durable application operations consumed by the HTTP adapter.
 ///
@@ -230,6 +216,12 @@ pub trait GatewayApplication:
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
+    fn report_app_update_progress(&self, _stage: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn cancel_app_update(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn list_skills(&self) -> ApplicationFuture<butler_runtime::skills::SkillSettingsView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -388,6 +380,8 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult>;
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<AppGrantView>>;
+    fn authority_revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()>;
     fn authority_list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn authority_revoke(
         &self,
@@ -437,6 +431,9 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn subsession_projection(&self, _session_id: String) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -487,9 +484,6 @@ pub trait GatewayApplication:
         listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError>;
 }
-
-/// Dropping the subscription must synchronously unregister its callback.
-pub trait EventSubscription: Send {}
 
 mod inbound_queue;
 mod message_file_store;

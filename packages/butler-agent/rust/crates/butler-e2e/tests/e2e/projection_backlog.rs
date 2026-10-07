@@ -114,7 +114,7 @@ fn file_ids(path: &Path) -> (u64, u64) {
     identity.id.map_or((0, 0), |id| (id.device, id.inode))
 }
 
-fn read_only(data: &Path) -> Connection {
+fn read_only(data: &Path) -> butler_platform::sqlite::Connection {
     sqlite::open_with_flags(data.join(DATABASE), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 

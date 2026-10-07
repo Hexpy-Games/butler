@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
-import { endTrace, instrument, navigateAppearance, startTrace, traceStats } from "./appearance-perf-support.ts";
+import { endTrace, instrument, navigateAppearance, startTrace, traceStats, settingsReady, toggleMotion } from "./appearance-perf-support.ts";
 
 const out = resolve(Bun.argv.find((a) => a.startsWith("--out="))?.slice(6) ?? ".tmp/appearance-perf");
 const reportOnly = Bun.argv.includes("--report-only");
@@ -42,10 +42,11 @@ async function measure(width: number, module: string, tone: string) {
   console.error(`measure ${width} ${module} ${tone}`);
   const params = custom ? (module === "butler.silk" ? { base: "#c9d2c6" } : { billow: 0.5 }) : undefined;
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: tone, wallpaper: { source: { kind: "live", module, params, paramsDark: params }, motion: "auto", pauseOnBattery: false } }) });
-  const context = await browser.newContext({ viewport: { width, height: 900 } });
-  await server.signIn(context);
+  const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "no-preference" });
   const page = await context.newPage();
   await instrument(page);
+  await server.signIn(context);
+
   await page.goto(server.url, { waitUntil: "load" });
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   console.error("app loaded");
@@ -53,6 +54,7 @@ async function measure(width: number, module: string, tone: string) {
   if (await menu.count()) await menu.click();
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: "모양", exact: true }).waitFor();
+  await settingsReady(page);
   console.error("settings loaded");
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
@@ -70,6 +72,20 @@ async function measure(width: number, module: string, tone: string) {
     const metrics = await cdp.send("Performance.getMetrics");
     const memory = metrics.metrics.find((m) => m.name === "JSHeapUsedSize")!.value;
     const result = { width, module, tone, round, custom, interactiveMs, readyMs, memory, ...traceStats(events), ...data };
+    writeFileSync(`${out}/${width}-${module}-${tone}-${round}.json`, JSON.stringify(result, null, 2));
+    await startTrace(cdp);
+    const toggle = await toggleMotion(page);
+    await page.waitForTimeout(100);
+    const toggleTrace = traceStats(await endTrace(cdp));
+    Object.assign(result, { toggleMs: toggle.ms, toggleTrace });
+    assert(toggle.ms <= 150, `Motion toggle took ${toggle.ms}ms`);
+    assert(toggleTrace.longTasks.length === 0, `Motion toggle long tasks: ${toggleTrace.longTasks}`);
+    assert(await page.getByRole("switch", { name: "움직임", exact: true }).isDisabled(), "Wallpaper motion must be held");
+    assert(await page.getByRole("switch", { name: "움직임", exact: true }).getAttribute("aria-checked") === "false", "Wallpaper must show still");
+    assert(await page.locator('[data-setting-id="main-screen-battery"]').count() === 0, "Battery field must be hidden");
+    await page.waitForFunction(() => document.querySelector('[data-setting-id="reduce-motion"] [role="switch"]')?.getAttribute("aria-checked") === "true");
+    await toggleMotion(page);
+    await page.waitForFunction(() => document.querySelector('[data-setting-id="main-screen-battery"]'));
     writeFileSync(`${out}/${width}-${module}-${tone}-${round}.json`, JSON.stringify(result, null, 2));
     rounds.push(result);
     assert(JSON.stringify(data.options) === JSON.stringify(expected), `Wallpaper count/order changed: ${JSON.stringify(data.options)}`);

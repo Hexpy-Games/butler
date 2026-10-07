@@ -105,6 +105,7 @@ export default mergeConfig(baseConfig as UserConfig, {
   base: siteBase === "/" ? "./" : siteBase,
   plugins: [siteLicenses(), siteRedirect()],
   build: {
+    rollupOptions: { input: path.join(siteDir, "index.html") },
     outDir,
     emptyOutDir: true,
     sourcemap: false,

@@ -1,6 +1,23 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { ArrowLeft, Clock3, Play, RotateCcw, Save, Trash2 } from "@/butler-ds";
-import { Button, ButtonContainer, IconButton } from "@/butler-ds";
+import {
+  ArrowLeft,
+  Clock3,
+  MoreHorizontal,
+  Play,
+  RotateCcw,
+  Save,
+  Trash2,
+} from "@/butler-ds";
+import {
+  Button,
+  ButtonContainer,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  IconButton,
+} from "@/butler-ds";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,6 +27,7 @@ import {
   BreadcrumbSeparator,
 } from "@/butler-ds";
 import { Stack } from "@/butler-ds";
+import { Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useAutomationStore } from "@/stores/automationStore";
 
@@ -34,6 +52,7 @@ export function AutomationActions({
   const state = useAutomationStore((state) => state.state);
   const saving = useAutomationStore((state) => state.saving);
   const copy = appCopy.automations;
+  const detailTitle = isNew ? copy.new : title || copy.detailFallback;
 
   return (
     <Stack
@@ -41,48 +60,65 @@ export function AutomationActions({
       justify="between"
       cross="center"
       gap="md"
+      minWidth="0"
       data-test-class="automation-detail-titlebar"
     >
-      <Stack align="row" cross="center" gap="sm">
-        <IconButton label={copy.backLabel} onClick={onBack}>
-          <ArrowLeft size="md" />
-        </IconButton>
-        <Breadcrumb label={appCopy.common.breadcrumb}>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbButton onClick={onBack}>{copy.title}</BreadcrumbButton>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>
-                {isNew ? copy.new : title || copy.detailFallback}
-              </BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </Stack>
-      <ButtonContainer size="default">
+      <Stack.Item grow minWidth="0">
+        <Stack align="row" cross="center" gap="sm" minWidth="0">
+          <IconButton label={copy.backLabel} onClick={onBack}>
+            <ArrowLeft size="md" />
+          </IconButton>
+          <Stack.Item grow minWidth="0">
+            <Breadcrumb label={appCopy.common.breadcrumb}>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbButton onClick={onBack}>{copy.title}</BreadcrumbButton>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>
+                    <Typo.Label as="span" minWidth="0" title={detailTitle} truncate>
+                      {detailTitle}
+                    </Typo.Label>
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </Stack.Item>
+        </Stack>
+      </Stack.Item>
+      <ButtonContainer size="sm" shrink={false}>
         {!isNew && (
           <>
-            <Button type="button" variant="outline" onClick={onRun}>
-              <Play size="md" /> {copy.runNow}
-            </Button>
-            {state === "paused" ? (
-              <Button type="button" variant="outline" onClick={onResume}>
-                <RotateCcw size="md" /> {copy.resume}
-              </Button>
-            ) : (
-              <Button type="button" variant="outline" onClick={onPause}>
-                <Clock3 size="md" /> {copy.pause}
-              </Button>
-            )}
-            <Button type="button" variant="destructive" onClick={onDelete}>
-              <Trash2 size="md" /> {appCopy.common.delete}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton label={appCopy.common.more}>
+                  <MoreHorizontal size="md" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={onRun}>
+                  <Play size="sm" /> {copy.runNow}
+                </DropdownMenuItem>
+                {state === "paused" ? (
+                  <DropdownMenuItem onSelect={onResume}>
+                    <RotateCcw size="sm" /> {copy.resume}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={onPause}>
+                    <Clock3 size="sm" /> {copy.pause}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                  <Trash2 size="sm" /> {appCopy.common.delete}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
-        <Button type="submit" disabled={saving}>
-          <Save size="md" /> {appCopy.common.save}
+        <Button type="submit" size="sm" disabled={saving}>
+          <Save size="sm" /> {appCopy.common.save}
         </Button>
       </ButtonContainer>
     </Stack>

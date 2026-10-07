@@ -1,10 +1,9 @@
+import { useUpdateProgressStore, updateIsRunning } from "@/stores/updateProgressStore";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
-import { notifyError } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type {
-  UpdateApplyResult,
-  UpdateComponentId,
   UpdateStatusView,
 } from "@/app/types.ts";
 import { useAppUpdateState } from "@/hooks/useAppUpdateState.ts";
@@ -14,6 +13,7 @@ import {
   UPDATE_COMPONENTS,
   UpdateComponentRow,
 } from "./UpdateComponentRow";
+import { useUpdateActions } from "./useUpdateActions";
 import { UpdatePreviewSwitch } from "./UpdatePreviewSwitch";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
@@ -30,52 +30,23 @@ export function UpdatesSettings() {
   const [view, setView] = useState<UpdateStatusView | null>(lastView);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [applying, setApplying] = useState<UpdateComponentId | null>(null);
+  const progress = useUpdateProgressStore((state) => state.progress);
+  const restartRunning = ["preparing", "restarting", "choice_required"].includes(restartState.status);
+  const applying = updateIsRunning(progress) ? progress!.component : restartRunning ? "app" : null;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadFailed(false);
-    try {
-      setView(await api<UpdateStatusView>("/updates"));
-    } catch {
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const check = useCallback(async (silent = false) => {
-    setLoading(true);
-    try {
-      setView(await api<UpdateStatusView>("/updates/check", {
-        method: "POST",
-        body: JSON.stringify({ component: "app" }),
-      }));
-    } catch (error) {
-      if (!silent) notifyError(error, copy.errors.checkUpdates, { id: "settings-updates-check" });
-    } finally {
-      setLoading(false);
-    }
-  }, [copy.errors.checkUpdates]);
-
-  const apply = useCallback(async (component: UpdateComponentId) => {
-    setApplying(component);
-    try {
-      const result = await api<UpdateApplyResult>("/updates/apply", {
-        method: "POST",
-        body: JSON.stringify({ component }),
-      });
-      setView((previous) => mergeUpdateResult(previous, result));
-    } catch (error) {
-      notifyError(error, copy.errors.applyUpdate, { id: "app-update" });
-    } finally {
-      setApplying(null);
-    }
-  }, [copy.errors.applyUpdate]);
+  const reportError = useCallback((error: unknown, action: "check" | "apply") => {
+    notifyError(error, action === "check" ? copy.errors.checkUpdates : copy.errors.applyUpdate,
+      { id: `settings-updates-${action}` });
+  }, [copy.errors.checkUpdates, copy.errors.applyUpdate]);
+  const { load, check, apply } = useUpdateActions({ setView, setLoading, setLoadFailed, reportError });
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (progress?.stage === "completed") void load();
+  }, [progress?.stage, load]);
 
   useEffect(() => {
     lastView = view;
@@ -106,7 +77,7 @@ export function UpdatesSettings() {
         errorMessage={copy.errors.loadUpdates}
         onRetry={() => void load()}
         actions={
-          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void check()}>
+          <Button type="button" size="sm" variant="outline" disabled={loading || applying !== null} onClick={() => void check()}>
             <RefreshCcw size="md" /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
           </Button>
         }
@@ -118,27 +89,15 @@ export function UpdatesSettings() {
             applying={applying}
             restartStatus={restartState.status}
             labels={copy.actions}
+            progress={progress?.component === status.component ? progress : null}
+            onCancel={() => void api<{ cancelled: boolean }>("/updates/cancel", { method: "POST" }).then(async (result) => {
+              if (result.cancelled) notifyStatus(copy.updateProgress.cancelled, { id: "app-update" });
+              await load();
+            }).catch((error) => notifyError(error, copy.errors.applyUpdate))}
             onApply={(component) => void apply(component)}
           />
         ))}
       </SettingsSection>
     </SettingsPage>
   );
-}
-
-function mergeUpdateResult(
-  view: UpdateStatusView | null,
-  result: UpdateApplyResult,
-): UpdateStatusView {
-  const generatedAt = result.checked_at;
-  const components = view?.components ?? UPDATE_COMPONENTS.map(emptyComponentStatus);
-  return {
-    generated_at: generatedAt,
-    components: components.map((component) =>
-      component.component === result.component ? result : component,
-    ),
-    storage_label: "updates",
-    manifest_source: result.manifest_source,
-    raw_text_included: false,
-  };
 }

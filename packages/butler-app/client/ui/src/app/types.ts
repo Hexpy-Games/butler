@@ -19,7 +19,6 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "memory"
-  | "privacy"
   | "security"
   | "system"
   | "archives"
@@ -445,7 +444,19 @@ export interface ComponentUpdateStatus {
   manifest_source: string;
 }
 
+export interface UpdateProgressView {
+  component: UpdateComponentId;
+  stage: "idle" | "checking" | "downloading" | "verifying" | "ready" | "applying" | "restarting" | "failed" | "completed";
+  revision: number;
+  bytes_done: number | null;
+  bytes_per_second?: number | null;
+  bytes_total: number | null;
+  cancellable: boolean;
+  error_code: string | null;
+}
+
 export interface UpdateStatusView {
+  progress?: UpdateProgressView | null;
   generated_at: string;
   components: ComponentUpdateStatus[];
   storage_label: "updates";
@@ -570,6 +581,9 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  /** false follows the OS; true forces the DS reduced-motion path. */
+  reduce_motion: boolean;
+  collapse_message_box: boolean;
   main_screen_theme: "none" | "bloom" | "silk";
   main_screen_theme_preset:
     | "monochrome"
@@ -588,6 +602,7 @@ export interface SettingsView {
   ];
   /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
   wallpaper: WallpaperSetting;
+  composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -766,6 +781,7 @@ export type ComposerModelState = ModelCatalogState;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  session_hint?: string;
   work_progress?: { completed: number; total: number };
   id: string;
   kind: ChatKind;
@@ -1641,6 +1657,7 @@ export interface TimelineEvent {
   type: string;
   created_at?: string;
   payload?: {
+    progress?: UpdateProgressView;
     message?: MessageRecord;
     segment_completed?: boolean;
     turn?: {

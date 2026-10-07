@@ -16,6 +16,8 @@ export interface WallpaperEngineOptions {
   imageLoader?: WallpaperImageLoader;
   /** Sibling canvas the crossfade freezes the previous frame on; no crossfade without it. */
   overlay?: HTMLCanvasElement | null;
+  /** A see-through canvas for `transparent` modules; fixed for the canvas's life. */
+  transparent?: boolean;
   /** Decodes image bytes; defaults to `createImageBitmap` (tests inject a fake). */
   decode?: (blob: Blob) => Promise<ImageBitmap>;
 }

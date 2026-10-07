@@ -168,7 +168,21 @@
   color: var(--text-secondary);
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .trigger:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .trigger[data-size="sm"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    min-height: var(--control-hit-target);
+  }
+
+  .item:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .trigger,
   .trigger[data-size="sm"] {
     min-height: var(--control-hit-target);

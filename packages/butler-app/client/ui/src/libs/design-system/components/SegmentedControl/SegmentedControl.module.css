@@ -64,7 +64,14 @@
   opacity: 0.52;
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .group[data-size="default"]
+    .item:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .group[data-size="default"] .item {
     min-height: var(--control-hit-target);
   }

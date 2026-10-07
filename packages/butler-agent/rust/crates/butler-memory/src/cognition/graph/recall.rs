@@ -36,7 +36,7 @@ pub(in crate::cognition) use temporal::TemporalSelection;
 pub(in crate::cognition) use vectors::CurrentVectorMatches;
 
 pub(in crate::cognition) struct GraphRecallReader {
-    connection: Option<Connection>,
+    connection: Option<sqlite::Connection>,
     revision: String,
 }
 
@@ -321,7 +321,7 @@ impl GraphRecallReader {
     }
 
     pub(in crate::cognition) fn connection(&self) -> CognitionResult<&Connection> {
-        self.connection.as_ref().ok_or_else(|| {
+        self.connection.as_deref().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
         })
     }
@@ -331,7 +331,7 @@ impl Drop for GraphRecallReader {
     fn drop(&mut self) {
         if let Some(connection) = self.connection.take() {
             let _ = connection.execute_batch("ROLLBACK");
-            let _ = connection.close();
+            let _ = connection.close().map_err(|(_, error)| db_error(error));
         }
     }
 }

@@ -12,6 +12,12 @@ use butler_runtime::operations::UpdateRequest;
 
 use super::{HttpError, HttpState, json, read_body_with_limit};
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProgressBody {
+    stage: String,
+}
+
 const UPDATE_REQUEST_LIMIT: usize = 16 * 1024;
 
 #[derive(Default, Deserialize)]
@@ -28,6 +34,13 @@ struct ApplyBody {
     component: String,
     channel: Option<String>,
     dry_run: Option<bool>,
+}
+
+pub(super) fn handles(path: &str) -> bool {
+    matches!(
+        path,
+        "/updates" | "/updates/check" | "/updates/apply" | "/updates/cancel" | "/updates/progress"
+    )
 }
 
 pub(super) async fn route(
@@ -66,6 +79,15 @@ pub(super) async fn route(
                     dry_run: input.dry_run.unwrap_or(false),
                     ..UpdateRequest::default()
                 })
+                .await?
+        }
+        (Method::POST, "/updates/cancel") => state.application.cancel_app_update().await?,
+        (Method::POST, "/updates/progress") => {
+            let body = read_body_with_limit(request.into_body(), UPDATE_REQUEST_LIMIT).await?;
+            let input: ProgressBody = serde_json::from_slice(&body).map_err(|_| invalid_apply())?;
+            state
+                .application
+                .report_app_update_progress(input.stage)
                 .await?
         }
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),

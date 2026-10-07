@@ -44,7 +44,22 @@
   border-color: var(--color-danger-border);
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .input:not(
+    [data-variant="underline"],
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ),
+  .input[data-compact]:not(
+      [data-variant="underline"],
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .input:not([data-variant="underline"]),
   .input[data-compact]:not([data-variant="underline"]) {
     min-height: var(--control-hit-target);

@@ -45,6 +45,7 @@ export function writeAppForegroundStartupProgress(
   butlerData: string,
   input: {
     stage: string;
+    timings?: Array<{ stage: string; elapsed_ms: number | null; timestamp_ms: number | null }>;
     platform?: string;
     architecture?: string;
     lifecycleMode?: string;

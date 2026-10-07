@@ -51,6 +51,7 @@
   "devDependencies": {
     "@types/mdast": "^4.0.4",
     "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "postcss": "8.5.13"
   }
 }

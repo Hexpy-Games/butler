@@ -1823,7 +1823,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
-  if (section.includes("security") || section.includes("보안")) return "security";
+  if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||
     section.includes("developer-log") ||
@@ -1851,7 +1851,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     section.includes("사용량")
   )
     return "usage";
-  if (section.includes("model") || section.includes("access")) return "models";
+  if (section.includes("model")) return "models";
   if (
     section.includes("about") ||
     section.includes("info") ||
@@ -1873,7 +1873,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
     section.includes("data") ||
     section.includes("diagnostic")
   )
-    return "privacy";
+    return "security";
   return "general";
 }
 

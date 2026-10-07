@@ -8,7 +8,7 @@ WHERE semantic_state NOT IN ('admitted','delivery_committed','delivered','cancel
 /// temporary reader window; current installations retain their runtime cache.
 pub(super) fn needs_backfill(db: &Connection) -> rusqlite::Result<bool> {
     db.query_row(
-        "SELECT COUNT(*)<14 OR EXISTS(SELECT 1 FROM sqlite_schema
+        "SELECT COUNT(*)<16 OR EXISTS(SELECT 1 FROM sqlite_schema
          WHERE name='idx_btcc_turn_cutover_candidates' AND sql<>?1)
          FROM sqlite_schema WHERE type='index' AND name IN (
          'idx_btcc_turns_authority_waiting','idx_btcc_subsession_outbox_pending',
@@ -17,7 +17,8 @@ pub(super) fn needs_backfill(db: &Connection) -> rusqlite::Result<bool> {
          'idx_btcc_turn_cutover_null_states','idx_btcc_activity_page',
          'idx_btcc_activity_identity','idx_btcc_activity_open_page',
          'idx_btcc_activity_parent_page','idx_btcc_activity_parent_open_page',
-         'idx_btcc_work_monitor','idx_btcc_work_latest_binding')",
+         'idx_btcc_work_monitor','idx_btcc_work_latest_binding',
+         'idx_btcc_permission_sources','idx_btcc_permissions_active')",
         [CANDIDATES],
         |row| row.get(0),
     )

@@ -1,8 +1,34 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Page } from "playwright";
+import { strict as assert } from "node:assert";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-/** Explicit launch flags for restricted smoke runners; normal runs keep defaults. */
-export function smokeBrowserArgs(): string[] {
-  return parseSmokeArgs("BUTLER_SMOKE_BROWSER_ARGS");
+import { smokeBrowserArgs } from "./smoke-browser-args";
+export { smokeBrowserArgs } from "./smoke-browser-args";
+
+/** Keep every matrix assertion, isolating Bun/CDP lifetimes on restricted runners. */
+export async function runSmokeCases(cases: string[], variable: string, entry: string): Promise<boolean> {
+  const selected = process.env[variable];
+  if (selected) { assert(cases.includes(selected), `Unknown smoke case: ${selected}`); return false; }
+  if (!smokeBrowserArgs().includes("--single-process")) return false;
+  assert.equal(new Set(cases).size, cases.length);
+  for (const cell of cases) {
+    const isolation = mkdtempSync(join(tmpdir(), "butler-smoke-case-"));
+    mkdirSync(join(isolation, "home")); mkdirSync(join(isolation, "data"));
+    try {
+      const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], {
+        env: { ...process.env, HOME: join(isolation, "home"), BUTLER_DATA: join(isolation, "data"), [variable]: cell },
+        stdio: "inherit",
+      });
+      const code = await new Promise<number | null>((resolve, reject) => {
+        child.once("error", reject); child.once("exit", resolve);
+      });
+      assert.equal(code, 0, `Smoke case ${cell} failed`);
+    } finally { rmSync(isolation, { recursive: true, force: true }); }
+  }
+  return true;
 }
 
 /** Electron needs its production process model; Chromium's restricted-runner
@@ -27,14 +53,17 @@ function parseSmokeArgs(name: string): string[] {
  */
 export async function launchSmokeBrowser(extraArgs: string[] = []): Promise<Browser> {
   const args = [...smokeBrowserArgs(), ...extraArgs];
-  const base = await chromium.launch({ headless: true, args });
+  const channel = process.env.BUTLER_SMOKE_BROWSER_CHANNEL;
+  if (channel && channel !== "chromium") throw new Error("BUTLER_SMOKE_BROWSER_CHANNEL must be chromium");
+  const launch = { headless: true, args, ...(channel ? { channel } : {}) };
+  const base = await chromium.launch(launch);
   if (!args.includes("--single-process")) return base;
   await boundOwnedClose(base);
   const owned = new Set<Browser>();
   let unusedBase = true;
   let tracingBrowser: Browser | undefined;
   async function newContext(options?: BrowserContextOptions): Promise<BrowserContext> {
-    const browser = unusedBase ? base : await chromium.launch({ headless: true, args });
+    const browser = unusedBase ? base : await chromium.launch(launch);
     if (!unusedBase) await boundOwnedClose(browser);
     unusedBase = false;
     reportEventTracing(browser);
@@ -94,7 +123,8 @@ function reportEventTracing(browser: Browser): void {
 
 /** Some sandboxed single-process builds hang closing iframe/GPU documents.
  * All assertions have finished when close is called; reap only this browser's
- * exact PID if its graceful teardown stalls, then let Playwright observe exit.
+ * exact PID if its graceful teardown stalls. Verify exit within the same 10s
+ * deadline even if the protocol close acknowledgement remains unresolved.
  */
 async function boundOwnedClose(browser: Browser): Promise<void> {
   const session = await browser.newBrowserCDPSession();
@@ -105,22 +135,32 @@ async function boundOwnedClose(browser: Browser): Promise<void> {
   const close = browser.close.bind(browser);
   let closing: Promise<void> | undefined;
   browser.close = (options) => closing ??= (async () => {
+    if (!browser.isConnected()) return;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const stalled = new Promise<void>((done, reject) => {
+    const disconnected = new Promise<void>(resolve => browser.once("disconnected", () => resolve()));
+    const stalled = new Promise<void>((resolve, reject) => {
       deadline = setTimeout(() => {
         try { process.kill(owner.id, "SIGKILL"); }
         catch (error) {
-          // The owned process can exit before Playwright's close promise
-          // settles. ESRCH proves teardown, rather than an orphan to reap.
-          if ((error as NodeJS.ErrnoException).code === "ESRCH") { done(); return; }
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
           reject(error); return;
         }
-        // Restricted single-process Chromium can leave its protocol close
-        // pending after all checks. SIGKILL targets the captured owner only.
-        done();
-      }, 10_000);
+        const expires = performance.now() + 500;
+        const observe = () => {
+          try { process.kill(owner.id, 0); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
+            reject(error); return;
+          }
+          if (performance.now() >= expires) { reject(new Error(`Owned smoke browser ${owner.id} did not exit`)); return; }
+          setTimeout(observe, 10);
+        };
+        observe();
+      }, 9_500);
     });
-    try { await Promise.race([close(options), stalled]); }
+    try {
+      await Promise.race([close(options), disconnected, stalled]);
+    }
     finally { clearTimeout(deadline); }
   })();
 }

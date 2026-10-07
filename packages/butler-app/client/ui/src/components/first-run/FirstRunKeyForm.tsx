@@ -1,3 +1,4 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import {
   Button,
   CheckIcon,
@@ -10,6 +11,7 @@ import {
   SetupWizardContent,
   Spinner,
   Stack,
+  InlineReference,
   Typo,
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
@@ -56,9 +58,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
       </Field>
       <Inline gap="md">
         {spec.keyUrl ? (
-          <Button asChild size="sm" variant="link">
-            <a href={spec.keyUrl} rel="noreferrer" target="_blank">{`${copy.getKey} ↗`}</a>
-          </Button>
+          <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body>
         ) : null}
         <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
       </Inline>

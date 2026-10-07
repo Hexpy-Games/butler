@@ -1,5 +1,5 @@
 //! One short transaction per bounded drain; streaming is coalesced upstream.
-use super::{AppStorageError, Completion, StorageResult, event_outbox};
+use super::{AppStorageCode, AppStorageError, Completion, StorageResult, event_outbox};
 use rusqlite::Connection;
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
@@ -70,6 +70,7 @@ fn batch(
     opened: &mut Option<Instant>,
 ) -> StorageResult<()> {
     let started = Instant::now();
+    let before = db.total_changes();
     let mut completions = Vec::new();
     let mut next = Some(first);
     for index in 0..BATCH_OPS {
@@ -103,7 +104,15 @@ fn batch(
         }
         next = receiver.try_recv().ok();
     }
-    let result = commit(db, opened);
+    let result = commit(db, opened).and_then(|()| {
+        if db.total_changes() == before {
+            return Ok(());
+        }
+        butler_platform::sqlite::sync_wal_index(db).map_err(|error| {
+            AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
+                .with_source(error)
+        })
+    });
     for completion in completions {
         completion(result.clone());
     }

@@ -1,7 +1,8 @@
+import { faviconSrc } from "@/app/favicons.ts";
 import { Fragment, useEffect } from "react";
 import {
   AlertCircle, Button, ButtonContainer, GitBranch, IconSlot, Monitor, Notice,
-  SendHorizontal, Separator, SetupWizardContent, Stack, Terminal, Typo,
+  SendHorizontal, Separator, SetupWizardContent, Stack, Terminal, InlineReference, Typo,
 } from "@/butler-ds";
 import { FIRST_RUN_GUIDE_URL } from "./FirstRunWelcome";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
@@ -31,11 +32,7 @@ export function FirstRunConsent({ flow }: { flow: FirstRunFlow }) {
                   <Typo.Body>{item.body}</Typo.Body>
                   {item.caption ? <Typo.Caption tone="secondary">{item.caption}</Typo.Caption> : null}
                   {index === 2 ? (
-                    <Button asChild size="sm" variant="link">
-                      <a href={`${FIRST_RUN_GUIDE_URL}#ai-providers`} rel="noreferrer" target="_blank">
-                        <Typo.Text as="span" wrap="normal">{copy.consentProviderLink}</Typo.Text>
-                      </a>
-                    </Button>
+                    <Typo.Body as="span"><InlineReference kind="external" href={`${FIRST_RUN_GUIDE_URL}#ai-providers`} iconSrc={faviconSrc(FIRST_RUN_GUIDE_URL)}>{copy.consentProviderLink}</InlineReference></Typo.Body>
                   ) : null}
                 </Stack>
               </Stack>

@@ -1,4 +1,6 @@
 import { browserFeatureEnabled } from "@/app/productFeatures";
+import { startupPaintReady } from "@/app/startupReady";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
@@ -64,13 +66,15 @@ import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { LegacyDataRecovery } from "@/components/first-run/LegacyDataRecovery.tsx";
 
 export function AppShell() {
-  if (window.butlerApp?.startupIssue === "legacy-data") return <LegacyDataRecovery />;
+  useEffect(() => { if (window.butlerApp?.startupIssue === "legacy-data") startupPaintReady(); }, []);
+  if (window.butlerApp?.startupIssue === "legacy-data") return <ErrorBoundary scope="legacy-recovery"><LegacyDataRecovery /></ErrorBoundary>;
   return <AppOnboardingShell />;
 }
 
 function AppOnboardingShell() {
   useAppLocale();
   const { gate, markComplete } = useOnboardingGate();
+  useEffect(() => { if (gate !== "pending" && gate !== "workspace") startupPaintReady(); }, [gate]);
   const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
   const closeRerun = useOnboardingStore((state) => state.closeRerun);
   if (gate === "pending") return <AppBootState />;
@@ -79,16 +83,18 @@ function AppOnboardingShell() {
     return (
       <>
         <FirstRunTheme />
-        <FirstRunSetup
-          key={mode}
-          mode={mode}
-          onCancel={closeRerun}
-          onComplete={(result) => {
-            if (result) useOnboardingStore.getState().setConnected(result.cardId);
-            markComplete();
-            closeRerun();
-          }}
-        />
+        <ErrorBoundary scope="onboarding">
+          <FirstRunSetup
+            key={mode}
+            mode={mode}
+            onCancel={closeRerun}
+            onComplete={(result) => {
+              if (result) useOnboardingStore.getState().setConnected(result.cardId);
+              markComplete();
+              closeRerun();
+            }}
+          />
+        </ErrorBoundary>
         <AppToaster />
       </>
     );
@@ -213,7 +219,7 @@ function AppWorkspaceShell() {
       }
     >
       {isSettingsView ? (
-        <SettingsView isActive={isSettingsView} />
+        <ErrorBoundary scope="settings"><SettingsView isActive={isSettingsView} /></ErrorBoundary>
       ) : (
         <>
           <AdaptiveShellSidebar
@@ -232,11 +238,11 @@ function AppWorkspaceShell() {
               <Stack fill gap="none">
                 {browserFeatureEnabled && view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
-                  <AutomationsView />
+                  <ErrorBoundary key={view.kind} scope="schedules"><AutomationsView /></ErrorBoundary>
                 ) : view.kind === "project-dashboard" ? (
-                  <ProjectDashboardView />
+                  <ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary>
                 ) : (
-                  <Conversation />
+                  <ErrorBoundary key={activeChatId} scope="conversation"><Conversation /></ErrorBoundary>
                 )}
               </Stack>
             </Stack>
@@ -262,13 +268,15 @@ function AppWorkspaceShell() {
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
-          {browserFeatureEnabled && view.kind === "browser" ? (
-            <InspectorShell id="butler-right-inspector" activeTab="conversation"
-              tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
-              onTabChange={() => undefined}>
-              <Conversation />
-            </InspectorShell>
-          ) : <Inspector id="butler-right-inspector" />}
+          <ErrorBoundary scope="inspector">
+            {browserFeatureEnabled && view.kind === "browser" ? (
+              <InspectorShell id="butler-right-inspector" activeTab="conversation"
+                tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
+                onTabChange={() => undefined}>
+                <Conversation />
+              </InspectorShell>
+            ) : <Inspector id="butler-right-inspector" />}
+          </ErrorBoundary>
         </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (

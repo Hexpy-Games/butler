@@ -346,6 +346,7 @@ fn close_state(state: Box<OperationState>) -> CognitionResult<()> {
         ..
     } = *state;
     canonical.close().map_err(CognitionError::from)?;
+    graph.sync_wal_index()?;
     let mut pools = IDLE_POOLS.lock();
     if handle
         .reader_pin

@@ -14,9 +14,9 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
  *   offscreen or under reduced motion.
  * - Foundations chapter heroes (FoundationHeroMotion): each hero runs only
  *   CSS animations of transform/opacity and documented specimen properties,
- *   including Sketch SVG contour drawing; holds the frame rate with no long
- *   task and a small main-thread cost per frame, pauses offscreen and in a
- *   hidden tab, and has no animation under reduced motion.
+ *   including timeline-owned SVG contour and guide strokes; holds the frame
+ *   rate with no long task and a small main-thread cost per frame, pauses
+ *   offscreen and in a hidden tab, and has no animation under reduced motion.
  * - Optional `--video`: Playwright recordings of each motion in light and dark
  *   (with `--only=heroes`: one loop of every chapter hero instead).
  *
@@ -303,6 +303,50 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   return { animationFrames: windows, whole, travel };
 }
 
+/**
+ * ProgressRing: value and indeterminate changes keep the ring's box (zero
+ * layout shift), the value moves only through stroke-dashoffset, and
+ * indeterminate is the DS Spinner (running, and still under reduced motion).
+ */
+async function measureProgressRing(page: Page, serverUrl: string, ids: Map<string, string>) {
+  const scope = await openItem(page, serverUrl, ids.get("ProgressRing")!, "light", "Live");
+  const probe = await scope.evaluate(async (story) => {
+    const ring = story.querySelector('[data-slot="progress-ring"]') as HTMLElement;
+    const box = () => { const rect = ring.getBoundingClientRect(); return `${rect.x},${rect.y},${rect.width},${rect.height}`; };
+    const boxes = new Set([box()]);
+    const sample = async (ms: number) => {
+      const start = performance.now();
+      while (performance.now() - start < ms) { boxes.add(box()); await new Promise((resolve) => requestAnimationFrame(resolve)); }
+    };
+    const fill = ring.querySelector('[data-slot="progress-ring-fill"]') as SVGCircleElement;
+    const offsetBefore = getComputedStyle(fill).strokeDashoffset;
+    (story.querySelector('[data-ds-motion="progress-ring-advance"]') as HTMLElement).click();
+    await sample(300);
+    const offsetAfter = getComputedStyle(fill).strokeDashoffset;
+    const transitionProperty = getComputedStyle(fill).transitionProperty;
+    (story.querySelector('[data-ds-motion="progress-ring-indeterminate"]') as HTMLElement).click();
+    await sample(300);
+    const orbit = ring.querySelector('[data-slot="spinner"] [data-slot="spinner-orbit"]');
+    const spinning = orbit ? getComputedStyle(orbit).animationName : null;
+    const valueNow = ring.getAttribute("aria-valuenow");
+    return { boxes: [...boxes], offsetBefore, offsetAfter, transitionProperty, spinning, valueNow };
+  });
+  // Under reduced motion the indeterminate ring follows the Spinner: the orbit stops.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reduced = await scope.evaluate((story) => {
+    const orbit = story.querySelector('[data-slot="progress-ring"] [data-slot="spinner-orbit"]');
+    return orbit ? getComputedStyle(orbit).animationName : null;
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await scope.locator('[data-ds-motion="progress-ring-indeterminate"]').click();
+  assert(probe.boxes.length === 1, `ProgressRing moved while its value changed: ${probe.boxes.join(" | ")}`);
+  assert(probe.offsetBefore !== probe.offsetAfter, `ProgressRing value did not change the fill: ${JSON.stringify(probe)}`);
+  assert(probe.transitionProperty === "stroke-dashoffset", `ProgressRing fill must transition stroke-dashoffset only: ${probe.transitionProperty}`);
+  assert(/spinner-orbit/u.test(probe.spinning ?? "") && probe.valueNow === null, `indeterminate ProgressRing must be the running Spinner: ${JSON.stringify(probe)}`);
+  assert(reduced === "none", `indeterminate ProgressRing must follow the Spinner under reduced motion: ${reduced}`);
+  return { ...probe, reduced };
+}
+
 type EnterProbe = { name: string; durationMs: number; firstFrame60Hz: number; observedFirstFrame: { ms: number; progress: number } };
 
 /** Watches for the next overlay enter (CSS *-enter animation or the toast opacity transition) and measures it. */
@@ -503,13 +547,13 @@ async function openHero(page: Page, serverUrl: string, pageId: string, theme: st
   return hero;
 }
 
-type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[]; outlineDashOnly: boolean };
+type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[]; authoredSvgContourDashOnly: boolean };
 
 function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimations> {
   return hero.evaluate((node) => {
     const list = node.getAnimations({ subtree: true });
     const properties = new Set<string>();
-    let outlineDashOnly = true;
+    let authoredSvgContourDashOnly = true;
     for (const animation of list) {
       for (const frame of (animation.effect as KeyframeEffect).getKeyframes()) {
         for (const key of Object.keys(frame)) {
@@ -517,7 +561,14 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
           properties.add(key);
           if (key === "strokeDashoffset") {
             const target = (animation.effect as KeyframeEffect).target;
-            outlineDashOnly &&= target instanceof SVGRectElement && /^sk-.+-rr$/u.test(target.getAttribute("data-t") ?? "");
+            const owner = target?.closest("[data-t]");
+            const scope = target?.closest("[data-hero-scope]");
+            const prefix = `${scope?.getAttribute("data-hero-scope")}-`;
+            authoredSvgContourDashOnly &&= target instanceof SVGGeometryElement
+              && owner !== null && scope !== null && scope?.contains(owner ?? null) === true
+              && animation instanceof CSSAnimation && animation.animationName.startsWith(prefix)
+              && /^\d+$/u.test(animation.animationName.slice(prefix.length))
+              && getComputedStyle(target).getPropertyValue("stroke-dasharray") !== "none";
           }
         }
       }
@@ -528,7 +579,7 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
       running: list.filter((animation) => animation.playState === "running").length,
       cssOnly: list.every((animation) => animation instanceof CSSAnimation),
       properties: [...properties].sort(),
-      outlineDashOnly,
+      authoredSvgContourDashOnly,
     };
   });
 }
@@ -603,9 +654,11 @@ async function measureHeroes(page: Page, serverUrl: string) {
     if (reportOnly) continue;
     assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
     assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
-    // Chapter blueprints draw only their SVG rect contours (the documented
-    // Sketch contract). This paint-only allowance never exempts layout checks.
-    const allowed = ["transform", "opacity", ...(playingAnimations.outlineDashOnly ? ["strokeDashoffset"] : []), ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
+    // DS motion rules allow paint-only stroke-dashoffset; heroTimeline's dash
+    // tracks draw Sketch contours and Annotations guides/leaders. Require a
+    // scoped timeline CSS animation on marked, dashed SVG geometry; keep all
+    // layout and performance gates below.
+    const allowed = ["transform", "opacity", ...(playingAnimations.authoredSvgContourDashOnly ? ["strokeDashoffset"] : []), ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
     assert(playingAnimations.properties.every((property) => allowed.includes(property)),
       `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
     assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced ${playing.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${playing.maxTaskMs}ms)`);
@@ -834,6 +887,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     assert(fade.settledChunkSpans === 0, "settled streamed text should render without chunk spans");
     results.m6 = await measureNumberAndMeter(page, serverUrl, ids);
     results.sendFlight = await measureSendFlight(page, serverUrl, ids);
+    results.progressRing = await measureProgressRing(page, serverUrl, ids);
     results.heroes = await measureHeroes(page, serverUrl);
   } finally {
     await context.close();

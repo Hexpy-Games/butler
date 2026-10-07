@@ -9,15 +9,21 @@ import {
   type WallpaperScene,
 } from "./registry";
 import { drawWallpaperStill } from "./stillGpu";
-import type { WallpaperModule, WallpaperSource, WallpaperTone } from "./types";
+import type { WallpaperModule, WallpaperSource, WallpaperTone, WallpaperImageLoader, WallpaperContentRect } from "./types";
 
 /** Drawing-buffer px of a still. */
 export interface WallpaperStillSize {
   width: number;
   height: number;
+  /** Lifecycle stills compose at their own window size instead of picker screen size. */
+  compositionWidth?: number;
+  pixelRatio?: number;
+  contentRect?: WallpaperContentRect;
+  dayPhase?: number;
+  imageLoader?: WallpaperImageLoader;
 }
 
-type LiveSource = Extract<WallpaperSource, { kind: "live" }>;
+type LiveSource = Exclude<WallpaperSource, { kind: "none" }>;
 /** A module (drawn with its defaults) or a live source (its params). */
 export type WallpaperStillTarget = WallpaperModule | LiveSource;
 
@@ -44,14 +50,14 @@ export function wallpaperStillKey(
   registry: WallpaperRegistry = BUILTIN_WALLPAPERS,
 ): string {
   const source = sourceOf(target);
-  const module = "manifest" in target ? target : registry.get(source.module);
+  const module = "manifest" in target ? target : registry.get(source.kind === "live" ? source.module : source.filter?.module ?? "butler.image");
   const revision = module ? wallpaperModuleRevision(module) : "-";
-  return `${wallpaperSourceKey(source)}|${revision}|${tone}|${size.width}x${size.height}`;
+  return `${wallpaperSourceKey(source)}|${revision}|${tone}|${size.width}x${size.height}|${size.compositionWidth ?? ""}|${JSON.stringify(size.contentRect)}|${size.dayPhase ?? ""}|${size.pixelRatio ?? ""}`;
 }
 
 function sceneOf(target: WallpaperStillTarget, tone: WallpaperTone, registry: WallpaperRegistry): WallpaperScene {
   if (!("manifest" in target)) return resolveWallpaperScene(target, registry, tone)!;
-  return liveWallpaperScene(target, sourceOf(target), tone);
+  return liveWallpaperScene(target, { kind: "live", module: target.manifest.id }, tone);
 }
 
 /**
