@@ -274,7 +274,7 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
     butler_e2e::gate!();
     let (url, server) = stub::default_folder_model().await?;
     let setup = Setup::new("DEFAULT-PROJECT-FOLDER")?
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
     let folders = [
