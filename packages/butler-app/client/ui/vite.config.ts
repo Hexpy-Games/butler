@@ -85,8 +85,14 @@ export default defineConfig({
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  define: { "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
-  plugins: [startupAssets(process.cwd()), hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
+  define: { __BUTLER_BROWSER_ENABLED__: process.env.BUTLER_FEATURE_BROWSER !== "false", "import.meta.env.BUTLER_APP_VERSION": JSON.stringify(JSON.parse(readFileSync(path.resolve(process.cwd(), "../electron/package.json"), "utf8")).version) },
+  plugins: [startupAssets(process.cwd()), {
+    name: "butler-product-features",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "product-features.json",
+        source: JSON.stringify({ browser: process.env.BUTLER_FEATURE_BROWSER !== "false" }) });
+    },
+  }, hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
     name: "wallpaper-poster-inputs",
     apply: "build",
     buildStart: () => checkWallpaperPosters(process.cwd()),

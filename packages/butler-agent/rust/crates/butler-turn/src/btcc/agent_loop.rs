@@ -14,6 +14,7 @@ mod model_round;
 pub mod operation_result_replay;
 mod ports;
 mod progress;
+pub(crate) use progress::{authority_batch, authority_cancellation_events};
 mod state;
 mod stream_relay;
 mod tool_batch;
@@ -34,6 +35,8 @@ pub use turn_binding::{BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, Gui
 mod failure_tests;
 #[cfg(any(test, feature = "test-support"))]
 mod guided_fixture;
+#[cfg(test)]
+mod outcome_tests;
 #[cfg(test)]
 mod round_contract_tests;
 #[cfg(any(test, feature = "test-support"))]

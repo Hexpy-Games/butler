@@ -29,6 +29,7 @@ pub(super) async fn setup(
         .access(access)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
+    *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
     Ok((setup.start().await?, script, server))
 }
 
@@ -299,9 +300,11 @@ mod stub {
         FinalTools,
         FinalEmptyTools,
         Batched,
+        ParallelFiles,
     }
     pub(crate) struct Script {
         pub requests: Mutex<Vec<Value>>,
+        pub file_root: Mutex<String>,
         pub mode: Mode,
     }
 
@@ -312,6 +315,7 @@ mod stub {
         let url = format!("http://{}/codex", listener.local_addr()?);
         let script = Arc::new(Script {
             requests: Mutex::new(vec![]),
+            file_root: Mutex::new(String::new()),
             mode,
         });
         let app = Router::new()
@@ -346,6 +350,15 @@ mod stub {
                     &json!({"path":"final-mutation.txt","content":"forbidden"}),
                 ),
                 Mode::Progress | Mode::FinalTools | Mode::FinalEmptyTools => progress(step, &body),
+                Mode::ParallelFiles if step == 0 => json!(
+                    (0..3)
+                        .map(|i| call(
+                            &format!("lookup-{i}"),
+                            "list_files",
+                            &json!({"root":format!("{}/lookup-{i}", script.file_root.lock().unwrap())})
+                        ))
+                        .collect::<Vec<_>>()
+                ),
                 Mode::Batched => {
                     super::super::token_cache::batched_reply(step, &body, progress, command, call)
                 }
@@ -354,7 +367,6 @@ mod stub {
                 }
                 Mode::ApprovalRecovery if step == 1 => command(true),
                 Mode::Empty | Mode::ApprovalRecovery if step < 5 => message(""),
-                Mode::Empty | Mode::ApprovalRecovery | Mode::Prose => message("The total is 42."),
                 Mode::Reasoning if step == 0 => {
                     json!({"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need to calculate the result."}]})
                 }
@@ -369,9 +381,14 @@ mod stub {
                     &json!({"questions":[{"id":"format","eyebrow":"Output","title":"Which format?","kind":"single","allow_custom":true,"options":[{"id":"brief","label":"Brief","recommended":true},{"id":"full","label":"Full"}]}]}),
                 ),
                 Mode::Approval if step == 0 => command(matches!(script.mode, Mode::Approval)),
-                Mode::Approval | Mode::Question | Mode::Reasoning | Mode::Commentary => {
-                    message("The total is 42.")
-                }
+                Mode::ParallelFiles
+                | Mode::Empty
+                | Mode::ApprovalRecovery
+                | Mode::Prose
+                | Mode::Approval
+                | Mode::Question
+                | Mode::Reasoning
+                | Mode::Commentary => message("The total is 42."),
                 Mode::Todo => match step {
                     0 => call(
                         "todo",

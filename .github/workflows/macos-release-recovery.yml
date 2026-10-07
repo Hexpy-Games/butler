@@ -79,6 +79,10 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write(f'BUTLER_NATIVE_AGENT_EXECUTABLE={binary}\n')
           PY
+      - name: Select the immutable target's product features
+        env:
+          PRODUCT_FEATURE_TAG: ${{ inputs.tag }}
+        run: python3 .github/scripts/product-features.py --root recovery-source --tag "$PRODUCT_FEATURE_TAG"
       - name: Build the target renderer and native payload
         working-directory: recovery-source
         env:

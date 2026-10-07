@@ -6,6 +6,7 @@ mod alias_index_drop;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
+mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
 mod browser_outputs;
