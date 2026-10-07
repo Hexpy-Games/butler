@@ -19,5 +19,7 @@ runs:
       env:
         PRODUCT_FEATURE_TAG: ${{ inputs.tag }}
       run: |
+        $ErrorActionPreference = 'Continue'
         python "$env:GITHUB_WORKSPACE/.github/scripts/product-features.py" --tag "$env:PRODUCT_FEATURE_TAG"
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

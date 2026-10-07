@@ -5,9 +5,15 @@ rejects absolute drive paths even for reads: installed tools use environment
 variables, while all CI-owned writes belong to the workspace or runner temp.
 """
 import ast
+import importlib.util
 import re
 from pathlib import Path
 
+
+_native_spec = importlib.util.spec_from_file_location(
+    'windows_native_safety', Path(__file__).with_name('windows-native-safety.py'))
+native_safety = importlib.util.module_from_spec(_native_spec)
+_native_spec.loader.exec_module(native_safety)
 
 ALLOWED_ACTIONS = re.compile(
     r'(?:actions/(?:checkout|upload-artifact|download-artifact|cache)@[^\s]+|'
@@ -152,6 +158,7 @@ def local_sources(root, path, source, seen, owner_input=False):
     source = owner_steps(source, owner_input)
     yield path, source
     references = re.findall(r'uses:\s*\./([^\s]+)', source)
+    references += re.findall(r'\$\{\{ github.action_path \}\}/([\w/-]+\.ps1)', source)
     for line in source.splitlines():
         if line.lstrip().startswith(('#', '//', 'import ', 'from ')):
             continue
@@ -210,7 +217,9 @@ def audit(root):
                 for module, module_text in python_sources(path, imported):
                     for line, hazard in symlink_hazards(module_text):
                         findings.append(f'{module.relative_to(root)}:{line}: {hazard}')
-                for line, hazard in hazards(text):
+                default_ps = bool(re.search(r'shell:\s*powershell\b', prefix + block))
+                native = native_safety.hazards(text, default_ps) if path.suffix in ('.yml', '.yaml', '.ps1') else []
+                for line, hazard in hazards(text) + native:
                     if path == workflow:
                         line += source[:offset].count('\n')
                     findings.append(f'{path.relative_to(root)}:{line}: {hazard}')
