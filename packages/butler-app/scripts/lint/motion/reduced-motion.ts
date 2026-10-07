@@ -46,4 +46,3 @@ export function motionAudit(css: string): { moves: boolean; tokenOnly: boolean; 
     reducedRule: /@media[^{]*prefers-reduced-motion/u.test(clean),
   };
 }
-
