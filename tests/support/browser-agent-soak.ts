@@ -5,6 +5,20 @@ import { join } from "node:path";
 import { waitBrowser, type browserAgentApp } from "./browser-agent-app";
 import { describeBrowser, bridgeBrowser, actConfirm, type browserStub } from "./browser-agent-stub";
 
+async function settleSoakTabs(app: Awaited<ReturnType<typeof browserAgentApp>>, ids: string[], evidence: string) {
+  try {
+    await waitBrowser(async()=>{
+      const state=await app.call<{tabs:Array<{id:string;status:string}>}>("state");
+      return ids.every(id=>state.tabs.some(t=>t.id===id && t.status!=="loading" && t.status!=="crashed"));
+    },"soak user tabs settled before baseline");
+  } catch(error) {
+    const state=await app.call<{tabs:Array<{id:string;status:string}>}>("state").then(v=>v.tabs.filter(t=>ids.includes(t.id)).map(t=>({id:t.id,status:t.status}))).catch(()=>null);
+    const native=await app.main(`(()=>{const b=globalThis.browserAgentSubject;return ${JSON.stringify(ids)}.map(id=>{const t=b.tabs.get(id),w=t?.view?.webContents;return {id,status:t?.status,url:t?.url,loading:w?.isLoading(),mainFrameLoading:w?.isLoadingMainFrame(),title:w?.getTitle(),listeners:w&&Object.fromEntries(w.eventNames().map(e=>[String(e),w.listenerCount(e)]))}})})()`).catch(()=>null);
+    writeFileSync(join(evidence,"soak-setup-failure.json"),JSON.stringify({error:String(error),state,native},null,2));
+    throw error;
+  }
+}
+
 /** Two hours of real guided observe/ref-act turns, with user tabs and video. */
 export async function soakBrowser(
   app: Awaited<ReturnType<typeof browserAgentApp>>,
@@ -20,10 +34,7 @@ export async function soakBrowser(
   for (const url of ["https://www.iana.org/domains/reserved", "https://www.iana.org/protocols", video]) {
     userTabs.push(await app.call<string>("create", { url }));
   }
-  await waitBrowser(async()=>{
-    const state=await app.call<{tabs:Array<{id:string;status:string}>}>("state");
-    return userTabs.every(id=>state.tabs.some(t=>t.id===id && t.status!=="loading" && t.status!=="crashed"));
-  },"soak user tabs settled before baseline");
+  await settleSoakTabs(app,userTabs,evidence);
   await app.call("activate", { id: tab });
   const videoTab=userTabs.at(-1)!;
   await waitBrowser(()=>app.main<boolean>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(videoTab)}).view.webContents.executeJavaScript("Boolean(document.querySelector('video') && document.querySelector('video').readyState>=2)")`).catch(()=>false),"soak video ready");
