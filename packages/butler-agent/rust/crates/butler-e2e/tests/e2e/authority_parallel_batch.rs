@@ -381,7 +381,7 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
                 .await?;
         assert_eq!(turn_state(&done), "cancelled");
         assert!(s.gw.approval_requests("general").await?.is_empty());
-        let messages = s.gw.messages("general").await?;
+        let messages = wait_cancelled_rows(&s, &id, allow_first).await?;
         let rows = butler_e2e::e2e::gateway::tool_rows(&messages, &id);
         assert_eq!(rows.len(), 3);
         for row in rows {
@@ -407,7 +407,12 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
         }
         let pending: u64 = {
             let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-            db.query_row("SELECT count(*) FROM btcc_authority_requests WHERE source_turn_id=?1 AND decision='pending'",
+            let closed: u64 = db.query_row(
+                "SELECT count(*) FROM btcc_authority_requests WHERE source_turn_id=?1 AND close_reason='session_cancelled' AND closed_at IS NOT NULL",
+                [&id], |row| row.get(0),
+            )?;
+            assert_eq!(closed, if allow_first { 2 } else { 3 });
+            db.query_row("SELECT count(*) FROM btcc_authority_requests WHERE source_turn_id=?1 AND decision='pending' AND closed_at IS NULL",
             [&id], |row| row.get(0))?
         };
         assert_eq!(pending, 0);
@@ -422,4 +427,38 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
         server.abort();
     }
     Ok(())
+}
+
+async fn wait_cancelled_rows(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    id: &str,
+    allow_first: bool,
+) -> Result<Vec<serde_json::Value>, HarnessError> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let messages = s.gw.messages("general").await?;
+        let rows = butler_e2e::e2e::gateway::tool_rows(&messages, id);
+        let mut settled = rows.len() == 3;
+        for row in rows {
+            let completed = allow_first
+                && row["safe_input_label"]
+                    .as_str()
+                    .unwrap()
+                    .contains("lookup-0");
+            settled &= row["state"] == if completed { "delivered" } else { "cancelled" };
+            settled &= !s
+                .gw
+                .operation_output(id, &row)
+                .await?
+                .contains("authority_pending");
+        }
+        if settled {
+            return Ok(messages);
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "cancelled rows did not settle: {messages:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }

@@ -250,7 +250,7 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
-    assert_eq!(staged_and_receipt(&app).await, (0, None));
+    assert_eq!(staged_and_receipt(&app, "action-resent").await, (0, None));
 
     // A cancellation marker cannot authorize a stale event without the owner's
     // durable cancellation record for this turn.
@@ -264,7 +264,10 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
-    assert_eq!(staged_and_receipt(&app).await, (0, None));
+    assert_eq!(
+        staged_and_receipt(&app, "outbound-unrequested-cancel").await,
+        (0, None)
+    );
 
     append_send(
         &transcript,
@@ -277,7 +280,7 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
         .await
         .unwrap();
     assert_eq!(
-        staged_and_receipt(&app).await,
+        staged_and_receipt(&app, "action-resent").await,
         (0, Some("outbound-resent".to_owned()))
     );
     let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
@@ -288,6 +291,22 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
         "Reading source"
     );
     super::projection_burst::assert_burst_projects_other_chat(&app, &native, &root).await;
+    // Cancellation progress may precede the control acknowledgment that changes
+    // the turn state. The durable owner request already authorizes settlement.
+    let cancelled_turn = turn.clone();
+    app.storage.execute(move |db| {
+        db.execute("INSERT INTO app_turn_cancel_outbox(turn_id,queue_id,state,created_at) VALUES(?1,'owner-cancel','pending','now')", [&cancelled_turn])
+            .map_err(AppStorageError::sqlite)?;
+        Ok(())
+    }).await.unwrap();
+    append_send(&transcript, "outbound-requested-cancel", &turn, None, true);
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        staged_and_receipt(&app, "outbound-requested-cancel").await,
+        (0, Some("outbound-requested-cancel".into()))
+    );
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }
@@ -322,16 +341,21 @@ fn append_send(
     if let Some(claim) = claim {
         metadata["appQueueClaimId"] = json!(claim);
     }
+    let action = if authority_cancel {
+        event_id
+    } else {
+        "action-resent"
+    };
     let outbound = json!({
         "eventId":event_id,"sessionId":"butler/app-general","kind":"outbound",
         "timestamp":"2026-09-14T00:00:01.000Z","transport":"app",
-        "payload":{"actionId":"action-resent","message":{},"metadata":metadata},
+        "payload":{"actionId":action,"message":{},"metadata":metadata},
         "metadata":{"source":"transport/delivery-guard.ts","attempts":1}
     });
     let delivery = json!({
         "eventId":format!("{event_id}-delivery"),"sessionId":"butler/app-general",
         "kind":"delivery","timestamp":"2026-09-14T00:00:02.000Z","transport":"app",
-        "payload":{"actionId":"action-resent","ok":true}
+        "payload":{"actionId":action,"ok":true}
     });
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -343,22 +367,23 @@ fn append_send(
 
 /// How many staged rows `action-resent` has, and the event its projection
 /// receipt names.
-async fn staged_and_receipt(app: &AppApplication) -> (i64, Option<String>) {
+async fn staged_and_receipt(app: &AppApplication, action: &str) -> (i64, Option<String>) {
+    let action = action.to_owned();
     app.storage
-        .execute(|db| {
+        .execute(move |db| {
             let staged = db
                 .query_row(
                     "SELECT COUNT(*) FROM app_transport_projection_staged_outbounds \
-                     WHERE action_id='action-resent'",
-                    [],
+                     WHERE action_id=?1",
+                    [&action],
                     |row| row.get(0),
                 )
                 .map_err(AppStorageError::sqlite)?;
             let receipt = db
                 .query_row(
                     "SELECT event_id FROM app_transport_projection_receipts \
-                     WHERE action_id='action-resent'",
-                    [],
+                     WHERE action_id=?1",
+                    [&action],
                     |row| row.get(0),
                 )
                 .optional()

@@ -313,7 +313,7 @@ fn cancellation_settlement(
     }
     db.query_row(
         "SELECT EXISTS(SELECT 1 FROM turns t JOIN app_turn_cancel_outbox c ON c.turn_id=t.id \
-         WHERE t.id=?1 AND t.chat_id=?2 AND t.state IN ('cancelling','cancelled') AND c.state IN ('pending','accepted','completed') AND c.queue_id IS NOT NULL)",
+         WHERE t.id=?1 AND t.chat_id=?2 AND c.state IN ('pending','accepted','completed') AND c.queue_id IS NOT NULL)",
         params![turn_id, chat_id], |row| row.get(0),
     ).map_err(AppStorageError::sqlite)
 }
