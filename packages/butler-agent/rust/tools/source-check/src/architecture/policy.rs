@@ -37,8 +37,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Timestamp formatting and the operational diagnostic macro are a leaf.
         "diagnostics" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
-        "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
-        | "tool_protocol" => &[],
+        "configuration" | "js_date" | "json_lines" | "locale" | "product_features"
+        | "public_text" | "segmentation" | "tool_protocol" => &[],
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
