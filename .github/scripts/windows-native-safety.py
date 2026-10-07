@@ -11,7 +11,7 @@ NATIVE = re.compile(
     r'(?:&\s+)?(?:cargo|rustc|rustup|python[3]?|bun|node|npm(?:\.cmd)?|gh|oras|dumpbin|'
     r'cmd(?:\.exe)?|reg(?:\.exe)?|tar|zstd|powershell(?:\.exe)?)\s|'
     r'&\s+(?:[\"\'][^\n]*?\.(?:exe|cmd)[\"\']|\$(?:Executable|vswhere|env:ComSpec))\s)', re.I)
-PREFERENCE = re.compile(r'\$ErrorActionPreference\s*=\s*[\"\'](Stop|Continue)[\"\']', re.I)
+PREFERENCE = re.compile(r'^\s*\$ErrorActionPreference\s*=\s*[\"\'](Stop|Continue)[\"\']', re.I)
 
 
 def statements(source):
@@ -27,6 +27,7 @@ def statements(source):
 
 def script_hazards(source):
     preference = 'stop'
+    setting_indent = None
     findings = []
     for start, _, statement in statements(source):
         if statement.lstrip().startswith('#'):
@@ -34,7 +35,9 @@ def script_hazards(source):
         setting = PREFERENCE.search(statement)
         if setting:
             preference = setting[1].lower()
-        if NATIVE.match(statement) and preference != 'continue':
+            setting_indent = len(statement) - len(statement.lstrip())
+        if NATIVE.match(statement) and (preference != 'continue'
+                or setting_indent != len(statement) - len(statement.lstrip())):
             findings.append((start, 'PS 5.1 native stderr under Stop (use scoped Continue and LASTEXITCODE)'))
     return findings
 

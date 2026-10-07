@@ -95,11 +95,11 @@ jobs:
       - name: PowerShell native stderr exit-code contract
         run: |
           $ErrorActionPreference = 'Continue'
-          python -c "import sys; print('successful native stderr', file=sys.stderr)" 2>&1 | Out-Host
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python -c "import sys; print('successful native stderr', file=sys.stderr)" 2>&1 | Out-Host
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { throw 'Successful native stderr changed the exit code' }
           $ErrorActionPreference = 'Continue'
-          python -c "import sys; print('failed native stderr', file=sys.stderr); sys.exit(7)" 2>&1 | Out-Host
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python -c "import sys; print('failed native stderr', file=sys.stderr); sys.exit(7)" 2>&1 | Out-Host
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 7) { throw 'Failed native stderr lost the exit code' }
           $global:LASTEXITCODE = 0

@@ -30,6 +30,10 @@ class WindowsSafety(unittest.TestCase):
             self.assertTrue(native.script_hazards(command), command)
             safe = "$ErrorActionPreference = 'Continue'\n" + command + "\n$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }"
             self.assertEqual(native.script_hazards(safe), [])
+        self.assertTrue(native.script_hazards(
+            "if ($condition) { $ErrorActionPreference = 'Continue' }\ncargo test"))
+        self.assertTrue(native.script_hazards(
+            "if ($condition) {\n  $ErrorActionPreference = 'Continue'\n}\ncargo test"))
         source = ("steps:\n  - run: |\n      $ErrorActionPreference = 'Continue'\n"
                   "      cargo test\n  - run: cargo test\n")
         self.assertEqual(len(native.hazards(source, True)), 1)
