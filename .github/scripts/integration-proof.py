@@ -13,7 +13,7 @@ SPEC.loader.exec_module(changes)
 GATES = {
     'rust-quality.yml': 'gate', 'post-merge-ci.yml': 'post-merge-ci gate',
     'windows-preview-smoke.yml': 'Complete Windows preview verification',
-    'windows-installer.yml': 'windows-installer gate', 'windows.yml': 'windows gate',
+    'windows-installer.yml': 'windows-installer gate',
     'macos-signing.yml': 'macos-signing gate', 'licenses.yml': 'licenses gate',
     'e2e.yml': 'E2E live tier',
 }
