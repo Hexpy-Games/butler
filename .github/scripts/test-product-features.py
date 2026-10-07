@@ -12,7 +12,7 @@ SCRIPT = Path(__file__).with_name("product-features.py")
 
 
 class ProductFeatures(unittest.TestCase):
-    def select(self, ref, tag="", present=True):
+    def select(self, ref, tag="", present=True, base_ref=""):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             releases = root / ".github" / "releases"
@@ -21,7 +21,7 @@ class ProductFeatures(unittest.TestCase):
                 (releases / "v0.1.0-preview.11.features.json").write_text('{"browser":false}')
             output = root / "github-env"
             env = dict(os.environ, GITHUB_REF=ref, GITHUB_REF_NAME="overridden-version",
-                       GITHUB_ENV=str(output))
+                       GITHUB_BASE_REF=base_ref, GITHUB_ENV=str(output))
             result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(root),
                                      "--tag", tag], env=env, check=True,
                                     capture_output=True, text=True)
@@ -37,6 +37,19 @@ class ProductFeatures(unittest.TestCase):
     # test-category: pure-logic
     def test_release_branch(self):
         self.assertEqual(self.select("refs/heads/release/0.1.0-preview.11"), {"browser": False})
+
+    # test-category: pure-logic
+    def test_pull_request_uses_release_base_without_changing_explicit_tags(self):
+        release = "release/0.1.0-preview.11"
+        for ref in ["refs/pull/123/merge", "refs/pull/123/head"]:
+            with self.subTest(ref=ref):
+                self.assertEqual(self.select(ref, base_ref=release), {"browser": False})
+                self.assertEqual(self.select(ref, "v0.1.0-preview.10", base_ref=release),
+                                 {"browser": True})
+                self.assertEqual(self.select(ref, base_ref="main"), {"browser": True})
+                self.assertEqual(self.select(ref, base_ref="release/../v0.1.0-preview.11"),
+                                 {"browser": True})
+        self.assertEqual(self.select("refs/heads/main", base_ref=release), {"browser": True})
 
     # test-category: pure-logic
     def test_other_branch_and_local_default_on(self):

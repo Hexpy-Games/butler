@@ -19,13 +19,15 @@ def release_features(root, tag):
     return features
 
 
-def artifact_tag(tag, ref):
+def artifact_tag(tag, ref, base_ref=""):
     if tag:
         return tag
     if ref.startswith("refs/tags/"):
         return ref.removeprefix("refs/tags/")
     if ref.startswith("refs/heads/release/"):
         return "v" + ref.removeprefix("refs/heads/release/")
+    if ref.startswith("refs/pull/") and base_ref.startswith("release/"):
+        return "v" + base_ref.removeprefix("release/")
     return ""
 
 
@@ -34,7 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("--tag", default="")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
-    tag = artifact_tag(args.tag, os.environ.get("GITHUB_REF", ""))
+    tag = artifact_tag(args.tag, os.environ.get("GITHUB_REF", ""),
+                       os.environ.get("GITHUB_BASE_REF", ""))
     features = release_features(args.root, tag)
     value = str(features["browser"]).lower()
     print(json.dumps(features))
