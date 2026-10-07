@@ -21,7 +21,6 @@ type Listener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 #[derive(Clone, Default)]
 pub(super) struct EventSubscribers {
     inner: Arc<Mutex<SubscriberState>>,
-    listener_changes: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Default)]
@@ -41,21 +40,10 @@ impl EventSubscribers {
         let id = state.next_id;
         state.listeners.insert(id, listener);
         drop(state);
-        self.listener_changes.notify_one();
         Box::new(Subscription {
             owner: Arc::downgrade(&self.inner),
-            listener_changes: self.listener_changes.clone(),
             id,
         })
-    }
-
-    /// Live-stream listeners (connected App clients).
-    pub(super) fn listener_count(&self) -> usize {
-        self.inner.lock().listeners.len()
-    }
-
-    pub(super) async fn listeners_changed(&self) {
-        self.listener_changes.notified().await;
     }
 
     /// Delivers a committed event to every listener; they share its frame.
@@ -78,7 +66,6 @@ impl EventSubscribers {
 
 struct Subscription {
     owner: Weak<Mutex<SubscriberState>>,
-    listener_changes: Arc<tokio::sync::Notify>,
     id: u64,
 }
 impl EventSubscription for Subscription {}
@@ -86,7 +73,6 @@ impl Drop for Subscription {
     fn drop(&mut self) {
         if let Some(owner) = self.owner.upgrade() {
             owner.lock().listeners.remove(&self.id);
-            self.listener_changes.notify_one();
         }
     }
 }
