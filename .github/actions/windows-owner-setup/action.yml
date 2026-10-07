@@ -55,7 +55,9 @@ runs:
           $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/ort-cache'
           $sdkArgs = @()
           if ('${{ inputs.require-prebuilt }}' -eq 'true') { $sdkArgs += '--require-prebuilt' }
+          $ErrorActionPreference = 'Continue'
           $prepared = python scripts/prepare-static-ort.py @sdkArgs
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { throw 'Static ORT preparation/hash verification failed' }
           $native = $prepared | ConvertFrom-Json
           @("ORT_LIB_PATH=$($native.ort_lib_path)", "PROTOC=$($native.protoc)",

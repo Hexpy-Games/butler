@@ -23,6 +23,24 @@ for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup'
 
 class WindowsSafety(unittest.TestCase):
     # test-category: security
+    def test_native_stderr_guard_requires_continue_per_step(self):
+        native = windows_safety.native_safety
+        for command in ['cargo test 2>&1 | Out-Host', 'python check.py',
+                        '$result = & "job/tool.exe" --list', '& reg query key']:
+            self.assertTrue(native.script_hazards(command), command)
+            safe = "$ErrorActionPreference = 'Continue'\n" + command + "\n$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }"
+            self.assertEqual(native.script_hazards(safe), [])
+        self.assertTrue(native.script_hazards(
+            "if ($condition) { $ErrorActionPreference = 'Continue' }\ncargo test"))
+        self.assertTrue(native.script_hazards(
+            "if ($condition) {\n  $ErrorActionPreference = 'Continue'\n}\ncargo test"))
+        source = ("steps:\n  - run: |\n      $ErrorActionPreference = 'Continue'\n"
+                  "      cargo test\n  - run: cargo test\n")
+        self.assertEqual(len(native.hazards(source, True)), 1)
+        self.assertEqual(native.hazards('steps:\n  - shell: bash\n    run: python script.py\n', True), [])
+        self.assertEqual(native.script_hazards('& "job/script.ps1"\n"BIN=job/test.exe" | Out-File $env:GITHUB_ENV'), [])
+
+    # test-category: security
     def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
         jobs, findings = windows_safety.audit(ROOT.parents[1])
         self.assertGreaterEqual(len(jobs), 6, jobs)

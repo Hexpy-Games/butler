@@ -3,7 +3,9 @@ $ErrorActionPreference = 'Stop'
 function Find-Python312($Executable, $Arguments = @()) {
     if (!$Executable -or !(Test-Path -LiteralPath $Executable -PathType Leaf)) { return $null }
     try {
+        $ErrorActionPreference = 'Continue'
         $found = & $Executable @Arguments -c 'import sys; print(sys.executable) if sys.version_info[:2] == (3, 12) else sys.exit(1)' 2>$null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -eq 0 -and $found -and (Test-Path -LiteralPath "$found" -PathType Leaf)) {
             return "$found"
         }
