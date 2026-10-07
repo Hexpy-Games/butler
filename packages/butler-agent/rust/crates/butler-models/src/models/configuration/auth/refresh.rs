@@ -1,6 +1,8 @@
 //! A refresh owns its lock until the rotated token is durably published,
 //! even if the requesting model call or quota poll is cancelled.
 use super::{AuthError, AuthOwner, OpenAiAuthProfile, error};
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub(super) async fn once(
@@ -18,22 +20,7 @@ pub(super) async fn once(
             clock: &clock,
             client: &client,
         };
-        let _refreshing = butler_core::configuration::lock_file_async(&owner.butler_profile_path())
-            .await
-            .map_err(|source| {
-                if let butler_core::configuration::ConfigError::LockFailed(os) = &source {
-                    eprintln!(
-                        "[oauth-profile-lock] kind={:?} os_code={:?}",
-                        os.kind(),
-                        os.raw_os_error()
-                    );
-                }
-                error(
-                    "provider_auth_lock_failed",
-                    "OpenAI auth profile could not be locked.",
-                )
-                .with_source(source)
-            })?;
+        let _refreshing = lock_profile(owner.butler_profile_path()).await?;
         if let Some(current) = owner.read_butler_profile().await
             && !current.access_token.is_empty()
             && (current.access_token != profile.access_token
@@ -51,4 +38,30 @@ pub(super) async fn once(
         )
         .with_source(source)
     })?
+}
+
+// Keep both filesystem locking and diagnostic writes off Tokio workers.
+async fn lock_profile(path: PathBuf) -> Result<butler_platform::secrets::ChangeLock, AuthError> {
+    tokio::task::spawn_blocking(move || {
+        let result = butler_core::configuration::lock_file(&path);
+        if let Err(butler_core::configuration::ConfigError::LockFailed(os)) = &result {
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "[oauth-profile-lock] kind={:?} os_code={:?}",
+                os.kind(),
+                os.raw_os_error()
+            );
+        }
+        result
+    })
+    .await
+    .map_err(butler_core::configuration::ConfigError::LockTask)
+    .and_then(std::convert::identity)
+    .map_err(|source| {
+        error(
+            "provider_auth_lock_failed",
+            "OpenAI auth profile could not be locked.",
+        )
+        .with_source(source)
+    })
 }
