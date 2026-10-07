@@ -356,7 +356,7 @@ fn store_error(error: keyring_core::Error) -> SecretError {
 /// Released when dropped.
 #[derive(Debug)]
 pub struct ChangeLock {
-    _file: File,
+    file: File,
 }
 
 impl ChangeLock {
@@ -379,7 +379,7 @@ impl ChangeLock {
         let deadline = Instant::now() + timeout;
         loop {
             match file.try_lock() {
-                Ok(()) => return Ok(Self { _file: file }),
+                Ok(()) => return Ok(Self { file }),
                 Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
@@ -417,7 +417,7 @@ impl ChangeLock {
 impl Drop for ChangeLock {
     fn drop(&mut self) {
         // Unlock before closing: Windows may defer release on handle closure.
-        let _ = self._file.unlock();
+        let _ = self.file.unlock();
     }
 }
 
