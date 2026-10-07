@@ -181,6 +181,7 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
   await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
   await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "longest transcript ready before scroll");
   await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+  const scrollTracePath = join(process.env.BUTLER_P0_EVIDENCE || app.dir, "scroll-trace.json");
   const scrollResult = await hostWindow("owner-scale scroll", async () => {
     const scrollHostLoad = await quietHost("owner-scale scroll", app);
     await app.main.evaluate("browserP0.traceStart()");
@@ -188,8 +189,8 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
     const scroll = await app.page.expression<{ distance: number; latest: boolean }>("new Promise(resolve=>{const e=document.querySelector('[data-test-class~=\"conversation-scroll\"]');if(!e)throw Error('Transcript scroller missing');const start=e.scrollTop;let n=0;function tick(){e.scrollTop=Math.max(0,e.scrollTop-400);if(++n<120)requestAnimationFrame(tick);else resolve({distance:Math.abs(e.scrollTop-start),latest:e.isConnected&&document.body.textContent.includes('메시지')})}requestAnimationFrame(tick)})");
     assert(scroll.distance > 0 && scroll.latest);
     const frameTimes = await frames(app);
-    await app.main.evaluate(`browserP0.traceStop(${JSON.stringify(tracePath)})`);
-    const attribution = attributeTrace(JSON.parse(readFileSync(tracePath, "utf8")), (await sample(app)).uiPID, (await sample(app)).mainPID);
+    await app.main.evaluate(`browserP0.traceStop(${JSON.stringify(scrollTracePath)})`);
+    const attribution = attributeTrace(JSON.parse(readFileSync(scrollTracePath, "utf8")), (await sample(app)).uiPID, (await sample(app)).mainPID);
     return { frameTimes, attribution, scrollHostLoad };
   });
   const { frameTimes, attribution, scrollHostLoad } = scrollResult;

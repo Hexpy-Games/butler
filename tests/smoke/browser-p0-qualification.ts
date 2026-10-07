@@ -62,7 +62,9 @@ try {
         assert.equal(initial.versions.electron, pin);
         assert(initial.domainBlockingDisabled, "Product keeps App WebGL recovery unblocked");
         evidence[`${name}Runtime`] = { electron: initial.versions.electron, gpu: initial.gpu, crashLimitDisabled: initial.crashLimitDisabled, domainBlockingDisabled: initial.domainBlockingDisabled, mainPID: initial.mainPID, uiPID: initial.uiPID };
-        await app.main.evaluate(`browserP0.open('user','${origin}/video',{user:true})`);
+        await app.main.evaluate(name === "soak"
+          ? `browserP0.openProductGPU('user','${origin}/video')`
+          : `browserP0.open('user','${origin}/video',{user:true})`);
         await waitFor(() => app!.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "decoded user video playing");
         evidence[name] = ["gpu-crash", "gpu-hang", "load"].includes(name) ? await hostWindow(name, run) : await run();
       }

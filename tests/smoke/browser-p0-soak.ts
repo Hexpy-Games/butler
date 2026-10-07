@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { budget, sample, type P0App, type Row, type Sample } from "./browser-p0-measure.ts";
 import { memoryCheckpoint } from "./browser-p0-memory";
 import { openBrowserArea, visitUserSite } from "./browser-p0-user";
+import { waitFor } from "./browser-p0-app";
 import { seedP0OwnerScale } from "./browser-p0-owner-scale";
 
 function agentRSS(pid: number): number {
@@ -30,6 +31,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     try { await app.main.evaluate("browserP0.step('warm')"); }
     finally { await app.main.evaluate("browserP0.close('warm')"); }
   }
+  await app.main.evaluate("browserP0.close('user')");
   await Bun.sleep(60_000);
   const initial = await idleSnapshot(app, "initial");
   const { before: idleBefore, after: idleAfter, delta: initialIdle } = initial;
@@ -40,7 +42,11 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     const productWarm = await app.main.evaluate("browserP0.productInventory()");
     const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
     await app.main.evaluate("browserP0.resetDelay()");
+    await app.main.evaluate(`browserP0.openProductGPU('user', '${origin}/video')`);
+    await waitFor(() => app.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "real USER decoded video playing");
     const loop = await runSoakLoop(app, origin, minutes, evidence);
+    await app.main.evaluate("browserP0.close('user')");
+    await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
     const after = await sample(app), agentAfter = agentRSS(pid);
     const productAfter = await app.main.evaluate("browserP0.productInventory()");
     return { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter };
@@ -74,6 +80,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
 async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string) {
   const startedAt = Date.now(), end = startedAt + minutes * 60_000;
   let iterations = 0, userVisits = 0, nextCheckpoint = startedAt + 15 * 60_000;
+  const videoFrames = [await decodedVideoFrames(app)];
   const checkpoints = [await memoryCheckpoint(app, evidence, "soak-start")];
   const paths = ["nodes", "cpu", "network"], fixtureVisits = { nodes: 0, cpu: 0, network: 0 };
   while (Date.now() < end) {
@@ -88,6 +95,9 @@ async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence
       console.log(JSON.stringify({ soakIterations: iterations, fixtureVisits, userVisits }));
     }
     if (Date.now() >= nextCheckpoint) {
+      const decoded = await decodedVideoFrames(app);
+      assert(decoded > videoFrames.at(-1)!, "Real USER video decodes during each soak interval");
+      videoFrames.push(decoded);
       checkpoints.push(await memoryCheckpoint(app, evidence, `soak-${Math.round((Date.now() - startedAt) / 60000)}m`));
       nextCheckpoint += 15 * 60_000;
     }
@@ -95,8 +105,11 @@ async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence
   }
   const elapsedMs = Date.now() - startedAt;
   checkpoints.push(await memoryCheckpoint(app, evidence, "soak-end"));
+  const decoded = await decodedVideoFrames(app);
+  assert(decoded > videoFrames.at(-1)!, "Real USER video still decodes at soak completion");
+  videoFrames.push(decoded);
   assert(userVisits >= iterations, "Every iteration exercised real USER and agent tabs");
-  return { elapsedMs, iterations, fixtureVisits, userVisits, checkpoints, realSites: Math.floor(iterations / 50) * 2 };
+  return { elapsedMs, iterations, fixtureVisits, userVisits, videoFrames, checkpoints, realSites: Math.floor(iterations / 50) * 2 };
 }
 
 async function visitRealSite(app: P0App, url: string) {
@@ -119,4 +132,8 @@ async function idleSnapshot(app: P0App, label: string) {
     const after = await snapshotFiles(app, `${label}-idle-after`);
     return { before, after, elapsedMs: Date.now() - started, delta: fileDelta(before, after) };
   });
+}
+
+async function decodedVideoFrames(app: P0App) {
+  return app.main.evaluate<number>("browserP0.evaluate('user', 'video.getVideoPlaybackQuality().totalVideoFrames')");
 }
