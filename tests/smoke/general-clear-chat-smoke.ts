@@ -37,6 +37,13 @@ async function rowMenu(page: Page) {
 }
 async function archives(page: Page) {
   await sidebar(page);
+  if (before) {
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: copy.commandPalette.label });
+    await palette.getByRole("combobox").fill(copy.space.archives);
+    await palette.getByRole("option").filter({ hasText: copy.space.archives }).first().click();
+    return;
+  }
   await page.getByRole("button", { name: copy.space.menu, exact: true }).click();
   await page.getByRole("menuitem", { name: new RegExp(copy.space.archives) }).click();
 }
