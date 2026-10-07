@@ -97,7 +97,7 @@ fn history(db: &Connection, payload_bytes: usize) {
     );
 }
 
-pub(super) async fn seed(
+pub(crate) async fn seed(
     data: std::path::PathBuf,
     count: usize,
     scale: bool,

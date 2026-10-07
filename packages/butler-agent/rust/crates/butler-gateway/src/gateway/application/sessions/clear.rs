@@ -1,9 +1,9 @@
 //! Archive the general channel's conversation while retaining its permanent identity.
 use super::{identity::runtime_hint, read};
-use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::{
-    AppApplication, AppIdentityClock, AppStorageError, EventSubscribers, app_error, events,
+    AppApplication, AppIdentityClock, AppStorageError, app_error, events,
 };
+use crate::gateway::{AppEventEnvelope, GatewayApplicationError};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
@@ -26,11 +26,14 @@ impl AppApplication {
         // Drain already committed output before transferring its checkpoint and ownership.
         self.projection.refresh("general".to_owned()).await?;
         let clock = self.dependencies.identity_clock.clone();
-        let subscribers = self.subscribers.clone();
-        self.storage
-            .execute(move |db| Ok(clear(db, &title, clock.as_ref(), &subscribers)))
+        let (result, event) = self
+            .storage
+            .execute(move |db| Ok(clear(db, &title, clock.as_ref())))
             .await
-            .map_err(app_error)?
+            .map_err(app_error)??;
+        self.recover_output_transfers().await?;
+        events::publish(&self.subscribers, &event);
+        Ok(result)
     }
 }
 
@@ -38,8 +41,7 @@ fn clear(
     db: &mut Connection,
     title: &str,
     clock: &dyn AppIdentityClock,
-    subscribers: &EventSubscribers,
-) -> Result<Value, GatewayApplicationError> {
+) -> Result<(Value, AppEventEnvelope), GatewayApplicationError> {
     let tx = db.savepoint().map_err(sql_error)?;
     let busy_now: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM turns WHERE chat_id='general' AND (state NOT IN ('delivered','cancelled','failed','runtime_fault') OR retryable=1)) OR EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id='general' AND state IN ('queued','dispatching')) OR EXISTS(SELECT 1 FROM app_session_context_gate WHERE session_id='general')",
@@ -70,8 +72,10 @@ fn clear(
     )
     .map_err(app_error)?;
     tx.commit().map_err(sql_error)?;
-    events::publish(subscribers, &event);
-    Ok(json!({"session":session,"archived_session":archived,"event_id":event.id}))
+    Ok((
+        json!({"session":session,"archived_session":archived,"event_id":event.id}),
+        event,
+    ))
 }
 
 fn transfer_history(db: &Connection, archived: &str) -> Result<(), GatewayApplicationError> {
@@ -81,7 +85,6 @@ fn transfer_history(db: &Connection, archived: &str) -> Result<(), GatewayApplic
         ("app_space_topics", "session_id"),
         ("messages", "chat_id"),
         ("turns", "chat_id"),
-        ("message_files", "owner_session_id"),
         ("session_queued_messages", "chat_id"),
         ("session_queue_pauses", "chat_id"),
         ("app_terminal_turn_projections", "chat_id"),
@@ -96,6 +99,14 @@ fn transfer_history(db: &Connection, archived: &str) -> Result<(), GatewayApplic
         )
         .map_err(sql_error)?;
     }
+    db.execute("UPDATE message_files SET owner_session_id=?1 WHERE owner_session_id='general' AND message_id IN (SELECT id FROM messages WHERE chat_id=?1)", [archived]).map_err(sql_error)?;
+    db.execute(
+        "INSERT INTO app_output_transfers(archive_id) VALUES(?1)",
+        [archived],
+    )
+    .map_err(sql_error)?;
+    // Existing relocation admission blocks publication until cross-store recovery completes.
+    db.execute("INSERT INTO app_session_context_gate(session_id,owner_kind,owner_id) VALUES('general','relocate',?1)", [archived]).map_err(sql_error)?;
     db.execute(
         "UPDATE app_automation_runs SET target_session_id=?1 WHERE target_session_id='general' AND (EXISTS(SELECT 1 FROM turns WHERE id=app_automation_runs.turn_id AND chat_id=?1) OR EXISTS(SELECT 1 FROM session_queued_messages WHERE id=app_automation_runs.queued_message_id AND chat_id=?1))",
         [archived],

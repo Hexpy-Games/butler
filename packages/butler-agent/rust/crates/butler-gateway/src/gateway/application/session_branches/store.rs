@@ -113,27 +113,7 @@ pub(super) fn resolve_source_session(
     {
         return Ok(Some(id));
     }
-    if let Some(id) = db
-        .query_row(
-            "SELECT id FROM chats WHERE runtime_session_hint=?1",
-            [external_session],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(AppStorageError::sqlite)?
-    {
-        return Ok(Some(id));
-    }
-    let Some(chat) = external_session.strip_prefix("butler/app-") else {
-        return Ok(None);
-    };
-    db.query_row(
-        "SELECT id FROM chats WHERE id=?1 AND runtime_session_hint IS NULL",
-        [chat],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(AppStorageError::sqlite)
+    super::super::sessions::identity::resolve_owner(db, external_session)
 }
 
 pub(super) fn selected_message(

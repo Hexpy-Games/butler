@@ -8,7 +8,7 @@
 mod images;
 mod security;
 mod self_check;
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     scenario::{Scenario, Setup},

@@ -1,7 +1,5 @@
 //! Source-shaped transcript filename admission for the projection watcher.
 
-use rusqlite::OptionalExtension;
-
 use super::super::{sync_chat_once, sync_deferred_once};
 use super::ProjectionContext;
 use crate::gateway::GatewayApplicationError;
@@ -50,11 +48,10 @@ pub(super) async fn resolve_chat_file(
     let chat = context
         .storage
         .inspect(move |db| {
-            db.query_row("SELECT id FROM chats WHERE runtime_session_hint='butler/app-'||?1 UNION ALL SELECT id FROM chats WHERE runtime_session_hint IS NULL AND id=?1 LIMIT 1", [&candidate], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()
-            .map_err(super::super::super::storage::AppStorageError::sqlite)
+            crate::gateway::application::sessions::identity::resolve_owner(
+                db,
+                &format!("butler/app-{candidate}"),
+            )
         })
         .await
         .map_err(super::super::super::app_error)?;

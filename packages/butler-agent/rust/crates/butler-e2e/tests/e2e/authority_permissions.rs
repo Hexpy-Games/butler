@@ -5,7 +5,7 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 
 mod scale;
-mod seed;
+pub(super) mod seed;
 use seed::{COMMAND, command, reference, seed};
 
 #[tokio::test]

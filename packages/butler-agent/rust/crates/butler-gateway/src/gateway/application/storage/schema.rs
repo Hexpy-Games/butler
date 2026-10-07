@@ -46,12 +46,12 @@ pub(super) fn migrate(
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
          CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
            ON chats(runtime_session_hint) WHERE runtime_session_hint IS NOT NULL;
-         CREATE INDEX IF NOT EXISTS chats_conversation_idx
-           ON chats(conversation_session_id) WHERE conversation_session_id IS NOT NULL;
-         CREATE INDEX IF NOT EXISTS projected_transport_chat_idx ON projected_transport_events(chat_id);
-         CREATE INDEX IF NOT EXISTS projection_receipts_chat_idx ON app_transport_projection_receipts(chat_id);
-         CREATE INDEX IF NOT EXISTS staged_outbounds_chat_idx ON app_transport_projection_staged_outbounds(chat_id);
-         CREATE INDEX IF NOT EXISTS terminal_projection_chat_idx ON app_terminal_turn_projections(chat_id);
+         DROP INDEX IF EXISTS chats_conversation_idx;
+         DROP INDEX IF EXISTS projected_transport_chat_idx;
+         DROP INDEX IF EXISTS projection_receipts_chat_idx;
+         DROP INDEX IF EXISTS staged_outbounds_chat_idx;
+         DROP INDEX IF EXISTS terminal_projection_chat_idx;
+         CREATE TABLE IF NOT EXISTS app_output_transfers(archive_id TEXT PRIMARY KEY);
          CREATE INDEX IF NOT EXISTS automation_runs_target_idx ON app_automation_runs(target_session_id)",
     ).map_err(AppStorageError::sqlite)?;
     // Existing App databases also need the actual-column index. Historical

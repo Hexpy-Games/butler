@@ -6,9 +6,10 @@ use butler_e2e::e2e::{HarnessError, fixtures};
 use butler_platform::sqlite;
 use rusqlite::{OpenFlags, params};
 use serde_json::json;
-use std::{
-    path::Path,
-    time::{Duration, Instant},
+use std::time::{Duration, Instant};
+mod support;
+use support::{
+    ordered_message_ids, seed_interrupted_output_transfer, seed_scale, verify_rotated_permissions,
 };
 
 #[tokio::test]
@@ -52,8 +53,37 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         "- [Use concise explanations.](kept.md)\n",
     )?;
     let instructions = s.gw.get("/memory/instructions").await?.data().clone();
-    s.turn("general", "Remember the cleararchiveunique marker.")
+    let saved_upload =
+        s.gw.upload(
+            "saved.txt",
+            "text/plain",
+            b"Saved message file",
+            Some("general"),
+        )
         .await?;
+    assert_eq!(saved_upload.status, 201, "{}", saved_upload.text);
+    let saved_file = saved_upload.data()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let sent = s.gw.post("/messages", json!({"chat_id":"general","text":"Remember the cleararchiveunique marker.","client_message_id":"saved-before-clear","attachments":[{"file_id":saved_file}]})).await?;
+    assert_eq!(sent.status, 202, "{}", sent.text);
+    let initial_turn = accepted_turn_id(sent.data())?;
+    s.gw.wait_terminal("general", &initial_turn, Duration::from_secs(30))
+        .await?;
+    let upload =
+        s.gw.upload(
+            "pending.txt",
+            "text/plain",
+            b"Pending composer text",
+            Some("general"),
+        )
+        .await?;
+    assert_eq!(upload.status, 201, "{}", upload.text);
+    let pending_file = upload.data()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let old = s.gw.messages("general").await?;
     assert!(old.len() >= 2);
     s.agent.terminate().await?;
@@ -73,7 +103,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     )?;
     let transcript: (String, i64) = db.query_row("SELECT transcript_path,projected_bytes FROM app_transcript_projection_checkpoints WHERE chat_id='general'", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
     let transcript_bytes = std::fs::read(&transcript.0)?;
+    let redundant: i64 = db.query_row("SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name IN ('chats_conversation_idx','projected_transport_chat_idx','projection_receipts_chat_idx','staged_outbounds_chat_idx','terminal_projection_chat_idx')", [], |r| r.get(0))?;
+    assert_eq!(redundant, 0);
     let ordered_before = ordered_message_ids(&db, "general")?;
+    let db_bytes = std::fs::metadata(s.sandbox.data.join("app-server/butler-client.sqlite"))?.len();
     let start = Instant::now();
     let cleared =
         s.gw.post(
@@ -83,12 +116,24 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         .await?;
     assert_eq!(cleared.status, 200, "{}", cleared.text);
     eprintln!(
-        "GENERAL-CLEAR messages=100002 elapsed={:?}",
+        "GENERAL-CLEAR messages=100002 transport_rows=2000000 db_bytes={db_bytes} elapsed={:?}",
         start.elapsed()
     );
     let archived = cleared.data()["archived_session"]["id"].as_str().unwrap();
     assert!(s.gw.messages("general").await?.is_empty());
     assert_eq!(ordered_message_ids(&db, archived)?, ordered_before);
+    let moved_file: String = db.query_row(
+        "SELECT owner_session_id FROM message_files WHERE id=?1",
+        [&saved_file],
+        |r| r.get(0),
+    )?;
+    assert_eq!(moved_file, archived);
+    assert_eq!(
+        s.gw.download(&format!("/message-files/{saved_file}"))
+            .await?
+            .1,
+        b"Saved message file"
+    );
     assert!(cleared.data()["session"]["latest_turn_id"].is_null());
     assert_eq!(
         cleared.data()["archived_session"]["active_turn_state"],
@@ -115,6 +160,24 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     }
     let corrupt: i64 = db.query_row("SELECT COUNT(*) FROM messages WHERE chat_id=?1 AND id LIKE 'scale-%' AND text != 'Scale message '||substr(id,7)", [archived], |row| row.get(0))?;
     assert_eq!(corrupt, 0);
+    for table in [
+        "projected_transport_events",
+        "app_transport_projection_receipts",
+    ] {
+        let moved: i64 = db.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM {table} WHERE chat_id=?1 AND action_id LIKE 'scale-action-%'"
+            ),
+            [archived],
+            |r| r.get(0),
+        )?;
+        let kept: i64 = db.query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE chat_id='other'"),
+            [],
+            |r| r.get(0),
+        )?;
+        assert_eq!((moved, kept), (100_000, 900_000));
+    }
     let indexed: i64 = db.query_row(
         "SELECT COUNT(*) FROM messages_fts f JOIN messages m ON m.rowid=f.rowid WHERE m.chat_id=?1",
         [archived],
@@ -161,7 +224,17 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let archives = s.gw.get("/archives").await?;
     assert!(archives.text.contains(archived));
     assert_eq!(s.gw.get("/navigation").await?.data()["archive_count"], 1);
-    s.turn("general", "A fresh conversation.").await?;
+    let sent = s.gw.post("/messages", json!({"chat_id":"general","text":"A fresh conversation.","client_message_id":"pending-after-clear","attachments":[{"file_id":pending_file}]})).await?;
+    assert_eq!(sent.status, 202, "{}", sent.text);
+    let sent_turn = accepted_turn_id(sent.data())?;
+    s.gw.wait_terminal("general", &sent_turn, Duration::from_secs(30))
+        .await?;
+    let attached: String = db.query_row(
+        "SELECT owner_session_id FROM message_files WHERE id=?1 AND message_id IS NOT NULL",
+        [&pending_file],
+        |row| row.get(0),
+    )?;
+    assert_eq!(attached, "general");
     assert_eq!(s.gw.messages("general").await?.len(), 2);
     let requests = server.chat_requests();
     let fresh_request = requests.last().expect("fresh model request").to_string();
@@ -201,29 +274,189 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     s.finish().await
 }
 
-fn seed_scale(data: &Path) -> Result<(), HarnessError> {
-    let mut db = sqlite::open_with_flags(
-        data.join("app-server/butler-client.sqlite"),
-        OpenFlags::SQLITE_OPEN_READ_WRITE,
+#[tokio::test]
+async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut cassette = super::browser_outputs::stub::cassette()?;
+    cassette
+        .exchanges
+        .extend(super::ask_user::stub::cassette()?.exchanges);
+    let mut s = Setup::new("GENERAL-CLEAR-OUTPUTS")?
+        .stub_cassette(cassette)
+        .start()
+        .await?;
+    s.turn("general", "Publish").await?;
+    s.turn("general", "Again").await?;
+    let before = s.gw.get("/artifacts?session_id=general").await?;
+    let output = before.data()["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["kind"] == "web")
+        .unwrap()
+        .clone();
+    let cleared =
+        s.gw.post("/sessions/general/clear", json!({"title":"Saved outputs"}))
+            .await?;
+    assert_eq!(cleared.status, 200, "{}", cleared.text);
+    let archive = cleared.data()["archived_session"]["id"].as_str().unwrap();
+    assert_eq!(
+        s.gw.get("/artifacts?session_id=general").await?.data()["artifacts"],
+        json!([])
+    );
+    let kept =
+        s.gw.get(&format!("/artifacts?session_id={archive}"))
+            .await?;
+    let kept_outputs = output_cards(kept.data());
+    assert_eq!(kept_outputs.len(), 1);
+    assert_eq!(kept_outputs[0]["id"], output["id"]);
+    assert_eq!(kept_outputs[0]["session_id"], archive);
+    assert!(s.gw.messages(archive).await?.iter().any(|m| {
+        m["artifacts"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|a| a["id"] == output["id"]))
+    }));
+    s.agent.terminate().await?;
+    seed_interrupted_output_transfer(&s.sandbox.data, archive)?;
+    s.gw = s.agent.start_again().await?;
+    let restored =
+        s.gw.get(&format!("/artifacts?session_id={archive}"))
+            .await?;
+    assert_eq!(
+        stable_artifacts(restored.data()),
+        stable_artifacts(kept.data())
+    );
+    assert_eq!(
+        s.gw.get("/artifacts?session_id=general").await?.data()["artifacts"],
+        json!([])
+    );
+    verify_rotated_permissions(&s, archive).await?;
+    let turn = accepted_turn_id(&s.gw.say("general", super::ask_user::stub::PROMPT).await?)?;
+    s.gw.wait_turn(
+        "general",
+        &turn,
+        &["waiting_for_form"],
+        Duration::from_secs(20),
+    )
+    .await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let q = view.data()["pending_questions"][0].clone();
+    super::ask_user::reply(&s, &q, json!({"status":"deferred"})).await?;
+    s.gw.wait_terminal("general", &turn, Duration::from_secs(20))
+        .await?;
+    super::ask_user::reply(&s, &q, super::ask_user::answer()).await?;
+    let db = sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
-    let tx = db.transaction()?;
-    tx.execute_batch("INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,access_mode,state,last_run_state,created_at,updated_at) VALUES('kept-schedule','Kept schedule','Keep scheduling here','chat','general',3600,'full_access','paused','delivered','2026-01-01','2026-01-01'); INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id) SELECT 'kept-run','kept-schedule','general','delivered','manual','2026-01-01','2026-01-01',id FROM turns WHERE chat_id='general' LIMIT 1")?;
-    {
-        let mut insert = tx.prepare("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES(?1,'general','user',?2,'delivered','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')")?;
-        for row in 0..100_000 {
-            insert.execute(params![
-                format!("scale-{row:06}"),
-                format!("Scale message {row:06}")
-            ])?;
+    let client: String = db.query_row("SELECT client_message_id FROM session_queued_messages WHERE chat_id='general' AND text LIKE 'Answers to your deferred questions:%'", [], |r| r.get(0))?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let followup = loop {
+        let dispatched: Option<String> = db.query_row("SELECT turn_id FROM session_queued_messages WHERE chat_id='general' AND client_message_id=?1", [&client], |r| r.get(0))?;
+        if let Some(turn) = dispatched {
+            break turn;
         }
-    }
-    tx.commit()?;
-    Ok(())
+        assert!(Instant::now() < deadline, "follow-up not dispatched");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    s.gw.wait_terminal("general", &followup, Duration::from_secs(20))
+        .await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.data()["pending_questions"], json!([]));
+    assert_eq!(
+        view.data()["question_answers"][0]["response"],
+        super::ask_user::answer()
+    );
+    let btcc = sqlite::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let outcome: String = btcc.query_row(
+        "SELECT outcome FROM btcc_authority_requests WHERE request_ref=?1",
+        [q["request_ref"].as_str().unwrap()],
+        |r| r.get(0),
+    )?;
+    assert_eq!(outcome, "applied");
+    drop(btcc);
+    let event: String = db.query_row(
+        "SELECT payload_json FROM events WHERE type='question.answered' ORDER BY id DESC LIMIT 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&event)?["session_id"],
+        "general"
+    );
+    s.agent.terminate().await?;
+    let retry = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    retry.execute(
+        "UPDATE btcc_authority_requests SET outcome='pending' WHERE request_ref=?1",
+        [q["request_ref"].as_str().unwrap()],
+    )?;
+    drop(retry);
+    s.gw = s.agent.start_again().await?;
+    let recovered = sqlite::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let outcome: String = recovered.query_row(
+        "SELECT outcome FROM btcc_authority_requests WHERE request_ref=?1",
+        [q["request_ref"].as_str().unwrap()],
+        |r| r.get(0),
+    )?;
+    assert_eq!(outcome, "applied");
+    drop(recovered);
+    let count: i64 = db.query_row(
+        "SELECT COUNT(*) FROM session_queued_messages WHERE client_message_id=?1",
+        [&client],
+        |r| r.get(0),
+    )?;
+    assert_eq!(count, 1);
+    let followups: i64 = db.query_row("SELECT COUNT(*) FROM session_queued_messages WHERE chat_id='general' AND text LIKE 'Answers to your deferred questions:%'", [], |r| r.get(0))?;
+    assert_eq!(followups, 1);
+    s.turn("general", "Publish").await?;
+    let fresh_output = s.gw.get("/artifacts?session_id=general").await?;
+    let fresh_cards = output_cards(fresh_output.data());
+    assert_eq!(fresh_cards.len(), 1);
+    assert_ne!(fresh_cards[0]["id"], output["id"]);
+    let archived_again =
+        s.gw.get(&format!("/artifacts?session_id={archive}"))
+            .await?;
+    assert_eq!(
+        stable_artifacts(archived_again.data()),
+        stable_artifacts(kept.data())
+    );
+    let deleted = s.gw.delete(&format!("/sessions/{archive}")).await?;
+    assert_eq!(deleted.status, 200, "{}", deleted.text);
+    s.turn("general", "Again").await?;
+    let revised = s.gw.get("/artifacts?session_id=general").await?;
+    let revised_cards = output_cards(revised.data());
+    assert_eq!(revised_cards.len(), 1);
+    assert_eq!(revised_cards[0]["id"], fresh_cards[0]["id"]);
+    drop(db);
+    s.finish().await
 }
 
-fn ordered_message_ids(db: &rusqlite::Connection, chat: &str) -> Result<Vec<String>, HarnessError> {
-    let mut rows = db.prepare("SELECT id FROM messages WHERE chat_id=?1 ORDER BY rowid")?;
-    Ok(rows
-        .query_map([chat], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
+fn output_cards(view: &serde_json::Value) -> Vec<serde_json::Value> {
+    view["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["kind"] == "web")
+        .cloned()
+        .collect()
+}
+
+fn stable_artifacts(view: &serde_json::Value) -> Vec<serde_json::Value> {
+    view["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .cloned()
+        .map(|mut artifact| {
+            // Signed download capabilities are renewed on each read, not stored history.
+            artifact.as_object_mut().unwrap().remove("signed_url");
+            artifact
+        })
+        .collect()
 }
