@@ -87,12 +87,18 @@ jobs:
           TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
           CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
           RUSTFLAGS: -C target-feature=+crt-static
-        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build the agent binary under test
         run: |
           $env:RUSTFLAGS = '-C target-feature=+crt-static'
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "BUTLER_E2E_BIN=$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -112,7 +118,10 @@ jobs:
           BUTLER_E2E_REPORT: ${{ env.OWNER_JOB_ROOT }}/e2e-live-report.txt
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Summarize
         if: always() && steps.credential.outputs.available == 'true'

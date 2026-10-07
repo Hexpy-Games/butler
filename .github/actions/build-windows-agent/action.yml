@@ -74,9 +74,13 @@ runs:
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $ErrorActionPreference = 'Continue'
         bun install --frozen-lockfile --ignore-scripts
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $ErrorActionPreference = 'Continue'
         npm.cmd --prefix packages/butler-app/client/ui run build
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Build unsigned release executable
       env:
@@ -102,14 +106,20 @@ runs:
         $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
         # Owner setup bypasses rust-agent-setup; restore after setting exact flags.
         if ('${{ inputs.owner-runner }}' -eq 'true') {
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
+        $ErrorActionPreference = 'Continue'
         cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
         # A runner has development DLLs installed. Refuse a dependency they hide.
+        $ErrorActionPreference = 'Continue'
         $imports = & dumpbin /dependents $binary
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $imports | Write-Output
         foreach ($line in $imports) {
@@ -133,8 +143,10 @@ runs:
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $ErrorActionPreference = 'Continue'
         python packages/butler-agent/rust/scripts/package-windows-agent.py `
           --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe" `
           --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist `
           --output dist/release/agent --artifact-base-url '${{ inputs.artifact-base-url }}'
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -21,7 +21,9 @@ foreach ($directory in $paths) {
 if (!(Get-Command cl -ErrorAction SilentlyContinue) -or !$env:VCToolsInstallDir -or !$env:UCRTVersion -or !$env:UniversalCRTSdkDir) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (!(Test-Path -LiteralPath $vswhere)) { throw 'Existing MSVC not found: vswhere is missing; no installation attempted' }
+    $ErrorActionPreference = 'Continue'
     $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0 -or !$installation) { throw 'Existing x64 MSVC installation not found; no installation attempted' }
     $developer = Join-Path $installation 'Common7/Tools/VsDevCmd.bat'
     if (!(Test-Path -LiteralPath $developer)) { throw 'Existing VsDevCmd.bat not found; no installation attempted' }
@@ -29,7 +31,9 @@ if (!(Get-Command cl -ErrorAction SilentlyContinue) -or !$env:VCToolsInstallDir 
     # Windows PowerShell 5.1 re-quotes native arguments. Avoid a quoted batch path.
     Push-Location -LiteralPath (Split-Path -Parent $developer)
     try {
+        $ErrorActionPreference = 'Continue'
         $environment = & $env:ComSpec /d /c 'call VsDevCmd.bat -no_logo -arch=x64 -host_arch=x64 >nul && set'
+        $ErrorActionPreference = 'Stop'
         $developerExit = $LASTEXITCODE
     } finally { Pop-Location }
     if ($developerExit -ne 0) { throw 'Existing MSVC developer environment failed; no host changes attempted' }
