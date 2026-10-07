@@ -25,6 +25,7 @@ use tokio_util::sync::CancellationToken;
 pub enum GuidedAccess {
     FullAccessContained,
     ReadOnlyObservation,
+    ContainedObservation,
 }
 
 /// A guided shell command with its workspace, timeout and access.

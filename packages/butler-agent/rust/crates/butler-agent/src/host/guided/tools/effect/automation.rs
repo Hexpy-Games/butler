@@ -30,6 +30,18 @@ pub(super) fn prepare(
     call: &butler_turn::btcc::ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
+    if call
+        .arguments
+        .get("access_mode")
+        .and_then(Value::as_str)
+        .and_then(butler_turn::btcc::AccessMode::parse)
+        .is_some_and(|mode| mode.rank() > owner.binding.access_mode.rank())
+    {
+        return Err(BtccError::relayed(
+            "schedule_access_exceeds_turn",
+            "Schedule access exceeds this turn.",
+        ));
+    }
     let target = match call.name.as_str() {
         "create_automation" => format!(
             "automation:create:{}",

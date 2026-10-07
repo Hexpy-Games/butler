@@ -9,7 +9,15 @@ pub(super) const ENFORCED: bool = true;
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {
-    let profile = [
+    read_only_contained(invocation, &[], &[])
+}
+
+pub(super) fn read_only_contained(
+    invocation: Invocation,
+    denied: &[&Path],
+    allowed: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    let mut profile = [
         "(version 1)",
         "(allow default)",
         "(deny file-write*)",
@@ -17,6 +25,15 @@ pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxErr
         "(deny network*)",
     ]
     .join("\n");
+    for (action, roots) in [("deny", denied), ("allow", allowed)] {
+        for root in roots {
+            let real = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+            for path in [*root, real.as_path()] {
+                let quoted = serde_json::to_string(&path.to_string_lossy())?;
+                profile.push_str(&format!("\n({action} file-read* (subpath {quoted}))"));
+            }
+        }
+    }
     Ok(sandboxed(profile, invocation))
 }
 

@@ -120,7 +120,7 @@ async fn reasoning_only_response_and_todo_updates_continue() -> Result<(), Harne
 #[tokio::test]
 async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskFirst).await?;
+    let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskAlways).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let turn =
         s.gw.wait_turn(
@@ -223,7 +223,7 @@ async fn empty_and_text_calls_receive_feedback_until_the_model_recovers() -> Res
 #[tokio::test]
 async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskFirst).await?;
+    let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskAlways).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let paused =
         s.gw.wait_turn(

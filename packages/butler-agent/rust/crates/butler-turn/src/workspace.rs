@@ -10,6 +10,8 @@ mod files;
 mod grep;
 mod mutations;
 mod path_guard;
+mod target_scope;
+pub use target_scope::{ScopeRoots, classify_targets};
 mod reference;
 mod session_recovery;
 mod session_worktree;

@@ -286,11 +286,23 @@ impl Walk<'_> {
         let relative = path.strip_prefix(self.root).unwrap_or(&path);
         let relative = relative.to_string_lossy().replace('\\', "/");
         if relative.is_empty()
-            || self.input.path_form == super::PathForm::RelativeOnly
+            || self.input.path_form.contained()
                 && (looks_sensitive(&relative)
                     || protected_path(self.root, &path, &self.input.protected_roots))
         {
             return Ok(Next::Continue);
+        }
+        if self.input.path_form == super::PathForm::Contained {
+            let guard = resolve_workspace_path_guard(GuardInput {
+                root: self.root,
+                requested: &path.to_string_lossy(),
+                path_form: self.input.path_form,
+                allow_directories: true,
+                protected_roots: &self.input.protected_roots,
+            })?;
+            if !guard.ok() {
+                return Ok(Next::Continue);
+            }
         }
         let Ok(file_type) = child.file_type() else {
             return Ok(self.io_error());

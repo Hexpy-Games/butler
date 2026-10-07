@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
-use butler_platform::command_sandbox::{self, SandboxError, ShellAccess};
+use butler_platform::command_sandbox::{self, ShellAccess};
 use butler_platform::process_control;
 use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
@@ -387,15 +387,44 @@ pub(super) fn guarded_directory(
 fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
     let access = match input.access {
         GuidedAccess::FullAccessContained => ShellAccess::Full,
-        GuidedAccess::ReadOnlyObservation => ShellAccess::ReadOnly,
+        GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
+            ShellAccess::ReadOnly
+        }
     };
-    let invocation = command_sandbox::login_shell(&input.command, access, &input.host_environment)
-        .map_err(|SandboxError::ReadOnlyUnavailable| {
-            CommandError::new(
-                CommandCode::CommandObservationIsolationUnavailable,
-                "This host cannot enforce the admitted read-only local command boundary.",
-            )
-        })?;
+    let shell = if input.access == GuidedAccess::ContainedObservation {
+        let mut denied = vec![input.butler_data.clone()];
+        if let Some(home) = input.host_environment.get("HOME") {
+            denied.extend(
+                [
+                    ".ssh",
+                    ".gnupg",
+                    ".aws",
+                    ".kube",
+                    ".docker",
+                    ".netrc",
+                    ".git-credentials",
+                    "Library/Keychains",
+                    ".butler-e2e-auth",
+                ]
+                .into_iter()
+                .map(|name| std::path::Path::new(home).join(name)),
+            );
+        }
+        command_sandbox::login_shell_contained(
+            &input.command,
+            &input.host_environment,
+            &denied.iter().map(|path| path.as_path()).collect::<Vec<_>>(),
+            &[input.workspace_root.as_path()],
+        )
+    } else {
+        command_sandbox::login_shell(&input.command, access, &input.host_environment)
+    };
+    let invocation = shell.map_err(|error| {
+        CommandError::new(
+            CommandCode::CommandObservationIsolationUnavailable,
+            error.to_string(),
+        )
+    })?;
     Ok(invocation)
 }
 

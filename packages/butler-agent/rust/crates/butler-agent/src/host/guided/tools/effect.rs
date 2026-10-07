@@ -40,7 +40,12 @@ pub(super) async fn execute(
         workspace_reference: owner.binding.workspace_reference.as_ref(),
         workspace_path: &owner.binding.workspace_path,
         butler_data: &owner.binding.butler_data,
-        access_mode: owner.binding.access_mode.clone(),
+        execution: if owner.binding.access_mode == AccessMode::FullAccess {
+            crate::host::guided::command::CommandExecution::Registered
+        } else {
+            crate::host::guided::command::CommandExecution::Sandboxed
+        },
+        contained_reads: false,
         abort: invocation.cancellation.clone(),
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
@@ -48,7 +53,9 @@ pub(super) async fn execute(
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    let decision = super::access::for_kind(owner, super::access::kind(call));
+    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
+    {
         return ordinary(
             "read_only",
             "This Turn has read-only access; no change was applied.",
@@ -56,7 +63,7 @@ pub(super) async fn execute(
         );
     }
     if call.name == ToolName::BindSessionGitWorktree
-        && (owner.binding.access_mode != AccessMode::FullAccess
+        && (matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
             || owner.binding.project_id.is_none())
     {
         return ordinary(
@@ -66,7 +73,7 @@ pub(super) async fn execute(
         );
     }
     if call.name == ToolName::RequestServiceRestart
-        && owner.binding.access_mode != AccessMode::FullAccess
+        && matches!(decision, butler_turn::btcc::AccessDecision::Deny(_))
     {
         return ordinary(
             "restart_full_access_required",
@@ -109,24 +116,28 @@ async fn execute_prepared(
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
         && !*owner.authority_consumed.lock();
-    let approved = if owner.binding.access_mode == AccessMode::AskFirst || resumes_authority {
-        match authority::gate(
-            owner,
-            call,
-            occurrence,
-            &work,
-            &target,
-            &input,
-            adapter.as_ref(),
-        )
-        .await?
-        {
-            authority::Gate::Return(result) => return Ok(result),
-            authority::Gate::Execute(approved) => approved,
-        }
-    } else {
-        None
-    };
+    let decision = super::access::decision(owner, call, &input)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    let approved =
+        if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_)) || resumes_authority {
+            match authority::gate(
+                owner,
+                call,
+                occurrence,
+                &work,
+                &target,
+                &input,
+                adapter.as_ref(),
+            )
+            .await?
+            {
+                authority::Gate::Return(result) => return Ok(result),
+                authority::Gate::Execute(approved) => approved,
+            }
+        } else {
+            None
+        };
     let outcome = match owner
         .effects
         .execute(ExecuteEffect {

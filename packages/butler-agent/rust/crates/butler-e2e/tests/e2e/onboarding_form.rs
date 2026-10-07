@@ -20,7 +20,7 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
     butler_e2e::gate!();
     let s = Setup::new("ONBOARDING-FORM")?
         .fixture(Fixture::FirstConversation)
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;

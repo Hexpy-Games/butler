@@ -74,11 +74,7 @@ fn source_prompt(
         "Current scope:\n- role: {}\n- workspace: {}\n- access: {}\n- work storage: {}",
         policy.role,
         policy.workspace_path,
-        match policy.access_mode {
-            butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-            butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-            butler_turn::btcc::AccessMode::FullAccess => "full_access",
-        },
+        policy.access_mode.as_str(),
         work_storage,
     );
     if let Some(project_id) = policy

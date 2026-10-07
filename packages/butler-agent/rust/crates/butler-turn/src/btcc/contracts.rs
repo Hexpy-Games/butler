@@ -22,7 +22,9 @@ pub enum ReasoningEffort {
 #[serde(rename_all = "snake_case")]
 pub enum AccessMode {
     FullAccess,
-    AskFirst,
+    AskAlways,
+    #[serde(rename = "ask_except_reads")]
+    AskExceptReads,
     ReadOnly,
 }
 

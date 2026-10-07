@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use butler_core::tool_protocol::ToolName;
-use command_risk::command_risk;
+pub(in crate::btcc) use command_risk::command_risk;
 
 /// Most examples one approval lists; all targets remain visible.
 const MAX_EXAMPLES: usize = 3;

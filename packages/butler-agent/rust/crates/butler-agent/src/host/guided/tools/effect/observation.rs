@@ -5,7 +5,7 @@ use super::{GuidedTools, ordinary};
 use crate::host::guided::command::CommandScope;
 use butler_core::{json::JsonDocument, tool_protocol::ToolName};
 use butler_turn::btcc::{
-    AccessMode, AuthorityOutcomeInput, ModelRoundToolCall, ToolExecutionError,
+    AccessDecision, AuthorityOutcomeInput, ModelRoundToolCall, ToolExecutionError,
 };
 use serde_json::Value;
 
@@ -23,12 +23,15 @@ pub(super) async fn execute(
     {
         return Ok(None);
     }
-    let needs_approval = owner.binding.access_mode == AccessMode::AskFirst
-        && !butler_platform::command_sandbox::READ_ONLY_SANDBOX;
     let mut input = Value::Object(call.arguments.clone());
     if input.get("state_effect").is_none() {
         input["state_effect"] = "read_only".into();
     }
+    let decision = super::super::access::decision(owner, call, &input)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    let needs_approval = matches!(decision, AccessDecision::Ask(_))
+        || super::super::access::resumes(owner, occurrence);
     let approval = if needs_approval {
         if let Some(result) = owner
             .command
@@ -51,7 +54,14 @@ pub(super) async fn execute(
     };
     let mut approved_scope = scope.clone();
     if needs_approval {
-        approved_scope.access_mode = AccessMode::FullAccess;
+        approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
+    }
+    if !needs_approval && owner.binding.access_mode.reviews_effects() {
+        if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+            approved_scope.contained_reads = true;
+        } else {
+            approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
+        }
     }
     let result = owner
         .command
