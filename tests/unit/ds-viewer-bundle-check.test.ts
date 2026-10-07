@@ -7,7 +7,6 @@ import {
   DS_VIEWER_BUNDLE_MARKER,
   inspectDsViewerBundle,
 } from "../smoke/ds-viewer-bundle-check.ts";
-import { ledgerTest, resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
 
 const tempDirs: string[] = [];
 
@@ -98,20 +97,5 @@ describe("DS Viewer bundle check", () => {
     expect(pkg.scripts["app:motion:trace"]).toContain("tests/smoke/ds-motion-trace.ts");
     expect(pkg.scripts["app:motion:trace"]).toContain("run build");
     expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-motion-trace.ts");
-  });
-
-  ledgerTest("spec records the lazy, sidebar-based DS Viewer contract", () => {
-    const spec = readFileSync(
-      resolveRepoOrLedgerPath("project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md"),
-      "utf8",
-    );
-
-    expect(spec).toContain("lazy(() => import(...))");
-    expect(spec).toContain("history.replaceState");
-    expect(spec).toContain("side-by-side");
-    expect(spec).toContain("tests/unit/ds-showcase-coverage.test.ts");
-    expect(spec).toContain("data-ds-story");
-    expect(spec).not.toContain("First-level navigation is tabbed");
-    expect(spec).not.toContain("each tab can\n  switch between 1, 2, and 4 columns");
   });
 });

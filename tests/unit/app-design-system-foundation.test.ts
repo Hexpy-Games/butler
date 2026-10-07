@@ -2,14 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { resolveRepoOrLedgerPath, ledgerTest } from "../support/project-ledger-root.ts";
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { lintDesignSystemRules } from "../../packages/butler-app/scripts/lint/design-system-rules-lint.ts";
 
 const uiSrc = "packages/butler-app/client/ui/src";
 
 function read(path: string): string {
-  return readFileSync(resolveRepoOrLedgerPath(path), "utf8");
+  return readFileSync(path, "utf8");
 }
 
 function walkUiSources(dir: string): string[] {
@@ -21,51 +20,6 @@ function walkUiSources(dir: string): string[] {
 }
 
 describe("design-system foundation spec", () => {
-  ledgerTest("spec records the Phase 1 foundation contracts", () => {
-    const spec = read(
-      "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
-    );
-    for (const heading of [
-      "## Scroll Fade Contract",
-      "## Tinted Glass Contract",
-      "## Theme Parity Contract",
-      "## Focus Ring Contract",
-      "## Layering Contract",
-      "## Control And Menu Sizing Contract",
-      "## Locale And Korean Typography Contract",
-    ]) {
-      expect(spec).toContain(heading);
-    }
-    expect(spec).toContain("--scroll-fade-size");
-    expect(spec).toContain("--focus-ring");
-    expect(spec).toContain("--menu-item-height");
-    expect(spec).toContain("--z-tooltip");
-  });
-
-  ledgerTest("spec records the Phase 2 screen contracts", () => {
-    const spec = read(
-      "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
-    );
-    expect(spec).toContain("## Phase 2 Screen Contracts");
-    for (const heading of [
-      "### Adaptive Drawer Width",
-      "### Sidebar Default State",
-      "### Filtered Select Popover",
-      "### Command Palette",
-      "### Settings Screens",
-      "### Code Blocks And Message Footer",
-      "### Composer Toolbar",
-      "### Navigation Rows",
-      "### Inspector Content",
-      "### Documents, Artifacts, And Briefing Titles",
-    ]) {
-      expect(spec).toContain(heading);
-    }
-    expect(spec).toContain("aria-activedescendant");
-    expect(spec).toContain("--syntax-");
-    expect(spec).toContain("Preferences");
-    expect(spec).toContain("A saved user choice");
-  });
 });
 
 

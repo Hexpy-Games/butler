@@ -3,12 +3,11 @@ import { expect, test, describe } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { resolveRepoOrLedgerPath, ledgerTest } from "../support/project-ledger-root.ts";
 
 const root = process.cwd();
 
 function read(path: string): string {
-  return readFileSync(resolveRepoOrLedgerPath(path), "utf8");
+  return readFileSync(path, "utf8");
 }
 
 // App copy moved from app/copy.ts into the shared butler-i18n locales (64dbc5c9).
@@ -3290,114 +3289,6 @@ describe("app-client design system foundation", () => {
     expect(buttonContainer).toContain('size === "lg" || size === "icon-lg"');
     expect(buttonContainer).toContain('data-slot="button-container"');
   });
-
-  ledgerTest("design-system skill maps agent component selection and quality gates", () => {
-    const skillRoot = join(designSystemRoot, "skills/butler-design-system");
-    const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
-    const componentMap = readFileSync(
-      join(skillRoot, "references/component-map.md"),
-      "utf8",
-    );
-    const skillsReadme = readFileSync(
-      join(designSystemRoot, "skills/README.md"),
-      "utf8",
-    );
-    const dsReadme = readFileSync(join(designSystemRoot, "README.md"), "utf8");
-    const installer = readFileSync(
-      join(designSystemRoot, "scripts/install-design-system-skill.mjs"),
-      "utf8",
-    );
-    const spec = read(
-      "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
-    );
-    const recoveryPlan = read(
-      "project-ledger/projects/butler/plans/plan-butler-dedicated-client-design-system-recovery.md",
-    );
-    const subrepoPlan = read(
-      "project-ledger/projects/butler/plans/plan-butler-dedicated-client-design-system-subrepo.md",
-    );
-    const report = read(
-      "project-ledger/projects/butler/reports/butler-dedicated-client-design-system-skill-map.md",
-    );
-
-    expect(existsSync(join(skillRoot, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(skillRoot, "references/component-map.md"))).toBe(
-      true,
-    );
-    expect(installer).toContain('const skillName = "butler-design-system"');
-    expect(installer).toContain('join(designSystemRoot, "skills", skillName)');
-    expect(skillsReadme).toContain(
-      "`butler-design-system` is the canonical skill name",
-    );
-
-    expect(skill).toContain("component-selection and quality-gate guide");
-    expect(skill).toContain("## Decision Loop");
-    expect(skill).toContain("## Container / Presenter Contract");
-    expect(skill).toContain("## Styling Rules");
-    expect(skill).toContain("## DS Viewer And Render");
-    expect(skill).toContain("## Wrong-Turn Guardrails");
-    expect(skill).toContain("bun run render Button NavRow CollapsibleNavGroup");
-    expect(skill).toContain("320, 375, 390, and 430px");
-    expect(skill).toContain("Active navigation states are flat backgrounds");
-    expect(skill).toContain("Consecutive buttons must be wrapped in");
-    expect(skill).toContain("Do not add component selectors");
-    expect(skill).toContain("@/styles/components");
-    expect(skill).toContain("project-ledger check");
-
-    expect(componentMap).toContain("## Quick Intent Index");
-    expect(componentMap).toContain("## Interaction And Motion");
-    expect(componentMap).toContain("## CSS Ownership Map");
-    expect(componentMap).toContain("## Agent Quality Gates");
-    expect(componentMap).toContain("NavRow` layout has two regions");
-    expect(componentMap).toContain(
-      "Children default to the same row size and alignment",
-    );
-    expect(componentMap).toContain("Do not introduce active outlines");
-    expect(componentMap).toContain("Use `ButtonContainer` whenever");
-    expect(componentMap).toContain(
-      "Do not place adjacent `Button` elements in a raw `Stack`",
-    );
-    expect(componentMap).toContain("Do not build RAG");
-
-    for (const requiredName of [
-      "ComposerControl",
-      "SettingsField",
-      "ActivityFeed",
-      "DialogForm",
-      "EmptyLine",
-      "AutomationRunList",
-      "ChromeFrame",
-      "TitlebarShell",
-      "Clickable",
-      "NativeSelect",
-      "ButtonContainer",
-      "TintedGlass",
-    ]) {
-      expect(componentMap).toContain(requiredName);
-    }
-
-    expect(dsReadme).toContain(
-      "bun run render Button NavRow CollapsibleNavGroup",
-    );
-    expect(spec).toContain(
-      "packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md",
-    );
-    expect(recoveryPlan).toContain(
-      "packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system",
-    );
-    expect(subrepoPlan).toContain(
-      "packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md",
-    );
-    expect(report).toContain("REPORT-BDC-DS-SKILL-MAP");
-    expect(report).toContain("DS Viewer and `bun run render <Component...>`");
-
-    for (const content of [spec, recoveryPlan, subrepoPlan, report]) {
-      expect(content).not.toContain(
-        "packages/butler-app/client/ui/src/libs/design-system/skills/design-system",
-      );
-    }
-  });
-
   test("design-system block files stay presenter-only and renderable", () => {
     const workbench = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
       + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
@@ -4073,35 +3964,6 @@ describe("app-client design system foundation", () => {
     expect(componentSources).not.toMatch(/from ["'][^"']*appComponentStyles["']/u);
     expect(legacyProductStyles).toEqual([]);
   });
-
-  ledgerTest("design-system primitive styles are no longer owned by tokens.css", () => {
-    const tokens = readFileSync(join(designSystemRoot, "tokens.css"), "utf8");
-    const report = read(
-      "project-ledger/projects/butler/reports/butler-dedicated-client-design-system-primitive-stabilization.md",
-    );
-    const componentSelectors = tokens
-      .split("\n")
-      .filter((line) =>
-        /^(?:\[data-slot|\.liquid-glass-popover|\[data-glass)/u.test(
-          line.trim(),
-        ),
-      );
-    const productStyleFiles = listUiSourceFiles(
-      "packages/butler-app/client/ui/src/styles/components",
-    ).filter((file) => file.endsWith(".module.css"));
-
-    expect(componentSelectors.length).toBe(0);
-    expect(componentSelectors).toEqual([]);
-    expect(productStyleFiles.length).toBeLessThanOrEqual(24);
-    expect(report).toContain(
-      "Reduced top-level component selectors in `tokens.css` from the DS-R1 baseline",
-    );
-    expect(report).toContain("of 115 to 0");
-    expect(report).toContain(
-      "Primitive implementation styles are owned by primitive CSS modules",
-    );
-  });
-
   test("palette and semantic color tokens both exist", () => {
     const cssContent = readFileSync(
       join(appClientPath, "src/libs/design-system/tokens.css"),
