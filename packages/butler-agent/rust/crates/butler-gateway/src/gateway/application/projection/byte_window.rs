@@ -160,6 +160,7 @@ fn read_at(path: impl AsRef<Path>, start: u64, length: usize) -> Result<Vec<u8>,
         return Ok(Vec::new());
     }
     let mut file = File::open(path).map_err(io_error)?;
+    crate::gateway::idle_probe::transcript_open();
     file.seek(SeekFrom::Start(start)).map_err(io_error)?;
     let mut bytes = vec![0; length];
     let count = file.read(&mut bytes).map_err(io_error)?;
