@@ -27,7 +27,8 @@ async fn update_progress_bytes_unknown_length_failure_cancel_and_retry() -> Resu
     let write = |name: &str, hash: &str| {
         std::fs::write(&manifest, json!({"artifacts":[{
         "component":"app", "version":"99.0.0", "channel":"stable",
-        "artifact_url":format!("{base}/{name}.zip"), "sha256":hash,
+        "platform":butler_platform::launcher::release_platform(),
+        "artifact_url":format!("{base}/{name}.{}",butler_platform::app_update::package_format()), "sha256":hash,
         "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
         "rollback_policy":"not-managed-by-butler"
     }]}).to_string())
@@ -86,7 +87,7 @@ fn feed(bytes: Vec<u8>) -> axum::Router {
     let known = bytes.clone();
     axum::Router::new()
         .route(
-            "/known.zip",
+            &format!("/known.{}", butler_platform::app_update::package_format()),
             axum::routing::get(move || {
                 let bytes = known.clone();
                 async move { bytes }
@@ -99,7 +100,7 @@ fn feed(bytes: Vec<u8>) -> axum::Router {
                     let chunks: Vec<_> = bytes.chunks(32_768).map(Vec::from).collect();
                     async move {
                         axum::body::Body::from_stream(futures_util::stream::unfold(
-                            (chunks.into_iter(), name == "slow.zip"),
+                            (chunks.into_iter(), name.starts_with("slow.")),
                             |(mut chunks, slow)| async move {
                                 let bytes = chunks.next()?;
                                 if slow {

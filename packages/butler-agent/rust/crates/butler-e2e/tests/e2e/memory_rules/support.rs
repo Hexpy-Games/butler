@@ -258,6 +258,7 @@ pub(crate) fn instruction_section(request: &Value) -> String {
         .split("## Active Rules")
         .nth(1)
         .and_then(|section| section.split("\n\n## ").next())
+        .and_then(|section| section.split("\n\nCurrent scope:").next())
         .unwrap_or_default()
         .to_owned()
 }
