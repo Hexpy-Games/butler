@@ -53,7 +53,7 @@ pub(super) async fn execute(
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
-    let decision = super::access::for_kind(owner, super::access::kind(call));
+    let decision = super::access::for_kind(owner, super::access::kind(call).gated_effect());
     if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::ReadOnly)
     {
         return ordinary(
@@ -116,9 +116,14 @@ async fn execute_prepared(
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
         && !*owner.authority_consumed.lock();
-    let decision = super::access::decision(owner, call, &input)
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
+    let decision = super::access::decision_for_kind(
+        owner,
+        call,
+        &input,
+        super::access::kind(call).gated_effect(),
+    )
+    .await
+    .map_err(ToolExecutionError::Integrity)?;
     let approved =
         if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_)) || resumes_authority {
             match authority::gate(

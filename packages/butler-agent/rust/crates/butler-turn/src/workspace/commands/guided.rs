@@ -393,28 +393,10 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
         }
     };
     let shell = if input.access == GuidedAccess::ContainedObservation {
-        let mut denied = vec![input.butler_data.clone()];
-        if let Some(home) = input.host_environment.get("HOME") {
-            denied.extend(
-                [
-                    ".ssh",
-                    ".gnupg",
-                    ".aws",
-                    ".kube",
-                    ".docker",
-                    ".netrc",
-                    ".git-credentials",
-                    "Library/Keychains",
-                    ".butler-e2e-auth",
-                ]
-                .into_iter()
-                .map(|name| std::path::Path::new(home).join(name)),
-            );
-        }
         command_sandbox::login_shell_contained(
             &input.command,
             &input.host_environment,
-            &denied.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+            &[input.butler_data.as_path()],
             &[input.workspace_root.as_path()],
         )
     } else {

@@ -103,11 +103,20 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
         CapabilityKind::FileRead | CapabilityKind::CommandMutation { .. } => {
             *mode == AccessMode::AskExceptReads
         }
-        CapabilityKind::CommandObservation { .. } => mode.reviews_effects(),
+        CapabilityKind::CommandObservation { sandboxed } => {
+            *mode == AccessMode::AskExceptReads || sandboxed && *mode == AccessMode::AskAlways
+        }
         _ => false,
     }
 }
 impl CapabilityKind {
+    /// Effects cannot inherit exemptions intended for other dispatch routes.
+    pub fn gated_effect(self) -> Self {
+        match self {
+            Self::InternalRead | Self::Exempt(_) | Self::ButlerOutput => Self::OtherEffect,
+            kind => kind,
+        }
+    }
     pub fn of_call(name: &str, arguments: &Map<String, Value>, ledger_effect: bool) -> Self {
         use ToolName::{
             BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
@@ -153,11 +162,18 @@ impl CapabilityKind {
 }
 /// Unresolved shell evaluation must never inherit a project classification.
 pub fn command_scope_unresolved(command: &str) -> bool {
-    command.contains(['$', '`', '%', '!'])
-        || command.split_ascii_whitespace().any(|word| {
-            let word = word.trim_matches(['\'', '"']);
-            word.starts_with('~')
-                || (std::path::Path::new(word).is_absolute() && word.contains(['*', '?', '[']))
+    command.contains(['$', '`', '%', '!', '{', '}', '?', '*', '['])
+        || butler_platform::command_sandbox::path_tokens(command)
+            .iter()
+            .any(|word| word.starts_with('~'))
+        || command.split([';', '&', '|', '\n']).any(|segment| {
+            let tokens = butler_platform::command_sandbox::path_tokens(segment);
+            let mut words = tokens.iter().filter(|word| !word.starts_with('-'));
+            match words.next().copied() {
+                Some("cd") => words.next().is_none(),
+                Some("pushd" | "popd") => true,
+                _ => false,
+            }
         })
 }
 /// Risk is shared with the exact-action approval card.

@@ -258,10 +258,61 @@ fn access_boundary_matches_the_owner_table() {
         "ls !USERPROFILE!",
         "cat `pwd`",
         "ls /tmp/*",
+        "cat {..,a}/outside.txt",
+        "cd && cat .zsh_history",
+        "cd -- && cat .zsh_history",
+        "cd '' && cat .zsh_history",
+        "pushd",
+        "popd",
+        "cat .en?",
+        "cat [.]env",
+        "ls *.rs",
     ] {
-        assert!(command_scope_unresolved(command));
+        assert!(command_scope_unresolved(command), "{command}");
     }
-    assert!(!command_scope_unresolved("ls *.rs"));
+    for name in [
+        "run_command",
+        "write_file",
+        "edit_file",
+        "bind_session_git_worktree",
+        "start_topic_conversation",
+        "request_service_restart",
+        "create_automation",
+        "update_automation",
+        "delete_automation",
+        "run_due_automations",
+    ] {
+        let kind = CapabilityKind::of_call(name, &serde_json::Map::new(), false);
+        assert!(
+            !matches!(kind, InternalRead | Exempt(_) | ButlerOutput),
+            "{name}"
+        );
+    }
+    for name in [
+        "project_ledger_create",
+        "project_ledger_update",
+        "project_ledger_work_update",
+        "project_ledger_task_update",
+        "project_ledger_task_complete",
+        "project_ledger_attempt_succeed",
+        "project_ledger_attempt_fail",
+    ] {
+        assert_eq!(
+            CapabilityKind::of_call(name, &serde_json::Map::new(), true),
+            ProjectRecord
+        );
+    }
+    for kind in [
+        InternalRead,
+        ButlerOutput,
+        Exempt(ApprovalExemptAction::MemorySave),
+    ] {
+        assert_eq!(kind.gated_effect(), OtherEffect);
+    }
+    assert!(!needs_scope(
+        &AskAlways,
+        CommandObservation { sandboxed: false }
+    ));
     for spelling in [
         r"C:foo",
         r"C:\p\a.txt:s",

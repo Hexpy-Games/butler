@@ -1,6 +1,7 @@
 //! Guarded, bounded discovery of regular workspace files.
 
 mod glob;
+mod guard;
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -8,9 +9,7 @@ use std::time::Instant;
 use serde_json::Value;
 
 use self::glob::{WorkspaceGlob, prune_prefix};
-use super::path_guard::{
-    GuardInput, looks_sensitive, protected_path, resolve_workspace_path_guard,
-};
+use super::path_guard::{GuardInput, resolve_workspace_path_guard};
 
 const EXCLUDED_DIRS: &[&str] = &[
     ".cache",
@@ -154,6 +153,7 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
         .collect();
     let mut walk = Walk {
         input,
+        guard: guard::WalkGuard::new(&guard.root, &input.protected_roots),
         root: &guard.root,
         include,
         exclude,
@@ -190,6 +190,7 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
 struct Walk<'a> {
     input: &'a WorkspaceListInput,
     root: &'a Path,
+    guard: guard::WalkGuard,
     include: Vec<WorkspaceGlob>,
     exclude: Vec<WorkspaceGlob>,
     started: Instant,
@@ -285,28 +286,14 @@ impl Walk<'_> {
         let path = child.path();
         let relative = path.strip_prefix(self.root).unwrap_or(&path);
         let relative = relative.to_string_lossy().replace('\\', "/");
-        if relative.is_empty()
-            || self.input.path_form.contained()
-                && (looks_sensitive(&relative)
-                    || protected_path(self.root, &path, &self.input.protected_roots))
-        {
-            return Ok(Next::Continue);
-        }
-        if self.input.path_form == super::PathForm::Contained {
-            let guard = resolve_workspace_path_guard(GuardInput {
-                root: self.root,
-                requested: &path.to_string_lossy(),
-                path_form: self.input.path_form,
-                allow_directories: true,
-                protected_roots: &self.input.protected_roots,
-            })?;
-            if !guard.ok() {
-                return Ok(Next::Continue);
-            }
-        }
         let Ok(file_type) = child.file_type() else {
             return Ok(self.io_error());
         };
+        if relative.is_empty()
+            || self.input.path_form.contained() && !self.guard.admits(&path, file_type.is_symlink())
+        {
+            return Ok(Next::Continue);
+        }
         if file_type.is_dir() {
             if !Path::new(&self.input.requested_root).is_absolute()
                 && EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())

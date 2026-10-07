@@ -19,7 +19,14 @@ pub(super) async fn decision(
     call: &ModelRoundToolCall,
     args: &Value,
 ) -> Result<AccessDecision, BtccError> {
-    let kind = kind(call);
+    decision_for_kind(owner, call, args, kind(call)).await
+}
+pub(super) async fn decision_for_kind(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    args: &Value,
+    kind: CapabilityKind,
+) -> Result<AccessDecision, BtccError> {
     let scope = if needs_scope(&owner.binding.access_mode, kind) {
         target_scope(owner, call, args).await?
     } else {
@@ -75,10 +82,7 @@ async fn target_scope(
             targets.extend(
                 butler_platform::command_sandbox::path_tokens(command)
                     .into_iter()
-                    .filter(|token| {
-                        token.contains(['/', '\\', '.'])
-                            || std::path::Path::new(token).is_absolute()
-                    })
+                    .filter(|token| !token.starts_with('-'))
                     .map(butler_platform::command_sandbox::normalize_path_token),
             );
             classify_targets(

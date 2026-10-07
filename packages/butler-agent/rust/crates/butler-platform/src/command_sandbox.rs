@@ -117,6 +117,7 @@ pub fn login_shell_contained(
 ) -> Result<Invocation, SandboxError> {
     sandbox::read_only_contained(
         shell::login_shell(command, environment),
+        environment,
         deny_reads,
         allow_reads,
     )

@@ -33,14 +33,6 @@ pub(super) async fn execute(
     let needs_approval = matches!(decision, AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if needs_approval {
-        if let Some(result) = owner
-            .command
-            .check_paths(&call.arguments, scope)
-            .await
-            .map_err(ToolExecutionError::Integrity)?
-        {
-            return Ok(Some(result));
-        }
         match gate(owner, call, occurrence, &input).await? {
             Gate::Pending(value) => {
                 return JsonDocument::from_value(&value)
@@ -53,7 +45,7 @@ pub(super) async fn execute(
         None
     };
     let mut approved_scope = scope.clone();
-    if needs_approval {
+    if needs_approval && !butler_platform::command_sandbox::READ_ONLY_SANDBOX {
         approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
     }
     if !needs_approval && owner.binding.access_mode.reviews_effects() {

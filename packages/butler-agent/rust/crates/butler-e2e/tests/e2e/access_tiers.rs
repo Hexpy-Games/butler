@@ -38,8 +38,10 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     let project = folder.join("작업 Project");
     std::fs::create_dir_all(project.join(".git"))?;
     std::fs::write(project.join("a.txt"), "project-marker")?;
-    std::fs::write(project.join(".env"), "SECRET_IN_ENV")?;
-    std::fs::write(project.join(".git/config"), "SECRET_IN_GIT")?;
+    std::fs::write(project.join(".env"), "KEY=SECRET_IN_ENV")?;
+    std::fs::write(project.join(".git/config"), "KEY=SECRET_IN_GIT")?;
+    std::fs::write(project.join("id_rsa"), "SECRET_IN_KEY")?;
+    std::fs::write(project.join("public-key.txt"), "KEY=PUBLIC_KEY")?;
     let linked = if butler_platform::command_sandbox::POSIX_SHELL {
         butler_platform::secure_fs::symlink(&outside, &project.join("link"))?;
         butler_platform::secure_fs::symlink(&project.join(".env"), &project.join("env-link"))?;
@@ -162,6 +164,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
         write_outputs.len()
     );
     guarded_reads(&s, &chat, &script, linked).await?;
+    guarded_commands(&s, &chat, &script, &project, linked).await?;
     for (prompt, args) in [
         (
             "Check outside command.",
@@ -401,5 +404,94 @@ async fn schedule_clamp(
     assert_eq!(stored.status, 200, "{stored:?}");
     assert_eq!(stored.data()["automation"]["access_mode"], "ask_first");
     eprintln!("PERM-01 D6: update=refused access_mode=ask_first authority_count=0 pending=0");
+    Ok(())
+}
+
+async fn guarded_commands(
+    s: &Scenario,
+    chat: &str,
+    script: &Arc<Script>,
+    project: &std::path::Path,
+    linked: bool,
+) -> Result<(), HarnessError> {
+    for command in [
+        "cat link",
+        "cat id_rsa",
+        "cat {..,a}/outside.txt",
+        "cd && cat .zsh_history",
+        "cat .en?",
+    ] {
+        if command == "cat link" && !linked {
+            continue;
+        }
+        let prompt = format!("Guard command {command}.");
+        script.rounds.lock().unwrap().insert(
+            prompt.clone(),
+            vec![call(
+                "guard",
+                "run_command",
+                &json!({"command":command,"summary":"Read files","state_effect":"read_only"}),
+            )],
+        );
+        let id = paused(s, chat, &prompt).await?;
+        assert_counts(s, &id, 1, 1)?;
+        approve(s, chat, "deny").await?;
+        delivered(s, chat, &id).await?;
+        assert_counts(s, &id, 1, 0)?;
+        let output = outputs(s, chat, &id, script, &prompt).await?;
+        assert!(
+            output
+                .iter()
+                .all(|v| !v.contains("SECRET_IN_") && !v.contains("outside-marker"))
+        );
+    }
+    if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+        let prompt = "Search project keys.";
+        script.rounds.lock().unwrap().insert(prompt.into(), vec![call("grep-command", "run_command",
+            &json!({"command":"grep -r KEY .","summary":"Search keys","state_effect":"read_only"}))]);
+        let id = accepted_turn_id(&s.gw.say(chat, prompt).await?)?;
+        delivered(s, chat, &id).await?;
+        assert_counts(s, &id, 0, 0)?;
+        let output = outputs(s, chat, &id, script, prompt).await?;
+        assert_eq!(output.len(), 1);
+        assert!(
+            output.iter().any(|v| v.contains("PUBLIC_KEY")),
+            "{output:?}"
+        );
+        assert!(
+            output.iter().all(|v| !v.contains("SECRET_IN_")),
+            "{output:?}"
+        );
+        // An exact approval grants the read, never writes or network access.
+        let prompt = "Approve an outside observation with a write attempt.";
+        let outside = s.sandbox.home.join("outside.txt");
+        let marker = project.join("approval-write.txt");
+        let command = format!(
+            "cat '{}' ; printf changed > '{}'",
+            outside.display(),
+            marker.display()
+        );
+        script.rounds.lock().unwrap().insert(
+            prompt.into(),
+            vec![call(
+                "approved-command",
+                "run_command",
+                &json!({"command":command,"summary":"Read marker","state_effect":"read_only"}),
+            )],
+        );
+        let id = paused(s, chat, prompt).await?;
+        approve(s, chat, "allow").await?;
+        delivered(s, chat, &id).await?;
+        assert_counts(s, &id, 1, 0)?;
+        let output = outputs(s, chat, &id, script, prompt).await?;
+        assert!(
+            output.iter().any(|v| v.contains("outside-marker")),
+            "{output:?}"
+        );
+        assert!(!marker.exists(), "approval removed the read-only sandbox");
+    }
+    eprintln!(
+        "PERM-01 commands: bare_paths=asked expansions=asked project_secrets=blocked approval_writes=blocked"
+    );
     Ok(())
 }
