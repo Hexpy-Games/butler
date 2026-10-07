@@ -8,9 +8,9 @@ import { createServer } from "node:net";
 import { once } from "node:events";
 
 const args = process.argv.slice(2);
-const valueOptions = ["--runs", "--json", "--electron-root"];
+const valueOptions = ["--runs", "--json", "--electron-root", "--before-run"];
 const executable = args.find((arg, index) => !arg.startsWith("--") && !valueOptions.includes(args[index - 1]));
-if (!executable) throw new Error("Usage: measure-startup.mjs <built executable> [--runs 5] [--json file] [--electron-root directory]");
+if (!executable) throw new Error("Usage: measure-startup.mjs <built executable> [--runs 5] [--json file] [--electron-root directory] [--before-run executable]");
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 const runs = Number(option("--runs", "5"));
 if (!Number.isInteger(runs) || runs < 1) throw new Error("--runs must be a positive integer");
@@ -34,8 +34,39 @@ function launchArgs(extra = []) {
   return [...(process.env.BUTLER_SMOKE_BROWSER_ARGS ? JSON.parse(process.env.BUTLER_SMOKE_BROWSER_ARGS) : []),
     ...(entry ? [resolve(entry)] : basename(executable).toLowerCase() === "update.exe" ? ["--processStart", "Butler.exe"] : []), ...extra];
 }
+// Host-specific sampling stays in the caller's executable. Run the quiet-host
+// gate before every launch, including warm launches, outside the timed phases.
+async function beforeRun(mode, run) {
+  const hook = option("--before-run");
+  if (!hook) return null;
+  const child = spawn(resolve(hook), [], { shell: false, stdio: ["ignore", "pipe", "inherit"] });
+  let output = "";
+  child.stdout.on("data", (chunk) => { output += chunk; process.stdout.write(chunk); });
+  const [code] = await once(child, "exit");
+  if (code !== 0) throw new Error(`${mode}/${run}: before-run gate failed (${code})`);
+  return JSON.parse(output.trim().split("\n").at(-1));
+}
+function observeStartup(child, events, profiles, traces, stop) {
+  // Electron hosts can emit main-process console timing lines on either pipe.
+  for (const stream of [child.stdout, child.stderr]) {
+    let pending = "";
+    stream.on("data", (chunk) => {
+      const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.lifecycleProfile) profiles.push(parsed.lifecycleProfile);
+          if (parsed.lifecycleTrace) traces.push(parsed.lifecycleTrace);
+          const event = parsed.startup;
+          if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
+        } catch { /* No general app logs in timing evidence. */ }
+      }
+    });
+  }
+}
 async function measure(mode, run, env) {
   const port = await freePort();
+  const host = await beforeRun(mode, run);
   const requested = Date.now();
   const environment = { ...process.env, ...env, BUTLER_APP_SERVER_PORT: String(port),
     BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
@@ -66,22 +97,7 @@ async function measure(mode, run, env) {
   };
   const deadline = setTimeout(stop, 150_000);
   process.once("SIGINT", stop);
-  // Electron hosts can emit main-process console timing lines on either pipe.
-  for (const stream of [child.stdout, child.stderr]) {
-    let pending = "";
-    stream.on("data", (chunk) => {
-      const lines = (pending + chunk.toString()).split("\n"); pending = lines.pop();
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.lifecycleProfile) profiles.push(parsed.lifecycleProfile);
-          if (parsed.lifecycleTrace) traces.push(parsed.lifecycleTrace);
-          const event = parsed.startup;
-          if (event) { events.push(event); if (["window_ready", "failed"].includes(event.stage)) stop(); }
-        } catch { /* No general app logs in timing evidence. */ }
-      }
-    });
-  }
+  observeStartup(child, events, profiles, traces, stop);
   try { await once(child, "exit"); }
   finally { clearTimeout(deadline); clearTimeout(hardStop); process.removeListener("SIGINT", stop); }
   if (signal && signal.exitCode === null && signal.signalCode === null) await once(signal, "exit");
@@ -104,7 +120,11 @@ async function measure(mode, run, env) {
     const start = elapsed(`stage_${stage}_start`), end = elapsed(`stage_${stage}_end`);
     if (start !== undefined && end !== undefined) metrics[`interval_${stage}`] = end - start;
   }
-  samples.push({ mode, run, launchKind: basename(executable).toLowerCase() === "update.exe" ? "squirrel-update" : /app-[^/\\]+[/\\]/.test(executable) ? "squirrel-direct" : "direct-or-stub", forcedStop, metrics, profiles, traces,
+  for (const phase of ["appearance_read", "startup_create", "startup_show", "startup_load"]) {
+    metrics[`interval_${phase}`] = elapsed(`${phase}_end`) - elapsed(`${phase}_start`);
+  }
+  metrics.interval_renderer_paint = elapsed("splash_painted") - elapsed("startup_load_start");
+  samples.push({ mode, run, host, launchKind: basename(executable).toLowerCase() === "update.exe" ? "squirrel-update" : /app-[^/\\]+[/\\]/.test(executable) ? "squirrel-direct" : "direct-or-stub", forcedStop, metrics, profiles, traces,
     events: events.map((event) => ({ ...event, launch_request_ms: event.timestamp_ms - requested })) });
   console.log(JSON.stringify({ mode, run, splash_after_ready: metrics.splash_after_ready }));
 }
