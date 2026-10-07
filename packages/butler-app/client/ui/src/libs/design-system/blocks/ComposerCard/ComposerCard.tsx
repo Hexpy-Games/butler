@@ -1,10 +1,14 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { createContext, forwardRef, useContext } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
+import type { ComposerCardEdge } from "./composerEdge";
+import { useDraftScrolledMark } from "./useDraftScrolledMark";
 import styles from "./ComposerCard.module.css";
+
+export type { ComposerCardEdge } from "./composerEdge";
 import { dsClass } from "../../lib/internal";
 
 export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
@@ -16,6 +20,13 @@ export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFo
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
+  /**
+   * Art behind the card's content (e.g. `ComposerDecoration`): fills the card,
+   * clipped by its radius, above the glass and below every editor and toolbar
+   * node. The slot adds no scrim; the glass top highlight stays on top.
+   */
+  decoration?: ReactNode;
+  edge?: ComposerCardEdge;
 }
 
 const ComposerExpandedContext = createContext(true);
@@ -30,27 +41,41 @@ export function ComposerCard({
   className,
   containerRef,
   expanded = true,
+  decoration,
+  edge,
   ...props
 }: ComposerCardProps) {
+  const reserve = edge?.reserveTop && edge.reserveTop > 0 ? edge.reserveTop : undefined;
+  const formRef = useDraftScrolledMark(Boolean(decoration), styles.textarea);
   return (
     <div
       className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
+      data-edge-reserve={reserve}
       data-test-class={`composer-wrap${large ? " large" : ""}`}
       ref={containerRef}
+      style={reserve ? ({ "--composer-edge-reserve": `${reserve}px` } as CSSProperties) : undefined}
     >
       {notice ? (
         <div className={styles.notice} data-test-class="composer-notice-slot">
           {notice}
         </div>
       ) : null}
+      {edge?.behind ? <div aria-hidden="true" className={styles.edge} data-slot="composer-edge-behind">{edge.behind}</div> : null}
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
+        data-decorated={decoration ? "" : undefined}
         data-drop-active={dropActive ? "true" : undefined}
         data-expanded={expanded}
         data-test-class="composer-card"
         {...props}
+        ref={formRef}
       >
+        {decoration ? (
+          <div aria-hidden="true" className={styles.background} data-slot="tinted-glass-decoration" data-test-class="composer-decoration-slot">
+            {decoration}
+          </div>
+        ) : null}
         {adjunct ? (
           <div className={styles.adjunct} data-test-class="composer-adjunct-slot">
             {adjunct}
@@ -58,6 +83,7 @@ export function ComposerCard({
         ) : null}
         <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
       </form>
+      {edge?.front ? <div aria-hidden="true" className={styles.edge} data-slot="composer-edge-front">{edge.front}</div> : null}
     </div>
   );
 }

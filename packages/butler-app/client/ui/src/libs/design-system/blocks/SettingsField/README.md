@@ -14,6 +14,11 @@ It fixes label/control spacing and mobile stacking in one place.
 
 ## How to use this component
 Pass an id, label, optional description, control node, and meta text.
+Pass `error` (localized, short) when the saved or entered value is invalid:
+it renders a `FieldError` under the control, marks the control
+`aria-invalid` and adds the error id to its `aria-describedby`. The
+description id is merged into `aria-describedby` too, without duplicating ids
+the control already names. Clear `error` once the value is valid again.
 
 ## Who can use this component
 Settings containers and form-oriented blocks.

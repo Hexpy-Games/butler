@@ -4,6 +4,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { workerActivityDisplayName, workerActivityStatusLine } from "@/app/utils.ts";
 import { Button, Stack } from "@/butler-ds";
 import { stewardPlanProgress } from "./stewardProgressPresentation.ts";
+import { workerActivityTitle } from "./workerActivityTitle.ts";
 
 /** The invocation owns placement; SessionView owns the live child state. */
 export function WorkerCallCapsule({ turnId, callId }: { turnId: string; callId: string }) {
@@ -17,7 +18,7 @@ export function WorkerCallCapsule({ turnId, callId }: { turnId: string; callId: 
   const open = useButlerStore((state) => state.openSessionObserver);
   if (!worker) return null;
   const progress = stewardPlanProgress(worker);
-  const activity = workerActivityStatusLine(worker);
+  const activity = workerActivityTitle(workerActivityStatusLine(worker), worker.objective);
   const label = [workerActivityDisplayName(worker), progress, activity].filter(Boolean).join(" · ");
   return (
     <Stack cross="start" gap="xs" data-test-class="worker-call-capsule" data-worker-id={worker.worker_id}>

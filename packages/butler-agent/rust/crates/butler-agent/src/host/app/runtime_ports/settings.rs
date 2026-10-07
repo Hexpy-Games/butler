@@ -124,7 +124,19 @@ async fn load(
             .map_err(GatewayApplicationError::internal_from)?;
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
+    let model_display_names: serde_json::Map<String, Value> = catalog
+        .models
+        .iter()
+        .chain(&catalog.registered_models)
+        .flat_map(|model| {
+            let display = serde_json::json!(model.display_name);
+            std::iter::once(model.model_ref.clone())
+                .chain(model.aliases.iter().flatten().cloned())
+                .map(move |id| (id, display.clone()))
+        })
+        .collect();
     let native_settings = serde_json::json!({
+        "model_display_names": model_display_names,
         "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},
         "update_previews": read.config.pointer("/update/previews").and_then(Value::as_bool).unwrap_or(false),
         "bridge_mode": bridge_mode,

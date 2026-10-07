@@ -1,5 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { api } from "@/app/api.ts";
+import { api, apiErrorCode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -14,27 +14,27 @@ type ActionsInput = {
   onSaved: () => void;
 };
 
-function localizedMcpError(error: unknown): unknown {
-  if (!(error instanceof Error)) return error;
-  const copy = appCopy.settings;
-  const messages: Record<string, string> = {
-    "MCP server id is required.": copy.mcpIdRequired,
-    "stdio MCP servers require command.": copy.mcpCommandRequired,
-    "http MCP servers require url.": copy.mcpUrlRequired,
-    "sse MCP servers require url.": copy.mcpUrlRequired,
-  };
-  return messages[error.message] ? new Error(messages[error.message]) : error;
-}
+export type McpFormErrors = Partial<Record<"id" | "command" | "url", string>>;
+const ERROR_FIELDS: Record<string, keyof McpFormErrors> = {
+  mcp_server_id_required: "id", mcp_server_id_invalid: "id",
+  mcp_command_required: "command", mcp_url_required: "url",
+};
 
 export function useMcpSettingsActions({ form, editingId, setServers, setStatus, onSaved }: ActionsInput) {
+  const [errors, setErrors] = useState<McpFormErrors>({});
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  async function run(action: () => Promise<void>, fallback: string) {
+  async function run(action: () => Promise<void>, fallback: string, inline = false) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     try { await action(); }
-    catch (error) { notifyError(localizedMcpError(error), fallback); }
+    catch (error) {
+      const code = apiErrorCode(error);
+      const field = code ? ERROR_FIELDS[code] : undefined;
+      if (inline && field) setErrors({ [field]: code });
+      else notifyError(error, fallback);
+    }
     finally { inFlight.current = false; setBusy(false); }
   }
   function updateServer(server: McpServerView) {
@@ -52,7 +52,8 @@ export function useMcpSettingsActions({ form, editingId, setServers, setStatus, 
     });
   }
   async function save() {
-    if (mcpServerIdError(form.id)) return;
+    if (mcpServerIdError(form.id)) { document.getElementById("mcp-server-id")?.focus(); return; }
+    setErrors({});
     await run(async () => {
       const path = editingId ? `/mcp-servers/${encodeURIComponent(editingId)}` : "/mcp-servers";
       const result = await api<McpServerMutationResult>(path, {
@@ -64,7 +65,7 @@ export function useMcpSettingsActions({ form, editingId, setServers, setStatus, 
       setStatus(`${appCopy.settings.saved}: ${result.server.id}`);
       updateServer(result.server);
       onSaved();
-    }, appCopy.settings.mcpSaveFailed);
+    }, appCopy.settings.mcpErrors.save, true);
   }
   async function remove(server: McpServerView) {
     await run(async () => {
@@ -74,7 +75,7 @@ export function useMcpSettingsActions({ form, editingId, setServers, setStatus, 
       await api(`/mcp-servers/${encodeURIComponent(server.id)}`, { method: "DELETE" });
       setStatus(`${appCopy.common.delete}: ${server.id}`);
       setServers((current) => current?.filter((item) => item.id !== server.id) ?? []);
-    }, appCopy.settings.mcpActionFailed);
+    }, appCopy.settings.mcpErrors.remove);
   }
   async function toggle(server: McpServerView) {
     await run(async () => {
@@ -82,7 +83,7 @@ export function useMcpSettingsActions({ form, editingId, setServers, setStatus, 
         method: "PATCH", body: JSON.stringify({ enabled: !server.enabled }),
       });
       updateServer(result.server);
-    }, appCopy.settings.mcpActionFailed);
+    }, appCopy.settings.mcpErrors.toggle);
   }
   async function probe(server: McpServerView) {
     await run(async () => {
@@ -92,7 +93,7 @@ export function useMcpSettingsActions({ form, editingId, setServers, setStatus, 
       const item = result.servers[0];
       if (!item?.ok) throw new Error(item?.error || appCopy.settings.mcpActionFailed);
       setStatus(`${server.id}: tools ${item.tools.length}, resources ${item.resources.length}`);
-    }, appCopy.settings.mcpActionFailed);
+    }, appCopy.settings.mcpErrors.probe);
   }
-  return { save, remove, toggle, probe, busy };
+  return { save, remove, toggle, probe, busy, errors, clearErrors: () => setErrors({}) };
 }

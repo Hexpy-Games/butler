@@ -21,7 +21,10 @@
   background: var(--accent);
 }
 
-.switch[data-disabled] {
+/* aria-disabled: blocked with a reason (disabledReason); it stays focusable
+   and hoverable so its tooltip can open, but looks the same as disabled. */
+.switch[data-disabled],
+.switch[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -58,7 +61,19 @@
   }
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .switch:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    position: relative;
+  }
+
+  .switch:not([data-viewport="desktop"], [data-viewport="desktop"] *)::after {
+    position: absolute;
+    inset: calc((var(--control-hit-target) - 100%) / -2);
+    content: "";
+  }
+}
+
+@media (pointer: coarse) {
   .switch {
     position: relative;
   }

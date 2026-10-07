@@ -82,7 +82,7 @@ const settingIds = (container: HTMLElement) =>
 
 test("the Models page keeps backup models and API keys visible and folds cleanup and workers into Advanced", async () => {
   await render(<ModelsSettings />, {}, async (container) => {
-    expect(sectionIds(container)).toEqual(["butler-model", "backup-models", "saved-keys", "permissions", "advanced-models"]);
+    expect(sectionIds(container)).toEqual(["butler-model", "backup-models", "advanced-models"]);
     // Like every section, Advanced has its header outside the card; the card holds the disclosure row.
     const section = container.querySelector('[data-settings-section-id="advanced-models"]')!;
     expect(section.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe("Advanced");
@@ -93,7 +93,7 @@ test("the Models page keeps backup models and API keys visible and folds cleanup
     await act(async () => advanced.click());
     expect(advanced.getAttribute("aria-expanded")).toBe("true");
     expect(sectionIds(container)).toEqual([
-      "butler-model", "backup-models", "saved-keys", "permissions", "advanced-models", "memory-cleanup", "worker-profiles",
+      "butler-model", "backup-models", "advanced-models", "memory-cleanup", "worker-profiles",
     ]);
     expect(settingIds(container)).toContain("consolidation-model");
   });
@@ -126,9 +126,9 @@ test("the backup summary names the models in order when backups are on", async (
   });
 });
 
-test("first run shows the main model, the backup summary and permissions only", async () => {
+test("first run shows the main model, the backup summary only", async () => {
   await render(<ButlerModelSettings />, {}, async (container) => {
-    expect(sectionIds(container)).toEqual(["butler-model", "backup-models", "permissions"]);
+    expect(sectionIds(container)).toEqual(["butler-model", "backup-models"]);
     expect(settingIds(container)).not.toContain("consolidation-model");
   });
 });

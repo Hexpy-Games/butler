@@ -184,12 +184,15 @@ test("no SPA fallback: the UI has no path routes, so unknown paths are 404 even 
   expect((await request("app://butler/assets/")).status).toBe(404);
 });
 
+// test-category: security
 test("main process loads production UI through the app protocol", () => {
   const main = readFileSync(
     join(import.meta.dir, "../../packages/butler-app/client/electron/main.mjs"),
     "utf8",
   );
-  expect(main).toContain("protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES])");
+  const bootstrap = readFileSync(join(import.meta.dir, "../../packages/butler-app/client/electron/bootstrap.mjs"), "utf8");
+  expect(bootstrap).toContain("protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES])");
+  expect(bootstrap.indexOf("protocol.registerSchemesAsPrivileged")).toBeLessThan(bootstrap.indexOf("app.whenReady()"));
   expect(main).toContain("distRoot: staticRendererDistRoot");
   expect(main).toContain('noticesFile: app.isPackaged ? join(process.resourcesPath, "bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz") : null');
   expect(main).toMatch(/protocol\.handle\(\s*APP_RENDERER_SCHEME,/u);

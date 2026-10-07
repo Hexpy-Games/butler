@@ -40,6 +40,20 @@ impl AgentConversationStore {
         self.execute(move |connection| finalize(connection, clock.as_ref(), input, &completed))
             .await
     }
+    /// Batched lifecycle facts for graph nodes, keyed by exact turn identity.
+    pub async fn read_turn_lifecycles(
+        &self,
+        ids: Vec<String>,
+    ) -> ConversationResult<serde_json::Value> {
+        let ids = serde_json::json!(ids).to_string();
+        self.execute(move |db| {
+            let mut result = serde_json::Map::new();
+            let mut query = db.prepare_cached("SELECT t.id,t.started_at,t.completed_at,t.status FROM json_each(?1) ids JOIN conversation_turns t ON t.id=ids.value").map_err(ConversationError::sqlite)?;
+            let rows = query.query_map([ids], |r| Ok((r.get::<_,String>(0)?,serde_json::json!({"started_at":r.get::<_,String>(1)?,"finished_at":r.get::<_,Option<String>>(2)?,"status":r.get::<_,String>(3)?})))) .map_err(ConversationError::sqlite)?;
+            for row in rows { let (id,value)=row.map_err(ConversationError::sqlite)?;result.insert(id,value); }
+            Ok(serde_json::Value::Object(result))
+        }).await
+    }
     /// A turn by id.
     pub async fn read_turn(&self, id: &str) -> ConversationResult<Option<ConversationTurn>> {
         let id = id.to_owned();

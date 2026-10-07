@@ -79,7 +79,10 @@ pub(super) fn extract_and_save(
     Ok(extraction.entities.len())
 }
 
-fn open_legacy_graph(data_root: &Path, memory_root: &Path) -> CognitionResult<Connection> {
+fn open_legacy_graph(
+    data_root: &Path,
+    memory_root: &Path,
+) -> CognitionResult<butler_platform::sqlite::Connection> {
     let descriptor_path = memory_root.join("active-generation.json");
     ensure_data_authority(data_root, &[memory_root, &descriptor_path])?;
     match fs::read_to_string(&descriptor_path) {

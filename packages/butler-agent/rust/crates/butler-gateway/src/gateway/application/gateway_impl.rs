@@ -42,22 +42,10 @@ impl GatewayApplication for AppApplication {
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            updates
-                .refresh(request)
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::check(self.dependencies.updates.clone(), request)
     }
     fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            updates
-                .current()
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::current(self.dependencies.updates.clone())
     }
     fn apply_app_update(
         &self,
@@ -65,7 +53,12 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<serde_json::Value> {
         super::updates::apply(self.dependencies.updates.clone(), request)
     }
-
+    fn report_app_update_progress(&self, stage: String) -> ApplicationFuture<Value> {
+        super::updates::report_stage(self.dependencies.updates.clone(), stage)
+    }
+    fn cancel_app_update(&self) -> ApplicationFuture<Value> {
+        super::updates::cancel(self.dependencies.updates.clone())
+    }
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
         let this = self.clone_handle();
         Box::pin(async move {
@@ -323,6 +316,13 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.send(command).await })
     }
+    fn authority_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.all_authority_permissions().await })
+    }
+    fn authority_revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()> {
+        self.revoke_authority_permissions(grants)
+    }
     fn authority_list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage> {
         self.dependencies.authority_handoff.list(owner_session_id)
     }
@@ -430,6 +430,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
     }
+    fn task_graph_read(&self, query: AppTaskGraphQuery) -> ApplicationFuture<Value> {
+        super::task_graphs::read(self, query)
+    }
     fn subsession_projection(&self, session_id: String) -> ApplicationFuture<Value> {
         self.dependencies.subsessions.projection(session_id, None)
     }
@@ -472,17 +475,7 @@ impl GatewayApplication for AppApplication {
         event_type: &'static str,
         payload: serde_json::Map<String, Value>,
     ) -> ApplicationFuture<()> {
-        let storage = self.storage.clone();
-        let subscribers = self.subscribers.clone();
-        let now = self.dependencies.identity_clock.now_iso();
-        Box::pin(async move {
-            storage
-                .execute(move |db| {
-                    events::append(db, &subscribers, event_type, None, payload, &now).map(drop)
-                })
-                .await
-                .map_err(app_error)
-        })
+        self.publish_gateway_event_owned(event_type, payload)
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
         self.event_cursor_read()

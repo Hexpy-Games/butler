@@ -1,8 +1,9 @@
-// Optional manifest fields of contract v1 amendments: two-pass modules, pixel ratio, image dim, default image, scene tone.
+// Optional manifest fields of contract v1 amendments: two-pass modules, pixel ratio, image dim, default image, scene tone,
+// transparent output and decorations.
 import { isRecord } from "./manifestParams";
 import type { WallpaperManifest, WallpaperParamSpec } from "./types";
 
-type Options = Pick<WallpaperManifest, "overlay" | "pixelRatio" | "imageDim" | "defaultImage" | "sceneTone">;
+type Options = Pick<WallpaperManifest, "overlay" | "pixelRatio" | "imageDim" | "defaultImage" | "sceneTone" | "transparent" | "decoration">;
 
 const PIXEL_RATIOS = new Set<unknown>(["default", "device"]);
 const IMAGE_DIMS = new Set<unknown>(["auto", "noDarkStep", "none"]);
@@ -48,5 +49,15 @@ export function validateManifestOptions(raw: Record<string, unknown>, params: re
     else options.defaultImage = defaultImage;
   }
   if (raw.sceneTone !== undefined) options.sceneTone = sceneTone(raw.sceneTone, params, errors);
+  const { transparent, decoration } = raw;
+  if (transparent !== undefined) {
+    if (typeof transparent !== "boolean") errors.push("transparent: must be a boolean");
+    else if (transparent && raw.image !== "none") errors.push("transparent: needs image none");
+    else options.transparent = transparent;
+  }
+  if (decoration !== undefined) {
+    if (typeof decoration === "boolean") options.decoration = decoration;
+    else errors.push("decoration: must be a boolean");
+  }
   return options;
 }

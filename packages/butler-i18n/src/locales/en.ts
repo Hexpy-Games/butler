@@ -1,3 +1,5 @@
+import { TASK_GRAPH_COPY } from "./task-graph.ts";
+import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
@@ -171,9 +173,9 @@ const firstRun = {
     keyHint: "Checked as soon as you paste it.",
     keyValid: "Connected",
     keyErrors: {
-      invalid: "This key didn't work. Copy it again and paste it here.",
-      noaccess: "This key can't use any models. Check billing or access.",
-      network: "Can't reach the service. Check your internet connection.",
+      invalid: "This key can't connect. Copy it again and paste it.",
+      noaccess: "This key can't use models. Check billing or access.",
+      network: "Can't reach the service. Check your connection.",
       ratelimited: "Too many tries. Wait a moment, then try again.",
       unavailable: "The service isn't responding. Try again later.",
       unsupported: "Butler can't check keys for this service yet.",
@@ -240,6 +242,9 @@ function englishProjectFallbackSuggestions(
 }
 
 export const enUsCopy: AppCopy = {
+  shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
+  taskGraph: TASK_GRAPH_COPY["en-US"],
+  lifecycle: lifecycleCopy.en,
   browser: { "title": "Browser", "myTabs": "My tabs", "newTab": "New tab", "closeTab": "Close tab", "address": "Address", "addressPlaceholder": "Search or enter URL", "back": "Back", "forward": "Forward", "reload": "Reload", "stop": "Stop", "loading": "Loading", "crashed": "Tab crashed", "empty": "Open a new tab", "updateRequired": "Update Butler", "restartRequired": "Restart Butler", "failed": "Could not open page", "openOutput": "Open in Browser", "output": "Output" },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
@@ -299,6 +304,7 @@ export const enUsCopy: AppCopy = {
     noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },
   projectDocumentMetadata: {
+    document: "Document",
     active: "Active", other: "Other", roadmap: "Roadmap",
     sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
     statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
@@ -313,7 +319,7 @@ export const enUsCopy: AppCopy = {
       interrupted: "Work was interrupted. You can resume it.", waitingForChildren: "Waiting for worker results.",
     },
     argumentLabels: { command: "Command", cmd: "Command", command_intent: "Command", output_count: "Outputs", path: "Path", file_path: "Path", target: "Target", objective: "Objective", query: "Query", pattern: "Pattern" },
-    tools: { ...additionalToolLabels, read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Use tool" },
+    tools: { ...additionalToolLabels, read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Working" },
     checkingPrevious: "Checking previous work and its current state.", checkingRequest: "Clarifying the request and required outcome.", toolWorking: "Working with tools.", checkingInformation: "Checking information needed for the work.", commandExecuting: "Running the required workspace commands.", conceptionTitle: "Confirm request intent", planningNext: "Define the work order and validation criteria for the request.", reportTitle: "Report results",
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
@@ -322,7 +328,7 @@ export const enUsCopy: AppCopy = {
     space_changed: "The list changed. Refresh it and try again.", space_invalid_group: "Select two different conversations.", space_invalid_scope: "Group conversations within the same project.", space_invalid_pin: "Pin a conversation or project.", space_undo_expired: "Other changes prevent undoing this action.", space_invalid_title: "Enter a group name between 1 and 120 characters.",
     branch_source_required: "A source conversation is required.", branch_source_invalid: "Select a response from this conversation.", branch_source_unavailable: "No completed response is available to branch.", branch_cancelled: "Conversation creation was cancelled.", branch_identity_conflict: "The creation request changed.", branch_request_invalid: "Check the new conversation title and source.",
     session_relocating: "The conversation is moving. Try again shortly.", relocation_identity_conflict: "The move request changed.", relocation_aborted: "The move did not finish. Check its status.", session_context_changed: "The conversation environment changed; the move could not finish.", session_not_movable: "This conversation cannot be moved.", space_invalid_target: "Select a different destination.", project_unavailable: "Select an available project.", same_session_context: "Use list organization to move within the same project.", model_not_configured: "Configure a model first.", session_context_conflict: "The move environment needs attention. Existing work is preserved.", relocation_preparation_missing: "Move preparation information is unavailable.", session_busy: "Wait for active work and queued messages to finish.",
-    space_node_not_found: "Item not found. Refresh the list.", space_invalid_parent: "Items cannot be placed inside a conversation.", space_scope_conflict: "Use project relocation to change the parent project.", space_cycle: "An item cannot be moved into its own descendants.", invalid_message_content: "Check the conversation reference format.", settings_model_unavailable: "The selected model is no longer available. Choose another model in Settings > Models.", image_payload_invalid: "Could not process the image attachment.",
+    space_node_not_found: "Item not found. Refresh the list.", space_invalid_parent: "Items cannot be placed inside a conversation.", space_scope_conflict: "Use project relocation to change the parent project.", space_cycle: "An item cannot be moved into its own descendants.", invalid_message_content: "Check the conversation reference format.", settings_model_unavailable: "That model is no longer available.", image_payload_invalid: "Could not process the image attachment.",
   },
   runtimeMessages: {
     ungroundedWorkerDispatch: () => "I could not verify worker execution for this response.\n\nI will not claim background work has started until the execution record confirms it. If you ask again, I will first verify the state and then continue safely.",
@@ -382,8 +388,11 @@ export const enUsCopy: AppCopy = {
     noProjectChats: "No project chats yet",
     noPlans: "No plans in project records",
     noSpecs: "No specs in project records",
+    copyDiagnostics: "Copy diagnostics",
+    panelCrashed: "Unable to show this view.",
+    retry: "Retry",
     uiCrashed: "Butler UI crashed.",
-    reload: "Reload the window or reopen Butler.",
+    reload: "Reload",
     custom: "Custom",
     freeContext: "Free context",
     generalChat: "General chat",
@@ -516,7 +525,7 @@ export const enUsCopy: AppCopy = {
     branchSource: "Go to original response",
     progressDetails: "View progress details",
     toolHistory: "Tool history",
-    toolUsage: "Tool usage",
+    workerActivity: "Working",
     noHistory: "No history",
     tool: "Tool",
     answerFailed: "Response failed",
@@ -1063,6 +1072,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   inspector: {
     tabs: {
+      tasks: "Tasks",
       summary: "Summary",
       activity: "Activity",
       context: "Context",
@@ -1090,6 +1100,10 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     copy: "Copy",
   },
   settings: {
+    localModelErrors: { discover: "No models found at this address.", register: "Couldn't add the model.", },
+    archiveErrors: { restore: "Couldn't restore it.", loadMore: "Couldn't load more.", },
+    skillErrors: { invalid: "That isn't a skill .zip.", tooLarge: "That file is too large.", import: "Couldn't import it.", },
+    mcpErrors: { save: "Couldn't save the server.", notFound: "This server was already removed.", unavailable: "Couldn't open MCP settings.", remove: "Couldn't remove the server.", toggle: "Couldn't change it.", probe: "Couldn't reach the server.", },
     hooks: { add: "Add hook", edit: "Edit", test: "Test", remove: "Delete", recent: "Recent runs", empty: "No hooks", name: "Name", event: "Event", tools: "Tools", command: "Command", args: "Args (JSON)", timeout: "Timeout (ms)", failClosed: "Block on error", async: "Background", enabled: "Enabled", refresh: "Refresh", blocked: "Blocked by hook", editTitle: "Edit hook", disabled: "Disabled", emptyRuns: "No runs yet", testSuccess: "Run succeeded", testFailure: "Run failed", exitCode: "Exit code", commandDisabled: "Using arguments.", commandRequired: "Enter a command or arguments.", deleteConfirm: name => `Delete hook "${name}".` },
     deleteSchedule: name => `Delete schedule "${name}".`,
     deleteMcpServer: name => `Delete MCP server "${name}" and its saved credentials.`,
@@ -1135,7 +1149,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     sectionDescriptions: {
       memory: "What Butler remembers, grouped by type.",
       general: "Configure language, time zone, conversation input, and search defaults.",
-      models: "Choose Butler's model, backup models, and permissions.",
+      models: "Choose Butler's model and backup models.",
       appearance: "Configure the app theme and display behavior.",
       server: "Configure the Butler server connection and new project folder.",
       updates: "Check and update Butler App.",
@@ -1146,7 +1160,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       logs: "Inspect model requests and responses in developer mode.",
       personalization: "Manage the name, tone, and personal settings Butler uses.",
       privacy: "Manage diagnostics and privacy settings.",
-      security: "Manage access from other devices and the connection code.",
+      security: "Manage access, permissions, keys and diagnostics.",
       system: "Review regular maintenance and system events.",
       archives: "Restore or delete archived projects and chats.",
       about: "View Butler version and app information.",
@@ -1165,12 +1179,26 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       logs: ["developer logs", "debug", "raw"],
       personalization: ["user profile", "persona", "tone"],
       privacy: ["diagnostics", "personal data"],
-      security: ["remote access", "connection code", "LAN", "network", "allowed hosts", "tunnel"],
+      security: ["remote access", "connection code", "LAN", "network", "allowed hosts", "tunnel", "permissions", "approvals", "API keys", "saved keys", "diagnostics", "privacy"],
       system: ["maintenance", "memory consolidation"],
       archives: ["saved chats", "archive"],
       about: ["version", "app info"],
     },
     updateComponents: { app: "Butler App", service: "Butler Agent" },
+    updateProgress: {
+      idle: "Update idle", checking: "Checking", downloading: "Downloading", verifying: "Verifying", ready: "Restart to finish.",
+      applying: "Applying", restarting: "Restarting", failed: "Update failed", completed: "Check complete",
+      retry: "Retry", cancel: "Cancel", restart: "Restart",
+      downloadMeta: "{percent}% · {done} of {total}", downloadedBytes: "{done} downloaded", cancelled: "Download cancelled.",
+    },
+    updateErrors: {
+      download: "Couldn't download the update. Check your connection.",
+      damaged: "The download didn't verify. Try again.",
+      incompatible: "No update for this device yet.",
+      storage: "Couldn't save the update file.",
+      apply: "Couldn't apply it. Your current version stays.",
+      generic: "Couldn't update.",
+    },
     sectionState: {
       loading: "Loading",
       error: "Could not load this section.",
@@ -1178,6 +1206,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "Nothing to show yet.",
     },
     pageSections: {
+      accessibility: "Accessibility",
       instructions: "Instructions",
       chatMemory: "Chat memory",
       profileMemory: "Profile",
@@ -1200,6 +1229,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       backupModels: "Backup models",
       savedKeys: "API keys",
       memoryCleanup: "Memory cleanup",
+      grants: "Approved actions",
       permissions: "Permissions",
       workerProfiles: "Worker profiles",
       connection: "Connection",
@@ -1212,6 +1242,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       allowedHosts: "Allowed hosts",
     },
     pageSectionDescriptions: {
+      grants: "Actions Butler runs without asking.",
       instructions: "Add or change these in chat.",
       chatMemory: "What Butler has picked up from your chats, including project chats.",
       profileMemory: "What Butler knows about you from your chats.",
@@ -1318,6 +1349,14 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       editLabel: "Edit backup models",
       done: "Done",
     },
+    grants: {
+      kind: { command: "Run command", fileWrite: "Write files", network: "Network", tool: "External tool", other: "Other action" },
+      scope: { conversation: "Chat", project: "Project", always: "Always" },
+      conversations: count => `${count} chats`, cwd: path => `In ${path}`,
+      revoke: "Revoke", revokeAlwaysTitle: "Revoke this always-on approval?", revokeAlwaysMessage: "Butler will ask before running it again.", revoked: "Revoked.",
+      search: "Search approvals", filter: "Kind", filterAll: "All", empty: "No approved actions.", noMatch: "No matches.",
+      targetUnknown: "Target not recorded", deletedChat: "Deleted chat", loadFailed: "Couldn't load approvals.", revokeFailed: "Couldn't revoke it.",
+    },
     modelsAdvanced: {
       title: "Advanced",
       contents: "Memory cleanup model and worker settings",
@@ -1328,6 +1367,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       maxSimultaneousWorkers: "Max simultaneous Workers",
     },
     wallpaper: {
+      moduleInvalid: "That wallpaper file isn't valid.", imageUnsupported: "JPG, PNG or WebP only.", imageTooLarge: "That image is too large.",
       options: "Wallpaper",
       none: "None",
       image: (index) => `Image ${index}`,
@@ -1393,6 +1433,10 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "Wallpaper",
       wallpaperMotion: "Motion",
       wallpaperPauseOnBattery: "Pause on battery",
+      collapseMessageBox: "Collapse message box",
+      reduceMotion: "Reduce motion",
+      composerDecoration: "Message box background",
+      composerCharacter: "Character",
       translucentSidebar: "Translucent sidebar",
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",
@@ -1485,6 +1529,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       wallpaper: "The new chat screen's background.",
       wallpaperMotion: "Animate the background.",
       wallpaperPauseOnBattery: "Hold still when unplugged.",
+      collapseMessageBox: "Shrink the message box to one line when you're not typing.",
+      reduceMotion: "When off, follows your system setting.",
+      reduceMotionSystem: "On in your system settings",
+      wallpaperStill: "Paused by Reduce motion",
+      composerDecoration: "Art behind your text. Follows wallpaper motion.",
+      composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>
         `The active Butler context budget. Model maximum: ${maxLabel}.`,
@@ -1768,6 +1818,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       developerLogSession: "Filter by session ID",
     },
     errors: {
+      saveFailed: "Couldn't save.",
       loadPersonalization: "Failed to load personalization",
       updateSettings: "Failed to update settings",
       chooseFolder: "Failed to choose folder",

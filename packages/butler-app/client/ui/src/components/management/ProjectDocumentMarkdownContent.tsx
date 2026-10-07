@@ -1,19 +1,10 @@
-import type { AnchorHTMLAttributes } from "react";
+import { faviconSrc } from "@/app/favicons.ts";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Grid, MarkdownContent, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { Grid, MarkdownContent, MarkdownLink, Stack, SurfacePanel, Typo } from "@/butler-ds";
 import { projectDocumentMarkdownView } from "@/app/projectDocuments.ts";
 
-const MARKDOWN_COMPONENTS = {
-  a({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) {
-    if (!href) return <span>{children}</span>;
-    return (
-      <a {...props} href={href} rel="noreferrer" target="_blank">
-        {children}
-      </a>
-    );
-  },
-};
+const MARKDOWN_COMPONENTS = { a: MarkdownLink };
 
 export function ProjectDocumentMarkdownContent({
   markdown,
@@ -42,7 +33,7 @@ export function ProjectDocumentMarkdownContent({
           </Stack>
         </SurfacePanel>
       ) : null}
-      <MarkdownContent>
+      <MarkdownContent faviconSrc={faviconSrc}>
         <ReactMarkdown
           components={MARKDOWN_COMPONENTS}
           remarkPlugins={[remarkGfm]}

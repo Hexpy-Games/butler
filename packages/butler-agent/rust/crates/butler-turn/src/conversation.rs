@@ -162,7 +162,18 @@ impl AgentConversationStore {
     {
         let (completion_tx, completion_rx) = oneshot::channel();
         let job: DatabaseOperation = Box::new(move |connection| {
-            let _ignored_cancelled_caller = completion_tx.send(operation(connection));
+            let before = connection.total_changes();
+            let result = operation(connection);
+            let synced = if connection.total_changes() == before {
+                Ok(())
+            } else {
+                sqlite::sync_wal_index(connection).map_err(|error| {
+                    ConversationError::new(ConversationCode::SqliteWalSyncFailed, error.to_string())
+                        .with_source(error)
+                })
+            };
+            let _ignored_cancelled_caller =
+                completion_tx.send(result.and_then(|value| synced.map(|()| value)));
         });
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
@@ -251,7 +262,7 @@ fn run_connection_lane(
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<ConversationResult<()>>,
 ) -> ConversationResult<()> {
-    let setup: ConversationResult<Connection> = (|| {
+    let setup: ConversationResult<sqlite::Connection> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 ConversationError::new(
@@ -289,6 +300,10 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        ConversationError::new(ConversationCode::SqliteWalSyncFailed, error.to_string())
+            .with_source(error)
+    })?;
     if initialized.send(Ok(())).is_err() {
         return Ok(());
     }

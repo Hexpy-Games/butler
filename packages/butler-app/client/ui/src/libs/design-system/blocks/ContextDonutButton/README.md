@@ -10,7 +10,8 @@ Use it when context usage needs to be available without consuming toolbar width.
 Use it in composer control clusters and similar dense action bars.
 
 ## Why to use this component
-It keeps the donut geometry, hover behavior, and ratio styling in the design system.
+It keeps the hover behavior and button shape in the design system; the donut
+itself is a decorative `ProgressRing` at 18px with a 3.5 stroke.
 
 ## How to use this component
 Pass a normalized ratio from 0 to 1 and provide an accessible label.

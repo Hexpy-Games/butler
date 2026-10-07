@@ -53,7 +53,7 @@ pub(super) fn may_refresh(
 fn database(
     root: &Path,
     paths: &CognitionPathEnvironment,
-) -> CognitionResult<Option<rusqlite::Connection>> {
+) -> CognitionResult<Option<butler_platform::sqlite::Connection>> {
     if !crate::cognition::active_memory_descriptor_exists(root, paths)? {
         return Ok(None);
     }

@@ -28,7 +28,13 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A button that toggles text (Enable/Disable) hides the current state.", render: () => <Button variant="outline" text="Enable backup models" /> },
     },
   ],
-  content: ["Name the setting, not the action: Use backup models, not Turn on backup models."],
-  accessibility: ["role=switch with aria-checked; bind the label with id, and the description with aria-describedby."],
+  content: [
+    "Name the setting, not the action: Use backup models, not Turn on backup models.",
+    "disabledReason is a few words (Follows the system setting), never an explanation paragraph.",
+  ],
+  accessibility: [
+    "role=switch with aria-checked; bind the label with id, and the description with aria-describedby.",
+    "disabledReason keeps the switch focusable (aria-disabled) so keyboard and pointer users can read the reason tooltip.",
+  ],
   tokens: ["--switch-track-bg", "--switch-thumb", "--accent", "--motion-ease-spring", "--motion-base"],
 };

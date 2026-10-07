@@ -23,7 +23,7 @@ let drawCost = 0;
 let timers: Array<{ callback: () => void; ms: number }> = [];
 let performanceNow: { mockRestore(): void } | null = null;
 
-function fakeCanvas({ unused = ["u_dayPhase"] }: { unused?: string[] } = {}): HTMLCanvasElement {
+function fakeCanvas({ unused = ["u_dayPhase"], renderer = "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro)" }: { unused?: string[]; renderer?: string } = {}): HTMLCanvasElement {
   const gl = new Proxy({
     getShaderParameter: () => true,
     getProgramParameter: () => true,
@@ -34,11 +34,13 @@ function fakeCanvas({ unused = ["u_dayPhase"] }: { unused?: string[] } = {}): HT
     uniform3fv: (location: string, value: Float32Array) => uploads.push([location, [...value]]),
     drawArrays: () => { draws += 1; fakeNow += drawCost; },
     getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: () => { lostContexts += 1; } } : null),
+    getParameter: () => renderer,
   } as Record<string, unknown>, { get: (target, key) => target[key as string] ?? (() => ({})) });
   return Object.assign(new EventTarget(), {
     width: 0,
     height: 0,
     style: { visibility: "" },
+    dataset: {} as Record<string, string>,
     getContext: () => gl,
     animate: (keyframes: Keyframe[]) => {
       fades.push(keyframes);
@@ -107,6 +109,39 @@ function start(source: WallpaperSource = { kind: "live", module: "butler.bloom" 
 test("animated modules loop at no more than 20fps", () => {
   start();
   for (let time = 0; time <= 1000; time += 1000 / 60) step(time);
+  expect(draws).toBeGreaterThanOrEqual(19);
+  expect(draws).toBeLessThanOrEqual(21);
+});
+
+test("software GL holds still frames for animated modules and marks the canvas before the first frame", () => {
+  const canvas = fakeCanvas({ renderer: "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)" });
+  const engine = createWallpaperEngine(canvas, { onError: () => undefined })!;
+  expect(canvas.dataset.wallpaperFallback).toBe("software");
+  engine.setScene(sceneOf({ kind: "live", module: "butler.bloom" }));
+  step(0);
+  expect(draws).toBe(1);
+  expect(step(100)).toBe(false);
+  expect(draws).toBe(1);
+  const hardware = fakeCanvas();
+  createWallpaperEngine(hardware, { onError: () => undefined });
+  expect(hardware.dataset.wallpaperFallback).toBeUndefined();
+  // A test harness opts out: software GL animates.
+  (documentTarget as unknown as { documentElement: { dataset: Record<string, string> } }).documentElement = { dataset: { wallpaperSoftwareFallback: "off" } };
+  const optedOut = fakeCanvas({ renderer: "SwiftShader" });
+  createWallpaperEngine(optedOut, { onError: () => undefined });
+  expect(optedOut.dataset.wallpaperFallback).toBeUndefined();
+});
+
+test("content-rect changes every frame (a scrolling rail) keep the 20fps cap and never stall the loop afterwards", () => {
+  const engine = start();
+  let time = 0;
+  for (; time <= 1500; time += 1000 / 60) {
+    engine.setContentRect({ x: time % 40, y: 5, width: 40, height: 20 });
+    step(time);
+  }
+  expect(draws).toBeLessThanOrEqual(32);
+  draws = 0;
+  for (const end = time + 1000; time <= end; time += 1000 / 60) step(time);
   expect(draws).toBeGreaterThanOrEqual(19);
   expect(draws).toBeLessThanOrEqual(21);
 });
@@ -253,7 +288,7 @@ test("unknown modules and missing WebGL2 report through onError", () => {
   const errors: string[] = [];
   const engine = createWallpaperEngine(fakeCanvas(), { onError: (error) => errors.push(error.reason) })!;
   engine.setScene(sceneOf({ kind: "live", module: "me.gone" }));
-  const canvas = Object.assign(new EventTarget(), { getContext: () => null }) as unknown as HTMLCanvasElement;
+  const canvas = Object.assign(new EventTarget(), { dataset: {}, getContext: () => null }) as unknown as HTMLCanvasElement;
   expect(createWallpaperEngine(canvas, { onError: (error) => errors.push(error.reason) })).toBeNull();
   expect(errors).toEqual(["unknown-module", "unsupported"]);
 });
@@ -271,6 +306,7 @@ interface FakeAnimation { keyframes: Keyframe[]; onfinish: (() => void) | null; 
 
 function fakeOverlay() {
   const overlay = {
+    dataset: {},
     width: 0,
     height: 0,
     hidden: true,

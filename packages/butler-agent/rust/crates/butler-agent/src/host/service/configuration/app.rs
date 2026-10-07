@@ -216,6 +216,7 @@ impl AppServiceConfiguration {
             message_rate_limit_max: self.gateway.message_rate_limit_max,
             message_rate_limit_window: self.gateway.message_rate_limit_window,
             static_ui_root: self.gateway.static_ui_root.clone(),
+            favicon_cache_root: self.gateway.favicon_cache_root.clone(),
         }
     }
 }
@@ -303,6 +304,7 @@ fn gateway_config(
             Duration::from_secs(60)
         },
         static_ui_root: None,
+        favicon_cache_root: None,
     }
 }
 

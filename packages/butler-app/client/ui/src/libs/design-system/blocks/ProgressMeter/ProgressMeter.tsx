@@ -1,15 +1,16 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { CSSProperties, ReactNode } from "react";
+import { Spinner } from "../../components/Spinner";
+import { IconSlot } from "../../components/IconSlot";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./ProgressMeter.module.css";
 import { dsClass } from "../../lib/internal";
 
-export interface ProgressMeterProps extends DsPrivateStyleProps {
+interface ProgressMeterBaseProps extends DsPrivateStyleProps {
   /** Visible label; omit only with `bare`. */
   label?: ReactNode;
-  value: number;
   meta?: ReactNode;
   ariaLabel?: string;
   tone?: "default" | "success" | "warning" | "danger";
@@ -17,16 +18,32 @@ export interface ProgressMeterProps extends DsPrivateStyleProps {
   bare?: boolean;
 }
 
-export function ProgressMeter({
-  label,
-  value,
-  meta,
-  ariaLabel,
-  tone = "default",
-  className,
-  bare = false,
-}: ProgressMeterProps) {
-  const normalized = Math.max(0, Math.min(100, value));
+/**
+ * A known value (0–100) is required unless `indeterminate` is set. A caller
+ * that switches between the two passes both (`value` is ignored while
+ * `indeterminate` is true).
+ */
+export type ProgressMeterProps = ProgressMeterBaseProps & (
+  | { value: number; indeterminate?: boolean }
+  | {
+    /** Unknown total: a spinner beside one caption line, without a fabricated track or percentage. */
+    indeterminate: true;
+    value?: never;
+  }
+);
+
+export function ProgressMeter(props: ProgressMeterProps) {
+  const { label, meta, ariaLabel, tone = "default", className, bare = false } = props;
+  if (props.indeterminate) {
+    return (
+      <Stack align="row" cross="start" gap="xs" role="status" aria-label={ariaLabel}
+        className={dsClass(styles.root, styles.indeterminate, className)} data-indeterminate="true">
+        <IconSlot size="sm" minHeight="line" tone="secondary"><Spinner size={12} /></IconSlot>
+        <Typo.Caption tone="secondary">{label}{meta != null ? <> · {meta}</> : null}</Typo.Caption>
+      </Stack>
+    );
+  }
+  const normalized = Math.max(0, Math.min(100, props.value));
   const track = (
     <div
       className={styles.track}

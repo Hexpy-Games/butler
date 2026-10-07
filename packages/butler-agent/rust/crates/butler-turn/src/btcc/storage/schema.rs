@@ -3,6 +3,7 @@ pub(super) mod core;
 pub(super) mod effects;
 pub(super) mod legacy;
 pub(super) mod subsession;
+pub(super) mod task_graphs;
 pub(super) mod work;
 
 use rusqlite::Connection;

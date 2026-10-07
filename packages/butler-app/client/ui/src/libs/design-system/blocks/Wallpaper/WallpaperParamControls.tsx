@@ -44,14 +44,16 @@ export interface WallpaperParamControlsProps {
 /**
  * Labeled controls generated from a module's manifest params (label above
  * control): sliders, shuffle buttons, switches, labeled enum options, color
- * swatches and palette presets. Renders nothing for a module without params.
+ * swatches and palette presets. `hidden` params are never listed; renders
+ * nothing for a module without listed params.
  */
 export function WallpaperParamControls({ locale, manifest, input, tone, onChange }: WallpaperParamControlsProps) {
-  if (manifest.params.length === 0) return null;
+  const listed = manifest.params.filter((spec) => !spec.hidden);
+  if (listed.length === 0) return null;
   const values = resolveWallpaperValues(manifest, input, tone);
   return (
     <Grid columns="auto-fit" gap="md">
-      {manifest.params.map((spec) => {
+      {listed.map((spec) => {
         const resolved = values[spec.key];
         return (
           <Field key={spec.key}>

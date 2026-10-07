@@ -12,7 +12,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { label: "Context limit", description: "Maximum tokens Butler keeps in context. The model allows up to 400K." },
-  "ko-KR": { label: "컨텍스트 한도", description: "버틀러가 컨텍스트에 유지할 최대 토큰 수입니다. 모델 최대치는 400K입니다." },
+  "ko-KR": { label: "컨텍스트 한도", description: "Butler가 컨텍스트에 유지할 최대 토큰 수입니다. 모델 최대치는 400K입니다." },
 } as const;
 
 function ContextLimit({ context, initial }: { context: ShowcaseRenderContext; initial: number }) {

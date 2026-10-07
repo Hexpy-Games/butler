@@ -9,6 +9,7 @@ import { BUILTIN_WALLPAPERS } from "./registry";
 import type { WallpaperMotion, WallpaperSource } from "./types";
 import type { WallpaperParamInput } from "./values";
 import { Wallpaper } from "./Wallpaper";
+import { TransparentDecorationDemo } from "./Wallpaper.decoration";
 import { ImageWallpaperDemo, showcaseImageLoader } from "./Wallpaper.demo";
 import { WallpaperParamControls } from "./WallpaperParamControls";
 import { useWallpaperTone } from "./wallpaperTone";
@@ -52,7 +53,8 @@ function Playground({ locale }: ShowcaseRenderContext) {
   const module = BUILTIN_WALLPAPERS.get(choice);
   const source = useMemo(() => sourceFor(choice, inputs[choice]), [choice, inputs]);
   // Filters (modules that require an image) draw over image sources, not on their own; living photos bring their own.
-  const modules = BUILTIN_WALLPAPERS.list().filter(({ manifest, defaultImage }) => manifest.image !== "required" || defaultImage).map(({ manifest }) => ({
+  // Decorations have their own story: they draw on a card, not a screen.
+  const modules = BUILTIN_WALLPAPERS.list().filter(({ manifest, defaultImage }) => !manifest.decoration && (manifest.image !== "required" || defaultImage)).map(({ manifest }) => ({
     value: manifest.id,
     label: locale === "ko-KR" ? manifest.name.ko : manifest.name.en,
   }));
@@ -123,6 +125,7 @@ function ViewportScope({ locale }: ShowcaseRenderContext) {
 export const stories: ShowcaseStory[] = [
   { name: "Module playground", render: (context) => <Playground {...context} /> },
   { name: "Image wallpaper", render: (context) => <ImageWallpaperDemo {...context} /> },
+  { name: "Transparent decoration", render: (context) => <TransparentDecorationDemo {...context} /> },
   { name: "Generated param controls", render: (context) => <GeneratedControls {...context} /> },
   { name: "Viewport scope", render: (context) => <ViewportScope {...context} /> },
 ];

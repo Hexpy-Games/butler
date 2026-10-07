@@ -78,6 +78,17 @@ export interface WallpaperManifest {
   /** A file beside `shader.frag` (e.g. `photo.jpg`) drawn when the module is a live source without an image. */
   defaultImage?: string;
   sceneTone?: WallpaperSceneToneSpec;
+  /**
+   * The module draws only its own content: the canvas is see-through
+   * everywhere else (WebGL `alpha: true`, premultiplied, cleared to 0), and
+   * `fragColor` must be premultiplied alpha. Needs `image: none`. Omitted: opaque.
+   */
+  transparent?: boolean;
+  /**
+   * A decoration for a component surface (e.g. the composer card), not an app
+   * wallpaper: pickers and picker posters leave it out.
+   */
+  decoration?: boolean;
   /** At most 8; the first 4 are the primary controls. */
   params: WallpaperParamSpec[];
 }

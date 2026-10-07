@@ -35,6 +35,8 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
+    // Finish startup recovery before asserting a foreground-dispatched turn.
+    app.queue_wake.drain_chat("general".into()).await.unwrap();
     let accepted = app
         .send_message(command("progress-client", "question"))
         .await
@@ -132,6 +134,8 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
+    // Finish startup recovery before asserting a foreground-dispatched turn.
+    app.queue_wake.drain_chat("general".into()).await.unwrap();
     let turn = app
         .send_message(command("retention-client", "question"))
         .await
@@ -229,6 +233,8 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
+    // Finish startup recovery before asserting a foreground-dispatched turn.
+    app.queue_wake.drain_chat("general".into()).await.unwrap();
     let turn = app
         .send_message(command("resend-client", "question"))
         .await

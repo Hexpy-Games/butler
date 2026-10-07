@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
 use crate::cognition::CognitionCode;
@@ -133,7 +133,7 @@ pub(super) fn index(
 
 /// The legacy query database, created with its schema inside the data
 /// root.
-fn open_query_database(data_root: &Path) -> CognitionResult<Connection> {
+fn open_query_database(data_root: &Path) -> CognitionResult<butler_platform::sqlite::Connection> {
     let query_dir = data_root.join("cognition/memory/query");
     let database_path = query_dir.join("messages.sqlite");
     let journal_path = query_dir.join("messages.sqlite-journal");

@@ -1,9 +1,12 @@
 // Public UI -> isolated native gateway, with injected transport failures only.
 // UI smoke coverage for #218–#221; all model providers are stubbed.
 import { strict as assert } from "node:assert";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { spawn } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { type Page } from "playwright";
+import { launchSmokeBrowser } from "../support/smoke-browser";
 import { createNativeAppServer } from "../support/native-app-server";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
@@ -11,19 +14,56 @@ import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../.
 let copy = getAppCopy("ko-KR");
 const screenshots = resolve(".tmp/settings-bugs");
 mkdirSync(screenshots, { recursive: true });
+const matrix = [[375, "light", "ko"], [375, "dark", "ko"], [1280, "light", "ko"], [1280, "dark", "ko"], [1280, "light", "en"]] as const;
+// As in the crash smoke, each matrix group owns its gateway and driver process.
+// Restricted Chromium must not accumulate closed CDP surfaces in one Bun loop.
+if (!process.argv.includes("--case")) {
+  const captured: string[] = [];
+  for (let index = 0; index <= matrix.length; index += 1) {
+    await runIsolatedCase(index);
+    const result = JSON.parse(readFileSync(resolve(screenshots, `manifest-${index}.json`), "utf8"));
+    assert.equal(result.cases, 1);
+    assert.equal(result.modelCalls, 0);
+    captured.push(...result.screenshots);
+  }
+  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: captured, cases: 6, modelCalls: 0 }, null, 2)}\n`);
+  console.log(JSON.stringify({ ok: true, cases: 6, screenshots: captured.length, modelCalls: 0 }));
+  process.exit(0);
+}
+const caseIndex = Number(process.argv[process.argv.indexOf("--case") + 1]);
+assert(Number.isInteger(caseIndex) && caseIndex >= 0 && caseIndex <= matrix.length);
+
+async function runIsolatedCase(index: number) {
+  const isolation = mkdtempSync(join(tmpdir(), "butler-settings-case-"));
+  mkdirSync(join(isolation, "home")); mkdirSync(join(isolation, "data"));
+  try {
+    const child = spawn(process.execPath, [import.meta.path, "--case", String(index)], {
+      env: { ...process.env, HOME: join(isolation, "home"), BUTLER_DATA: join(isolation, "data") }, stdio: "inherit",
+    });
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject); child.once("exit", resolve);
+    });
+    assert.equal(code, 0, `settings case ${index} failed`);
+  } finally { rmSync(isolation, { recursive: true, force: true }); }
+}
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const evidence: string[] = [];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 const toast = (page: Page) => page.locator('[data-sonner-toast][data-type="error"]').last();
 
 async function capture(page: Page, prefix: string, state: string) {
+  await page.bringToFront();
+  assert.equal(await page.evaluate(() => document.hidden), false, `${state}: capture page is visible`);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
     animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${state}: no page overflow`);
   const name = `${prefix}-${state}.png`;
-  await page.screenshot({ path: resolve(screenshots, name) });
+  console.log(`capture ${name}`);
+  await page.screenshot({ path: resolve(screenshots, name), animations: "allow", timeout: 10_000 });
+  // Sonner deliberately pauses expiry on hover; leave the toast region after capture.
+  await page.mouse.move(0, 0);
   evidence.push(name);
 }
 
@@ -62,8 +102,10 @@ async function paletteChecks(page: Page, prefix: string) {
     await page.keyboard.press("Escape");
   }
   let dialog = await search(page, "");
-  // Fifteen visible sections, plus any server-owned content results.
-  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), 15);
+  // #537: merged main declares fifteen sections, including Hooks and Server. Assert every entry.
+  const expectedSections = ["general", "appearance", "personalization", "memory", "models", "updates", "usage", "security", "system", "archives", "about", "mcp", "hooks", "skills", "server"] as const;
+  assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), expectedSections.length);
+  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) }).count(), 1);
   await capture(page, prefix, "palette-all-sections");
   await dialog.getByRole("combobox").fill("logs");
   await page.getByText(copy.commandPalette.empty, { exact: true }).waitFor();
@@ -95,14 +137,14 @@ async function skillChecks(page: Page, prefix: string) {
   page.on("request", (request) => { if (request.url().includes("/skills/import")) imports += 1; });
   const file = { name: "invalid.zip", mimeType: "application/zip", buffer: Buffer.from("invalid zip") };
   await page.locator('input[type="file"]').setInputFiles(file);
-  await toast(page).waitFor();
+  await page.getByText(copy.settings.skillErrors.invalid, { exact: true }).waitFor();
   await capture(page, prefix, "skill-import-error");
   assert.equal(await page.locator('input[type="file"]').inputValue(), "", "file input cleared for retry");
   await page.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[type="file"]')?.value === "");
   assert.equal(imports, 2, "same file imports twice");
-  await toast(page).waitFor({ state: "hidden" });
+  assert.equal(await toast(page).count(), 0, "skill failure is inline");
   await page.getByRole("button", { name: copy.settings.back, exact: true }).click();
 }
 
@@ -131,13 +173,13 @@ async function formChecks(page: Page, prefix: string) {
   assert.equal(await save.isDisabled(), true);
   await capture(page, prefix, "mcp-save-pending");
   release();
-  await toast(page).getByText(copy.settings.mcpCommandRequired, { exact: true }).waitFor();
+  await form.getByText(copy.settings.mcpCommandRequired, { exact: true }).waitFor();
   await page.unroute("**/mcp-servers");
   assert.equal(await page.locator("#mcp-server-name").inputValue(), "입력을 유지합니다");
   assert.equal(await page.locator("#mcp-server-id").inputValue(), "GitHub");
   await capture(page, prefix, "mcp-save-error-retained");
   await form.getByRole("button", { name: copy.common.cancel, exact: true }).click();
-  await toast(page).waitFor({ state: "hidden" });
+  assert.equal(await toast(page).count(), 0, "MCP field error has no toast");
 }
 
 async function mcpChecks(page: Page, prefix: string) {
@@ -214,14 +256,16 @@ async function scheduleChecks(page: Page, prefix: string) {
   await detail.waitFor();
   let deletes = 0;
   page.on("request", (request) => { if (request.method() === "DELETE" && request.url().includes("/automations/")) deletes += 1; });
-  await detail.getByRole("button", { name: copy.common.delete, exact: true }).click();
+  await detail.getByRole("button", { name: copy.common.more, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.common.delete, exact: true }).click();
   const confirm = page.getByRole("alertdialog", { name: copy.common.delete, exact: true });
   await confirm.getByText(copy.settings.deleteSchedule("삭제 검증"), { exact: true }).waitFor();
   await capture(page, prefix, "schedule-delete-confirm");
   assert.equal(deletes, 0);
   await page.keyboard.press("Escape");
   assert.equal(deletes, 0, "dismissal sends no DELETE");
-  await detail.getByRole("button", { name: copy.common.delete, exact: true }).click();
+  await detail.getByRole("button", { name: copy.common.more, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.common.delete, exact: true }).click();
   await confirm.getByRole("button", { name: copy.common.delete, exact: true }).click();
   await detail.waitFor({ state: "hidden" });
   assert.equal(deletes, 1, "confirmation deletes once");
@@ -243,12 +287,18 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
   await page.goto(server.url);
   await page.locator('[data-test-class~="composer-card"]').waitFor();
   const prefix = `${width}-${language}-${theme}`;
-  await paletteChecks(page, prefix);
-  await skillChecks(page, prefix);
-  await mcpChecks(page, prefix);
-  await scheduleChecks(page, prefix);
-  assert.deepEqual(errors, [], "no unhandled renderer errors");
-  await context.close();
+  try {
+    await paletteChecks(page, prefix);
+    await skillChecks(page, prefix);
+    await mcpChecks(page, prefix);
+    await scheduleChecks(page, prefix);
+    assert.deepEqual(errors, [], "no unhandled renderer errors");
+  } catch (error) {
+    const visibility = !page.isClosed() ? await page.evaluate(() => ({ hidden: document.hidden, focused: document.hasFocus() })).catch(() => null) : null;
+    console.error(JSON.stringify({ case: prefix, url: page.url(), closed: page.isClosed(), visibility, rendererErrors: errors }));
+    if (!page.isClosed()) await page.screenshot({ path: resolve(screenshots, `${prefix}-failure.png`), animations: "allow", timeout: 10_000 }).catch(() => undefined);
+    throw error;
+  } finally { await context.close(); }
 }
 
 async function englishChecks() {
@@ -290,12 +340,12 @@ try {
   for (let index = 0; index < 30; index += 1) {
     await server.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: `models regression ${index}` }) });
   }
-  for (const width of [375, 1280]) for (const theme of ["light", "dark"] as const) await runCase(width, theme);
-  await runCase(1280, "light", "en");
-  await englishChecks();
+  const cell = matrix[caseIndex];
+  if (cell) await runCase(cell[0], cell[1], cell[2]);
+  else await englishChecks();
   assert.equal(server.stubModelCalls.length, 0, "settings need no model calls");
-  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: evidence, cases: 6, modelCalls: 0 }, null, 2)}\n`);
-  console.log(JSON.stringify({ ok: true, cases: 6, screenshots: evidence.length, modelCalls: 0 }));
+  writeFileSync(resolve(screenshots, `manifest-${caseIndex}.json`), `${JSON.stringify({ screenshots: evidence, cases: 1, modelCalls: 0 }, null, 2)}\n`);
+  console.log(JSON.stringify({ ok: true, cases: 1, screenshots: evidence.length, modelCalls: 0 }));
 } finally {
   await browser.close();
   await server.stop();

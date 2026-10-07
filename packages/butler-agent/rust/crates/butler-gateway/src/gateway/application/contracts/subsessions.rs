@@ -13,6 +13,11 @@ pub trait AppSubsessionPort: Send + Sync {
         None
     }
 
+    /// Change-driven graph invalidations from canonical plan/delegation writes.
+    fn graph_changes(&self) -> Option<tokio::sync::broadcast::Receiver<String>> {
+        None
+    }
+
     /// Read-only execution presence for the requested visible parent sessions.
     fn running_parents(&self, _parents: Vec<String>) -> ApplicationFuture<Vec<String>> {
         Box::pin(async { Ok(Vec::new()) })
@@ -40,6 +45,9 @@ pub trait AppSubsessionPort: Send + Sync {
     ) -> ApplicationFuture<Option<AppWorkerActivitySourcePage>> {
         Box::pin(async { Ok(None) })
     }
+    fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn projection(
         &self,
         session_id: String,
@@ -60,4 +68,15 @@ pub struct AppSessionViewPage {
     pub after_cursor: Option<u64>,
     pub before_cursor: Option<u64>,
     pub limit: usize,
+}
+
+/// Read-only graph scope, with revision-bound keyset pages.
+#[derive(Clone, Debug)]
+pub struct AppTaskGraphQuery {
+    pub scope: butler_turn::btcc::TaskGraphScope,
+    pub revision: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: usize,
+    /// Internal SSE snapshots; HTTP conversation lists remain summaries.
+    pub include_nodes: bool,
 }

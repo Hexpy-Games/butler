@@ -1,5 +1,7 @@
 //! Host adapter from App session projection/control to the BTCC owner.
 
+mod lifecycle;
+mod task_graphs;
 use std::sync::Arc;
 
 use butler_gateway::gateway::{
@@ -20,15 +22,22 @@ pub(crate) struct AppSubsessions {
     conversations: Arc<AgentConversationStore>,
     progress: StorageProgressPublication,
     btcc: butler_turn::btcc::Btcc,
+    settings: Arc<super::runtime_ports::AppSettingsFactsAdapter>,
+    shutdown: tokio_util::sync::CancellationToken,
 }
 
 impl AppSubsessions {
-    pub(crate) fn for_runtime(runtime: &crate::host::AgentRuntime) -> Self {
+    pub(crate) fn new(
+        runtime: &crate::host::AgentRuntime,
+        settings: Arc<super::runtime_ports::AppSettingsFactsAdapter>,
+    ) -> Self {
         Self {
             service: runtime.subsessions.clone(),
             conversations: runtime.conversations.clone(),
             progress: runtime.progress.clone(),
             btcc: runtime.btcc.clone(),
+            settings,
+            shutdown: runtime.service_shutdown.clone(),
         }
     }
 }
@@ -38,6 +47,9 @@ impl AppSubsessionPort for AppSubsessions {
         Some(self.service.subscribe_changes())
     }
 
+    fn graph_changes(&self) -> Option<tokio::sync::broadcast::Receiver<String>> {
+        Some(task_graphs::changes(self))
+    }
     fn running_parents(&self, parents: Vec<String>) -> ApplicationFuture<Vec<String>> {
         let service = self.service.clone();
         Box::pin(async move {
@@ -93,6 +105,12 @@ impl AppSubsessionPort for AppSubsessions {
             }))
         })
     }
+    fn task_graph_read(
+        &self,
+        query: butler_gateway::gateway::AppTaskGraphQuery,
+    ) -> ApplicationFuture<serde_json::Value> {
+        task_graphs::read(self, query)
+    }
     fn projection(
         &self,
         session_id: String,
@@ -101,12 +119,13 @@ impl AppSubsessionPort for AppSubsessions {
         let service = self.service.clone();
         let conversations = self.conversations.clone();
         let progress = self.progress.clone();
+        let settings = self.settings.clone();
         Box::pin(async move {
             let mut projection = service
                 .app_projection(&session_id)
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
-            with_turn_times(&conversations, &mut projection).await;
+            lifecycle::enrich(&conversations, &settings, &mut projection).await?;
             if projection
                 .get("relation")
                 .is_some_and(serde_json::Value::is_object)
@@ -390,48 +409,6 @@ fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
             code: error.code().to_owned(),
             message: message.into(),
             source: None,
-        }
-    }
-}
-
-/// The children's turns carry the BTCC relation time; replace it with the
-/// conversation turn's own start and end where the conversation store has the
-/// turn, so clients (and the result-commit grace) see when the turn settled.
-async fn with_turn_times(
-    conversations: &AgentConversationStore,
-    projection: &mut serde_json::Value,
-) {
-    for key in ["steward_children", "workers"] {
-        let Some(children) = projection
-            .get_mut(key)
-            .and_then(serde_json::Value::as_array_mut)
-        else {
-            continue;
-        };
-        for child in children {
-            let Some(id) = child
-                .pointer("/latest_turn/id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-            else {
-                continue;
-            };
-            let Ok(Some(turn)) = conversations.read_turn(&id).await else {
-                continue;
-            };
-            let updated = turn
-                .completed_at
-                .clone()
-                .unwrap_or_else(|| turn.started_at.clone());
-            for turn_key in ["latest_turn", "active_turn"] {
-                if let Some(value) = child
-                    .get_mut(turn_key)
-                    .and_then(serde_json::Value::as_object_mut)
-                {
-                    value.insert("created_at".into(), serde_json::json!(turn.started_at));
-                    value.insert("updated_at".into(), serde_json::json!(updated));
-                }
-            }
         }
     }
 }

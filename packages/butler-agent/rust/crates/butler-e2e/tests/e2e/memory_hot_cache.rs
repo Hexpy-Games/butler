@@ -10,14 +10,14 @@ use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use butler_platform::sqlite;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::path::Path;
 
 const FACT: &str = "My preferred garden flower is the blue iris.";
 const NOW: &str = "2026-10-02T04:01:00.000Z";
 
-fn readonly(path: &Path) -> Connection {
+fn readonly(path: &Path) -> butler_platform::sqlite::Connection {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 

@@ -195,7 +195,7 @@ fn open_validation(
     cancellation: tokio_util::sync::CancellationToken,
     deferred: bool,
     started: std::time::Instant,
-) -> StorageResult<Connection> {
+) -> StorageResult<sqlite::Connection> {
     // Whole-file prefetch is not interruptible; reserve it for mandatory
     // synchronous checks. Deferred reads yield through the SQLite hook.
     if full && !deferred {

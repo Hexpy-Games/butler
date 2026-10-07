@@ -116,7 +116,7 @@ async function skillChecks() {
     const input = doc.querySelector<HTMLInputElement>('input[type="file"]')!;
     Object.defineProperty(input, "files", { configurable: true, value: [new File(["invalid zip"], "invalid.zip")] });
     await act(async () => input.dispatchEvent(new window.Event("change", { bubbles: true })));
-    await waitFor(() => imports === attempt + 1 && doc.body.textContent?.includes(appCopy.interfaceFeedback.importFailed) === true, "import rejection displayed");
+    await waitFor(() => imports === attempt + 1 && doc.body.textContent?.includes(appCopy.settings.skillErrors.invalid) === true, "import rejection displayed");
     assert.equal(input.value, "");
   }
   assert.equal(imports, 2);
@@ -124,7 +124,9 @@ async function skillChecks() {
 
 async function paletteChecks() {
   await render(h(CommandPalette, { onClose: () => {} }));
-  await waitFor(() => doc.querySelectorAll('[role="option"]').length === 14, "all settings present");
+  const sections = ["general", "appearance", "personalization", "memory", "models", "updates", "usage", "privacy", "security", "system", "archives", "about", "mcp", "skills", "server"] as const;
+  await waitFor(() => doc.querySelectorAll('[role="option"]').length === sections.length, "all settings present");
+  for (const id of sections) assert.equal([...doc.querySelectorAll('[role="option"]')].filter(node => [...node.querySelectorAll("*")].some(child => child.textContent === appCopy.settings.sections[id])).length, 1);
   for (const [query, label] of [["모델", appCopy.settings.sections.models], ["models", appCopy.settings.sections.models], ["스킬", appCopy.settings.sections.skills], ["mcp", appCopy.settings.sections.mcp]]) {
     await fill('[role="combobox"]', query!);
     await waitFor(() => [...doc.querySelectorAll('[role="option"]')].some((node) => node.textContent?.includes(label!)), `localized search: ${query}`);
