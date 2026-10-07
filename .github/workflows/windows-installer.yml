@@ -125,6 +125,7 @@ jobs:
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         env:
+          BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/windows-installer-evidence
           BUTLER_WINDOWS_SMOKE_FROM: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
         run: |
@@ -147,6 +148,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_TAG: ${{ inputs.baseline-tag }}
+          BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/windows-installer-baseline-evidence
           BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -163,6 +165,17 @@ jobs:
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
+      - name: Preserve Squirrel setup and update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-diagnostics
+          path: |
+            ${{ runner.temp }}/windows-installer-evidence/
+            ${{ runner.temp }}/windows-installer-baseline-evidence/
+            dist/startup-installer-evidence/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Prove legacy-data refusal and desktop recovery
         shell: pwsh
         run: |
