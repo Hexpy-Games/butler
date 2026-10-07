@@ -192,9 +192,7 @@ const accentIconRules = new Set([
 ]);
 
 // Every surface: DS components and blocks, the DS Viewer and app code.
-// Follow-up: Opus FoundationHeroMotion hero text contrast (Spacing/Sizing and related heroes).
-// Owner reserved DS fixes for the Opus worker; keep this single contract pending.
-test.skip("accent used as text reads through --accent-text, never the fill token", async () => {
+test("accent used as text reads through --accent-text, never the fill token", async () => {
   const { Glob } = await import("bun");
   const offenders: string[] = [];
   for await (const path of new Glob("**/*.module.css").scan({ cwd: new URL("../..", import.meta.url).pathname })) {
