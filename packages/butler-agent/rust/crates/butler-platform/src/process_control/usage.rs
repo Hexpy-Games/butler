@@ -13,7 +13,13 @@ pub fn load_average() -> io::Result<Option<[f64; 3]>> {
             .map(str::parse::<f64>)
             .collect::<Result<Vec<_>, _>>()
             .map_err(io::Error::other)?;
-        Ok(Some([values[0], values[1], values[2]]))
+        let [one, five, fifteen] = values.as_slice() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "missing load averages",
+            ));
+        };
+        Ok(Some([*one, *five, *fifteen]))
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
