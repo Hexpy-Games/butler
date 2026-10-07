@@ -21,18 +21,17 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let path = uri.path();
-    let session_id = authority_session_id(uri);
-    let owner = state
-        .application
-        .runtime_session_hint(session_id.clone())
-        .await?;
-
     if path == "/authority-permissions" && method == Method::GET {
         return super::authority_permissions::list(&state).await;
     }
     if path == "/authority-permissions/revoke" && method == Method::POST {
         return super::authority_permissions::revoke(&state, request).await;
     }
+    let session_id = authority_session_id(uri);
+    let owner = state
+        .application
+        .runtime_session_hint(session_id.clone())
+        .await?;
     if method == Method::GET && path == "/authority-requests" {
         return list_requests(&state, owner, session_id).await;
     }

@@ -10,10 +10,22 @@ pub(super) fn report(logs: &str) {
         eprintln!("{cache}");
     }
     let mut stages: BTreeMap<&str, Vec<u64>> = BTreeMap::new();
+    let mut metadata_reader = false;
     for line in logs
         .lines()
         .filter(|line| line.starts_with("approvals-profile"))
     {
+        // The metadata closure logs before its reader commits and syncs.
+        // Ignore startup/background reader jobs, rather than taking the last 100.
+        if line.contains("metadata_sql_us=") {
+            metadata_reader = !line.contains("metadata_lane_owned=1");
+        }
+        if line.contains("reader_open_us=") {
+            if !metadata_reader {
+                continue;
+            }
+            metadata_reader = false;
+        }
         for field in line.split_whitespace().skip(1) {
             if let Some((key, value)) = field.split_once('=')
                 && key.ends_with("_us")
@@ -24,10 +36,8 @@ pub(super) fn report(logs: &str) {
         }
     }
     for (stage, mut samples) in stages {
-        if stage.starts_with("reader_") {
-            // Setup can issue earlier reads; report the last 100 listing reads.
-            samples.drain(..samples.len().saturating_sub(100));
-        }
+        let cold = samples.remove(0);
+        eprintln!("approvals-cold {stage} us={cold}");
         samples.sort_unstable();
         let count = samples.len();
         eprintln!("approvals-distribution {stage} {samples:?}");
@@ -60,13 +70,19 @@ pub(super) fn explain(db: &rusqlite::Connection) -> Result<(), rusqlite::Error> 
 }
 
 pub(super) fn explain_metadata(db: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-    let mut query = db.prepare(
-        "EXPLAIN QUERY PLAN SELECT c.title,c.project_id,p.display_name \
-         FROM chats c INDEXED BY idx_chats_authority_metadata \
-         LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id WHERE c.id=?1",
-    )?;
-    for detail in query.query_map(["chat-0"], |row| row.get::<_, String>(3))? {
+    let mut query = db.prepare(&format!("EXPLAIN QUERY PLAN {METADATA_SQL}"))?;
+    for detail in query.query_map([r#"["butler/app-chat-0"]"#], |row| row.get::<_, String>(3))? {
         eprintln!("approvals-plan metadata {}", detail?);
     }
     Ok(())
 }
+
+pub(super) const METADATA_SQL: &str = "SELECT owners.value,c.title,c.project_id,p.display_name \
+    FROM json_each(?1) owners \
+    LEFT JOIN chats explicit INDEXED BY chats_runtime_hint_idx \
+      ON explicit.runtime_session_hint=owners.value AND explicit.runtime_session_hint IS NOT NULL \
+    LEFT JOIN chats legacy INDEXED BY sqlite_autoindex_chats_1 \
+      ON explicit.id IS NULL AND legacy.runtime_session_hint IS NULL \
+      AND legacy.id=CASE WHEN substr(owners.value,1,11)='butler/app-' THEN substr(owners.value,12) ELSE owners.value END \
+    JOIN chats c INDEXED BY idx_chats_authority_metadata ON c.id=coalesce(explicit.id,legacy.id) \
+    LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id";

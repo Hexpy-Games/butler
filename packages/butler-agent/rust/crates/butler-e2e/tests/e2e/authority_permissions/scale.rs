@@ -57,6 +57,22 @@ pub(super) async fn measure_current(
         current.data()["permissions"].as_array().unwrap(),
         &remaining
     );
+    report_idle_writes(s).await?;
+    Ok(())
+}
+
+async fn report_idle_writes(s: &Scenario) -> Result<(), HarnessError> {
+    if std::env::var("BUTLER_E2E_PERF").as_deref() != Ok("1") {
+        return Ok(());
+    }
+    let pid = s.agent.pid().unwrap();
+    let before = butler_platform::process_control::sample_usage(pid)?.unwrap();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let after = butler_platform::process_control::sample_usage(pid)?.unwrap();
+    eprintln!(
+        "approvals-idle seconds=3 write_bytes={}",
+        after.write_bytes.saturating_sub(before.write_bytes)
+    );
     Ok(())
 }
 
@@ -117,13 +133,12 @@ fn check_metadata_indexes(path: &std::path::Path) -> Result<(), HarnessError> {
     db.execute_batch(
         "UPDATE sqlite_stat1 SET stat='1 1' WHERE tbl='chats'; ANALYZE sqlite_schema;",
     )?;
-    let mut query = db.prepare(
-        "EXPLAIN QUERY PLAN SELECT c.title,c.project_id,p.display_name \
-         FROM chats c INDEXED BY idx_chats_authority_metadata \
-         LEFT JOIN projects p INDEXED BY idx_projects_authority_metadata ON p.id=c.project_id WHERE c.id=?1",
-    )?;
+    let mut query = db.prepare(&format!(
+        "EXPLAIN QUERY PLAN {}",
+        super::profile::METADATA_SQL
+    ))?;
     let details = query
-        .query_map(["chat-0"], |row| row.get::<_, String>(3))?
+        .query_map([r#"["butler/app-chat-0"]"#], |row| row.get::<_, String>(3))?
         .collect::<Result<Vec<_>, _>>()?;
     for index in [
         "idx_chats_authority_metadata",
@@ -137,9 +152,11 @@ fn check_metadata_indexes(path: &std::path::Path) -> Result<(), HarnessError> {
         );
     }
     assert!(
-        details
-            .iter()
-            .all(|detail| !detail.starts_with("SCAN c") && !detail.starts_with("SCAN p")),
+        details.iter().all(
+            |detail| !["SCAN c", "SCAN p", "SCAN explicit", "SCAN legacy"]
+                .iter()
+                .any(|table| detail.starts_with(table))
+        ),
         "{details:?}"
     );
     Ok(())

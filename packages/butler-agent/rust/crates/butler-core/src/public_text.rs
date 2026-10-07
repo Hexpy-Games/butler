@@ -30,9 +30,8 @@ pub fn sanitize_public_text(value: &str, fallback: &str) -> String {
     } else {
         Cow::Borrowed(value)
     };
-    let secrets = PATTERNS.secrets.replace(&stripped, "[redacted]");
-    let bearer = PATTERNS.bearer.replace(&secrets, "Bearer [redacted]");
-    let normalized = collapse_whitespace(&bearer);
+    let redacted = PATTERNS.redact(&stripped);
+    let normalized = collapse_whitespace(&redacted);
     if normalized.is_empty() || PATTERNS.is_private(&normalized) || decoded_private(&normalized) {
         fallback.to_owned()
     } else {
@@ -59,11 +58,7 @@ pub fn sanitize_public_delta(value: &str) -> String {
     } else {
         Cow::Borrowed(value)
     };
-    let secrets = PATTERNS.secrets.replace(&stripped, "[redacted]");
-    PATTERNS
-        .bearer
-        .replace(&secrets, "Bearer [redacted]")
-        .into_owned()
+    PATTERNS.redact(&stripped).into_owned()
 }
 
 /// [`sanitize_public_text`] of a JSON scalar's JavaScript string form;

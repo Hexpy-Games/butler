@@ -14,6 +14,7 @@ pub(super) struct ProjectionCache {
     epoch: u64,
     hits: usize,
     misses: usize,
+    command_scope: Option<super::permission::CommandScope>,
 }
 struct CachedSource {
     // Exact current bytes, including owner/workspace and every decoding input.
@@ -58,7 +59,15 @@ impl ProjectionCache {
             self.bytes -= old.bytes;
         }
         self.misses += 1;
-        let target = super::permission::for_source(source, collation, prefixes)?;
+        let command_scope = self
+            .command_scope
+            .get_or_insert_with(|| super::permission::CommandScope::new(collation));
+        let target = super::permission::for_source(source, collation, prefixes, command_scope)?;
+        // The first listing returns every decoded target without allocating a
+        // second owned copy. Populate memoization on the next actual request.
+        if self.epoch == 1 {
+            return Ok(target);
+        }
         let bytes = std::mem::size_of::<CachedSource>()
             + facts.iter().map(|value| value.len()).sum::<usize>()
             + target.grant_ref.capacity()

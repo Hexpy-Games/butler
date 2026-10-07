@@ -4,6 +4,7 @@ use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
+mod ownership;
 mod profile;
 mod scale;
 pub(super) mod seed;

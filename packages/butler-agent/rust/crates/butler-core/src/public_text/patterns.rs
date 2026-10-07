@@ -1,5 +1,5 @@
 use super::{fixed_regex, fixed_regex_ci};
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
 use regex::Regex;
 
@@ -8,32 +8,78 @@ use regex::Regex;
 const SPACE: &str = r"[\x09-\x0d\x20\u{a0}\u{1680}\u{2000}-\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}\u{feff}]";
 
 pub(super) struct Patterns {
-    pub secrets: BoundaryPattern,
-    pub bearer: BoundaryPattern,
+    secrets: LazyLock<BoundaryPattern>,
+    bearer: LazyLock<BoundaryPattern>,
+    private: LazyLock<PrivatePatterns>,
+}
+
+impl Patterns {
+    pub(super) fn new() -> Self {
+        Self {
+            secrets: LazyLock::new(secret_pattern),
+            bearer: LazyLock::new(bearer_pattern),
+            private: LazyLock::new(PrivatePatterns::new),
+        }
+    }
+
+    pub(super) fn redact<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        // Every secret assignment requires one of these ASCII delimiters.
+        // Every bearer match contains this ASCII word, even under /iu folding.
+        // These necessary conditions never exclude a possible regex match.
+        let secrets = if text.contains([':', '=']) {
+            self.secrets.replace(text, "[redacted]")
+        } else {
+            Cow::Borrowed(text)
+        };
+        if !secrets
+            .as_bytes()
+            .windows(6)
+            .any(|word| word.eq_ignore_ascii_case(b"bearer"))
+        {
+            return secrets;
+        }
+        match self.bearer.replace(&secrets, "Bearer [redacted]") {
+            Cow::Borrowed(_) => secrets,
+            Cow::Owned(redacted) => Cow::Owned(redacted),
+        }
+    }
+
+    pub(super) fn is_private(&self, text: &str) -> bool {
+        self.private.is_private(text)
+    }
+}
+
+fn secret_pattern() -> BoundaryPattern {
+    let nonspace = SPACE.replacen('[', "[^", 1);
+    BoundaryPattern::new(
+        &format!(
+            r"(?:api[_-]?key|token|secret|password|database_url|db_url){SPACE}*[:=]{SPACE}*{nonspace}+|(?:auth|authorization){SPACE}*[:=]{SPACE}*(?:bearer{SPACE}+)?{nonspace}+"
+        ),
+        true,
+        true,
+        None,
+    )
+}
+
+fn bearer_pattern() -> BoundaryPattern {
+    BoundaryPattern::new(
+        &format!(r"bearer{SPACE}+[a-z0-9_.~+/=\-]+"),
+        true,
+        true,
+        None,
+    )
+}
+
+struct PrivatePatterns {
     private: Vec<BoundaryPattern>,
     json_start: Regex,
     json_key: Regex,
 }
 
-impl Patterns {
-    pub(super) fn new() -> Self {
+impl PrivatePatterns {
+    fn new() -> Self {
         let nonspace_no_slash = format!(r"[^{}\\]", &SPACE[1..SPACE.len() - 1]);
-        let nonspace = SPACE.replacen('[', "[^", 1);
         Self {
-            secrets: BoundaryPattern::new(
-                &format!(
-                    r"(?:api[_-]?key|token|secret|password|database_url|db_url){SPACE}*[:=]{SPACE}*{nonspace}+|(?:auth|authorization){SPACE}*[:=]{SPACE}*(?:bearer{SPACE}+)?{nonspace}+"
-                ),
-                true,
-                true,
-                None,
-            ),
-            bearer: BoundaryPattern::new(
-                &format!(r"bearer{SPACE}+[a-z0-9_.~+/=\-]+"),
-                true,
-                true,
-                None,
-            ),
             private: vec![
                 BoundaryPattern::new(
                     &format!(r"<{SPACE}*/?{SPACE}*(thinking|reasoning|think)[^>]*>"),

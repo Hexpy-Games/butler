@@ -27,7 +27,7 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         query::list_permissions(self.db, owner)
     }
     fn list_all_permissions(&mut self) -> AuthorityResult<Vec<ConversationPermission>> {
-        query::list_all_permissions(self.db)
+        permission_read(self.db, query::list_all_permissions)
     }
     fn revoke_permissions(
         &mut self,
@@ -41,7 +41,9 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         owners: &[String],
         visit: &mut dyn FnMut(PermissionSource<'_>) -> AuthorityResult<()>,
     ) -> AuthorityResult<()> {
-        query::permission_projection_records(self.db, owners, visit)
+        permission_read(self.db, |db| {
+            query::permission_projection_records(db, owners, visit)
+        })
     }
     fn permission_records(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::permission_records(self.db, owner)
@@ -109,4 +111,23 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         close::close_pending_self_session_requests(self.db, session, reason, now)
             .map_err(AuthorityError::from)
     }
+}
+
+fn permission_read<T>(
+    db: &Connection,
+    read: impl FnOnce(&Connection) -> AuthorityResult<T>,
+) -> AuthorityResult<T> {
+    // Indexed reads bypass repeated page copies/pread calls on the small writer
+    // cache. Map only for this request; restore before serving other operations,
+    // so startup sweeps and idle storage retain their existing bounded caches.
+    let mapping: i64 = db
+        .pragma_query_value(None, "mmap_size", |row| row.get(0))
+        .map_err(query::sql)?;
+    db.pragma_update(None, "mmap_size", 8_589_934_592_i64)
+        .map_err(query::sql)?;
+    let result = read(db);
+    let restored = db
+        .pragma_update(None, "mmap_size", mapping)
+        .map_err(query::sql);
+    result.and_then(|value| restored.map(|()| value))
 }

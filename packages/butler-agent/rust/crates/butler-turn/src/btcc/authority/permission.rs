@@ -6,6 +6,9 @@ use super::contracts::{
 };
 use super::identity::{canonical, digest};
 use butler_core::tool_protocol::ToolName;
+mod command_scope;
+mod command_source;
+pub(super) use command_scope::CommandScope;
 
 pub(super) fn for_admission(
     input: &AuthorityAdmissionInput,
@@ -196,9 +199,27 @@ pub(super) fn for_source(
     source: &PermissionSource<'_>,
     collation: &butler_core::locale::LocaleCollation,
     prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    command_scope: &CommandScope,
 ) -> AuthorityResult<PermissionTarget> {
+    if matches!(
+        source.capability,
+        "run_command" | "run_command_remote_observation"
+    ) && let Some(target) = command_source::project(source, collation, prefixes, command_scope)?
+    {
+        return Ok(target);
+    }
     let input: Value = serde_json::from_str(source.input_json)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    for_decoded_source(source, collation, prefixes, command_scope, input)
+}
+
+fn for_decoded_source(
+    source: &PermissionSource<'_>,
+    collation: &butler_core::locale::LocaleCollation,
+    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    command_scope: &CommandScope,
+    input: Value,
+) -> AuthorityResult<PermissionTarget> {
     let facts = PermissionFacts {
         owner: source.owner,
         workspace: source.workspace,
@@ -226,14 +247,18 @@ pub(super) fn for_source(
             .unwrap_or(source.workspace)
             .to_owned()
     });
-    let scope_key = scope_key(
-        std::borrow::Cow::Owned(input),
-        source.capability,
-        source.target,
-        collation,
-        file_edit,
-        command,
-    )?;
+    let scope_key = if command {
+        command_scope.key(&input, collation)?
+    } else {
+        scope_key(
+            std::borrow::Cow::Owned(input),
+            source.capability,
+            source.target,
+            collation,
+            file_edit,
+            command,
+        )?
+    };
     let grant_ref = source_grant_ref(source, &scope_key, collation, prefixes)?;
     Ok(PermissionTarget {
         grant_ref,

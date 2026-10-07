@@ -10,7 +10,7 @@ use regex::{Regex, RegexBuilder};
 const COMPOSED: &[(&str, &str)] = &[
     (
         "public_text/patterns.rs",
-        "public_text::tests (every sanitize call forces Patterns::new)",
+        "public_text::tests (exercises secret, bearer and private pattern initialization)",
     ),
     (
         "work_records/dashboard/evidence.rs",

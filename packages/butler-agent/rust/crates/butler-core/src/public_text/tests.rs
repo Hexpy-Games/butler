@@ -47,6 +47,11 @@ fn public_text_redacts_secrets_and_private_text() {
         ("bell\u{7}", "bell"),
         (" token=abc", " [redacted]"),
         ("auth: bearer abc ", "[redacted] "),
+        ("Bearer abc", "Bearer [redacted]"),
+        ("BEARER\u{a0}abc", "Bearer [redacted]"),
+        ("api_Key=abc ſecret:xyz", "[redacted] [redacted]"),
+        ("cargo test case_2", "cargo test case_2"),
+        ("a bearer without-a-token?", "a Bearer [redacted]?"),
         ("", ""),
     ] {
         assert_eq!(sanitize_public_delta(value), expected, "{value:?}");
