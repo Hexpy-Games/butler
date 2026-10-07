@@ -296,6 +296,9 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
     let s = setup
         .stub_cassette(provider::cassette()?)
         .env("BUTLER_CODEX_BASE_URL", url)
+        // Match replay() and the installed App's module environment.
+        .env("PSModulePath", "")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1")
