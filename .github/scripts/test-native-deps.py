@@ -466,7 +466,8 @@ class NativeDeps(unittest.TestCase):
         import os
         import subprocess
         completed = subprocess.CompletedProcess([], 0, stdout='Login Succeeded', stderr='')
-        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token'), \
+        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token',
+                        BUTLER_ORAS_EXECUTABLE=str(self.root / 'oras.exe')), \
                 patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
             sdk.ci_oci.authenticate()
             arguments = invoke.call_args.args[0]
@@ -475,7 +476,7 @@ class NativeDeps(unittest.TestCase):
             self.assertEqual(os.environ['BUTLER_OCI_AUTH_CONFIG'], config)
             self.assertEqual(invoke.call_args.kwargs['input'], 'stub-token')
             self.assertNotIn('stub-token', arguments)
-            self.assertEqual(arguments[0], 'oras')
+            self.assertEqual(arguments[0], str(self.root / 'oras.exe'))
 
     # test-category: security
     def test_unsafe_archive_is_rejected(self):

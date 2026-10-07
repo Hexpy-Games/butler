@@ -88,6 +88,35 @@ class WindowsSafety(unittest.TestCase):
         self.assertIn('shell: bash', hosted)
 
     # test-category: security
+    def test_owner_portable_oras_is_reachable_without_persistent_host_changes(self):
+        repository = ROOT.parents[1]
+        publisher = (repository / '.github/workflows/native-deps.yml').read_text().split(
+            '  windows-owner:', 1)[1]
+        consumer = (repository / '.github/actions/windows-owner-setup/action.yml').read_text()
+        for source, operation in [(publisher, 'name: Build and publish owner-toolset SDK'),
+                                  (consumer, 'name: Verify or prepare pinned static ORT')]:
+            self.assertNotIn("'oras'", source)
+            self.assertLess(source.index('uses: ./.github/actions/setup-oras'), source.index(operation))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflow = root / '.github/workflows/portable.yml'
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+                                '    steps:\n      - uses: ./.github/actions/setup-oras\n')
+            action = root / '.github/actions/setup-oras/action.yml'
+            action.parent.mkdir(parents=True)
+            action.write_text((repository / '.github/actions/setup-oras/action.yml').read_text())
+            script = root / '.github/scripts/setup-oras.py'
+            script.parent.mkdir(parents=True)
+            script.write_text((ROOT / 'setup-oras.py').read_text())
+            self.assertEqual(windows_safety.audit(root)[1], [])
+            for mutation in ['subprocess.run(["winget", "install", "oras"])',
+                             'subprocess.run(["setx", "PATH", "portable"])',
+                             'subprocess.run(["reg", "add", "HKCU/Environment"])']:
+                script.write_text((ROOT / 'setup-oras.py').read_text() + '\n' + mutation + '\n')
+                self.assertTrue(windows_safety.audit(root)[1], mutation)
+
+    # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -205,6 +234,7 @@ class WindowsSafety(unittest.TestCase):
                         oras_setup.install()
                         installed = Path(path_file.read_text().strip().split('=', 1)[1])
                         self.assertTrue(path_file.read_text().startswith('BUTLER_ORAS_EXECUTABLE='))
+                        self.assertTrue(installed.is_relative_to(root))
                         self.assertEqual(installed.read_bytes(), b'official executable fixture')
                         self.assertEqual(execute.call_args.args[0], [str(installed), 'version'])
                         self.assertFalse((root / 'outside').exists())
