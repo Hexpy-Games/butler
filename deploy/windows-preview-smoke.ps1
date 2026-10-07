@@ -25,7 +25,9 @@ function Assert-InstalledBinding {
         $original = [IO.File]::ReadAllBytes($case.Path)
         try {
             [IO.File]::WriteAllText($case.Path,$case.Text)
+            $ErrorActionPreference = 'Continue'
             & "$Root/butler-agent.exe" --installation-root $Root --resource-root "$Root/resources" doctor --check installation --json | Out-Null
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -eq 0) { throw 'Doctor accepted a tampered installation binding' }
         } finally { [IO.File]::WriteAllBytes($case.Path,$original) }
     }
@@ -33,7 +35,9 @@ function Assert-InstalledBinding {
 
 function Assert-CommandBinding {
     param([string]$Command)
+    $ErrorActionPreference = 'Continue'
     & $Command doctor --check installation --json | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Native command lost its installation binding' }
     $marker = "$Command.target"
     $original = [IO.File]::ReadAllBytes($marker)
@@ -51,7 +55,6 @@ function Assert-CommandBinding {
 
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
-$protocolBefore = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
 # Keep the fixture within Windows PowerShell 5.1's normal path limit.
 $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString('N'))
 $originalProfile = $env:USERPROFILE
@@ -70,6 +73,8 @@ $env:BUTLER_SECRET_STORE = 'file'
 $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 # Do not turn the service-manager capability off: the real Windows path must work.
 New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:APPDATA,$env:BUTLER_DATA | Out-Null
+& "$PSScriptRoot/windows-protocol-snapshot.ps1" -Output "$root/protocol-before.json"
+$protocolBefore = Get-Content "$root/protocol-before.json" -Raw
 "WINDOWS_PREVIEW_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $env:WINDOWS_PREVIEW_TEMP_ROOT = $root
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
@@ -96,27 +101,47 @@ try {
     # Exercise the packed npm entry point as well as the PowerShell one-liner path.
     Push-Location packages/butler-npm
     try {
+        $ErrorActionPreference = 'Continue'
         npm.cmd pack --pack-destination $root | Out-Null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
     } finally { Pop-Location }
     $package = (Get-ChildItem "$root/hexpygames-butler-*.tgz").FullName
+    $ErrorActionPreference = 'Continue'
     tar -xzf $package -C $root
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'npm package extraction failed' }
+    $ErrorActionPreference = 'Continue'
     node "$root/package/bin/butler-install.js" install --no-start
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'npm Windows install failed' }
+    $ErrorActionPreference = 'Continue'
     node "$root/package/bin/butler-install.js" --version
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'npm installed-command forwarding failed' }
+    $ErrorActionPreference = 'Continue'
     & $launcher --version
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw '--version failed' }
-    $status = (& $launcher status --json | ConvertFrom-Json)
+    $ErrorActionPreference = 'Continue'
+    $status = & $launcher status --json
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Native command failed' }
+    $status = $status | ConvertFrom-Json
     if (!$status.ok -or $status.data.services.summary.online -ne 1) { throw 'Status did not report one online service' }
     $record = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     $pidBefore = $record.pid
+    $ErrorActionPreference = 'Continue'
     & $launcher start --json | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Idempotent start failed' }
     $record = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     if ($record.pid -ne $pidBefore) { throw 'Start created a second instance' }
-    $open = (& $launcher open --no-browser --json | ConvertFrom-Json)
+    $ErrorActionPreference = 'Continue'
+    $open = & $launcher open --no-browser --json
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Native command failed' }
+    $open = $open | ConvertFrom-Json
     if (!$open.ok -or $open.data.browserOpened) { throw 'Open failed' }
     try { Invoke-WebRequest "$($record.app_endpoint)/sessions" -UseBasicParsing | Out-Null; throw 'Unauthenticated API allowed' }
     catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) { throw } }
@@ -138,23 +163,39 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-admin.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
     # Windows PowerShell 5.1 waits for descendants of piped native commands.
+    $ErrorActionPreference = 'Continue'
     & $launcher restart
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
     $after = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     if ($after.pid -eq $pidBefore) { throw 'Restart did not replace instance' }
+    $ErrorActionPreference = 'Continue'
     & $launcher stop --json | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Stop failed' }
-    $status = (& $launcher status --json | ConvertFrom-Json)
+    $ErrorActionPreference = 'Continue'
+    $status = & $launcher status --json
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Native command failed' }
+    $status = $status | ConvertFrom-Json
     if (!$status.ok -or $status.data.services.summary.online -ne 0) { throw 'Service remained online' }
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
     "BUTLER_E2E_INSTALLED_ROOT=$env:LOCALAPPDATA/Butler/agent/$current" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     'PASS installed ZIP: version, start, single instance, status, browser UI/assets, cookie auth, private DATA/tokens, restart, stop'
 } finally {
-    if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
+    $stopCode = 0
+    if (Test-Path $launcher) {
+        $ErrorActionPreference = 'Continue'
+        & $launcher stop --json | Out-Null
+        $ErrorActionPreference = 'Stop'
+        $stopCode = $LASTEXITCODE
+    }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
+    & "$PSScriptRoot/windows-protocol-snapshot.ps1" -Output "$root/protocol-after.json"
+    $protocolAfter = Get-Content "$root/protocol-after.json" -Raw
     if ($protocolBefore -cne $protocolAfter) { throw 'Owner protocol registry changed' }
+    if ($stopCode -ne 0) { throw 'Cleanup stop failed' }
 }
-# An absent protocol key returns 1 from reg.exe. Every smoke failure throws;
+# Every smoke failure throws;
 # only a completed smoke returns success to the caller's LASTEXITCODE check.
 $global:LASTEXITCODE = 0

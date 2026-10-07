@@ -223,4 +223,25 @@ def audit(root):
                     if path == workflow:
                         line += source[:offset].count('\n')
                     findings.append(f'{path.relative_to(root)}:{line}: {hazard}')
+    findings += installed_preview_hazards(root)
     return jobs, sorted(set(findings))
+
+
+def installed_preview_hazards(root):
+    """PS 5.1 stderr safety also applies to the hosted installed-preview job."""
+    workflow = root / '.github/workflows/windows-preview-smoke.yml'
+    if not workflow.is_file():
+        return []
+    source = workflow.read_text()
+    match = re.search(r'^  release:\s*\n(?:(?!^  [\w-]+:).)*', source, re.M | re.S)
+    if not match:
+        return []
+    findings = []
+    for path, text in local_sources(root, workflow, match[0], {workflow.resolve()}):
+        if path.suffix not in ('.yml', '.yaml', '.ps1'):
+            continue
+        for line, hazard in native_safety.hazards(text, True):
+            if path == workflow:
+                line += source[:match.start()].count('\n')
+            findings.append(f'{path.relative_to(root)}:{line}: {hazard}')
+    return findings
