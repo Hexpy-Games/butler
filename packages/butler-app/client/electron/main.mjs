@@ -2169,8 +2169,7 @@ async function createWindow() {
       app.quit();
       return;
     }
-    // Retry/update may authorize the final quit without starting normal shutdown.
-    if (!nativeShellPreferences.trayEnabled || isQuitting || finalQuitAllowed) return;
+    if (!nativeShellPreferences.trayEnabled || isQuitting) return;
     event.preventDefault();
     win.hide();
   });

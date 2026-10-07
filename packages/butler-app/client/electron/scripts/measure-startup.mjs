@@ -65,8 +65,8 @@ function observeStartup(child, events, profiles, traces, stop) {
   }
 }
 async function measure(mode, run, env) {
-  const port = await freePort();
   const host = await beforeRun(mode, run);
+  const port = await freePort();
   const requested = Date.now();
   const environment = { ...process.env, ...env, BUTLER_APP_SERVER_PORT: String(port),
     BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
