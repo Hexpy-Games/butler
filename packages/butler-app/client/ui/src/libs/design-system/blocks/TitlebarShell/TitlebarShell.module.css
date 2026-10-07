@@ -136,6 +136,7 @@
     padding-right: max(var(--space-md), var(--safe-area-right));
     padding-left: calc(
       max(var(--space-md), var(--safe-area-left)) +
+        var(--chrome-floating-toggle-left) +
         var(--chrome-floating-toggle-size, var(--control-hit-target))
     );
   }
