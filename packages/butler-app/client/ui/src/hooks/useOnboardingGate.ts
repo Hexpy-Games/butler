@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { loadStartupSettings } from "@/app/startupSettings";
 import { api } from "@/app/api.ts";
 import {
   LEGACY_FIRST_RUN_STORAGE_KEY,
@@ -9,7 +10,7 @@ import {
   type OnboardingGate,
 } from "@/app/onboarding.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { ModelCatalogView, OnboardingSettingsView, SettingsView } from "@/app/types.ts";
+import type { ModelCatalogView, OnboardingSettingsView } from "@/app/types.ts";
 
 /** Retry delay while the agent is still starting. */
 export const ONBOARDING_SETTINGS_RETRY_MS = 2000;
@@ -50,7 +51,7 @@ export function useOnboardingGate(): { gate: OnboardingGate; markComplete: () =>
     const load = async () => {
       try {
         const [settings, catalog] = await Promise.all([
-          api<SettingsView>("/settings"), api<ModelCatalogView>("/model-catalog"),
+          loadStartupSettings(), api<ModelCatalogView>("/model-catalog"),
         ]);
         if (cancelled) return;
         useButlerStore.getState().setSettings(settings);

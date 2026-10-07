@@ -114,6 +114,7 @@ async function launch() {
   assert.equal(await main<string>("process.versions.electron"), "44.5.1");
   await main(`(() => {
     globalThis.outputWindows=[];
+    globalThis.outputBaselineWindowIds=${electronModule}.BrowserWindow.getAllWindows().map(win=>win.id).sort((a,b)=>a-b);
     globalThis.outputMainWindowId=${electronModule}.BrowserWindow.getAllWindows().find(win=>win.webContents.getURL().startsWith('app://butler/')).id;
     ${electronModule}.app.on('browser-window-created',(_event,win)=>win.webContents.once('did-finish-load',()=>{
       if(win.webContents.getURL().includes('/__o/'))outputWindows.push({visible:win.isVisible(),content:win.getContentBounds()});
@@ -169,7 +170,7 @@ async function checkPublished() {
   assert.equal(inspectors.length, 4); assert.ok(inspectors.every(window => !window.visible));
   assert.ok(inspectors.every(window => window.content.width === 1280 && window.content.height === 800));
   measurements.hidden_inspectors = inspectors;
-  assert.equal(await main<number>(`${electronModule}.BrowserWindow.getAllWindows().length`), 1, "hidden inspectors destroyed");
+  assert.equal(await main<boolean>(`JSON.stringify(${electronModule}.BrowserWindow.getAllWindows().map(win=>win.id).sort((a,b)=>a-b))===JSON.stringify(outputBaselineWindowIds)`), true, "all hidden inspectors destroyed; original App/lifecycle windows retained");
   console.log(JSON.stringify({ phase: "checks", ...measurements.main_event_loop as object, diagnostic_bytes: bytes }));
 }
 
@@ -219,7 +220,7 @@ async function idle() {
 }
 async function recovery() {
   const active = await send("Quit");
-  await waitUntil(async () => await main<boolean>(`${electronModule}.BrowserWindow.getAllWindows().some(w=>w.id!==outputMainWindowId&&!w.isVisible())`), "active hidden check");
+  await waitUntil(async () => await main<boolean>(`${electronModule}.BrowserWindow.getAllWindows().some(w=>w.webContents.getURL().includes('/__o/')&&!w.isVisible())`), "active hidden check");
   for (const text of ["Fix follow-up one", "Fix follow-up two"]) await api("/session-queue", { chat_id: sessionId, text, model: "local/stub", access_mode: "full_access", client_message_id: crypto.randomUUID() });
   const queueBefore = await api<{ queued_messages: Array<{ state: string }> }>(`/session-queue?session_id=${sessionId}`);
   const activeBeforeQuit = (await turns()).find(turn => turnId(turn) === active);

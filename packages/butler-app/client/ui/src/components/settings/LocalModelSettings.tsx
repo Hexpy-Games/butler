@@ -73,7 +73,7 @@ export function LocalModelSettings({
     context: manualContext,
   });
 
-  const { discover, register, deleteModel } = useLocalModelOperations({
+  const { discover, register, deleteModel, discoveryError, clearDiscoveryError } = useLocalModelOperations({
     apiKey,
     platform,
     serverUrl,
@@ -118,7 +118,8 @@ export function LocalModelSettings({
         platform={platform}
         setPlatform={setPlatform}
         serverUrl={serverUrl}
-        setServerUrl={setServerUrl}
+        error={discoveryError}
+        setServerUrl={(value) => { clearDiscoveryError(); setServerUrl(value); }}
         advancedOpen={advancedOpen}
         setAdvancedOpen={setAdvancedOpen}
         canDiscover={canDiscover}

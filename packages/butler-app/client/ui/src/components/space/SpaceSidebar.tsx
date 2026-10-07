@@ -17,7 +17,7 @@ import { SpaceRow } from "./SpaceRow";
 import { SpaceDialogs } from "./SpaceDialogs";
 import { SpaceRootDrop } from "./SpaceRootDrop";
 import { SpaceDropScope } from "./SpaceDropScope";
-import { SidebarSettingsItem } from "../layout/SidebarSettingsItem";
+import { SidebarFooter } from "../layout/SidebarFooter";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceWorkStatus } from "./SpaceWorkStatus";
 
@@ -99,7 +99,7 @@ export function SpaceSidebar() {
         ariaLabel={appCopy.space.navigation}
         scrollHeader={<SpaceHeader rows={rows} />}
         stickyHeader={<SpaceBrowseHeader />}
-        footer={<SidebarSettingsItem />}
+        footer={<SidebarFooter />}
       >
         <SpaceDropScope enabled={tab === "all"} ariaLabel={appCopy.space.conversationList}>
           {/* Inserted rows reveal and removed rows fold away; tab switches do not animate. */}

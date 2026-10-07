@@ -3,7 +3,7 @@
 use butler_platform::sqlite;
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 
 use crate::cognition::{CognitionCode, CognitionError, CognitionResult};
 use crate::work_records::WorkRecordReader;
@@ -111,7 +111,7 @@ fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
     Ok(false)
 }
 
-fn open(path: &Path) -> CognitionResult<Connection> {
+fn open(path: &Path) -> CognitionResult<butler_platform::sqlite::Connection> {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| unreadable().with_source(source))
 }

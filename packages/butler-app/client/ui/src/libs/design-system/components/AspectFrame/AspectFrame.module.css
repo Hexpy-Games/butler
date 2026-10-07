@@ -34,3 +34,7 @@
 .frame[data-size="2xl"] {
   width: var(--icon-size-2xl);
 }
+
+.frame[data-size="3xl"] {
+  width: var(--icon-size-3xl);
+}

@@ -41,11 +41,13 @@ export async function underlineFocus(input: Locator) {
     probe.style.color = "var(--focus-ring-color)";
     element.parentElement!.append(probe);
     const focusColor = getComputedStyle(probe).color; probe.remove();
-    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
-    const paint = canvas.getContext("2d")!;
     const rgba = (color: string) => {
-      paint.clearRect(0, 0, 1, 1); paint.fillStyle = color; paint.fillRect(0, 0, 1, 1);
-      return [...paint.getImageData(0, 0, 1, 1).data];
+      const probe = document.createElement("span");
+      probe.style.color = `rgb(from ${color} r g b / alpha)`;
+      element.parentElement!.append(probe);
+      const channels = getComputedStyle(probe).color.match(/[\d.]+/g)!.map(Number);
+      probe.remove();
+      return [...channels.slice(0, 3), (channels[3] ?? 1) * 255];
     };
     const ancestors: Element[] = [];
     for (let parent = element.parentElement; parent; parent = parent.parentElement) ancestors.unshift(parent);

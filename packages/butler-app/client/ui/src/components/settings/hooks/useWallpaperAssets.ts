@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { apiErrorCode } from "@/app/api";
+import { settingsErrorCopy } from "@/app/settingsErrors";
 import { appCopy } from "@/app/copy.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import {
@@ -29,11 +31,23 @@ function notifyProblem(problem: WallpaperAssetProblem, fallback: "uploadFailed" 
 /**
  * The gateway's wallpaper images for a picker: listed once, oldest first;
  * uploads are checked (type, size) before they leave and appended; deletes
- * drop the image. Failures become brief toasts.
+ * drop the image. Upload errors stay under the control; deletion errors use toasts.
  */
-export function useWallpaperAssets() {
+export function useWallpaperAssets(pickerClass?: string) {
+  const [uploadErrorCode, setUploadErrorCode] = useState<string>();
+  const uploadErrorId = useId();
+  const uploadError = uploadErrorCode ? settingsErrorCopy({ code: uploadErrorCode }, appCopy.settings.wallpaper.uploadFailed) : undefined;
   const [assets, setAssets] = useState<WallpaperAsset[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (!pickerClass) return;
+    const button = document.querySelector<HTMLButtonElement>(`[data-test-class~="${pickerClass}"] [data-option="upload"] button`);
+    if (!button) return;
+    button.setAttribute("aria-invalid", String(Boolean(uploadError)));
+    if (uploadError) { button.setAttribute("aria-describedby", uploadErrorId); button.focus(); }
+    else button.removeAttribute("aria-describedby");
+  }, [pickerClass, uploadError, uploadErrorId]);
 
   useEffect(() => {
     let live = true;
@@ -45,11 +59,12 @@ export function useWallpaperAssets() {
     };
   }, []);
 
-  /** The stored asset, or null after a toast. */
+  /** The stored asset, or null with local field feedback. */
   const upload = async (file: File): Promise<WallpaperAsset | null> => {
+    setUploadErrorCode(undefined);
     const problem = wallpaperUploadProblem(file);
     if (problem) {
-      notifyProblem(problem, "uploadFailed");
+      setUploadErrorCode(problem === "too-large" ? "wallpaper_too_large" : "wallpaper_unsupported_type");
       return null;
     }
     setUploading(true);
@@ -58,7 +73,7 @@ export function useWallpaperAssets() {
       setAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
       return asset;
     } catch (error) {
-      notifyProblem(wallpaperAssetProblem(error), "uploadFailed");
+      setUploadErrorCode(apiErrorCode(error) ?? "unknown");
       return null;
     } finally {
       setUploading(false);
@@ -74,5 +89,5 @@ export function useWallpaperAssets() {
     }
   };
 
-  return { assets, uploading, upload, remove };
+  return { assets, uploading, upload, remove, uploadError, uploadErrorId };
 }

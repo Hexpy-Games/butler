@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
@@ -11,6 +12,7 @@ import {
 import { useButlerStore, selectEffectiveRightOpen } from "@/app/store.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
+import { TasksPanel } from "./TasksPanel.tsx";
 import { SummaryPanel } from "./SummaryPanel.tsx";
 import { ContextPanel } from "./ContextPanel.tsx";
 import { ArtifactsPanel } from "./ArtifactsPanel.tsx";
@@ -45,6 +47,7 @@ export function Inspector({ id }: InspectorProps = {}) {
 
   const tabs: Array<[string, string, ReactElement]> = [
     ["summary", appCopy.inspector.tabs.summary, <ListFilter size="md" />],
+    ["tasks", appCopy.inspector.tabs.tasks, <Blocks size="md" />],
     ["context", appCopy.inspector.tabs.context, <Command size="md" />],
     ["artifacts", appCopy.inspector.tabs.artifacts, <FileText size="md" />],
     ["automations", appCopy.inspector.tabs.automations, <Clock3 size="md" />],
@@ -61,33 +64,36 @@ export function Inspector({ id }: InspectorProps = {}) {
         .map(([id, label, icon]) => ({ id, label, icon }))}
       onTabChange={setRightTab}
     >
-      {activeTab === "summary" && (
-        <SummaryPanel
-          developerMode={developerMode}
-          status={status}
-          summary={summary}
-        />
-      )}
-      {activeTab === "context" && (
-        <ContextPanel context={summary?.context_details} />
-      )}
-      {activeTab === "artifacts" && (
-        <ArtifactsPanel artifacts={summary?.artifacts ?? []} />
-      )}
-      {activeTab === "automations" && (
-        <AutomationTargetsPanel
-          automations={summary?.automation_targets ?? []}
-          onOpenAutomation={(automationId) =>
-            setView({ kind: "automation-detail", automationId })
-          }
-        />
-      )}
-      {activeTab === "workers" && (
-        <WorkersPanel
-          workers={summary?.worker_activity ?? []}
-          onWorkerControl={controlWorker}
-        />
-      )}
+      <ErrorBoundary key={activeTab} scope={`inspector-${activeTab}`}>
+        {activeTab === "summary" && (
+          <SummaryPanel
+            developerMode={developerMode}
+            status={status}
+            summary={summary}
+          />
+        )}
+        {activeTab === "tasks" && <TasksPanel />}
+        {activeTab === "context" && (
+          <ContextPanel context={summary?.context_details} />
+        )}
+        {activeTab === "artifacts" && (
+          <ArtifactsPanel artifacts={summary?.artifacts ?? []} />
+        )}
+        {activeTab === "automations" && (
+          <AutomationTargetsPanel
+            automations={summary?.automation_targets ?? []}
+            onOpenAutomation={(automationId) =>
+              setView({ kind: "automation-detail", automationId })
+            }
+          />
+        )}
+        {activeTab === "workers" && (
+          <WorkersPanel
+            workers={summary?.worker_activity ?? []}
+            onWorkerControl={controlWorker}
+          />
+        )}
+      </ErrorBoundary>
     </InspectorShell>
   );
 }

@@ -308,7 +308,7 @@ fn run_connection_lane(
     initialized: oneshot::Sender<StorageResult<()>>,
     metrics: &Arc<metrics::Metrics>,
 ) -> StorageResult<()> {
-    let setup: StorageResult<Connection> = (|| {
+    let setup: StorageResult<sqlite::Connection> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 AppStorageError::new(
@@ -340,6 +340,10 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppSqliteWalSyncFailed, error.to_string())
+            .with_source(error)
+    })?;
     if initialized.send(Ok(())).is_err() {
         return close_connection(connection);
     }
@@ -348,7 +352,7 @@ fn run_connection_lane(
     close_connection(connection)
 }
 
-fn close_connection(connection: Connection) -> StorageResult<()> {
+fn close_connection(connection: sqlite::Connection) -> StorageResult<()> {
     if !connection.is_autocommit() {
         return Err(AppStorageError::new(
             AppStorageCode::AppSqliteTransactionOpenAtClose,

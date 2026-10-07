@@ -7,6 +7,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
 mod access;
+mod composer_decoration;
 mod controls;
 mod default_model;
 mod model;
@@ -307,11 +308,12 @@ impl super::AppApplication {
         let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
             self.project_creation.resolve_workspace_selection(token)
         })?;
-        if let Some(asset) = wallpaper::patched_image_asset(&prepared.patch)
-            && !self.wallpaper_asset_exists(asset.to_owned()).await?
+        if prepared.workspace_root.is_none()
+            && update::unchanged_composer_preferences(&prepared.patch, &current)
         {
-            return Err(wallpaper::unknown_asset());
+            return Ok((wallpaper::source(&current), current));
         }
+        self.validate_wallpaper_patch(&prepared.patch).await?;
         self.dependencies
             .settings_mutations
             .apply(prepared.patch.clone(), prepared.projection)
@@ -363,5 +365,17 @@ impl super::AppApplication {
             .map_err(super::app_error)?;
         self.project_creation.set_workspace_root(workspace_root);
         Ok((previous, projection))
+    }
+
+    async fn validate_wallpaper_patch(
+        &self,
+        patch: &Value,
+    ) -> Result<(), crate::gateway::GatewayApplicationError> {
+        if let Some(asset) = wallpaper::patched_image_asset(patch)
+            && !self.wallpaper_asset_exists(asset.to_owned()).await?
+        {
+            return Err(wallpaper::unknown_asset());
+        }
+        Ok(())
     }
 }

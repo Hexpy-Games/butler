@@ -79,11 +79,16 @@
 /* Phones: the palette is a top sheet (Dialog); results fill more of it and
    rows meet the touch target. */
 @media (width <= 640px) {
-  .palette .results {
+  .palette
+    .results:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     max-height: calc(var(--adaptive-viewport-block-size) * 0.6);
   }
 
-  .results [role="option"] {
+  .results
+    [role="option"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     min-height: var(--touch-target);
   }
 }

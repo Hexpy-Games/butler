@@ -1,3 +1,4 @@
+import { StartupPreview } from "./StartupPreview";
 import type { ReactNode } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { AdaptiveBreakpoints, DropZoneDiagram, GlassOverContent, KoreanWrapping, SettingsRamp } from "./demos";
@@ -23,6 +24,12 @@ export interface PatternDefinition {
 }
 
 export const PATTERNS: PatternDefinition[] = [
+  {
+    id: "startup", title: "Desktop startup", summary: "Real stages, data-paint handoff and recoverable failure.",
+    rules: ["The native window follows the OS theme.", "Use the toolbar to compare light/dark and reduced motion.", "Retry and log export here are preview actions."],
+    tokens: ["--surface-base", "--font-body"], live: [],
+    demo: (locale) => <StartupPreview locale={locale.startsWith("ko") ? "ko" : "en"} />,
+  },
   {
     id: "tinted-glass",
     title: "Tinted glass",

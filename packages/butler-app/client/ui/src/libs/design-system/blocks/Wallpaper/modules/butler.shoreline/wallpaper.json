@@ -79,6 +79,19 @@
       "step": 0.01
     },
     {
+      "key": "dayClouds",
+      "type": "number",
+      "label": {
+        "en": "Cloud shadows by day",
+        "ko": "낮 구름 그림자"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "hidden": true
+    },
+    {
       "key": "realtime",
       "type": "boolean",
       "label": {

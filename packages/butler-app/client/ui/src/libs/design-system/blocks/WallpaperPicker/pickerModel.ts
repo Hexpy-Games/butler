@@ -32,12 +32,15 @@ export function wallpaperPickerKey(value: WallpaperPickerValue): string {
 /** A living photo: a module that needs an image and brings its own (`image: required` + `defaultImage`), made for that photo. */
 const livingPhoto = (module: WallpaperModule) => module.manifest.image === "required" && module.defaultImage !== undefined;
 
+/** Decorations (`decoration: true`) belong to a component surface, never the app wallpaper: pickers leave them out. */
+const pickable = (module: WallpaperModule) => module.manifest.decoration !== true;
+
 /**
  * Registered modules that take an image (`image: optional | required`): the
  * image filters. Living photos are left out; they only draw their own photo.
  */
 export function wallpaperImageFilters(registry: WallpaperRegistry): WallpaperModule[] {
-  return registry.list().filter((module) => module.manifest.image !== "none" && !livingPhoto(module));
+  return registry.list().filter((module) => pickable(module) && module.manifest.image !== "none" && !livingPhoto(module));
 }
 
 interface OptionsInput {
@@ -49,7 +52,7 @@ interface OptionsInput {
 }
 
 /** Modules that can be a live source: they need no image, or bring a default one. */
-const drawsAlone = (module: WallpaperModule) => module.manifest.image !== "required" || module.defaultImage !== undefined;
+const drawsAlone = (module: WallpaperModule) => pickable(module) && (module.manifest.image !== "required" || module.defaultImage !== undefined);
 const liveOption = (module: WallpaperModule, mine: boolean): WallpaperPickerOption => ({ key: `live:${module.manifest.id}`, kind: "live", module, mine });
 
 /** Registered modules first, then the user's in their order: usable ones live, failing ones unavailable. */

@@ -71,9 +71,13 @@ export function rendererMimeType(filePath) {
   return mimeTypes.get(extname(filePath).toLowerCase()) ?? "application/octet-stream";
 }
 
-export function createAppRendererProtocolHandler({ distRoot, noticesFile = null }) {
+export function createAppRendererProtocolHandler({ distRoot, noticesFile = null, fetchFavicon = null }) {
   const root = resolve(distRoot);
   return async function handleAppRendererRequest(request) {
+    const url = appRendererUrl(request.url);
+    if (url?.pathname === "/favicons" && request.method === "GET" && fetchFavicon) {
+      return fetchFavicon(`${url.pathname}${url.search}`);
+    }
     const target = resolveRendererAsset(root, request.url, request.method);
     if (!target.ok) return new Response(null, { status: target.status });
     const pathname = new URL(request.url).pathname;

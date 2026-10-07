@@ -1,3 +1,7 @@
+import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
+import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
+import { createUiCrashStore } from "./ui-crash-store.mjs";
 import {
   app,
   BrowserWindow,
@@ -17,6 +21,8 @@ import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
+import { createQuitFeedback } from "./quit-feedback.mjs";
+import { spawnTracedAgent } from "./quit-agent-trace.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
@@ -117,7 +123,6 @@ import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from 
 import {
   APP_RENDERER_ORIGIN,
   APP_RENDERER_SCHEME,
-  APP_RENDERER_SCHEME_PRIVILEGES,
   createAppRendererProtocolHandler,
   findRendererDistRoot,
   isAppRendererDocumentUrl,
@@ -136,6 +141,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
+const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
@@ -223,8 +229,7 @@ let rendererUrl = explicitUiUrl
   : defaultRendererUrl();
 let rendererOrigin = rendererOriginForUrl(rendererUrl);
 let appRendererProtocolReady = null;
-// Must run before the app is ready.
-protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
+// The lightweight bootstrap registers the scheme before app readiness.
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -268,7 +273,7 @@ let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
 let foregroundQuitSnapshot = null;
-let preconfirmedE2eQuit = false;
+let quitFeedback = null;
 let legacyMigrationPromise = null;
 let suppressInitialWindowForLogin = false;
 const foregroundRecoveryBudget = createRecoveryBudget();
@@ -299,7 +304,8 @@ let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
-  spawnProcess: spawn,
+  spawnProcess: (command, args, options) => spawnTracedAgent(command, args, options,
+    (phase, edge) => quitFeedback?.phase(phase, edge)),
   healthCheck: healthOk,
   readinessCheck: gatewayReady,
   isPortAvailable,
@@ -574,6 +580,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
+  if (startupPending()) { failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -1066,7 +1073,7 @@ function resolveStaticRendererDist() {
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
-    process.platform === "win32" && process.resourcesPath
+    process.resourcesPath
       ? join(process.resourcesPath, "bundled-agent", "resources", "app-client", "dist")
       : null,
     process.resourcesPath
@@ -1094,6 +1101,7 @@ function prepareAppRendererProtocol() {
       APP_RENDERER_SCHEME,
       createAppRendererProtocolHandler({
         distRoot: staticRendererDistRoot,
+        fetchFavicon: (path) => appServerFetch(path),
         noticesFile: app.isPackaged ? join(process.resourcesPath, "bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz") : null,
       }),
     );
@@ -1766,8 +1774,10 @@ function scheduleTrayMenuRefresh() {
 }
 
 async function showMainWindow() {
+  if (isQuitting) return mainWindow;
   const win =
     mainWindow && !mainWindow.isDestroyed() ? mainWindow : await createWindow();
+  if (startupPending()) return win;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -2027,6 +2037,7 @@ async function setDeveloperMode(enabled) {
 
 function applyDeveloperModeToWindows(enabled = developerModeEnabled()) {
   for (const win of BrowserWindow.getAllWindows()) {
+    if (isStartupWindow(win) || isLifecycleWindow(win)) continue;
     if (enabled) {
       win.webContents.openDevTools({ mode: "detach" });
     } else if (win.webContents.isDevToolsOpened()) {
@@ -2102,7 +2113,7 @@ async function createWindow() {
     await ensureServer();
   }
   if (!legacyDataBlocked) {
-    await loadInitialNativeShellPreferences();
+    void loadInitialNativeShellPreferences().catch(() => undefined);
     browserHost?.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
@@ -2133,7 +2144,8 @@ async function createWindow() {
     roundedCorners: true,
     hasShadow: true,
     autoHideMenuBar: true,
-    backgroundColor: usesTransparentWindow ? macTransparentBackground : "#f6f6f4",
+    backgroundColor: usesTransparentWindow ? macTransparentBackground
+      : nativeTheme.shouldUseDarkColors ? "#1f2023" : "#f8f9fa",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -2143,6 +2155,7 @@ async function createWindow() {
     },
   });
   mainWindow = win;
+  const firstDataPaint = waitForStartupRenderer(win);
   if (browserEnabled) {
     userBrowser ??= installUserBrowser(app, () => mainWindow);
     win.on("hide", () => userBrowser.syncAll());
@@ -2155,6 +2168,11 @@ async function createWindow() {
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
+    if (isWindows && !finalQuitAllowed) {
+      event.preventDefault();
+      app.quit();
+      return;
+    }
     if (!nativeShellPreferences.trayEnabled || isQuitting) return;
     event.preventDefault();
     win.hide();
@@ -2189,17 +2207,21 @@ async function createWindow() {
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
+  startupTiming("renderer_loaded");
+  startupStage("data");
   if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
     const status = await win.webContents.executeJavaScript('fetch("/sessions").then(response => response.status)');
     if (status !== 200) throw new Error("Test renderer is not authenticated");
     console.log("Test renderer connected; authenticated sessions=200");
   }
   if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
+    startupStage("upgrade");
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {
       scheduleTrayMenuRefresh();
       applyDeveloperModeToWindows();
-      if (!suppressInitialWindowForLogin) win.show();
+      await firstDataPaint;
+      completeStartup(win, !suppressInitialWindowForLogin && !isQuitting);
       suppressInitialWindowForLogin = false;
       return win;
     }
@@ -2207,8 +2229,11 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
+  startupStage("data");
+  await firstDataPaint;
+  if (!completeStartup(win, !suppressInitialWindowForLogin)) return win;
   recordAppStartupProgress("window_ready", { windowReady: true });
-  if (!suppressInitialWindowForLogin) win.show();
+  if (!suppressInitialWindowForLogin && !isQuitting) win.show();
   suppressInitialWindowForLogin = false;
   return win;
 }
@@ -2286,8 +2311,7 @@ ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
   if (action === "restart") {
     // The preload endpoint is internal state, not an external-server override
     // for the next App. Keep only an override supplied at the original launch.
-    if (explicitServerUrl) process.env.BUTLER_APP_SERVER_URL = explicitServerUrl;
-    else delete process.env.BUTLER_APP_SERVER_URL;
+    restoreLaunchServerEnvironment(explicitServerUrl);
     app.relaunch();
     finalQuitAllowed = true;
     app.quit();
@@ -2346,9 +2370,15 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
   firstRunSetupBridge.cancel(),
 );
 
-ipcMain.handle("butler:first-run-setup-diagnostics", () =>
-  firstRunSetupBridge.diagnostics(),
-);
+ipcMain.handle("butler:ui-crash", (event, input) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error("invalid_crash_sender");
+  return uiCrashStore.append(input);
+});
+ipcMain.handle("butler:ui-crash-log", () => uiCrashStore.read());
+
+ipcMain.handle("butler:first-run-setup-diagnostics", async () => ({
+  ...firstRunSetupBridge.diagnostics(), ui_crashes: await uiCrashStore.read(),
+}));
 
 ipcMain.handle("butler:agent-service-status", () =>
   agentServiceControl.getAgentServiceStatus(),
@@ -2382,13 +2412,11 @@ ipcMain.handle("butler:agent-runtime-update-rollback", (_event, input = {}) =>
   agentServiceControl.rollbackAgentRuntimeUpdate(input ?? {}),
 );
 
-ipcMain.handle("butler:agent-service-diagnostics", () =>
-  agentServiceControl.readAgentServiceDiagnostics(),
-);
+ipcMain.handle("butler:agent-service-diagnostics", async () => ({
+  ...await agentServiceControl.readAgentServiceDiagnostics(), ui_crashes: await uiCrashStore.read(),
+}));
 
-ipcMain.handle("butler:quit-app", (_event, input = {}) => {
-  preconfirmedE2eQuit = input?.confirmed === true &&
-    process.env.BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT === "1";
+ipcMain.handle("butler:quit-app", () => {
   app.quit();
   return { quitting: true };
 });
@@ -2400,6 +2428,11 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
     onChange,
   }),
   stopForUpdate: async () => {
+    const snapshot = await (await appServerFetch("/updates")).json();
+    if (snapshot.progress?.stage === "ready") {
+      await reportAppUpdateStage("applying");
+      await reportAppUpdateStage("restarting");
+    }
     const result = await stopServerProcess({ reason: "app_update" });
     if (!result.stopped || (isMac && !result.checkpointed)) throw new Error("update_checkpoint_failed");
     isQuitting = true;
@@ -2407,11 +2440,20 @@ const appUpdateCoordinator = createAppUpdateCoordinator({
     return { update_ready: true };
   },
   onState: (state) => {
+    if (state.status === "failed") void reportAppUpdateStage("failed").catch(() => {});
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("butler:app-update-state", state);
       if (state.status === "choice_required") mainWindow.show();
     }
   },
+});
+
+ipcMain.handle("butler:update-progress", (event, value) => {
+  if (event.sender !== mainWindow?.webContents) return;
+  if (value !== null && value !== "indeterminate" &&
+      (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)) return;
+  if (!isMac && !isWindows) return;
+  mainWindow?.setProgressBar(value === null ? -1 : value === "indeterminate" ? (isMac ? -1 : 2) : value);
 });
 
 ipcMain.handle("butler:app-update-state", () => appUpdateCoordinator.state());
@@ -2511,6 +2553,7 @@ ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
   updateTrayIcon();
   if (isMac) {
     for (const win of BrowserWindow.getAllWindows()) {
+      if (isLifecycleWindow(win)) continue;
       win.setBackgroundColor(macTransparentBackground);
       win.setVibrancy(macVibrancy);
     }
@@ -2612,7 +2655,7 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const update = await appUpdateCoordinator.request(async () => {
     const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
       installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
-      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
+      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1), onStage: reportAppUpdateStage });
     return {
       cancel: helper.cancel,
       activate: () => {
@@ -2624,6 +2667,14 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   });
   return { opened: update.update_started, update };
 });
+
+async function reportAppUpdateStage(stage) {
+  const response = await appServerFetch("/updates/progress", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ stage }),
+  });
+  if (!response.ok) throw new Error("Update progress could not be delivered.");
+}
 
 function safeUpdateArtifactPath(value) {
   const requestedPath = typeof value === "string" ? value.trim() : "";
@@ -2677,6 +2728,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
+      configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -2693,7 +2745,7 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
-      await installDevtools();
+      void installDevtools().catch(() => undefined);
       await createWindow();
       flushPendingNativeNavigation();
     })
@@ -2709,6 +2761,8 @@ app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
+    mainWindow?.setProgressBar(-1);
+    quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
       tray = null;
@@ -2718,52 +2772,29 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (isQuitting) return;
   isQuitting = true;
+  // Visible feedback precedes any I/O. The Agent owns shutdown interruption
+  // and FIFO recovery; UI cancellation would pause the queue as a user cancel.
+  let feedbackReady;
+  if (app.isReady() && !isMenuBarHelperProcess) {
+    quitFeedback ??= createQuitFeedback(BrowserWindow, desktopLanguage, () => bundledAgentSupervisor.diagnostics());
+    feedbackReady = quitFeedback.begin(mainWindow);
+  }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  void confirmForegroundQuitIfNeeded().then((confirmed) => {
-    if (!confirmed) {
-      isQuitting = false;
-      foregroundQuitSnapshot = null;
-      return;
-    }
+  void Promise.resolve(feedbackReady).then(() => {
     browserHost?.stop();
-    return stopServerProcess({
-      reason: "app_quit",
-    });
-  }).then(async (stopped) => {
-    if (stopped === undefined && !isQuitting) return stopped;
-    return stopped;
-  }).then((stopped) => {
-    if (stopped === undefined && !isQuitting) return;
+    return stopServerProcess({ reason: "app_quit" });
+  }).then(() => {
     finalQuitAllowed = true;
     // Quit on a later tick: Electron drops an app.quit() made in the same
     // tick as the before-quit it cancelled (the stopped-Agent path is sync).
     setImmediate(() => app.quit());
   }).catch((error) => {
-    isQuitting = false;
+    // Keep the owner alive on failure. Exiting would close the foreground
+    // containment while durable cleanup might still be running.
+    quitFeedback?.failed();
     console.error(error);
   });
 });
-
-async function confirmForegroundQuitIfNeeded() {
-  if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
-  // After an honored `butler stop` no Agent runs, so no work can be lost and
-  // the unreadable active-work state must not ask for confirmation.
-  if (bundledAgentSupervisor.agentState().state === "stopped") {
-    preconfirmedE2eQuit = false;
-    foregroundQuitSnapshot = null;
-    return true;
-  }
-  const snapshot = await readForegroundActiveWorkSnapshot();
-  const preconfirmed = preconfirmedE2eQuit;
-  preconfirmedE2eQuit = false;
-  const confirmed = preconfirmed || await confirmAppForegroundQuit({
-    snapshot,
-    language: await readDesktopLanguage(),
-    showMessageBox: (options) => dialog.showMessageBox(options),
-  });
-  foregroundQuitSnapshot = confirmed ? snapshot : null;
-  return confirmed;
-}
 
 async function readForegroundActiveWorkSnapshot() {
   if (bundledAgentSupervisor.agentState().state === "stopped") {
@@ -2790,9 +2821,9 @@ async function stopServerProcess({ reason = "app_shutdown" } = {}) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
-  // Shutdown closes queue admission before interrupting turns. Cancellation
-  // APIs instead discard work and pause follow-ups; never use them for restart.
-  const stopResult = await bundledAgentSupervisor.stop({ wait: true });
+  const stopResult = await bundledAgentSupervisor.stop({ wait: true, preserveWork: true });
+  if (stopResult.stopped !== true) throw new Error("foreground_stop_incomplete");
+  quitFeedback?.phase("port_release");
   const checkpointed = stopResult.stopped && stopResult.containment_released &&
     bundledAgentSupervisor.diagnostics().last_exit?.code === 0;
   if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
@@ -2889,18 +2920,22 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
-  app.quit();
+  if (!failStartup()) app.quit();
 }
 
 function recordAppStartupProgress(stage, {
   windowReady = false,
   trayReady = Boolean(tray),
 } = {}) {
+  startupTiming(stage);
+  if (stage === "agent_starting") startupStage("service");
+  if (stage === "agent_ready") startupStage("screen");
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     writeAppForegroundStartupProgress(butlerDataRoot, {
       stage,
+      timings: startupTimings(),
       platform: process.platform,
       architecture: process.arch,
       lifecycleMode: appLifecycleMode,

@@ -231,33 +231,7 @@ pub(super) fn read(
         "multiline_send_behavior".into(),
         json!(multiline(stored.get("multiline_send_behavior"))),
     );
-    output.insert(
-        "appearance_theme".into(),
-        json!(enum_value(
-            stored.get("appearance_theme"),
-            &["system", "light", "dark"],
-            "system"
-        )),
-    );
-    main_screen(&stored, &mut output);
-    output.insert(
-        "translucent_sidebar".into(),
-        json!(
-            stored
-                .get("translucent_sidebar")
-                .and_then(Value::as_bool)
-                .unwrap_or(true)
-        ),
-    );
-    output.insert(
-        "smart_grouping_enabled".into(),
-        json!(
-            stored
-                .get("smart_grouping_enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(true)
-        ),
-    );
+    appearance(&stored, &mut output);
     output.insert(
         "diagnostics_enabled".into(),
         json!(
@@ -289,6 +263,54 @@ pub(super) fn read(
 }
 /// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
 /// they describe until a PATCH stores one.
+fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
+    output.insert(
+        "appearance_theme".into(),
+        json!(enum_value(
+            stored.get("appearance_theme"),
+            &["system", "light", "dark"],
+            "system"
+        )),
+    );
+    output.insert(
+        "reduce_motion".into(),
+        json!(
+            stored
+                .get("reduce_motion")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ),
+    );
+    output.insert(
+        "collapse_message_box".into(),
+        json!(
+            stored
+                .get("collapse_message_box")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        ),
+    );
+    main_screen(stored, output);
+    output.insert(
+        "translucent_sidebar".into(),
+        json!(
+            stored
+                .get("translucent_sidebar")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        ),
+    );
+    output.insert(
+        "smart_grouping_enabled".into(),
+        json!(
+            stored
+                .get("smart_grouping_enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        ),
+    );
+}
+
 fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
     let colors = main_colors(stored.get("main_screen_theme_custom_colors"));
     output.insert(
@@ -302,6 +324,10 @@ fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
     output.insert("main_screen_theme_custom_colors".into(), json!(colors));
     let setting = wallpaper::view(stored.get(wallpaper::KEY), legacy_source(stored));
     output.insert(wallpaper::KEY.into(), setting);
+    output.insert(
+        super::composer_decoration::KEY.into(),
+        super::composer_decoration::view(stored.get(super::composer_decoration::KEY)),
+    );
 }
 
 /// The wallpaper source the legacy main-screen keys of `settings` describe.

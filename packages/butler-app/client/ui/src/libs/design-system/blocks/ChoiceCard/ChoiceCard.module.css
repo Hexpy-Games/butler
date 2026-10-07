@@ -222,16 +222,19 @@
 
 @media (width <= 640px) {
   @container choice-tile (width < 185px) {
-    .tile {
+    .tile:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .tileTitle {
+    .tileTitle:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
       grid-row: 2;
       grid-column: 1;
     }
 
-    .tileDescription {
+    .tileDescription:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
       grid-row: 3;
     }
   }

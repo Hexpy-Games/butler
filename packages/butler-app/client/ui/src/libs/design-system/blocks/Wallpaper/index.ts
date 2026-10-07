@@ -53,12 +53,14 @@ export {
   resolveWallpaperScene,
   wallpaperModuleRevision,
   wallpaperSourceKey,
+  wallpaperSourceTransparent,
   type WallpaperFilterResult,
   type WallpaperRegistry,
   type WallpaperScene,
 } from "./registry";
 export {
   BLOOM_WALLPAPER,
+  CHERRY_BLOSSOM_WALLPAPER,
   DIATOM_WALLPAPER,
   DUSK_WALLPAPER,
   GRAIN_WALLPAPER,

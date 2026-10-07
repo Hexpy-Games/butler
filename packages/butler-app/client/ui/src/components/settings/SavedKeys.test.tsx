@@ -9,7 +9,7 @@ import { getAppCopy, setAppCopyLanguage } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ModelCatalogView, SavedCredentialView } from "@/app/types.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { ModelsSettings } from "./ModelsSettings";
+import { SecuritySettings } from "./SecuritySettings";
 import { credentialDeleteRule, credentialStorageLabel } from "./savedKeysUtils";
 
 const initialButlerState = useButlerStore.getState();
@@ -90,7 +90,7 @@ async function render(bridgeOverrides: Bridge, run: (harness: Harness) => Promis
   const container = dom.window.document.getElementById("root")!;
   const root = createRoot(container);
   try {
-    await act(async () => root.render(<ModelsSettings />));
+    await act(async () => root.render(<SecuritySettings />));
     await settle();
     await run({ window: dom.window, container, calls });
   } finally {
@@ -136,7 +136,7 @@ test("one row per saved key: provider logo, masked key, models using it and wher
   await render({}, async ({ container }) => {
     // The section sits under Backup models on the Models page.
     const ids = Array.from(container.querySelectorAll("[data-settings-section-id]")).map((item) => item.getAttribute("data-settings-section-id"));
-    expect(ids.slice(0, 4)).toEqual(["butler-model", "backup-models", "saved-keys", "permissions"]);
+    expect(ids.slice(0, 4)).toEqual(["remote-access", "permissions", "grants", "saved-keys"]);
     const section = container.querySelector('[data-settings-section-id="saved-keys"]')!;
     expect(section.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe("API keys");
     const [openai, anthropic, google] = rows(container);

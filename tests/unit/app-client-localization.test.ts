@@ -69,6 +69,7 @@ test("English count copy uses singular and plural forms", () => {
   expect(templates.pendingApprovals(3)).toBe("3 pending approvals");
 });
 
+// test-category: format-pin
 test("design-system and dashboard labels are localized", () => {
   const en = getAppCopy("en-US");
   const ko = getAppCopy("ko-KR");
@@ -84,8 +85,8 @@ test("design-system and dashboard labels are localized", () => {
     expect(value.length).toBeGreaterThan(0);
     expect(value).not.toBe(pick(en)[index]);
   }
-  // Work and Task are product terms that stay in English in Korean copy.
-  expect([ko.interfaceStatus.work, ko.interfaceStatus.task]).toEqual(["Work", "Task"]);
+  // Task badges use the Korean product label.
+  expect([ko.interfaceStatus.work, ko.interfaceStatus.task]).toEqual(["Work", "작업"]);
 });
 
 test("body font stack prefers Hangul faces before the generic family", () => {

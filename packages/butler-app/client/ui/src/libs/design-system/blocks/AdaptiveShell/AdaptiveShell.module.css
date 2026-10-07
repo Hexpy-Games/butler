@@ -363,40 +363,46 @@
 }
 
 @media (width <= 640px) {
-  .root[data-panel-layout="drawer"][data-compact-sidebar-full-width="true"] {
+  .root[data-panel-layout="drawer"][data-compact-sidebar-full-width="true"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     --adaptive-drawer-width: 100vw;
   }
 
-  .root {
+  .root:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     --app-window-radius: 0px;
 
     border-radius: 0;
   }
 
-  .workspace {
+  .workspace:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     border: 0;
     border-radius: 0;
   }
 
-  .sidebar {
+  .sidebar:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     width: var(--adaptive-drawer-width);
   }
 
   /* Match the drawer rule's specificity so phone widths keep the full-width
      inspector (and its titlebar) instead of the tablet 92vw drawer width. */
-  .inspector,
-  .root[data-panel-layout="drawer"] .inspector {
+  .inspector:not([data-viewport="desktop"], [data-viewport="desktop"] *),
+  .root[data-panel-layout="drawer"]
+    .inspector:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     width: var(--adaptive-inspector-width);
   }
 
-  .root .inspector > * {
+  .root
+    .inspector
+    > *:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     inset: var(--titlebar-safe-area-top) 0 0 auto;
     height: calc(
       var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top)
     );
   }
 
-  .panelTitlebar {
+  .panelTitlebar:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
     position: fixed;
     top: 0;
     right: 0;
@@ -411,7 +417,10 @@
     visibility: hidden;
   }
 
-  .panelTitlebar[data-open="true"] {
+  .panelTitlebar[data-open="true"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
     pointer-events: auto;
     visibility: visible;
   }

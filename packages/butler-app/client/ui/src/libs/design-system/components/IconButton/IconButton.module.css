@@ -44,7 +44,21 @@
   background: transparent;
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .moduleScope:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    width: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+    height: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+    min-height: var(--control-hit-target);
+  }
+}
+
+@media (pointer: coarse) {
   .moduleScope {
     width: max(
       var(--icon-button-size, var(--control-height-md)),
@@ -69,7 +83,19 @@
     calc(-1 * var(--icon-button-optical-offset));
 }
 
-@media (width <= 640px), (pointer: coarse) {
+@media (width <= 640px) {
+  .moduleScope[data-optical-align="top-end"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    --icon-button-optical-hit: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+  }
+}
+
+@media (pointer: coarse) {
   .moduleScope[data-optical-align="top-end"] {
     --icon-button-optical-hit: max(
       var(--icon-button-size, var(--control-height-md)),

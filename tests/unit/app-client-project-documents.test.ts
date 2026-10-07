@@ -65,6 +65,7 @@ test("project dashboard maps specified work to the planned lane", () => {
   ).toBe("planned");
 });
 
+// test-category: pure-logic
 test("project dashboard keeps top-level plans separate from work records", () => {
   expect(planBoardTabs().map((tab) => tab.id)).toEqual([
     "plan",
@@ -75,6 +76,6 @@ test("project dashboard keeps top-level plans separate from work records", () =>
   expect(planBoardType(projectDocument("work"))).toBe("work");
   expect(planBoardType(projectDocument("task"))).toBe("task");
   expect(projectDocumentBadgeLabel(projectDocument("plan"))).toBe("Plan");
-  expect(projectDocumentBadgeLabel(projectDocument("work"))).toBe("Work");
+  expect(projectDocumentBadgeLabel(projectDocument("work"))).toBe("Document");
   expect(projectDocumentBadgeLabel(projectDocument("task"))).toBe("Task");
 });

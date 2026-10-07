@@ -74,6 +74,7 @@ test("pauses hold a still frame", () => {
   expect(wallpaperFrameMode({ ...RUNNING, motion: "paused" })).toBe("still");
   expect(wallpaperFrameMode({ ...RUNNING, reducedMotion: true })).toBe("still");
   expect(wallpaperFrameMode({ ...RUNNING, degraded: true })).toBe("still");
+  expect(wallpaperFrameMode({ ...RUNNING, softwareRendering: true })).toBe("still");
   expect(wallpaperFrameMode({ ...RUNNING, pauseOnBattery: true, onBattery: true })).toBe("still");
   // Battery alone, or the option alone, keeps animating.
   expect(wallpaperFrameMode({ ...RUNNING, onBattery: true })).toBe("animate");

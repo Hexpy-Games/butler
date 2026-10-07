@@ -1,4 +1,6 @@
 use super::*;
+mod sessions;
+use sessions::TestSessions;
 
 struct TestMonitoring;
 
@@ -407,6 +409,12 @@ impl AppAuthorityHandoff for TestAuthority {
     fn close_self_session(&self, _: String, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    fn list_all_permissions(&self) -> ApplicationFuture<Vec<crate::gateway::AppGrantView>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn revoke_permissions(&self, _: Vec<crate::gateway::AppGrantRef>) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn list(&self, _: String) -> ApplicationFuture<AppAuthorityPage> {
         Box::pin(async {
             Ok(AppAuthorityPage {
@@ -436,65 +444,5 @@ impl AppAuthorityHandoff for TestAuthority {
     }
     fn settle_question_followup(&self, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
-    }
-}
-
-struct TestSessions;
-
-impl AppSessionWorkspaceProvisioner for TestSessions {
-    fn provision(
-        &self,
-        _: AppSessionWorkspaceSnapshot,
-        _: CancellationToken,
-    ) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-
-    fn branch_info(
-        &self,
-        _: AppSessionBranchQuery,
-        _: CancellationToken,
-    ) -> ApplicationFuture<Value> {
-        Box::pin(async {
-            Ok(json!({
-                "available":false,"workspace_mode":"none","safe_status":"unavailable"
-            }))
-        })
-    }
-}
-
-impl AppSessionWorkProgress for TestSessions {
-    fn read(&self, _: String) -> ApplicationFuture<Option<AppWorkProgress>> {
-        Box::pin(async { Ok(None) })
-    }
-}
-
-impl AppWorkStreamReader for TestSessions {
-    fn list_active(&self, _: AppWorkStreamQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Ok(json!([])) })
-    }
-
-    fn reconcile_turn(&self, _: AppWorkStreamTurnOutcome) -> ApplicationFuture<()> {
-        Box::pin(async { Ok(()) })
-    }
-}
-
-impl AppSubsessionPort for TestSessions {
-    fn projection(&self, _: String, _: Option<AppSessionViewPage>) -> ApplicationFuture<Value> {
-        Box::pin(async { Ok(json!({"steward_children":[],"workers":[]})) })
-    }
-    fn cancel(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn resume(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
-    fn read_operation_output_chunks(
-        &self,
-        _: String,
-        _: String,
-        _: String,
-    ) -> ApplicationFuture<Vec<crate::gateway::OperationOutputChunk>> {
-        Box::pin(async { Ok(Vec::new()) })
     }
 }

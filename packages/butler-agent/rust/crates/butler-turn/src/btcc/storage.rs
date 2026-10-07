@@ -31,6 +31,11 @@ mod stop;
 mod subsession_result;
 mod subsessions;
 pub(crate) use subsessions::ChildCompletion;
+mod task_graphs;
+pub use task_graphs::{
+    ChildRecord as TaskGraphChildRecord, GraphRecords as TaskGraphRecords,
+    GraphScope as TaskGraphScope, PlanRecord as TaskGraphPlanRecord,
+};
 mod tool_journal;
 mod transitions;
 mod wake;
@@ -294,7 +299,7 @@ fn run_connection_lane(
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<(String, u64)>>,
 ) -> StorageResult<()> {
-    let setup: StorageResult<(Connection, RuntimeOwner)> = (|| {
+    let setup: StorageResult<(sqlite::Connection, RuntimeOwner)> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
                 StorageError::new(StorageCode::SqliteParentCreateFailed, error.to_string())
@@ -316,6 +321,9 @@ fn run_connection_lane(
             return Err(error);
         }
     };
+    sqlite::sync_wal_index(&connection).map_err(|error| {
+        StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string()).with_source(error)
+    })?;
     if initialized
         .send(Ok((owner.owner_id().to_owned(), owner.generation())))
         .is_err()

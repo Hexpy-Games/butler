@@ -33,7 +33,11 @@ impl AppUpdateService {
             self.refresh_in_background();
         }
         match saved {
-            Some(view) => Ok(reconciled(view, version)),
+            Some(view) => {
+                let mut view = reconciled(view, version);
+                view["progress"] = self.progress.snapshot().await;
+                Ok(view)
+            }
             None => {
                 let request = UpdateRequest::default();
                 let status = self
@@ -44,7 +48,9 @@ impl AppUpdateService {
                         None,
                     )
                     .await?;
-                Ok(self.view(&request, &status))
+                let mut view = self.view(&request, &status);
+                view["progress"] = self.progress.snapshot().await;
+                Ok(view)
             }
         }
     }
@@ -54,7 +60,40 @@ impl AppUpdateService {
     /// (`check_state: "unavailable"`), not a failure.
     pub async fn refresh(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
-        self.refresh_now(self.resolved_request(request).await).await
+        let prior = self.progress.snapshot().await;
+        if matches!(
+            prior["stage"].as_str(),
+            Some("ready" | "applying" | "restarting")
+        ) {
+            return self.current().await;
+        }
+        self.progress.report("checking", None, None, None).await?;
+        let result = self.refresh_now(self.resolved_request(request).await).await;
+        let code = match &result {
+            Err(error) => Some(error.code().to_owned()),
+            Ok(view) => view["components"][0]["check_error"]
+                .as_str()
+                .map(str::to_owned),
+        };
+        self.progress
+            .report(
+                if code.is_some() {
+                    "failed"
+                } else {
+                    "completed"
+                },
+                None,
+                None,
+                code.as_deref(),
+            )
+            .await?;
+        match result {
+            Ok(mut view) => {
+                view["progress"] = self.progress.snapshot().await;
+                Ok(view)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub(super) async fn resolved_request(&self, mut request: UpdateRequest) -> UpdateRequest {
