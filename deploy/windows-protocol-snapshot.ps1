@@ -1,11 +1,7 @@
 param([Parameter(Mandatory)][string]$Output)
 $ErrorActionPreference = 'Stop'
-# Query as required, then hash a registry export: this compares all value types
-# and subkeys without depending on console encoding or Out-String formatting.
-$ErrorActionPreference = 'Continue'
-& cmd.exe /d /c 'reg query HKCU\Software\Classes\butler /s 2>NUL' | Out-Null
-$ErrorActionPreference = 'Stop'
-$code = $LASTEXITCODE
+# Absence is expected; the registry provider avoids native stderr in PS 5.1.
+$code = if (Test-Path 'HKCU:\Software\Classes\butler') { 0 } else { 1 }
 $export = "$Output.reg"
 try {
     $digest = $null
