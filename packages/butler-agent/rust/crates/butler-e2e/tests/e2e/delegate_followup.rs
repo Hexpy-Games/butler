@@ -36,7 +36,6 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     })?
     .stub_cassette(Cassette::load("TOOL-01")?)
     .env("BUTLER_CODEX_BASE_URL", &url)
-    .env("BUTLER_APP_SERVER_PORT", "0")
     .start()
     .await?;
     s.turn("general", stub::OWNER).await?;
