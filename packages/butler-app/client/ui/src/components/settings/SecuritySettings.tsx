@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { DisclosureRow } from "@/butler-ds";
@@ -72,12 +73,12 @@ export function SecuritySettings() {
             disabled={busy !== null}
             onSave={security.saveAllowedHosts}
           />
-          <SecurityAllowedHostsField
+          {browserFeatureEnabled && <SecurityAllowedHostsField
             content
             hosts={view.content_hosts ?? []}
             disabled={busy !== null}
             onSave={security.saveContentHosts}
-          />
+          />}
         </SettingsSection>
       )}
     </SettingsPage>

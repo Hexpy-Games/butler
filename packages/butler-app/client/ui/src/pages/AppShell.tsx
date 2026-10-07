@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
@@ -229,7 +230,7 @@ function AppWorkspaceShell() {
             <Stack fill gap="none">
               <LiveConnectionNotice />
               <Stack fill gap="none">
-                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
+                {browserFeatureEnabled && view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
                   <AutomationsView />
                 ) : view.kind === "project-dashboard" ? (
@@ -261,7 +262,7 @@ function AppWorkspaceShell() {
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
-          {view.kind === "browser" ? (
+          {browserFeatureEnabled && view.kind === "browser" ? (
             <InspectorShell id="butler-right-inspector" activeTab="conversation"
               tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
               onTabChange={() => undefined}>

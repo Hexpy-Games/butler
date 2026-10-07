@@ -109,7 +109,11 @@ pub async fn serve_gateway(
             .checked_add(1)
             .ok_or_else(|| std::io::Error::other("content port overflow"))?,
     );
-    let content_listener = TcpListener::bind(content_addr).await?;
+    let content_listener = if butler_core::product_features::BROWSER {
+        Some(TcpListener::bind(content_addr).await?)
+    } else {
+        None
+    };
     let shutdown = CancellationToken::new();
     let task = http::serve(
         listener,

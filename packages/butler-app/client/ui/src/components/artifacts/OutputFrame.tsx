@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useCallback, useEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { openBrowser, useBrowserState } from "../browser/browserBridge";
@@ -29,7 +30,8 @@ export function OutputFrame({ outputId, title }: { outputId: string; title: stri
       setFailure(apiErrorCode(error) === "content_host_required" ? copy.contentHostRequired : copy.loadFailed);
     }
   }, [outputId, revision, copy.contentHostRequired, copy.loadFailed]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (browserFeatureEnabled) void load(); }, [load]);
+  if (!browserFeatureEnabled) return <Typo.Caption>{copy.unsupported}</Typo.Caption>;
   return (
     <Stack gap="sm">
       <Stack align="row" gap="sm" cross="center" wrap>

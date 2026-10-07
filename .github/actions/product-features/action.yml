@@ -1,0 +1,23 @@
+name: Select release product features
+description: Default-on product features, overridden only for an exact release tag
+inputs:
+  tag:
+    description: Explicit artifact tag (empty selects the workflow tag, never its branch)
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Read exact release feature metadata
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        PRODUCT_FEATURE_TAG: ${{ inputs.tag }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/product-features.py" --tag "$PRODUCT_FEATURE_TAG"
+    - name: Read exact release feature metadata on Windows
+      if: runner.os == 'Windows'
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      env:
+        PRODUCT_FEATURE_TAG: ${{ inputs.tag }}
+      run: |
+        python "$env:GITHUB_WORKSPACE/.github/scripts/product-features.py" --tag "$env:PRODUCT_FEATURE_TAG"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
