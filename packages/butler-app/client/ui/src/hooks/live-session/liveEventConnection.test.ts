@@ -1,10 +1,11 @@
-// test-category: race
-/// <reference types="bun" />
-
-import { expect, test } from "bun:test";
+// test-category: pure-logic
+import { describe, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { createLiveEventConnection } from "./liveEventConnection.ts";
+import { liveEventReconnectDelayMs } from "./liveEventReconnect.ts";
 
+describe("liveEventConnection.test.ts", () => {
+// test-category: race
 test("an agent resume reconnects a lost live connection without waiting for backoff", () => {
   const dom = new JSDOM("");
   const saved = {
@@ -61,4 +62,17 @@ test("an agent resume reconnects a lost live connection without waiting for back
     Object.assign(globalThis, saved);
     dom.window.close();
   }
+});
+});
+
+describe("app-live-event-reconnect.test.ts", () => {
+test("reconnect delays back off and stay capped", () => {
+  expect([
+    liveEventReconnectDelayMs(0),
+    liveEventReconnectDelayMs(1),
+    liveEventReconnectDelayMs(2),
+    liveEventReconnectDelayMs(5),
+    liveEventReconnectDelayMs(100),
+  ]).toEqual([1_000, 2_000, 4_000, 30_000, 30_000]);
+});
 });

@@ -19,6 +19,7 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
 import { WorkerProfileTaskFields } from "./WorkerProfileTaskFields";
 import { selectWorkerProfileModel } from "./workerProfileUpdates";
+import { workerProfileTextPatch } from "./workerProfileTextPatch";
 import type {
   AppModelSummary,
   ReasoningEffort,
@@ -52,7 +53,8 @@ export function WorkerProfileEditor({
   function commitLabel() {
     const trimmed = (labelDraft ?? profile.label).trim();
     setLabelDraft(null);
-    if (trimmed && trimmed !== profile.label) onUpdate({ label: trimmed });
+    const patch = workerProfileTextPatch(profile, "label", trimmed);
+    if (patch) onUpdate(patch);
   }
 
   function changeModel(value: string) {

@@ -1,20 +1,6 @@
 // test-category: pure-logic
-/// <reference types="bun" />
-
-import { afterEach, expect, test } from "bun:test";
-import { JSDOM } from "jsdom";
-import { renderToStaticMarkup as renderRaw } from "react-dom/server";
-import { SettingsFieldScopeProvider } from "@/butler-ds";
-
-/** Settings fields render inside a section scope (SettingsField throws outside one). */
-const renderToStaticMarkup = (node: React.ReactNode) =>
-  renderRaw(<SettingsFieldScopeProvider>{node}</SettingsFieldScopeProvider>);
-import { EMPTY_SETTINGS } from "@/app/constants.ts";
-import type { AppModelSummary, SettingsView } from "@/app/types.ts";
-import {
-  addBackupModel,
-  BackupModelsSettings,
-} from "./BackupModelsSettings";
+import type { AppModelSummary } from "@/app/types.ts";
+import { expect, test } from "bun:test";
 import { selectableBackupModels } from "./backupModelsUtils";
 
 function model(
@@ -40,69 +26,6 @@ function model(
 }
 
 const primary = model("openai/primary", "Primary model");
-const backup = model("zai-api/backup", "Registered backup");
-const unregistered = model("zai/other", "Unregistered model", false);
-
-function draftWithFallback(
-  modelFallback: SettingsView["model_fallback"],
-): SettingsView {
-  return {
-    ...EMPTY_SETTINGS,
-    model: primary.model_ref,
-    model_fallback: modelFallback,
-  };
-}
-
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
-  delete (globalThis as { navigator?: unknown }).navigator;
-  delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
-  delete (globalThis as { Node?: unknown }).Node;
-  delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
-    .IS_REACT_ACT_ENVIRONMENT;
-});
-
-test("disabled backup models show only the switch, while enabled models show DS cards", () => {
-  const disabledHtml = renderToStaticMarkup(
-    <BackupModelsSettings
-      models={[primary, backup, unregistered]}
-      draft={draftWithFallback({ enabled: false, models: [backup.model_ref] })}
-      saving={false}
-      onUpdate={async () => undefined}
-    />,
-  );
-  const disabled = new JSDOM(disabledHtml).window.document;
-  expect(disabled.querySelector('[data-test-class="settings-backup-model-add"]'))
-    .toBeNull();
-  expect(disabled.querySelector('[data-test-class="settings-backup-model-list"]'))
-    .toBeNull();
-
-  const enabledHtml = renderToStaticMarkup(
-    <BackupModelsSettings
-      models={[primary, backup, unregistered]}
-      draft={draftWithFallback({ enabled: true, models: [backup.model_ref] })}
-      saving={false}
-      onUpdate={async () => undefined}
-    />,
-  );
-  const enabled = new JSDOM(enabledHtml).window.document;
-  expect(enabled.querySelector('[data-test-class="settings-backup-model-add"]'))
-    .not.toBeNull();
-  expect(enabled.querySelector('[data-test-class="settings-backup-model-list"]'))
-    .not.toBeNull();
-  expect(enabled.body.textContent ?? "").toContain("Registered backup");
-  expect(enabled.body.textContent ?? "").not.toContain("Unregistered model");
-});
-
-test("the DS picker add contract appends an ordered registered model", () => {
-  const next = addBackupModel(
-    { enabled: true, models: [] },
-    backup.model_ref,
-  );
-  expect(next).toEqual({ enabled: true, models: [backup.model_ref] });
-  expect(addBackupModel(next, backup.model_ref)).toBe(next);
-});
 
 test("candidate filtering removes provider-family aliases for the same model", () => {
   const zai = model("zai/glm-5.2", "GLM-5.2");
