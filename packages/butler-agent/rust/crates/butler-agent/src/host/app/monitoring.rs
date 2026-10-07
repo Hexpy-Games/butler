@@ -153,16 +153,6 @@ impl AppMonitoringPort for AppMonitoring {
     fn provider_quota_updates(&self) -> Option<broadcast::Receiver<ProviderQuotaUpdate>> {
         Some(self.quota.subscribe())
     }
-
-    fn poll_provider_quota(&self) -> ApplicationFuture<()> {
-        let poller = self.poller.clone();
-        Box::pin(async move {
-            if let Some(poller) = poller {
-                poller.poll(QuotaPollTrigger::Scheduled, None).await;
-            }
-            Ok(())
-        })
-    }
 }
 
 pub(in crate::host) fn now_iso() -> String {

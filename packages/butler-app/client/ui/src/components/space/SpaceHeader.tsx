@@ -4,6 +4,8 @@ import {
   Box,
   Button,
   ButtonContainer,
+  Clock3,
+  IconSlot,
   NavRow,
   NavSectionHeading,
   PencilLine,
@@ -40,6 +42,11 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
             icon={<Search />}
             label={appCopy.space.search}
             onClick={() => useButlerStore.getState().setCommandOpen(true)}
+          />
+          <NavRow
+            icon={<IconSlot size="sidebar" minHeight="line"><Clock3 /></IconSlot>}
+            label={appCopy.space.automations}
+            onClick={() => useButlerStore.getState().setView({ kind: "automations" })}
           />
           <BrowserEntry />
         </SidebarNav>

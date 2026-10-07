@@ -99,11 +99,6 @@ pub trait AppMonitoringPort: Send + Sync + 'static {
     fn provider_quota_updates(&self) -> Option<broadcast::Receiver<ProviderQuotaUpdate>> {
         None
     }
-    /// The periodic quota poll, run while an App client is connected; a
-    /// no-op by default.
-    fn poll_provider_quota(&self) -> ApplicationFuture<()> {
-        Box::pin(async { Ok(()) })
-    }
 }
 
 pub(crate) async fn work_status(

@@ -67,7 +67,7 @@ test("project create dialog renders DS form regions without overlap-prone compos
   expect(form.querySelector('[data-slot="field"]')).not.toBeNull();
   expect(form.querySelector('[data-slot="field-label"]')).not.toBeNull();
   expect(form.querySelector('[data-slot="button-container"]')).not.toBeNull();
-  expect(form.querySelectorAll('[data-slot="button"]')).toHaveLength(2);
+  expect(form.querySelectorAll('[data-slot="button"]')).toHaveLength(3);
 
   const regions = Array.from(form.children);
   expect(regions).toHaveLength(3);

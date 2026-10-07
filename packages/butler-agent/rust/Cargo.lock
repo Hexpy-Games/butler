@@ -856,6 +856,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "hmac 0.12.1",
+ "notify",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",

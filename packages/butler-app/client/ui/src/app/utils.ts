@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "./productFeatures";
 import { sessionDisplayTitle } from "./sessionTitle.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy, interfaceText } from "./copy.ts";
@@ -1719,7 +1720,7 @@ export function activeTitleForView(
   view: AppView,
   activeChat: ActiveChatView,
 ): { title: string; subtitle?: string } {
-  if (view.kind === "browser") return { title: appCopy.browser.title };
+  if (browserFeatureEnabled && view.kind === "browser") return { title: appCopy.browser.title };
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };

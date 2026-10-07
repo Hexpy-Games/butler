@@ -9,9 +9,7 @@ import {
 } from "../libs/design-system/responsive.ts";
 import {
   api,
-  canSelectProjectFolder,
-  isProjectFolderPickerUnavailable,
-  selectProjectFolder,
+  type ProjectFolderSelection,
 } from "./api.ts";
 import { appCopy, setAppCopyLanguage } from "./copy.ts";
 import {
@@ -282,7 +280,7 @@ interface ButlerStore {
   deleteQueuedMessage: (queuedMessageId: string) => Promise<void>;
   cancelActiveTurn: () => Promise<void>;
   createScratchProject: (displayName: string) => Promise<boolean>;
-  createProjectFromExistingFolder: () => Promise<void>;
+  createProjectFromExistingFolder: (selection: ProjectFolderSelection, displayName: string) => Promise<boolean>;
   runProjectAction: (
     project: ProjectSummary,
     action: ProjectAction,
@@ -2212,48 +2210,28 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
-  createProjectFromExistingFolder: async () => {
-    if (!canSelectProjectFolder()) {
-      notifyError(
-        new Error(
-          appCopy.interfaceFeedback.desktopFolderOnly,
-        ),
-        appCopy.interfaceFeedback.projectFolderFailed,
-        {
-          id: "project-folder-picker-unavailable",
-        },
-      );
-      set({ status: { label: "ready", tone: "ok" } });
-      return;
-    }
+  createProjectFromExistingFolder: async (selection, displayName) => {
     set({
       creatingProject: true,
-      status: { label: "choosing folder", tone: "muted" },
+      status: { label: "creating project", tone: "muted" },
     });
     try {
-      const selection = await selectProjectFolder();
-      if (selection?.cancelled) {
-        set({ status: { label: "ready", tone: "ok" } });
-        return;
-      }
       const result = await api<{ project: ProjectSummary }>("/projects", {
         method: "POST",
         body: JSON.stringify({
           source: "existing_folder",
-          display_name: selection.display_name,
+          display_name: displayName.trim(),
           folder_selection_token: selection.folder_selection_token,
         }),
       });
       await get().refreshNavigation();
       get().openNewProjectChat(result.project.id);
       set({ messages: [], status: { label: "ready", tone: "ok" } });
+      return true;
     } catch (error) {
-      if (isProjectFolderPickerUnavailable(error)) {
-        set({ status: { label: "ready", tone: "ok" } });
-        return;
-      }
       notifyError(error, appCopy.interfaceFeedback.projectFolderFailed, { id: "project-folder" });
       set({ status: { label: "ready", tone: "ok" } });
+      return false;
     } finally {
       set({ creatingProject: false });
     }

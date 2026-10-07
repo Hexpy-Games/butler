@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod feature_gate;
 mod images;
 mod security;
 mod self_check;

@@ -739,13 +739,9 @@ export interface AppCopy {
     projects: string;
     chats: string;
     settings: string;
-    expandProjects: string;
-    collapseProjects: string;
     expandChats: string;
     collapseChats: string;
     newProject: string;
-    startFromScratch: string;
-    useExistingFolder: string;
     availableInDesktop: string;
     projectDashboard: string;
     newProjectChat: string;
@@ -753,6 +749,11 @@ export interface AppCopy {
     projectCreateTitle: string;
     projectRenameTitle: string;
     projectName: string;
+    projectFolder: string;
+    projectFolderAuto: string;
+    chooseProjectFolder: string;
+    changeProjectFolder: string;
+    resetProjectFolder: string;
     pin: string;
     unpin: string;
     delete: string;

@@ -190,3 +190,59 @@ pub(super) fn report_slow_views(metrics: &Value) {
         }
     }
 }
+
+/// The instrumented agent uses only the test-support SQLite trace probe.
+pub(super) fn report_history_load(logs: &Path) -> Result<(), butler_e2e::e2e::HarnessError> {
+    if std::env::var("BUTLER_E2E_DB_LOAD").as_deref() != Ok("1") {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(logs.join("agent-2.log"))?;
+    let loads: Vec<_> = text
+        .lines()
+        .filter(|line| line.contains("DB_LOAD phase=history "))
+        .collect();
+    eprintln!("STORAGE history_windows={}", loads.len());
+    let bindings: Vec<_> = text
+        .lines()
+        .filter(|line| line.contains("DB_LOAD phase=history-binding"))
+        .collect();
+    assert_eq!(
+        bindings.len(),
+        16,
+        "context and canonical admission each look up the fresh binding"
+    );
+    for line in bindings {
+        eprintln!("STORAGE {line}");
+        assert!(
+            line.contains("queries=1 result_rows=0 fullscan_steps=0"),
+            "{line}"
+        );
+        assert!(line.contains("connections=1 autocommit=true max_read_depth=1"));
+    }
+    for line in loads {
+        eprintln!("STORAGE {line}");
+        assert!(line.contains("connections=1 autocommit=true"));
+        if std::env::var("BUTLER_E2E_EXPECT_EMPTY_HISTORY_LOAD").as_deref() == Ok("1") {
+            assert!(line.contains("max_read_depth=1"));
+            assert!(
+                line.contains("queries=2 result_rows=0 fullscan_steps=0"),
+                "{line}"
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn instrument(
+    setup: butler_e2e::e2e::scenario::Setup,
+) -> butler_e2e::e2e::scenario::Setup {
+    setup.env("BUTLER_E2E_STORAGE_METRICS", "1").env(
+        "BUTLER_E2E_DB_LOAD",
+        std::env::var("BUTLER_E2E_DB_LOAD").unwrap_or_default(),
+    )
+}
+
+pub(super) fn p95(samples: &mut [u64]) -> u64 {
+    samples.sort_unstable();
+    samples[(samples.len() * 95).div_ceil(100) - 1]
+}

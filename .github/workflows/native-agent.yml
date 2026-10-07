@@ -30,6 +30,7 @@ jobs:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/product-features
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: ${{ inputs.ort-mode }}

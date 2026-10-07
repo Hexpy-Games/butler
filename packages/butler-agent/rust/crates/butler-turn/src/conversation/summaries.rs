@@ -214,7 +214,9 @@ pub(in crate::conversation) fn query_summaries(
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(ConversationError::sqlite)
 }
-fn summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
+pub(in crate::conversation) fn summary_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<ConversationSummary> {
     Ok(ConversationSummary {
         id: row.get("id")?,
         session_id: row.get("session_id")?,

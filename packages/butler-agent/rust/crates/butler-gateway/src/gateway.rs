@@ -11,6 +11,7 @@ mod auth;
 mod crypto;
 mod devices;
 mod http;
+mod idle_probe;
 mod image_files;
 mod live;
 mod message_validation;
