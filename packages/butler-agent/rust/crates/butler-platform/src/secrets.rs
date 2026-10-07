@@ -370,6 +370,12 @@ impl ChangeLock {
             secure_fs::create_private_dir_all(parent)?;
         }
         let file = Self::open(path)?;
+        if !file.metadata()?.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "change gate must be a file",
+            ));
+        }
         let deadline = Instant::now() + timeout;
         loop {
             match file.try_lock() {
