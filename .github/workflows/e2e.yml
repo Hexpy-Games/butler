@@ -134,6 +134,19 @@ jobs:
             } catch { "OAuth gate: open/lock HRESULT=$($_.Exception.HResult)" }
           } else { 'OAuth gate: missing' }
 
+      - name: Verify both provider stream orders with stub replay
+        if: github.event_name != 'workflow_dispatch' || !inputs.record_cassettes
+        env:
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_RECORD: "0"
+          BUTLER_E2E_SKIP_BUILD: "1"
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e stream_orders:: -- --test-threads=1
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run the live tier
         env:
           BUTLER_E2E_RECORD: ${{ github.event_name == 'workflow_dispatch' && inputs.record_cassettes && '1' || '0' }}
