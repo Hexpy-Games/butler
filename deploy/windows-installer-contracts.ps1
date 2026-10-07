@@ -1,4 +1,5 @@
 param([ValidateSet('Build','Verify')][string]$Mode)
+. "$PSScriptRoot/windows-job-tree.ps1"
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
 $repo = (Get-Location).Path
@@ -51,4 +52,4 @@ try {
             if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
         }
     }
-} finally { Remove-Item -Recurse -Force $root }
+} finally { Remove-JobTree $root }

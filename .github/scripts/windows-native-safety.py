@@ -9,7 +9,7 @@ import re
 NATIVE = re.compile(
     r'^\s*(?:\[xml\])?(?:\$[\w:]+\s*=\s*)?\(*\s*(?:'
     r'(?:&\s+)?(?:cargo|rustc|rustup|python[3]?|bun|node|npm(?:\.cmd)?|gh|oras|dumpbin|'
-    r'cmd(?:\.exe)?|reg(?:\.exe)?|tar|zstd|powershell(?:\.exe)?|schtasks(?:\.exe)?)\s|'
+    r'robocopy(?:\.exe)?|cmd(?:\.exe)?|reg(?:\.exe)?|tar|zstd|powershell(?:\.exe)?|schtasks(?:\.exe)?)\s|'
     r'&\s+(?:[\"\'][^\n]*?\.(?:exe|cmd)[\"\']|\$[\w:]+)\s)', re.I)
 PREFERENCE = re.compile(r'^\s*\$ErrorActionPreference\s*=\s*[\"\'](Stop|Continue)[\"\']', re.I)
 

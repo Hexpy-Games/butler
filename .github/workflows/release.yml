@@ -193,7 +193,7 @@ jobs:
           try { ./deploy/windows-preview-smoke.ps1 }
           finally {
             if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
-              Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+              . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $env:WINDOWS_PREVIEW_TEMP_ROOT
             }
           }
 

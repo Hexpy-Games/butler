@@ -46,4 +46,4 @@ runs:
           bun run packages/butler-app/scripts/windows/package-release.ts
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE) { throw 'Windows packaging failed' }
-        } finally { Remove-Item -Recurse -Force $profile }
+        } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }

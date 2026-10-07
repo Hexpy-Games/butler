@@ -141,7 +141,7 @@ jobs:
             ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
       - name: Update the published baseline through Settings to this candidate
         if: inputs.baseline-tag
         shell: pwsh
@@ -164,7 +164,7 @@ jobs:
             if ($LASTEXITCODE) { throw 'Published baseline download failed' }
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
       - name: Preserve Squirrel setup and update diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -192,7 +192,7 @@ jobs:
             $app = Join-Path $profile 'portable/Butler-win32-x64/Butler.exe'
             bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
             if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
 
   gate:
     name: windows-installer gate

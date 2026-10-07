@@ -24,6 +24,17 @@ for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup'
 
 class WindowsSafety(unittest.TestCase):
     # test-category: security
+    def test_recursive_provider_operations_are_rejected(self):
+        for command in ['Copy-Item $failures $destination -Recurse',
+                        'Remove-Item -Recurse -Force $env:OWNER_JOB_ROOT',
+                        'Remove-Item $profile -Force -Recurse',
+                        'Copy-Item $failures `\n -Recurse']:
+            self.assertTrue(windows_safety.hazards(command), command)
+        for command in ['Copy-JobTree $failures $destination', 'Remove-JobTree $profile',
+                        'Remove-Item Env:BUTLER_E2E_PERF', 'Copy-Item $executable $destination']:
+            self.assertEqual(windows_safety.hazards(command), [])
+
+    # test-category: security
     def test_native_stderr_guard_requires_continue_per_step(self):
         native = windows_safety.native_safety
         for command in ['cargo test 2>&1 | Out-Host', 'python check.py',
