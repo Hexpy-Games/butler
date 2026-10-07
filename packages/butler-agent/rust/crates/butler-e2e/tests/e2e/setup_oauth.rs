@@ -279,9 +279,22 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
         }))?,
     )?;
     let original: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    // The persistent gate can be readable without granting write access.
+    // Exercise the same gate in both the harness and the product refresh.
+    let gate = folder.join("auth.json.lock");
+    std::fs::write(&gate, [])?;
+    let original_permissions = std::fs::metadata(&gate)?.permissions();
+    let mut permissions = original_permissions.clone();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&gate, permissions)?;
     // An aborted forced refresh must restore the missing expiry field without
     // changing any credentials or unknown Codex fields (never print them).
-    drop(super::live::profile::ExpiryProbe::begin(path.clone())?);
+    let aborted = super::live::profile::ExpiryProbe::begin(path.clone())?;
+    assert!(
+        aborted.verify(2).is_err(),
+        "unrefreshed expiry was accepted"
+    );
+    drop(aborted);
     let restored: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     assert!(
         restored == original,
@@ -306,6 +319,7 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
             .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?
             .timestamp_millis(),
     )?;
+    drop(probe);
     let saved = std::fs::read(&path)?;
     let auth: Value = serde_json::from_slice(&saved)?;
     assert_ne!(auth["tokens"]["access_token"], expired);
@@ -337,5 +351,6 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
         1,
         "restart must reuse the rotated token"
     );
+    std::fs::set_permissions(&gate, original_permissions)?;
     s.finish().await
 }

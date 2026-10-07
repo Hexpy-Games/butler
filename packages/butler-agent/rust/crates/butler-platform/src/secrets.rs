@@ -369,10 +369,7 @@ impl ChangeLock {
         {
             secure_fs::create_private_dir_all(parent)?;
         }
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        let _ = secure_fs::owner_only(&mut options);
-        let file = options.open(path)?;
+        let file = Self::open(path)?;
         let deadline = Instant::now() + timeout;
         loop {
             match file.try_lock() {
@@ -389,6 +386,32 @@ impl ChangeLock {
                 Err(TryLockError::Error(error)) => return Err(error),
             }
         }
+    }
+
+    fn open(path: &Path) -> io::Result<File> {
+        // Locking does not write the file. In particular, Windows LockFileEx
+        // accepts a read handle; demanding write access to an existing gate
+        // can reject an otherwise usable persistent OAuth profile.
+        match File::open(path) {
+            Ok(file) => Ok(file),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let mut options = OpenOptions::new();
+                options.read(true).write(true).create_new(true);
+                let _ = secure_fs::owner_only(&mut options);
+                match options.open(path) {
+                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => File::open(path),
+                    result => result,
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl Drop for ChangeLock {
+    fn drop(&mut self) {
+        // Unlock before closing: Windows may defer release on handle closure.
+        let _ = self._file.unlock();
     }
 }
 
