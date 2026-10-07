@@ -7,7 +7,11 @@ import {
   IconButton,
   ListFilter,
   NavSectionHeading,
-  OverflowActionMenu,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  IconSlot,
   Plus,
   Stack,
   Tabs,
@@ -56,33 +60,21 @@ export function SpaceBrowseHeader() {
         }
         actions={
           <ButtonContainer size="icon-sm">
-            {tab === "all" && <IconButton
-              label={appCopy.space.createGroup}
-              onClick={() => setDialog({ kind: "create", parentKey: null })}
-            >
-              <Plus />
-            </IconButton>}
-            <OverflowActionMenu
-              label={appCopy.space.menu}
-              items={[
-                {
-                  label: appCopy.space.newProject,
-                  onSelect: () =>
-                    useButlerStore.getState().setProjectCreateDialogOpen(true),
-                },
-                {
-                  label: appCopy.space.automations,
-                  icon: <Clock3 />,
-                  onSelect: () =>
-                    useButlerStore.getState().setView({ kind: "automations" }),
-                },
-                {
-                  label: appCopy.space.archives,
-                  onSelect: () =>
-                    useButlerStore.getState().openSettings("archive"),
-                },
-              ]}
-            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton label={appCopy.space.menu}>
+                  <IconSlot size="sm"><Plus /></IconSlot>
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8}>
+                <DropdownMenuItem onSelect={() => setDialog({ kind: "create", parentKey: null })}>
+                  {appCopy.space.newGroup}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => useButlerStore.getState().setProjectCreateDialogOpen(true)}>
+                  {appCopy.space.newProject}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </ButtonContainer>
         }
       />

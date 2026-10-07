@@ -12,6 +12,7 @@ afterAll(() => {
 });
 
 mock.module("@/butler-ds", () => ({
+  ...originalButlerDs,
   Button: ({
     children,
     ...props

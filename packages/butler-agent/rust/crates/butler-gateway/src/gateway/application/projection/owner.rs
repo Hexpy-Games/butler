@@ -246,7 +246,6 @@ async fn run(
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
     let files = open_turn_transcripts(&context).await?;
-    work.poll_active = !files.is_empty();
     for file in files {
         work.enqueue(file);
     }
@@ -308,7 +307,7 @@ async fn run(
             }
             continue;
         }
-        let command = next_command(&mut receiver, &context, work.poll_active).await;
+        let command = next_command(&mut receiver, &context).await;
         if work.command(command, &context).await {
             return context.streaming.flush_all(&context).await;
         }
@@ -328,7 +327,6 @@ struct Work {
     changed: VecDeque<String>,
     changed_set: HashSet<String>,
     terminal: bool,
-    poll_active: bool,
     terminal_resweep: bool,
     terminal_after: String,
 }
@@ -406,7 +404,6 @@ impl Work {
                 // are replayed by the deferred sweep.
                 match open_turn_transcripts(context).await {
                     Ok(files) => {
-                        self.poll_active = !files.is_empty();
                         for file in files {
                             self.enqueue(file);
                         }
@@ -484,13 +481,13 @@ fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
 async fn next_command(
     receiver: &mut mpsc::Receiver<Command>,
     context: &ProjectionContext,
-    active: bool,
 ) -> Option<Command> {
-    // Only open turns or uncommitted deltas arm the clock; idle is change-driven.
+    // Only buffered deltas arm a flush deadline. An unfinished turn is
+    // durable state, not evidence that its transcript has changed.
     let deadline = context.streaming.until_flush();
-    let delay = deadline.map_or(SETTLE_DELAY, |delay| delay.min(SETTLE_DELAY));
+    let delay = deadline.unwrap_or_default();
     tokio::select! {
         command = receiver.recv() => command,
-        () = tokio::time::sleep(delay), if active || deadline.is_some() => Some(Command::Terminal),
+        () = tokio::time::sleep(delay), if deadline.is_some() => Some(Command::Events),
     }
 }
