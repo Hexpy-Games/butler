@@ -32,7 +32,7 @@ pub(super) async fn send(
         provider: "openai",
         api,
         policy: snapshot.config.policy,
-        external: stop,
+        external: stop.clone(),
         mode,
         stream_observer: None,
         attempts: 1.0,
@@ -46,17 +46,13 @@ pub(super) async fn send(
         quota: None,
     })
     .await;
-    if let Ok(response) = &response {
-        crate::models::provider::prefix_diagnostics::reported_usage(&mut diagnostic, response);
+    let response = response?;
+    if !stop.is_cancelled() {
+        crate::models::provider::prefix_diagnostics::reported_usage(&mut diagnostic, &response);
+        diagnostic["status"] = "completed".into();
+        record(snapshot, diagnostic, Some(&response)).await?;
     }
-    diagnostic["status"] = if response.is_ok() {
-        "completed"
-    } else {
-        "failed"
-    }
-    .into();
-    record(snapshot, diagnostic, response.as_ref().ok()).await?;
-    response.map(|_| ())
+    Ok(())
 }
 
 fn prepare(
@@ -79,6 +75,14 @@ fn prepare(
     let object = body
         .as_object_mut()
         .ok_or_else(|| ModelRoundError::StablePrefix("keepalive_body_invalid".into()))?;
+    let store_before_input = object
+        .keys()
+        .take_while(|key| key.as_str() != "input")
+        .any(|key| key == "store");
+    if snapshot.config.auth.mode() == crate::models::ProviderAuthMode::ApiKey && !store_before_input
+    {
+        object.insert("store".into(), false.into());
+    }
     let cap_before_input = object
         .keys()
         .take_while(|key| key.as_str() != "input")
@@ -107,9 +111,14 @@ async fn record(
 ) -> Result<(), ModelRoundError> {
     let metrics = snapshot.metrics.clone();
     let model = snapshot.config.metadata.model_ref.clone();
-    let scope = snapshot.scope.clone();
+    let scope = format!(
+        "btcc-keepalive:{}",
+        snapshot
+            .scope
+            .strip_prefix("btcc-guided:")
+            .unwrap_or(&snapshot.scope)
+    );
     let data = snapshot.data.clone();
-    let turn = snapshot.turn.clone();
     let usage = response.and_then(|r| super::super::result::openai_usage(r, &model, 0));
     let number = |key| {
         usage
@@ -127,7 +136,7 @@ async fn record(
         .usage_auth_mode("openai", snapshot.config.auth.mode());
     tokio::task::spawn_blocking(move || {
         let attribution = PromptUsageAttribution {
-            turn_id: Some(&turn),
+            turn_id: None,
             phase: Some("keepalive"),
             round_index: None,
             reasoning_effort: None,

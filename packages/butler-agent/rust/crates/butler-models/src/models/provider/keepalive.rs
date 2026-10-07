@@ -18,28 +18,26 @@ struct Settings {
 }
 impl Settings {
     fn environment() -> Option<Self> {
-        if matches!(
-            std::env::var("BUTLER_PROMPT_CACHE_KEEPALIVE").as_deref(),
-            Ok("off" | "0" | "false")
-        ) {
+        if std::env::var("BUTLER_PROMPT_CACHE_KEEPALIVE").is_ok_and(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "off" | "0" | "false" | "no"
+            )
+        }) {
             return None;
         }
         let seconds = |key, default| {
             std::env::var(key)
                 .ok()
                 .and_then(|v| v.parse::<f64>().ok())
-                .filter(|v| v.is_finite() && *v >= 0.000_000_001 && *v <= 86400.0)
+                .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 86400.0)
                 .unwrap_or(default)
         };
+        let interval = seconds("BUTLER_PROMPT_CACHE_KEEPALIVE_INTERVAL_SECONDS", 240.0).max(30.0);
+        let cap = seconds("BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS", 2700.0).max(interval);
         Some(Self {
-            interval: Duration::from_secs_f64(seconds(
-                "BUTLER_PROMPT_CACHE_KEEPALIVE_INTERVAL_SECONDS",
-                240.0,
-            )),
-            cap: Duration::from_secs_f64(seconds(
-                "BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS",
-                2700.0,
-            )),
+            interval: Duration::from_secs_f64(interval),
+            cap: Duration::from_secs_f64(cap),
         })
     }
 }
@@ -152,8 +150,12 @@ impl Keepalive {
         let owner = Arc::downgrade(self);
         tokio::spawn(async move {
             let result = maintain(&snapshot, &settings, last_real, stop.clone()).await;
-            if result.is_err() {
-                eprintln!("prompt cache keepalive failed; stopped for this wait");
+            if let Err(error) = result {
+                eprintln!(
+                    "prompt cache keepalive failed; session={} reason={}; stopped for this wait",
+                    scope.strip_prefix("btcc-guided:").unwrap_or(&scope),
+                    failure_reason(&error),
+                );
             }
             if let Some(owner) = owner.upgrade() {
                 let mut state = owner.0.lock();
@@ -222,6 +224,13 @@ impl ModelProvider {
         if Settings::environment().is_none()
             || config.metadata.provider_id != "openai"
             || config.auth.mode() == super::ProviderAuthMode::None
+            || body.get("prompt_cache_retention").and_then(Value::as_str) == Some("24h")
+            || !request.tools.iter().any(|tool| {
+                matches!(
+                    tool.name.as_str(),
+                    "delegate_to_steward" | "delegate_to_worker" | "wait_for_worker"
+                )
+            })
         {
             return;
         }
@@ -259,5 +268,20 @@ impl ModelProvider {
 impl Drop for Keepalive {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+// Fixed classifications only: provider messages may contain request content.
+fn failure_reason(error: &butler_turn::btcc::ModelRoundError) -> &'static str {
+    use butler_turn::btcc::ModelRoundError;
+    match error {
+        ModelRoundError::Provider(error) => match error.status_code {
+            Some(400..=499) => "provider_client_error",
+            Some(500..=599) => "provider_server_error",
+            _ => "provider_transport_error",
+        },
+        ModelRoundError::StablePrefix(_) => "prefix_or_metric_failure",
+        ModelRoundError::Cancelled => "cancelled",
+        _ => "request_failed",
     }
 }

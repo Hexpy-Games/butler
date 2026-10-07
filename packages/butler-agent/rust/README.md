@@ -26,15 +26,18 @@ While a session waits for a delegated worker, OpenAI routes keep their last requ
 warm with invisible one-word requests. The default interval is four minutes and the wait cap
 is 45 minutes. Set `BUTLER_PROMPT_CACHE_KEEPALIVE=off` to disable, or set
 `BUTLER_PROMPT_CACHE_KEEPALIVE_INTERVAL_SECONDS` and
-`BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS` to positive seconds (at most 86400).
+`BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS` to seconds (interval at least 30, cap at least the interval, both at most 86400).
+Only parent sessions eligible for delegation retain snapshots; 24h routes skip maintenance.
 Snapshots stay in memory, limited to 128 sessions and a 32 MiB retention charge
 (four times serialized request bytes). Maintenance is skipped when that capacity is exceeded.
 Each completed ping appends usage to `metrics/prompt-cache-usage.jsonl` with
-`prefixDiagnostics.trigger=keepalive`. Inputs, cancellation, session close and shutdown stop
+`prefixDiagnostics.trigger=keepalive` and scope `btcc-keepalive:{session}`; they do not
+contribute to session/turn usage, cost share, request counts or the context meter. Inputs, cancellation, session close and shutdown stop
 maintenance immediately; a failed ping stops that wait without retries. Local and Anthropic
 routes do not send maintenance requests. Existing fields before input remain unchanged;
 API-key requests append or lower an output cap after input to 16 tokens (preserving a smaller
-existing cap), while Codex uses the one-word
+existing cap). API-key `store` remains unchanged when it precedes input, preserving
+the serialized prefix; otherwise pings set it to false. Codex uses the one-word
 instruction because it rejects output caps.
 
 Development and CI builds use the official prebuilt ONNX Runtime binaries provided by `ort`.

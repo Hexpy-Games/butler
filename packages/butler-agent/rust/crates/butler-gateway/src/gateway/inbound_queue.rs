@@ -141,8 +141,10 @@ impl InboundQueue {
         envelope: JsonDocument,
         metadata: Map<String, Value>,
     ) -> QueueResult<QueuedInboundEvent> {
-        let _guard = self.lane.lock();
-        let result = storage::enqueue_idempotent(&self.root, envelope, metadata);
+        let result = {
+            let _guard = self.lane.lock();
+            storage::enqueue_idempotent(&self.root, envelope, metadata)
+        };
         if result.is_ok() {
             // The durable queue write precedes this coalesced in-process wake.
             if let Ok((record, true)) = &result {

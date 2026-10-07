@@ -56,6 +56,17 @@ async fn session_context_tracks_appends_partial_rows_and_same_prefix_rotation()
     let complete = context(&s, 321, "provider_prompt_usage").await?;
     configuration_freshness(&s).await?;
     let usage = complete["usage"].clone();
+    let mut ping = row(&turn, 99_999);
+    ping["scope"] = json!("btcc-keepalive:butler/app-general");
+    ping["phase"] = json!("keepalive");
+    ping["cachedTokens"] = json!(90_000);
+    ping["totalTokens"] = json!(100_000);
+    append(&path, &ping, true);
+    let after_ping = context(&s, 321, "provider_prompt_usage").await?;
+    assert_eq!(
+        after_ping["usage"], usage,
+        "ping affected usage/request counts/cost"
+    );
     let requests = usage["request_count"].as_u64().unwrap();
     let input = usage["input_tokens"].as_u64().unwrap();
     append(&path, &row(&turn, 654), false);

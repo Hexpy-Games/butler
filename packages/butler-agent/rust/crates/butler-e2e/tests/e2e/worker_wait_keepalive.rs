@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+#[path = "worker_wait_keepalive/live.rs"]
+mod live;
 use super::delegate_followup::stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -54,25 +56,83 @@ async fn worker_wait_keepalive_new_input_stops_wait() -> Result<(), HarnessError
     exercise("input").await
 }
 
+#[tokio::test]
+async fn worker_wait_keepalive_api_key_prefix() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    exercise("api").await
+}
+#[tokio::test]
+async fn worker_wait_keepalive_24h_retention() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    exercise("retention").await
+}
+
+#[tokio::test]
+async fn worker_wait_keepalive_archive() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    exercise("archive").await
+}
+#[tokio::test]
+async fn worker_wait_keepalive_delete() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    exercise("delete").await
+}
+#[tokio::test]
+async fn worker_wait_keepalive_cap_floor() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    exercise("capfloor").await
+}
+
 async fn exercise(mode: &str) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(true).await?;
     script.fail_ping.store(mode == "failure", Ordering::SeqCst);
     script.hold_ping.store(mode == "inflight", Ordering::SeqCst);
-    let s = Setup::new(&format!("KEEPALIVE-{mode}"))?
+    let api = matches!(mode, "api" | "retention");
+    let mut setup = Setup::new(&format!("KEEPALIVE-{mode}"))?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", &url)
         .env(
             "BUTLER_PROMPT_CACHE_KEEPALIVE",
-            if mode == "off" { "off" } else { "on" },
+            if mode == "off" { "No" } else { "on" },
         )
         .env("BUTLER_PROMPT_CACHE_KEEPALIVE_INTERVAL_SECONDS", "1")
         .env(
             "BUTLER_PROMPT_CACHE_KEEPALIVE_CAP_SECONDS",
-            if mode == "cap" { "2.8" } else { "60" },
-        )
-        .start()
-        .await?;
-    let (turn, outcome) = s.turn("general", stub::OWNER).await?;
+            if mode == "cap" {
+                "45"
+            } else if mode == "capfloor" {
+                "1"
+            } else {
+                "120"
+            },
+        );
+    if api {
+        setup = setup
+            .without_credential()
+            .env("OPENAI_API_KEY", "stub-api-key")
+            .env("OPENAI_BASE_URL", &url)
+            .env("BUTLER_OPENAI_PROMPT_CACHE_RETENTION", "in_memory");
+    }
+    if mode == "retention" {
+        setup = setup.env("BUTLER_OPENAI_PROMPT_CACHE_RETENTION", "24h");
+    }
+    let s = setup.start().await?;
+    if api {
+        register_api_route(&s).await?;
+    }
+    let session = if matches!(mode, "archive" | "delete") {
+        let reply =
+            s.gw.post(
+                "/sessions",
+                json!({"kind":"chat","title":"Keepalive lifecycle"}),
+            )
+            .await?;
+        reply.data()["session"]["id"].as_str().unwrap().to_owned()
+    } else {
+        "general".into()
+    };
+    let view_url = format!("/session-view?session_id={session}");
+    let (turn, outcome) = s.turn(&session, stub::OWNER).await?;
     assert_eq!(outcome["state"], "delivered", "{outcome}");
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let suspension: String = db.query_row(
@@ -85,7 +145,7 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         .await
         .unwrap();
     wait_progress_publication(&db).await?;
-    let baseline = s.gw.messages("general").await?;
+    let baseline = s.gw.messages(&session).await?;
     assert!(baseline.iter().all(|m| m["text"] != "OK"));
     let transcripts = transcript_sizes(&s)?;
     assert!(
@@ -96,13 +156,14 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         r.get(0)
     })?;
     let before = Instant::now();
-    if mode == "off" {
-        tokio::time::sleep(Duration::from_secs(3)).await;
+    let view_before = s.gw.get(&view_url).await?.data().clone();
+    if matches!(mode, "off" | "retention" | "capfloor") {
+        tokio::time::sleep(Duration::from_secs(33)).await;
     } else {
         wait_pings(&script, if mode == "result" { 2 } else { 1 }).await;
     }
     assert_eq!(
-        s.gw.messages("general").await?,
+        s.gw.messages(&session).await?,
         baseline,
         "ping wrote conversation messages"
     );
@@ -117,29 +178,48 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         progress,
         "ping wrote activity entries"
     );
+    let view_after = s.gw.get(&view_url).await?.data().clone();
+    assert_eq!(
+        view_after["usage"], view_before["usage"],
+        "ping changed session usage/cost/request count"
+    );
+    assert_eq!(
+        view_after["context"], view_before["context"],
+        "ping changed context meter"
+    );
     assert_prefix(&script);
     for pair in script.ping_times.lock().unwrap().windows(2) {
         let gap = pair[1].duration_since(pair[0]);
         assert!(
-            gap >= Duration::from_secs(1),
+            gap >= Duration::from_secs(30),
             "ping interval was shortened: {gap:?}"
         );
         eprintln!("keepalive {mode}: ping_gap_ms={}", gap.as_millis());
     }
-    if mode == "input" {
-        s.gw.say("general", "새 요청입니다. OK라고 답해 주세요.")
+    if mode == "archive" {
+        let reply =
+            s.gw.post(&format!("/sessions/{session}/archive"), json!({}))
+                .await?;
+        assert_eq!(reply.status, 200, "{reply:?}");
+    } else if mode == "delete" {
+        let reply =
+            s.gw.delete(&format!("/sessions/{session}?permanent=true"))
+                .await?;
+        assert_eq!(reply.status, 200, "{reply:?}");
+    } else if mode == "input" {
+        s.gw.say(&session, "새 요청입니다. OK라고 답해 주세요.")
             .await?;
     } else if mode == "cancel" {
         let reply =
             s.gw.post(
                 &format!(
                     "/steward-relations/{}/cancel",
-                    s.gw.get("/session-view?session_id=general").await?.data()["steward_children"]
+                    s.gw.get(&view_url).await?.data()["steward_children"]
                         [0]["relation"]["relation_id"]
                         .as_str()
                         .unwrap()
                 ),
-                json!({"parent_session_id":"general"}),
+                json!({"parent_session_id":session}),
             )
             .await?;
         assert_eq!(reply.status, 202, "{reply:?}");
@@ -149,7 +229,7 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
             if s.gw
-                .messages("general")
+                .messages(&session)
                 .await?
                 .iter()
                 .any(|m| m["text"] == "원문 확인 결과를 정리했습니다.")
@@ -179,20 +259,30 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         );
     }
     if mode == "cap" {
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(18)).await;
     }
     let pings = script.ping_headers.lock().unwrap().len();
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_secs(
+        if matches!(mode, "archive" | "delete") {
+            33
+        } else {
+            3
+        },
+    ))
+    .await;
     assert_eq!(
         script.ping_headers.lock().unwrap().len(),
         pings,
         "maintenance continued after stop"
     );
-    if mode == "off" {
+    if matches!(mode, "off" | "retention") {
         assert_eq!(pings, 0);
     }
     if mode == "failure" {
         assert_eq!(pings, 1);
+        let logs = s.agent.logs();
+        assert!(logs.contains("session=butler/app-general reason=provider_client_error"));
+        assert!(!logs.contains("Stub ping failure"));
         assert_eq!(
             s.agent
                 .logs()
@@ -201,10 +291,15 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
             1
         );
     }
-    if mode == "cap" {
-        assert!((1..=3).contains(&pings));
-    }
-    assert_metrics(&s, pings)?;
+    if mode == "cap" { assert_eq!(pings, 1); }
+    // At an equal interval/cap deadline the biased stop may win before the ping.
+    if mode == "capfloor" { assert!(pings <= 1); }
+    let completed = if matches!(mode, "failure" | "inflight") {
+        0
+    } else {
+        pings
+    };
+    assert_metrics(&s, completed)?;
     eprintln!(
         "keepalive {mode}: pings={pings}, elapsed_ms={}",
         before.elapsed().as_millis()
@@ -215,7 +310,7 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
     Ok(())
 }
 async fn wait_pings(script: &stub::Script, count: usize) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(75);
     while script.ping_headers.lock().unwrap().len() < count {
         assert!(Instant::now() < deadline, "keepalive did not fire");
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -243,8 +338,10 @@ async fn wait_progress_publication(db: &rusqlite::Connection) -> Result<(), Harn
 }
 fn assert_prefix(script: &stub::Script) {
     let requests = script.requests.lock().unwrap();
+    let wires = script.wires.lock().unwrap();
     let mut original = None;
-    for body in requests.iter() {
+    let mut parent_scope = None;
+    for (index, body) in requests.iter().enumerate() {
         let input = body["input"].as_array().unwrap();
         if input
             .last()
@@ -252,18 +349,41 @@ fn assert_prefix(script: &stub::Script) {
             .to_string()
             .contains("Cache keepalive.")
         {
-            let original: &Value = original.expect("parent request before ping");
+            let (original, original_wire): (&Value, &String) =
+                original.expect("parent request before ping");
             let mut restored = body.clone();
             restored["input"].as_array_mut().unwrap().pop();
-            assert_eq!(&restored, original, "ping changed fields or prefix");
+            let mut expected = original.clone();
+            if expected["store"] == true {
+                // store precedes input; changing it breaks the physical prefix.
+                assert_eq!(body["store"], true);
+                if expected.get("max_output_tokens").is_none() {
+                    expected["max_output_tokens"] = json!(16);
+                }
+            }
+            assert_eq!(restored, expected, "ping changed fields or prefix");
+            let ping_wire = &wires[index];
+            let boundary = original_wire.find("\"input\":").unwrap();
+            assert_eq!(
+                &original_wire[..boundary],
+                &ping_wire[..boundary],
+                "physical prefix changed"
+            );
             for header in script.ping_headers.lock().unwrap().iter() {
-                assert_eq!(header, original["prompt_cache_key"].as_str().unwrap());
+                let expected = if original["store"] == true {
+                    ""
+                } else {
+                    original["prompt_cache_key"].as_str().unwrap()
+                };
+                assert_eq!(header, expected);
             }
         } else if butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default())
             .user_request
             == stub::OWNER
+            || parent_scope.as_ref() == body.get("prompt_cache_key")
         {
-            original = Some(body);
+            parent_scope = body.get("prompt_cache_key").cloned();
+            original = Some((body, &wires[index]));
         }
     }
 }
@@ -283,8 +403,16 @@ fn assert_metrics(s: &Scenario, count: usize) -> Result<(), HarnessError> {
         assert_eq!(d["appendOnly"], true);
         assert_eq!(d["lcpBytes"], d["previousPrefixBytes"]);
         assert_eq!(d["lcpPercent"], 100);
-        assert!(d["idleGapMs"].as_f64().unwrap() >= 1000.0);
+        assert!(d["idleGapMs"].as_f64().unwrap() >= 30_000.0);
         assert_eq!(row["phase"], "keepalive");
+        assert!(
+            row["scope"]
+                .as_str()
+                .unwrap()
+                .starts_with("btcc-keepalive:")
+        );
+        assert!(row.get("turnId").is_none_or(Value::is_null));
+        assert_eq!(d["status"], "completed");
         if d["status"] == "completed" {
             assert_eq!(row["promptTokens"].as_f64(), Some(100.0));
             assert_eq!(row["totalTokens"].as_f64(), Some(120.0));
@@ -312,4 +440,20 @@ fn transcript_sizes(s: &Scenario) -> Result<std::collections::BTreeMap<String, u
             ))
         })
         .collect()
+}
+
+async fn register_api_route(s: &Scenario) -> Result<(), HarnessError> {
+    let credential =
+        s.gw.post(
+            "/model-catalog/provider-credentials",
+            json!({"provider_id":"openai","auth_type":"api_key","api_key":"stub-api-key"}),
+        )
+        .await?;
+    assert_eq!(credential.status, 201, "{}", credential.status);
+    let id = credential.data()["credential"]["id"].as_str().unwrap();
+    let registered = s.gw.post("/model-catalog/registered-models", json!({
+        "provider_id":"openai","model_id":"gpt-6-sol","auth_type":"api_key","credential_id":id
+    })).await?;
+    assert_eq!(registered.status, 201, "{}", registered.text);
+    Ok(())
 }

@@ -7,7 +7,7 @@ use std::{
     fmt::Write,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 use tokio::sync::Notify;
@@ -17,8 +17,11 @@ pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
 pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
+    api_history: Mutex<HashMap<String, Vec<Value>>>,
+    response_seq: AtomicUsize,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
+    pub wires: Mutex<Vec<String>>,
     pub ping_headers: Mutex<Vec<String>>,
     pub ping_times: Mutex<Vec<std::time::Instant>>,
     pub fail_ping: AtomicBool,
@@ -53,11 +56,36 @@ pub(crate) async fn start(
 async fn reply(
     State(script): State<Arc<Script>>,
     headers: axum::http::HeaderMap,
-    Json(body): Json<Value>,
+    wire_body: bytes::Bytes,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
+    let mut body: Value = serde_json::from_slice(&wire_body).unwrap();
+    let response_id = format!(
+        "stub-{}",
+        script.response_seq.fetch_add(1, Ordering::SeqCst)
+    );
+    let streaming = body["stream"] == true;
+    {
+        let mut requests = script.requests.lock().unwrap();
+        script
+            .wires
+            .lock()
+            .unwrap()
+            .push(String::from_utf8(wire_body.to_vec()).unwrap());
+        requests.push(body.clone());
+    }
+    if !streaming {
+        let mut history = script.api_history.lock().unwrap();
+        let mut input = body["previous_response_id"]
+            .as_str()
+            .and_then(|id| history.get(id))
+            .cloned()
+            .unwrap_or_default();
+        input.extend(body["input"].as_array().unwrap().iter().cloned());
+        history.insert(response_id.clone(), input.clone());
+        body["input"] = json!(input);
+    }
     let key = matching::key("/codex/responses", &body, &Placeholders::default());
-    script.requests.lock().unwrap().push(body.clone());
     if body["input"]
         .as_array()
         .and_then(|a| a.last())
@@ -88,11 +116,7 @@ async fn reply(
         if script.hold_ping.load(Ordering::SeqCst) {
             script.ping_release.notified().await;
         }
-        return (
-            [("content-type", "text/event-stream")],
-            wire(message("OK"), Some(80)),
-        )
-            .into_response();
+        return respond(message("OK"), Some(80), streaming, &response_id);
     }
     let child = key.user_request.starts_with("role: steward");
     let kind = if child {
@@ -186,7 +210,7 @@ async fn reply(
     } else {
         item
     };
-    ([("content-type", "text/event-stream")], wire(item, None)).into_response()
+    respond(item, None, streaming, &response_id)
 }
 fn work_id(body: &Value) -> String {
     body["input"]
@@ -248,4 +272,26 @@ fn wire(item: Value, cached: Option<u32>) -> String {
             .unwrap();
             output
         })
+}
+
+fn respond(
+    item: Value,
+    cached: Option<u32>,
+    streaming: bool,
+    id: &str,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let encoded = wire(item, cached);
+    if streaming {
+        return ([("content-type", "text/event-stream")], encoded).into_response();
+    }
+    let last = encoded
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .next_back()
+        .unwrap();
+    let event: Value = serde_json::from_str(last).unwrap();
+    let mut response = event["response"].clone();
+    response["id"] = json!(id);
+    Json(response).into_response()
 }
