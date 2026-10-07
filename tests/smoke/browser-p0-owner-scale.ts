@@ -1,7 +1,7 @@
 import { seedP0BtccScale } from "./browser-p0-btcc-scale.ts";
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
-import { statSync } from "node:fs";
+import { statSync, statfsSync } from "node:fs";
 import { join } from "node:path";
 
 /** Mirrors monitoring_scale.rs, enlarged to the standing owner-scale contract. */
@@ -35,4 +35,16 @@ export function seedP0OwnerScale(data: string) {
   assert(appBytes >= 1_300_000_000); assert(counts.transcriptBytes >= 290_000_000);
   const btcc = seedP0BtccScale(data);
   return { btcc, ...counts, appBytes, chatId: "p0-c599" };
+}
+
+/** The full DBs and their transaction WALs must fit before any fixture write. */
+export async function waitP0OwnerScaleSpace(data: string) {
+  const requiredBytes = 20 * 1024 ** 3;
+  for (;;) {
+    const filesystem = statfsSync(data);
+    const freeBytes = filesystem.bavail * filesystem.bsize;
+    console.log(JSON.stringify({ ownerScaleDisk: { at: new Date().toISOString(), freeBytes, requiredBytes } }));
+    if (freeBytes >= requiredBytes) return;
+    await Bun.sleep(60_000);
+  }
 }

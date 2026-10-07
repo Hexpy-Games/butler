@@ -8,7 +8,7 @@ import { budget, sample, type P0App, type Row, type Sample } from "./browser-p0-
 import { memoryCheckpoint } from "./browser-p0-memory";
 import { openBrowserArea, visitUserSite } from "./browser-p0-user";
 import { waitFor } from "./browser-p0-app";
-import { seedP0OwnerScale } from "./browser-p0-owner-scale";
+import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale";
 
 function agentRSS(pid: number): number {
   if (process.platform === "win32") return Number(execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${pid}).WorkingSet64`], { encoding: "utf8" }).trim());
@@ -23,6 +23,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   assert(evidence, "BUTLER_P0_EVIDENCE required"); mkdirSync(evidence, { recursive: true });
   const pid = JSON.parse(readFileSync(join(app.data, "app/runtime/foreground/instance.json"), "utf8")).agent_host_pid;
   assert(Number.isSafeInteger(pid) && pid > 0);
+  await waitP0OwnerScaleSpace(app.data);
   const ownerScale = seedP0OwnerScale(app.data);
   await app.page.reload(); await openBrowserArea(app);
   await visitUserSite(app, `${origin}/nodes`, evidence);

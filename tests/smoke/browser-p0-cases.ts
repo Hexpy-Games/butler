@@ -4,7 +4,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { budget, frames, percentile, sample, startFrames, typing, prepareTyping, attributeTrace, type P0App, type Row } from "./browser-p0-measure.ts";
-import { seedP0OwnerScale } from "./browser-p0-owner-scale.ts";
+import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale.ts";
 import { waitFor, P0_STUB_CONTENT } from "./browser-p0-app.ts";
 
 export async function rendererCrash(app: P0App, origin: string, rows: Row[]) {
@@ -28,6 +28,7 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
   const policy = await app.main.evaluate<{ webgl: boolean; webgl2: boolean; webgpu: boolean }>("browserP0.gpuPolicy('gpu')");
   const webgpu = policy.webgpu;
   if (user) assert(policy.webgl && policy.webgl2 && policy.webgpu, "User tab retains GPU APIs");
+  else assert(!policy.webgl && !policy.webgl2, "Agent WebGL mitigation is applied before GPU qualification");
   if (!user && process.env.BUTLER_P0_AGENT_GPU === "off") {
     for (const feature of ["webgl", "webgl2", "webgpu"] as const) rows.push({ test: "gpu crash", metric: `agent ${feature} disabled`, value: String(policy[feature]), budget: "false", status: policy[feature] ? "FAIL" : "PASS", attribution: "Electron per-view capability policy", mitigation: "Verify a supported per-view GPU policy before treating this as a mitigation run" });
   }
@@ -93,7 +94,9 @@ export async function gpuCrash(app: P0App, origin: string, rows: Row[]) {
 export async function gpuHang(app: P0App, origin: string, rows: Row[]) {
   const user = process.env.BUTLER_P0_GPU_SOURCE === "user";
   await app.main.evaluate(user ? `browserP0.openProductGPU('hang', '${origin}/hang')` : `browserP0.open('hang', '${origin}/hang')`);
-  const policy = await app.main.evaluate("browserP0.gpuPolicy('hang')");
+  const policy = await app.main.evaluate<{ webgl: boolean; webgl2: boolean; webgpu: boolean }>("browserP0.gpuPolicy('hang')");
+  if (user) assert(policy.webgl && policy.webgl2 && policy.webgpu, "Real USER tab retains GPU APIs");
+  else assert(!policy.webgl && !policy.webgl2, "Agent WebGL mitigation is applied before GPU hang");
   await quietHost("GPU calibration", app);
   const prepared = await app.main.evaluate<{ blocked: boolean }>("browserP0.evaluate('hang','prepare()')");
   const hostLoad = await quietHost(`GPU hang ${user ? "user" : "agent"}`, app);
@@ -154,6 +157,7 @@ async function measuredMainLoad(app: P0App, origin: string, rows: Row[], tracing
 }
 
 export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
+  await waitP0OwnerScaleSpace(app.data);
   const scale = seedP0OwnerScale(app.data);
   await app.page.reload();
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="workspace"]')));

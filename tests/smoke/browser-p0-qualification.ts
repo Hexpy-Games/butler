@@ -78,7 +78,7 @@ try {
 } finally {
   if (app) await app.stop(); fixtures.stop(true);
   // §9.3 requires failures AFTER mitigations. Raw failures alone are not triggers.
-  console.log(JSON.stringify({ rows, evidence, decision: "Review GPU proof, user-tab results, and full soak against §9.3; unavailable is never a pass", gpuSource: process.env.BUTLER_P0_GPU_SOURCE || "agent", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", platform: `${process.platform}/${process.arch}` }));
+  console.log(JSON.stringify({ rows, evidence, decision: "Review GPU proof, user-tab results, and full soak against §9.3; unavailable is never a pass", gpuSource: process.env.BUTLER_P0_GPU_SOURCE || "agent", agentGPU: process.env.BUTLER_P0_AGENT_GPU || "on", agentWebGLDefault: false, platform: `${process.platform}/${process.arch}` }));
   if (invalidWindow) process.exit(75);
   if (rows.some(r => r.status === "FAIL" || r.status === "UNAVAILABLE")) process.exitCode = 1;
 }

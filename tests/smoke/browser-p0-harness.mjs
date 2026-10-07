@@ -36,7 +36,7 @@ export function installBrowserP0Harness(window, userBrowser) {
   const initial = baseline();
   const get = id => { const view = productTabs.has(id) ? userBrowser.tabs.get(productTabs.get(id))?.view : views.get(id); if (!view) throw new Error("Unknown tab"); return view.webContents; };
   globalThis.browserP0 = {
-    async open(id, url, { webgl = true, user = false } = {}) {
+    async open(id, url, { user = false, webgl = user } = {}) {
       const parsed = new URL(url);
       if (!((parsed.hostname === "127.0.0.1" && parsed.protocol === "http:") ||
         (parsed.protocol === "https:" && parsed.hostname === "www.iana.org" && ["/help/example-domains", "/domains/reserved"].includes(parsed.pathname)))) throw new Error("P0 fixtures only");
