@@ -15,7 +15,7 @@ runs:
     - name: Require existing owner tools
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        foreach ($tool in @('python', 'cargo', 'rustc', 'cl', 'oras', 'bun', 'node')) {
+        foreach ($tool in @('python', 'cargo', 'rustc', 'cl', 'bun', 'node')) {
           if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
         }
         @('RUSTUP_AUTO_INSTALL=0', 'RUSTUP_TOOLCHAIN=1.91.0') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -45,6 +45,7 @@ runs:
           "APPDATA=$root/roaming", "TEMP=$root/tmp", "TMP=$root/tmp",
           "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         exit 0
+    - uses: ./.github/actions/setup-oras
     - name: Verify or prepare pinned static ORT
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust

@@ -41,7 +41,7 @@ RULES = {
     'machine mutation or installer smoke': (
         r'\b(?:winget|choco)\s+install\b|\bnpm(?:\.cmd)?\s+(?:i|install)\s+(-g|--global)\b|'
         r'\b(?:Register-ScheduledTask|New-Service|Set-Service)\b|'
-        r'\breg(?:\.exe)?\s+(?:add|delete|import)\b|'
+        r'\breg(?:\.exe)?(?:\s+|[\x22\x27]\s*,\s*[\x22\x27])(?:add|delete|import)\b|'
         r'(?:released-install-smoke|installer-smoke|windows-startup-smoke|windows-task-xml-probe)\.(?:ts|ps1)')
 }
 SCRIPT = re.compile(r'(?:\$PSScriptRoot/|(?:\.\.?/)*)([\w./-]+\.(?:ps1|py|ts|mjs))\b')

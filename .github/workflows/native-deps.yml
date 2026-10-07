@@ -85,7 +85,7 @@ jobs:
         run: |
           python -c "import sys; sys.exit('Owner runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
           if ($LASTEXITCODE -ne 0) { throw 'Existing Python 3.12 is required; no installation attempted' }
-          foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake', 'oras')) {
+          foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake')) {
             if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
           }
           rustc --version
@@ -93,6 +93,7 @@ jobs:
           foreach ($name in @('VCToolsInstallDir', 'UCRTVersion', 'UniversalCRTSdkDir')) {
             if (![Environment]::GetEnvironmentVariable($name)) { throw "Existing MSVC developer environment requires $name; no host changes attempted" }
           }
+      - uses: ./.github/actions/setup-oras
       - name: Build and publish owner-toolset SDK
         env:
           GH_TOKEN: ${{ github.token }}
