@@ -1,6 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Page } from "playwright";
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -121,46 +121,45 @@ function reportEventTracing(browser: Browser): void {
   };
 }
 
-/** Some sandboxed single-process builds hang closing iframe/GPU documents.
- * All assertions have finished when close is called; reap only this browser's
- * exact PID if its graceful teardown stalls. Verify exit within the same 10s
- * deadline even if the protocol close acknowledgement remains unresolved.
+/** The in-process Playwright bridge owns the Chromium child. Keep this pinned
+ * adapter here: a CDP PID cannot tell us whether its pipes/cleanup have closed.
+ */
+export function ownedBrowserProcess(browser: Browser): ChildProcess {
+  const local = browser as unknown as {
+    _connection: { toImpl(browser: Browser): { options: { browserProcess: { process: ChildProcess } } } };
+  };
+  const child = local._connection.toImpl(browser).options.browserProcess.process;
+  if (!Number.isSafeInteger(child.pid) || child.pid! <= 0 || !child.stdio) {
+    throw new Error("Smoke browser ownership unavailable");
+  }
+  return child;
+}
+
+/** CDP read handles can keep Playwright waiting after
+ * Chromium is gone. Destroy only our exited child's streams so close and profile
+ * cleanup complete. Disconnection alone is not successful browser teardown.
  */
 async function boundOwnedClose(browser: Browser): Promise<void> {
-  const session = await browser.newBrowserCDPSession();
-  const { processInfo } = await session.send("SystemInfo.getProcessInfo");
-  await session.detach();
-  const owner = processInfo.find((process: { type: string }) => process.type === "browser");
-  if (!owner || !Number.isSafeInteger(owner.id) || owner.id <= 0) throw new Error("Smoke browser ownership unavailable");
+  const child = ownedBrowserProcess(browser);
+  const exited = () => child.exitCode !== null || child.signalCode !== null;
+  const releasePipes = () => { for (const stream of child.stdio) stream?.destroy(); };
+  child.once("exit", releasePipes);
+  if (exited()) releasePipes();
   const close = browser.close.bind(browser);
   let closing: Promise<void> | undefined;
   browser.close = (options) => closing ??= (async () => {
-    if (!browser.isConnected()) return;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    const disconnected = new Promise<void>(resolve => browser.once("disconnected", () => resolve()));
-    const stalled = new Promise<void>((resolve, reject) => {
+    const stalled = new Promise<never>((_, reject) => {
       deadline = setTimeout(() => {
-        try { process.kill(owner.id, "SIGKILL"); }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
-          reject(error); return;
-        }
-        const expires = performance.now() + 500;
-        const observe = () => {
-          try { process.kill(owner.id, 0); }
-          catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ESRCH") { resolve(); return; }
-            reject(error); return;
-          }
-          if (performance.now() >= expires) { reject(new Error(`Owned smoke browser ${owner.id} did not exit`)); return; }
-          setTimeout(observe, 10);
-        };
-        observe();
+        // Do not signal a stale CDP PID, or turn a forced live-process kill green.
+        if (!exited()) {
+          try { child.kill("SIGKILL"); }
+          catch (error) { reject(error); return; }
+        } else releasePipes();
+        reject(new Error(`Owned smoke browser ${child.pid} did not close`));
       }, 9_500);
     });
-    try {
-      await Promise.race([close(options), disconnected, stalled]);
-    }
+    try { await Promise.race([close(options), stalled]); }
     finally { clearTimeout(deadline); }
   })();
 }
