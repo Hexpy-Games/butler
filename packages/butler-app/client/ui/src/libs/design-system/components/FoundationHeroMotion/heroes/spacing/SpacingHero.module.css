@@ -196,7 +196,7 @@
 }
 
 .readToken {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -350,7 +350,7 @@
 }
 
 .note {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 [data-layout="tall"] .note {
@@ -506,7 +506,7 @@
 }
 
 .caption {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
