@@ -142,7 +142,15 @@ impl AppApplication {
         turn_id: &str,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         let messages = self.message_page(chat_id.to_owned(), 0.0, 200).await?;
-        let turns = self.turn_page(chat_id.to_owned(), 0.0).await?;
+        let chat = chat_id.to_owned();
+        let turn = turn_id.to_owned();
+        let turn = self
+            .storage
+            .inspect(move |db| {
+                Ok(read_model::exact_turn(db, &turn)?.filter(|row| row.chat_id == chat))
+            })
+            .await
+            .map_err(app_error)?;
         Ok(MessageSendResult {
             accepted: messages
                 .messages
@@ -151,7 +159,7 @@ impl AppApplication {
             queued: None,
             reply: None,
             replies: Vec::new(),
-            turn: turns.turns.into_iter().find(|item| item.id == turn_id),
+            turn,
             next_cursor: butler_core::json::saturating_u64(messages.next_cursor),
         })
     }

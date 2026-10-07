@@ -18,6 +18,16 @@ use std::time::{Duration, Instant};
 async fn terminal_settlement_delivers_without_filesystem_notifications() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
+    settlement(0).await
+}
+
+#[tokio::test]
+async fn terminal_settlement_delivers_after_first_two_hundred_turns() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    settlement(200).await
+}
+
+async fn settlement(previous_turns: usize) -> Result<(), HarnessError> {
     let cassette = Cassette::load("Q-02")?;
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
     let expected = cassette.exchanges[0].response.output_text();
@@ -29,6 +39,7 @@ async fn terminal_settlement_delivers_without_filesystem_notifications() -> Resu
         .env("BUTLER_E2E_HOLD_SETTLEMENT", "1")
         .start()
         .await?;
+    seed_terminal_turns(&s.sandbox.data, previous_turns)?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let id = accepted_turn_id(&s.gw.say("general", &prompt).await?)?;
     let queue = s.sandbox.data.join("runtime/inbound-events");
@@ -53,8 +64,10 @@ async fn terminal_settlement_delivers_without_filesystem_notifications() -> Resu
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let before = s.gw.turn("general", &id).await?.unwrap();
-    assert_eq!(turn_state(&before), "thinking", "{before}");
+    let before = s.gw.get("/session-view?session_id=general").await?;
+    let before = &before.data()["latest_turn"];
+    assert_eq!(before["id"], id);
+    assert_eq!(turn_state(before), "thinking", "{before}");
     tokio::fs::write(queue.join("e2e-settlement-release"), b"release").await?;
     // Observe the UI event directly: a foreground turn GET refreshes projection
     // and would mask a missing completion wake.
@@ -64,8 +77,11 @@ async fn terminal_settlement_delivers_without_filesystem_notifications() -> Resu
             && event["payload"]["turn"]["state"] == "delivered"
     })
     .await?;
-    let terminal = s.gw.turn("general", &id).await?.unwrap();
-    assert_eq!(turn_state(&terminal), "delivered", "{terminal}");
+    let terminal = s.gw.get("/session-view?session_id=general").await?;
+    let terminal = &terminal.data()["latest_turn"];
+    assert_eq!(terminal["id"], id);
+    assert_eq!(turn_state(terminal), "delivered", "{terminal}");
+    assert_terminal_row(&database, &id, previous_turns)?;
     let messages = s.gw.messages("general").await?;
     let answers: Vec<_> = messages
         .iter()
@@ -74,4 +90,38 @@ async fn terminal_settlement_delivers_without_filesystem_notifications() -> Resu
     assert_eq!(answers.len(), 1, "{messages:?}");
     assert_eq!(answers[0]["text"], expected);
     s.finish().await
+}
+
+fn assert_terminal_row(
+    database: &std::path::Path,
+    id: &str,
+    previous: usize,
+) -> Result<(), HarnessError> {
+    let db = butler_platform::sqlite::open_with_flags(
+        database,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?;
+    let (row, state): (usize, String) = db
+        .query_row("SELECT rowid,state FROM turns WHERE id=?1", [id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?;
+    assert_eq!(row, previous + 1);
+    assert_eq!(state, "delivered");
+    Ok(())
+}
+
+fn seed_terminal_turns(data: &std::path::Path, count: usize) -> Result<(), HarnessError> {
+    let mut db = butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite"))
+        .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?;
+    let tx = db
+        .transaction()
+        .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?;
+    for n in 0..count {
+        tx.execute("INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at) VALUES(?1,'general','delivered','Delivered','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')", [format!("seed-terminal-{n}")])
+            .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?;
+    }
+    tx.commit()
+        .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))
 }
