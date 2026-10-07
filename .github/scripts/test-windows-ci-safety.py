@@ -14,7 +14,8 @@ import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
-for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup', 'setup-oras.py')]:
+for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup', 'setup-oras.py'),
+                       ('zstd_setup', 'prepare-windows-zstd.py')]:
     spec = importlib.util.spec_from_file_location(name, ROOT / filename)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -135,6 +136,20 @@ class WindowsSafety(unittest.TestCase):
                              'subprocess.run(["reg", "add", "HKCU/Environment"])']:
                 script.write_text((ROOT / 'setup-oras.py').read_text() + '\n' + mutation + '\n')
                 self.assertTrue(windows_safety.audit(root)[1], mutation)
+        self.assertLess(consumer.index('prepare-windows-zstd.py'), consumer.index(
+            'name: Verify or prepare pinned static ORT'))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / zstd_setup.ASSET
+            with zipfile.ZipFile(archive, 'w') as package:
+                package.writestr(f'zstd-v{zstd_setup.VERSION}-win64/zstd.exe', b'verified executable')
+                package.writestr('../unwanted.txt', b'must not extract')
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                zstd_setup.unpack(archive, root)
+            self.assertFalse((root / 'zstd.exe').exists())
+            with patch.object(zstd_setup, 'SHA256', hashlib.sha256(archive.read_bytes()).hexdigest()):
+                self.assertEqual(zstd_setup.unpack(archive, root).read_bytes(), b'verified executable')
+            self.assertEqual([path.name for path in root.iterdir()], ['zstd.exe'])
 
     # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
