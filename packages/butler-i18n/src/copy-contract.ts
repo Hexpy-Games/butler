@@ -751,6 +751,8 @@ export interface AppCopy {
     projectFolder: string;
     projectFolderAuto: string;
     chooseProjectFolder: string;
+    changeProjectFolder: string;
+    resetProjectFolder: string;
     pin: string;
     unpin: string;
     delete: string;

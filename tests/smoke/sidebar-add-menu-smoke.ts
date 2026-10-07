@@ -44,7 +44,7 @@ async function picker(page: Page, result: Record<string, unknown>, fail = false)
   const name = await input.inputValue();
   await input.fill(`${name} `);
   await input.fill(name);
-  await page.getByRole("button", { name: "폴더 선택", exact: true }).click();
+  await page.locator("#project-create-folder").click();
   await page.waitForFunction(() => !document.querySelector("form[aria-busy=true]"));
 }
 
@@ -71,18 +71,29 @@ async function captureMatrix(page: Page) {
     await page.getByRole("menuitem", { name: "새 프로젝트", exact: true }).click();
     await page.getByRole("dialog").waitFor();
     await shot("dialog-empty");
-    const unavailable = page.getByRole("button", { name: "데스크톱 앱에서 사용 가능", exact: true });
-    assert(await unavailable.isDisabled());
+    const unavailable = page.getByRole("button", { name: "폴더 선택", exact: true });
+    assert.equal(await unavailable.getAttribute("aria-disabled"), "true");
+    assert.equal(await unavailable.getAttribute("disabled"), null);
+    await unavailable.evaluate(el => (el as HTMLButtonElement).click());
+    assert.equal(await page.getByLabel("프로젝트 이름", { exact: true }).inputValue(), "");
     await unavailable.hover();
     await page.getByRole("tooltip", { name: "데스크톱 앱에서 사용 가능", exact: true }).waitFor();
-    const path = "/Users/example/Projects/workspaces/a-very-long-project-folder-path/demo-project";
+    await settle(page);
+    const webShot = join(output!, `after-${width}-${theme}-web-disabled.png`);
+    await page.screenshot({ path: webShot }); screenshots.push(webShot);
+    await picker(page, { cancelled: true });
+    await shot("auto");
+    const path = String.raw`C:\Users\example\Projects\workspaces\a-very-long-project-folder-path\demo-project`;
     await picker(page, { display_name: "demo-project", folder_path: path, folder_selection_token: "fixture" });
     assert.equal(await page.getByLabel("프로젝트 이름", { exact: true }).inputValue(), "demo-project");
-    const pathText = page.getByTitle(path, { exact: true });
-    assert(await pathText.evaluate(el => el.scrollWidth > el.clientWidth));
-    await shot("dialog-folder");
+    const pathText = page.getByLabel(path, { exact: true });
+    assert.equal(await pathText.textContent(), `demo-project${path.slice(0, path.lastIndexOf("\\"))}`);
+    assert(await pathText.locator("[data-truncate=true]").last().evaluate(el => el.scrollWidth > el.clientWidth));
+    await pathText.hover();
+    await page.getByRole("tooltip", { name: path, exact: true }).waitFor();
+    await shot("picked");
     const dialog = await page.getByRole("dialog").boundingBox();
-    for (const name of ["폴더 선택", "취소", "만들기"]) {
+    for (const name of ["변경", "새 폴더로 되돌리기", "취소", "만들기"]) {
       const box = await page.getByRole("button", { name, exact: true }).boundingBox();
       assert(dialog && box && box.x >= dialog.x && box.x + box.width <= dialog.x + dialog.width, `${name} stays inside dialog`);
     }
@@ -118,7 +129,7 @@ async function exerciseCreation(page: Page) {
   await picker(page, selection);
   assert.equal(await input.inputValue(), "Custom project");
   await picker(page, { cancelled: true });
-  assert(await page.getByTitle(folder, { exact: true }).isVisible());
+  assert(await page.getByLabel(folder, { exact: true }).isVisible());
   await page.evaluate(() => { delete window.butlerApp; });
   await page.route("**/projects", route => route.request().method() === "POST"
     ? route.fulfill({ status: 500, json: { ok: false, error: { code: "fixture_failure" } } }) : route.continue());
@@ -144,15 +155,54 @@ async function exerciseCreation(page: Page) {
   await page.getByRole("dialog").waitFor({ state: "hidden" });
 }
 
+async function exerciseFolderStates(page: Page) {
+  await openDialog(page);
+  const input = page.getByLabel("프로젝트 이름", { exact: true });
+  for (const [path, base, parent] of [
+    ["/", "/", ""], ["C:\\", "C:\\", ""], ["C:", "C:", ""],
+    ["/alpha/beta/", "beta", "/alpha"], ["/beta", "beta", "/"],
+    [String.raw`C:\beta`, "beta", "C:\\"],
+  ]) {
+    await input.fill("");
+    await picker(page, { folder_path: path, folder_selection_token: "fixture" });
+    assert.equal(await input.inputValue(), base);
+    const value = page.getByLabel(path, { exact: true });
+    assert.equal(await value.textContent(), `${base}${parent}`);
+    await page.getByRole("button", { name: "새 폴더로 되돌리기", exact: true }).click();
+    assert.equal(await input.inputValue(), base);
+    assert(await page.locator("#project-create-folder").evaluate(el => el === document.activeElement));
+    assert.equal(await page.getByRole("button", { name: "새 폴더로 되돌리기", exact: true }).count(), 0);
+  }
+  await input.fill("Typed name");
+  await picker(page, { folder_path: "/alpha/beta", folder_selection_token: "fixture" });
+  await page.evaluate(() => {
+    window.butlerApp = { selectProjectFolder: () => new Promise(resolve => {
+      window.addEventListener("fixture-picker-cancel", () => resolve({ cancelled: true }), { once: true });
+    }) };
+  });
+  await page.locator("#project-create-folder").click();
+  assert.equal(await page.locator("#project-create-folder").getAttribute("disabled"), "");
+  assert(await page.getByRole("button", { name: "새 폴더로 되돌리기", exact: true }).isDisabled());
+  await page.evaluate(() => window.dispatchEvent(new Event("fixture-picker-cancel")));
+  await page.waitForFunction(() => !document.querySelector("form[aria-busy=true]"));
+  assert(await page.getByLabel("/alpha/beta", { exact: true }).isVisible());
+  assert.equal(await input.inputValue(), "Typed name");
+  await page.getByRole("button", { name: "새 폴더로 되돌리기", exact: true }).click();
+  assert.equal(await input.inputValue(), "Typed name");
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await page.evaluate(() => { delete window.butlerApp; });
+}
+
 try {
   const page = await browser.newPage({ reducedMotion: "reduce" });
   await server.signIn(page);
   await captureMatrix(page);
   await exerciseCreation(page);
+  await exerciseFolderStates(page);
   assert.equal(server.stubModelCalls.length, 0);
   writeFileSync(join(output, "screenshots.txt"), `${screenshots.join("\n")}\n`);
   console.log(JSON.stringify({ ok: true, screenshots: screenshots.length, modelCalls: 0,
-    verified: ["menu", "group naming", "schedules", "picker cancellation", "picker error", "custom name", "creation error", "existing folder", "path dedupe", "scratch"] }));
+    verified: ["menu", "group naming", "schedules", "picker cancellation", "picker error", "custom name", "creation error", "existing folder", "path dedupe", "scratch", "Windows/POSIX/root paths", "reset focus", "pending picker"] }));
 } finally {
   await browser.close(); await server.stop(); rmSync(folder, { recursive: true, force: true });
 }

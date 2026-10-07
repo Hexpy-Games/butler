@@ -1,3 +1,4 @@
+import { splitProjectFolderPath } from "./projectFolderPath";
 import { useEffect, useState } from "react";
 import { canSelectProjectFolder, selectProjectFolder, type ProjectFolderSelection } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -44,7 +45,7 @@ export function useProjectCreateForm(props: ProjectCreateDialogProps) {
         return;
       }
       setFolder(selection);
-      setValue((name) => name.trim() ? name : selection.display_name ?? selection.folder_path!.split(/[\\/]/u).filter(Boolean).pop() ?? "");
+      setValue((name) => name.trim() ? name : selection.display_name ?? splitProjectFolderPath(selection.folder_path!).basename);
       setError(null);
     } catch {
       setError(appCopy.interfaceFeedback.projectFolderFailed);
@@ -69,6 +70,12 @@ export function useProjectCreateForm(props: ProjectCreateDialogProps) {
     }
   }
 
-  return { open, value, setValue, folder, error, pending, canSubmit, pickFolder, submit,
+  function resetFolder() {
+    if (pending) return;
+    setFolder(null);
+    setError(null);
+  }
+
+  return { open, value, setValue, folder, error, pending, canSubmit, pickFolder, resetFolder, submit,
     onOpenChange: (next: boolean) => { if (!pending) onOpenChange(next); } };
 }
