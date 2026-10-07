@@ -20,6 +20,7 @@ ALLOWED_ACTIONS = re.compile(
     r'\./\.github/actions/[\w/-]+)\Z')
 
 RULES = {
+    'owner Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
     'PowerShell CI script blocked by execution policy': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?powershell[\x22\x27]?\s*$',
     'unsafe Windows ORAS setup action': r'\buses:\s*[\x22\x27]?oras-project/setup-oras@',
@@ -145,12 +146,11 @@ def owner_steps(source, owner_input):
     Blank excluded lines to retain diagnostic line numbers. Unknown expressions
     remain reachable and must pass the owner safety checks.
     """
-    if not owner_input:
-        return source
     blocks = re.split(r'(?=^\s*- (?:uses:|name:|run:))', source, flags=re.M)
     guard = r"^\s*if:\s*(?:\$\{\{\s*)?inputs\.owner-runner != 'true'(?:\s*\}\})?\s*$"
-    return ''.join('\n' * block.count('\n') if re.search(guard, block, re.M) else block
-                   for block in blocks)
+    unix_guard = r"^\s*if:\s*(?:\$\{\{\s*)?runner\.os != 'Windows'(?:\s*\}\})?\s*$"
+    return ''.join('\n' * block.count('\n') if (re.search(unix_guard, block, re.M)
+                   or owner_input and re.search(guard, block, re.M)) else block for block in blocks)
 
 
 def local_sources(root, path, source, seen, owner_input=False):
@@ -210,7 +210,7 @@ def audit(root):
             # Workflow defaults also apply to owner jobs with no step shell.
             prefix = source.split('\njobs:', 1)[0]
             for line, hazard in hazards(prefix):
-                if hazard in ('unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
+                if hazard in ('owner Windows Bash shell', 'unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
                     findings.append(f'{workflow.relative_to(root)}:{line}: {hazard}')
             imported = set()
             for path, text in local_sources(root, workflow, block, {workflow.resolve()}):

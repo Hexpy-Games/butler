@@ -7,10 +7,10 @@ This is deliberately limited to literal native commands and executable calls.
 import re
 
 NATIVE = re.compile(
-    r'^\s*(?:\$[\w:]+\s*=\s*)?(?:'
+    r'^\s*(?:\$[\w:]+\s*=\s*)?\(*\s*(?:'
     r'(?:&\s+)?(?:cargo|rustc|rustup|python[3]?|bun|node|npm(?:\.cmd)?|gh|oras|dumpbin|'
     r'cmd(?:\.exe)?|reg(?:\.exe)?|tar|zstd|powershell(?:\.exe)?)\s|'
-    r'&\s+(?:[\"\'][^\n]*?\.(?:exe|cmd)[\"\']|\$(?:Executable|vswhere|env:ComSpec))\s)', re.I)
+    r'&\s+(?:[\"\'][^\n]*?\.(?:exe|cmd)[\"\']|\$[\w:]+)\s)', re.I)
 PREFERENCE = re.compile(r'^\s*\$ErrorActionPreference\s*=\s*[\"\'](Stop|Continue)[\"\']', re.I)
 
 
@@ -29,14 +29,24 @@ def script_hazards(source):
     preference = 'stop'
     setting_indent = None
     findings = []
-    for start, _, statement in statements(source):
+    commands = list(statements(source))
+    for index, (start, _, statement) in enumerate(commands):
         if statement.lstrip().startswith('#'):
             continue
         setting = PREFERENCE.search(statement)
         if setting:
             preference = setting[1].lower()
             setting_indent = len(statement) - len(statement.lstrip())
-        if NATIVE.match(statement) and (preference != 'continue'
+        if not NATIVE.match(statement):
+            continue
+        following = []
+        for _, _, next_statement in commands[index + 1:]:
+            if NATIVE.match(next_statement):
+                break
+            following.append(next_statement)
+        if not re.search(r'\$LASTEXITCODE\b', '\n'.join(following), re.I):
+            findings.append((start, 'native command without LASTEXITCODE verification'))
+        if (preference != 'continue'
                 or setting_indent != len(statement) - len(statement.lstrip())):
             findings.append((start, 'PS 5.1 native stderr under Stop (use scoped Continue and LASTEXITCODE)'))
     return findings
