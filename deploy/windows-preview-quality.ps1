@@ -1,5 +1,8 @@
 # Owner Windows quality gates; native stderr never decides command success.
 $ErrorActionPreference = 'Stop'
+$env:TARGET_SNAPSHOT_PROFILE = 'debug'
+$env:TARGET_SNAPSHOT_FEATURES = 'workspace-no-defaults,butler-agent/static-ort'
+$env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
 $ErrorActionPreference = 'Continue'
 python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python -c "import sys; print('successful native stderr', file=sys.stderr)" 2>&1 | Out-Host
 $ErrorActionPreference = 'Stop'

@@ -95,9 +95,6 @@ jobs:
       - name: Windows native stderr, formatting, clippy and source policy
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SNAPSHOT_PROFILE: debug
-          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
-          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
         run: ../../../deploy/windows-preview-quality.ps1
       - name: Diagnose original ACL writer and checker
         run: ../../../deploy/windows-acl-diagnosis.ps1
