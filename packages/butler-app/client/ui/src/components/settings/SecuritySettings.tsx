@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -88,12 +89,12 @@ export const SecuritySettings = memo(function SecuritySettings() {
             disabled={busy !== null}
             onSave={security.saveAllowedHosts}
           />
-          <SecurityAllowedHostsField
+          {browserFeatureEnabled && <SecurityAllowedHostsField
             content
             hosts={view.content_hosts ?? []}
             disabled={busy !== null}
             onSave={security.saveContentHosts}
-          />
+          />}
         </SettingsSection>
       )}
     </SettingsPage>

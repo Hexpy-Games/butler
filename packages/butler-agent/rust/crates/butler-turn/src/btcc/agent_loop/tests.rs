@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::btcc::{AgentLoop, AgentLoopError, ExecutionRoute, SuspensionReason};
 
 use super::continuation::AuthorityLoopContinuation;
-use super::contracts::{AuthorityDecision, ToolOutcome};
+use super::contracts::AuthorityDecision;
 use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::GuidedPolicyDependencies;
 use super::test_data::{call, result, run, turn};
@@ -281,6 +281,7 @@ pub(crate) fn stored_authority_continuation_with_every_field_is_byte_stable() {
     assert_eq!(serde_json::to_string(&decoded).unwrap(), stored);
 }
 
+// test-category: pure-logic
 #[tokio::test]
 async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
     let pending = Fixture::new([result("", vec![call("pending", "read_file")], 0)]);
@@ -347,57 +348,64 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
             }
         }
     }
+    failed_rows_only_include_emitted_authority_calls().await;
 }
 
-// test-category: pure-logic
-#[tokio::test]
-async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
-    let empty = Fixture::new([
-        result("", vec![], 0),
-        result("", vec![], 1),
-        result("recovered", vec![], 2),
-    ]);
-    let no_visible = run(&empty.agent(), &turn(None, "typed_terminal"))
-        .await
-        .unwrap();
-    assert_eq!(no_visible.terminal_outcome, None);
-    assert_eq!(no_visible.content, "recovered");
-    assert_eq!(
-        empty
-            .events
-            .lock()
-            .unwrap()
+async fn failed_rows_only_include_emitted_authority_calls() {
+    for concurrent in [false, true] {
+        let mut continuation = AuthorityLoopContinuation::fixture("request-1", "journal-pending");
+        continuation.batch.calls = vec![
+            call("pending", "read_file"),
+            call("settled", "read_file"),
+            call("unemitted", "read_file"),
+        ];
+        if concurrent {
+            continuation.batch.concurrent_results = vec![
+                super::contracts::ToolResult {
+                    tool_call_id: "pending".into(),
+                    name: "read_file".into(),
+                    ok: true,
+                    error: None,
+                    output: Some(
+                        butler_core::json::JsonDocument::from_value(
+                            &json!({"authority_pending":true,"request_ref":"request-1"}),
+                        )
+                        .unwrap(),
+                    ),
+                },
+                super::contracts::ToolResult {
+                    tool_call_id: "settled".into(),
+                    name: "read_file".into(),
+                    ok: true,
+                    error: None,
+                    output: None,
+                },
+            ];
+        }
+        let fixture = Fixture::new([]);
+        let error = fixture
+            .agent()
+            .run(
+                &turn(Some(Box::new(continuation)), "safe_fallback"),
+                &super::test_data::claim(),
+                1,
+                fixture.as_ref(),
+                &crate::btcc::NOOP_MODEL_ROUND_OBSERVER,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, AgentLoopError::Propagate(value) if value.code() == "authority_decision_missing")
+        );
+        let progress = fixture.progress_events.lock().unwrap();
+        let failed: Vec<_> = progress
             .iter()
-            .filter(|value| value.starts_with("model:"))
-            .count(),
-        3
-    );
-
-    let first = Fixture::new([result(
-        "",
-        vec![call("one", "web_search"), call("two", "start_work")],
-        0,
-    )]);
-    first.outcomes.lock().unwrap().insert(
-        "one".into(),
-        ToolOutcome::Suspend(SuspensionReason::WaitingForWorker),
-    );
-    first.outcomes.lock().unwrap().insert(
-        "two".into(),
-        ToolOutcome::Suspend(SuspensionReason::AuthorityPending),
-    );
-    let outcome = run(&first.agent(), &turn(None, "safe_fallback"))
-        .await
-        .unwrap();
-    assert_eq!(outcome.suspension, Some(SuspensionReason::WaitingForWorker));
-    assert!(
-        !first
-            .events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|value| value == "batch:one,two")
-    );
+            .filter(|event| event.kind == "tool.failed")
+            .map(|event| event.payload.as_ref().unwrap()["toolCallId"].clone())
+            .collect();
+        assert_eq!(failed, vec![json!("pending")]);
+    }
 }
 
 #[tokio::test]

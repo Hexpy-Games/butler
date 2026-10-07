@@ -12,10 +12,11 @@ pub(crate) fn trim_text_to_token_budget(
     if trimmed.is_empty() {
         return Ok(String::new());
     }
-    if snapshot
-        .estimate(TokenEstimateInput::Text(trimmed), None)?
-        .tokens
-        <= max_tokens
+    if trimmed.len() as f64 <= max_tokens
+        || snapshot
+            .estimate(TokenEstimateInput::Text(trimmed), None)?
+            .tokens
+            <= max_tokens
     {
         return Ok(trimmed.to_owned());
     }

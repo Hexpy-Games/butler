@@ -83,9 +83,7 @@ pub(super) async fn operation(
             .and_then(|output| output.field("request_ref").ok().flatten())
             .unwrap_or_default();
         let result_call_id = operation_call_id.unwrap_or(call_id);
-        let id = super::super::identity::digest(&format!(
-            "btcc-guided-tool-result.v2\0{result_call_id}\0{phase}\0{request_ref}"
-        ));
+        let id = result_identity(result_call_id, phase, request_ref);
         payload.insert("resultId".into(), Value::String(id.clone()));
         payload.insert("resultByteLength".into(), Value::from(body.len()));
         (id, sha256)
@@ -184,4 +182,179 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
                 .filter(|value| !value.is_empty())
         })
         .or_else(|| (call.name == "list_files").then(|| ".".into()))
+}
+
+/// Publish pending rows only after persistence, or fail them when parking fails.
+pub(crate) async fn authority_batch(
+    progress: &dyn AgentLoopProgress,
+    transition: &crate::btcc::TurnTransition,
+    persisted: bool,
+) {
+    let crate::btcc::TurnTransition::Suspend {
+        authority_continuation: Some(continuation),
+        ..
+    } = transition
+    else {
+        return;
+    };
+    let pending = butler_core::json::JsonDocument::from_value(&json!({
+        "ok":true,"authority_pending":true,"request_ref":continuation.request_ref,
+    }))
+    .ok();
+    for (index, call) in continuation
+        .batch
+        .calls
+        .iter()
+        .enumerate()
+        .skip(continuation.batch.next_call_index)
+    {
+        let output = continuation
+            .batch
+            .concurrent_results
+            .get(index)
+            .and_then(|result| result.output.as_ref());
+        if index != continuation.batch.next_call_index
+            && super::continuation::pending_authority(output).is_none()
+        {
+            continue;
+        }
+        if persisted {
+            operation(
+                progress,
+                call,
+                Status::Completed,
+                output.or(pending.as_ref()),
+                None,
+            )
+            .await;
+        } else {
+            authority_terminal(progress, call, Status::Failed).await;
+        }
+    }
+}
+
+fn result_identity(call_id: &str, phase: &str, request_ref: &str) -> String {
+    super::super::identity::digest(&format!(
+        "btcc-guided-tool-result.v2\0{call_id}\0{phase}\0{request_ref}"
+    ))
+}
+
+/// Reuse the terminal projection for durable cancellation before the turn's final event.
+pub(crate) async fn authority_cancellation_events(
+    continuation: &super::continuation::AuthorityLoopContinuation,
+) -> Vec<RuntimeTurnEventInput> {
+    let events = AuthorityCancellationEvents::default();
+    for (index, call) in continuation
+        .batch
+        .calls
+        .iter()
+        .enumerate()
+        .skip(continuation.batch.next_call_index)
+    {
+        let pending = if continuation.batch.concurrent_results.is_empty() {
+            index == continuation.batch.next_call_index
+        } else {
+            continuation
+                .batch
+                .concurrent_results
+                .get(index)
+                .is_some_and(|result| {
+                    super::continuation::pending_authority(result.output.as_ref()).is_some()
+                })
+        };
+        if pending {
+            authority_terminal(&events, call, Status::Cancelled).await;
+        }
+    }
+    events
+        .0
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Collect only the small terminal projections; the caller durably appends each event.
+#[derive(Default)]
+struct AuthorityCancellationEvents(std::sync::Mutex<Vec<RuntimeTurnEventInput>>);
+
+impl AgentLoopProgress for AuthorityCancellationEvents {
+    fn emit(&self, event: RuntimeTurnEventInput) -> crate::btcc::PortFuture<'_, ()> {
+        Box::pin(async move {
+            let mut event = event;
+            event
+                .payload
+                .get_or_insert_with(Map::new)
+                .insert("authorityCancellation".into(), Value::Bool(true));
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(event);
+            Ok(())
+        })
+    }
+}
+
+/// Replace a pending body with the actual failure/cancellation outcome.
+/// Ordinary non-authority failures retain their existing publication path.
+pub(super) async fn authority_terminal(
+    progress: &dyn AgentLoopProgress,
+    call: &super::contracts::ModelRoundToolCall,
+    status: Status,
+) {
+    let Ok(output) = butler_core::json::JsonDocument::from_value(&json!({
+        "ok":false,"error":{"code":status.as_str(),"message":"Operation did not complete."},
+    })) else {
+        return;
+    };
+    operation(progress, call, status, Some(&output), None).await;
+    emit_output_chunks(
+        progress,
+        &call.id,
+        &result_identity(&call.id, "terminal", ""),
+        &super::super::identity::digest(output.as_str()),
+        output.as_str(),
+    )
+    .await;
+}
+
+/// Settle unresolved pending rows; completed siblings retain their actual result.
+pub(super) async fn fail_pending(
+    input: &super::driver::Invocation<'_>,
+    state: &super::state::State,
+) {
+    fail_pending_except(input, &state.tool_results).await;
+}
+
+pub(super) async fn fail_pending_except(
+    input: &super::driver::Invocation<'_>,
+    completed: &[super::contracts::ToolResult],
+) {
+    let Some(continuation) = input.turn.authority_continuation.as_ref() else {
+        return;
+    };
+    for (index, call) in continuation
+        .batch
+        .calls
+        .iter()
+        .enumerate()
+        .skip(continuation.batch.next_call_index)
+    {
+        let pending = if continuation.batch.concurrent_results.is_empty() {
+            index == continuation.batch.next_call_index
+        } else {
+            continuation
+                .batch
+                .concurrent_results
+                .get(index)
+                .is_some_and(|result| {
+                    super::continuation::pending_authority(result.output.as_ref()).is_some()
+                })
+        };
+        if pending
+            && !completed
+                .iter()
+                .any(|result| result.tool_call_id == call.id)
+        {
+            authority_terminal(input.progress, call, Status::Failed).await;
+        }
+    }
 }

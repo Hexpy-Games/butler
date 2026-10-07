@@ -18,14 +18,15 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .join(transcript_name(&session_id));
     let prior = previous_checkpoint(context, chat_id).await?;
     let path_for_read = path.clone();
-    let state = tokio::task::spawn_blocking(move || file_state(&path_for_read))
-        .await
-        .map_err(GatewayApplicationError::internal_from)??;
-    let Some(state) = state else { return Ok(false) };
+    let prior_for_read = prior.clone();
+    let state =
+        tokio::task::spawn_blocking(move || read_state(&path_for_read, prior_for_read.as_ref()))
+            .await
+            .map_err(GatewayApplicationError::internal_from)??;
+    let Some((state, reusable)) = state else {
+        return Ok(false);
+    };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
-    let reusable = prior
-        .as_ref()
-        .is_some_and(|value| super::byte_window::reusable(value, &path, state.size));
     if reusable
         && prior
             .as_ref()
@@ -80,6 +81,18 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
     Ok(advanced && pending)
+}
+
+// Boundary validation opens and reads the file, so it belongs on a blocking worker.
+fn read_state(
+    path: &std::path::Path,
+    prior: Option<&Checkpoint>,
+) -> Result<Option<(FileState, bool)>, GatewayApplicationError> {
+    let Some(state) = file_state(path)? else {
+        return Ok(None);
+    };
+    let reusable = prior.is_some_and(|value| super::byte_window::reusable(value, path, state.size));
+    Ok(Some((state, reusable)))
 }
 
 fn transcript_name(session_id: &str) -> String {

@@ -109,9 +109,11 @@ pub(super) fn decide(
         updated_at=?6 WHERE request_ref=?7 AND owner_session_id=?8 AND source_session_id=?9 \
         AND decision='pending' AND close_reason IS NULL AND source_call_id IS NOT NULL \
         AND EXISTS (SELECT 1 FROM btcc_turns source \
-        WHERE source.turn_id=btcc_authority_requests.source_turn_id \
-        AND source.suspension_reason='authority_pending' AND source.semantic_state='admitted' \
-        AND json_extract(source.authority_continuation_json,'$.requestRef')=request_ref)",
+        WHERE source.turn_id=btcc_authority_requests.source_turn_id AND source.semantic_state='admitted' \
+        AND ((source.suspension_reason='authority_pending' \
+        AND json_extract(source.authority_continuation_json,'$.requestRef')=request_ref) \
+        OR EXISTS (SELECT 1 FROM json_each(source.authority_continuation_json, \
+        '$.batch.concurrentCallIds') sibling WHERE sibling.value=source_call_id)))",
         params![decision,schedule,if write.permission.is_some(){"conversation"}else{"once"},
             decision,write.alternative_input,write.now,write.request_ref,write.owner_session_id,
             write.source_session_id]).map_err(query::sql)?;

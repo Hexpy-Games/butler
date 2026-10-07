@@ -9,20 +9,14 @@ use butler_turn::btcc::{BtccError, BtccRepositories, ContextDocumentRead, TurnRe
 
 pub(super) struct DocumentProjection {
     pub context: String,
+    pub sections: Vec<DocumentSection>,
+    pub instruction_components: Value,
     pub project_instructions: String,
+
     pub response_language: String,
     pub governing: String,
     pub persona: String,
     pub eol: String,
-}
-
-impl DocumentProjection {
-    pub(super) fn prompt_context(&self) -> impl Iterator<Item = String> {
-        [&self.project_instructions, &self.context]
-            .into_iter()
-            .filter(|value| !value.is_empty())
-            .cloned()
-    }
 }
 
 fn references<'a>(turn: &'a TurnRecord, field: &str) -> impl Iterator<Item = &'a str> {
@@ -39,7 +33,7 @@ async fn group(
     refs: impl Iterator<Item = String>,
     limit: usize,
     projected: Option<&HashMap<String, String>>,
-) -> String {
+) -> Vec<DocumentSection> {
     let mut documents = Vec::new();
     for reference in refs {
         let Ok(document) = repo.read_context_document(reference.clone()).await else {
@@ -48,28 +42,64 @@ async fn group(
         if document.source_id == "project-instructions" {
             continue; // Exact admitted instructions are projected separately from memory.
         }
+        let history = history_document(&document);
         let content = match projected {
             Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
             None => document.content,
         };
-        documents.push((document.source_id, content));
+        documents.push((document.source_id, content, history));
     }
-    documents.sort_by_key(|(source, _)| std::cmp::Reverse(super::excerpts::priority(source)));
+    documents.sort_by_key(|(source, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
     let count = documents.len();
     let mut remaining = limit;
     let mut contents = Vec::new();
-    for (index, (source, content)) in documents.into_iter().enumerate() {
+    for (index, (source, content, history)) in documents.into_iter().enumerate() {
         // Keep room for a deterministic omission marker for every later source.
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
         let retrieval = format!("source {source}; use recall_memory or read_file to expand");
-        let value = super::excerpts::text(&content, allowance, &retrieval);
+        let budget_content = if projected.is_some() {
+            content.as_str()
+        } else {
+            history
+                .as_ref()
+                .map_or(content.as_str(), |h| h.main_budget_projection.as_str())
+        };
+        let charged = super::excerpts::text(budget_content, allowance, &retrieval);
+        let value = if projected.is_some() && content.is_empty() {
+            String::new()
+        } else {
+            history.map_or_else(|| charged.clone(), |h| h.history)
+        };
         if !value.trim().is_empty() {
-            contents.push(value.clone());
+            contents.push(DocumentSection {
+                stage: stage(&source),
+                id: source,
+                text: value.clone(),
+                budget_text: charged.clone(),
+            });
         }
-        remaining = remaining.saturating_sub(value.len() + 2);
+        remaining = remaining.saturating_sub(charged.len() + 2);
     }
-    contents.join("\n\n")
+    contents
+}
+
+fn history_document(
+    document: &ContextDocumentRead,
+) -> Option<butler_turn::conversation::HistoryDocument> {
+    if document.source_id != "recent-conversation" {
+        return None;
+    }
+    let content = document
+        .content
+        .strip_prefix("## Recent Conversation\n\n")
+        .unwrap_or(&document.content);
+    Some(serde_json::from_str(content).unwrap_or_else(|_| {
+        butler_turn::conversation::HistoryDocument {
+            history: content.to_owned(),
+            main_budget_projection: content.to_owned(),
+        }
+    }))
 }
 
 fn language(candidate: &str) -> Option<String> {
@@ -158,19 +188,36 @@ pub(super) async fn read(
     )
     .await;
     let mut groups = Vec::new();
+    let mut sections = Vec::new();
     for (title, value) in [
         ("Recent conversation and feedback", recent),
         ("Required working context", mandatory),
         ("Optional working context", optional),
     ] {
-        if !value.is_empty() {
-            groups.push(format!("## {title}\n\n{value}"));
+        {
+            let header = format!("## {title}");
+            let budget = value
+                .iter()
+                .filter(|section| !section.budget_text.trim().is_empty())
+                .map(|section| section.budget_text.as_str())
+                .collect::<Vec<_>>();
+            if !budget.is_empty() {
+                groups.push(format!("{header}\n\n{}", budget.join("\n\n")));
+            }
+            sections.push(DocumentSection {
+                id: title.into(),
+                text: header.clone(),
+                budget_text: header,
+                stage: Stage::Stable,
+            });
+            sections.extend(value);
         }
     }
     project_profile(
         repo,
         turn,
         groups.join("\n\n"),
+        sections,
         response_language,
         profile_limit,
     )
@@ -181,6 +228,7 @@ async fn project_profile(
     repo: &BtccRepositories,
     turn: &TurnRecord,
     context: String,
+    sections: Vec<DocumentSection>,
     response_language: String,
     profile_limit: usize,
 ) -> Result<DocumentProjection, BtccError> {
@@ -241,7 +289,10 @@ async fn project_profile(
     };
     Ok(DocumentProjection {
         context,
+        sections,
+        instruction_components: super::diagnostics::instruction_components(&bounded),
         project_instructions,
+
         response_language,
         governing: join(&governing_sources),
         persona: join(&persona_sources),
@@ -265,6 +316,30 @@ fn exact_eol(admitted: &[ContextDocumentRead]) -> Result<String, BtccError> {
         ));
     }
     Ok(eol_content.unwrap_or_default())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Stage {
+    Stable,
+    History,
+    Volatile,
+}
+
+pub(super) struct DocumentSection {
+    pub id: String,
+    pub text: String,
+    pub stage: Stage,
+    pub budget_text: String,
+}
+
+fn stage(id: &str) -> Stage {
+    // Retrieved context, feedback and remembered rules can change when a turn
+    // completes. Only fixed headings and exact project instructions precede history.
+    if id == "recent-conversation" {
+        Stage::History
+    } else {
+        Stage::Volatile
+    }
 }
 
 /// Project operating instructions stay exact across memory budgets and phases.

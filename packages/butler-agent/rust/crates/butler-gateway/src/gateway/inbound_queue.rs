@@ -1,7 +1,6 @@
 //! Source-compatible durable inbound queue for the standalone native owner.
 
 mod error;
-#[cfg(debug_assertions)]
 mod fixture;
 mod observers;
 mod record;
@@ -67,7 +66,6 @@ impl InboundQueue {
         item: ClaimedInboundEvent,
         metadata: Value,
     ) -> QueueResult<bool> {
-        #[cfg(debug_assertions)]
         fixture::before_settlement(&self.root).await?;
         self.blocking(move |queue| queue.complete(&item, metadata))
             .await

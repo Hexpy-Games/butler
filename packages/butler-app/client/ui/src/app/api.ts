@@ -897,7 +897,14 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   throw new Error(`Unsupported Butler app API route: ${method} ${url.pathname}`);
 }
 
-export async function selectProjectFolder(): Promise<{ cancelled?: boolean; display_name?: string; folder_selection_token?: string }> {
+export interface ProjectFolderSelection {
+  cancelled?: boolean;
+  display_name?: string;
+  folder_path?: string;
+  folder_selection_token?: string;
+}
+
+export async function selectProjectFolder(): Promise<ProjectFolderSelection> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (!bridge?.selectProjectFolder) {
     const error = new Error(appCopy.interfaceFeedback.desktopFolderOnly);

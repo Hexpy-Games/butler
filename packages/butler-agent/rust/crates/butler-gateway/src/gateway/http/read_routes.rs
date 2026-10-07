@@ -143,15 +143,27 @@ pub(super) async fn get_live_events(
 
 /// `GET /health`.
 pub(super) fn health() -> Result<Response, HttpError> {
+    let data = HealthView {
+        ok: true,
+        service: "butler-app-server".to_owned(),
+        protocol_version: APP_PROTOCOL_VERSION.to_owned(),
+    };
+    if let Some(opens) = crate::gateway::idle_probe::transcript_opens() {
+        let mut probe = serde_json::to_value(data).map_err(|_| HttpError::Internal)?;
+        probe["transcript_read_opens"] = serde_json::json!(opens);
+        return json(
+            StatusCode::OK,
+            ApiEnvelope {
+                protocol_version: APP_PROTOCOL_VERSION,
+                data: probe,
+            },
+        );
+    }
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: HealthView {
-                ok: true,
-                service: "butler-app-server".to_owned(),
-                protocol_version: APP_PROTOCOL_VERSION.to_owned(),
-            },
+            data,
         },
     )
 }

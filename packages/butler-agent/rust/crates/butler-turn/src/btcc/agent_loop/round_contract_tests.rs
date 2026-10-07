@@ -2,6 +2,7 @@ use super::contracts::{BatchDisposition, ToolChoice, UsageAttribution};
 use super::test_data::{call, result, run, turn};
 use super::test_support::Fixture;
 
+// test-category: pure-logic
 #[tokio::test]
 async fn round_attribution_uses_source_offset_and_final_report_preserves_tool_choice() {
     let fixture = Fixture::new([
@@ -9,6 +10,7 @@ async fn round_attribution_uses_source_offset_and_final_report_preserves_tool_ch
         result("settled", vec![], 1),
     ]);
     *fixture.usage_attribution.lock().unwrap() = Some(UsageAttribution {
+        prompt_diagnostics: None,
         session_kind: Some("parent".into()),
         turn_id: "turn-1".into(),
         phase: "ordinary".into(),
