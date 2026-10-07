@@ -70,11 +70,19 @@ class WindowsSafety(unittest.TestCase):
     # test-category: security
     def test_owner_native_publisher_uses_powershell_not_runner_bash_alias(self):
         source = (ROOT.parents[1] / '.github/workflows/native-deps.yml').read_text()
-        for action, version in [('actions/setup-python@v5', "python-version: '3.12'"),
-                                ('dtolnay/rust-toolchain@master', 'toolchain: 1.91.0')]:
-            setup = source.split(f'- uses: {action}', 1)[1].split('- uses:', 1)[0]
-            self.assertNotIn('if:', setup)  # Service PATH need not contain owner-installed tools.
-            self.assertIn(version, setup)
+        python = source.split('- uses: actions/setup-python@v5', 1)[1].split('- uses:', 1)[0]
+        self.assertNotIn('if:', python)
+        self.assertIn("python-version: '3.12'", python)
+        self.assertIn('PSExecutionPolicyPreference: Bypass', python)
+        rust = source.split('- uses: dtolnay/rust-toolchain@master', 1)[1].split('- uses:', 1)[0]
+        self.assertIn('if: ${{ !matrix.owner }}', rust)
+        owner_rust = source.split('name: Set up owner Rust in workspace cache', 1)[1].split('- uses:', 1)[0]
+        self.assertIn('if: matrix.owner', owner_rust)
+        self.assertIn('shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass', owner_rust)
+        self.assertIn("Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/toolchains'", owner_rust)
+        self.assertIn('--no-modify-path', owner_rust)
+        self.assertIn('toolchain install 1.91.0 --profile minimal --no-self-update', owner_rust)
+        self.assertIn('if ($LASTEXITCODE -ne 0)', owner_rust)
         self.assertLess(source.index('uses: actions/setup-python@v5'),
                         source.index('uses: ./.github/actions/setup-oras'))
         owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]

@@ -52,11 +52,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        env:
+          # Process scope only; the runner service policy remains unchanged.
+          PSExecutionPolicyPreference: Bypass
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@master
+        if: ${{ !matrix.owner }}
         with:
           toolchain: 1.91.0
+      - name: Set up owner Rust in workspace cache
+        if: matrix.owner
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+        run: |
+          $tools = Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/toolchains'
+          $env:CARGO_HOME = Join-Path $tools 'cargo'
+          $env:RUSTUP_HOME = Join-Path $tools 'rustup'
+          $rustup = Join-Path $env:CARGO_HOME 'bin/rustup.exe'
+          if (!(Test-Path $rustup)) {
+            $installer = Join-Path $env:RUNNER_TEMP 'rustup-init.exe'
+            Invoke-WebRequest -UseBasicParsing 'https://win.rustup.rs/x86_64' -OutFile $installer
+            & $installer --default-toolchain none --no-modify-path --profile minimal -y
+            if ($LASTEXITCODE -ne 0) { throw 'Owner Rust bootstrap failed' }
+          }
+          & $rustup toolchain install 1.91.0 --profile minimal --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned owner Rust toolchain installation failed' }
+          & $rustup default 1.91.0
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned owner Rust toolchain selection failed' }
+          @("CARGO_HOME=$env:CARGO_HOME", "RUSTUP_HOME=$env:RUSTUP_HOME") |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          (Join-Path $env:CARGO_HOME 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
         with:
