@@ -42,10 +42,10 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
     assert_attention(&s, true).await?;
     Ok((s, turn, question))
 }
-fn answer() -> Value {
+pub(super) fn answer() -> Value {
     json!({"status":"answered","answers":[{"id":"format","selected":["full"],"custom":null,"skipped":false}]})
 }
-async fn reply(s: &Scenario, q: &Value, response: Value) -> Result<Value, HarnessError> {
+pub(super) async fn reply(s: &Scenario, q: &Value, response: Value) -> Result<Value, HarnessError> {
     let response =
         s.gw.post(
             &format!(

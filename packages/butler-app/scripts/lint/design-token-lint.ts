@@ -169,6 +169,19 @@ const findings = files.flatMap((path) => {
   return path.endsWith(".css") ? lintCss(relPath, source) : lintScript(relPath, source);
 });
 
+
+const tokenSource = readFileSync(join(sourceRoot, "libs/design-system/tokens.css"), "utf8");
+const rootBlock = /:root\s*\{([^}]*)\}/u.exec(tokenSource)?.[1] ?? "";
+const declaredLineHeights = new Set([...rootBlock.matchAll(/(--line-height-[\w-]+)\s*:/gu)].map((match) => match[1]));
+for (const path of files.filter((file) => file.endsWith(".css"))) {
+  const source = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
+  for (const match of source.matchAll(/var\((--line-height-[\w-]+)\)/gu)) {
+    if (declaredLineHeights.has(match[1])) continue;
+    findings.push({ path: relative(root, path), line: source.slice(0, match.index).split("\n").length,
+      reason: "referenced line-height token must be declared in :root", text: match[0] });
+  }
+}
+
 if (findings.length > 0) {
   console.error("Design token lint failed:");
   for (const finding of findings) {

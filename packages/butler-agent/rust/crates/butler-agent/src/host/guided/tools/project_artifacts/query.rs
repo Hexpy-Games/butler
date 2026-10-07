@@ -54,15 +54,19 @@ pub(super) struct Artifact {
 // select every assistant message across the owner's unrelated chat history.
 const CANDIDATES: &str = "WITH origins AS (\
     SELECT a.file_id,MAX(m.rowid) AS latest FROM chats c \
-    CROSS JOIN messages m ON m.chat_id=c.id \
+    CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid \
     JOIN message_attachments a ON a.message_id=m.id \
     WHERE c.project_id=?1 AND m.role='assistant' AND m.status='delivered' \
     AND (m.safe_error_code IS NULL OR m.safe_error_code NOT IN \
     ('app_turn_queue_failed','goal_completion_incomplete')) GROUP BY a.file_id), \
-    matches AS (SELECT f.*,m.rowid AS origin_rowid,m.chat_id,m.turn_id,m.id AS origin_message,\
+    matches AS (SELECT f.*,m.rowid AS origin_rowid,COALESCE(h.archive_id,m.chat_id) AS chat_id,m.turn_id,m.id AS origin_message,\
     CASE WHEN lower(f.safe_name)=lower(?2) AND ?2<>'' THEN 0 ELSE 1 END AS match_rank \
     FROM origins o JOIN message_files f ON f.id=o.file_id \
     JOIN messages m ON m.rowid=o.latest \
+    LEFT JOIN app_general_history h ON h.last_rowid=CASE WHEN m.chat_id='general' \
+      THEN (SELECT MIN(last_rowid) FROM app_general_history WHERE last_rowid>=m.rowid) END \
+      AND m.rowid>=h.first_rowid \
     WHERE (?2='' OR instr(lower(f.safe_name),lower(?2))>0) \
     AND f.storage_name=f.id \
     AND (?3='' OR lower(f.mime_type)=lower(?3) OR lower(f.kind)=lower(?3)) \

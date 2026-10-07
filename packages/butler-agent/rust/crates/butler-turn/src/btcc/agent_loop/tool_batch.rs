@@ -11,6 +11,29 @@ use super::ports::{GuidedPolicyPort, ToolExecutionError};
 use super::progress::{Status, operation};
 use crate::btcc::BtccCode;
 
+/// Execution metadata computed once, including the parsed authority request.
+pub(super) struct ExecutedCall {
+    pub result: ToolResult,
+    pub pending_authority: Option<String>,
+}
+
+impl ExecutedCall {
+    pub(super) fn restored(result: ToolResult) -> Self {
+        let pending_authority = super::continuation::pending_authority(result.output.as_ref());
+        Self {
+            result,
+            pending_authority,
+        }
+    }
+
+    pub(super) fn settled(result: ToolResult) -> Self {
+        Self {
+            result,
+            pending_authority: None,
+        }
+    }
+}
+
 pub(super) struct PreparedCall<'a> {
     pub call: ModelRoundToolCall,
     pub tool: Option<&'a ModelRoundTool>,
@@ -84,7 +107,7 @@ pub(super) async fn execute<'a>(
     policy: &'a dyn GuidedPolicyPort,
     invocation: GuidedInvocation<'a>,
     prepared: &'a PreparedCall<'a>,
-) -> Result<ToolResult, BtccError> {
+) -> Result<ExecutedCall, BtccError> {
     operation(
         invocation.progress,
         &prepared.call,
@@ -110,7 +133,7 @@ pub(super) async fn execute<'a>(
         )
         .await;
         super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
-        return Ok(result);
+        return Ok(ExecutedCall::settled(result));
     }
     let denied = super::hooks::pre_tool(policy, invocation, &prepared.call).await;
     let mut result = if let Some(message) = denied {
@@ -135,6 +158,20 @@ pub(super) async fn execute<'a>(
             .await?;
     }
     super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
+    // A pending body is visible only after the continuation commit succeeds.
+    let executed = ExecutedCall::restored(result);
+    if executed.pending_authority.is_none() {
+        publish_result(policy, invocation, prepared, &executed.result).await;
+    }
+    Ok(executed)
+}
+
+async fn publish_result(
+    policy: &dyn GuidedPolicyPort,
+    invocation: GuidedInvocation<'_>,
+    prepared: &PreparedCall<'_>,
+    result: &ToolResult,
+) {
     let visible = result
         .error
         .as_ref()
@@ -153,7 +190,6 @@ pub(super) async fn execute<'a>(
         operation_call_id.as_deref(),
     )
     .await;
-    Ok(result)
 }
 
 fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
@@ -223,13 +259,28 @@ pub(super) async fn execute_concurrent<'a>(
     policy: &'a dyn GuidedPolicyPort,
     invocation: GuidedInvocation<'a>,
     calls: &'a [PreparedCall<'a>],
-) -> Result<Vec<ToolResult>, BtccError> {
+) -> Result<Vec<ExecutedCall>, BtccError> {
     let results = join_all(
         calls
             .iter()
             .map(|prepared| execute(policy, invocation, prepared)),
     )
     .await;
+    if results.iter().any(Result::is_err) {
+        for (call, result) in calls.iter().zip(&results) {
+            if result
+                .as_ref()
+                .is_ok_and(|result| result.pending_authority.is_some())
+            {
+                super::progress::authority_terminal(
+                    invocation.progress,
+                    &call.call,
+                    Status::Failed,
+                )
+                .await;
+            }
+        }
+    }
     results.into_iter().collect()
 }
 

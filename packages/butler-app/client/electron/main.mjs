@@ -2619,6 +2619,7 @@ ipcMain.handle("butler:select-project-folder", async () => {
   return {
     cancelled: false,
     display_name: basename(folderPath) || "Project",
+    folder_path: folderPath,
     folder_selection_token: createProjectFolderSelectionToken(
       folderPath,
       projectFolderTokenSecret,
@@ -2747,6 +2748,10 @@ if (appSingleInstanceLock) {
       }
       void installDevtools().catch(() => undefined);
       await createWindow();
+      if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
+        const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
+        installBrowserP0Harness(mainWindow, userBrowser);
+      }
       flushPendingNativeNavigation();
     })
     .catch(handleFatalStartupError);

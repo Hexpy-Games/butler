@@ -1,3 +1,4 @@
+// test-category: security
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import { saveProjectWallpaper, type GatewayRequest } from "./projectWallpaperSave.ts";

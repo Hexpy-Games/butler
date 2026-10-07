@@ -32,8 +32,7 @@ pub(super) fn execute(
         io::Replacement::RequiresExpectedDigest,
     )?;
     if input.create_parents {
-        let root = (input.context.path_form == super::super::PathForm::RelativeOnly)
-            .then_some(input.context.root.as_path());
+        let root = (input.context.path_form.contained()).then_some(input.context.root.as_path());
         io::ensure_parent(&prepared, root)?;
     } else {
         // The observation checked an existing parent; recheck after preparation.

@@ -5,7 +5,7 @@ import type { AccessMode, SessionControlsView } from "@/app/types.ts";
 import { isAccessMode } from "@/components/conversation/accessModeUtils";
 
 /** A new schedule's access mode when the target conversation's mode is unknown. */
-export const DEFAULT_SCHEDULE_ACCESS_MODE: AccessMode = "ask_first";
+export const DEFAULT_SCHEDULE_ACCESS_MODE: AccessMode = "ask_except_reads";
 
 export type AutomationFormField = "title" | "prompt" | "interval" | "accessMode" | "form";
 

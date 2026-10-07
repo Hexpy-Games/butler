@@ -63,12 +63,14 @@ pub(super) fn list_message_page(
         (">", 0, "DESC", true)
     };
     let query = format!(
-        "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,\
-         conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,\
-         safe_error_code,retryable,plan_json FROM messages m WHERE chat_id=?1 AND rowid{operator}?2 \
+        "SELECT m.rowid,m.id,o.chat_id,m.turn_id,m.conversation_session_id,m.conversation_turn_id,\
+         m.conversation_message_id,m.role,m.text,m.content_parts_json,m.status,m.created_at,m.updated_at,\
+         m.safe_error_code,m.retryable,m.plan_json FROM app_message_owners o CROSS JOIN messages m \
+         WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+         AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.rowid{operator}?2 \
          AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
          safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
-         AND {visible} ORDER BY rowid {order} LIMIT ?3",
+         AND {visible} ORDER BY m.rowid {order} LIMIT ?3",
         visible = owner_visible!()
     );
     let mut statement = connection
@@ -204,7 +206,9 @@ pub(super) fn latest_message_cursor(
 ) -> Result<u64, AppStorageError> {
     connection
         .query_row_cached(
-            "SELECT COALESCE(MAX(rowid),0) FROM messages WHERE chat_id=?1",
+            "SELECT COALESCE((SELECT m.rowid FROM app_message_owners o CROSS JOIN messages m \
+             WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+             AND m.rowid BETWEEN o.first_rowid AND o.last_rowid ORDER BY m.rowid DESC LIMIT 1),0)",
             [chat_id],
             |row| row.get(0),
         )

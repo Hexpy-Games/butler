@@ -247,9 +247,10 @@ fn read_public_messages(
 ) -> Result<Vec<Value>, AppStorageError> {
     let mut statement = db
         .prepare(
-            "SELECT m.id,m.chat_id,c.title,m.created_at,m.updated_at,substr(m.text,1,1200),\
+            "SELECT m.id,c.id,c.title,m.created_at,m.updated_at,substr(m.text,1,1200),\
              length(m.text),(SELECT count(*) FROM message_attachments a WHERE a.message_id=m.id) \
-             FROM chats c JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 \
              AND m.rowid<=?2 AND m.role='assistant' AND m.status='delivered' AND \
              NOT (m.safe_error_code IS NOT NULL AND m.safe_error_code IN \
              ('app_turn_queue_failed','goal_completion_incomplete')) \

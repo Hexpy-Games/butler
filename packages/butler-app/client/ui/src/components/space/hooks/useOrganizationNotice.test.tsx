@@ -1,3 +1,4 @@
+// test-category: race
 import { expect, spyOn, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act, StrictMode } from "react";

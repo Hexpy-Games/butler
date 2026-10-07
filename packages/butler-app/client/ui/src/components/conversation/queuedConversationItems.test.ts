@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import type { MessageRecord, QueuedMessageRecord } from "@/app/types.ts";

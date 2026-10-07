@@ -24,7 +24,7 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
     butler_e2e::gate!();
     let mut setup = Setup::new("INSTALLED-PREVIEW")?
         .data_folder_token()
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .stub_cassette(conversation_stub())
         .env("OPENAI_API_KEY", "e2e-not-a-real-key")
         .env("BUTLER_E2E_APP_NOW", chrono::Utc::now().to_rfc3339());

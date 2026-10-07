@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
 use crate::gateway::{
     AppAuthorityDecisionInput,
-    application::app_session_hint,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 use std::sync::Arc;
@@ -23,7 +22,10 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = uri.path();
     let session_id = authority_session_id(uri);
-    let owner = app_session_hint(&session_id);
+    let owner = state
+        .application
+        .runtime_session_hint(session_id.clone())
+        .await?;
 
     if path == "/authority-permissions" && method == Method::GET {
         return super::authority_permissions::list(&state).await;
@@ -32,18 +34,7 @@ pub(super) async fn route(
         return super::authority_permissions::revoke(&state, request).await;
     }
     if method == Method::GET && path == "/authority-requests" {
-        let page = state.application.authority_list(owner).await?;
-        return json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: json!({
-                    "session_id":session_id,
-                    "requests":page.requests,
-                    "permissions":page.permissions,
-                }),
-            },
-        );
+        return list_requests(&state, owner, session_id).await;
     }
     if method == Method::DELETE
         && let Some(grant) = path.strip_prefix("/authority-permissions/")
@@ -181,4 +172,23 @@ fn authority_session_id(uri: &Uri) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("general")
         .to_owned()
+}
+
+async fn list_requests(
+    state: &HttpState,
+    owner: String,
+    session_id: String,
+) -> Result<Response, HttpError> {
+    let page = state.application.authority_list(owner).await?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: json!({
+                "session_id":session_id,
+                "requests":page.requests,
+                "permissions":page.permissions,
+            }),
+        },
+    )
 }

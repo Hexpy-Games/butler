@@ -63,7 +63,7 @@
 }
 
 .keyNote {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -228,7 +228,7 @@
 }
 
 .readToken {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
@@ -282,7 +282,7 @@
 }
 
 .sideTagText {
-  color: var(--accent);
+  color: var(--accent-text);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;

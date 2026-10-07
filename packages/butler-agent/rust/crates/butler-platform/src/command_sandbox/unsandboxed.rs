@@ -18,3 +18,12 @@ pub(super) fn protect_writes(
 ) -> Result<Protection, ProtectError> {
     Ok(Protection::Unavailable(invocation))
 }
+
+pub(super) fn read_only_contained(
+    invocation: Invocation,
+    _environment: &std::collections::HashMap<String, String>,
+    _denied: &[&Path],
+    _allowed: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    read_only(invocation)
+}

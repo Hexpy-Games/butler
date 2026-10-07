@@ -1,7 +1,7 @@
 use super::*;
 use butler_turn::btcc::AdmissionContextPort;
 use butler_turn::conversation::{
-    AppendMessageInput, BeginTurnInput, ConversationOriginKind, ConversationRole,
+    AppendMessageInput, BeginTurnInput, ConversationOriginKind, ConversationRole, FinalizeTurnInput,
 };
 use butler_turn::workspace::SessionRole as WorkspaceRole;
 
@@ -50,6 +50,15 @@ async fn rich_ports_and_real_recent_store_feed_the_admission_adapter() {
             .await
             .unwrap();
     }
+    conversation
+        .finalize_turn(FinalizeTurnInput {
+            turn_id: "turn".into(),
+            status: None,
+            completed_at: None,
+            outcome_capsule: None,
+        })
+        .await
+        .unwrap();
     let request = request();
     let binding = binding(WorkspaceRole::Butler);
     let assembly = AdmissionContextPort::build_butler(&assembler, &request, &binding)

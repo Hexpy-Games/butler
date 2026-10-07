@@ -106,9 +106,11 @@ fn app_message(
     db: &Connection,
     candidate: &HistoricalOriginCandidate,
 ) -> Option<Option<AppMessage>> {
+    // A clear moves the turn's owner, but the message and execution controls
+    // retain creation provenance. Their immutable message id binds the evidence.
     db.query_row(
         "SELECT m.id,m.chat_id,m.role,m.conversation_session_id,m.conversation_turn_id,m.conversation_message_id,t.id app_turn_id,t.execution_controls_json \
-         FROM messages m LEFT JOIN turns t ON t.chat_id=m.chat_id AND t.user_message_id=m.id \
+         FROM messages m LEFT JOIN turns t ON t.user_message_id=m.id \
          WHERE m.conversation_session_id=?1 AND m.conversation_turn_id IS ?2 AND m.conversation_message_id=?3 \
          ORDER BY m.created_at,m.id LIMIT 1",
         params![candidate.session_id, candidate.turn_id, candidate.message_id],

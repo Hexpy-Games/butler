@@ -16,8 +16,7 @@ use crate::btcc::{
 
 use super::completion::{Ending, OutcomeCheck, after_batch, finish, finish_outcome, record_result};
 use super::continuation::{
-    AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, pending_authority,
-    unexecuted_call,
+    AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, unexecuted_call,
 };
 use super::contracts::{
     AgentLoopEvent, AuthorityDecision, BatchDisposition, CandidateDisposition, ModelRoundMessage,
@@ -81,25 +80,44 @@ struct Reply {
 
 /// Runs the model/tool loop for one admitted turn until it answers or suspends.
 pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, AgentLoopError> {
-    let mut prepared = input
-        .policy
-        .prepare(GuidedInvocation::from(&input))
-        .await
-        .map_err(propagated)?;
-    let mut state = restore_state(&mut input, &mut prepared)?;
-    let context = input
+    let mut prepared = match input.policy.prepare(GuidedInvocation::from(&input)).await {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            super::progress::fail_pending_except(&input, &[]).await;
+            return Err(propagated(error));
+        }
+    };
+    let mut state = match restore_state(&mut input, &mut prepared) {
+        Ok(state) => state,
+        Err(error) => {
+            super::progress::fail_pending_except(&input, &[]).await;
+            return Err(error);
+        }
+    };
+    let context = match input
         .policy
         .begin_context(GuidedInvocation::from(&input), input.budget.clone())
         .await
-        .map_err(propagated)?;
+    {
+        Ok(context) => context,
+        Err(error) => {
+            super::progress::fail_pending(&input, &state).await;
+            return Err(propagated(error));
+        }
+    };
     loop {
         let step = match run_iteration(&input, &mut state, &prepared, context.as_ref()).await {
             Err(AgentLoopError::Propagate(error))
                 if error.code() == "turn_continuation_budget_exhausted" =>
             {
+                super::progress::fail_pending(&input, &state).await;
                 return finish_limit(&input, &state, error.message()).await;
             }
-            result => result?,
+            Err(error) => {
+                super::progress::fail_pending(&input, &state).await;
+                return Err(error);
+            }
+            Ok(step) => step,
         };
         match step {
             Step::Continue => {}

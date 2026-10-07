@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run(provider: &ModelProvider, recorded: &RecordedRequest) -> Result<(), ModelRoundError> {
     let attribution = UsageAttribution {
+        prompt_diagnostics: None,
         session_kind: Some("parent".into()),
         turn_id: recorded.label.clone(),
         phase: "reconstructed-replay".into(),

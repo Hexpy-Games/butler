@@ -283,6 +283,9 @@ pub struct UsageAttribution {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_kind: Option<String>,
     pub turn_id: String,
+    /// Content-free request layout, carried unchanged through in-turn rounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_diagnostics: Option<Value>,
     pub phase: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,

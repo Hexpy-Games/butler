@@ -12,6 +12,7 @@ wire_codes! {
         AdmittedModelInvalid = "admitted_model_invalid",
         AdmittedModelMissing = "admitted_model_missing",
         AdmittedReasoningInvalid = "admitted_reasoning_invalid",
+        AuthorityContinuationMissing = "authority_continuation_missing",
         AuthorityContinuationCursorInvalid = "authority_continuation_cursor_invalid",
         AuthorityDecisionMissing = "authority_decision_missing",
         AuthorityModifyInputMissing = "authority_modify_input_missing",

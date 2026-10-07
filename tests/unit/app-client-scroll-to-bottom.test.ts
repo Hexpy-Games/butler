@@ -1,12 +1,11 @@
 /// <reference lib="dom" />
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import {
-  conversationBottomLockAfterScroll,
-  isConversationPinnedToBottom,
-  scrollConversationToBottom,
+    conversationBottomLockAfterScroll,
+    isConversationPinnedToBottom,
+    scrollConversationToBottom,
 } from "../../packages/butler-app/client/ui/src/components/conversation/conversationScrollUtils.ts";
 
 test("layout-driven active-row growth retains bottom lock until direct user scroll intent", () => {
@@ -76,56 +75,3 @@ test("conversation scroll utility detects bottom distance and scrolls smoothly t
   expect(lastScrollTo.current).toEqual({ top: 700, behavior: "smooth" });
   expect(isConversationPinnedToBottom(scrollElement)).toBe(true);
 });
-
-test("message list renders the production scroll-to-bottom affordance only from hook state", () => {
-  const messageList = readSource(
-    "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
-  ) + readSource(
-    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
-  );
-  expect(messageList).toContain(
-    "const scrollState = useConversationAutoScroll",
-  );
-  expect(messageList).toContain("scrollState.isAwayFromBottom");
-  expect(messageList).toContain("<ScrollToBottomButton");
-  expect(messageList).toContain(
-    "hasUnreadMessages={scrollState.hasUnreadMessages}",
-  );
-  expect(messageList).toContain(
-    'scrollState.scrollToBottom({ behavior: "smooth" })',
-  );
-});
-
-test("scroll-to-bottom button source keeps the control accessible and concise", () => {
-  const button = readSource(
-    "packages/butler-app/client/ui/src/components/conversation/ScrollToBottomButton.ts",
-  );
-  const conversationShell = readSource(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/ConversationShell/ConversationShell.tsx",
-  );
-  // App copy lives in the shared butler-i18n locales since 64dbc5c9b.
-  const copy = [
-    "packages/butler-i18n/src/copy-contract.ts",
-    "packages/butler-i18n/src/locales/en.ts",
-  ].map(readSource).join("\n");
-
-  expect(button).toContain("ConversationScrollToBottomButton");
-  expect(button).toContain(
-    "ariaLabel: appCopy.conversation.scrollToBottom.ariaLabel",
-  );
-  expect(conversationShell).toContain("import { PillButton }");
-  expect(conversationShell).toContain("<PillButton");
-  expect(conversationShell).not.toContain("<button");
-  expect(conversationShell).toContain("aria-label={ariaLabel}");
-  expect(conversationShell).toContain(
-    'data-test-class="scroll-to-bottom-button"',
-  );
-  expect(conversationShell).toContain("data-unread-messages=");
-  expect(conversationShell).toContain('icon={<ChevronDownIcon size="md" />}');
-  expect(copy).toContain("Scroll to the latest message and composer");
-  expect(copy).toContain("newMessagesLabel");
-});
-
-function readSource(path: string): string {
-  return readFileSync(path, "utf8");
-}

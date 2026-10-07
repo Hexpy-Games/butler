@@ -63,6 +63,13 @@ pub(super) fn normalize(
     ] {
         normalized.insert(key.into(), value);
     }
+    if payload
+        .get("authorityCancellation")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        normalized.insert("authorityCancellation".into(), Value::Bool(true));
+    }
     Ok(normalized)
 }
 

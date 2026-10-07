@@ -218,12 +218,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
                     turn_id: start.turn.turn_id.clone(),
-                    app_session_id: start
-                        .turn
-                        .context
-                        .get("appSessionId")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned),
+                    app_session_id: app_session_id(&start.turn.context),
                     access_mode: policy.access_mode.clone(),
                     enable_project_ledger_effects: policy.access_mode
                         != butler_turn::btcc::AccessMode::ReadOnly
@@ -252,6 +247,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         ),
                     },
                     project_id: policy.project_id.clone(),
+                    project_folder: policy.project_id.as_ref().map(|_| workspace_path.clone()),
                     project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
@@ -387,4 +383,11 @@ fn bound_turn<'a>(
         progress: start.progress,
         base: start.base,
     })
+}
+
+fn app_session_id(context: &serde_json::Value) -> Option<String> {
+    context
+        .get("appSessionId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
 }

@@ -26,10 +26,21 @@ impl AppApplication {
         let projects = self.list_projects(true).await?;
         let automations = self.list_automations_owned(None, false).await?;
         let space = self.read_space().await?;
+        let archive_count: i64 = self
+            .storage
+            .read(|db| {
+                db.query_row("SELECT (SELECT COUNT(*) FROM chats c WHERE archived=1 AND NOT EXISTS(SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared'))+(SELECT COUNT(*) FROM projects WHERE archived=1)", [], |row| {
+                    row.get(0)
+                })
+                .map_err(super::AppStorageError::sqlite)
+            })
+            .await
+            .map_err(super::app_error)?;
         let generated_at = self.dependencies.identity_clock.now_iso();
         Ok(json!({
             "space": space,
             "chats": chats,
+            "archive_count": archive_count,
             "projects": projects.projects,
             "automations_summary": {
                 "total_count": automations.automations.len(),

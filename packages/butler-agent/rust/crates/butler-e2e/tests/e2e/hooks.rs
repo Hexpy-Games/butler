@@ -213,7 +213,7 @@ async fn hooks_pretool_deny_is_model_feedback_without_tool_or_card() -> Result<(
     butler_e2e::gate!();
     let setup = Setup::new("HOOK-TOOL-DENY")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .access(Access::AskFirst);
+        .access(Access::AskAlways);
     let command = if command_sandbox::POSIX_SHELL {
         "echo 'Guard reason' >&2; exit 2"
     } else {

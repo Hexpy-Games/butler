@@ -11,9 +11,11 @@ use super::ports::{
 };
 use super::progress::TurnProgressScope;
 use super::supervisor::TurnExecutionSupervisor;
-use super::transition::guided_final;
+use super::transition::guided_transition;
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, DeliveredOutcome, ProgressDestination, TurnOutcome, TurnOutcomeKind};
+
+mod authority;
 
 pub(super) struct TurnRuntime {
     store: Arc<dyn TurnStore>,
@@ -75,24 +77,13 @@ impl TurnRuntime {
             self.publish_state(conversation, &turn, &destination).await;
         }
         if turn.semantic_state != TurnSemanticState::DeliveryCommitted {
-            let recovery_turn_id = turn.turn_id.clone();
-            turn = match self
-                .run_agent(
-                    turn,
-                    conversation,
-                    &destination,
-                    prepared.request.recovery_attempt.unwrap_or(1),
-                )
-                .await
-            {
-                Ok(turn) => turn,
-                Err(error) => match self.store.find_turn(&recovery_turn_id).await {
-                    Ok(Some(current)) if current.semantic_state == TurnSemanticState::Cancelled => {
-                        current
-                    }
-                    _ => return Err(error),
-                },
-            };
+            turn = Box::pin(self.run_until_undecided(
+                turn,
+                conversation,
+                &destination,
+                prepared.request.recovery_attempt.unwrap_or(1),
+            ))
+            .await?;
         }
         if let Some(reason) = turn.suspension {
             return Ok((suspended(&turn.turn_id, reason), fresh));
@@ -167,15 +158,12 @@ impl TurnRuntime {
         };
         permit.assert_active()?;
         explain_runtime_failure(&turn, &mut result);
-        let transition = match result.suspension {
-            Some(reason) => TurnTransition::Suspend {
-                reason,
-                authority_continuation: result.authority_continuation,
-            },
-            None => guided_final(&turn, result)?,
-        };
-        self.commit_agent_transition(&turn, &claim, &transition, &permit)
-            .await?;
+        let transition = guided_transition(&turn, result)?;
+        let committed = self
+            .commit_agent_transition(&turn, &claim, &transition, &permit)
+            .await;
+        super::super::agent_loop::authority_batch(&progress, &transition, committed.is_ok()).await;
+        committed?;
         let committed = self.store.activate_successor(&turn.turn_id).await?;
         if let TurnTransition::Suspend { reason, .. } = transition {
             if committed.suspension != Some(reason) {

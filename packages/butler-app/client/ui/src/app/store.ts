@@ -1,3 +1,4 @@
+import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
@@ -8,9 +9,7 @@ import {
 } from "../libs/design-system/responsive.ts";
 import {
   api,
-  canSelectProjectFolder,
-  isProjectFolderPickerUnavailable,
-  selectProjectFolder,
+  type ProjectFolderSelection,
 } from "./api.ts";
 import { appCopy, setAppCopyLanguage } from "./copy.ts";
 import {
@@ -25,6 +24,7 @@ import {
   readCachedMessageListSync,
   readCachedMessageList,
   writeCachedMessageList,
+  clearCachedMessageList,
 } from "./messageCache.ts";
 import { APP_CACHE_BUDGET, cacheEntryBytes } from "./cacheBudget.ts";
 import {
@@ -144,6 +144,7 @@ interface ButlerStore {
   view: AppView;
   settingsReturnView: AppView;
   activeChatId: string;
+  activeChatTitle?: string;
   navigation: NavigationView;
   navigationGeneration: number;
   messages: MessageRecord[];
@@ -227,7 +228,7 @@ interface ButlerStore {
   setCommandOpen: (commandOpen: boolean) => void;
   setRenameProject: (renameProject: ProjectSummary | null) => void;
   setRenameSession: (renameSession: SessionSummary | null) => void;
-  openSession: (chatId: string) => void;
+  openSession: (chatId: string, sessionTitle?: string) => void;
   openNewChat: () => void;
   openNewProjectChat: (projectId: string) => void;
   startProjectChatWithDocument: (
@@ -279,11 +280,12 @@ interface ButlerStore {
   deleteQueuedMessage: (queuedMessageId: string) => Promise<void>;
   cancelActiveTurn: () => Promise<void>;
   createScratchProject: (displayName: string) => Promise<boolean>;
-  createProjectFromExistingFolder: () => Promise<void>;
+  createProjectFromExistingFolder: (selection: ProjectFolderSelection, displayName: string) => Promise<boolean>;
   runProjectAction: (
     project: ProjectSummary,
     action: ProjectAction,
   ) => Promise<void>;
+  resetGeneralConversation: (eventId: number) => void;
   runSessionAction: (
     session: SessionSummary,
     action: SessionAction,
@@ -931,6 +933,8 @@ function beginSessionViewRequest(
     latestSessionViewRequestByChat.get(chatId) === requestToken;
 }
 
+let lastGeneralClearEvent = 0;
+
 const initialSettings = readCachedSettings();
 setAppCopyLanguage(initialSettings.language);
 
@@ -1265,7 +1269,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setRenameProject: (renameProject) => set({ renameProject }),
   setRenameSession: (renameSession) => set({ renameSession }),
 
-  openSession: (chatId) =>
+  openSession: (chatId, sessionTitle) =>
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
       const storedSessionView = state.sessionViews[chatId] ?? null;
@@ -1287,6 +1291,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,
         observerSessionId: null,
@@ -2205,48 +2210,28 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
-  createProjectFromExistingFolder: async () => {
-    if (!canSelectProjectFolder()) {
-      notifyError(
-        new Error(
-          appCopy.interfaceFeedback.desktopFolderOnly,
-        ),
-        appCopy.interfaceFeedback.projectFolderFailed,
-        {
-          id: "project-folder-picker-unavailable",
-        },
-      );
-      set({ status: { label: "ready", tone: "ok" } });
-      return;
-    }
+  createProjectFromExistingFolder: async (selection, displayName) => {
     set({
       creatingProject: true,
-      status: { label: "choosing folder", tone: "muted" },
+      status: { label: "creating project", tone: "muted" },
     });
     try {
-      const selection = await selectProjectFolder();
-      if (selection?.cancelled) {
-        set({ status: { label: "ready", tone: "ok" } });
-        return;
-      }
       const result = await api<{ project: ProjectSummary }>("/projects", {
         method: "POST",
         body: JSON.stringify({
           source: "existing_folder",
-          display_name: selection.display_name,
+          display_name: displayName.trim(),
           folder_selection_token: selection.folder_selection_token,
         }),
       });
       await get().refreshNavigation();
       get().openNewProjectChat(result.project.id);
       set({ messages: [], status: { label: "ready", tone: "ok" } });
+      return true;
     } catch (error) {
-      if (isProjectFolderPickerUnavailable(error)) {
-        set({ status: { label: "ready", tone: "ok" } });
-        return;
-      }
       notifyError(error, appCopy.interfaceFeedback.projectFolderFailed, { id: "project-folder" });
       set({ status: { label: "ready", tone: "ok" } });
+      return false;
     } finally {
       set({ creatingProject: false });
     }
@@ -2290,6 +2275,23 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
+  resetGeneralConversation: (eventId) => {
+    if (eventId <= lastGeneralClearEvent) return;
+    lastGeneralClearEvent = eventId;
+    generalChatCleared();
+    latestSessionViewRequestByChat.delete("general");
+    void clearCachedMessageList("general");
+    set((state) => {
+      const sessionViews = { ...state.sessionViews };
+      delete sessionViews.general;
+      const sessionMessageViews = { ...state.sessionMessageViews };
+      delete sessionMessageViews.general;
+      return { sessionViews, sessionMessageViews, ...(state.activeChatId === "general" ? {
+        messages: [], summary: null, turnProgress: {}, sessionView: null,
+        sessionQueue: [], authorityApprovals: null, messageLoadPending: false,
+      } : {}) };
+    });
+  },
   runSessionAction: async (session, action) => {
     try {
       if (action === "rename") {

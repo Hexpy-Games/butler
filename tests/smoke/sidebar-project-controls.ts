@@ -29,13 +29,10 @@ export async function checkSidebarProjectControls(page: Page, screenshot: string
   assert.equal(metrics.width, page.viewportSize()!.width <= 640 ? 44 : 30);
   assert.equal(metrics.menuVisible, "hidden");
   assert(metrics.identity && metrics.identity !== metrics.dashboard);
-  const headingButtons = [sidebar.getByRole("button", { name: "그룹 만들기", exact: true }),
-    sidebar.getByRole("button", { name: "스페이스 메뉴", exact: true })];
-  const headerRects = await Promise.all(headingButtons.map(button => button.boundingBox()));
-  const dashboardRect = (await dashboard.boundingBox())!;
+  const headingButton = sidebar.getByRole("button", { name: "스페이스 메뉴", exact: true });
+  const headerRect = (await headingButton.boundingBox())!;
   const menuRect = (await menu.boundingBox())!;
-  assert.equal(headerRects[0]!.x + headerRects[0]!.width / 2, dashboardRect.x + dashboardRect.width / 2);
-  assert.equal(headerRects[1]!.x + headerRects[1]!.width / 2, menuRect.x + menuRect.width / 2);
+  assert.equal(headerRect.x + headerRect.width / 2, menuRect.x + menuRect.width / 2);
   // Compare resolved semantic color (tokens may themselves contain color functions).
   assert(await row.evaluate((el, color) => {
     const probe = document.createElement("span");

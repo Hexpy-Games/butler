@@ -65,7 +65,7 @@ pub(super) fn apply(
         return Ok(false);
     }
     let current_existing: Option<String>=tx.query_row(
-        "SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1",
+        "SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1",
         params![input.chat_id,input.turn_id],|row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     if current_existing != input.existing_message_id {
         return Err(AppStorageError::new(

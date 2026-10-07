@@ -149,7 +149,7 @@ impl AppApplication {
         let expected = self
             .dependencies
             .branch_conversations
-            .resolve_app_session(super::super::app_session_hint(source_session_id))
+            .resolve_app_session(self.runtime_hint(source_session_id).await?)
             .await?
             .map(|(session, _)| session);
         if expected

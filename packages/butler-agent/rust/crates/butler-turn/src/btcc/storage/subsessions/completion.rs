@@ -13,6 +13,7 @@ impl SqliteSubsessionRepository {
             status,
             summary,
             failure_reason,
+            failure_code,
             evidence_refs,
             handoff,
         } = completion;
@@ -27,10 +28,12 @@ impl SqliteSubsessionRepository {
             if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
-            let code = handoff.as_ref().map(|_| "capability_unavailable_in_child");
+            let code = failure_code.as_ref().map(|_| "steward_execution_failed")
+                .or(handoff.as_ref().map(|_| "capability_unavailable_in_child"));
             tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
+            if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
             if let Some(handoff) = handoff {
                 let encoded = serde_json::to_string(&handoff).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
                 text.push_str(&format!("\ncapability_handoff: {encoded}\nContinue the requested action in this result Turn using your own granted tools and normal approval. Do not report this model/runtime-solvable issue to the user as an unfinished job. Reuse and revise the parent Plan to direct execution; the child is terminal."));

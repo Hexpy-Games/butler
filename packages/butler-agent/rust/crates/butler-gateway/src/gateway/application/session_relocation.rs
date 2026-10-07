@@ -10,7 +10,7 @@ use super::{
     AppApplication, AppRelocateSessionRequest, AppRelocationBindingUpdate,
     AppRelocationCanonicalUpdate, AppRelocationWorkspaceRequest, AppSpaceMutationResult, app_error,
 };
-use crate::gateway::{GatewayApplicationError, app_session_hint, application::space};
+use crate::gateway::{GatewayApplicationError, application::space};
 
 impl AppApplication {
     pub(crate) async fn relocate_session_owned(
@@ -63,7 +63,7 @@ impl AppApplication {
             .execute(move |db| Ok(records::validate(db, &request_for_validation)))
             .await
             .map_err(app_error)??;
-        let runtime_session_id = app_session_hint(&request.session_id);
+        let runtime_session_id = self.runtime_hint(&request.session_id).await?;
         let snapshot = self
             .dependencies
             .relocation_host
@@ -113,7 +113,7 @@ impl AppApplication {
     ) -> Result<AppSpaceMutationResult, GatewayApplicationError> {
         let before = records::decode_before(&row)?;
         let destination = records::decode_destination(&row)?;
-        let runtime_session_id = app_session_hint(&row.session_id);
+        let runtime_session_id = self.runtime_hint(&row.session_id).await?;
         let binding = match before.binding.clone() {
             Some(binding) => binding,
             None => {
@@ -292,7 +292,7 @@ impl AppApplication {
         row: &records::Row,
         error: GatewayApplicationError,
     ) -> Result<AppSpaceMutationResult, GatewayApplicationError> {
-        let runtime_session_id = app_session_hint(&row.session_id);
+        let runtime_session_id = self.runtime_hint(&row.session_id).await?;
         let Ok(snapshot) = self
             .dependencies
             .relocation_host

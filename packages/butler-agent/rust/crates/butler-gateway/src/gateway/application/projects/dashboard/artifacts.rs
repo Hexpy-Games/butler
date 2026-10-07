@@ -123,9 +123,10 @@ fn read_artifact_page(
 ) -> Result<Vec<ArtifactRow>, AppStorageError> {
     let mut statement = db
         .prepare(
-            "SELECT m.rowid,m.id,m.chat_id,m.turn_id,c.title,f.id,f.kind,f.mime_type,\
+            "SELECT m.rowid,m.id,c.id,m.turn_id,c.title,f.id,f.kind,f.mime_type,\
              f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at \
-             FROM chats c CROSS JOIN messages m ON m.chat_id=c.id \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid \
              JOIN message_attachments a ON a.message_id=m.id \
              JOIN message_files f ON f.id=a.file_id WHERE c.project_id=?1 \
              AND m.role='assistant' AND m.status='delivered' AND \
@@ -287,9 +288,10 @@ pub(super) fn read_artifact(
     };
     let row = db
         .query_row(
-            "SELECT m.id,m.chat_id,m.turn_id,c.title, f.id,f.kind,f.mime_type,\
+            "SELECT m.id,c.id,m.turn_id,c.title, f.id,f.kind,f.mime_type,\
              f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at FROM chats c \
-             CROSS JOIN messages m ON m.chat_id=c.id JOIN message_attachments a ON a.message_id=m.id \
+             CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid JOIN message_attachments a ON a.message_id=m.id \
              JOIN message_files f ON f.id=a.file_id WHERE c.project_id=?1 AND f.id=?2 \
              AND m.role='assistant' AND m.status='delivered' AND \
              NOT (m.safe_error_code IS NOT NULL AND m.safe_error_code IN \
