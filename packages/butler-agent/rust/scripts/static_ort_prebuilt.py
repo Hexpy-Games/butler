@@ -61,7 +61,7 @@ def request(url, *, binary=False):
 
 def release(fingerprint, target, *, anonymous=True):
     reference = f'{ci_oci.REGISTRY}/native-deps:{target}-{fingerprint}'
-    if shutil.which('oras') is None:
+    if shutil.which(os.environ.get('BUTLER_ORAS_EXECUTABLE', 'oras')) is None:
         return None  # Developer builds can compile the SDK without oras installed.
     published = ci_oci.manifest(reference, anonymous=anonymous)
     if published is None:

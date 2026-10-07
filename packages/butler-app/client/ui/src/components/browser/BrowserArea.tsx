@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Button, EmptyLine, NativeViewSlot, Stack, TabStrip, type TabStripGroup } from "@/butler-ds";
@@ -43,6 +44,7 @@ export function BrowserArea() {
   const empty = !tab || !tab.url;
   const crashed = tab?.status === "crashed";
   const disabled = !state.enabled;
+  if (!browserFeatureEnabled) return null;
   return <Stack fill gap="none" id="butler-browser-area" tabIndex={-1} data-test-class="browser-area"
     onFocusCapture={() => void browserCall("scope", { value: true })}
     onBlurCapture={(event) => {
