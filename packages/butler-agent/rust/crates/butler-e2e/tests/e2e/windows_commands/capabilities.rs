@@ -183,8 +183,10 @@ async fn operation(
     }
     let turn = turn?;
     if turn_state(&turn) == "waiting_for_form" {
-        assert!(!case.refused, "Refused operation must not request approval");
+        // Stored ask_first is Ask every time: command admission precedes the
+        // executor's credential refusal. Allow must never bypass that refusal.
         assert_eq!(access, Access::AskAlways);
+        assert!(script.result.lock().unwrap().is_none(), "ran before Allow");
         let cards = s.gw.approval_requests(chat).await?;
         let card = cards
             .iter()
@@ -262,7 +264,7 @@ async fn operation(
             )
             .await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
-    } else if access == Access::AskAlways && !case.refused {
+    } else if access == Access::AskAlways {
         panic!(
             "Mutation/command must show an approval card: {turn}; result={:?}",
             script.result.lock().unwrap()
