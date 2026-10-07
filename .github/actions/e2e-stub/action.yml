@@ -160,6 +160,10 @@ runs:
           fi
         fi
         filterset='package(=butler-e2e) and not test(idle_disk_writes_and_cpu_stay_bounded)'
+        if [ "${BUTLER_FEATURE_BROWSER:-true}" = false ]; then
+          export BUTLER_E2E_EXPECT_BROWSER=false
+          filterset="($filterset) and (not test(/^browser_outputs::/) or test(browser_product_gate_controls_routes_and_model_tools))"
+        fi
         if [ -n "$TEST_FILTERSET" ]; then
           filterset="($TEST_FILTERSET) and $filterset"
         fi
