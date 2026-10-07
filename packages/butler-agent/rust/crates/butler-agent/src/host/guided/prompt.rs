@@ -2,7 +2,7 @@
 
 mod attachments;
 mod helpers;
-use helpers::{js_truthy, json, nonempty_array};
+use helpers::{default_project_folder, js_truthy, json, nonempty_array};
 mod documents;
 mod excerpts;
 mod phase_memory;
@@ -104,6 +104,7 @@ fn source_prompt(
     }
     entries.push(format!("User request:\n{}", turn.original_message));
     entries.push(scope);
+    entries.extend(default_project_folder(&turn.context));
     entries.extend(delegated_tools(state));
     if let Some(work) = work_context::render(state.work.context.as_ref()) {
         let summary = butler_core::public_text::trim_js_whitespace(&work);
