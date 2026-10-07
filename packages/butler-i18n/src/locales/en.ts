@@ -1237,6 +1237,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       savedKeys: "API keys",
       memoryCleanup: "Memory cleanup",
       grants: "Approved actions",
+      permissions: "Permissions",
       defaultPermission: "Default permission",
       workerProfiles: "Worker profiles",
       connection: "Connection",

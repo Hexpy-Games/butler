@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
 import { contrastGrade, contrastRatio, flatten, formatRatio, inkOn, parseColor } from "./contrast";

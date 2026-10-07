@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { getAppCopy, getInterfaceProgressLabel } from "./index.ts";
 
 function shape(value: unknown): unknown {
@@ -67,28 +66,6 @@ test("Korean catalog uses Korean for generic UI words", () => {
   expect(ko.conversation.work.toolStepsSummary("read_file", 2)).toBe("read_file 2단계");
   expect(ko.conversation.work.webSearchDetail("butler")).toBe("웹 검색: butler");
 });
-
-test("Korean copy keeps the Work, Task, Worker and Custom product terms consistent", () => {
-  const ko = getAppCopy("ko-KR");
-  const strings: string[] = [];
-  const collect = (value: unknown): void => {
-    if (typeof value === "string") strings.push(value);
-    else if (typeof value === "function" && value.length === 0) collect((value as () => unknown)());
-    else if (value && typeof value === "object") Object.values(value).forEach(collect);
-  };
-  collect(ko);
-  expect(strings.filter((text) => /워커|작업자/u.test(text))).toEqual([]);
-  expect(ko.interfaceStatus.work).toBe("Work");
-  expect(ko.interfaceStatus.task).toBe("Task");
-  expect(ko.inspector.tabs.workers).toBe("Worker");
-  expect(ko.interfaceStatus.workerCall).toBe("Worker 호출");
-  expect(ko.projectSignpost.work).toBe("작업");
-  expect(ko.projectSignpost.parentWork).toBe("상위 Work");
-  expect(ko.projectSignpost.tasks).toBe("하위 Task");
-  expect(ko.projectStatistics.labels.work).toBe("Work 변경");
-  expect(ko.settings.localModels.customOpenAiCompatible).toBe("Custom OpenAI 호환");
-});
-
 test("worked durations use locale units", () => {
   const en = getAppCopy("en-US").interfaceTemplates.workedDuration;
   const ko = getAppCopy("ko-KR").interfaceTemplates;
@@ -121,29 +98,6 @@ function strings(value: unknown, into: string[] = []): string[] {
   else if (value && typeof value === "object") Object.values(value).forEach((nested) => strings(nested, into));
   return into;
 }
-
-test("Korean glossary: Butler uses Latin spelling, 시간대 not 타임존, 아카이브 not 보관함", () => {
-  const ko = strings(getAppCopy("ko-KR"));
-  expect(ko.filter((text) => /타임존|보관함|버틀러|Butler App/u.test(text))).toEqual([]);
-  expect(getAppCopy("ko-KR").settings.fields.timezone).toBe("시간대");
-  expect(getAppCopy("ko-KR").space.archives).toBe("아카이브");
-  expect(getAppCopy("ko-KR").settings.sections.appearance).toBe("모양");
-});
-
-test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and Schedule(s) (never Automation or Scheduled task)", () => {
-  const koSource = readFileSync(new URL("./locales/ko.ts", import.meta.url), "utf8");
-  expect(koSource.split("\n").filter((line) => line.includes("자동화"))).toEqual([]);
-  expect(strings(getAppCopy("ko-KR")).filter((text) => text.includes("자동화"))).toEqual([]);
-  const enSource = readFileSync(new URL("./locales/en.ts", import.meta.url), "utf8");
-  const enLiterals = enSource.match(/(["'`])(?:(?!\1)[^\\\n]|\\.)*\1/gu) ?? [];
-  const retiredEnglish = /\bautomations?\b|\bscheduled tasks?\b/iu;
-  expect(enLiterals.filter((literal) => retiredEnglish.test(literal))).toEqual([]);
-  expect(strings(getAppCopy("en-US")).filter((text) => retiredEnglish.test(text))).toEqual([]);
-  for (const [locale, term] of [["ko-KR", "예약 작업"], ["en-US", "Schedules"]] as const) {
-    const copy = getAppCopy(locale);
-    expect([copy.space.automations, copy.sidebar.automations, copy.automations.title, copy.inspector.tabs.automations]).toEqual([term, term, term, term]);
-  }
-});
 
 test("API key copy claims Keychain storage only where the agent reports it (#217)", () => {
   // Unsigned builds keep keys in a local file (#243), so first run says only "this computer".

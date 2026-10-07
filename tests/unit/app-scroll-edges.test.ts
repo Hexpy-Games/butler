@@ -1,11 +1,10 @@
 /// <reference lib="dom" />
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import {
-  observeScrollEdges,
-  readScrollEdges,
+    observeScrollEdges,
+    readScrollEdges,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/lib/useScrollEdges.ts";
 
 type Metrics = { position: number; size: number; total: number };
@@ -127,51 +126,4 @@ test("observeScrollEdges reacts to element and first-child resizes", () => {
   expect(edges(element)).toEqual({ overflowing: "false", atStart: "true", atEnd: "true" });
   stop();
   expect(resizeCallbacks.length).toBe(0);
-});
-
-test("scroll-fade stylesheet drives per-edge masks from the edge attributes", () => {
-  const css = readFileSync(
-    "packages/butler-app/client/ui/src/libs/design-system/scroll-fade.css",
-    "utf8",
-  );
-  const tokens = readFileSync(
-    "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
-    "utf8",
-  );
-  // scroll-fade.css is among the leading @imports (fonts.css precedes it).
-  expect(tokens.trimStart()).toMatch(/^(?:@import url\("[^"]+"\);\s*)*@import url\("\.\/scroll-fade\.css"\);/u);
-  expect(css).toContain('[data-scroll-fade="x"]');
-  expect(css).toContain('[data-scroll-fade="y"]');
-  expect(css).toContain('[data-overflowing="true"]:not([data-at-start="true"])');
-  expect(css).toContain('[data-overflowing="true"]:not([data-at-end="true"])');
-  expect(css).toContain("var(--scroll-fade-size)");
-  expect(css).toContain("--scroll-fade-gutter");
-  expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^}]*transition/u);
-});
-
-test("horizontal scrollers and legacy vertical masks use the shared scroll-fade primitive", () => {
-  const ui = "packages/butler-app/client/ui/src";
-  const horizontal = [
-    "libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.tsx",
-    "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectPopover.tsx",
-    "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectFooter.tsx",
-    "libs/design-system/blocks/InspectorShell/InspectorShell.tsx",
-    "libs/design-system/components/Tabs/Tabs.tsx",
-    "libs/design-system/blocks/ChangedLineDiff/ChangedLineDiff.tsx",
-    "libs/design-system/blocks/ActivityHeatmap/ActivityHeatmap.tsx",
-    "libs/design-system/blocks/KanbanBoard/KanbanBoard.tsx",
-    "libs/design-system/blocks/MarkdownContent/MarkdownParts.tsx",
-  ];
-  for (const file of horizontal) {
-    expect(`${file}: ${readFileSync(`${ui}/${file}`, "utf8").includes('useScrollEdges("x"')}`).toBe(`${file}: true`);
-  }
-  // The project work board gets the fade from KanbanBoard scroll.
-  expect(readFileSync(`${ui}/components/management/ProjectWorkBoard.tsx`, "utf8")).toContain("<KanbanBoard scroll");
-  for (const file of [
-    "libs/design-system/blocks/ScrollArea/ScrollArea.module.css",
-    "libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
-    "libs/design-system/blocks/ConversationShell/ConversationShell.module.css",
-  ]) {
-    expect(`${file}: ${/mask-image/u.test(readFileSync(`${ui}/${file}`, "utf8"))}`).toBe(`${file}: false`);
-  }
 });

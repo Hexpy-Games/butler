@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
-  CANVAS_MOTION_ENGINES,
-  MOTION_RULES,
-  lintCanvasEngines,
-  lintMotionCss,
-  lintMotionScript,
-  type MotionFinding,
+    CANVAS_MOTION_ENGINES,
+    MOTION_RULES,
+    lintCanvasEngines,
+    lintMotionCss,
+    lintMotionScript,
+    type MotionFinding,
 } from "../../packages/butler-app/scripts/lint/motion-lint.ts";
+import { motionAudit, tokenOnlyTransform } from "../../packages/butler-app/scripts/lint/motion/reduced-motion.ts";
 
 const DS = "libs/design-system/components/Example/Example.module.css";
 const PRODUCT = "components/example/Example.module.css";
@@ -16,13 +18,14 @@ function rules(findings: MotionFinding[]): string[] {
 }
 
 describe("motion lint rules", () => {
-  test("exposes the five ratcheted motion rules", () => {
+  test("exposes the ratcheted motion rules", () => {
     expect([...MOTION_RULES]).toEqual([
       "motion-outside-ds",
       "keyword-easing",
       "transition-property",
       "waapi-outside-helper",
       "canvas-motion",
+      "reduced-motion",
     ]);
   });
 
@@ -155,4 +158,29 @@ describe("motion lint rules", () => {
     ]);
     for (const reason of Object.values(wallpaper!.constants)) expect(reason.length).toBeGreaterThan(20);
   });
+});
+
+// test-category: pure-logic
+describe("reduced-motion contract", () => {
+  test("token-only transforms are recognised", () => {
+    expect(tokenOnlyTransform("translateY(calc(-1 * var(--motion-distance-sm))) scale(var(--motion-scale-menu))")).toBe(true);
+    expect(tokenOnlyTransform("translate(-50%, -50%) scale(var(--motion-scale-dialog))")).toBe(true);
+    expect(tokenOnlyTransform("translateY(-2px) scale(0.985)")).toBe(false);
+    expect(tokenOnlyTransform("rotate(270deg)")).toBe(false);
+  });
+
+
+  test("tokens zero travel and scale under reduced motion", () => {
+    const tokens = readFileSync("packages/butler-app/client/ui/src/libs/design-system/tokens.css", "utf8");
+    const media = tokens.slice(tokens.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(media).toContain("--motion-distance-sm: 0px");
+    expect(media).toContain("--motion-scale-menu: 1");
+  });
+});
+
+// test-category: pure-logic
+test("reduced motion lint distinguishes unsafe movement from tokens and overrides", () => {
+  expect(motionAudit("@keyframes move { to { transform: translateY(2px); } }")).toMatchObject({ moves: true, tokenOnly: false, reducedRule: false });
+  expect(motionAudit("@keyframes move { to { transform: translateY(var(--motion-distance-sm)); } }")).toMatchObject({ moves: true, tokenOnly: true });
+  expect(motionAudit("@keyframes move { to { transform: translateY(2px); } } @media (prefers-reduced-motion: reduce) { .move { animation: none; } }")).toMatchObject({ reducedRule: true });
 });

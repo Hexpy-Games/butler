@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 
 import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
