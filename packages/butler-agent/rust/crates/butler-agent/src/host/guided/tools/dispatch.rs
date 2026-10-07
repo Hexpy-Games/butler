@@ -423,6 +423,9 @@ async fn workspace_tool(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if !butler_core::product_features::tool_enabled(&call.name) {
+        return None;
+    }
     match call.name.as_str() {
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),

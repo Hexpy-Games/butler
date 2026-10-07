@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
@@ -21,14 +22,15 @@ export const useBrowserState = create<BrowserSnapshot>(() => ({
 }));
 let unsubscribe: (() => void) | undefined;
 export function connectBrowser() {
-  if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => useBrowserState.setState(state));
+  if (browserFeatureEnabled && !unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => useBrowserState.setState(state));
 }
 export async function browserCall(op: string, input?: unknown) {
+  if (!browserFeatureEnabled) return undefined;
   try { return await window.butlerBrowser?.call(op, input); }
   catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); return undefined; }
 }
 export async function openBrowser(output?: { url: string; sessionId: string }) {
-  if (!window.butlerBrowser) return;
+  if (!browserFeatureEnabled || !window.butlerBrowser) return;
   connectBrowser();
   await browserCall("open");
   if (output) {
