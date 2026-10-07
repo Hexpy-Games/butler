@@ -30,23 +30,15 @@ jobs:
           - target: linux-x64
             runner: ubuntu-24.04
             label: linux-x64
-            owner: false
           - target: linux-arm64
             runner: ubuntu-24.04-arm
             label: linux-arm64
-            owner: false
           - target: macos-arm64
             runner: macos-15
             label: macos-arm64
-            owner: false
           - target: windows-x64
             runner: windows-latest
             label: windows-hosted
-            owner: false
-          - target: windows-x64
-            runner: [self-hosted, Windows, X64, butler-win]
-            label: windows-owner
-            owner: true
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
@@ -58,55 +50,54 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@master
-        if: ${{ !matrix.owner }}
         with:
           toolchain: 1.91.0
-      - name: Set up owner Rust in workspace cache
-        if: matrix.owner
-        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: |
-          $tools = Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/toolchains'
-          $env:CARGO_HOME = Join-Path $tools 'cargo'
-          $env:RUSTUP_HOME = Join-Path $tools 'rustup'
-          $rustup = Join-Path $env:CARGO_HOME 'bin/rustup.exe'
-          if (!(Test-Path $rustup)) {
-            $installer = Join-Path $env:RUNNER_TEMP 'rustup-init.exe'
-            Invoke-WebRequest -UseBasicParsing 'https://win.rustup.rs/x86_64' -OutFile $installer
-            & $installer --default-toolchain none --no-modify-path --profile minimal -y
-            if ($LASTEXITCODE -ne 0) { throw 'Owner Rust bootstrap failed' }
-          }
-          & $rustup toolchain install 1.91.0 --profile minimal --no-self-update
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned owner Rust toolchain installation failed' }
-          & $rustup default 1.91.0
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned owner Rust toolchain selection failed' }
-          @("CARGO_HOME=$env:CARGO_HOME", "RUSTUP_HOME=$env:RUSTUP_HOME") |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          (Join-Path $env:CARGO_HOME 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
         with:
           arch: x64
       - uses: ./.github/actions/setup-oras
       - name: Build once and publish verified SDK
-        if: ${{ !matrix.owner }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_TARGET: ${{ matrix.target }}
-          # Owner SDK cache stays inside this runner's own workspace (#557).
-          CARGO_TARGET_DIR: ${{ matrix.owner && format('{0}/target/windows-owner/native-deps', github.workspace) || format('{0}/ort-cache', runner.temp) }}
+          CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
           PYTHONDONTWRITEBYTECODE: '1'
           RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"
-      - name: Build and publish owner-toolset SDK
-        if: matrix.owner
+  windows-owner:
+    name: Publish windows-owner
+    runs-on: [self-hosted, Windows, X64, butler-win]
+    timeout-minutes: 90
+    defaults:
+      run:
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+    env:
+      RUSTUP_AUTO_INSTALL: '0'
+      RUSTUP_TOOLCHAIN: '1.91.0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify existing owner toolchain
+        run: |
+          if (!(Get-Command python -ErrorAction SilentlyContinue)) { throw 'Existing Python 3.12 is required on PATH; installers are forbidden' }
+          python -c "import sys; sys.exit('Owner runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
+          if ($LASTEXITCODE -ne 0) { throw 'Existing Python 3.12 is required; no installation attempted' }
+          foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake', 'oras')) {
+            if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
+          }
+          rustc --version
+          if ($LASTEXITCODE -ne 0) { throw 'Existing Rust 1.91.0 is required; no installation attempted' }
+          foreach ($name in @('VCToolsInstallDir', 'UCRTVersion', 'UniversalCRTSdkDir')) {
+            if (![Environment]::GetEnvironmentVariable($name)) { throw "Existing MSVC developer environment requires $name; no host changes attempted" }
+          }
+      - name: Build and publish owner-toolset SDK
         env:
           GH_TOKEN: ${{ github.token }}
-          NATIVE_TARGET: ${{ matrix.target }}
+          NATIVE_TARGET: windows-x64
           CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-owner/native-deps
-          PYTHONDONTWRITEBYTECODE: '1'
           RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps $env:NATIVE_TARGET

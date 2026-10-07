@@ -9,6 +9,10 @@ import re
 from pathlib import Path
 
 
+ALLOWED_ACTIONS = re.compile(
+    r'(?:actions/(?:checkout|upload-artifact|download-artifact|cache)@[^\s]+|'
+    r'\./\.github/actions/[\w/-]+)\Z')
+
 RULES = {
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
     'PowerShell CI script blocked by execution policy': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?powershell[\x22\x27]?\s*$',
@@ -27,6 +31,12 @@ RULES = {
     'owner profile write path': (r'(?:\$env:USERPROFILE|%USERPROFILE%)[\\/]'
                                  r'(?!\.cargo\b|\.rustup\b)|'
                                  r'(?:\$env:LOCALAPPDATA|%LOCALAPPDATA%)[\\/]butler-app'),
+    'owner installer or host configuration write': (
+        r'\b(?:choco|winget|msiexec|setx)(?:\.exe)?\b|'
+        r'\bSet-ItemProperty\b[^\n]*(?:HKLM|HKCU|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\b|'
+        r'\b(?:rustup(?:\.exe)?\s+(?:toolchain\s+install|default|update)|rustup-init)\b|'
+        r'\b(?:pip|pip3)(?:\.exe)?\s+install\b|\bpython\s+-m\s+pip\s+install\b|'
+        r'\bGITHUB_PATH\b'),
     'machine mutation or installer smoke': (
         r'\b(?:winget|choco)\s+install\b|\bnpm(?:\.cmd)?\s+(?:i|install)\s+(-g|--global)\b|'
         r'\b(?:Register-ScheduledTask|New-Service|Set-Service)\b|'
@@ -106,6 +116,9 @@ def hazards(source):
     for number, line in enumerate(source.splitlines(), 1):
         if line.lstrip().startswith(('#', '//')):
             continue
+        action = re.search(r"\buses:\s*[\"']?([^\s\"']+)", line)
+        if action and not ALLOWED_ACTIONS.fullmatch(action[1]):
+            findings.append((number, 'action not allowed on owner runner: ' + action[1]))
         for kind, pattern in RULES.items():
             if kind == 'owner profile write path' and 'Get-ChildItem' in line and '\\Downloads' in line:
                 continue  # Existing owner-profile observation is read-only.
@@ -116,8 +129,23 @@ def hazards(source):
     return findings + symlink_hazards(source)
 
 
-def local_sources(root, path, source, seen):
+def owner_steps(source, owner_input):
+    """Exclude only a literal hosted-only input guard proven by the caller.
+
+    Blank excluded lines to retain diagnostic line numbers. Unknown expressions
+    remain reachable and must pass the owner safety checks.
+    """
+    if not owner_input:
+        return source
+    blocks = re.split(r'(?=^\s*- (?:uses:|name:|run:))', source, flags=re.M)
+    guard = r"^\s*if:\s*(?:\$\{\{\s*)?inputs\.owner-runner != 'true'(?:\s*\}\})?\s*$"
+    return ''.join('\n' * block.count('\n') if re.search(guard, block, re.M) else block
+                   for block in blocks)
+
+
+def local_sources(root, path, source, seen, owner_input=False):
     """Follow local actions and scripts without traversing dependencies or data."""
+    source = owner_steps(source, owner_input)
     yield path, source
     references = re.findall(r'uses:\s*\./([^\s]+)', source)
     for line in source.splitlines():
@@ -142,12 +170,21 @@ def local_sources(root, path, source, seen):
         if not candidate.is_relative_to(root.resolve()) or not candidate.is_file() or candidate in seen:
             continue
         seen.add(candidate)
-        yield from local_sources(root, candidate, candidate.read_text(), seen)
+        step = re.search(r'uses:\s*\./' + re.escape(name) + r'[^\n]*\n'
+                         r'(?:(?!\s*- (?:uses:|name:|run:)).*\n)*', source)
+        bound_owner = step and re.search(r"owner-runner:\s*['\"]?true['\"]?\s*$", step[0], re.M)
+        if step and not bound_owner:
+            # This exact selector reaches butler-win only when runner != hosted.
+            selector = "inputs.runner == 'hosted' && 'windows-latest'"
+            runner = re.search(r'^\s*runs-on:\s*(.+)$', source, re.M)
+            bound_owner = runner and selector in runner[1] and 'fromJSON(\'["self-hosted", "butler-win"]\')' in runner[1] and re.search(
+                r"owner-runner:\s*\$\{\{ inputs\.runner != 'hosted' \}\}", step[0])
+        yield from local_sources(root, candidate, candidate.read_text(), seen, bool(bound_owner))
 
 
 def audit(root):
     findings, jobs = [], []
-    for workflow in sorted((root / '.github/workflows').glob('*.yml')):
+    for workflow in sorted((root / '.github/workflows').glob('*.y*ml')):
         source = workflow.read_text()
         for block in re.split(r'(?=^  [\w-]+:\s*\n)', source, flags=re.M):
             runner = re.search(r'^    runs-on:[ \t]*([^\n]*(?:\n      - [^\n]+)*)', block, re.M)

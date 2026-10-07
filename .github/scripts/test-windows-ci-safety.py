@@ -70,29 +70,19 @@ class WindowsSafety(unittest.TestCase):
     # test-category: security
     def test_owner_native_publisher_uses_powershell_not_runner_bash_alias(self):
         source = (ROOT.parents[1] / '.github/workflows/native-deps.yml').read_text()
-        python = source.split('- uses: actions/setup-python@v5', 1)[1].split('- uses:', 1)[0]
-        self.assertNotIn('if:', python)
-        self.assertIn("python-version: '3.12'", python)
-        self.assertIn('PSExecutionPolicyPreference: Bypass', python)
-        rust = source.split('- uses: dtolnay/rust-toolchain@master', 1)[1].split('- uses:', 1)[0]
-        self.assertIn('if: ${{ !matrix.owner }}', rust)
-        owner_rust = source.split('name: Set up owner Rust in workspace cache', 1)[1].split('- uses:', 1)[0]
-        self.assertIn('if: matrix.owner', owner_rust)
-        self.assertIn('shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass', owner_rust)
-        self.assertIn("Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/toolchains'", owner_rust)
-        self.assertIn('--no-modify-path', owner_rust)
-        self.assertIn('toolchain install 1.91.0 --profile minimal --no-self-update', owner_rust)
-        self.assertIn('if ($LASTEXITCODE -ne 0)', owner_rust)
-        self.assertLess(source.index('uses: actions/setup-python@v5'),
-                        source.index('uses: ./.github/actions/setup-oras'))
+        owner_job = source.split('  windows-owner:', 1)[1]
+        self.assertNotIn('setup-python', owner_job)
+        self.assertNotIn('rustup-init', owner_job)
+        self.assertNotIn('toolchain install', owner_job)
+        self.assertIn("sys.version_info[:2] != (3, 12)", owner_job)
+        self.assertIn("RUSTUP_AUTO_INSTALL: '0'", owner_job)
+        self.assertIn('no installation attempted', owner_job)
+        self.assertIn('Verify existing owner toolchain', owner_job)
         owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]
-        self.assertIn('if: matrix.owner', owner)
-        self.assertIn('shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass', owner)
         self.assertIn('native-deps $env:NATIVE_TARGET', owner)
         self.assertIn('if ($LASTEXITCODE -ne 0)', owner)
         hosted = source.split('name: Build once and publish verified SDK', 1)[1].split(
             'name: Build and publish owner-toolset SDK', 1)[0]
-        self.assertIn('if: ${{ !matrix.owner }}', hosted)
         self.assertIn('shell: bash', hosted)
 
     # test-category: security
@@ -125,6 +115,55 @@ class WindowsSafety(unittest.TestCase):
             self.assertEqual(windows_safety.audit(root)[0], [])
 
     # test-category: security
+    def test_owner_action_allowlist_and_installer_commands(self):
+        forbidden = ['uses: actions/setup-python@v5', 'uses: actions/setup-node@v4',
+                     'uses: vendor/arbitrary@v1', 'uses: actions/checkout-extra@v4',
+                     'uses: ./.github/actions/../untrusted', 'choco install python',
+                     'winget upgrade python', 'msiexec.exe /i python.msi',
+                     r'Set-ItemProperty -Path HKLM:\Software -Name value -Value 1',
+                     r"Set-ItemProperty 'HKCU:\Software' value 1", r'reg add HKCU\Software',
+                     'setx PATH value', 'rustup toolchain install 1.91.0',
+                     'python -m pip install package', '$env:GITHUB_PATH']
+        for source in forbidden:
+            with self.subTest(source=source):
+                self.assertTrue(windows_safety.hazards(source), source)
+        for action in ['checkout', 'upload-artifact', 'download-artifact', 'cache']:
+            self.assertEqual(windows_safety.hazards(f'uses: actions/{action}@v4'), [])
+        self.assertEqual(windows_safety.hazards('uses: ./.github/actions/owner-tools'), [])
+
+    # test-category: security
+    def test_hosted_guard_requires_literal_owner_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflow = root / '.github/workflows/test.yml'
+            workflow.parent.mkdir(parents=True)
+            action = root / '.github/actions/build/action.yml'
+            action.parent.mkdir(parents=True)
+            action.write_text("runs:\n  using: composite\n  steps:\n"
+                              "    - uses: actions/setup-node@v4\n"
+                              "      if: inputs.owner-runner != 'true'\n")
+            job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+                   '    steps:\n      - uses: ./.github/actions/build\n')
+            workflow.write_text(job)
+            self.assertTrue(windows_safety.audit(root)[1])
+            workflow.write_text(job + "        with:\n          owner-runner: 'true'\n")
+            self.assertEqual(windows_safety.audit(root)[1], [])
+            action.write_text(action.read_text().replace("inputs.owner-runner != 'true'", 'unknown.condition'))
+            self.assertTrue(windows_safety.audit(root)[1])
+
+    # test-category: security
+    def test_oci_uses_job_executable_without_path_changes(self):
+        sys.path.insert(0, str(ROOT.parents[1] / 'packages/butler-agent/rust/scripts'))
+        try:
+            import ci_oci
+            with patch.dict(os.environ, BUTLER_ORAS_EXECUTABLE='job-tools/oras.exe'), \
+                 patch.object(ci_oci.subprocess, 'run') as execute:
+                ci_oci.command('version')
+                self.assertEqual(execute.call_args.args[0][:2], ['job-tools/oras.exe', 'version'])
+        finally:
+            sys.path.pop(0)
+
+    # test-category: security
     def test_windows_oras_extracts_verified_zip_and_rejects_bad_checksum(self):
         archive = io.BytesIO()
         with zipfile.ZipFile(archive, 'w') as package:
@@ -135,10 +174,10 @@ class WindowsSafety(unittest.TestCase):
         for expected in [checksum, '0' * 64]:
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                path_file = root / 'github-path'
+                path_file = root / 'github-env'
                 responses = [io.BytesIO(payload), io.BytesIO(
                     f'{expected}  oras_1.2.3_windows_amd64.zip\n'.encode())]
-                with patch.dict(os.environ, RUNNER_TEMP=temporary, GITHUB_PATH=str(path_file)), \
+                with patch.dict(os.environ, RUNNER_TEMP=temporary, GITHUB_ENV=str(path_file)), \
                      patch.object(oras_setup.platform, 'system', return_value='Windows'), \
                      patch.object(oras_setup.platform, 'machine', return_value='AMD64'), \
                      patch.object(oras_setup.urllib.request, 'urlopen', side_effect=responses), \
@@ -151,7 +190,8 @@ class WindowsSafety(unittest.TestCase):
                         self.assertFalse(path_file.exists())
                     else:
                         oras_setup.install()
-                        installed = Path(path_file.read_text().strip()) / 'oras.exe'
+                        installed = Path(path_file.read_text().strip().split('=', 1)[1])
+                        self.assertTrue(path_file.read_text().startswith('BUTLER_ORAS_EXECUTABLE='))
                         self.assertEqual(installed.read_bytes(), b'official executable fixture')
                         self.assertEqual(execute.call_args.args[0], [str(installed), 'version'])
                         self.assertFalse((root / 'outside').exists())
