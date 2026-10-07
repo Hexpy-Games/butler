@@ -20,6 +20,10 @@ export async function soakBrowser(
   for (const url of ["https://www.iana.org/domains/reserved", "https://www.iana.org/protocols", video]) {
     userTabs.push(await app.call<string>("create", { url }));
   }
+  await waitBrowser(async()=>{
+    const state=await app.call<{tabs:Array<{id:string;status:string}>}>("state");
+    return userTabs.every(id=>state.tabs.some(t=>t.id===id && t.status!=="loading" && t.status!=="crashed"));
+  },"soak user tabs settled before baseline");
   await app.call("activate", { id: tab });
   const videoTab=userTabs.at(-1)!;
   await waitBrowser(()=>app.main<boolean>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(videoTab)}).view.webContents.executeJavaScript("Boolean(document.querySelector('video') && document.querySelector('video').readyState>=2)")`).catch(()=>false),"soak video ready");
@@ -30,7 +34,8 @@ export async function soakBrowser(
     const e=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(),"packages/butler-app/client/electron/package.json"))})('electron');
     const contents=e.webContents.getAllWebContents(),emitters=[e.app,process,...e.BrowserWindow.getAllWindows(),...contents];
     return {rss:process.memoryUsage().rss,heap:process.memoryUsage().heapUsed,webContents:contents.length,
-      listeners:emitters.reduce((sum,target)=>sum+target.eventNames().reduce((n,event)=>n+target.listenerCount(event),0),0)};
+      listeners:emitters.reduce((sum,target)=>sum+target.eventNames().reduce((n,event)=>n+target.listenerCount(event),0),0),
+      listenerDetails:emitters.map((target,index)=>({index,events:Object.fromEntries(target.eventNames().map(event=>[String(event),target.listenerCount(event)]))}))};
   })()`);
   const baseline = await resourceSnapshot();
   const started = Date.now(), rows: Array<{elapsedMs:number;turnMs:number;loadAverage1m:number;inputPaintMs:number;loop:{p99Ms:number;maxMs:number};video:{paused:boolean;time:number};proof:unknown;metrics:unknown;resources:Awaited<ReturnType<typeof resourceSnapshot>>}> = [];
