@@ -109,30 +109,40 @@ fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
     }
 }
 
-/// Every boundary case reads the same full skill fact through the public view.
+/// The public detail and summary views must agree on the complete latest fact.
+pub(super) async fn verify_skill_views(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    expected: &serde_json::Value,
+) -> Result<butler_e2e::e2e::gateway::Reply, butler_e2e::e2e::HarnessError> {
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.status, 200);
+    assert_eq!(&view.data()["skills_used"], expected);
+    let summary = s.gw.get("/session-summary?session_id=general").await?;
+    assert_eq!(summary.status, 200);
+    assert_eq!(&summary.data()["skills_used"], expected);
+    Ok(view)
+}
+
+/// Every boundary case reads the same full skill fact through both public views.
 pub(super) async fn verify_skill_record_boundaries(
     s: &butler_e2e::e2e::scenario::Scenario,
     path: &std::path::Path,
     event: &serde_json::Value,
 ) -> Result<(), butler_e2e::e2e::HarnessError> {
     let expected =
-        serde_json::Value::Array(vec![event["payload"]["details"]["skillNames"][0].clone()]);
+        serde_json::Value::Array(vec![event["payload"]["details"]["skillNames"][1].clone()]);
     let mut padded = event.clone();
     padded["padding"] = serde_json::Value::String("x".repeat(70_000));
     let record = padded.to_string();
     // Cross multiple 32KiB reads, with and without a final newline.
     for suffix in ["", "\n"] {
         std::fs::write(path, format!("{record}{suffix}"))?;
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        assert_eq!(view.status, 200);
-        assert_eq!(view.data()["skills_used"], expected);
+        verify_skill_views(s, &expected).await?;
     }
     // An oversized newer record must not hide the earlier complete fact.
     padded["padding"] = serde_json::Value::String("x".repeat(1024 * 1024));
     std::fs::write(path, format!("{event}\n{padded}\n"))?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.status, 200);
-    assert_eq!(view.data()["skills_used"], expected);
+    verify_skill_views(s, &expected).await?;
     Ok(())
 }
 
