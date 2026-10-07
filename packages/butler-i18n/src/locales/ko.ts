@@ -245,7 +245,7 @@ export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
-  browser: { "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "버틀러 업데이트 필요", "restartRequired": "버틀러 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
+  browser: { "title": "브라우저", "myTabs": "내 탭", "newTab": "새 탭", "closeTab": "탭 닫기", "address": "주소", "addressPlaceholder": "검색 또는 URL 입력", "back": "뒤로", "forward": "앞으로", "reload": "새로고침", "stop": "중지", "loading": "로딩 중", "crashed": "탭이 중단됨", "empty": "새 탭을 열어보세요", "updateRequired": "Butler 업데이트 필요", "restartRequired": "Butler 재시작 필요", "failed": "페이지를 열지 못함", "openOutput": "브라우저에서 열기", "output": "출력물" },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",
@@ -391,7 +391,7 @@ export const koKrCopy: AppCopy = {
     copyDiagnostics: "진단 복사",
     panelCrashed: "화면을 표시할 수 없습니다.",
     retry: "다시 시도",
-    uiCrashed: "버틀러 화면에 오류가 발생했습니다.",
+    uiCrashed: "Butler 화면에 오류가 발생했습니다.",
     reload: "다시 불러오기",
     custom: "직접 지정",
     freeContext: "남은 컨텍스트",
@@ -1158,7 +1158,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     sectionDescriptions: {
       memory: "Butler가 기억하는 내용을 종류별로 관리합니다.",
       general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
-      models: "버틀러 모델과 예비 모델을 설정합니다.",
+      models: "Butler 모델과 예비 모델을 설정합니다.",
       appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
       server: "Butler 서버 연결과 새 프로젝트 폴더를 설정합니다.",
       updates: "Butler를 확인하고 업데이트합니다.",
@@ -1175,7 +1175,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       about: "Butler 버전과 앱 정보를 확인합니다.",
     },
     sectionAliases: {
-      memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리"],
+      memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리", "저장 공간"],
       general: ["기본", "일반 설정", "대화"],
       models: ["모델 설정", "Worker", "예비 모델", "API 키"],
       appearance: ["테마", "화면 설정", "디자인"],
@@ -1193,7 +1193,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       archives: ["보관", "아카이브"],
       about: ["버전", "앱 정보"],
     },
-    updateComponents: { app: "버틀러", service: "버틀러 에이전트" },
+    updateComponents: { app: "Butler", service: "Butler 에이전트" },
     updateProgress: {
       idle: "업데이트 대기", checking: "확인 중", downloading: "다운로드 중", verifying: "파일 확인 중", ready: "다시 시작하면 적용됩니다.",
       applying: "적용 중", restarting: "다시 시작하는 중", failed: "업데이트 실패", completed: "확인 완료",
@@ -1240,7 +1240,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       memoryCleanup: "기억 정리",
       grants: "허용한 작업",
       permissions: "권한",
-      workerProfiles: "작업자 설정",
+      workerProfiles: "Worker 설정",
       connection: "연결",
       projects: "프로젝트",
       diagnostics: "진단",
@@ -1317,7 +1317,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     panels: {
       butlerModel: "모델 설정",
-      workerProfiles: "작업자 설정",
+      workerProfiles: "Worker 설정",
       backupModels: "예비 모델",
       updates: "업데이트",
       mcpServers: "MCP 서버",
@@ -1367,12 +1367,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     modelsAdvanced: {
       title: "고급",
-      contents: "기억 정리 모델과 작업자 설정",
+      contents: "기억 정리 모델과 Worker 설정",
     },
     workerProfilesPanel: {
-      add: "작업자 추가",
-      addLimitReached: "작업자는 최대 12명까지 등록할 수 있습니다.",
-      maxSimultaneousWorkers: "최대 동시 작업자 수",
+      add: "Worker 추가",
+      addLimitReached: "Worker는 최대 12명까지 등록할 수 있습니다.",
+      maxSimultaneousWorkers: "최대 동시 Worker 수",
     },
     wallpaper: {
       moduleInvalid: "월페이퍼 파일이 올바르지 않습니다.", imageUnsupported: "JPG, PNG, WebP 이미지만 가능", imageTooLarge: "이미지가 너무 큽니다.",

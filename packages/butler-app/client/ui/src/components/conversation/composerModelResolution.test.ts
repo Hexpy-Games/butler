@@ -1,3 +1,4 @@
+// test-category: race
 import { describe, expect, test } from "bun:test";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import { HARNESS_MODEL_CATALOG } from "@/app/fixtures.ts";

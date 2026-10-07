@@ -79,9 +79,9 @@ test("Korean copy keeps the Work, Task, Worker and Custom product terms consiste
   collect(ko);
   expect(strings.filter((text) => /워커|작업자/u.test(text))).toEqual([]);
   expect(ko.interfaceStatus.work).toBe("Work");
-  expect(ko.interfaceStatus.task).toBe("Task");
+  expect(ko.interfaceStatus.task).toBe("작업");
   expect(ko.inspector.tabs.workers).toBe("Worker");
-  expect(ko.interfaceStatus.workerCall).toBe("Worker 호출");
+  expect(ko.interfaceStatus.workerCall).toBe("작업 위임");
   expect(ko.projectSignpost.work).toBe("작업");
   expect(ko.projectSignpost.parentWork).toBe("상위 Work");
   expect(ko.projectSignpost.tasks).toBe("하위 Task");

@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";

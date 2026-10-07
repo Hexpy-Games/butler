@@ -1,3 +1,4 @@
+// test-category: race
 import { beforeEach, expect, test } from "bun:test";
 import { useComposerStore } from "./composerStore.ts";
 

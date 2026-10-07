@@ -1,3 +1,4 @@
+// test-category: format-pin
 /// <reference types="bun" />
 
 import { expect, test } from "bun:test";

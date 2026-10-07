@@ -1,3 +1,4 @@
+// test-category: race
 import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
