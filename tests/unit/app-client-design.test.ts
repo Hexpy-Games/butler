@@ -342,12 +342,6 @@ test("dedicated client keeps complete work history and session management contro
   const sidebarProjectGroup = read(
     "packages/butler-app/client/ui/src/components/layout/SidebarProjectGroup.tsx",
   );
-  const sidebarProjectsMenu = read(
-    "packages/butler-app/client/ui/src/components/layout/SidebarProjectsMenu.tsx",
-  );
-  const sidebarProjectsSection = read(
-    "packages/butler-app/client/ui/src/components/layout/SidebarProjectsSection.tsx",
-  );
   const sidebarSessionActions = read(
     "packages/butler-app/client/ui/src/components/layout/SidebarSessionActions.tsx",
   );
@@ -453,20 +447,12 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarProjectGroup).toContain(
     "effectiveCollapsed ? <Folder /> : <FolderOpen />",
   );
-  expect(sidebarProjectsMenu).toContain("projectsCollapsed");
-  expect(sidebarProjectsMenu).toContain('<Expand size="md" />');
-  expect(sidebarProjectsMenu).toContain('<Collapse size="md" />');
   expect(sidebarChatsSection).toContain(
     'chatsCollapsed ? <Expand size="md" />',
   );
   expect(useSidebarProjectCollapse).toContain("Set<string>");
-  expect(sidebarProjectsSection).toContain("collapsedProjectIds");
   expect(useSidebarProjectCollapse).toContain("setCollapsedProjectIds");
   expect(sidebarProjectActions).toContain("event.stopPropagation()");
-  expect(sidebarProjectsSection).toContain(
-    "collapsedProjectIds.has(project.id)",
-  );
-  expect(sidebarProjectsSection).toContain("projectRowCollapsed");
   // Window drag regions are a DS prop since 079728031.
   expect(sidebarProjectActions).toContain('windowDrag="no-drag"');
   expect(sidebarSessionActions).toContain('windowDrag="no-drag"');
@@ -1195,7 +1181,6 @@ test("navigation UI is backed by app-server data rather than sidebar fixtures", 
 
   expect(renderer).toContain('api<NavigationView>("/navigation")');
   expect(renderer).toContain('api<{ project: ProjectSummary }>("/projects"');
-  expect(renderer).toContain("const projects = navigation.projects ?? []");
   expect(renderer).toContain("const chats = navigation.chats ?? []");
   expect(renderer).toContain("projects.map((project) =>");
   expect(renderer).toContain("paging.visibleSessions.map((chat) =>");
@@ -1205,10 +1190,7 @@ test("navigation UI is backed by app-server data rather than sidebar fixtures", 
   expect(renderer).toContain("project.sessions ?? []");
   expect(renderer).toContain("function selectProjectFolder");
   expect(renderer).toContain("canSelectProjectFolder");
-  expect(renderer).toContain("creatingProject || !folderPickerAvailable");
   expect(renderer).toContain("function projectDraftId");
-  expect(renderer).toContain("sidebarCopy.startFromScratch");
-  expect(renderer).toContain("sidebarCopy.useExistingFolder");
   expect(renderer).toContain("runProjectAction: async (project, action)");
   expect(renderer).toContain("appCopy.sidebar.projectDashboard");
   expect(renderer).toContain("appCopy.sessionActions.rename");
@@ -2608,7 +2590,6 @@ test("app client enforces tokenized styling and modular store architecture", () 
   expect(renderer).toContain("function SidebarChatItem");
   expect(renderer).toContain("function SidebarSection");
   expect(renderer).toContain("function SidebarSettingsItem");
-  expect(renderer).toContain("function SidebarProjectsMenu");
   expect(renderer).toContain("function SidebarProjectActions");
   expect(renderer).toContain("function SidebarSessionActions");
   expect(renderer).toContain("function useSidebarProjectCollapse");

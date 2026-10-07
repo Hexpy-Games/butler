@@ -76,6 +76,35 @@ impl SubsessionService {
         status: &str,
         summary: String,
     ) -> Result<(), BtccError> {
+        self.complete_child_result(session, turn, status, summary, None)
+            .await
+    }
+
+    /// A terminal runtime failure returns only its stable code to the parent.
+    pub async fn complete_failed_child(
+        &self,
+        session: &str,
+        turn: &str,
+        code: &str,
+    ) -> Result<(), BtccError> {
+        self.complete_child_result(
+            session,
+            turn,
+            "failed",
+            format!("Delegated work could not continue: {code}."),
+            Some(code.into()),
+        )
+        .await
+    }
+
+    async fn complete_child_result(
+        &self,
+        session: &str,
+        turn: &str,
+        status: &str,
+        summary: String,
+        failure_code: Option<String>,
+    ) -> Result<(), BtccError> {
         self.bind_child_work(session, turn).await?;
         if status == "cancelled" {
             self.work
@@ -90,11 +119,15 @@ impl SubsessionService {
         let blocked = disposition
             .as_ref()
             .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked);
-        let failure_reason = blocked.map(|value| {
-            value
-                .next_condition
-                .clone()
-                .unwrap_or_else(|| value.summary.clone())
+        let failure_reason = failure_code.clone().or_else(|| {
+            blocked
+                .map(|value| {
+                    value
+                        .next_condition
+                        .clone()
+                        .unwrap_or_else(|| value.summary.clone())
+                })
+                .or_else(|| (status == "failed").then(|| summary.clone()))
         });
         let status = if status == "success" && blocked.is_some() {
             "blocked"
@@ -125,6 +158,7 @@ impl SubsessionService {
                     status: status.into(),
                     summary,
                     failure_reason,
+                    failure_code,
                     evidence_refs,
                     handoff,
                 },

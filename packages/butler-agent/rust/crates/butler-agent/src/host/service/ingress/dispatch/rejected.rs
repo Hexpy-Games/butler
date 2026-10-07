@@ -32,6 +32,10 @@ const INVALID_RECORD: [&str; 6] = [
 pub(super) fn is_rejection(error: &BtccError) -> bool {
     [
         BtccCode::TurnReplayConflict.as_str(),
+        BtccCode::AuthorityContinuationMissing.as_str(),
+        BtccCode::AuthoritySourceCallMissing.as_str(),
+        StorageCode::AuthoritySourceCallMismatch.as_str(),
+        StorageCode::AuthoritySourceCallNotPending.as_str(),
         StorageCode::TurnNotAdmitted.as_str(),
     ]
     .contains(&error.code())
@@ -118,10 +122,9 @@ async fn close_child(
     if !matches!(binding.role, SessionRole::Worker | SessionRole::Steward) {
         return false;
     }
-    let summary = format!("Delegated work could not continue: {code}.");
     let turn_id = bind::routed_turn_id(&envelope);
     if let Err(error) = subsessions
-        .complete_child(&binding.session_id, turn_id, "failed", summary)
+        .complete_failed_child(&binding.session_id, turn_id, code)
         .await
     {
         butler_core::diagnostic!(

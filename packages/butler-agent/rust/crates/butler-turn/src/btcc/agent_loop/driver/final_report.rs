@@ -50,6 +50,7 @@ pub(super) async fn reject_tools(
             result,
             iteration,
             OutcomeCheck::RecordOnly,
+            None,
         )
         .await?;
     }

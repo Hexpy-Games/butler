@@ -1,124 +1,92 @@
-import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useState } from "react";
+import { useRef } from "react";
+import { splitProjectFolderPath } from "./projectFolderPath";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { canSelectProjectFolder } from "@/app/api.ts";
 import {
-  Button,
-  ButtonContainer,
-  Dialog,
-  DialogContent,
-  DialogForm,
-  DialogTitle,
-  Field,
-  FieldLabel,
-  Input,
+  Button, ButtonContainer, Dialog, DialogContent, DialogForm, DialogTitle,
+  Field, FieldError, FieldLabel, IconButton, IconSlot, Input, Folder, FolderPlus, Separator, Stack, Tooltip, Typo, X,
 } from "@/butler-ds";
-import { appCopy } from "@/app/copy.ts";
-import { useButlerStore } from "@/app/store.ts";
+import { useProjectCreateForm, type ProjectCreateDialogProps } from "./useProjectCreateForm";
 
-interface ProjectCreateDialogProps {
-  open?: boolean;
-  creatingProject?: boolean;
-  initialDisplayName?: string;
-  onOpenChange?: (open: boolean) => void;
-  onSubmit?: (displayName: string) => Promise<boolean> | boolean | void;
-}
-
-export function ProjectCreateDialog({
-  open: openProp,
-  creatingProject: creatingProjectProp,
-  initialDisplayName,
-  onOpenChange: onOpenChangeProp,
-  onSubmit: onSubmitProp,
-}: ProjectCreateDialogProps = {}) {
+export function ProjectCreateDialog(props: ProjectCreateDialogProps = {}) {
   useAppLocale();
-  const storeOpen = useButlerStore((state) => state.projectCreateDialogOpen);
-  const setStoreOpen = useButlerStore(
-    (state) => state.setProjectCreateDialogOpen,
-  );
-  const creatingProject = useButlerStore((state) => state.creatingProject);
-  const createScratchProject = useButlerStore(
-    (state) => state.createScratchProject,
-  );
-  const open = openProp ?? storeOpen;
-  const pending = creatingProjectProp ?? creatingProject;
-  const onOpenChange = onOpenChangeProp ?? setStoreOpen;
-  const onSubmit = onSubmitProp ?? createScratchProject;
-  const [value, setValue] = useState(initialDisplayName ?? "");
-  const [submitting, setSubmitting] = useState(false);
-  const inputId = "project-create-input";
-  const trimmedValue = value.trim();
-  const canSubmit = trimmedValue.length > 0 && !pending && !submitting;
-
-  useEffect(() => {
-    if (!open) return;
-    setValue(initialDisplayName ?? "");
-    setSubmitting(false);
-  }, [open]);
-
-  async function submit(): Promise<void> {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    try {
-      const result = await onSubmit(trimmedValue);
-      if (result !== false) onOpenChange(false);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function close(): void {
-    if (!pending && !submitting) onOpenChange(false);
-  }
-
+  const form = useProjectCreateForm(props);
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen) onOpenChange(true);
-        else close();
-      }}
-    >
-      <DialogContent closeLabel={appCopy.common.close}
-        aria-describedby={undefined}
-        data-test-class="modal-card"
-        glassRadius="composer"
-        showCloseButton={!pending}
-      >
-        <DialogTitle visuallyHidden>
-          {appCopy.sidebar.projectCreateTitle}
-        </DialogTitle>
-        <DialogForm
-          title={appCopy.sidebar.projectCreateTitle}
-          onSubmit={() => void submit()}
-          footer={
-            <ButtonContainer size="default" justify="end">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={close}
-              >
-                {appCopy.common.cancel}
-              </Button>
-              <Button type="submit" disabled={!canSubmit}>
-                {appCopy.common.create}
-              </Button>
-            </ButtonContainer>
-          }
-        >
-          <Field>
-            <FieldLabel htmlFor={inputId}>
-              {appCopy.sidebar.projectName}
-            </FieldLabel>
-            <Input
-              id={inputId}
-              autoFocus
-              value={value}
-              disabled={pending || submitting}
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </Field>
-        </DialogForm>
+    <Dialog open={form.open} onOpenChange={form.onOpenChange}>
+      <DialogContent closeLabel={appCopy.common.close} aria-describedby={undefined}
+        data-test-class="modal-card" glassRadius="composer" showCloseButton={!form.pending}>
+        <DialogTitle visuallyHidden>{appCopy.sidebar.projectCreateTitle}</DialogTitle>
+        <Stack minWidth="0">
+          <DialogForm title={appCopy.sidebar.projectCreateTitle} busy={form.pending}
+            onSubmit={() => void form.submit()}
+            footer={
+              <ButtonContainer size="default" justify="end">
+                <Button type="button" variant="outline" disabled={form.pending}
+                  onClick={() => form.onOpenChange(false)}>{appCopy.common.cancel}</Button>
+                <Button type="submit" disabled={!form.canSubmit}>{appCopy.common.create}</Button>
+              </ButtonContainer>
+            }>
+            <ProjectCreateFields form={form} />
+          </DialogForm>
+        </Stack>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ProjectCreateFields({ form }: { form: ReturnType<typeof useProjectCreateForm> }) {
+  const pickerAvailable = canSelectProjectFolder();
+  const pickerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor="project-create-input">{appCopy.sidebar.projectName}</FieldLabel>
+        <Input id="project-create-input" autoFocus value={form.value} disabled={form.pending}
+          onChange={(event) => form.setValue(event.target.value)} />
+      </Field>
+      <Separator />
+      <Field>
+        <FieldLabel htmlFor="project-create-folder">{appCopy.sidebar.projectFolder}</FieldLabel>
+        <Stack align="row" cross="center" gap="sm">
+          <Stack.Item alignSelf={form.folder ? "start" : "center"} shrink={false}>
+            <IconSlot size="md" minHeight="line" tone={form.folder ? undefined : "secondary"}>
+              {form.folder ? <Folder /> : <FolderPlus />}
+            </IconSlot>
+          </Stack.Item>
+          {form.folder?.folder_path
+            ? <SelectedFolderPath path={form.folder.folder_path} />
+            : <Typo.Body grow basis="0" truncate tone="secondary">
+                {appCopy.sidebar.projectFolderAuto}
+              </Typo.Body>}
+          <ButtonContainer size="sm">
+            <Tooltip label={pickerAvailable ? undefined : appCopy.sidebar.availableInDesktop}>
+              <Button id="project-create-folder" ref={pickerRef} type="button" variant="outline" size="sm"
+                disabled={form.pending} aria-disabled={!pickerAvailable || undefined}
+                aria-label={form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
+                onClick={() => void form.pickFolder()}>
+                {form.folder ? appCopy.sidebar.changeProjectFolder : appCopy.sidebar.chooseProjectFolder}
+              </Button>
+            </Tooltip>
+            {form.folder && <IconButton disabled={form.pending} label={appCopy.sidebar.resetProjectFolder}
+              onClick={() => { form.resetFolder(); pickerRef.current?.focus(); }}>
+              <IconSlot size="sm"><X /></IconSlot>
+            </IconButton>}
+          </ButtonContainer>
+        </Stack>
+      </Field>
+      {form.error && <FieldError>{form.error}</FieldError>}
+    </>
+  );
+}
+
+function SelectedFolderPath({ path }: { path: string }) {
+  const { basename, parent } = splitProjectFolderPath(path);
+  return (
+    <Tooltip label={path} wrap>
+      <Stack gap="none" grow basis="0" minWidth="0" tabIndex={0} aria-label={path}>
+        <Typo.Body truncate weight="medium">{basename}</Typo.Body>
+        <Typo.Caption truncate tone="secondary">{parent}</Typo.Caption>
+      </Stack>
+    </Tooltip>
   );
 }
