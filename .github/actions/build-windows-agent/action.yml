@@ -43,13 +43,14 @@ runs:
         path: ${{ runner.temp }}/windows-native-artifact
     - name: Restore native tree with its verified library layout
       if: inputs.native-deps-artifact != ''
-      shell: bash
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        set -euo pipefail
-        root="$(cygpath -u "$RUNNER_TEMP")"
-        mkdir -p "$root/ort-cache/native-deps"
-        tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
-          -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
+        $root = $env:RUNNER_TEMP
+        New-Item -ItemType Directory -Force "$root/ort-cache/native-deps" | Out-Null
+        $ErrorActionPreference = 'Continue'
+        tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - uses: ./.github/actions/rust-agent-setup
       if: inputs.owner-runner != 'true'
       with:

@@ -26,16 +26,18 @@ class WindowsSafety(unittest.TestCase):
     def test_native_stderr_guard_requires_continue_per_step(self):
         native = windows_safety.native_safety
         for command in ['cargo test 2>&1 | Out-Host', 'python check.py',
-                        '$result = & "job/tool.exe" --list', '& reg query key']:
+                        '$result = & "job/tool.exe" --list', '& reg query key',
+                        '$result = (& python check.py)', '& $python check.py']:
             self.assertTrue(native.script_hazards(command), command)
             safe = "$ErrorActionPreference = 'Continue'\n" + command + "\n$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }"
             self.assertEqual(native.script_hazards(safe), [])
+        self.assertTrue(native.script_hazards("$ErrorActionPreference = 'Continue'\npython check.py"))
         self.assertTrue(native.script_hazards(
             "if ($condition) { $ErrorActionPreference = 'Continue' }\ncargo test"))
         self.assertTrue(native.script_hazards(
             "if ($condition) {\n  $ErrorActionPreference = 'Continue'\n}\ncargo test"))
         source = ("steps:\n  - run: |\n      $ErrorActionPreference = 'Continue'\n"
-                  "      cargo test\n  - run: cargo test\n")
+                  "      cargo test\n      if ($LASTEXITCODE) { exit $LASTEXITCODE }\n  - run: cargo test\n")
         self.assertEqual(len(native.hazards(source, True)), 1)
         self.assertEqual(native.hazards('steps:\n  - shell: bash\n    run: python script.py\n', True), [])
         self.assertEqual(native.script_hazards('& "job/script.ps1"\n"BIN=job/test.exe" | Out-File $env:GITHUB_ENV'), [])
@@ -267,13 +269,19 @@ class WindowsSafety(unittest.TestCase):
             workflow = root / '.github/workflows/fixture.yml'
             job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
                    '    steps:\n      - uses: ./.github/actions/setup\n')
-            for unsafe in ['shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
+            for unsafe in ['shell: bash', 'shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
                 action.write_text('runs:\n  using: composite\n  steps:\n    - ' + unsafe + '\n')
                 workflow.write_text(job)
                 self.assertTrue(windows_safety.audit(root)[1], unsafe)
                 action.write_text('runs:\n  using: composite\n  steps: []\n')
                 workflow.write_text(job + '      - ' + unsafe + '\n')
                 self.assertTrue(windows_safety.audit(root)[1], unsafe)
+            action.write_text("runs:\n  using: composite\n  steps:\n    - shell: bash\n      if: runner.os != 'Windows'\n")
+            workflow.write_text(job)
+            self.assertEqual(windows_safety.audit(root)[1], [])
+            action.write_text(action.read_text().replace("runner.os != 'Windows'", 'unknown.condition'))
+            self.assertTrue(windows_safety.audit(root)[1])
+            action.write_text('runs:\n  using: composite\n  steps: []\n')
             for prefix in ['', 'defaults:\n  run:\n    shell: pwsh\n']:
                 workflow.write_text(prefix + job.replace('    steps:',
                     '    defaults:\n      run:\n        shell: pwsh\n    steps:'))
