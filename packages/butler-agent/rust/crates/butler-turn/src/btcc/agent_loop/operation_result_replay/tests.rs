@@ -50,6 +50,7 @@ fn exact_read_arguments_preserve_source_bounds_and_nulls() {
     assert!(exact_read_arguments(diagnostic.as_object().unwrap()).is_ok());
 }
 
+// test-category: race
 #[tokio::test]
 async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() {
     let fixture = Fixture::activated();
@@ -212,7 +213,12 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
     assert_eq!(acknowledged.delivery_state.as_deref(), Some("acknowledged"));
     assert!(acknowledged.delivery_response_sha256.is_some());
     let second = runtime
-        .prepare("btcc-model-round-1", &[message], &NoMeasurement, None)
+        .prepare(
+            "btcc-model-round-1",
+            &[message.clone()],
+            &NoMeasurement,
+            None,
+        )
         .await
         .unwrap();
     let projected = second.messages.unwrap();
@@ -260,6 +266,82 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
             .list_tool(json!({"limit":"not a number"}).as_object().unwrap())
             .await
             .is_err()
+    );
+    let output = json!({"schema":"butler.browser-action.v1","status":"ok","steps":[{"status":"completed","hit":{"name":"x".repeat(20_000)}}]});
+    journal
+        .start(ToolJournalStart {
+            turn_id: "turn".into(),
+            call_id: "browser-call".into(),
+            tool_name: "browser_act".into(),
+            raw_arguments: "{}".into(),
+            arguments: json!({}),
+        })
+        .await
+        .unwrap();
+    journal
+        .finish(ToolJournalFinish {
+            call_id: "browser-call".into(),
+            status: ToolJournalFinishStatus::Completed,
+            result: Some(JsonDocument::from_value(&output).unwrap()),
+            changed_files: None,
+            error_code: None,
+        })
+        .await
+        .unwrap();
+    message.tool_call_id = Some("browser-call".into());
+    message.name = Some("browser_act".into());
+    message.content = json!({"ok":true,"output":output}).to_string().into();
+    assert!(
+        runtime
+            .prepare(
+                "btcc-model-round-2",
+                &[message.clone()],
+                &NoMeasurement,
+                None
+            )
+            .await
+            .unwrap()
+            .messages
+            .is_none()
+    );
+    runtime
+        .accepted(
+            "btcc-model-round-2",
+            &super::super::test_data::result("ok", vec![], 2),
+        )
+        .await
+        .unwrap();
+    // Browser semantic projections may already replace a durable payload when
+    // replay sees it. Neither the latest full result nor a smaller stub is lost.
+    for output in [
+        json!({"schema":"butler.browser-action.v1","status":"ok","steps":[{"status":"completed","hit":{"name":"x".repeat(20_000)}}]}),
+        json!({"schema":"butler.browser-action.v1","status":"ok","steps":"10/10 completed","superseded":true}),
+        json!({"schema":"butler.browser-observation.v1","obs":"o1","status":"superseded","acted":"hover f0-e2 ×10 completed"}),
+    ] {
+        message.content = json!({"ok":true,"output":output}).to_string().into();
+        assert!(
+            runtime
+                .prepare(
+                    "btcc-model-round-3",
+                    &[message.clone()],
+                    &NoMeasurement,
+                    None
+                )
+                .await
+                .unwrap()
+                .messages
+                .is_none()
+        );
+    }
+    assert_eq!(
+        journal
+            .find_for_turn("turn".into(), "call".into())
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_state
+            .as_deref(),
+        Some("reference_only")
     );
     storage.close().await.unwrap();
 }

@@ -14,7 +14,7 @@ function collect(root, elements, candidates) {
   }
 }
 function snapshot(options) {
-  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map(),labels:new WeakMap()};
+  globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),renderings:new WeakMap(),luminances:new Map(),labels:new WeakMap()};
   const start = performance.now(), elements = [], nodes = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const candidates = new WeakSet();
   collect(document, elements, candidates);
@@ -53,13 +53,17 @@ function snapshot(options) {
   };
   const gridCandidates=[];
   const emitStart = performance.now();
-  for (const element of elements) if (options.full_grid || candidates.has(element) || scrollRegion(element)) emit(element);
-  const emitMs = performance.now() - emitStart;
   for (const element of elements) {
-    if (seen.has(element)) continue;
     const box=boxOf(element);
-    if (box.width>=4 && box.height>=4 && box.bottom>0 && box.right>0 && box.top<innerHeight && box.left<innerWidth && styleValue(element,"cursor")==="pointer") gridCandidates.push(box);
+    const scrollVisible=box.width>=4 && box.height>=4 && box.bottom>0 && box.top<innerHeight;
+    const inViewport=scrollVisible && box.right>0 && box.left<innerWidth;
+    // Semantic targets still visit emit offscreen to retain below-fold totals.
+    // Share the walk/grid visibility read; offscreen non-targets cannot scroll
+    // or contribute a sampled point and need no native style/property getters.
+    if (options.full_grid || candidates.has(element) || scrollVisible && scrollRegion(element)) emit(element);
+    if (inViewport && !seen.has(element) && styleValue(element,"cursor")==="pointer") gridCandidates.push(box);
   }
+  const emitMs = performance.now() - emitStart;
   const gridStart = performance.now();
   for (let y = 12; y < innerHeight; y += 24) for (let x = 12; x < innerWidth; x += 24) {
     // A non-pointer, non-semantic hit cannot add an interactive node. Keep the

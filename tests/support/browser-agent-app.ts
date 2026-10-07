@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage } from "./electron-page-cdp";
-import { electronMain } from "./electron-main-cdp";
+import { connectElectronMain } from "./electron-main-cdp";
 import { createNativeAppServer, freePort, type StubModelRequest } from "./native-app-server";
 import { smokeElectronArgs } from "./smoke-browser";
 
@@ -35,10 +35,15 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   for (const stream of [child.stdout!, child.stderr!]) stream.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
   const win = `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`;
-  const main = <T>(expression: string) => electronMain<T>(inspector, expression);
+  let inspectorClient: ReturnType<typeof connectElectronMain> | undefined;
+  const main = async <T>(expression: string): Promise<T> => {
+    inspectorClient ??= connectElectronMain(inspector);
+    return (await inspectorClient).evaluate<T>(expression);
+  };
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   const stop = async () => {
     page?.close();
+    (await inspectorClient?.catch(()=>undefined))?.close();
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
       const until=Date.now()+5000;

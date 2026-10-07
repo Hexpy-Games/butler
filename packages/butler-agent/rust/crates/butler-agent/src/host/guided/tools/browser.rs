@@ -74,6 +74,18 @@ pub(super) async fn execute(
             object.remove("frames");
             object.remove("payment");
             object.remove("addons");
+            for field in [
+                "scriptMs",
+                "gridSampleMs",
+                "walkerMs",
+                "proseMs",
+                "collectMs",
+                "emitMs",
+                "cursor",
+                "epoch",
+            ] {
+                object.remove(field);
+            }
         }
     }
     encode_page_data(result)

@@ -263,6 +263,9 @@ async fn store_still(
         for step in steps.iter_mut().take(10) {
             step["tab"] = tab.clone();
             upload_still(state, session, step).await?;
+            if let Some(record) = step.as_object_mut() {
+                record.remove("tab");
+            }
             if let Some(file) = step.get("still_file") {
                 latest = Some(file.clone());
             }

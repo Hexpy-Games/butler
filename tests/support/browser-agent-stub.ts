@@ -21,7 +21,8 @@ export function latestBrowser(request: StubModelRequest, field: "tab" | "obs") {
     if (typeof value === "string") { try { return find(JSON.parse(value)); } catch { return undefined; } }
     if (!value || typeof value !== "object") return undefined;
     const record = value as Record<string, unknown>;
-    if (typeof record[field] === "string" && record.status === "ok") return record;
+    if (typeof record[field] === "string" && record.status === "ok" &&
+        (field !== "obs" || record.schema === "butler.browser-observation.v1")) return record;
     for (const item of Object.values(record)) { const found = find(item); if (found) return found; }
   }
   for (const message of [...request.messages].reverse()) {

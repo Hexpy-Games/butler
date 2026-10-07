@@ -48,6 +48,13 @@ export function paintState(element) {
   const result={opacity,invisible};cache?.set(element,result);return result;
 }
 export function rendering(element) {
+  const cache=globalThis.__butlerPerceptionCache?.renderings;
+  if(cache?.has(element)) return cache.get(element);
+  const result=renderingState(element);
+  cache?.set(element,result);
+  return result;
+}
+export function renderingState(element) {
   const paint=paintState(element);
   if(paint.invisible || paint.opacity<.1) return "invisible";
   if (fullyClipped(element)) return "invisible";

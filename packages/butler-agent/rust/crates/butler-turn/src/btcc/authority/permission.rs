@@ -185,9 +185,9 @@ fn permission_identity(
 pub(super) fn for_source(
     source: &PermissionSource<'_>,
     collation: &butler_core::locale::LocaleCollation,
-    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    identities: &std::collections::HashMap<(&str, &str, &str), &str>,
     comparisons: &KeyComparisons,
-) -> AuthorityResult<PermissionTarget> {
+) -> AuthorityResult<Option<PermissionTarget>> {
     let input: Value = serde_json::from_str(source.input_json)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
     let facts = PermissionFacts {
@@ -209,26 +209,10 @@ pub(super) fn for_source(
         "run_command" | "run_command_remote_observation"
     );
     let scope_key = permission_scope_key(facts, file_edit, command, Some(comparisons))?;
-    // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
-    if !prefixes
-        .get(source.owner)
-        .is_some_and(|workspaces| workspaces.contains_key(source.workspace))
-    {
-        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
-        let _ = prefix.pop(); // Preserve the shared codec's exact array escaping.
-        prefixes
-            .entry(source.owner.to_owned())
-            .or_default()
-            .insert(source.workspace.to_owned(), prefix);
-    }
-    let prefix = prefixes
-        .get(source.owner)
-        .and_then(|workspaces| workspaces.get(source.workspace))
-        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
-    let grant_ref = format!(
-        "permission-{}",
-        &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
-    );
+    let Some(grant_ref) = identities.get(&(source.owner, source.workspace, scope_key.as_str()))
+    else {
+        return Ok(None);
+    };
     let target =
         butler_core::public_text::sanitize_public_delta(&permission_target(facts, command));
     let cwd = command.then(|| {
@@ -238,12 +222,12 @@ pub(super) fn for_source(
             .unwrap_or(source.workspace)
             .to_owned()
     });
-    Ok(PermissionTarget {
-        grant_ref,
+    Ok(Some(PermissionTarget {
+        grant_ref: (*grant_ref).to_owned(),
         capability: source.capability.to_owned(),
         target,
         cwd,
-    })
+    }))
 }
 
 fn permission_description(file_edit: bool, command: bool, executable: Option<&str>) -> String {

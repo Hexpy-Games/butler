@@ -69,7 +69,7 @@ fn project_targets(
         .collect();
     let mut sources = HashMap::with_capacity(grants.len());
     let mut current = std::collections::HashSet::new();
-    let mut prefixes = HashMap::new();
+    let identities = grant_identities(grants);
     let comparisons = Default::default();
     repo.permission_projection_records(&owners, &mut |record| {
         let key = [
@@ -83,8 +83,11 @@ fn project_targets(
         let mut source = if let Some(source) = cache.targets.get(&key) {
             source.clone()
         } else {
-            let source =
-                super::permission::for_source(&record, collation, &mut prefixes, &comparisons)?;
+            let Some(source) =
+                super::permission::for_source(&record, collation, &identities, &comparisons)?
+            else {
+                return Ok(());
+            };
             if active.contains(&source.grant_ref) {
                 cache.targets.insert(key.clone(), source.clone());
             }
@@ -105,4 +108,22 @@ fn project_targets(
         }
     }
     Ok(())
+}
+
+fn grant_identities(grants: &[ConversationPermission]) -> HashMap<(&str, &str, &str), &str> {
+    // Active grants already store the canonical scope and grant identity. Match
+    // current source facts to that scope instead of hashing the owner twice.
+    grants
+        .iter()
+        .map(|grant| {
+            (
+                (
+                    grant.owner_session_id.as_str(),
+                    grant.workspace_path.as_str(),
+                    grant.scope_key.as_str(),
+                ),
+                grant.grant_ref.as_str(),
+            )
+        })
+        .collect()
 }
