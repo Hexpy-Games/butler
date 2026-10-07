@@ -80,9 +80,9 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-discovery
       - name: Verify existing owner toolchain
         run: |
-          if (!(Get-Command python -ErrorAction SilentlyContinue)) { throw 'Existing Python 3.12 is required on PATH; installers are forbidden' }
           python -c "import sys; sys.exit('Owner runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
           if ($LASTEXITCODE -ne 0) { throw 'Existing Python 3.12 is required; no installation attempted' }
           foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake', 'oras')) {

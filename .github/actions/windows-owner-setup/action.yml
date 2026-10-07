@@ -11,6 +11,7 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: ./.github/actions/windows-owner-discovery
     - name: Require existing owner tools
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
