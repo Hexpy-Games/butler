@@ -15,7 +15,8 @@ export async function nativeSmokeRuntime(entry: string): Promise<number | null> 
     const build = await Bun.build({ entrypoints: [fileURLToPath(entry)], target: "node", format: "esm", packages: "external", external: ["node:sqlite"] });
     if (!build.success) throw new Error(build.logs.join("\n"));
     await Bun.write(output, build.outputs[0]!);
-    const child = spawn("node", [output, ...process.argv.slice(2)], { stdio: "inherit", env: process.env });
+    const env = { ...process.env, BUTLER_SMOKE_REPOSITORY_ROOT: fileURLToPath(new URL("../../", import.meta.url)) };
+    const child = spawn("node", [output, ...process.argv.slice(2)], { stdio: "inherit", env });
     const [code] = await once(child, "exit") as [number | null];
     return code ?? 1;
   } finally { rmSync(temporary, { recursive: true, force: true }); }

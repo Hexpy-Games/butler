@@ -66,7 +66,7 @@ export type NativeAppServerHandle = {
   stop(): Promise<void>;
 };
 
-const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+const repositoryRoot = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? fileURLToPath(new URL("../../", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
