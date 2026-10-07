@@ -180,7 +180,7 @@ async fn invalid_files_reported_without_partial_injection() -> Result<(), Harnes
             "OVERSIZE_SENTINEL",
             "FORBIDDEN_FALLBACK",
         ] {
-            assert!(!text.contains(marker));
+            assert!(!text.contains(marker), "unexpected {marker}: {text}");
         }
     }
     s.finish().await
