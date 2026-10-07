@@ -14,6 +14,7 @@ mod model_round;
 pub mod operation_result_replay;
 mod ports;
 mod progress;
+pub(crate) use progress::authority_batch;
 mod state;
 mod stream_relay;
 mod tool_batch;

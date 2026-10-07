@@ -135,6 +135,20 @@ pub(super) async fn execute<'a>(
             .await?;
     }
     super::hooks::post_tool(policy, invocation, &prepared.call, &result).await;
+    // A pending body is visible only after the continuation commit succeeds.
+    if super::continuation::pending_authority(result.output.as_ref()).is_some() {
+        return Ok(result);
+    }
+    publish_result(policy, invocation, prepared, &result).await;
+    Ok(result)
+}
+
+async fn publish_result(
+    policy: &dyn GuidedPolicyPort,
+    invocation: GuidedInvocation<'_>,
+    prepared: &PreparedCall<'_>,
+    result: &ToolResult,
+) {
     let visible = result
         .error
         .as_ref()
@@ -153,7 +167,6 @@ pub(super) async fn execute<'a>(
         operation_call_id.as_deref(),
     )
     .await;
-    Ok(result)
 }
 
 fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
@@ -230,6 +243,20 @@ pub(super) async fn execute_concurrent<'a>(
             .map(|prepared| execute(policy, invocation, prepared)),
     )
     .await;
+    if results.iter().any(Result::is_err) {
+        for (call, result) in calls.iter().zip(&results) {
+            if result.as_ref().is_ok_and(|result| {
+                super::continuation::pending_authority(result.output.as_ref()).is_some()
+            }) {
+                super::progress::authority_terminal(
+                    invocation.progress,
+                    &call.call,
+                    Status::Failed,
+                )
+                .await;
+            }
+        }
+    }
     results.into_iter().collect()
 }
 

@@ -2,6 +2,9 @@
 
 use super::*;
 
+mod concurrent;
+use concurrent::run_concurrent_batch;
+
 /// Runs the reply's tool calls, concurrently when all are safe, and applies
 /// the policy's disposition for the settled batch.
 pub(super) async fn run_tool_batch(
@@ -27,7 +30,7 @@ pub(super) async fn run_tool_batch(
     let Some(resumed) = resumed_batch else {
         announce_tool_round(input, &reply.text, &reply.calls, iteration).await?;
         return if tool_batch::concurrent(&prepared_calls) {
-            run_concurrent_batch(input, state, &batch).await
+            run_concurrent_batch(input, state, prepared, &batch).await
         } else {
             run_sequential_batch(input, state, prepared, &batch, BatchCursor::fresh()).await
         };
@@ -56,6 +59,8 @@ pub(super) struct BatchCursor {
     results: Vec<ToolResult>,
     /// Set when the batch resumes after an authority decision.
     resumed: bool,
+    concurrent_results: Vec<ToolResult>,
+    concurrent_call_ids: Vec<String>,
 }
 
 impl BatchCursor {
@@ -64,6 +69,8 @@ impl BatchCursor {
             start: 0,
             results: Vec::new(),
             resumed: false,
+            concurrent_results: Vec::new(),
+            concurrent_call_ids: Vec::new(),
         }
     }
 
@@ -72,6 +79,8 @@ impl BatchCursor {
             start: batch.next_call_index,
             results: batch.results,
             resumed: true,
+            concurrent_results: batch.concurrent_results,
+            concurrent_call_ids: batch.concurrent_call_ids,
         }
     }
 }
@@ -97,48 +106,6 @@ pub(super) async fn announce_tool_round(
         .map_err(propagated)
 }
 
-pub(super) async fn run_concurrent_batch(
-    input: &Invocation<'_>,
-    state: &mut State,
-    batch: &ToolBatch<'_>,
-) -> Result<Step, AgentLoopError> {
-    for prepared_call in batch.prepared_calls {
-        emit_tool_call(input, prepared_call, batch.iteration);
-    }
-    let results = tool_batch::execute_concurrent(
-        input.policy,
-        GuidedInvocation::from(input),
-        batch.prepared_calls,
-    )
-    .await
-    .map_err(propagated)?;
-    let mut first_outcome = None;
-    for (prepared_call, result) in batch.prepared_calls.iter().zip(&results) {
-        state.used_tools.push(prepared_call.call.name.clone());
-        let check = if first_outcome.is_none() {
-            OutcomeCheck::Evaluate
-        } else {
-            OutcomeCheck::RecordOnly
-        };
-        let outcome = record_result(
-            input,
-            state,
-            &prepared_call.call,
-            result.clone(),
-            batch.iteration,
-            check,
-        )
-        .await?;
-        if first_outcome.is_none() {
-            first_outcome = outcome;
-        }
-    }
-    if let Some(result) = finish_outcome(input, state, first_outcome).await? {
-        return Ok(Step::finished(result));
-    }
-    settle_batch(input, state, batch, &results).await
-}
-
 /// Runs calls one by one from the cursor. A call parked on an authority request
 /// suspends the turn with the batch persisted; on resume a refusal marks the
 /// pending and later calls unexecuted.
@@ -153,6 +120,8 @@ pub(super) async fn run_sequential_batch(
         start,
         mut results,
         resumed,
+        concurrent_results,
+        concurrent_call_ids,
     } = cursor;
     let refusal = if resumed {
         Refusal::from_decision(prepared.authority_decision.as_ref())
@@ -160,29 +129,39 @@ pub(super) async fn run_sequential_batch(
         None
     };
     for (index, prepared_call) in batch.prepared_calls.iter().enumerate().skip(start) {
-        emit_tool_call(input, prepared_call, batch.iteration);
+        if concurrent_results.is_empty() || (resumed && index == start) {
+            emit_tool_call(input, prepared_call, batch.iteration);
+        }
         let position = if index == start {
             RefusedCall::Pending
         } else {
             RefusedCall::Following
         };
-        let result = match refusal {
-            Some(refusal) => refuse_call(input, &prepared_call.call, refusal, position).await?,
-            None => tool_batch::execute(input.policy, GuidedInvocation::from(input), prepared_call)
-                .await
-                .map_err(propagated)?,
-        };
+        let result = batch_result(
+            input,
+            prepared_call,
+            refusal,
+            position,
+            index,
+            resumed.then_some(start),
+            &concurrent_results,
+        )
+        .await?;
         state.used_tools.push(prepared_call.call.name.clone());
         if let Some(request_ref) = pending_authority(result.output.as_ref()) {
+            if resumed && index > start {
+                append_modification(state, prepared);
+            }
             let parked = ParkedBatch {
                 request_ref,
                 call: &prepared_call.call,
                 next_call_index: index,
                 results,
+                call_id: concurrent_call_ids.get(index).cloned(),
+                concurrent_results,
+                concurrent_call_ids,
             };
-            return suspend_for_authority(input, state, prepared, batch, parked)
-                .await
-                .map(Step::finished);
+            return park_batch(input, state, prepared, batch, parked).await;
         }
         results.push(result.clone());
         let outcome = record_result(
@@ -191,13 +170,23 @@ pub(super) async fn run_sequential_batch(
             &prepared_call.call,
             result,
             batch.iteration,
-            OutcomeCheck::Evaluate,
+            if concurrent_results.is_empty() {
+                OutcomeCheck::Evaluate
+            } else {
+                OutcomeCheck::RecordOnly
+            },
+            concurrent_call_ids.get(index).map(String::as_str),
         )
         .await?;
         if let Some(result) = finish_outcome(input, state, outcome).await? {
             return Ok(Step::finished(result));
         }
     }
+    append_modification(state, prepared);
+    settle_batch(input, state, batch, &results).await
+}
+
+fn append_modification(state: &mut State, prepared: &PreparedPolicy) {
     if let Some(AuthorityDecision::Modify {
         input: modification,
     }) = &prepared.authority_decision
@@ -207,7 +196,31 @@ pub(super) async fn run_sequential_batch(
             Some(super::super::state::CURRENT_USER_REQUEST.into()),
         ));
     }
-    settle_batch(input, state, batch, &results).await
+}
+
+/// Reuse settled siblings; park later pending siblings before executing them.
+async fn batch_result(
+    input: &Invocation<'_>,
+    prepared: &PreparedCall<'_>,
+    refusal: Option<Refusal>,
+    position: RefusedCall,
+    index: usize,
+    resumed_start: Option<usize>,
+    concurrent: &[ToolResult],
+) -> Result<ToolResult, AgentLoopError> {
+    if let Some(result) = concurrent.get(index)
+        && (pending_authority(result.output.as_ref()).is_none() || Some(index) != resumed_start)
+    {
+        return Ok(result.clone());
+    }
+    // Concurrent siblings are independent; denial applies only to this call.
+    let refusal = refusal.filter(|_| concurrent.is_empty() || Some(index) == resumed_start);
+    match refusal {
+        Some(refusal) => refuse_call(input, &prepared.call, refusal, position).await,
+        None => tool_batch::execute(input.policy, GuidedInvocation::from(input), prepared)
+            .await
+            .map_err(propagated),
+    }
 }
 
 pub(super) fn emit_tool_call(
@@ -237,16 +250,47 @@ pub(super) async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    operation(input.progress, call, Status::Cancelled, None, None).await;
+    super::super::progress::authority_terminal(input.progress, call, Status::Cancelled).await;
     Ok(result)
 }
 
 /// A sequential batch stopped at a call that waits for an authority decision.
 pub(super) struct ParkedBatch<'a> {
+    call_id: Option<String>,
     request_ref: String,
     call: &'a ModelRoundToolCall,
     next_call_index: usize,
     results: Vec<ToolResult>,
+    concurrent_results: Vec<ToolResult>,
+    concurrent_call_ids: Vec<String>,
+}
+
+/// Failed parking settles the pending rows without altering completed siblings.
+async fn park_batch(
+    input: &Invocation<'_>,
+    state: &mut State,
+    prepared: &PreparedPolicy,
+    batch: &ToolBatch<'_>,
+    parked: ParkedBatch<'_>,
+) -> Result<Step, AgentLoopError> {
+    let start = parked.next_call_index;
+    let pending = parked.concurrent_results.clone();
+    let completed = state.tool_results.clone();
+    let result = suspend_for_authority(input, state, prepared, batch, parked).await;
+    if result.is_err() {
+        state.tool_results = completed;
+        for (index, call) in batch.calls.iter().enumerate().skip(start) {
+            if index == start
+                || pending
+                    .get(index)
+                    .is_some_and(|result| pending_authority(result.output.as_ref()).is_some())
+            {
+                super::super::progress::authority_terminal(input.progress, call, Status::Failed)
+                    .await;
+            }
+        }
+    }
+    result.map(Step::finished)
 }
 
 /// Persists the loop state as an authority continuation and suspends the turn.
@@ -260,6 +304,8 @@ pub(super) async fn suspend_for_authority(
     let call_id = input
         .policy
         .operation_result_call_id(&parked.call.id)
+        .or(parked.call_id)
+        .filter(|call_id| !call_id.is_empty())
         .ok_or_else(|| {
             propagated(super::super::invalid_contract(
                 BtccCode::AuthoritySourceCallMissing,
@@ -292,6 +338,8 @@ pub(super) async fn suspend_for_authority(
             calls: batch.calls.to_vec(),
             next_call_index: parked.next_call_index,
             results: parked.results,
+            concurrent_results: parked.concurrent_results,
+            concurrent_call_ids: parked.concurrent_call_ids,
         },
         extensions: Default::default(),
     };

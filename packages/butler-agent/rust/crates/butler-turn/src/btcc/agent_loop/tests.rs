@@ -398,6 +398,18 @@ async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
             .iter()
             .any(|value| value == "batch:one,two")
     );
+    let malformed = Fixture::new([result("", vec![call("missing", "read_file")], 0)]);
+    malformed.outcomes.lock().unwrap().insert(
+        "missing".into(),
+        ToolOutcome::Suspend(SuspensionReason::AuthorityPending),
+    );
+    let failure = run(&malformed.agent(), &turn(None, "safe_fallback"))
+        .await
+        .unwrap_err();
+    let AgentLoopError::Propagate(failure) = failure else {
+        panic!("expected a typed contract error");
+    };
+    assert_eq!(failure.code(), "authority_continuation_missing");
 }
 
 #[tokio::test]

@@ -5,6 +5,29 @@ use super::failure::runtime_failure_message;
 use crate::btcc::BtccError;
 use crate::btcc::identity::{content_ref, digest, json_value};
 
+/// Reject malformed authority suspension before any storage transition.
+pub(super) fn guided_transition(
+    turn: &TurnRecord,
+    result: super::contracts::AgentLoopResult,
+) -> Result<TurnTransition, BtccError> {
+    use super::contracts::SuspensionReason;
+    if result.suspension == Some(SuspensionReason::AuthorityPending)
+        && result.authority_continuation.is_none()
+    {
+        return Err(BtccError::detected(
+            crate::btcc::BtccCode::AuthorityContinuationMissing,
+            "Authority suspension requires a continuation",
+        ));
+    }
+    match result.suspension {
+        Some(reason) => Ok(TurnTransition::Suspend {
+            reason,
+            authority_continuation: result.authority_continuation,
+        }),
+        None => guided_final(turn, result),
+    }
+}
+
 /// Accepts the agent's final answer: the payload (content-addressed by its
 /// body digest) and the Outbox that delivers it as the canonical message.
 pub(super) fn guided_final(
