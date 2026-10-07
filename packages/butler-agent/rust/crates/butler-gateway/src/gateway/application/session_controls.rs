@@ -96,7 +96,7 @@ fn validate_update(update: &AppSessionControlUpdate) -> Result<(), GatewayApplic
         || update
             .access_mode
             .as_deref()
-            .is_some_and(|value| !matches!(value, "full_access" | "ask_first" | "read_only"))
+            .is_some_and(|value| butler_turn::btcc::AccessMode::parse(value).is_none())
     {
         return Err(GatewayApplicationError::Public {
             status: 400,

@@ -1,3 +1,4 @@
+// test-category: race
 import { expect, test } from "bun:test";
 import { evaluateCdpWithTimeout } from "./cdp-timeout.ts";
 

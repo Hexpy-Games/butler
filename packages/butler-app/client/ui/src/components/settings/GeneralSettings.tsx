@@ -5,6 +5,7 @@ import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { ConversationInputFields } from "./ConversationInputFields";
+import { DefaultPermissionFields } from "./DefaultPermissionFields";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
@@ -43,6 +44,9 @@ export const GeneralSettings = memo(function GeneralSettings() {
       {languageRegionSection(draft, timezones, update, setSettings)}
       <SettingsSection id="conversation-input" kind="form" title={sections.conversationInput}>
         <ConversationInputFields />
+      </SettingsSection>
+      <SettingsSection id="default-permission" kind="form" title={sections.defaultPermission}>
+        <DefaultPermissionFields />
       </SettingsSection>
       {notificationSections(draft.desktop_notifications, updateNotifications)}
       <SettingsSection id="memory-model" kind="status" title={appCopy.firstRun.memoryModel.label}>

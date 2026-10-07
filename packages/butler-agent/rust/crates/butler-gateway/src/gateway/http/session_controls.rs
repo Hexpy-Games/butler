@@ -104,9 +104,10 @@ fn controls_update(value: &Value) -> Result<AppSessionControlUpdate, HttpError> 
                 Some("none" | "low" | "medium" | "high" | "xhigh" | "max")
             )
         })
-        || object
-            .get("access_mode")
-            .is_some_and(|v| !matches!(v.as_str(), Some("full_access" | "ask_first" | "read_only")))
+        || object.get("access_mode").is_some_and(|v| {
+            v.as_str()
+                .is_none_or(|v| butler_turn::btcc::AccessMode::parse(v).is_none())
+        })
         || object.get("plan_mode").is_some_and(|v| !v.is_boolean())
     {
         return Err(invalid());

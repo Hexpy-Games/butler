@@ -70,6 +70,9 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// The read-deny paths could not be quoted into the sandbox profile.
+    #[error("sandbox profile encoding failed")]
+    Profile(#[from] serde_json::Error),
 }
 
 /// Why a write-protected invocation could not be built.
@@ -103,6 +106,21 @@ pub fn login_shell(
         ShellAccess::Full => Ok(invocation),
         ShellAccess::ReadOnly => sandbox::read_only(invocation),
     }
+}
+
+/// Read-only shell with denied private roots and an explicit project exception.
+pub fn login_shell_contained(
+    command: &str,
+    environment: &HashMap<String, String>,
+    deny_reads: &[&Path],
+    allow_reads: &[&Path],
+) -> Result<Invocation, SandboxError> {
+    sandbox::read_only_contained(
+        shell::login_shell(command, environment),
+        environment,
+        deny_reads,
+        allow_reads,
+    )
 }
 
 /// Adds the arguments of `invocation` to `command`, which starts its

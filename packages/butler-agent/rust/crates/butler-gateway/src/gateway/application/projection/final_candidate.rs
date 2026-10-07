@@ -62,7 +62,7 @@ pub(super) fn candidate(
         "SELECT p.workspace_path FROM chats c LEFT JOIN projects p ON p.id=c.project_id WHERE c.id=?1",
         [chat_id], |row| row.get(0)).optional().map_err(AppStorageError::sqlite)?.flatten();
     let existing_message_id: Option<String> = db.query_row(
-        "SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1",
+        "SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1",
         params![chat_id,turn_id], |row| row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     let existing_content_keys = existing_message_id
         .as_deref()

@@ -5,6 +5,9 @@ import { createStartupWindow, failStartup, startupTiming } from "./startup-windo
 
 protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 startupTiming("entry");
+// A web tab GPU reset must not block the trusted App origin from restoring WebGL.
+// Chromium 152 has no per-origin exemption; the Browser five-loss breaker remains.
+app.commandLine.appendSwitch("disable-domain-blocking-for-3d-apis");
 app.once("will-finish-launching", () => startupTiming("will_finish_launching"));
 app.setName("Butler");
 if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {

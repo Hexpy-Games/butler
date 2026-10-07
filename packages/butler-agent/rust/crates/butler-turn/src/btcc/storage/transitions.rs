@@ -186,7 +186,7 @@ fn park_authority_call(
     let bound = connection
         .execute(
             "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
-         AND source_turn_id = ?3 AND decision = 'pending' AND close_reason IS NULL \
+         AND source_turn_id = ?3 AND decision IN ('pending','allowed','denied','modified') AND close_reason IS NULL \
          AND (source_call_id IS NULL OR source_call_id = ?1)",
             params![call_id, request_ref, turn.turn_id],
         )

@@ -36,7 +36,8 @@ fn read_conversations(
     let mut statement = db
         .prepare(
             "SELECT c.id,c.title,max(m.created_at) FROM chats c \
-             JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 \
+             CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 \
              AND m.created_at>=?2 AND m.created_at<?3 AND m.role IN ('user','assistant') \
              AND m.status IN ('sent','delivered') AND NOT \
              (m.role='assistant' AND m.safe_error_code IS NOT NULL AND m.safe_error_code IN \
@@ -93,7 +94,8 @@ fn read_artifacts(
     let mut statement = db
         .prepare(
             "SELECT f.id,f.safe_name,f.sha256,min(m.created_at),c.id,c.title \
-             FROM chats c JOIN messages m ON m.chat_id=c.id \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid \
              JOIN message_attachments a ON a.message_id=m.id JOIN message_files f ON f.id=a.file_id \
              WHERE c.project_id=?1 AND m.role='assistant' AND m.status='delivered' AND NOT \
              (m.role='assistant' AND m.safe_error_code IS NOT NULL AND m.safe_error_code IN \

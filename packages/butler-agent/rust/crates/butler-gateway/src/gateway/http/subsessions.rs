@@ -13,7 +13,7 @@ use super::{
     HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json as response_json, query, read_body_with_limit,
 };
 use crate::gateway::{
-    AppSessionViewPage, app_session_hint,
+    AppSessionViewPage,
     crypto::{constant_time_eq, hmac_sha256_base64},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
@@ -68,57 +68,7 @@ pub(super) async fn route(
             },
         )?));
     }
-    let Some((relation, action)) = uri
-        .path()
-        .strip_prefix("/steward-relations/")
-        .and_then(|tail| tail.rsplit_once('/'))
-        .filter(|(id, action)| {
-            !id.is_empty() && !id.contains('/') && matches!(*action, "cancel" | "resume")
-        })
-    else {
-        return Ok(None);
-    };
-    if request.method() != Method::POST {
-        return Ok(None);
-    }
-    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
-    let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    let parent = body
-        .get("parent_session_id")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| {
-            HttpError::public(
-                400,
-                "parent_session_id_required",
-                "parent_session_id is required.",
-            )
-        })?;
-    let runtime = if parent.starts_with("steward-") {
-        parent.into()
-    } else {
-        app_session_hint(parent)
-    };
-    let relation = decode_component(relation)?;
-    let data = if action == "resume" {
-        state
-            .application
-            .resume_subsession(runtime, relation)
-            .await?
-    } else {
-        state
-            .application
-            .cancel_subsession(runtime, relation)
-            .await?
-    };
-    Ok(Some(response_json(
-        StatusCode::ACCEPTED,
-        ApiEnvelope {
-            protocol_version: APP_PROTOCOL_VERSION,
-            data,
-        },
-    )?))
+    relation_route(state, request, uri).await
 }
 
 pub(super) fn decode_component(encoded: &str) -> Result<String, HttpError> {
@@ -286,6 +236,67 @@ fn resync() -> HttpError {
         "session_cursor_resync_required",
         "Session view cursor is invalid or expired; reload the session.",
     )
+}
+
+async fn relation_route(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
+    let Some((relation, action)) = uri
+        .path()
+        .strip_prefix("/steward-relations/")
+        .and_then(|tail| tail.rsplit_once('/'))
+        .filter(|(id, action)| {
+            !id.is_empty() && !id.contains('/') && matches!(*action, "cancel" | "resume")
+        })
+    else {
+        return Ok(None);
+    };
+    if request.method() != Method::POST {
+        return Ok(None);
+    }
+    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+    let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let parent = body
+        .get("parent_session_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            HttpError::public(
+                400,
+                "parent_session_id_required",
+                "parent_session_id is required.",
+            )
+        })?;
+    let runtime = if parent.starts_with("steward-") {
+        parent.into()
+    } else {
+        state
+            .application
+            .runtime_session_hint(parent.to_owned())
+            .await?
+    };
+    let relation = decode_component(relation)?;
+    let data = if action == "resume" {
+        state
+            .application
+            .resume_subsession(runtime, relation)
+            .await?
+    } else {
+        state
+            .application
+            .cancel_subsession(runtime, relation)
+            .await?
+    };
+    Ok(Some(response_json(
+        StatusCode::ACCEPTED,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )?))
 }
 
 #[cfg(test)]

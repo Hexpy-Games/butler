@@ -25,9 +25,11 @@ use tokio_util::sync::CancellationToken;
 pub enum GuidedAccess {
     FullAccessContained,
     ReadOnlyObservation,
+    ContainedObservation,
 }
 
 /// A guided shell command with its workspace, timeout and access.
+#[derive(Clone)]
 pub struct GuidedCommandInput {
     pub command: String,
     pub cwd: Option<String>,

@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
 use super::storage_concurrency_support;
-use storage_concurrency_support::{seed, verify_rows};
+use storage_concurrency_support::{p95, seed, verify_rows};
 const REQUEST: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 const SESSIONS: usize = 8;
 const DELTAS: usize = 200;
@@ -100,10 +100,6 @@ fn rewrite_text(value: &mut Value) {
         Value::Array(items) => items.iter_mut().for_each(rewrite_text),
         _ => {}
     }
-}
-fn p95(samples: &mut [u64]) -> u64 {
-    samples.sort_unstable();
-    samples[(samples.len() * 95).div_ceil(100) - 1]
 }
 
 async fn views(
@@ -240,9 +236,9 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
         "STORAGE-AFTER"
     })?
     .stub_cassette(cassette()?)
-    .env("BUTLER_E2E_STORAGE_METRICS", "1")
     .env("BUTLER_E2E_INGRESS_CAPACITY", "8")
     .env("BUTLER_E2E_STREAM_UNCOALESCED", "1");
+    setup = storage_concurrency_support::instrument(setup);
     if baseline {
         setup = setup.env("BUTLER_E2E_STORAGE_BASELINE", "1");
     }
@@ -296,6 +292,7 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     }
     s.agent.terminate().await?;
     verify_rows(&path, &sessions, &turns, DELTAS, REQUEST, &answer());
+    storage_concurrency_support::report_history_load(&s.sandbox.logs)?;
     let result = storage_metrics(&path, measure_latency, view_samples)?;
     s.finish().await?;
     Ok(result)

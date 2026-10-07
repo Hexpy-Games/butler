@@ -18,7 +18,7 @@ indexmap.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, features = ["functions"] }
 sha2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -28,7 +28,7 @@ regress.workspace = true
 
 [features]
 # Exposes BTCC fixtures to scenario tests in dependent crates.
-test-support = []
+test-support = ["rusqlite/trace"]
 
 [dev-dependencies]
 butler-test-support = { path = "../butler-test-support" }

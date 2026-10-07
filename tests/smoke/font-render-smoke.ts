@@ -43,8 +43,8 @@ const LOAD_PROBE = `(async () => {
     bytes: fonts.reduce((total, entry) => total + (entry.encodedBodySize || entry.transferSize || 0), 0),
     family: getComputedStyle(document.body).fontFamily,
     pretendardLoaded: [...document.fonts].filter((face) => face.family.includes("Pretendard Variable") && face.status === "loaded").length,
-    // Initial English UI intentionally fetches no Hangul subset; the probes below
-    // load and verify Hangul rendering for both locales.
+    // One Pretendard file covers Latin and Hangul; the probes below verify
+    // Hangul rendering for both locales.
     check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "Butler 설정" : "Butler"),
   };
 })()`;

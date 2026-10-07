@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { createWallpaperEngine } from "./engine";

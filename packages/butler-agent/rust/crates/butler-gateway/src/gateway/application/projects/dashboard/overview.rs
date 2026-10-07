@@ -282,8 +282,8 @@ fn read_metrics(
     let rows = {
         let mut statement = db
             .prepare(
-                "SELECT substr(m.created_at,1,10),COUNT(*) FROM messages m \
-                 JOIN chats c ON c.id=m.chat_id WHERE c.project_id=?1 AND m.created_at>=?2 \
+                "SELECT substr(m.created_at,1,10),COUNT(*) FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+                 CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 AND m.created_at>=?2 \
                  GROUP BY substr(m.created_at,1,10) ORDER BY substr(m.created_at,1,10)",
             )
             .map_err(AppStorageError::sqlite)?;
@@ -300,7 +300,8 @@ fn read_metrics(
     };
     let count = |since: &str| -> Result<usize, AppStorageError> {
         db.query_row(
-            "SELECT COUNT(*) FROM messages m JOIN chats c ON c.id=m.chat_id \
+            "SELECT COUNT(*) FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid \
              WHERE c.project_id=?1 AND m.created_at>=?2",
             params![project_id, since],
             |row| Ok(usize::try_from(row.get::<_, i64>(0)?.max(0)).unwrap_or_default()),

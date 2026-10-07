@@ -7,6 +7,7 @@ use crate::gateway::application::storage::AppStorageCode;
 
 const COLUMNS: &[(&str, &str, &str)] = &[
     ("chats", "conversation_session_id", "TEXT"),
+    ("chats", "runtime_session_hint", "TEXT"),
     ("chats", "pinned", "INTEGER NOT NULL DEFAULT 0"),
     ("chats", "archived", "INTEGER NOT NULL DEFAULT 0"),
     ("messages", "turn_id", "TEXT"),

@@ -151,6 +151,8 @@ fn cancel(
     let changed = connection
         .execute(
             "UPDATE btcc_turns SET semantic_state='cancelled', active_checkpoint_id=NULL, \
+         authority_continuation_json=CASE WHEN suspension_reason='authority_pending' \
+           THEN authority_continuation_json ELSE NULL END, \
          suspension_reason=NULL, revision=?1, execution_fence=execution_fence+1, \
          final_disposition='cancelled' WHERE turn_id=?2 AND revision=?3 \
          AND semantic_state='admitted' AND execution_fence=?4",

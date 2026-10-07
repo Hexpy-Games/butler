@@ -9,6 +9,13 @@ use serde_json::{Value, json};
 pub enum PathForm {
     RelativeOnly,
     RelativeOrAbsolute,
+    Contained,
+}
+
+impl PathForm {
+    pub fn contained(self) -> bool {
+        self != Self::RelativeOrAbsolute
+    }
 }
 
 /// Whether a mutation target's final component must already exist.
@@ -221,8 +228,23 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         return Ok(out);
     };
     out.real = Some(real.clone());
-    if input.path_form == PathForm::RelativeOnly && inside_relative(&root_real, &real).is_none() {
+    if input.path_form.contained() && inside_relative(&root_real, &real).is_none() {
         out.reason = Some("symlink_escape");
+        return Ok(out);
+    }
+    // A1: classification and opening are separate boundaries. A swapped
+    // in-project symlink must not turn an ordinary read into a secret read.
+    if input.path_form == PathForm::Contained
+        && !admit_contained(
+            &mut out,
+            &Resolved {
+                root_real,
+                absolute: real,
+            },
+            input.protected_roots,
+            input.path_form,
+        )
+    {
         return Ok(out);
     }
     let meta = std::fs::symlink_metadata(&absolute)?;
@@ -269,7 +291,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
     let installation = Installation::resolve(
         input
             .installation_root
-            .filter(|_| input.path_form == PathForm::RelativeOnly),
+            .filter(|_| input.path_form.contained()),
     )?;
     if installation.contains(&resolved.absolute) {
         out.reason = Some("program_directory_read_only");
@@ -298,7 +320,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
             let parent_real = realpath_or_nearest(parent);
             if installation.contains(&parent_real) {
                 out.reason = Some("program_directory_read_only");
-            } else if input.path_form == PathForm::RelativeOnly
+            } else if input.path_form.contained()
                 && inside_relative(&root_real, &parent_real).is_none()
             {
                 out.reason = Some("parent_escape");
@@ -326,7 +348,7 @@ fn existing_target_rejection(
     if installation.contains(real) {
         return Ok(Some("program_directory_read_only"));
     }
-    if path_form == PathForm::RelativeOnly && inside_relative(root_real, real).is_none() {
+    if path_form.contained() && inside_relative(root_real, real).is_none() {
         return Ok(Some("symlink_escape"));
     }
     let meta = std::fs::symlink_metadata(absolute)?;
@@ -397,7 +419,7 @@ pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> b
         butler_platform::secure_fs::path_is_within(&target, &realpath_or_nearest(&candidate))
     })
 }
-fn realpath_or_nearest(path: &Path) -> PathBuf {
+pub(super) fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     let mut suffix = Vec::new();
     loop {
@@ -417,7 +439,7 @@ fn realpath_or_nearest(path: &Path) -> PathBuf {
         current = parent.to_path_buf();
     }
 }
-fn inside_relative(root: &Path, candidate: &Path) -> Option<PathBuf> {
+pub(super) fn inside_relative(root: &Path, candidate: &Path) -> Option<PathBuf> {
     let relative = butler_platform::secure_fs::relative_path(candidate, root)?;
     // Node's isInside uses path.relative and rejects any result beginning
     // with "..", including a contained filename such as "..notes".

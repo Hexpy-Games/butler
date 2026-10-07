@@ -26,18 +26,21 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 ## Working rules
 
-- **Isolation.** Run every test and check command with `HOME` and `BUTLER_DATA` pointed at a fresh temp dir. This covers `bun run check`, `cargo test`, `cargo nextest` and E2E. Use, for example, `export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)` in the same shell.
+- **Isolation.** Run every test and check command with `HOME` and `BUTLER_DATA` pointed at a fresh temp dir. This covers Bun lint/typecheck, lifecycle-check, targeted TS tests, `cargo test`, `cargo nextest` and E2E. Use, for example, `export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)` in the same shell.
   - Never read or write the owner's real `~/.butler`, unless the task explicitly grants read access.
   - Never touch port 18765, `~/Applications/ButlerAgent`, or launchd services.
 - **Scope.** Write only inside your worktree, plus the build caches (`~/.cargo`, `~/.bun`, temp dirs). Never kill processes by name pattern (`pkill`, `killall`); kill only PIDs you started. Never print tokens or keys.
 - **Model calls.** Tests use stub or replay only. If a cassette must be re-recorded live, use only `openai/gpt-6-luna`, even when existing cassettes name other models.
+- **TypeScript validation.** Do not run the full `bun run check`: it runs lifecycle-check, lint, typecheck and about 960 TS unit tests, and often reaches its 900-second limit.
+  - For changes to `packages/butler-app/**`, `packages/butler-i18n/**` or any `*.ts`/`*.tsx`, run `bun run lint` and `bun run typecheck`. Run lifecycle-check only when UI lifecycle assets or inputs change, and run only TS tests covering the changed files.
+  - For Rust-only changes, skip all Bun checks. E2E and real-app verification remain the primary evidence.
 - **Root causes.** Fix the cause, not the symptom. Never skip, weaken or retry tests to get green. Never raise timeouts or loosen performance budgets. If you can't reproduce a failure, say so; don't claim a cause you haven't shown.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
 - **Before pushing:**
   - `git fetch origin` and merge your base (`origin/main` or the named `origin/release/<v>`) if it moved;
   - run `cargo fmt`, `clippy -D warnings` on touched crates, and `cargo run -p butler-source-check -- .`;
-  - if TS or UI changed, run `bun install --frozen-lockfile --ignore-scripts && bun run check`, isolated as above.
+  - if TS or UI changed, follow the TypeScript validation rule above, isolated as above.
 - **Pushing.** Push only when the task allows it. When the task includes a PR, after pushing confirm with `gh pr checks <n>` that checks started. GitHub runs no `pull_request` checks while a PR has merge conflicts.
 - **Final message:**
   - what changed;
@@ -64,6 +67,9 @@ Newest first. The coordinator adds an entry whenever a mistake repeats. Each ent
 
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**
   - What happened: `actions/setup-python` tried to rewrite Python registry registrations on the owner PC, logged a permission error and hung until the 90-minute job timeout (run 37560002889).
+
+- **2026-10-07: Scope TypeScript validation to changed paths.** Do not run the full `bun run check`; use lint, typecheck, lifecycle-check when relevant, and tests covering changed files.
+  - What happened: the full command runs about 960 TS unit tests and often reaches its 900-second limit.
 
 - **2026-10-06: Work documents belong only in the Project Ledger.**
   - What happened: work docs accumulated in `plans/`, root and `rust/docs`; moved to the ledger.

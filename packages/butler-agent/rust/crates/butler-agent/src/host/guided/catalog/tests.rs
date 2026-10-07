@@ -292,8 +292,13 @@ fn image_tool_requires_current_full_access_image_admission() {
 fn ask_first_admits_the_attached_image_tool() {
     let catalog = catalog();
     let catalog = catalog.snapshot();
-    for flag in ["on", "off"] {
-        let mut turn = phase_turn("ask_first", &image_context());
+    for (flag, access) in [
+        ("on", "ask_first"),
+        ("off", "ask_first"),
+        ("on", "ask_except_reads"),
+        ("off", "ask_except_reads"),
+    ] {
+        let mut turn = phase_turn(access, &image_context());
         turn.context["executionPolicy"]["requiredNativeTools"] = json!(["analyze_attached_image"]);
         let selection = select_phase(GuidedPhaseInput {
             turn: &turn,
@@ -331,6 +336,7 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
     let cases = [
         ("full_access", true, true, true),
         ("ask_first", true, true, true),
+        ("ask_except_reads", true, true, true),
         ("read_only", false, false, false),
     ];
     for (access, exempt, mcp, automation) in cases {

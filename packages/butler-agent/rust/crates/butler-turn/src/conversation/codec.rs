@@ -1,5 +1,10 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde_json::{Map, Value};
+mod hash_payload;
+mod row_decoder;
+pub(super) use row_decoder::{MessageColumns, message_row_cached};
+#[cfg(test)]
+use serde_json::Map;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::types::*;
@@ -113,38 +118,67 @@ pub(super) fn hydrate_message(
     let mut statement = connection
         .prepare("SELECT * FROM conversation_parts WHERE message_id=?1 ORDER BY part_index ASC")
         .map_err(ConversationError::sqlite)?;
-    let rows = statement
-        .query_map([&message.id], |row| {
-            Ok((
-                row.get::<_, String>("id")?,
-                row.get::<_, String>("message_id")?,
-                row.get::<_, u64>("part_index")?,
-                row.get::<_, String>("kind")?,
-                row.get::<_, String>("content_json")?,
-                row.get::<_, Option<String>>("tool_call_id")?,
-                row.get::<_, Option<String>>("parent_tool_call_id")?,
-                row.get::<_, Option<String>>("provider_shape")?,
-                row.get::<_, String>("status")?,
-            ))
-        })
-        .map_err(ConversationError::sqlite)?;
-    let mut parts = Vec::new();
-    for row in rows {
-        let (id, message_id, part_index, kind, content, call, parent, provider, part_status) =
-            row.map_err(ConversationError::sqlite)?;
-        parts.push(ConversationPart {
-            id,
-            message_id,
-            part_index,
-            kind: part_kind(&kind)?,
-            content_json: parse(&content)?,
-            tool_call_id: call,
-            parent_tool_call_id: parent,
-            provider_shape: provider.as_deref().map(provider_shape).transpose()?,
-            status: status(&part_status)?,
-        });
-    }
+    let parts = statement
+        .query_map([&message.id], part_row)
+        .map_err(ConversationError::sqlite)?
+        .map(|row| decode_part(row.map_err(ConversationError::sqlite)?))
+        .collect::<ConversationResult<Vec<_>>>()?;
     Ok(ConversationMessageWithParts { message, parts })
+}
+
+pub(super) type RawPart = (
+    String,
+    String,
+    u64,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+);
+
+pub(super) fn part_row(row: &Row<'_>) -> rusqlite::Result<RawPart> {
+    Ok((
+        row.get("id")?,
+        row.get("message_id")?,
+        row.get("part_index")?,
+        row.get("kind")?,
+        row.get("content_json")?,
+        row.get("tool_call_id")?,
+        row.get("parent_tool_call_id")?,
+        row.get("provider_shape")?,
+        row.get("status")?,
+    ))
+}
+
+pub(super) fn part_row_at(row: &Row<'_>, offset: usize) -> rusqlite::Result<RawPart> {
+    Ok((
+        row.get(offset)?,
+        row.get(offset + 1)?,
+        row.get(offset + 2)?,
+        row.get(offset + 3)?,
+        row.get(offset + 4)?,
+        row.get(offset + 5)?,
+        row.get(offset + 6)?,
+        row.get(offset + 7)?,
+        row.get(offset + 8)?,
+    ))
+}
+
+pub(super) fn decode_part(row: RawPart) -> ConversationResult<ConversationPart> {
+    let (id, message_id, part_index, kind, content, call, parent, provider, part_status) = row;
+    Ok(ConversationPart {
+        id,
+        message_id,
+        part_index,
+        kind: part_kind(&kind)?,
+        content_json: parse(&content)?,
+        tool_call_id: call,
+        parent_tool_call_id: parent,
+        provider_shape: provider.as_deref().map(provider_shape).transpose()?,
+        status: status(&part_status)?,
+    })
 }
 
 pub(super) fn read_message(
@@ -175,13 +209,18 @@ pub(super) fn source_hash(messages: &[ConversationMessageWithParts]) -> Conversa
 pub(super) struct SourceHasher {
     hash: Sha256,
     first: bool,
+    encoded: String,
 }
 
 impl SourceHasher {
     pub(super) fn new() -> Self {
         let mut hash = Sha256::new();
         hash.update(b"[");
-        Self { hash, first: true }
+        Self {
+            hash,
+            first: true,
+            encoded: String::with_capacity(1024),
+        }
     }
 
     pub(super) fn push(
@@ -192,8 +231,14 @@ impl SourceHasher {
             self.hash.update(b",");
         }
         self.first = false;
-        self.hash
-            .update(stringify(&source_payload(message))?.as_bytes());
+        hash_payload::encode(message, &mut self.encoded)?;
+        #[cfg(test)]
+        assert_eq!(
+            self.encoded,
+            stringify(&source_payload(message))?,
+            "canonical hash encoding changed"
+        );
+        self.hash.update(self.encoded.as_bytes());
         Ok(())
     }
 
@@ -203,6 +248,7 @@ impl SourceHasher {
     }
 }
 
+#[cfg(test)]
 fn source_payload(message: &ConversationMessageWithParts) -> Value {
     let mut object = Map::new();
     object.insert("id".into(), Value::String(message.message.id.clone()));
@@ -246,6 +292,7 @@ fn source_payload(message: &ConversationMessageWithParts) -> Value {
     Value::Object(object)
 }
 
+#[cfg(test)]
 fn part_payload(part: &ConversationPart) -> Value {
     let mut object = Map::new();
     object.insert("id".into(), Value::String(part.id.clone()));
@@ -276,6 +323,7 @@ fn part_payload(part: &ConversationPart) -> Value {
     Value::Object(object)
 }
 
+#[cfg(test)]
 fn option_string(value: Option<&String>) -> Value {
     value.cloned().map(Value::String).unwrap_or(Value::Null)
 }

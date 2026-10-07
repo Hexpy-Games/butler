@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod core;
+mod message_ownership;
 mod migration;
 mod monitoring;
 mod project_ledger_bindings;
@@ -41,6 +42,19 @@ pub(super) fn migrate(
     // database, the connected provider's routine preset for a new one.
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
+         CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
+         CREATE UNIQUE INDEX IF NOT EXISTS chats_runtime_hint_idx
+           ON chats(runtime_session_hint) WHERE runtime_session_hint IS NOT NULL;
+         DROP INDEX IF EXISTS chats_conversation_idx;
+         DROP INDEX IF EXISTS projected_transport_chat_idx;
+         DROP INDEX IF EXISTS projection_receipts_chat_idx;
+         DROP INDEX IF EXISTS staged_outbounds_chat_idx;
+         DROP INDEX IF EXISTS terminal_projection_chat_idx;
+         CREATE TABLE IF NOT EXISTS app_output_transfers(archive_id TEXT PRIMARY KEY);
+         CREATE INDEX IF NOT EXISTS automation_runs_target_idx ON app_automation_runs(target_session_id)",
+    ).map_err(AppStorageError::sqlite)?;
     // Existing App databases also need the actual-column index. Historical
     // payload turn ids can differ from events.turn_id, so the JSON indexes do
     // not serve retention's authoritative turn lookup.
@@ -61,6 +75,7 @@ pub(super) fn migrate(
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
+    message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
     Ok(())
 }
