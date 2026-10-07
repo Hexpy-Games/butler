@@ -26,8 +26,13 @@ if (!(Get-Command cl -ErrorAction SilentlyContinue) -or !$env:VCToolsInstallDir 
     $developer = Join-Path $installation 'Common7/Tools/VsDevCmd.bat'
     if (!(Test-Path -LiteralPath $developer)) { throw 'Existing VsDevCmd.bat not found; no installation attempted' }
     # Capture rather than log the environment, which may contain credentials.
-    $environment = & $env:ComSpec /d /s /c "`"`"$developer`" -no_logo -arch=x64 -host_arch=x64 >nul && set`""
-    if ($LASTEXITCODE -ne 0) { throw 'Existing MSVC developer environment failed; no host changes attempted' }
+    # Windows PowerShell 5.1 re-quotes native arguments. Avoid a quoted batch path.
+    Push-Location -LiteralPath (Split-Path -Parent $developer)
+    try {
+        $environment = & $env:ComSpec /d /c 'call VsDevCmd.bat -no_logo -arch=x64 -host_arch=x64 >nul && set'
+        $developerExit = $LASTEXITCODE
+    } finally { Pop-Location }
+    if ($developerExit -ne 0) { throw 'Existing MSVC developer environment failed; no host changes attempted' }
     $msvcVariables = @('INCLUDE', 'LIB', 'LIBPATH', 'VCToolsInstallDir', 'VCToolsVersion',
         'VCIDEInstallDir', 'VCINSTALLDIR', 'VSINSTALLDIR', 'VisualStudioVersion',
         'WindowsSdkDir', 'WindowsSDKVersion', 'WindowsSDKLibVersion', 'WindowsSdkBinPath',
