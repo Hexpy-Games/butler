@@ -8,7 +8,10 @@ if ($userEnvironment.Path) {
 }
 $paths += Join-Path $env:USERPROFILE '.cargo/bin'
 $paths += Join-Path $env:USERPROFILE '.bun/bin'
-foreach ($directory in ($paths | Select-Object -Unique)) {
+# GitHub prepends command-file entries in reverse order. Preserve tool priority.
+$paths = @($paths | Select-Object -Unique)
+[array]::Reverse($paths)
+foreach ($directory in $paths) {
     if ($directory -and (Test-Path -LiteralPath $directory -PathType Container)) {
         $directory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         $env:PATH = "$directory;$env:PATH"
@@ -35,7 +38,9 @@ if (!(Get-Command cl -ErrorAction SilentlyContinue) -or !$env:VCToolsInstallDir 
         if ($entry -notmatch '^([^=]+)=(.*)$') { continue }
         $name, $value = $Matches[1], $Matches[2]
         if ($name -eq 'PATH') {
-            $value -split ';' | Where-Object { $_ } | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $developerPaths = @($value -split ';' | Where-Object { $_ })
+            [array]::Reverse($developerPaths)
+            $developerPaths | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         } elseif ($name -in $msvcVariables) {
             "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         }
