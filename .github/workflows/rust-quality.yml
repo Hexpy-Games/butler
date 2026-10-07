@@ -385,6 +385,9 @@ jobs:
       - name: Keep work documents in the Project Ledger
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/work-docs-lint.py
+      - name: Validate release product feature selection
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-product-features.py
       - name: Validate workflow selection invariants
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py

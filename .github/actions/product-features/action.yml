@@ -1,8 +1,8 @@
 name: Select release product features
-description: Default-on product features, overridden only for an exact release tag
+description: Default-on product features, overridden for an exact release tag or release branch
 inputs:
   tag:
-    description: Explicit artifact tag (empty selects the workflow tag, never its branch)
+    description: Explicit artifact tag (empty selects the workflow tag or release branch)
     default: ""
 runs:
   using: composite

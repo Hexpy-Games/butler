@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select product features for one exact release tag; branches default to on."""
+"""Select product features for an exact release tag or its release branch."""
 import argparse
 import json
 import os
@@ -19,13 +19,22 @@ def release_features(root, tag):
     return features
 
 
+def artifact_tag(tag, ref):
+    if tag:
+        return tag
+    if ref.startswith("refs/tags/"):
+        return ref.removeprefix("refs/tags/")
+    if ref.startswith("refs/heads/release/"):
+        return "v" + ref.removeprefix("refs/heads/release/")
+    return ""
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", default="")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
-    tag = args.tag or (os.environ.get("GITHUB_REF_NAME", "")
-                       if os.environ.get("GITHUB_REF", "").startswith("refs/tags/") else "")
+    tag = artifact_tag(args.tag, os.environ.get("GITHUB_REF", ""))
     features = release_features(args.root, tag)
     value = str(features["browser"]).lower()
     print(json.dumps(features))

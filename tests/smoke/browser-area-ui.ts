@@ -16,7 +16,7 @@ for (const ref of ["refs/heads/main", "refs/heads/release/0.1.0-preview.11", "re
   const result = JSON.parse(execFileSync("python3", [".github/scripts/product-features.py"], {
     env: { ...process.env, GITHUB_REF: ref, GITHUB_REF_NAME: ref.split("/").at(-1)!, GITHUB_ENV: "" }, encoding: "utf8",
   }));
-  assert.equal(result.browser, ref !== "refs/tags/v0.1.0-preview.11");
+  assert.equal(result.browser, !(["refs/tags/v0.1.0-preview.11", "refs/heads/release/0.1.0-preview.11"].includes(ref)));
 }
 for (const enabled of [true, false]) {
   const exposed = new Set<string>();

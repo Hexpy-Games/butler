@@ -30,9 +30,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # Version overrides label fixtures; feature selection follows the original ref.
     - uses: ./.github/actions/product-features
-      with:
-        tag: ${{ inputs.version && format('v{0}', inputs.version) || '' }}
     - uses: ilammy/msvc-dev-cmd@v1
       if: inputs.owner-runner != 'true'
       with:
