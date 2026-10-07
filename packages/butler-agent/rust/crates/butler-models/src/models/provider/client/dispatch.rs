@@ -83,6 +83,10 @@ impl ModelProvider {
         let trace = super::super::request_trace::RequestTrace::round(self, prefix, request).await?;
         let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
+            self.keepalive.requested(
+                request.cache_scope,
+                request.usage_attribution.map(|a| a.turn_id.as_str()),
+            );
             self.observations.request(ProviderObservation {
                 request_bytes: serialized_bytes,
             });

@@ -202,7 +202,7 @@ async fn exercise(mode: &str) -> Result<(), HarnessError> {
         );
     }
     if mode == "cap" {
-        assert!((1..=2).contains(&pings));
+        assert!((1..=3).contains(&pings));
     }
     assert_metrics(&s, pings)?;
     eprintln!(
@@ -283,6 +283,7 @@ fn assert_metrics(s: &Scenario, count: usize) -> Result<(), HarnessError> {
         assert_eq!(d["appendOnly"], true);
         assert_eq!(d["lcpBytes"], d["previousPrefixBytes"]);
         assert_eq!(d["lcpPercent"], 100);
+        assert!(d["idleGapMs"].as_f64().unwrap() >= 1000.0);
         assert_eq!(row["phase"], "keepalive");
         if d["status"] == "completed" {
             assert_eq!(row["promptTokens"].as_f64(), Some(100.0));

@@ -75,6 +75,14 @@ struct State {
 pub(super) struct Keepalive(Mutex<State>);
 
 impl Keepalive {
+    pub(super) fn requested(&self, scope: Option<&str>, turn: Option<&str>) {
+        if let Some(scope) = scope
+            && let Some(entry) = self.0.lock().entries.get_mut(scope)
+            && Some(entry.turn.as_str()) == turn
+        {
+            entry.last_real = Instant::now();
+        }
+    }
     pub(super) fn stop_scope(&self, scope: Option<&str>) {
         if let Some(scope) = scope {
             remove(&mut self.0.lock(), scope);
@@ -173,7 +181,7 @@ async fn maintain(
     stop: CancellationToken,
 ) -> Result<(), butler_turn::btcc::ModelRoundError> {
     let deadline = Instant::now() + settings.cap;
-    let mut next = (last_real + settings.interval).max(Instant::now() + settings.interval);
+    let mut next = (last_real + settings.interval).max(Instant::now());
     loop {
         tokio::select! {
             biased;
@@ -182,7 +190,7 @@ async fn maintain(
             () = tokio::time::sleep_until(next) => {},
         }
         let ping_stop = stop.child_token();
-        let send = ping::send(snapshot, ping_stop.clone());
+        let send = ping::send(snapshot, ping_stop.clone(), last_real);
         tokio::pin!(send);
         let result = tokio::select! {
             biased;

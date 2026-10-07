@@ -9,8 +9,10 @@ const TRAILING: &str = "Cache keepalive. Reply with one word: OK. Do not call to
 pub(super) async fn send(
     snapshot: &Snapshot,
     stop: CancellationToken,
+    last_real: tokio::time::Instant,
 ) -> Result<(), ModelRoundError> {
     let (body, prefix, mut diagnostic) = prepare(snapshot)?;
+    diagnostic["idleGapMs"] = (last_real.elapsed().as_secs_f64() * 1000.0).into();
     let encoded = prefix
         .body_json(&body)
         .map_err(|_| ModelRoundError::StablePrefix("keepalive_serialization_failed".into()))?;
