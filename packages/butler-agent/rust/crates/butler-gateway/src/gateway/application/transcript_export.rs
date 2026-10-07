@@ -217,12 +217,14 @@ fn read_page(
 ) -> Result<TranscriptMessagePage, AppStorageError> {
     let mut statement = db
         .prepare(concat!(
-            "SELECT rowid,role,text FROM app_owned_messages m WHERE chat_id=?1 AND rowid>?2 \
+            "SELECT m.rowid,m.role,m.text FROM app_message_owners o CROSS JOIN messages m \
+                 WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+                 AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.rowid>?2 \
                  AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
                  safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
                  AND ",
             owner_visible!(),
-            " ORDER BY rowid ASC LIMIT ?3"
+            " ORDER BY m.rowid ASC LIMIT ?3"
         ))
         .map_err(AppStorageError::sqlite)?;
     let mut items = statement

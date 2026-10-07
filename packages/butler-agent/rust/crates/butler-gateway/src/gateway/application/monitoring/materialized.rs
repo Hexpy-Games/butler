@@ -115,9 +115,11 @@ fn project(db: &Connection, chat: &str) -> Result<AppWorkStatusConversationFact,
             .collect()
     });
     let report = db.query_row(
-        "SELECT text FROM app_owned_messages WHERE chat_id=?1 AND role='assistant' AND status='delivered' \
+        "SELECT m.text FROM app_message_owners o CROSS JOIN messages m \
+         WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+         AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.role='assistant' AND status='delivered' \
          AND NOT(safe_error_code IS NOT NULL AND safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
-         AND length(trim(text,?2))>0 ORDER BY rowid DESC LIMIT 1", params![chat, WHITESPACE.as_str()], |row| row.get::<_, String>(0))
+         AND length(trim(text,?2))>0 ORDER BY m.rowid DESC LIMIT 1", params![chat, WHITESPACE.as_str()], |row| row.get::<_, String>(0))
         .optional().map_err(AppStorageError::sqlite)?;
     let mut seen = HashSet::new();
     let mut recent_artifacts = std::collections::VecDeque::new();
@@ -143,8 +145,10 @@ fn references(db: &Connection, chat: &str) -> Result<HashSet<String>, AppStorage
         super::super::sessions::identity::runtime_hint(db, chat)?,
     ]);
     let sql = concat!(
-        "SELECT m.id,m.chat_id,m.turn_id,m.conversation_session_id, \
-       m.conversation_turn_id,m.conversation_message_id FROM app_owned_messages m WHERE m.chat_id=?1 \
+        "SELECT m.id,o.chat_id,m.turn_id,m.conversation_session_id, \
+       m.conversation_turn_id,m.conversation_message_id FROM app_message_owners o CROSS JOIN messages m \
+       WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+       AND m.rowid BETWEEN o.first_rowid AND o.last_rowid \
        AND NOT(m.role='assistant' AND m.safe_error_code IS NOT NULL AND \
        m.safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) AND ",
         owner_visible!()
@@ -169,9 +173,10 @@ fn artifact_inputs(
     chat: &str,
 ) -> Result<Vec<(String, Vec<String>)>, AppStorageError> {
     let mut statement = db.prepare_cached(
-        "SELECT f.safe_name,f.id,m.id,m.turn_id FROM app_owned_messages m \
+        "SELECT f.safe_name,f.id,m.id,m.turn_id FROM app_message_owners o CROSS JOIN messages m \
          JOIN message_attachments a ON a.message_id=m.id JOIN message_files f ON f.id=a.file_id \
-         WHERE m.chat_id=?1 AND m.role='assistant' AND m.status='delivered' \
+         WHERE o.chat_id=?1 AND m.chat_id=o.source_chat_id \
+         AND m.rowid BETWEEN o.first_rowid AND o.last_rowid AND m.role='assistant' AND m.status='delivered' \
          AND NOT(m.safe_error_code IS NOT NULL AND m.safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
          ORDER BY m.rowid,a.position").map_err(AppStorageError::sqlite)?;
     statement

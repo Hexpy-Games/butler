@@ -43,7 +43,9 @@ pub(super) fn workspace_project(
 const SESSION_SELECT: &str = concat!(
     r"
 SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
- (SELECT m.text FROM app_owned_messages m WHERE m.chat_id=c.id
+ (SELECT m.text FROM app_message_owners o CROSS JOIN messages m
+   WHERE o.chat_id=c.id AND m.chat_id=o.source_chat_id
+   AND m.rowid BETWEEN o.first_rowid AND o.last_rowid
    AND NOT(m.role='assistant' AND m.safe_error_code IS NOT NULL
      AND m.safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete'))
    AND ",

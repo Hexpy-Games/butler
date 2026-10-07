@@ -159,6 +159,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let transferred: (String, i64) = db.query_row("SELECT transcript_path,projected_bytes FROM app_transcript_projection_checkpoints WHERE chat_id=?1", [archived], |row| Ok((row.get(0)?, row.get(1)?)))?;
     assert_eq!(transferred, transcript);
     assert_eq!(std::fs::read(&transferred.0)?, transcript_bytes);
+    support::verify_archive_cursors(&s, archived).await?;
     let archived_messages = s.gw.messages(archived).await?;
     assert!(!archived_messages.is_empty());
     let count: i64 = db.query_row(

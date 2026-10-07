@@ -21,6 +21,10 @@ pub(super) fn seed_scale(data: &Path) -> Result<(), HarnessError> {
             ])?;
         }
     }
+    tx.execute_batch("WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<7)
+      INSERT INTO chats(id,title,kind,created_at,updated_at) SELECT 'small-'||i,'Small '||i,'chat','2026-01-01','2026-01-01' FROM n;
+      INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at)
+      SELECT 'message-'||id,id,'user','Small chat message','delivered','2026-01-01','2026-01-01' FROM chats WHERE id LIKE 'small-%';")?;
     // Large unrelated transport history forces the rare clear to scan without new write indexes.
     for table in [
         "projected_transport_events",
@@ -168,4 +172,42 @@ impl Drop for WriteProbe {
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+}
+
+/// Both cursor directions retain logical ownership and exact archive ordering.
+pub(super) async fn verify_archive_cursors(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    archive: &str,
+) -> Result<(), HarnessError> {
+    let latest =
+        s.gw.get(&format!("/session-view?session_id={archive}&limit=1"))
+            .await?;
+    assert_eq!(latest.status, 200, "{}", latest.text);
+    assert_eq!(latest.data()["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(latest.data()["messages"][0]["id"], "scale-099999");
+    assert_eq!(latest.data()["messages"][0]["chat_id"], archive);
+    assert_eq!(latest.data()["message_window"]["has_more"], true);
+    let token = latest.data()["message_window"]["previous_cursor_token"]
+        .as_str()
+        .unwrap();
+    let older =
+        s.gw.get(&format!(
+            "/session-view?session_id={archive}&limit=1&before_cursor_token={token}"
+        ))
+        .await?;
+    assert_eq!(older.status, 200, "{}", older.text);
+    assert_eq!(older.data()["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(older.data()["messages"][0]["id"], "scale-099998");
+    assert_eq!(older.data()["messages"][0]["chat_id"], archive);
+    let token = older.data()["message_window"]["next_cursor_token"]
+        .as_str()
+        .unwrap();
+    let newer =
+        s.gw.get(&format!(
+            "/session-view?session_id={archive}&limit=1&cursor_token={token}"
+        ))
+        .await?;
+    assert_eq!(newer.status, 200, "{}", newer.text);
+    assert_eq!(newer.data()["messages"], latest.data()["messages"]);
+    Ok(())
 }
