@@ -246,13 +246,33 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
     assert!(claim.is_some(), "the dispatched turn carries a claim");
     let transcript = root.join("transcripts/butler_app-general.jsonl");
 
-    append_send(&transcript, "outbound-claimless", &turn, None);
+    append_send(&transcript, "outbound-claimless", &turn, None, false);
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
     assert_eq!(staged_and_receipt(&app).await, (0, None));
 
-    append_send(&transcript, "outbound-resent", &turn, claim.as_deref());
+    // A cancellation marker cannot authorize a stale event without the owner's
+    // durable cancellation record for this turn.
+    append_send(
+        &transcript,
+        "outbound-unrequested-cancel",
+        &turn,
+        None,
+        true,
+    );
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(staged_and_receipt(&app).await, (0, None));
+
+    append_send(
+        &transcript,
+        "outbound-resent",
+        &turn,
+        claim.as_deref(),
+        false,
+    );
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
@@ -274,12 +294,23 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
 
 /// Appends one send of the progress action `action-resent`: its outbound
 /// record and its delivery, written together as the runtime writes them.
-fn append_send(transcript: &std::path::Path, event_id: &str, turn: &str, claim: Option<&str>) {
+fn append_send(
+    transcript: &std::path::Path,
+    event_id: &str,
+    turn: &str,
+    claim: Option<&str>,
+    authority_cancel: bool,
+) {
     use std::io::Write;
     let mut metadata = json!({
         "kind":"tool_progress","turnId":turn,"activityKind":"used_tool","state":"running",
         "safeLabel":"Reading source","toolName":"read_file","toolCallId":"call-1"
     });
+    if authority_cancel {
+        metadata = json!({"kind":"turn_event","turnId":turn,"event":{
+            "kind":"tool.cancelled","payload":{"authorityCancellation":true,
+                "toolName":"read_file","toolCallId":"call-1","bridgePhase":"btcc_operation"}}});
+    }
     if let Some(claim) = claim {
         metadata["appQueueClaimId"] = json!(claim);
     }

@@ -239,6 +239,60 @@ fn result_identity(call_id: &str, phase: &str, request_ref: &str) -> String {
     ))
 }
 
+/// Reuse the terminal projection for durable cancellation before the turn's final event.
+pub(crate) async fn authority_cancellation_events(
+    continuation: &super::continuation::AuthorityLoopContinuation,
+) -> Vec<RuntimeTurnEventInput> {
+    let events = AuthorityCancellationEvents::default();
+    for (index, call) in continuation
+        .batch
+        .calls
+        .iter()
+        .enumerate()
+        .skip(continuation.batch.next_call_index)
+    {
+        let pending = if continuation.batch.concurrent_results.is_empty() {
+            index == continuation.batch.next_call_index
+        } else {
+            continuation
+                .batch
+                .concurrent_results
+                .get(index)
+                .is_some_and(|result| {
+                    super::continuation::pending_authority(result.output.as_ref()).is_some()
+                })
+        };
+        if pending {
+            authority_terminal(&events, call, Status::Cancelled).await;
+        }
+    }
+    events
+        .0
+        .into_inner()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Collect only the small terminal projections; the caller durably appends each event.
+#[derive(Default)]
+struct AuthorityCancellationEvents(std::sync::Mutex<Vec<RuntimeTurnEventInput>>);
+
+impl AgentLoopProgress for AuthorityCancellationEvents {
+    fn emit(&self, event: RuntimeTurnEventInput) -> crate::btcc::PortFuture<'_, ()> {
+        Box::pin(async move {
+            let mut event = event;
+            event
+                .payload
+                .get_or_insert_with(Map::new)
+                .insert("authorityCancellation".into(), Value::Bool(true));
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(event);
+            Ok(())
+        })
+    }
+}
+
 /// Replace a pending body with the actual failure/cancellation outcome.
 /// Ordinary non-authority failures retain their existing publication path.
 pub(super) async fn authority_terminal(
@@ -284,14 +338,18 @@ pub(super) async fn fail_pending_except(
         .enumerate()
         .skip(continuation.batch.next_call_index)
     {
-        let settled = continuation
-            .batch
-            .concurrent_results
-            .get(index)
-            .is_some_and(|result| {
-                super::continuation::pending_authority(result.output.as_ref()).is_none()
-            });
-        if !settled
+        let pending = if continuation.batch.concurrent_results.is_empty() {
+            index == continuation.batch.next_call_index
+        } else {
+            continuation
+                .batch
+                .concurrent_results
+                .get(index)
+                .is_some_and(|result| {
+                    super::continuation::pending_authority(result.output.as_ref()).is_some()
+                })
+        };
+        if pending
             && !completed
                 .iter()
                 .any(|result| result.tool_call_id == call.id)

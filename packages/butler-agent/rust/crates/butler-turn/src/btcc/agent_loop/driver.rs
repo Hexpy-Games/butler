@@ -16,8 +16,7 @@ use crate::btcc::{
 
 use super::completion::{Ending, OutcomeCheck, after_batch, finish, finish_outcome, record_result};
 use super::continuation::{
-    AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, pending_authority,
-    unexecuted_call,
+    AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, unexecuted_call,
 };
 use super::contracts::{
     AgentLoopEvent, AuthorityDecision, BatchDisposition, CandidateDisposition, ModelRoundMessage,

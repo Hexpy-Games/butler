@@ -12,7 +12,9 @@ use std::time::Duration;
 async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    for deny in [false, true] {
+    for decision in ["allow", "deny", "modify"] {
+        let deny = decision == "deny";
+        let modify = decision == "modify";
         let (mut s, script, server) = super::turn_continuation::setup(
             super::turn_continuation::Mode::ParallelFiles,
             Access::AskFirst,
@@ -43,9 +45,16 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
         // Restart proves the concurrent results survive without reissuing the batch.
         s.restart().await?;
         // Decide later siblings first: their decisions must survive parking them.
-        for card in cards.iter().rev() {
+        let mut ordered = cards.clone();
+        ordered.sort_by_key(|card| card["approval"].to_string());
+        if !modify {
+            ordered.reverse();
+        }
+        for card in &ordered {
             let reference = card["request_ref"].as_str().unwrap();
-            let action = if deny && card["approval"].to_string().contains("lookup-1") {
+            let action = if modify && card["approval"].to_string().contains("lookup-0") {
+                "modify"
+            } else if deny && card["approval"].to_string().contains("lookup-1") {
                 "deny"
             } else {
                 "allow"
@@ -53,10 +62,18 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
             let response =
                 s.gw.post(
                     &format!("/authority-requests/{reference}/{action}?session_id=general"),
-                    json!({"scope":"once"}),
+                    if action == "modify" {
+                        json!({"instruction": MODIFICATION})
+                    } else {
+                        json!({"scope":"once"})
+                    },
                 )
                 .await?;
             assert_eq!(response.status, 202, "{}", response.text);
+            if action == "modify" {
+                wait_reparked(&s, &id, true).await?;
+                s.restart().await?;
+            }
         }
         let done =
             s.gw.wait_terminal("general", &id, Duration::from_secs(20))
@@ -77,8 +94,11 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
             .map(|item| item["output"].as_str().unwrap().to_owned())
             .collect();
         assert_eq!(outputs.len(), 3);
+        assert_pairing(&requests[1], modify);
         for (i, output) in outputs.iter().enumerate() {
-            if deny && i == 1 {
+            if modify && i == 0 {
+                assert!(output.contains("authority_request_modified"));
+            } else if deny && i == 1 {
                 assert!(output.contains("authority_request_denied"));
             } else {
                 assert!(output.contains(&format!("found-{i}.txt")), "{output}");
@@ -117,7 +137,7 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
         );
         drop(db);
         eprintln!(
-            "parallel authority: 3 visible requests, 3 terminal results, 2 model rounds; deny={deny}"
+            "parallel authority: 3 visible requests, 3 terminal results, 2 model rounds; decision={decision}"
         );
         s.finish().await?;
         server.abort();
@@ -142,7 +162,7 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
         std::fs::create_dir_all(&root)?;
         std::fs::write(root.join(format!("found-{i}.txt")), "fixture")?;
     }
-    let s = setup.start().await?;
+    let mut s = setup.start().await?;
     s.turn("general", super::delegate_followup::stub::OWNER)
         .await?;
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -154,6 +174,7 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
         assert!(Instant::now() < deadline, "{cards:?}\n{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
+    s.restart().await?;
     for card in cards.iter().rev() {
         let reference = card["request_ref"].as_str().unwrap();
         let response =
@@ -225,5 +246,179 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
     eprintln!("delegated parallel authority: 3 parent-visible requests, 3 complete child results");
     s.finish().await?;
     server.abort();
+    Ok(())
+}
+
+const MODIFICATION: &str = "Use the remaining two directories instead.";
+
+fn assert_pairing(request: &serde_json::Value, modified: bool) {
+    let input = request["input"].as_array().unwrap();
+    let calls: Vec<_> = input
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| item["type"] == "function_call")
+        .map(|(index, item)| (index, item["call_id"].clone()))
+        .collect();
+    let outputs: Vec<_> = input
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| item["type"] == "function_call_output")
+        .collect();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(outputs.len(), 3);
+    for ((_, call), (_, output)) in calls.iter().zip(&outputs) {
+        assert_eq!(call, &output["call_id"]);
+    }
+    let first = calls[0].0;
+    let last = outputs[2].0;
+    assert!(
+        input[first..=last].iter().all(|item| matches!(
+            item["type"].as_str(),
+            Some("function_call" | "function_call_output")
+        )),
+        "user text split the tool batch: {input:?}"
+    );
+    if modified {
+        let modifications: Vec<_> = input
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item["role"] == "user" && item.to_string().contains(MODIFICATION))
+            .collect();
+        assert_eq!(modifications.len(), 1);
+        assert!(
+            modifications[0].0 > last,
+            "modification must follow all results"
+        );
+    }
+}
+
+async fn wait_reparked(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    id: &str,
+    modified: bool,
+) -> Result<(), HarnessError> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let continuation: Option<String> = {
+            let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+            db.query_row(
+                "SELECT authority_continuation_json FROM btcc_turns WHERE turn_id=?1",
+                [id],
+                |row| row.get(0),
+            )?
+        };
+        if let Some(raw) = continuation {
+            let state: serde_json::Value = serde_json::from_str(&raw)?;
+            if state["batch"]["nextCallIndex"] == 1 {
+                if modified {
+                    assert_eq!(
+                        state["batch"]["pendingModifications"],
+                        json!([MODIFICATION])
+                    );
+                }
+                return Ok(());
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "modification did not repark"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test]
+async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for allow_first in [false, true] {
+        let (mut s, script, server) = super::turn_continuation::setup(
+            super::turn_continuation::Mode::ParallelFiles,
+            Access::AskFirst,
+        )
+        .await?;
+        for i in 0..3 {
+            let root = s.sandbox.data.join(format!("lookup-{i}"));
+            std::fs::create_dir_all(&root)?;
+            std::fs::write(root.join(format!("found-{i}.txt")), "fixture")?;
+        }
+        let id = accepted_turn_id(
+            &s.gw
+                .say("general", "Calculate the total and report the result.")
+                .await?,
+        )?;
+        let paused =
+            s.gw.wait_turn(
+                "general",
+                &id,
+                &["waiting_for_form", "failed"],
+                Duration::from_secs(20),
+            )
+            .await?;
+        assert_eq!(turn_state(&paused), "waiting_for_form");
+        assert_eq!(s.gw.approval_requests("general").await?.len(), 3);
+        if allow_first {
+            let cards = s.gw.approval_requests("general").await?;
+            let first = cards
+                .iter()
+                .find(|card| card["approval"].to_string().contains("lookup-0"))
+                .unwrap();
+            let reference = first["request_ref"].as_str().unwrap();
+            let response =
+                s.gw.post(
+                    &format!("/authority-requests/{reference}/allow?session_id=general"),
+                    json!({"scope":"once"}),
+                )
+                .await?;
+            assert_eq!(response.status, 202);
+            wait_reparked(&s, &id, false).await?;
+        }
+        let response = s.gw.post(&format!("/turns/{id}/cancel"), json!({})).await?;
+        assert_eq!(response.status, 202, "{}", response.text);
+        let done =
+            s.gw.wait_terminal("general", &id, Duration::from_secs(20))
+                .await?;
+        assert_eq!(turn_state(&done), "cancelled");
+        assert!(s.gw.approval_requests("general").await?.is_empty());
+        let messages = s.gw.messages("general").await?;
+        let rows = butler_e2e::e2e::gateway::tool_rows(&messages, &id);
+        assert_eq!(rows.len(), 3);
+        for row in rows {
+            let settled = allow_first
+                && row["safe_input_label"]
+                    .as_str()
+                    .unwrap()
+                    .contains("lookup-0");
+            assert!(
+                if settled {
+                    row["state"] == "delivered"
+                } else {
+                    row["state"] == "cancelled"
+                },
+                "{row}"
+            );
+            assert!(
+                !s.gw
+                    .operation_output(&id, &row)
+                    .await?
+                    .contains("authority_pending")
+            );
+        }
+        let pending: u64 = {
+            let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+            db.query_row("SELECT count(*) FROM btcc_authority_requests WHERE source_turn_id=?1 AND decision='pending'",
+            [&id], |row| row.get(0))?
+        };
+        assert_eq!(pending, 0);
+        assert_eq!(script.requests.lock().unwrap().len(), 1);
+        s.restart().await?;
+        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            turn_state(&s.gw.turn("general", &id).await?.unwrap()),
+            "cancelled"
+        );
+        s.finish().await?;
+        server.abort();
+    }
     Ok(())
 }

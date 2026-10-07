@@ -19,7 +19,7 @@ pub(super) async fn run_concurrent_batch(
     .map_err(propagated)?;
     if results
         .iter()
-        .any(|result| pending_authority(result.output.as_ref()).is_some())
+        .any(|result| result.pending_authority.is_some())
     {
         // Start with a non-resumed cursor: every pending call, including the
         // first, must park before execution with its own decision.
@@ -33,6 +33,8 @@ pub(super) async fn run_concurrent_batch(
                 results: Vec::new(),
                 resumed: false,
                 concurrent_results: results,
+                pending_modifications: Vec::new(),
+                first_suspension: None,
                 concurrent_call_ids: batch
                     .calls
                     .iter()
@@ -59,7 +61,7 @@ pub(super) async fn run_concurrent_batch(
             input,
             state,
             &call.call,
-            result.clone(),
+            result.result.clone(),
             batch.iteration,
             check,
             None,
@@ -72,5 +74,9 @@ pub(super) async fn run_concurrent_batch(
     if let Some(result) = finish_outcome(input, state, first_outcome).await? {
         return Ok(Step::finished(result));
     }
+    let results: Vec<_> = results
+        .into_iter()
+        .map(|executed| executed.result)
+        .collect();
     settle_batch(input, state, batch, &results).await
 }
