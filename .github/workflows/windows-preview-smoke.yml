@@ -292,7 +292,7 @@ jobs:
         run: |
           $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
           if (Test-Path $failures) {
-            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+            . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Copy-JobTree $failures "$env:PREVIEW_ROOT/logs/failures"
           }
       - name: Preserve native regression evidence before isolated cleanup
         if: always()

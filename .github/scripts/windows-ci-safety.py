@@ -20,6 +20,7 @@ ALLOWED_ACTIONS = re.compile(
     r'\./\.github/actions/[\w/-]+)\Z')
 
 RULES = {
+    'MAX_PATH-unsafe recursive job tree operation': r'\b(?:Copy-Item|Remove-Item)\b[^\n]*-(?:Recurse|r|rec)\b',
     'owner Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
     'PowerShell CI script blocked by execution policy': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?powershell[\x22\x27]?\s*$',
@@ -121,6 +122,9 @@ def python_sources(path, seen):
 
 def hazards(source):
     findings = []
+    for match in re.finditer(r'\b(?:Copy-Item|Remove-Item)\b[^\n]*`[ \t]*\n[^\n]*-(?:Recurse|r|rec)\b', source, re.I):
+        findings.append((source[:match.start()].count('\n') + 1,
+                         'MAX_PATH-unsafe recursive job tree operation'))
     for number, line in enumerate(source.splitlines(), 1):
         if line.lstrip().startswith(('#', '//')):
             continue
@@ -163,7 +167,7 @@ def local_sources(root, path, source, seen, owner_input=False):
         if line.lstrip().startswith(('#', '//', 'import ', 'from ')):
             continue
         if path.suffix not in ('.yml', '.yaml') and not re.search(
-                r'\b(?:subprocess|spawn|run|command|Start-Process)\b|^\s*&|\$PSScriptRoot', line):
+                r'\b(?:subprocess|spawn|run|command|Start-Process)\b|^\s*[&.]|\$PSScriptRoot', line):
             continue
         references += SCRIPT.findall(line)
     for name in references:
