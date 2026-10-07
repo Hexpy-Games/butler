@@ -63,3 +63,6 @@ data/personas/active.md
 .codex-tmp/
 /plans/
 /HANDOFF*.md
+
+# Generated from the packaged renderer, never a development feature override.
+/packages/butler-app/client/electron/product-features.json

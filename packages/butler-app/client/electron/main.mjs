@@ -16,6 +16,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { readProductFeatures } from "./product-features.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
@@ -2089,10 +2090,11 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-const browserHost = createBrowserHost({
+const browserEnabled = readProductFeatures(app.isPackaged ? __dirname : process.env.BUTLER_APP_RENDERER_DIST).browser;
+const browserHost = browserEnabled ? createBrowserHost({
   fetch: (path, init) => appServerFetch(path, init),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
-});
+}) : null;
 
 let userBrowser;
 async function createWindow() {
@@ -2112,7 +2114,7 @@ async function createWindow() {
   }
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
-    browserHost.start();
+    browserHost?.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
@@ -2149,18 +2151,20 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
+      additionalArguments: [appCacheBudgetArgument, ...(!browserEnabled ? ["--butler-browser-disabled"] : []), ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
     },
   });
   mainWindow = win;
   const firstDataPaint = waitForStartupRenderer(win);
-  userBrowser ??= installUserBrowser(app, () => mainWindow);
-  win.on("hide", () => userBrowser.syncAll());
-  win.on("show", () => userBrowser.syncAll());
-  win.on("closed", () => userBrowser.hide());
-  win.webContents.on("before-input-event", (event, input) => {
-    if (userBrowser.shortcut(input)) event.preventDefault();
-  });
+  if (browserEnabled) {
+    userBrowser ??= installUserBrowser(app, () => mainWindow);
+    win.on("hide", () => userBrowser.syncAll());
+    win.on("show", () => userBrowser.syncAll());
+    win.on("closed", () => userBrowser.hide());
+    win.webContents.on("before-input-event", (event, input) => {
+      if (userBrowser.shortcut(input)) event.preventDefault();
+    });
+  }
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
@@ -2781,7 +2785,7 @@ app.on("before-quit", (event) => {
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
   void Promise.resolve(feedbackReady).then(() => {
-    browserHost.stop();
+    browserHost?.stop();
     return stopServerProcess({ reason: "app_quit" });
   }).then(() => {
     finalQuitAllowed = true;
