@@ -166,20 +166,29 @@ try {
 }
 
 async function cleanupInstaller() {
-  page?.close();
-  ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
+  const errors: unknown[] = [];
   try {
+    page?.close();
+    const capture = readJson(resolve("dist/startup-installer-evidence/install/capture-process.json"));
+    if (Number.isInteger(capture?.setup_pid) && alive(capture!.setup_pid)) {
+      const started = powershell(`$process = Get-Process -Id $env:BUTLER_INSTALLER_SETUP_PID -ErrorAction SilentlyContinue
+        if ($process) { $process.StartTime.ToUniversalTime().ToString('o') }`,
+      { ...env, BUTLER_INSTALLER_SETUP_PID: String(capture!.setup_pid) });
+      if (started === capture!.started_at) owned.add(capture!.setup_pid);
+    }
+    ownedProcesses(data, owned);
+    for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+    await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
     if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
-  } catch (error) {
-    if (!failed) throw error;
-    console.error(`Installer cleanup failed after the original error: ${String(error)}`);
-  } finally {
-    preserveInstallerLogs(root, installed, env, phase, "cleanup");
-    server.stop(true);
-    removeProfile(root, env);
+  } catch (error) { errors.push(error); }
+  for (const action of [
+    () => preserveInstallerLogs(root, installed, env, phase, "cleanup"),
+    () => server.stop(true), () => removeProfile(root, env),
+  ]) {
+    try { action(); } catch (error) { errors.push(error); }
   }
+  for (const error of errors) console.error(`Installer cleanup failed: ${String(error)}`);
+  if (errors.length && !failed) throw errors[0];
 }
 
 function memoryState() {

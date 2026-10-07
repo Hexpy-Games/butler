@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -91,6 +91,16 @@ export function preserveInstallerLogs(root: string, installed: string, env: Node
     ["electron.log", join(root, "electron.log")],
     ["app-install.log", join(env.BUTLER_DATA!, "updates/app-install.log")],
   ];
+  // Current Squirrel uses action-specific and rotated logs, including TEMP on uninstall.
+  for (const [label, directory] of [
+    ["setup", join(env.SQUIRREL_TEMP!, "SquirrelTemp")], ["installed", installed],
+    ["local", env.LOCALAPPDATA!], ["temp", env.TEMP!],
+  ]) {
+    if (!existsSync(directory)) continue;
+    for (const file of readdirSync(directory, { withFileTypes: true })) {
+      if (file.isFile() && /^Squirrel.*\.log$/iu.test(file.name)) sources.push([`${label}-${file.name}`, join(directory, file.name)]);
+    }
+  }
   const captured: string[] = [];
   for (const [name, path] of sources) {
     if (!existsSync(path)) continue;
