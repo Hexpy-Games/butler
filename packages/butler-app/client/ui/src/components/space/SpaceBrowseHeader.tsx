@@ -24,6 +24,7 @@ export function SpaceBrowseHeader() {
   const tab = useOrganization((s) => s.tab);
   const setTab = useOrganization((s) => s.setTab);
   const setDialog = useOrganization((s) => s.setDialog);
+  const archiveCount = useButlerStore(s => s.navigation.archive_count ?? 0);
   const hasGeneral = useButlerStore((s) =>
     s.navigation.chats.some((c) => c.id === "general"),
   );
@@ -77,7 +78,7 @@ export function SpaceBrowseHeader() {
                     useButlerStore.getState().setView({ kind: "automations" }),
                 },
                 {
-                  label: appCopy.space.archives,
+                  label: archiveCount ? appCopy.clearChat.archiveCount(archiveCount) : appCopy.space.archives,
                   onSelect: () =>
                     useButlerStore.getState().openSettings("archive"),
                 },

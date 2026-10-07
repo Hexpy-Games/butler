@@ -59,7 +59,7 @@ fn refresh_dirty(db: &Connection) -> Result<(), AppStorageError> {
         let fact = project(db, &chat)?;
         db.execute("INSERT INTO app_work_monitor(chat_id,runtime_session_id,summary,artifacts_json) VALUES(?1,?2,?3,?4) \
           ON CONFLICT(chat_id) DO UPDATE SET runtime_session_id=excluded.runtime_session_id,summary=excluded.summary,artifacts_json=excluded.artifacts_json",
-          params![chat,super::super::app_session_hint(&chat), fact.latest_report_summary, serde_json::to_string(&fact.recent_artifacts).map_err(json_error)?])
+          params![chat,super::super::sessions::identity::runtime_hint(db, &chat)?, fact.latest_report_summary, serde_json::to_string(&fact.recent_artifacts).map_err(json_error)?])
           .map_err(AppStorageError::sqlite)?;
         db.execute(
             "DELETE FROM app_work_monitor_dirty WHERE chat_id=?1",
@@ -138,7 +138,10 @@ fn project(db: &Connection, chat: &str) -> Result<AppWorkStatusConversationFact,
 }
 
 fn references(db: &Connection, chat: &str) -> Result<HashSet<String>, AppStorageError> {
-    let mut refs = HashSet::from([chat.to_owned(), super::super::app_session_hint(chat)]);
+    let mut refs = HashSet::from([
+        chat.to_owned(),
+        super::super::sessions::identity::runtime_hint(db, chat)?,
+    ]);
     let sql = concat!(
         "SELECT m.id,m.chat_id,m.turn_id,m.conversation_session_id, \
        m.conversation_turn_id,m.conversation_message_id FROM messages m WHERE m.chat_id=?1 \

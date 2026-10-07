@@ -579,6 +579,7 @@ export const koKrCopy: AppCopy = {
     success: "성공",
     failures: "실패",
   },
+  clearChat: { archiveCount: (count: number) => `아카이브 (${count})`, title: "대화 비우기", description: "지금까지의 대화는 아카이브에 보관되고, 빈 화면에서 새로 시작합니다.", memory: "지침과 대화 기억은 그대로 유지됩니다.", manageMemory: "지침·기억 관리 ›", clear: "비우기", busy: "진행 중인 작업이 끝나면 비울 수 있습니다.", failed: "대화를 비우지 못했습니다.", archivedTitle: (date: string) => `일반 · ${date}` },
   space: {
     general: "일반",
     space: "스페이스",

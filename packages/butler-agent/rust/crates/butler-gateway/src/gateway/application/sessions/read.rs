@@ -58,7 +58,8 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  t.id AS latest_turn_id,
  c.pinned,c.archived,
  (SELECT COUNT(*) FROM app_automations a WHERE a.target_session_id=c.id AND a.state!='deleted'),
- (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name
+ (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name,
+ c.runtime_session_hint
 FROM chats c
 LEFT JOIN turns t ON t.rowid=(
  SELECT latest.rowid FROM turns latest WHERE latest.chat_id=c.id ORDER BY latest.rowid DESC LIMIT 1
@@ -67,6 +68,7 @@ LEFT JOIN turns t ON t.rowid=(
 );
 
 struct SessionRow {
+    runtime_session_hint: Option<String>,
     id: String,
     kind: String,
     title: String,
@@ -88,6 +90,7 @@ struct SessionRow {
 
 fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
     Ok(SessionRow {
+        runtime_session_hint: row.get(17)?,
         id: row.get(0)?,
         kind: row.get(1)?,
         title: row.get(2)?,
@@ -247,21 +250,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         .map(serde_json::from_str::<Value>)
         .transpose()
         .map_err(json_error)?;
-    let preview = row
-        .preview
-        .as_deref()
-        .map(trim_js_whitespace)
-        .filter(|text| !text.is_empty())
-        .map(|text| {
-            if text.encode_utf16().count() > 96 {
-                format!(
-                    "{}...",
-                    butler_core::json::Utf16Slice::new(text, 0, 93).utf8_lossy()
-                )
-            } else {
-                text.to_owned()
-            }
-        });
+    let preview = preview(row.preview.as_deref());
     let project_id = row.project_id.clone();
     let project = project_id
         .clone()
@@ -277,7 +266,9 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         title: row.title,
         project_id,
         project,
-        session_hint: crate::gateway::application::snapshot_input::session_hint(&row.id),
+        session_hint: row
+            .runtime_session_hint
+            .unwrap_or_else(|| crate::gateway::app_session_hint(&row.id)),
         created_at: row.created_at,
         updated_at: row.updated_at.clone(),
         last_activity_at: row.updated_at,
@@ -306,4 +297,20 @@ fn chat_kind(value: &str) -> Result<AppChatKind, AppStorageError> {
             "Invalid stored session kind",
         )),
     }
+}
+
+fn preview(preview: Option<&str>) -> Option<String> {
+    preview
+        .map(trim_js_whitespace)
+        .filter(|text| !text.is_empty())
+        .map(|text| {
+            if text.encode_utf16().count() > 96 {
+                format!(
+                    "{}...",
+                    butler_core::json::Utf16Slice::new(text, 0, 93).utf8_lossy()
+                )
+            } else {
+                text.to_owned()
+            }
+        })
 }

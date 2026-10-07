@@ -1,6 +1,8 @@
 //! App-owned session rows and source-shaped navigation reads.
 
+mod clear;
 mod contracts;
+pub(super) mod identity;
 mod mutations;
 mod owner;
 pub(super) mod read;

@@ -113,17 +113,27 @@ pub(super) fn resolve_source_session(
     {
         return Ok(Some(id));
     }
-    let mut statement = db
-        .prepare("SELECT id FROM chats ORDER BY rowid")
-        .map_err(AppStorageError::sqlite)?;
-    let ids = statement
-        .query_map([], |row| row.get::<_, String>(0))
+    if let Some(id) = db
+        .query_row(
+            "SELECT id FROM chats WHERE runtime_session_hint=?1",
+            [external_session],
+            |row| row.get(0),
+        )
+        .optional()
         .map_err(AppStorageError::sqlite)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AppStorageError::sqlite)?;
-    Ok(ids
-        .into_iter()
-        .find(|id| super::super::app_session_hint(id) == *external_session))
+    {
+        return Ok(Some(id));
+    }
+    let Some(chat) = external_session.strip_prefix("butler/app-") else {
+        return Ok(None);
+    };
+    db.query_row(
+        "SELECT id FROM chats WHERE id=?1 AND runtime_session_hint IS NULL",
+        [chat],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn selected_message(

@@ -843,6 +843,7 @@ export interface ProjectSummary {
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
 
 export interface NavigationView {
+  archive_count?: number;
   space: import("../../../shared/app-contracts.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
