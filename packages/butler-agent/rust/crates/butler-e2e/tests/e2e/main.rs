@@ -108,6 +108,7 @@ mod startup_readiness;
 mod steward_presentation;
 mod steward_results;
 mod storage_resilience;
+mod stream_orders;
 mod streaming;
 mod subsession_legacy;
 mod token_cache;

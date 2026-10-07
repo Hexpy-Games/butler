@@ -14,18 +14,16 @@
 use std::fs;
 use std::time::Duration;
 
-use butler_e2e::e2e::config::{Credential, LiveProvider, ModelChoice};
+use butler_e2e::e2e::config::{Credential, LiveProvider};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
-use butler_e2e::e2e::{HarnessError, cassette, live, media, nonce};
+use butler_e2e::e2e::{HarnessError, live, media, nonce};
 use serde_json::{Value, json};
 
+mod drift;
 pub(super) mod profile;
 
 const IGNORE: &str = "";
-
-/// LIVE-09's canonical exchange: `(cassette, user request)`.
-const CANONICAL: (&str, &str) = ("MEM-03", "Reply with exactly: memory check");
 
 async fn start(id: &str) -> Result<Option<(Scenario, LiveProvider)>, HarnessError> {
     let Some(provider) = live::gate(id)? else {
@@ -321,59 +319,7 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
     let Some(provider) = live::gate("LIVE-09")? else {
         return Ok(());
     };
-    // The canonical exchange: a plain answer recorded with the owner's live
-    // model (gpt-6-luna@max) inside MEM-03. Real calls never use gpt-6-sol.
-    let committed = cassette::Cassette::load(CANONICAL.0)?;
-    let index = committed
-        .exchanges
-        .iter()
-        .position(|exchange| exchange.request.key.user_request == CANONICAL.1)
-        .ok_or_else(|| butler_e2e::e2e::harness_error("canonical drift exchange missing"))?;
-    if committed.meta.provider != provider.provider {
-        live::report(
-            "LIVE-09",
-            &format!(
-                "SKIPPED (canonical cassettes are {}; live provider is {})",
-                committed.meta.provider, provider.provider
-            ),
-        );
-        return Ok(());
-    }
-    let temp = std::env::temp_dir().join(format!(
-        "butler-e2e-drift-{}",
-        uuid::Uuid::new_v4().simple()
-    ));
-    // Same model and effort as the committed recording: a reasoning effort
-    // adds reasoning items to the stream, which is not provider drift.
-    let s = Setup::new("LIVE-09")?
-        .cassette(CANONICAL.0)
-        .model(ModelChoice {
-            model: committed.meta.model.clone(),
-            effort: committed.meta.effort.clone(),
-        })
-        .record_into(temp.clone())
-        .start()
-        .await?;
-    live_turn(&s, "general", CANONICAL.1).await?;
-    s.finish().await?;
-    let fresh = cassette::load_from(&temp, "LIVE-09")?;
-    let _ = fs::remove_dir_all(&temp);
-    let normalize = |print: &[String]| -> Vec<String> {
-        // Keep event order but drop repeats of the same event shape.
-        let mut out: Vec<String> = Vec::new();
-        for entry in print {
-            if !out.contains(entry) {
-                out.push(entry.clone());
-            }
-        }
-        out
-    };
-    let old = normalize(&committed.meta.fingerprint[index]);
-    let new = normalize(&fresh.meta.fingerprint[0]);
-    assert_eq!(
-        new, old,
-        "provider stream shape drifted; re-record cassettes (BUTLER_E2E_RECORD=1)"
-    );
+    drift::check(&provider).await?;
     done("LIVE-09")
 }
 
