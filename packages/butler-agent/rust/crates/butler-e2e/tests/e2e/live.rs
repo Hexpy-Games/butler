@@ -20,6 +20,8 @@ use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
 use butler_e2e::e2e::{HarnessError, cassette, live, media, nonce};
 use serde_json::{Value, json};
 
+pub(super) mod profile;
+
 const IGNORE: &str = "";
 
 /// LIVE-09's canonical exchange: `(cassette, user request)`.
@@ -387,32 +389,14 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
         live::report("LIVE-10", "SKIPPED (needs a dedicated OAuth test profile)");
         return Ok(());
     };
-    // The profile is the owner's test-only login; only `expiresAt` is touched
-    // (moved into the past; the product reads 0 as "no expiry"), and it is
-    // put back if the product did not refresh the token.
-    let mut profile: Value = serde_json::from_slice(&fs::read(&path)?)?;
-    let original = profile["expiresAt"].clone();
-    let before = original.as_f64().unwrap_or(0.0);
-    profile["expiresAt"] = json!(1);
-    fs::write(&path, serde_json::to_vec_pretty(&profile)?)?;
-    let outcome = async {
-        let s = Setup::new("LIVE-10")?.live(provider).start().await?;
-        let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
-        s.finish().await?;
-        Ok::<Value, HarnessError>(turn)
-    }
-    .await;
-    let mut after: Value = serde_json::from_slice(&fs::read(&path)?)?;
-    let refreshed = after["expiresAt"].as_f64().unwrap_or(0.0);
-    if refreshed <= 1.0 {
-        after["expiresAt"] = original;
-        fs::write(&path, serde_json::to_vec_pretty(&after)?)?;
-    }
-    let turn = outcome?;
+    // Check the sibling lock before mutating the in-place login. The guard
+    // restores only expiry on failure, preserving any rotated credentials.
+    let probe = profile::ExpiryProbe::begin(path)?;
+    let s = Setup::new("LIVE-10")?.live(provider).start().await?;
+    let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    assert!(
-        refreshed > before.max(1.0),
-        "expiresAt did not move forward"
-    );
+    probe.verify(chrono::Utc::now().timestamp_millis())?;
+    s.finish().await?;
+    drop(probe);
     done("LIVE-10")
 }
