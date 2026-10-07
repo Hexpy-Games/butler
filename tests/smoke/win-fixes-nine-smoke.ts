@@ -115,11 +115,11 @@ try {
     await capture("modal");
     await page.getByRole("button", { name: "닫기", exact: true }).click();
     await page.locator('[data-slot="composer-compact-preview"]').click();
-    for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "먼저 확인"]]) {
+    for (const [mode, label] of [["full_access", "전체 권한"], ["read_only", "읽기 전용"], ["ask_first", "모두 확인"]]) {
       await page.locator('[contenteditable="true"]').focus();
       await page.locator('[data-test-class="access-button"]').click();
       const menu = page.locator('[data-test-class="composer-menu"]');
-      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 3, "original three choices despite existing grants");
+      assert.equal(await menu.locator('[data-slot="option-menu-item"]').count(), 4, "the shipped choices despite existing grants");
       assert.equal(await page.locator('[data-test-class="granted-permissions"]').count(), 0);
       assert(!(await menu.innerText()).includes("허용한"));
       await capture(`permission-menu-${mode}`);

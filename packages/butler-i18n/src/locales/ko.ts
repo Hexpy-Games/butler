@@ -1003,11 +1003,16 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   permissions: {
     fullAccess: "전체 권한",
-    fullAccessDesc: "파일 읽기, 쓰기, 명령 실행 가능",
+    fullAccessDesc: "확인 없이 진행",
+    askAlways: "모두 확인",
+    askAlwaysDesc: "모든 작업 전에 확인",
     askFirst: "먼저 확인",
-    askFirstDesc: "파일 수정이나 명령 실행 전에 허용 여부 확인",
+    askFirstDesc: "변경·명령 전에 확인",
+    auto: "알아서 진행",
+    autoDesc: "위험한 작업만 확인",
     readOnly: "읽기 전용",
     readOnlyDesc: "파일 읽기만 가능",
+    recommended: "권장",
   },
   automations: {
 
@@ -1176,7 +1181,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionAliases: {
       memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리"],
-      general: ["기본", "일반 설정", "대화"],
+      general: ["기본", "일반 설정", "대화", "기본 권한"],
       models: ["모델 설정", "Worker", "예비 모델", "API 키"],
       appearance: ["테마", "화면 설정", "디자인"],
       server: ["연결", "프로젝트 폴더"],
@@ -1239,7 +1244,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       savedKeys: "API 키",
       memoryCleanup: "기억 정리",
       grants: "허용한 작업",
-      permissions: "권한",
+      defaultPermission: "기본 권한",
       workerProfiles: "작업자 설정",
       connection: "연결",
       projects: "프로젝트",
@@ -1426,7 +1431,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       consolidationModel: "대화 기억 정리 모델",
       localReasoningBudget: "로컬 추론 예산",
       contextLimit: "컨텍스트 한도",
-      access: "접근 권한",
+      chatAccess: "새 대화",
       planModeDefault: "기본으로 계획 모드 사용",
       name: "이름",
       job: "작업",
@@ -1525,6 +1530,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     descriptions: {
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
+      chatAccess: "새 대화가 이 권한으로 시작합니다. 대화마다 바꿀 수 있습니다.",
       language: "Butler 앱의 인터페이스 언어를 설정합니다",
       timezone:
         "Butler가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",

@@ -995,11 +995,16 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   permissions: {
     fullAccess: "Full access",
-    fullAccessDesc: "Can read files, write files, and run commands",
+    fullAccessDesc: "Never ask",
+    askAlways: "Ask every time",
+    askAlwaysDesc: "Ask before every action",
     askFirst: "Ask first",
-    askFirstDesc: "Ask before changing files or running commands",
+    askFirstDesc: "Ask before changes and commands",
+    auto: "Auto",
+    autoDesc: "Ask only for risky actions",
     readOnly: "Read only",
     readOnlyDesc: "Can only read files",
+    recommended: "Recommended",
   },
   automations: {
 
@@ -1168,7 +1173,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionAliases: {
       memory: ["instructions", "chat memory", "profile", "project memory", "reset", "free up space", "storage"],
-      general: ["basics", "general settings", "conversation"],
+      general: ["basics", "general settings", "conversation", "default permission"],
       models: ["model settings", "workers", "backup models", "api keys"],
       appearance: ["theme", "display", "design"],
       server: ["connection", "project folder"],
@@ -1231,7 +1236,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       savedKeys: "API keys",
       memoryCleanup: "Memory cleanup",
       grants: "Approved actions",
-      permissions: "Permissions",
+      defaultPermission: "Default permission",
       workerProfiles: "Worker profiles",
       connection: "Connection",
       projects: "Projects",
@@ -1419,7 +1424,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       consolidationModel: "Chat memory model",
       localReasoningBudget: "Local reasoning budget",
       contextLimit: "Context limit",
-      access: "Access",
+      chatAccess: "New chats",
       planModeDefault: "Use plan mode by default",
       name: "Name",
       job: "Job",
@@ -1518,6 +1523,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     descriptions: {
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
+      chatAccess: "New chats start with this. Change it in any chat.",
       language: "Sets the Butler App interface language.",
       timezone:
         "The time zone Butler uses to understand current time and schedule context.",

@@ -50,7 +50,7 @@ async function mount(state: Partial<ReturnType<typeof useAutomationStore.getStat
       sessionOptions: [{ id: "chat-a", label: "A" }],
       targetSessionId: "chat-a",
       intervalSeconds: 1800,
-      accessMode: "ask_first",
+      accessMode: "ask_except_reads",
       saveError: null,
       ...state,
     });
@@ -72,7 +72,7 @@ test("the access field shows the composer's label and icon for the selected mode
 });
 
 test("only ask first shows the one-line hint that runs wait for approval while away", async () => {
-  const container = await mount({ accessMode: "ask_first" });
+  const container = await mount({ accessMode: "ask_except_reads" });
   const hint = container.querySelector('[data-test-class="automation-access-field"] [data-slot="field-description"]');
   expect(hint?.textContent).toBe(appCopy.automations.accessHint);
   expect(trigger(container).getAttribute("aria-describedby")).toBe(hint!.id);
@@ -82,18 +82,18 @@ test("only ask first shows the one-line hint that runs wait for approval while a
   expect(trigger(container).getAttribute("aria-describedby")).toBeNull();
 });
 
-test("the selector lists the composer's three modes with descriptions and picking one updates the schedule", async () => {
+test("the selector lists the shipped modes with descriptions and picking one updates the schedule", async () => {
   setAppCopyLanguage("ko");
-  const container = await mount({ accessMode: "ask_first" });
+  const container = await mount({ accessMode: "ask_except_reads" });
   await act(async () => trigger(container).click());
   const items = [...dom!.window.document.querySelectorAll('[data-slot="option-menu-item"]')];
   expect(items.map((item) => item.querySelector('[data-slot="option-menu-item-label"]')!.textContent))
-    .toEqual(["전체 권한", "먼저 확인", "읽기 전용"]);
+    .toEqual(["읽기 전용", "모두 확인", "먼저 확인", "전체 권한"]);
   expect(items.map((item) => item.querySelector('[data-slot="option-menu-item-description"]')!.textContent))
-    .toEqual([appCopy.permissions.fullAccessDesc, appCopy.permissions.askFirstDesc, appCopy.permissions.readOnlyDesc]);
-  expect(items[1]!.getAttribute("aria-current")).toBe("true");
+    .toEqual([appCopy.permissions.readOnlyDesc, appCopy.permissions.askAlwaysDesc, appCopy.permissions.askFirstDesc, appCopy.permissions.fullAccessDesc]);
+  expect(items[2]!.getAttribute("aria-current")).toBe("true");
 
-  await act(async () => (items[2] as HTMLButtonElement).click());
+  await act(async () => (items[0] as HTMLButtonElement).click());
   expect(useAutomationStore.getState().accessMode).toBe("read_only");
   expect(trigger(container).textContent).toBe("읽기 전용");
   expect(dom!.window.document.querySelector('[data-slot="option-menu-item"]')).toBeNull();

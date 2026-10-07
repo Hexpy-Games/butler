@@ -23,7 +23,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
   const draft = useSettingsUIStore(useShallow(state => state.draft && ({
-    access_mode: state.draft.access_mode, diagnostics_enabled: state.draft.diagnostics_enabled,
+    diagnostics_enabled: state.draft.diagnostics_enabled,
   })));
   const update = useSettingsUIStore(state => state.update);
   const setSettings = useButlerStore(state => state.setSettings);
