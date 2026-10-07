@@ -44,9 +44,21 @@ test("tokens.css loads the bundled faces through fonts.css", () => {
   expect(tokens).toMatch(/@import url\("\.\/fonts\/fonts\.css"\);/u);
 });
 
-test("Pretendard ships only the official pinned dynamic-subset build", () => {
+test("Pretendard ships only the official pinned single-file variable face", () => {
   expect(uiPackage.dependencies.pretendard).toBe("1.3.9");
-  expect(fonts).toContain('@import url("pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css");');
+  const imports = [...fonts.matchAll(/@import url\("([^"]+)"\);/gu)].map((match) => match[1]);
+  expect(imports).toEqual(["pretendard/dist/web/variable/pretendardvariable.css"]);
+  // One face covers every script: per-syllable unicode-range slices split Hangul
+  // into separate shaping runs and make long text layout orders of magnitude slower.
+  const face = readFileSync(new URL(import.meta.resolve("pretendard/dist/web/variable/pretendardvariable.css")), "utf8");
+  const faces = [...face.matchAll(/@font-face\s*\{([^}]*)\}/gu)].map((match) => match[1]!);
+  expect(faces).toHaveLength(1);
+  expect(faces[0]).toContain("font-family: 'Pretendard Variable'");
+  expect(faces[0]).toContain("font-weight: 45 920");
+  expect(faces[0]).toContain("font-style: normal");
+  expect(faces[0]).toContain("font-display: swap");
+  expect(faces[0]).not.toContain("unicode-range");
+  expect(faces[0]).toMatch(/url\('\.\/woff2\/PretendardVariable\.woff2'\)/u);
 });
 
 test("IBM Plex Mono faces point at vendored official files with the license", () => {
