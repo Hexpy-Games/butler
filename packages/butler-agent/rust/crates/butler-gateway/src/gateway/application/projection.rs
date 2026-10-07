@@ -181,54 +181,9 @@ async fn project_final(
     outbound: TranscriptEvent,
     checkpoint: Option<Checkpoint>,
 ) -> Result<bool, GatewayApplicationError> {
-    let terminal_root = context.butler_data.clone();
-    let terminal_event = outbound.clone();
-    let processed_claim_verified = tokio::task::spawn_blocking(move || {
-        terminal_records::verified_processed_claim(&terminal_root, &terminal_event)
-    })
-    .await
-    .map_err(GatewayApplicationError::internal_from)?;
-    let data = context.butler_data.clone();
-    let candidate_event = outbound.clone();
-    let candidate = context
-        .storage
-        .execute(move |db| {
-            final_candidate::candidate(
-                db,
-                &data,
-                &stored_chat,
-                &candidate_event,
-                processed_claim_verified,
-            )
-        })
-        .await
-        .map_err(app_error)?;
+    let candidate = load_final_candidate(context, stored_chat, &outbound).await?;
     let Some(candidate) = candidate else {
-        let action = outbound
-            .payload
-            .get("actionId")
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        return match (checkpoint, action) {
-            (Some(checkpoint), Some(action)) => {
-                let now = context.dependencies.identity_clock.now_iso();
-                context
-                    .storage
-                    .execute(move |db| {
-                        let tx = db
-                            .savepoint()
-                            .map_err(super::storage::AppStorageError::sqlite)?;
-                        staging::delete(&tx, &action)?;
-                        checkpoint::save(&tx, &checkpoint, &now)?;
-                        tx.commit().map_err(super::storage::AppStorageError::sqlite)
-                    })
-                    .await
-                    .map_err(app_error)
-                    .map(|()| true)
-            }
-            (Some(checkpoint), None) => save_checkpoint(context, checkpoint).await.map(|()| true),
-            (None, _) => Ok(true),
-        };
+        return discard_final(context, &outbound, checkpoint).await;
     };
     let files = context
         .dependencies
@@ -261,24 +216,7 @@ async fn project_final(
         None
     };
     let reply_id = format!("message-{}", context.dependencies.identity_clock.new_uuid());
-    let turn_event_ids = final_turn_events::FinalTurnEventIds {
-        started: format!(
-            "turn-event-{}",
-            context.dependencies.identity_clock.new_uuid()
-        ),
-        completed: format!(
-            "turn-event-{}",
-            context.dependencies.identity_clock.new_uuid()
-        ),
-        turn_completed: format!(
-            "turn-event-{}",
-            context.dependencies.identity_clock.new_uuid()
-        ),
-        failed: format!(
-            "turn-event-{}",
-            context.dependencies.identity_clock.new_uuid()
-        ),
-    };
+    let turn_event_ids = final_event_ids(context);
     let now = context.dependencies.identity_clock.now_iso();
     let subscribers = context.subscribers.clone();
     let settled_chat = candidate.chat_id.clone();
@@ -303,18 +241,7 @@ async fn project_final(
         .await
         .map_err(app_error)?;
     if projected {
-        let _ = context
-            .dependencies
-            .work_streams
-            .reconcile_turn(AppWorkStreamTurnOutcome {
-                session_id: super::app_session_hint(&settled_chat),
-                turn_id: settled_turn.clone(),
-                outcome: "completed".into(),
-                status_note: "Reconciled after delivered turn replay.".into(),
-            })
-            .await;
-        context.finish_terminal_turn(settled_turn).await?;
-        context.queue_wake.chat(settled_chat).await?;
+        settle_final(context, settled_chat, settled_turn).await?;
     }
     Ok(projected)
 }
@@ -332,4 +259,114 @@ async fn save_checkpoint(
         .execute(move |db| checkpoint::save(db, &value, &now))
         .await
         .map_err(app_error)
+}
+
+async fn load_final_candidate(
+    context: &ProjectionContext,
+    stored_chat: String,
+    outbound: &TranscriptEvent,
+) -> Result<Option<final_candidate::FinalCandidate>, GatewayApplicationError> {
+    let terminal_root = context.butler_data.clone();
+    let terminal_event = outbound.clone();
+    let processed_claim_verified = tokio::task::spawn_blocking(move || {
+        terminal_records::verified_processed_claim(&terminal_root, &terminal_event)
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?;
+    let data = context.butler_data.clone();
+    let candidate_event = outbound.clone();
+    let candidate = context
+        .storage
+        .execute(move |db| {
+            final_candidate::candidate(
+                db,
+                &data,
+                &stored_chat,
+                &candidate_event,
+                processed_claim_verified,
+            )
+        })
+        .await
+        .map_err(app_error)?;
+    Ok(candidate)
+}
+
+async fn settle_final(
+    context: &ProjectionContext,
+    settled_chat: String,
+    settled_turn: String,
+) -> Result<(), GatewayApplicationError> {
+    let _ = context
+        .dependencies
+        .work_streams
+        .reconcile_turn(AppWorkStreamTurnOutcome {
+            session_id: {
+                let chat = settled_chat.clone();
+                context
+                    .storage
+                    .read(move |db| super::sessions::identity::runtime_hint(db, &chat))
+                    .await
+                    .map_err(app_error)?
+            },
+            turn_id: settled_turn.clone(),
+            outcome: "completed".into(),
+            status_note: "Reconciled after delivered turn replay.".into(),
+        })
+        .await;
+    context.finish_terminal_turn(settled_turn).await?;
+    context.queue_wake.chat(settled_chat).await?;
+    Ok(())
+}
+
+async fn discard_final(
+    context: &ProjectionContext,
+    outbound: &TranscriptEvent,
+    checkpoint: Option<Checkpoint>,
+) -> Result<bool, GatewayApplicationError> {
+    let action = outbound
+        .payload
+        .get("actionId")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    match (checkpoint, action) {
+        (Some(checkpoint), Some(action)) => {
+            let now = context.dependencies.identity_clock.now_iso();
+            context
+                .storage
+                .execute(move |db| {
+                    let tx = db
+                        .savepoint()
+                        .map_err(super::storage::AppStorageError::sqlite)?;
+                    staging::delete(&tx, &action)?;
+                    checkpoint::save(&tx, &checkpoint, &now)?;
+                    tx.commit().map_err(super::storage::AppStorageError::sqlite)
+                })
+                .await
+                .map_err(app_error)
+                .map(|()| true)
+        }
+        (Some(checkpoint), None) => save_checkpoint(context, checkpoint).await.map(|()| true),
+        (None, _) => Ok(true),
+    }
+}
+
+fn final_event_ids(context: &ProjectionContext) -> final_turn_events::FinalTurnEventIds {
+    final_turn_events::FinalTurnEventIds {
+        started: format!(
+            "turn-event-{}",
+            context.dependencies.identity_clock.new_uuid()
+        ),
+        completed: format!(
+            "turn-event-{}",
+            context.dependencies.identity_clock.new_uuid()
+        ),
+        turn_completed: format!(
+            "turn-event-{}",
+            context.dependencies.identity_clock.new_uuid()
+        ),
+        failed: format!(
+            "turn-event-{}",
+            context.dependencies.identity_clock.new_uuid()
+        ),
+    }
 }

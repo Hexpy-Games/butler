@@ -512,6 +512,7 @@ export interface AppCopy {
     success: string;
     failures: string;
   };
+  clearChat: { archiveCount: (count: number) => string; title: string; description: string; memory: string; manageMemory: string; clear: string; busy: string; failed: string; archivedTitle: (date: string) => string };
   space: {
     general: string;
     space: string;

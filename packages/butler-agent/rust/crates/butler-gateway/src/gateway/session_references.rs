@@ -5,7 +5,6 @@ use serde_json::{Value, json};
 
 use super::{
     AppReferencedChatSnapshot, GatewayApplicationError, MessageContent, MessageContentPart,
-    application::app_session_hint,
 };
 use butler_core::json::Utf16Prefix;
 use butler_core::public_text::trim_js_whitespace;
@@ -46,7 +45,7 @@ pub async fn resolve_session_references(
             continue;
         };
         let canonical = conversations
-            .get_session_by_gateway_binding("app", &app_session_hint(&chat.id))
+            .get_session_by_gateway_binding("app", &chat.runtime_session_hint)
             .await
             .map_err(GatewayApplicationError::internal_from)?;
         let preview = if let Some(canonical) = canonical.as_ref().filter(|_| preview_budget > 0) {

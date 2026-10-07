@@ -580,6 +580,7 @@ export const enUsCopy: AppCopy = {
     success: "Successes",
     failures: "Failures",
   },
+  clearChat: { archiveCount: (count: number) => `Archive (${count})`, title: "Clear chat", description: "This chat moves to Archive and you start fresh. Instructions and memories stay.", memory: "", manageMemory: "Manage memory ›", clear: "Clear", busy: "Wait for pending work to finish.", failed: "Could not clear chat.", archivedTitle: (date: string) => `General · ${date}` },
   space: {
     general: "General",
     space: "Space",

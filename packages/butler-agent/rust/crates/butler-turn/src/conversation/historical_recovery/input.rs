@@ -120,8 +120,9 @@ pub fn read_historical_app_rows(
                 "NULL"
             }
         };
+        let source = projection_source(&connection)?;
         let sql = format!(
-            "SELECT id,chat_id,role,text,created_at,{}, {}, {} FROM messages ORDER BY created_at ASC,id ASC",
+            "SELECT id,chat_id,role,text,created_at,{}, {}, {} FROM {source} ORDER BY created_at ASC,id ASC",
             optional("conversation_session_id"),
             optional("conversation_turn_id"),
             optional("conversation_message_id")
@@ -150,6 +151,19 @@ pub fn read_historical_app_rows(
         .close()
         .map_err(|(_, error)| ConversationError::sqlite(error))?;
     rows
+}
+
+// Older inputs predate ownership extents and may only have the messages table.
+fn projection_source(connection: &rusqlite::Connection) -> ConversationResult<&'static str> {
+    let owned: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='view' AND name='app_owned_messages')",
+        [], |row| row.get(0),
+    ).map_err(ConversationError::sqlite)?;
+    Ok(if owned {
+        "app_owned_messages"
+    } else {
+        "messages"
+    })
 }
 
 // Passthrough: legacy/historical records of unknown shape.

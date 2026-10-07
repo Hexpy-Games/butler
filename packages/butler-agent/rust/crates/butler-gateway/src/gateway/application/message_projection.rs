@@ -32,7 +32,7 @@ pub(super) fn decorate(
             continue;
         };
         let previous_end: Option<String> = db.query_row(
-            "SELECT updated_at FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' \
+            "SELECT updated_at FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' \
              AND rowid<?3 ORDER BY rowid DESC LIMIT 1",
             rusqlite::params![message.chat_id, turn, message.cursor], |row| row.get(0),
         ).optional().map_err(AppStorageError::sqlite)?;

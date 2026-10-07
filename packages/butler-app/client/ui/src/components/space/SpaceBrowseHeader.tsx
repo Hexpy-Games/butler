@@ -28,6 +28,7 @@ export function SpaceBrowseHeader() {
   const tab = useOrganization((s) => s.tab);
   const setTab = useOrganization((s) => s.setTab);
   const setDialog = useOrganization((s) => s.setDialog);
+  const archiveCount = useButlerStore(s => s.navigation.archive_count ?? 0);
   const hasGeneral = useButlerStore((s) =>
     s.navigation.chats.some((c) => c.id === "general"),
   );
@@ -73,8 +74,12 @@ export function SpaceBrowseHeader() {
                 <DropdownMenuItem onSelect={() => useButlerStore.getState().setProjectCreateDialogOpen(true)}>
                   {appCopy.space.newProject}
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => useButlerStore.getState().openSettings("archive")}>
+                  {archiveCount ? appCopy.clearChat.archiveCount(archiveCount) : appCopy.space.archives}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
           </ButtonContainer>
         }
       />
