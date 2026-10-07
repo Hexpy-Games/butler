@@ -489,4 +489,6 @@ pub struct PrincipalAuthority {
     pub(super) collation: Arc<LocaleCollation>,
     pub(super) clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub(super) uuid: Arc<dyn Fn() -> String + Send + Sync>,
+    pub(super) permission_projections:
+        Arc<parking_lot::Mutex<super::permission_cache::ProjectionCache>>,
 }

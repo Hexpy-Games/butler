@@ -17,21 +17,13 @@ pub(super) async fn measure_current(
         samples.push(timing.split_once(',').unwrap().1.parse::<u64>().unwrap());
     }
     samples.sort_unstable();
+    eprintln!("approvals-distribution server_us {samples:?}");
     let bytes = std::fs::metadata(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?.len();
     eprintln!(
-        "approvals samples=100 btcc_bytes={bytes} p50_us={} p99_us={} max_us={}",
-        samples[49], samples[98], samples[99]
+        "approvals samples=100 btcc_bytes={bytes} p50_us={} p95_us={} p99_us={} max_us={}",
+        samples[49], samples[94], samples[98], samples[99]
     );
-    for line in s
-        .agent
-        .logs()
-        .lines()
-        .filter(|line| line.starts_with("approvals-profile"))
-        .rev()
-        .take(12)
-    {
-        eprintln!("{line}");
-    }
+    super::profile::report(&s.agent.logs());
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(samples[98]),
         Duration::from_millis(50),

@@ -227,10 +227,13 @@ impl ReadPool {
         connection: &mut Option<butler_platform::sqlite::Connection>,
         operation: ReadOperation,
     ) -> StorageResult<()> {
+        let profile = std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1");
+        let started = Instant::now();
         if connection.is_none() {
             *connection = Some(Self::connection(path)?);
             work.reader_opened();
         }
+        let opened = started.elapsed();
         let Some(connection) = connection.as_ref() else {
             return Err(AppStorageError::new(
                 super::AppStorageCode::AppSqliteOwnerClosed,
@@ -245,13 +248,23 @@ impl ReadPool {
                 .map_err(AppStorageError::sqlite)?;
             operation(&transaction)?;
             transaction.commit().map_err(AppStorageError::sqlite)?;
-            butler_platform::sqlite::sync_wal_index(connection).map_err(|error| {
+            let queried = started.elapsed();
+            let result = butler_platform::sqlite::sync_wal_index(connection).map_err(|error| {
                 AppStorageError::new(
                     super::AppStorageCode::AppSqliteWalSyncFailed,
                     error.to_string(),
                 )
                 .with_source(error)
-            })
+            });
+            if profile {
+                eprintln!(
+                    "approvals-profile reader_open_us={} reader_query_us={} reader_sync_us={}",
+                    opened.as_micros(),
+                    (queried - opened).as_micros(),
+                    (started.elapsed() - queried).as_micros()
+                );
+            }
+            result
         }))
         .unwrap_or_else(|payload| {
             let message = payload

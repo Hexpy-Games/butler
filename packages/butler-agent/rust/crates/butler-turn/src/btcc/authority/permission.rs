@@ -115,32 +115,59 @@ fn permission_scope_key(
     file_edit: bool,
     command: bool,
 ) -> AuthorityResult<String> {
-    let PermissionFacts {
-        capability,
-        target,
-        input,
-        collation,
-        ..
-    } = facts;
-    let scope = if file_edit {
-        json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
-    } else if command {
-        let mut scope = serde_json::Map::new();
-        scope.insert("kind".into(), json!("command"));
+    scope_key(
+        std::borrow::Cow::Borrowed(facts.input),
+        facts.capability,
+        facts.target,
+        facts.collation,
+        file_edit,
+        command,
+    )
+}
+
+fn scope_key(
+    mut input: std::borrow::Cow<'_, Value>,
+    capability: &str,
+    target: &str,
+    collation: &butler_core::locale::LocaleCollation,
+    file_edit: bool,
+    command: bool,
+) -> AuthorityResult<String> {
+    let mut scope = serde_json::Map::new();
+    scope.insert(
+        "kind".into(),
+        json!(if file_edit {
+            "file_operation"
+        } else if command {
+            "command"
+        } else {
+            "effect"
+        }),
+    );
+    if command {
         for (name, source) in [
             ("command", "command"),
             ("cwd", "cwd"),
             ("stateEffect", "state_effect"),
         ] {
-            if let Some(value) = input.get(source) {
-                scope.insert(name.into(), value.clone());
+            // Listing owns the decoded JSON: move its scope fields instead of
+            // cloning the same command/cwd (or arbitrarily large effect input).
+            let value = match &mut input {
+                std::borrow::Cow::Borrowed(input) => input.get(source).cloned(),
+                std::borrow::Cow::Owned(input) => input
+                    .as_object_mut()
+                    .and_then(|object| object.remove(source)),
+            };
+            if let Some(value) = value {
+                scope.insert(name.into(), value);
             }
         }
-        Value::Object(scope)
     } else {
-        json!({"kind":"effect","capability":capability,"target":target,"input":input})
-    };
-    Ok(digest(&canonical(&scope, collation)?))
+        scope.insert("capability".into(), json!(capability));
+        scope.insert("target".into(), json!(target));
+        scope.insert("input".into(), input.into_owned());
+    }
+    Ok(digest(&canonical(&Value::Object(scope), collation)?))
 }
 
 fn permission_identity(
@@ -190,27 +217,6 @@ pub(super) fn for_source(
         source.capability,
         "run_command" | "run_command_remote_observation"
     );
-    let scope_key = permission_scope_key(facts, file_edit, command)?;
-    // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
-    if !prefixes
-        .get(source.owner)
-        .is_some_and(|workspaces| workspaces.contains_key(source.workspace))
-    {
-        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
-        let _ = prefix.pop(); // Preserve the shared codec's exact array escaping.
-        prefixes
-            .entry(source.owner.to_owned())
-            .or_default()
-            .insert(source.workspace.to_owned(), prefix);
-    }
-    let prefix = prefixes
-        .get(source.owner)
-        .and_then(|workspaces| workspaces.get(source.workspace))
-        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
-    let grant_ref = format!(
-        "permission-{}",
-        &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
-    );
     let target =
         butler_core::public_text::sanitize_public_delta(&permission_target(facts, command));
     let cwd = command.then(|| {
@@ -220,12 +226,48 @@ pub(super) fn for_source(
             .unwrap_or(source.workspace)
             .to_owned()
     });
+    let scope_key = scope_key(
+        std::borrow::Cow::Owned(input),
+        source.capability,
+        source.target,
+        collation,
+        file_edit,
+        command,
+    )?;
+    let grant_ref = source_grant_ref(source, &scope_key, collation, prefixes)?;
     Ok(PermissionTarget {
         grant_ref,
         capability: source.capability.to_owned(),
         target,
         cwd,
     })
+}
+
+fn source_grant_ref(
+    source: &PermissionSource<'_>,
+    scope_key: &str,
+    collation: &butler_core::locale::LocaleCollation,
+    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+) -> AuthorityResult<String> {
+    if !prefixes
+        .get(source.owner)
+        .is_some_and(|paths| paths.contains_key(source.workspace))
+    {
+        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
+        let _ = prefix.pop();
+        prefixes
+            .entry(source.owner.to_owned())
+            .or_default()
+            .insert(source.workspace.to_owned(), prefix);
+    }
+    let prefix = prefixes
+        .get(source.owner)
+        .and_then(|paths| paths.get(source.workspace))
+        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
+    Ok(format!(
+        "permission-{}",
+        &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
+    ))
 }
 
 fn permission_description(file_edit: bool, command: bool, executable: Option<&str>) -> String {

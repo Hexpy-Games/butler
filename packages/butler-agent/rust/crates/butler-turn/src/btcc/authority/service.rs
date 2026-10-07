@@ -28,6 +28,7 @@ impl PrincipalAuthority {
             collation,
             clock,
             uuid,
+            permission_projections: Arc::default(),
         }
     }
     pub(super) async fn in_lane<T: Send + 'static>(

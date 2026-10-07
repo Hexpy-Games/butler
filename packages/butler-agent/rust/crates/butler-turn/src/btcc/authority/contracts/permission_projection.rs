@@ -4,8 +4,11 @@ pub(crate) struct PermissionSource<'a> {
     pub workspace: &'a str,
     pub capability: &'a str,
     pub target: &'a str,
+    pub created_at: &'a str,
+    pub rowid: i64,
     pub input_json: &'a str,
 }
+#[derive(Clone)]
 pub(crate) struct PermissionTarget {
     pub grant_ref: String,
     pub capability: String,

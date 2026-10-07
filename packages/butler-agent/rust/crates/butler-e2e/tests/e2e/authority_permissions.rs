@@ -4,8 +4,10 @@ use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::json;
 use std::time::{Duration, Instant};
 
+mod profile;
 mod scale;
 mod seed;
+mod source_order;
 pub(super) use seed::history as seed_settled_history;
 use seed::{COMMAND, command, reference, seed};
 

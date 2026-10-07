@@ -7,6 +7,7 @@ mod decision;
 mod execution;
 mod identity;
 mod permission;
+mod permission_cache;
 mod permission_management;
 mod projection;
 pub(super) mod questions;

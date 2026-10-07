@@ -109,8 +109,10 @@ pub(super) async fn seed(
         if scale { history(&tx, if std::env::var("BUTLER_E2E_PERF").as_deref() == Ok("1") { 700_000 } else { 1024 }); }
         else { source(&tx, 3001); tx.execute("INSERT INTO btcc_conversation_permissions VALUES('orphan','deleted','/workspace','orphan','Private','Private','2000-01-01T00:00:00Z',NULL)", []).unwrap(); }
         tx.commit().unwrap();
+        super::profile::explain(&db).unwrap();
         let app = sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
         app.execute_batch("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599) INSERT INTO chats(id,title,kind,created_at,updated_at) SELECT 'chat-'||i,'Chat '||i,'chat','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z' FROM n").unwrap();
+        super::profile::explain_metadata(&app).unwrap();
         eprintln!("approval fixture: grants={count} chats=600 btcc_bytes={}", std::fs::metadata(data.join("agent-runtime/btcc.sqlite")).unwrap().len());
     }).await.map_err(|e| HarnessError(e.to_string()))
 }

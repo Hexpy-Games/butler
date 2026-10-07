@@ -4,7 +4,18 @@ use sha2::{Digest, Sha256};
 use super::contracts::{AuthorityAdmissionInput, AuthorityError, AuthorityResult};
 
 pub(super) fn digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    let mut output = String::with_capacity(64);
+    for byte in Sha256::digest(value.as_bytes()) {
+        for nibble in [byte >> 4, byte & 15] {
+            let digit = if nibble < 10 {
+                b'0' + nibble
+            } else {
+                b'a' + nibble - 10
+            };
+            output.push(char::from(digit));
+        }
+    }
+    output
 }
 // Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn canonical(

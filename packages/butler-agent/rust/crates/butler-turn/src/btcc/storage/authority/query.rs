@@ -274,22 +274,41 @@ pub(super) fn permission_projection_records(
 ) -> AuthorityResult<()> {
     let owners = serde_json::to_string(owners)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let profile = std::env::var("BUTLER_E2E_STORAGE_METRICS").as_deref() == Ok("1");
+    let started = std::time::Instant::now();
     let mut statement = db.prepare_cached(
-        "SELECT a.owner_session_id,a.workspace_path,a.capability,a.normalized_target,a.normalized_input_json \
+        "SELECT a.owner_session_id,a.workspace_path,a.capability,a.normalized_target,a.normalized_input_json,a.created_at,a.rowid \
          FROM btcc_authority_requests a INDEXED BY idx_btcc_permission_sources \
          WHERE a.owner_session_id IN (SELECT value FROM json_each(?1)) \
-         AND a.decision='allowed' AND a.allow_scope='conversation' \
-         ORDER BY a.owner_session_id,a.created_at,a.rowid"
+         AND a.decision='allowed' AND a.allow_scope='conversation'"
     ).map_err(sql)?;
+    let prepared = started.elapsed();
     let mut rows = statement.query([owners]).map_err(sql)?;
+    let queried = started.elapsed();
+    let mut projected = std::time::Duration::ZERO;
     while let Some(row) = rows.next().map_err(sql)? {
+        let step = profile.then(std::time::Instant::now);
         visit(PermissionSource {
             owner: source_text(row, 0)?,
             workspace: source_text(row, 1)?,
             capability: source_text(row, 2)?,
             target: source_text(row, 3)?,
             input_json: source_text(row, 4)?,
+            created_at: source_text(row, 5)?,
+            rowid: row.get(6).map_err(sql)?,
         })?;
+        if let Some(step) = step {
+            projected += step.elapsed();
+        }
+    }
+    if profile {
+        eprintln!(
+            "approvals-profile source_prepare_us={} source_query_us={} source_rows_us={} source_visit_us={}",
+            prepared.as_micros(),
+            (queried - prepared).as_micros(),
+            (started.elapsed() - queried - projected).as_micros(),
+            projected.as_micros()
+        );
     }
     Ok(())
 }
