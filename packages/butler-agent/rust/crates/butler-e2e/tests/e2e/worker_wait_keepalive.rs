@@ -5,8 +5,6 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
-#[path = "worker_wait_keepalive/live.rs"]
-mod live;
 use super::delegate_followup::stub;
 use butler_e2e::e2e::{
     HarnessError,
