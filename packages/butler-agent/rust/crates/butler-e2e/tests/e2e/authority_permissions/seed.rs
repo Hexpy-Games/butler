@@ -74,7 +74,7 @@ fn source(db: &Connection, i: usize) {
     db.execute("INSERT INTO btcc_conversation_permissions VALUES(?1,?2,?3,?4,'Private title','Private description',?5,NULL)", params![reference(i),owner,workspace(i),scope_key(i),date]).unwrap();
 }
 
-fn history(db: &Connection, payload_bytes: usize) {
+pub(crate) fn history(db: &Connection, payload_bytes: usize) {
     // 10k unrelated settled requests: large payloads must never enter the list query.
     db.execute(&format!("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9999)
       INSERT INTO btcc_authority_requests(request_id,request_ref,identity_sha256,owner_session_id,source_session_id,source_turn_id,source_work_id,workspace_path,plan_revision_id,action_key,authority_generation,capability,normalized_target,normalized_input_json,model_ref,reasoning_effort,category,reason,executable,command_count,decision,allow_scope,schedule_client_message_id,schedule_input_text,outcome,created_at,updated_at)
