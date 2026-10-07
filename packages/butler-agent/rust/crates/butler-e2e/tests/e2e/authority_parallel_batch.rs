@@ -185,6 +185,7 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
             .await?;
         assert_eq!(response.status, 202, "{}", response.text);
     }
+    let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let response = s.gw.get("/session-view?session_id=general").await?;
         let child = &response.data()["steward_children"][0];

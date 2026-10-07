@@ -201,7 +201,7 @@ fn sanitize_value(value: &Value, key: &str, preserve_numbers: bool) -> Value {
     } else {
         fallback(key)
     };
-    if key == "retryable" || key == "firstVisible" {
+    if matches!(key, "retryable" | "firstVisible" | "authorityCancellation") {
         return value.as_bool().map(Value::Bool).unwrap_or(Value::Null);
     }
     if key == "latencyMs"

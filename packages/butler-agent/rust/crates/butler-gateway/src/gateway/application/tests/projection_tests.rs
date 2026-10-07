@@ -310,6 +310,14 @@ fn append_send(
         metadata = json!({"kind":"turn_event","turnId":turn,"event":{
             "kind":"tool.cancelled","payload":{"authorityCancellation":true,
                 "toolName":"read_file","toolCallId":"call-1","bridgePhase":"btcc_operation"}}});
+        let payload = super::super::projection::normalize_committed_turn_event(
+            "tool.cancelled",
+            "public",
+            metadata["event"]["payload"].as_object(),
+        )
+        .unwrap();
+        assert_eq!(payload["authorityCancellation"], true);
+        metadata["event"]["payload"] = json!(payload);
     }
     if let Some(claim) = claim {
         metadata["appQueueClaimId"] = json!(claim);
