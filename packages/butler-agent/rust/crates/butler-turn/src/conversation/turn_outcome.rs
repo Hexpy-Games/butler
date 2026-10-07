@@ -301,3 +301,47 @@ fn outcome_hash(capsule: &TurnOutcomeCapsule, referenced: &str) -> ConversationR
     hash.update(stringify(&Value::Object(object))?.as_bytes());
     Ok(format!("{:x}", hash.finalize()))
 }
+
+pub(super) fn history_outcome_row(
+    row: &rusqlite::Row<'_>,
+    prefix: &str,
+) -> ConversationResult<TurnOutcomeCapsule> {
+    let json = |key| -> ConversationResult<Value> {
+        serde_json::from_str(
+            &row.get::<_, String>(format!("{prefix}{key}").as_str())
+                .map_err(ConversationError::sqlite)?,
+        )
+        .map_err(ConversationError::json)
+    };
+    let get = |key| {
+        row.get::<_, String>(format!("{prefix}{key}").as_str())
+            .map_err(ConversationError::sqlite)
+    };
+    let opt = |key| {
+        row.get::<_, Option<String>>(format!("{prefix}{key}").as_str())
+            .map_err(ConversationError::sqlite)
+    };
+    Ok(TurnOutcomeCapsule {
+        id: get("id")?,
+        session_id: get("session_id")?,
+        turn_id: get("turn_id")?,
+        generation: row
+            .get(format!("{prefix}generation").as_str())
+            .map_err(ConversationError::sqlite)?,
+        outcome: outcome(&get("outcome")?)?,
+        source_hash: get("source_hash")?,
+        request_message_id: opt("request_message_id")?,
+        public_assistant_message_id: opt("public_assistant_message_id")?,
+        provider_id: opt("provider_id")?,
+        model_ref: opt("model_ref")?,
+        evidence_refs: serde_json::from_value(json("evidence_refs_json")?)
+            .map_err(ConversationError::json)?,
+        unresolved_obligations: serde_json::from_value(json("unresolved_obligations_json")?)
+            .map_err(ConversationError::json)?,
+        continuation: opt("continuation_json")?
+            .map(|v| serde_json::from_str(&v).map_err(ConversationError::json))
+            .transpose()?,
+        safe_code: opt("safe_code")?,
+        created_at: get("created_at")?,
+    })
+}

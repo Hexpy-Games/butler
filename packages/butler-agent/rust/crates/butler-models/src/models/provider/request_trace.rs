@@ -30,6 +30,29 @@ pub(crate) struct RequestTrace {
 }
 
 impl RequestTrace {
+    pub(super) async fn round(
+        provider: &ModelProvider,
+        prepared: Prepared,
+        request: &butler_turn::btcc::ModelRoundRequest<'_>,
+    ) -> Result<Self, ModelRoundError> {
+        Self::new(
+            provider,
+            prepared,
+            request.cache_scope,
+            request.usage_attribution.map(|a| a.phase.as_str()),
+            request
+                .usage_attribution
+                .and_then(|a| a.round_index)
+                .map(f64::from),
+            request
+                .usage_attribution
+                .and_then(|a| a.session_kind.as_deref())
+                .unwrap_or("parent"),
+            request.butler_data,
+        )
+        .await
+    }
+
     pub(super) async fn new(
         provider: &ModelProvider,
         prepared: Prepared,

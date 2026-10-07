@@ -43,7 +43,7 @@ pub(super) async fn read(
         ("optionalHotCacheRefs", "optional_hot_cache"),
     ] {
         for reference in refs(turn, field) {
-            let document = repo
+            let mut document = repo
                 .read_context_document(reference.to_owned())
                 .await
                 .map_err(|source| {
@@ -54,6 +54,17 @@ pub(super) async fn read(
             }
             if document.source_id == "project-instructions" {
                 continue; // Operating instructions use their own exact admitted projection.
+            }
+            if document.source_id == "recent-conversation"
+                && let Ok(history) =
+                    serde_json::from_str::<butler_turn::conversation::HistoryDocument>(
+                        document
+                            .content
+                            .strip_prefix("## Recent Conversation\n\n")
+                            .unwrap_or(&document.content),
+                    )
+            {
+                document.content = history.main_budget_projection;
             }
             let allowed = class == "profile"
                 || class == "recent_feedback"

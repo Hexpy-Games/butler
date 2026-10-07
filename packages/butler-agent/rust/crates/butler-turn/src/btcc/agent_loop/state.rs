@@ -71,6 +71,14 @@ impl State {
         prepared: &mut PreparedPolicy,
     ) -> Self {
         drop(std::mem::take(&mut prepared.prompt));
+        if let Some(usage) = prepared.request.usage_attribution.as_mut() {
+            if let Some(diagnostics) = restored.extensions.get("promptDiagnostics") {
+                usage.prompt_diagnostics = Some(diagnostics.clone());
+            }
+            if let Some(diagnostics) = usage.prompt_diagnostics.as_mut() {
+                diagnostics["trigger"] = "authority-resume".into();
+            }
+        }
         prepared.instructions = restored.instructions;
         prepared.request.stable_provider_cache_prefix = restored.stable_provider_cache_prefix;
         let used_tools = restored

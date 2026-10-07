@@ -147,7 +147,24 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
         s.gw.wait_terminal("general", &id, Duration::from_secs(20))
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    assert_eq!(script.requests.lock().unwrap().len(), 2);
+    let requests = script.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2);
+    super::prompt_history::approval_parity(&s, &id, &requests)?;
+    if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
+        s.finish().await?;
+        server.abort();
+        return Ok(());
+    }
+    let metrics = super::token_metrics::report(&s, &requests, "Approval resume layout")?;
+    assert_eq!(
+        metrics[1]["prefixDiagnostics"]["trigger"],
+        "authority-resume"
+    );
+    assert_eq!(
+        metrics[0]["prefixDiagnostics"]["instructionComponents"],
+        metrics[1]["prefixDiagnostics"]["instructionComponents"]
+    );
+    assert_eq!(metrics[1]["prefixDiagnostics"]["appendOnly"], true);
     paused_transcript::assert_segments(&s, true).await?;
     s.restart().await?;
     paused_transcript::assert_segments(&s, true).await?;
