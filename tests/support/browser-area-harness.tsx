@@ -3,6 +3,7 @@ import React from "../../packages/butler-app/client/ui/node_modules/react";
 import { createRoot } from "react-dom/client";
 import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, Dialog, DialogContent, DialogTitle, DialogTrigger, Stack } from "../../packages/butler-app/client/ui/src/libs/design-system";
 import { OutputFrame } from "../../packages/butler-app/client/ui/src/components/artifacts/OutputFrame";
+import { SecuritySettings } from "../../packages/butler-app/client/ui/src/components/settings/SecuritySettings";
 import { BrowserArea } from "../../packages/butler-app/client/ui/src/components/browser/BrowserArea";
 import { BrowserEntry } from "../../packages/butler-app/client/ui/src/components/browser/BrowserEntry";
 import { Titlebar } from "../../packages/butler-app/client/ui/src/components/layout/Titlebar";
@@ -60,11 +61,12 @@ window.butlerBrowser = {
 };
 function FixtureWorkspace() {
   const view = useButlerStore((state) => state.view);
+  if (mode === "security") return <SecuritySettings />;
   return mode === "output" && view.kind !== "browser" ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
 }
 createRoot(document.getElementById("root")!).render(
-  <AdaptiveShell theme={{ appearance: theme }} leftOpen={true} rightOpen={false} chromeEnvironment="electron">
-    <AdaptiveShellSidebar open={true}><BrowserEntry /></AdaptiveShellSidebar>
+  <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">
+    <AdaptiveShellSidebar open={mode !== "security"}><BrowserEntry /></AdaptiveShellSidebar>
     <AdaptiveShellWorkspace>
       <Titlebar />
       <Stack fill gap="none"><Stack gap="none"><Dialog><DialogTrigger asChild><Button>Overlay</Button></DialogTrigger>

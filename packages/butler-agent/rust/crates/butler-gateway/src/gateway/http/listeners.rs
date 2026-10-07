@@ -160,18 +160,20 @@ impl RemoteAccess {
             if !every_interface {
                 match bind(address) {
                     Ok(listener) => {
-                        let content_address = SocketAddr::new(ip, super::content::port(state));
-                        let content_listener = match bind(content_address) {
-                            Ok(listener) => listener,
-                            Err(error) => {
-                                bound.bind_errors.push(BindError {
-                                    address: content_address,
-                                    error: error.to_string(),
-                                });
-                                continue;
-                            }
-                        };
-                        super::content::spawn(content_listener, state.clone(), closed.clone());
+                        if butler_core::product_features::BROWSER {
+                            let content_address = SocketAddr::new(ip, super::content::port(state));
+                            let content_listener = match bind(content_address) {
+                                Ok(listener) => listener,
+                                Err(error) => {
+                                    bound.bind_errors.push(BindError {
+                                        address: content_address,
+                                        error: error.to_string(),
+                                    });
+                                    continue;
+                                }
+                            };
+                            super::content::spawn(content_listener, state.clone(), closed.clone());
+                        }
                         drop(spawn(listener, state.clone(), closed.clone()));
                         bound.lan_listeners.push(address);
                     }

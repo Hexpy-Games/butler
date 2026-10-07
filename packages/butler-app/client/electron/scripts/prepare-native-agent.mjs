@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readProductFeatures } from "../product-features.mjs";
 import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -88,6 +89,12 @@ const uiDistRoot = resolve(
     join(repositoryRoot, "packages", "butler-app", "client", "ui", "dist"),
 );
 requireFile(join(uiDistRoot, "index.html"));
+const productFeatures = readProductFeatures(uiDistRoot);
+if (process.env.BUTLER_FEATURE_BROWSER !== undefined &&
+    productFeatures.browser !== (process.env.BUTLER_FEATURE_BROWSER !== "false")) {
+  throw new Error("Renderer product features do not match this package build.");
+}
+writeFileSync(join(electronRoot, "product-features.json"), `${JSON.stringify(productFeatures)}\n`);
 requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"));
 if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).equals(readFileSync(join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt")))) {
   throw new Error("Renderer notices are stale; rebuild the App renderer.");
