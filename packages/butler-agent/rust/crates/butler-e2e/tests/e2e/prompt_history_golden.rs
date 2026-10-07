@@ -1,5 +1,5 @@
-//! Every-turn parity projections. Normalization is restricted to time, temporary
-//! sandbox paths and the live configuration hash. No identity/content stripping.
+//! Every-turn parity projections. Normalize per-run values and the exact host
+//! environment, which is asserted before normalization. No content stripping.
 use super::*;
 use sha2::{Digest, Sha256};
 
@@ -42,6 +42,10 @@ fn capture_frame(
 fn normalize(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> String {
     paths
         .hide(text)
+        .replace(
+            &butler_platform::launcher::runtime_prompt_environment(),
+            "OS: {{HOST_OS}}\nShell: {{HOST_SHELL}}",
+        )
         .split_inclusive('\n')
         .map(|line| {
             for field in [
@@ -238,6 +242,15 @@ fn loaded_sections(
             "turn {turn_id} references multiple revisions for {id}"
         );
         let loaded = super::super::agent_context::loaded_excerpt(&id, &content, &prompt);
+        if id == "runtime-system-contract" {
+            assert!(
+                loaded.contains(&format!(
+                    "## Host Environment\n{}\n",
+                    butler_platform::launcher::runtime_prompt_environment()
+                )),
+                "the complete current host environment must reach the model"
+            );
+        }
         let normalized = normalize(&loaded, placeholders);
         sections.insert(id, normalized.into());
     }

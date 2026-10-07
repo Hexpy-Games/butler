@@ -242,6 +242,26 @@ async fn interrupted_trash_waits_for_an_explicit_cleanup_after_restart() -> Resu
     );
     let resumed = uuid::Uuid::new_v4().to_string();
     let inventory = s.gw.get("/memory/inventory").await?;
+    // Exact second crash boundary: this explicit operation's acceptance is
+    // durable, but a writer takes the gate before its worker obtains it.
+    // Reposting the same operation exercises the supported receipt replay.
+    let accepted = memory.join("management/operations").join(&resumed);
+    std::fs::create_dir_all(&accepted)?;
+    std::fs::write(
+        accepted.join("receipt.json"),
+        json!({"operation_id":resumed,"inventory_revision":inventory.data()["revision"],
+            "phase":"preparing","sequence":1,"bytes_reclaimed":0,"items":[]})
+        .to_string(),
+    )?;
+    // A startup writer may still own the consolidation gate after gateway
+    // readiness. Hold that exact gate to make the acceptance/handoff race
+    // deterministic rather than relying on hosted-runner scheduling.
+    let writer = sqlite::open(
+        s.sandbox
+            .data
+            .join("cognition/consolidation/locks/consolidation.lock.coord.sqlite"),
+    )?;
+    writer.execute_batch("BEGIN IMMEDIATE")?;
     let started =
         s.gw.post(
             "/memory/cleanup",
@@ -249,6 +269,16 @@ async fn interrupted_trash_waits_for_an_explicit_cleanup_after_restart() -> Resu
         )
         .await?;
     assert_eq!(started.status, 202, "{}", started.text);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let pending = s.gw.get(&format!("/memory/cleanup/{resumed}")).await?;
+    assert_eq!(
+        pending.data()["phase"],
+        "preparing",
+        "accepted cleanup must wait for the current writer: {}",
+        pending.text
+    );
+    assert!(operation.join("trash/0").exists());
+    writer.execute_batch("COMMIT")?;
     let result = completed(&s, &resumed).await?;
     assert_eq!(result["bytes_reclaimed"], bytes);
     assert!(!operation.join("trash/0").exists());
