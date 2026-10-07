@@ -27,7 +27,8 @@ class WindowsSafety(unittest.TestCase):
     def test_native_stderr_guard_requires_continue_per_step(self):
         native = windows_safety.native_safety
         for command in ['cargo test 2>&1 | Out-Host', 'python check.py',
-                        '$result = & "job/tool.exe" --list', '& reg query key',
+                        '$result = & "job/tool.exe" --list', '& reg query key', 'reg.exe query key 2>$null',
+                        '$protocolBefore = (& reg.exe query key /s 2>$null) -join \"`n\"',
                         '$result = (& python check.py)', '& $python check.py']:
             self.assertTrue(native.script_hazards(command), command)
             safe = "$ErrorActionPreference = 'Continue'\n" + command + "\n$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }"
@@ -42,6 +43,24 @@ class WindowsSafety(unittest.TestCase):
         self.assertEqual(len(native.hazards(source, True)), 1)
         self.assertEqual(native.hazards('steps:\n  - shell: bash\n    run: python script.py\n', True), [])
         self.assertEqual(native.script_hazards('& "job/script.ps1"\n"BIN=job/test.exe" | Out-File $env:GITHUB_ENV'), [])
+
+    # test-category: security
+    def test_hosted_installed_preview_follows_registry_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflow = root / '.github/workflows/windows-preview-smoke.yml'
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text('jobs:\n  release:\n    runs-on: windows-latest\n'
+                                '    steps:\n      - run: ./deploy/probe.ps1\n')
+            probe = root / 'deploy/probe.ps1'
+            probe.parent.mkdir()
+            probe.write_text("$ErrorActionPreference = 'Stop'\n"
+                             "$before = (& reg.exe query HKCU\\Software /s 2>$null)\n"
+                             "if ($LASTEXITCODE -notin @(0,1)) { throw 'probe failed' }\n")
+            findings = windows_safety.audit(root)[1]
+            self.assertTrue(any('probe.ps1:2: PS 5.1' in item for item in findings), findings)
+            probe.write_text(probe.read_text().replace("'Stop'", "'Continue'"))
+            self.assertEqual(windows_safety.audit(root)[1], [])
 
     # test-category: security
     def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
