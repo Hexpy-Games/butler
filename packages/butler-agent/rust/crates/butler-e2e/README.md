@@ -278,7 +278,16 @@ containing the helper (including helper modules), and prints every budget's
 source location before execution. The contention binary is also retained for its
 minimum lock-hold assertion. PERF-IDLE uses its documented separate release
 `cargo test` runner, because its five-minute sampling exceeds nextest's existing
-watchdog. No budget or timeout is increased.
+watchdog. Performance budgets remain unchanged.
+
+The hooks idle observation runs in the serial perf tier with all three 60-second
+windows. Its six-minute nextest deadline accommodates the 180-second observation,
+startup, terminal retention settlement and shutdown. The Browser attached-host
+idle observation retains its full 600 seconds with a twelve-minute deadline and
+runs only against Browser-on builds. Both overrides name exactly one test.
+Release archives and E2E selection use the same product feature metadata as the
+native Agent. Browser-off builds run the public absence contract, excluding the
+enabled Browser scenarios; the hidden feature is not a release prerequisite.
 
 Budgets before PR #441's revision and after this correction (strict `<` bounds):
 
