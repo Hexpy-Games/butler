@@ -70,6 +70,13 @@ class WindowsSafety(unittest.TestCase):
     # test-category: security
     def test_owner_native_publisher_uses_powershell_not_runner_bash_alias(self):
         source = (ROOT.parents[1] / '.github/workflows/native-deps.yml').read_text()
+        for action, version in [('actions/setup-python@v5', "python-version: '3.12'"),
+                                ('dtolnay/rust-toolchain@master', 'toolchain: 1.91.0')]:
+            setup = source.split(f'- uses: {action}', 1)[1].split('- uses:', 1)[0]
+            self.assertNotIn('if:', setup)  # Service PATH need not contain owner-installed tools.
+            self.assertIn(version, setup)
+        self.assertLess(source.index('uses: actions/setup-python@v5'),
+                        source.index('uses: ./.github/actions/setup-oras'))
         owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]
         self.assertIn('if: matrix.owner', owner)
         self.assertIn('shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass', owner)
