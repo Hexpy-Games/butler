@@ -12,7 +12,7 @@ import {
   Activity01Icon, Add01Icon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
-  CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
+  CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
   Copy01Icon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
   Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
@@ -20,7 +20,7 @@ import {
   Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Task01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Task01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
@@ -51,6 +51,7 @@ export const AiChip = createIcon(AiChipIcon);
 export const AlertCircle = createIcon(AlertCircleIcon);
 export const Archive = createIcon(ArchiveIcon);
 export const CheckCircle2 = createIcon(CheckmarkCircle02Icon);
+export const CheckList = createIcon(CheckListIcon);
 export const CircleAlert = AlertCircle;
 export const CircleX = createIcon(CancelCircleIcon);
 export const ListFilter = createIcon(FilterIcon);
@@ -120,6 +121,7 @@ export const Server = createIcon(ServerStack01Icon);
 export const Settings = createIcon(Settings01Icon);
 export const ShieldCheck = createIcon(SecurityCheckIcon);
 export const ShieldQuestion = createIcon(SecurityIcon);
+export const ShieldEnergy = createIcon(ShieldEnergyIcon);
 export const SlidersHorizontal = createIcon(SlidersHorizontalIcon);
 export const Sparkles = createIcon(StarIcon);
 export const Square = createIcon(SquareIcon);

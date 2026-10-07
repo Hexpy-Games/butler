@@ -136,7 +136,7 @@ test("one row per saved key: provider logo, masked key, models using it and wher
   await render({}, async ({ container }) => {
     // The section sits under Backup models on the Models page.
     const ids = Array.from(container.querySelectorAll("[data-settings-section-id]")).map((item) => item.getAttribute("data-settings-section-id"));
-    expect(ids.slice(0, 4)).toEqual(["remote-access", "permissions", "grants", "saved-keys"]);
+    expect(ids.slice(0, 4)).toEqual(["remote-access", "grants", "saved-keys", "diagnostics"]);
     const section = container.querySelector('[data-settings-section-id="saved-keys"]')!;
     expect(section.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe("API keys");
     const [openai, anthropic, google] = rows(container);
@@ -157,7 +157,7 @@ test("an agent without the key routes hides the section", async () => {
   const missing = () => ({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: "not_found", status: 404 } });
   await render({ listCredentials: missing }, async ({ container }) => {
     expect(container.querySelector('[data-settings-section-id="saved-keys"]')).toBeNull();
-    expect(container.querySelector('[data-settings-section-id="permissions"]')).not.toBeNull();
+    expect(container.querySelector('[data-settings-section-id="grants"]')).not.toBeNull();
   });
 });
 

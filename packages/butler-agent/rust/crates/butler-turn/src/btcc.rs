@@ -33,7 +33,11 @@ mod work;
 
 use std::sync::Arc;
 
-pub use access::{ApprovalExemptAction, stored_binding_access_mode};
+pub use access::{
+    AccessDecision, AccessRequest, ApprovalExemptAction, CapabilityKind, CommandSandbox,
+    DenyReason, FullOnlyAction, GrantUse, TargetScope, TurnTaint, command_access_risk,
+    command_scope_unresolved, decide, needs_scope, stored_binding_access_mode,
+};
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,

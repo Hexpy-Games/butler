@@ -110,7 +110,7 @@ pub(super) fn sanitize(
     if input
         .get("access_mode")
         .and_then(Value::as_str)
-        .is_some_and(|value| matches!(value, "full_access" | "ask_first" | "read_only"))
+        .is_some_and(|value| butler_turn::btcc::AccessMode::parse(value).is_some())
     {
         output.insert("access_mode".into(), input["access_mode"].clone());
     }

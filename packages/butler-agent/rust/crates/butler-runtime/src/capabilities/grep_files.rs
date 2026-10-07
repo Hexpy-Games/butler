@@ -101,7 +101,7 @@ pub(super) async fn execute(
             root: PathBuf::from(&workspace_root),
             requested_root: options.root.clone(),
             path_form: super::arguments::path_form(&input),
-            protected_roots: input.protected_ledger_roots.to_vec(),
+            protected_roots: super::arguments::read_protected_roots(&input),
             include_globs: options.include.clone(),
             exclude_globs: options.exclude.clone(),
             after_path: position.as_ref().map(|cursor| cursor.scan_path.clone()),
@@ -139,7 +139,7 @@ pub(super) async fn execute(
     };
     let searched = search::execute(
         workspace,
-        PathBuf::from(&workspace_root),
+        arguments::read_context(&input, PathBuf::from(&workspace_root)),
         &listed,
         matcher,
         &options,

@@ -88,7 +88,7 @@ describe("composer model truth", () => {
     expect(result.metadata).toBeUndefined();
   });
 
-  test("new chats default to ask_first and keep a chosen access mode", () => {
+  test("new chats default to ask_except_reads and keep a chosen access mode", () => {
     const input = {
       catalog: HARNESS_MODEL_CATALOG,
       catalogState: "ready",
@@ -96,7 +96,7 @@ describe("composer model truth", () => {
       controlsState: "ready",
       planModeAvailable: false,
     } as const;
-    expect(resolveComposerModelTruth({ ...input, settings: EMPTY_SETTINGS }).accessMode).toBe("ask_first");
+    expect(resolveComposerModelTruth({ ...input, settings: EMPTY_SETTINGS }).accessMode).toBe("ask_except_reads");
     expect(
       resolveComposerModelTruth({ ...input, settings: { ...EMPTY_SETTINGS, access_mode: "full_access" } }).accessMode,
     ).toBe("full_access");

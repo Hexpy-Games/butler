@@ -1,5 +1,6 @@
 //! All current scenarios share one integration-test link.
 mod access;
+mod access_tiers;
 mod agent_context;
 mod agent_exit;
 mod alias_index_drop;

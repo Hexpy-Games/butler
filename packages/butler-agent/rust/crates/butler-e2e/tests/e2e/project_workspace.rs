@@ -40,7 +40,7 @@ fn selection(s: &Scenario, path: &Path) -> Result<String, HarnessError> {
     ))
 }
 
-async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, HarnessError> {
+pub(super) async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, HarnessError> {
     let token = selection(s, folder)?;
     s.patch_settings(
         json!({"default_project_folder_selection_token":token}),
@@ -195,7 +195,7 @@ async fn workspace_case(long: bool) -> Result<(), HarnessError> {
     } else {
         "PROJECT-WORKSPACE"
     })?
-    .access(Access::AskFirst);
+    .access(Access::AskAlways);
     let mut folder = setup.sandbox.workspace.join("선택 Project");
     if long {
         for _ in 0..5 {

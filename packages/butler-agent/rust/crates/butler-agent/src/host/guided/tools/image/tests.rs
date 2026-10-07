@@ -8,7 +8,8 @@ use butler_turn::btcc::{AccessMode, ToolExecutionError};
 fn image_analysis_runs_in_full_access_and_ask_first_never_in_read_only() {
     for (access, allowed) in [
         (AccessMode::FullAccess, true),
-        (AccessMode::AskFirst, true),
+        (AccessMode::AskAlways, true),
+        (AccessMode::AskExceptReads, true),
         (AccessMode::ReadOnly, false),
     ] {
         match require_analysis_access(&access) {

@@ -30,10 +30,11 @@ test("each schedule row shows its access mode with the composer's icon and label
         onNewAutomation={() => undefined}
       />,
     );
-    expect(row("ask_first")).toContain("enabled / 1 hour / 먼저 확인");
+    expect(row("ask_first")).toContain("enabled / 1 hour / 모두 확인");
+    expect(row("ask_except_reads")).toContain("enabled / 1 hour / 먼저 확인");
     expect(row("full_access")).toContain("enabled / 1 hour / 전체 권한");
     expect(row("read_only")).toContain("enabled / 1 hour / 읽기 전용");
-    for (const mode of ["ask_first", "full_access", "read_only"] as const) {
+    for (const mode of ["ask_first", "ask_except_reads", "full_access", "read_only"] as const) {
       expect(row(mode)).toContain(renderToStaticMarkup(accessModeIcon(mode)));
     }
   } finally {

@@ -37,7 +37,15 @@ pub(super) async fn execute(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if call.name == ToolName::ForgetExplicitMemory
-        && owner.binding.access_mode != butler_turn::btcc::AccessMode::FullAccess
+        && matches!(
+            super::access::for_kind(
+                owner,
+                butler_turn::btcc::CapabilityKind::FullOnly(
+                    butler_turn::btcc::FullOnlyAction::MemoryForget
+                )
+            ),
+            butler_turn::btcc::AccessDecision::Deny(_)
+        )
     {
         return encoded(&failure(
             "memory_write_requires_full_access",
