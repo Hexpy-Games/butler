@@ -47,18 +47,13 @@ async fn group(
             Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
             None => document.content,
         };
-        documents.push((
-            document.source_id,
-            document.projection_class,
-            content,
-            history,
-        ));
+        documents.push((document.source_id, content, history));
     }
-    documents.sort_by_key(|(source, _, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
+    documents.sort_by_key(|(source, _, _)| std::cmp::Reverse(super::excerpts::priority(source)));
     let count = documents.len();
     let mut remaining = limit;
     let mut contents = Vec::new();
-    for (index, (source, kind, content, history)) in documents.into_iter().enumerate() {
+    for (index, (source, content, history)) in documents.into_iter().enumerate() {
         // Keep room for a deterministic omission marker for every later source.
         let reserve = (count - index - 1) * 160;
         let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
@@ -78,7 +73,7 @@ async fn group(
         };
         if !value.trim().is_empty() {
             contents.push(DocumentSection {
-                stage: stage(&kind, &source),
+                stage: stage(&source),
                 id: source,
                 text: value.clone(),
                 budget_text: charged.clone(),
@@ -337,20 +332,11 @@ pub(super) struct DocumentSection {
     pub budget_text: String,
 }
 
-fn stage(kind: &str, id: &str) -> Stage {
-    // Owner's cross-turn measurement: profile, rules (~11 KB), optional docs
-    // and feedback change <10%; the other mandatory/runtime docs change 30-100%.
-    // Classify by admitted kind/id after applying main's shared group budgets.
+fn stage(id: &str) -> Stage {
+    // Retrieved context, feedback and remembered rules can change when a turn
+    // completes. Only fixed headings and exact project instructions precede history.
     if id == "recent-conversation" {
         Stage::History
-    } else if matches!(
-        id,
-        "runtime-state" | "inbound-message" | "current-attachments"
-    ) {
-        Stage::Volatile
-    } else if id == "rules" || matches!(kind, "profile" | "optional_hot_cache" | "recent_feedback")
-    {
-        Stage::Stable
     } else {
         Stage::Volatile
     }
