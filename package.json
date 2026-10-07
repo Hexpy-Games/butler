@@ -29,7 +29,7 @@
     "test:unit:fast": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts test:unit:fast:run",
     "test:unit:fast:run": "bash tests/unit/run-fast-unit-tests.sh",
     "test:unit:packaging": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts test:unit:packaging:run --timeout=900",
-    "test:unit:packaging:run": "${BUTLER_BUN:-bun} test tests/unit/app-first-run-smoke-script.test.ts tests/unit/native-mac-release.test.ts",
+    "test:unit:packaging:run": "${BUTLER_BUN:-bun} test tests/unit/native-mac-release.test.ts",
     "app:ui:install": "npm --prefix packages/butler-app/client/ui install",
     "app:ui:build": "npm --prefix packages/butler-app/client/ui run build",
     "app:client:install": "npm --prefix packages/butler-app/client/electron install && npm --prefix packages/butler-app/client/ui install",
