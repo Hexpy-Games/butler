@@ -2,6 +2,9 @@
 
 mod admission;
 mod codec;
+#[cfg(feature = "test-support")]
+#[path = "conversation/tests/db_load.rs"]
+mod db_load;
 mod error;
 mod historical_origin;
 mod historical_recovery;

@@ -8,6 +8,18 @@ pub(super) fn material(
     ids: &[String],
     epoch: f64,
 ) -> ConversationResult<PromptMaterial> {
+    if ids.is_empty() {
+        return Ok(PromptMaterial {
+            session_id: session.into(),
+            summaries: vec![],
+            semantic_tail: vec![],
+            current_turn: vec![],
+            turns: vec![],
+            outcomes: vec![],
+            token_estimate: 0,
+            provenance: vec![],
+        });
+    }
     let ids = serde_json::to_string(ids).map_err(ConversationError::json)?;
     let (turns, outcomes) = metadata(db, &ids)?;
     let mut by_turn = messages(db, session, &ids, epoch, None, false)?;
@@ -127,6 +139,7 @@ fn push(
     }
 }
 
+#[cfg(feature = "test-support")]
 pub(super) fn budget_material(
     db: &Connection,
     session: &str,

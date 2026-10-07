@@ -347,7 +347,11 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
     let main = compile_prompt_material_context_plan(&raw, &options)
         .unwrap()
         .rendered;
-    let budget = compile_prompt_material_context_plan(&window.budget_material, &options)
+    let budget_material = conversation
+        .read_history_budget_material("session", 16_000)
+        .await
+        .unwrap();
+    let budget = compile_prompt_material_context_plan(&budget_material, &options)
         .unwrap()
         .rendered;
     assert_eq!(

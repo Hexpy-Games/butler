@@ -8,11 +8,26 @@ mod load;
 pub struct HistoryWindow {
     pub material: PromptMaterial,
     pub digest: String,
-    pub budget_material: PromptMaterial,
     pub late_turn_ids: Vec<String>,
 }
 
 impl AgentConversationStore {
+    /// Diagnostic budget geometry is opt-in; admission never reads it twice.
+    #[cfg(feature = "test-support")]
+    pub async fn read_history_budget_material(
+        &self,
+        session: &str,
+        cap: usize,
+    ) -> ConversationResult<PromptMaterial> {
+        let session = session.to_owned();
+        self.execute(move |db| {
+            budget::register(db)?;
+            let summaries = valid_summaries(db, &session)?;
+            load::budget_material(db, &session, cap, &summaries)
+        })
+        .await
+    }
+
     pub async fn read_history_window(
         &self,
         session: &str,
@@ -21,6 +36,9 @@ impl AgentConversationStore {
         let session = session.to_owned();
         self.execute(move |db| {
             let before = db.total_changes();
+            #[cfg(feature = "test-support")]
+            let window = super::db_load::measure(db, "history", |db| read(db, &session, cap))?;
+            #[cfg(not(feature = "test-support"))]
             let window = read(db, &session, cap)?;
             if std::env::var("BUTLER_E2E_VERIFY_HISTORY_WRITES").as_deref() == Ok("1") {
                 eprintln!(
@@ -62,11 +80,9 @@ pub(super) fn read(
         sizes.get(..start).unwrap_or_default(),
         cap / 10,
     )?;
-    let budget_material = load::budget_material(db, session, cap, &material.summaries)?;
     Ok(HistoryWindow {
         material,
         digest,
-        budget_material,
         late_turn_ids,
     })
 }
@@ -117,8 +133,11 @@ fn completed_sizes(
          FROM (SELECT m.turn_id,SUM(CASE WHEN p.kind IN ('tool_call','tool_result') \
          THEN 160 ELSE octet_length(p.content_json)+64 END) bytes,MIN(CASE WHEN m.role='user' AND p.kind='text' THEN m.seq END) request_seq, \
          MIN(CASE WHEN m.role='assistant' AND m.status IN ('complete','compacted') THEN m.seq END) terminal_seq \
-         FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
-         WHERE m.session_id=?1 AND m.seq>?2 GROUP BY m.turn_id) s \
+         FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \
+         JOIN conversation_parts p ON p.message_id=m.id \
+         WHERE m.session_id=?1 AND m.seq>?2 \
+         AND EXISTS (SELECT 1 FROM conversation_turns completed WHERE completed.id=m.turn_id \
+         AND completed.completed_at IS NOT NULL) GROUP BY m.turn_id) s \
          JOIN conversation_turns t ON t.id=s.turn_id \
          LEFT JOIN conversation_turn_outcomes o ON o.turn_id=t.id \
          LEFT JOIN conversation_messages final ON final.id=o.public_assistant_message_id \
@@ -156,7 +175,8 @@ fn dropped_digest(
     let mut used = 0;
     // Only the newest digest entries can fit; do not inspect the rest of the range.
     let mut query = db.prepare("SELECT substr(json_extract(p.content_json,'$.text'),1,160) \
-        FROM conversation_messages m JOIN conversation_parts p ON p.message_id=m.id \
+        FROM conversation_messages m INDEXED BY conversation_messages_session_seq_idx \
+         JOIN conversation_parts p ON p.message_id=m.id \
         WHERE m.session_id=?1 AND m.seq=?2 AND m.role='user' AND p.kind='text' ORDER BY p.part_index LIMIT 1")
         .map_err(ConversationError::sqlite)?;
     for (id, _, request_seq) in dropped.iter().rev() {

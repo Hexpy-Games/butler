@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::codec::bump_public_revision;
 use super::types::*;
@@ -98,16 +98,26 @@ impl AgentConversationStore {
         let gateway = gateway.to_owned();
         let external_session_id = external_session_id.to_owned();
         self.execute(move |connection| {
-            connection
-                .query_row(
-                    "SELECT s.* FROM conversation_sessions s JOIN conversation_bindings b \
+            let read = |connection: &mut Connection| {
+                connection
+                    .query_row(
+                        "SELECT s.* FROM conversation_sessions s JOIN conversation_bindings b \
                      ON b.conversation_session_id=s.id WHERE b.gateway=?1 \
                      AND b.external_session_id=?2 LIMIT 1",
-                    params![gateway, external_session_id],
-                    session_row,
-                )
-                .optional()
-                .map_err(ConversationError::sqlite)
+                        params![gateway, external_session_id],
+                        session_row,
+                    )
+                    .optional()
+                    .map_err(ConversationError::sqlite)
+            };
+            #[cfg(feature = "test-support")]
+            {
+                super::db_load::measure(connection, "history-binding", read)
+            }
+            #[cfg(not(feature = "test-support"))]
+            {
+                read(connection)
+            }
         })
         .await
     }

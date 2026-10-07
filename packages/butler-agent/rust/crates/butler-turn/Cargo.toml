@@ -28,7 +28,7 @@ regress.workspace = true
 
 [features]
 # Exposes BTCC fixtures to scenario tests in dependent crates.
-test-support = []
+test-support = ["rusqlite/trace"]
 
 [dev-dependencies]
 butler-test-support = { path = "../butler-test-support" }

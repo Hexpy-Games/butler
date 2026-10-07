@@ -98,6 +98,10 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         .env("BUTLER_CODEX_BASE_URL", url)
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env(
+            "BUTLER_E2E_DB_LOAD",
+            std::env::var("BUTLER_E2E_DB_LOAD").unwrap_or_default(),
+        )
+        .env(
             "BUTLER_E2E_VERIFY_HISTORY_WRITES",
             if verify { "1" } else { "0" },
         );
@@ -259,6 +263,12 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         db.query_row::<u64, _, _>("SELECT COUNT(*) FROM conversation_summaries", [], |row| row
             .get(0))?
     );
+    if std::env::var("BUTLER_E2E_DB_LOAD").as_deref() == Ok("1") {
+        let log = std::fs::read_to_string(s.sandbox.logs.join("agent-1.log"))?;
+        for line in log.lines().filter(|line| line.contains("DB_LOAD ")) {
+            eprintln!("PROMPT {line}");
+        }
+    }
     s.finish().await?;
     server.abort();
     Ok(())
