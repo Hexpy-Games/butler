@@ -21,6 +21,13 @@ pub(super) async fn once(
         let _refreshing = butler_core::configuration::lock_file_async(&owner.butler_profile_path())
             .await
             .map_err(|source| {
+                if let butler_core::configuration::ConfigError::LockFailed(os) = &source {
+                    eprintln!(
+                        "[oauth-profile-lock] kind={:?} os_code={:?}",
+                        os.kind(),
+                        os.raw_os_error()
+                    );
+                }
                 error(
                     "provider_auth_lock_failed",
                     "OpenAI auth profile could not be locked.",

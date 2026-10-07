@@ -261,7 +261,9 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
     let setup = Setup::new("CODEX-PERSISTENT-REFRESH")?
         .cassette("USE-02")
         .quota_polling();
-    let path = setup.sandbox.root.join("auth.json");
+    let folder = setup.sandbox.home.join(".butler-e2e-auth");
+    std::fs::create_dir_all(&folder)?;
+    let path = folder.join("auth.json");
     let expired = format!(
         "e30.{}.signature",
         base64url(json!({"exp":1}).to_string().as_bytes())
@@ -276,6 +278,16 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
                 "unknown_token_field":"keep"}
         }))?,
     )?;
+    let original: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    // An aborted forced refresh must restore the missing expiry field without
+    // changing any credentials or unknown Codex fields (never print them).
+    drop(super::live::profile::ExpiryProbe::begin(path.clone())?);
+    let restored: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    assert!(
+        restored == original,
+        "aborted expiry probe changed the profile"
+    );
+    let probe = super::live::profile::ExpiryProbe::begin(path.clone())?;
     let mut s = setup
         .env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string())
         .env(
@@ -289,6 +301,10 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
             .await?;
     assert_eq!(reply.status, 200);
     assert_eq!(reply.data()["available"], true);
+    probe.verify(
+        chrono::DateTime::parse_from_rfc3339(butler_e2e::e2e::fixtures::FIXTURE_TIME)?
+            .timestamp_millis(),
+    )?;
     let saved = std::fs::read(&path)?;
     let auth: Value = serde_json::from_slice(&saved)?;
     assert_ne!(auth["tokens"]["access_token"], expired);
