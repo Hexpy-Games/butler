@@ -1650,6 +1650,7 @@ function progressStateRank(state: string): number {
 export function activeChatFromNavigation(
   navigation: NavigationView,
   activeChatId: string,
+  fallbackTitle?: string,
 ): ActiveChatView {
   const draft = parseDraftChatId(activeChatId);
   if (draft.kind === "chat") {
@@ -1692,8 +1693,8 @@ export function activeChatFromNavigation(
     }
   }
   return {
-    title: appCopy.interfaceTemplates.homeTitle,
-    shortTitle: appCopy.interfaceFeedback.newChat,
+    title: fallbackTitle || appCopy.interfaceTemplates.homeTitle,
+    shortTitle: fallbackTitle || appCopy.interfaceFeedback.newChat,
     project: "",
   };
 }

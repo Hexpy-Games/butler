@@ -114,6 +114,9 @@ async function capture(width: number, theme: "light" | "dark") {
     await shot(page, cell, "archives");
     await page.getByRole("button", { name: archived.title, exact: true }).click();
     await page.getByText("비우기 전 대화입니다.", { exact: true }).waitFor();
+    await page.locator('[data-test-class="titlebar-title"]').filter({ hasText: archived.title }).waitFor();
+    assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), archived.title);
+    await shot(page, cell, "opened-archive");
   } finally { await browser.close(); await server.stop(); rmSync(dir, { recursive: true, force: true }); }
 }
 for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) await capture(width, theme);

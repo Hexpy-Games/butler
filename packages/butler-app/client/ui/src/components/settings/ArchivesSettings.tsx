@@ -109,7 +109,7 @@ export function ArchivesSettings() {
           <ArchiveItemRow
             key={`${item.kind}:${item.id}`}
             item={item}
-            onOpen={item.kind === "session" ? () => useButlerStore.getState().openSession(item.id) : undefined}
+            onOpen={item.kind === "session" ? () => useButlerStore.getState().openSession(item.id, item.title) : undefined}
             busy={busyId === item.id}
             onRestore={() => void restore(item)}
             onRemove={() => void remove(item)}

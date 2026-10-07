@@ -146,6 +146,7 @@ interface ButlerStore {
   view: AppView;
   settingsReturnView: AppView;
   activeChatId: string;
+  activeChatTitle?: string;
   navigation: NavigationView;
   navigationGeneration: number;
   messages: MessageRecord[];
@@ -229,7 +230,7 @@ interface ButlerStore {
   setCommandOpen: (commandOpen: boolean) => void;
   setRenameProject: (renameProject: ProjectSummary | null) => void;
   setRenameSession: (renameSession: SessionSummary | null) => void;
-  openSession: (chatId: string) => void;
+  openSession: (chatId: string, sessionTitle?: string) => void;
   openNewChat: () => void;
   openNewProjectChat: (projectId: string) => void;
   startProjectChatWithDocument: (
@@ -1270,7 +1271,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setRenameProject: (renameProject) => set({ renameProject }),
   setRenameSession: (renameSession) => set({ renameSession }),
 
-  openSession: (chatId) =>
+  openSession: (chatId, sessionTitle) =>
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
       const storedSessionView = state.sessionViews[chatId] ?? null;
@@ -1292,6 +1293,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,
         observerSessionId: null,
