@@ -143,7 +143,7 @@ try {
   assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
   console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls.chat + calls.memory,
     chatCalls: calls.chat, memoryCalls: calls.memory,
-    normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
+    normalInstallLaunch: true, windowCloseQuit: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
   failed = true;
@@ -166,20 +166,29 @@ try {
 }
 
 async function cleanupInstaller() {
-  page?.close();
-  ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
+  const errors: unknown[] = [];
   try {
+    page?.close();
+    const capture = readJson(resolve("dist/startup-installer-evidence/install/capture-process.json"));
+    if (Number.isInteger(capture?.setup_pid) && alive(capture!.setup_pid)) {
+      const started = powershell(`$process = Get-Process -Id $env:BUTLER_INSTALLER_SETUP_PID -ErrorAction SilentlyContinue
+        if ($process) { $process.StartTime.ToUniversalTime().ToString('o') }`,
+      { ...env, BUTLER_INSTALLER_SETUP_PID: String(capture!.setup_pid) });
+      if (started === capture!.started_at) owned.add(capture!.setup_pid);
+    }
+    ownedProcesses(data, owned);
+    for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+    await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
     if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
-  } catch (error) {
-    if (!failed) throw error;
-    console.error(`Installer cleanup failed after the original error: ${String(error)}`);
-  } finally {
-    preserveInstallerLogs(root, installed, env, phase, "cleanup");
-    server.stop(true);
-    removeProfile(root, env);
+  } catch (error) { errors.push(error); }
+  for (const action of [
+    () => preserveInstallerLogs(root, installed, env, phase, "cleanup"),
+    () => server.stop(true), () => removeProfile(root, env),
+  ]) {
+    try { action(); } catch (error) { errors.push(error); }
   }
+  for (const error of errors) console.error(`Installer cleanup failed: ${String(error)}`);
+  if (errors.length && !failed) throw errors[0];
 }
 
 function memoryState() {
@@ -297,21 +306,47 @@ async function shellFeatures(sessionId: string) {
     const value = powershell("[string](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env);
     assert.equal(value.includes(stub), enabled);
   }
-  phase = "close to tray";
-  const closeButton = "document.querySelector('[data-test-class=\"app-window-close\"]')";
-  await waitFor(async () => await page!.expression(`Boolean(${closeButton})`), "native close button");
-  await page!.expression(`${closeButton}.click(); true`);
-  await waitFor(async () => await page!.expression("document.visibilityState === 'hidden'"), "close to tray");
-  assert.equal((await bridge(page!, "health")).ok, true);
+  await windowCloseAndRelaunch(sessionId);
   phase = "native notification";
   const notification = await bridge(page!, "testDesktopNotification");
   assert.equal(notification.shown, true); assert.equal(notification.status.last_error, null);
   assert.ok(notification.status.last_shown_at, "Native notification show event missing");
   phase = "deep link";
   await page!.expression("window.__navigation = null; window.butlerApp.onNativeNavigation(value => window.__navigation = value); true");
+  await page!.expression("document.querySelector('[data-test-class=\"app-window-minimize\"]').click(); true");
+  await waitFor(async () => await page!.expression("document.visibilityState === 'hidden'"), "minimized window");
   powershell("Start-Process $env:BUTLER_DEEP_LINK", { ...env, BUTLER_DEEP_LINK: `butler://session/${sessionId}` });
   await waitFor(async () => await page!.expression(`window.__navigation?.sessionId === ${JSON.stringify(sessionId)}`), "registered deep link dispatch");
   await waitFor(async () => await page!.expression("document.visibilityState === 'visible'"), "deep link restores window");
+}
+
+async function windowCloseAndRelaunch(sessionId: string) {
+  phase = "window close and relaunch";
+  const previous = readJson(join(data, "app/runtime/foreground/instance.json"))!;
+  ownedProcesses(data, owned);
+  const closeButton = "document.querySelector('[data-test-class=\"app-window-close\"]')";
+  await waitFor(async () => await page!.expression(`Boolean(${closeButton})`), "native close button");
+  // Windows X uses the normal Quit path, including foreground Agent shutdown.
+  await page!.expression(`setTimeout(() => ${closeButton}.click(), 50); true`);
+  page!.close(); page = null;
+  await waitFor(() => [...owned].every(pid => !alive(pid)), "window close shuts down App and Agent");
+  const stopped = readJson(join(data, "app/runtime/foreground/instance.json"))!;
+  assert.equal(stopped.state, "stopped"); assert.equal(stopped.clean_exit, true);
+  const exit = readJson(join(data, "app/runtime/foreground/last-exit.json"))!;
+  assert.equal(exit.generation, previous.generation); assert.equal(exit.exit_reason, "app_quit");
+  assert.equal(exit.graceful, true); assert.equal(exit.process_tree_dead, true); assert.equal(exit.port_released, true);
+  const app = spawn(stub, [], { env, stdio: "ignore" });
+  if (app.pid) owned.add(app.pid);
+  await waitFor(() => {
+    const instance = readJson(join(data, "app/runtime/foreground/instance.json"));
+    return instance?.state === "ready" && instance.app_pid !== previous.app_pid;
+  }, "replacement foreground Agent after window close");
+  page = await electronPage(debugPort);
+  await proof(from);
+  const messages = (await bridge(page, "listMessages", { chatId: sessionId })).messages;
+  assert.equal(messages.length, 2); assert.equal(messages[0].text, "Reply with Windows update ready.");
+  assert.equal(messages[1].text, "Windows update ready.");
+  assert.equal(calls.chat, 1); assert.equal(calls.memory, 2);
 }
 
 async function settingsUpdate() {
