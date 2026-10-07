@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { freePort, nativeAgentExecutable, readLocalAuthToken, writeOnboardingComplete } from "../support/native-app-server.ts";
+import { freeGatewayPort, nativeAgentExecutable, readLocalAuthToken, writeOnboardingComplete } from "../support/native-app-server.ts";
 
 export async function quitFixture() {
   // Validate inputs before allocating the profile or starting a model server.
@@ -54,7 +54,8 @@ export async function quitFixture() {
     models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${modelPort}`, context_window_tokens: 128000 }] },
     metrics: { enabled: false },
   }));
-  const port = await freePort();
+  // The gateway needs API + 1 too; ephemeral inspector ports can be adjacent.
+  const port = await freeGatewayPort();
   const inherited = new Set(["PATH", "TMPDIR", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TZ", "DISPLAY", "XAUTHORITY"]);
   const env: Record<string, string> = {
     ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => inherited.has(entry[0]) && typeof entry[1] === "string")),
