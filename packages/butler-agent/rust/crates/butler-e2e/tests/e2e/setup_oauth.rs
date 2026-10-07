@@ -319,6 +319,8 @@ async fn dedicated_codex_profile_refresh_survives_restart() -> Result<(), Harnes
             .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?
             .timestamp_millis(),
     )?;
+    // Even a failed post-refresh check must preserve the rotated login.
+    assert!(probe.verify(i64::MAX).is_err());
     drop(probe);
     let saved = std::fs::read(&path)?;
     let auth: Value = serde_json::from_slice(&saved)?;
