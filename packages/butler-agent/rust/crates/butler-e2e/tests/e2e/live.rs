@@ -338,11 +338,23 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
     // Check the sibling lock before mutating the in-place login. The guard
     // restores only expiry on failure, preserving any rotated credentials.
     let probe = profile::ExpiryProbe::begin(path)?;
-    let s = Setup::new("LIVE-10")?.live(provider).start().await?;
-    let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    probe.verify(chrono::Utc::now().timestamp_millis())?;
-    s.finish().await?;
+    let mut s = Setup::new("LIVE-10")?.live(provider).start().await?;
+    let result = async {
+        let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
+        if turn_state(&turn) != "delivered" {
+            return Err(butler_e2e::e2e::harness_error(
+                "refresh turn was not delivered",
+            ));
+        }
+        probe.verify(chrono::Utc::now().timestamp_millis())
+    }
+    .await;
+    // Resolve expiry under the refresh gate while the agent is still alive.
+    // Dropping the scenario first would kill an in-flight token publication.
     drop(probe);
+    let stopped = s.agent.terminate().await;
+    result?;
+    stopped?;
+    s.finish().await?;
     done("LIVE-10")
 }

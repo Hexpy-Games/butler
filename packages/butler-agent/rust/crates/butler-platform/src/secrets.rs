@@ -356,7 +356,7 @@ fn store_error(error: keyring_core::Error) -> SecretError {
 /// Released when dropped.
 #[derive(Debug)]
 pub struct ChangeLock {
-    _file: File,
+    file: File,
 }
 
 impl ChangeLock {
@@ -369,14 +369,17 @@ impl ChangeLock {
         {
             secure_fs::create_private_dir_all(parent)?;
         }
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        let _ = secure_fs::owner_only(&mut options);
-        let file = options.open(path)?;
+        let file = Self::open(path)?;
+        if !file.metadata()?.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "change gate must be a file",
+            ));
+        }
         let deadline = Instant::now() + timeout;
         loop {
             match file.try_lock() {
-                Ok(()) => return Ok(Self { _file: file }),
+                Ok(()) => return Ok(Self { file }),
                 Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
@@ -389,6 +392,32 @@ impl ChangeLock {
                 Err(TryLockError::Error(error)) => return Err(error),
             }
         }
+    }
+
+    fn open(path: &Path) -> io::Result<File> {
+        // Locking does not write the file. In particular, Windows LockFileEx
+        // accepts a read handle; demanding write access to an existing gate
+        // can reject an otherwise usable persistent OAuth profile.
+        match File::open(path) {
+            Ok(file) => Ok(file),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let mut options = OpenOptions::new();
+                options.read(true).write(true).create_new(true);
+                let _ = secure_fs::owner_only(&mut options);
+                match options.open(path) {
+                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => File::open(path),
+                    result => result,
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl Drop for ChangeLock {
+    fn drop(&mut self) {
+        // Unlock before closing: Windows may defer release on handle closure.
+        let _ = self.file.unlock();
     }
 }
 

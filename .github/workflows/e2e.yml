@@ -151,6 +151,18 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Verify persistent profile refresh with a stub
+        env:
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_SKIP_BUILD: "1"
+          BUTLER_E2E_RECORD: "0"
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e setup_oauth::dedicated_codex_profile_refresh_survives_restart -- --test-threads=1
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run the live tier
         env:
           BUTLER_E2E_RECORD: ${{ github.event_name == 'workflow_dispatch' && inputs.record_cassettes && '1' || '0' }}
@@ -160,6 +172,25 @@ jobs:
           BUTLER_E2E_REPORT: ${{ env.OWNER_JOB_ROOT }}/e2e-live-report.txt
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
+          # Diagnose access to the sibling gate without locking or modifying
+          # the persistent profile, exposing paths, ACL identities or tokens.
+          $gate = "$env:BUTLER_E2E_CODEX_AUTH_JSON.lock"
+          Write-Output "::add-mask::$gate"
+          if (Test-Path -LiteralPath $gate -PathType Leaf) {
+            foreach ($access in @([IO.FileAccess]::Read, [IO.FileAccess]::ReadWrite)) {
+              try {
+                $handle = [IO.File]::Open($gate, [IO.FileMode]::Open, $access,
+                  ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+                $handle.Dispose()
+                Write-Output "OAuth gate open: access=$access accepted=true"
+              } catch {
+                $cause = $_.Exception
+                while ($cause.InnerException) { $cause = $cause.InnerException }
+                $code = $cause.HResult -band 0xffff
+                Write-Output "OAuth gate open: access=$access accepted=false code=$code"
+              }
+            }
+          }
           $ErrorActionPreference = 'Continue'
           $filter = 'live::'
           if ($env:BUTLER_E2E_RECORD -eq '1') { $filter = 'live::live_09_cassette_drift' }
