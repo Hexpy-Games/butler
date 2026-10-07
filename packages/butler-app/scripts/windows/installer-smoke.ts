@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -30,6 +30,7 @@ const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const downloads: DownloadsProof = { requests: 0 };
 const downloadsCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
+let failed = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
 const artifact = manifest.artifacts.find((item: any) => item.platform === "windows-x64");
@@ -65,7 +66,8 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 const debugPort = await freePort();
 const agentPort = await freePort();
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
-  LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
+  LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"), BUTLER_SECRET_STORE: "file",
+  SQUIRREL_TEMP: join(root, "home/AppData/Local"), TEMP: join(root, "tmp"), TMP: join(root, "tmp"),
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
@@ -73,7 +75,8 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERP
   BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_WINDOWS_SMOKE_MANIFEST ?? `http://127.0.0.1:${server.port}/manifest.json`,
   BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
-const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
+const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData', [Environment+SpecialFolderOption]::DoNotVerify)", env), "butler-app");
+assert.equal(resolve(dirname(installed)).toLowerCase(), resolve(env.LOCALAPPDATA).toLowerCase(), "Squirrel and App local profile must agree");
 const stub = join(installed, "Butler.exe");
 const updater = join(installed, "Update.exe");
 const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
@@ -143,6 +146,8 @@ try {
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
+  failed = true;
+  preserveInstallerLogs(root, installed, env, phase);
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
     providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
     memoryState: memoryState(),
@@ -157,13 +162,24 @@ try {
   if (existsSync(join(data, "updates/app-install.log"))) console.error(readFileSync(join(data, "updates/app-install.log"), "utf8"));
   throw error;
 } finally {
+  await cleanupInstaller();
+}
+
+async function cleanupInstaller() {
   page?.close();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
-  if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
-  server.stop(true);
-  removeProfile(root, env);
+  try {
+    if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
+  } catch (error) {
+    if (!failed) throw error;
+    console.error(`Installer cleanup failed after the original error: ${String(error)}`);
+  } finally {
+    preserveInstallerLogs(root, installed, env, phase, "cleanup");
+    server.stop(true);
+    removeProfile(root, env);
+  }
 }
 
 function memoryState() {
@@ -211,7 +227,7 @@ async function oneClickLaunch() {
 }
 
 function prepare() {
-  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
+  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "retained");
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
     metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
@@ -226,7 +242,11 @@ function run(command: string, args: string[]) {
     const expected = readFileSync(command + ".sha256", "utf8").trim().split(/\s+/u)[0];
     assert.equal(digest(command), expected, "Baseline installer checksum");
   }
-  const child = spawnSync(command, args, { env, stdio: "ignore" });
+  const child = spawnSync(command, args, { env, encoding: "utf8" });
+  if (child.status !== 0) {
+    console.error(JSON.stringify({ phase, command, args, status: child.status,
+      error: child.error?.message, stdout: child.stdout, stderr: child.stderr }));
+  }
   assert.equal(child.status, 0, `${command}: exit ${child.status}`);
 }
 
