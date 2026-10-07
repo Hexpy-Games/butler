@@ -45,10 +45,11 @@ function ProjectCreateFields({ form }: { form: ReturnType<typeof useProjectCreat
       <Field>
         <FieldLabel htmlFor="project-create-folder">{appCopy.sidebar.projectFolder}</FieldLabel>
         <Stack align="row" cross="start" gap="sm">
-          <Typo.Body grow basis="0" truncate alignWith="control" tone={form.folder ? "primary" : "secondary"}
-            title={form.folder?.folder_path}>
-            {form.folder?.folder_path ?? appCopy.sidebar.projectFolderAuto}
-          </Typo.Body>
+          {form.folder?.folder_path
+            ? <SelectedFolderPath path={form.folder.folder_path} />
+            : <Typo.Body grow basis="0" truncate alignWith="control" tone="secondary">
+                {appCopy.sidebar.projectFolderAuto}
+              </Typo.Body>}
           <ButtonContainer size="icon-sm">
             <IconButton id="project-create-folder" disabled={!pickerAvailable || form.pending}
               label={pickerAvailable ? appCopy.sidebar.chooseProjectFolder : appCopy.sidebar.availableInDesktop}
@@ -60,5 +61,23 @@ function ProjectCreateFields({ form }: { form: ReturnType<typeof useProjectCreat
       </Field>
       {form.error && <FieldError>{form.error}</FieldError>}
     </>
+  );
+}
+
+function SelectedFolderPath({ path }: { path: string }) {
+  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (separatorIndex < 0 || separatorIndex === path.length - 1) {
+    return <Typo.Body grow basis="0" minWidth="0" wrap="anywhere" alignWith="control" title={path}>{path}</Typo.Body>;
+  }
+
+  return (
+    <Stack align="row" cross="start" gap="none" grow basis="0" minWidth="0">
+      <Typo.Body grow basis="0" minWidth="0" truncate alignWith="control" tone="primary" title={path}>
+        {path.slice(0, separatorIndex)}
+      </Typo.Body>
+      <Typo.Body minWidth="0" wrap="anywhere" alignWith="control">
+        {path.slice(separatorIndex)}
+      </Typo.Body>
+    </Stack>
   );
 }
