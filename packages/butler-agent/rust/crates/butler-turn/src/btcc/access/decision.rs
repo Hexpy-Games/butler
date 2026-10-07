@@ -32,13 +32,7 @@ pub enum FullOnlyAction {
     GitWorktree,
     MemoryForget,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TargetScope {
-    NoTarget,
-    ProjectFolder,
-    Outside,
-    Protected,
-}
+pub use crate::workspace::TargetScope;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TurnTaint {
     Clean,
@@ -70,8 +64,10 @@ pub enum AccessDecision {
 
 /// PR1 boundary: taint and ProjectWrite are reserved for PR2.
 pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
-    use AccessDecision::*;
-    use CapabilityKind::*;
+    use AccessDecision::{Allow, Ask, Deny};
+    use CapabilityKind::{
+        ButlerOutput, CommandMutation, CommandObservation, Exempt, FileRead, FullOnly, InternalRead,
+    };
     if *mode == AccessMode::FullAccess {
         return Allow;
     }
@@ -113,7 +109,12 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
 }
 impl CapabilityKind {
     pub fn of_call(name: &str, arguments: &Map<String, Value>, ledger_effect: bool) -> Self {
-        use ToolName::*;
+        use ToolName::{
+            BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
+            ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, ReadFile,
+            RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
+            SetWallpaper, StartTopicConversation, UpdateAutomation, WriteFile,
+        };
         let Some(tool) = ToolName::parse(name) else {
             return Self::OtherEffect;
         };

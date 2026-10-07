@@ -17,11 +17,12 @@ pub enum ReasoningEffort {
     Max,
 }
 
-/// What a turn may do to the workspace: anything, ask first, or read only.
+/// Stored access tiers; legacy `ask_first` retains AskAlways semantics.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccessMode {
     FullAccess,
+    #[serde(rename = "ask_first")]
     AskAlways,
     #[serde(rename = "ask_except_reads")]
     AskExceptReads,

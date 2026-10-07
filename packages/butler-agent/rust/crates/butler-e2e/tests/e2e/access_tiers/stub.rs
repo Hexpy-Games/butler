@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, reason = "E2E fixture state")]
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
-use butler_e2e::e2e::{HarnessError, matching, placeholders::Placeholders};
+use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -11,6 +11,20 @@ use std::{
 pub(super) struct Script {
     pub rounds: Mutex<HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
+}
+impl Script {
+    pub(super) fn requests_for(&self, prompt: &str) -> Vec<Value> {
+        self.requests
+            .lock()
+            .expect("script lock")
+            .iter()
+            .filter(|request| {
+                matching::key("/codex/responses", request, &Placeholders::default()).user_request
+                    == prompt
+            })
+            .cloned()
+            .collect()
+    }
 }
 pub(super) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
@@ -47,6 +61,6 @@ async fn reply(
     )
         .into_response()
 }
-pub(super) fn call(id: &str, name: &str, args: Value) -> Value {
+pub(super) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
 }

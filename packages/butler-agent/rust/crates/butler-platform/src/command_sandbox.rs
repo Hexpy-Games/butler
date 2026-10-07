@@ -70,6 +70,7 @@ pub enum SandboxError {
     /// This host cannot enforce [`ShellAccess::ReadOnly`].
     #[error("this host cannot enforce read-only commands")]
     ReadOnlyUnavailable,
+    /// The read-deny paths could not be quoted into the sandbox profile.
     #[error("sandbox profile encoding failed")]
     Profile(#[from] serde_json::Error),
 }

@@ -162,15 +162,16 @@ async fn prepare_command(
         ));
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
-    let invocation = invocation(input)?;
-    let (environment, process_cwd) = tokio::task::spawn_blocking({
+    let (invocation, environment, process_cwd) = tokio::task::spawn_blocking({
+        let input = input.clone();
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
         let cwd = cwd.clone();
         move || {
+            let invocation = invocation(&input)?;
             let environment = guided_environment(&host, &butler_data)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
-            Ok::<_, CommandError>((environment, process_cwd))
+            Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
     })
     .await
@@ -413,7 +414,7 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
         command_sandbox::login_shell_contained(
             &input.command,
             &input.host_environment,
-            &denied.iter().map(|path| path.as_path()).collect::<Vec<_>>(),
+            &denied.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
             &[input.workspace_root.as_path()],
         )
     } else {

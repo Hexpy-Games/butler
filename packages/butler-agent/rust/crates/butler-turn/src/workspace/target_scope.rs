@@ -2,9 +2,16 @@
 use super::path_guard::{
     inside_relative, lexical_absolute, looks_sensitive, protected_path, realpath_or_nearest,
 };
-use crate::btcc::TargetScope;
 use butler_platform::secure_fs::{ambiguous_path, canonicalize, path_is_within};
 use std::path::{Path, PathBuf};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TargetScope {
+    NoTarget,
+    ProjectFolder,
+    Outside,
+    Protected,
+}
 
 pub struct ScopeRoots<'a> {
     pub project: Option<&'a Path>,

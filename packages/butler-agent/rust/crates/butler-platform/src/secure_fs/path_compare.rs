@@ -55,11 +55,15 @@ pub fn windows_ambiguous_spelling(text: &str) -> bool {
     }
     let value = normalized.strip_prefix("//?/").unwrap_or(&normalized);
     let bytes = value.as_bytes();
-    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    let drive = matches!(bytes, [d, b':', ..] if d.is_ascii_alphabetic());
     if drive && bytes.get(2) != Some(&b'/') {
         return true;
     }
-    let rest = if drive { &value[2..] } else { value };
+    let rest = if drive {
+        value.get(2..).unwrap_or("")
+    } else {
+        value
+    };
     rest.split('/').any(|part| {
         if part == "." || part == ".." {
             return false;
@@ -73,7 +77,7 @@ pub fn windows_ambiguous_spelling(text: &str) -> bool {
         }
         if stem.len() == 4
             && (stem.starts_with("com") || stem.starts_with("lpt"))
-            && matches!(stem.as_bytes()[3], b'1'..=b'9')
+            && matches!(stem.as_bytes().get(3), Some(b'1'..=b'9'))
         {
             return true;
         }

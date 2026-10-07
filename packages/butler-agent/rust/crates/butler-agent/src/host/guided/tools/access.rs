@@ -29,12 +29,12 @@ pub(super) async fn decision(
         &owner.binding.access_mode,
         AccessRequest {
             kind,
-            scope,
             risk: if call.name == "run_command" {
                 command_access_risk(args["command"].as_str().unwrap_or(""))
             } else {
                 ApprovalRisk::Medium
             },
+            scope,
             taint: TurnTaint::Clean,
         },
     ))
@@ -48,7 +48,7 @@ async fn target_scope(
         .binding
         .workspace_reference
         .as_ref()
-        .map(|r| r.get())
+        .map(butler_turn::workspace::WorkspaceReference::get)
         .transpose()
         .map_err(|e| BtccError::relayed(e.code(), "Workspace unavailable"))?
         .unwrap_or_else(|| owner.binding.workspace_path.clone());

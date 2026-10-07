@@ -173,7 +173,7 @@ pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
         )
         || !butler_core::json::at(value, "/access_mode")
             .as_str()
-            .is_some_and(|v| crate::btcc::AccessMode::parse(v).is_some())
+            .is_some_and(|v| butler_core::tool_protocol::ACCESS_MODE_WIRE_NAMES.contains(&v))
         || !butler_core::json::at(value, "/plan_mode").is_boolean()
         || !matches!(
             butler_core::json::at(value, "/source").as_str(),

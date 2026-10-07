@@ -1,10 +1,14 @@
 #![allow(clippy::unwrap_used, reason = "security boundary assertions")]
 use super::*;
 use crate::btcc::ApprovalRisk;
-use AccessDecision::*;
-use AccessMode::*;
-use CapabilityKind::*;
-use TargetScope::*;
+use AccessDecision::{Allow, Ask, Deny};
+use AccessMode::{AskAlways, AskExceptReads, FullAccess, ReadOnly};
+use CapabilityKind::{
+    ButlerOutput, CommandMutation, CommandObservation, Connector, CrossConversation, Exempt,
+    FileEdit, FileRead, FullOnly, InternalRead, Network, OtherEffect, ProjectRecord, Schedule,
+    SettingsWrite,
+};
+use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
 
 // Independent owner cells; None is a wildcard, not an implementation branch.
@@ -131,6 +135,11 @@ fn order(decision: AccessDecision) -> u8 {
 // test-category: security
 #[test]
 fn access_boundary_matches_the_owner_table() {
+    contained_read_rechecks_swapped_secret();
+    assert_eq!(
+        AccessMode::ALL.map(|mode| mode.as_str()),
+        butler_core::tool_protocol::ACCESS_MODE_WIRE_NAMES,
+    );
     for mode in AccessMode::ALL {
         for &kind in KINDS {
             for scope in [NoTarget, ProjectFolder, Outside, Protected] {
@@ -138,8 +147,8 @@ fn access_boundary_matches_the_owner_table() {
                     for taint in [TurnTaint::Clean, TurnTaint::External] {
                         let request = AccessRequest {
                             kind,
-                            scope,
                             risk,
+                            scope,
                             taint,
                         };
                         assert_eq!(
@@ -291,4 +300,51 @@ fn access_boundary_matches_the_owner_table() {
             assert!(mode.clone().narrower(other.clone()).rank() <= other.rank());
         }
     }
+}
+
+// A1: pin the open-time boundary after an ordinary target was classified.
+fn contained_read_rechecks_swapped_secret() {
+    use crate::workspace::{PathForm, ReadFileInput, ScopeRoots, WorkspaceFiles, classify_targets};
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("butler-access-a1-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("a.txt"), "ordinary").unwrap();
+    std::fs::write(root.join(".env"), "SECRET_IN_ENV").unwrap();
+    let data = root.with_extension("data");
+    let roots = ScopeRoots {
+        project: Some(&root),
+        butler_data: &data,
+        protected_ledger_roots: &[],
+        installation_root: None,
+    };
+    assert_eq!(classify_targets(&roots, &root, &["a.txt"]), ProjectFolder);
+    std::fs::remove_file(root.join("a.txt")).unwrap();
+    butler_platform::secure_fs::symlink(&root.join(".env"), &root.join("a.txt")).unwrap();
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let files = WorkspaceFiles::new(1);
+        let result = files
+            .read_one(ReadFileInput {
+                root: root.clone(),
+                path: "a.txt".into(),
+                path_form: PathForm::Contained,
+                protected_roots: vec![],
+                start_line: None,
+                limit_lines: None,
+                max_bytes: 2048,
+                offset_bytes: None,
+            })
+            .await
+            .unwrap()
+            .unwrap()
+            .result;
+        files.close().await;
+        assert!(
+            result.to_string().contains("sensitive_path_blocked"),
+            "{result}"
+        );
+        assert!(!result.to_string().contains("SECRET_IN_ENV"));
+    });
+    std::fs::remove_dir_all(root).unwrap();
 }

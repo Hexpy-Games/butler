@@ -29,6 +29,7 @@ pub enum GuidedAccess {
 }
 
 /// A guided shell command with its workspace, timeout and access.
+#[derive(Clone)]
 pub struct GuidedCommandInput {
     pub command: String,
     pub cwd: Option<String>,
