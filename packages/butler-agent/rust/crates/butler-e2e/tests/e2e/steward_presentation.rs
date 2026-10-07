@@ -420,8 +420,7 @@ fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     }
     Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", "0"))
+        .env("BUTLER_CODEX_BASE_URL", url))
 }
 
 async fn assert_sidebar_work(
