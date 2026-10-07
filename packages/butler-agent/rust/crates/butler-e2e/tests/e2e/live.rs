@@ -14,7 +14,7 @@
 use std::fs;
 use std::time::Duration;
 
-use butler_e2e::e2e::config::{Credential, LiveProvider, ModelChoice};
+use butler_e2e::e2e::config::{Credential, LiveProvider};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
 use butler_e2e::e2e::{HarnessError, live, media, nonce};

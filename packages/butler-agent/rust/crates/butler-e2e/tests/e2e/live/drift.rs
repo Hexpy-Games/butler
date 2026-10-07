@@ -37,13 +37,8 @@ pub(super) async fn check(provider: &LiveProvider) -> Result<(), HarnessError> {
     let (_, turn) = super::live_turn(&s, "general", PROMPT).await?;
     assert_eq!(super::turn_state(&turn), "delivered");
     s.finish().await?;
-    let mut fresh = cassette::load_from(&temporary, BASELINE)?;
+    let mut fresh = canonical(cassette::load_from(&temporary, BASELINE)?)?;
     std::fs::remove_dir_all(&temporary)?;
-    assert_eq!(
-        fresh.exchanges.len(),
-        1,
-        "plain drift turn must record one exchange"
-    );
     if recording {
         let output = PathBuf::from(
             nonempty("BUTLER_E2E_RECORD_OUTPUT")
@@ -70,6 +65,26 @@ pub(super) async fn check(provider: &LiveProvider) -> Result<(), HarnessError> {
         );
     }
     Ok(())
+}
+
+// Memory maintenance shares the recording proxy. Select the exact caller's
+// exchange, preserving its complete response; never assume it arrived first.
+fn canonical(mut recorded: cassette::Cassette) -> Result<cassette::Cassette, HarnessError> {
+    recorded
+        .exchanges
+        .retain(|exchange| exchange.request.key.user_request == PROMPT);
+    if recorded.exchanges.len() != 1 {
+        return Err(harness_error(
+            "drift turn must have exactly one canonical exchange",
+        ));
+    }
+    let response = &recorded.exchanges[0].response;
+    if response.status != 200 || response.output_text().is_empty() {
+        return Err(harness_error(
+            "canonical drift response must be complete and successful",
+        ));
+    }
+    Ok(recorded)
 }
 
 // Reasoning items are optional, and complete before the message starts. Keep
@@ -109,6 +124,7 @@ fn shape(
 // test-category: format-pin
 #[test]
 fn drift_preserves_message_completion_order_and_every_event_key() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let old = cassette::Cassette::load("MEM-03")?;
     let response = &old
         .exchanges

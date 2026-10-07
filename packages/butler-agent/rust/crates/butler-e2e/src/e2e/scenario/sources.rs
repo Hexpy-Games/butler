@@ -125,6 +125,11 @@ pub(super) async fn record_source(
         harness_error("BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials")
     })?;
     let choice = model.unwrap_or_else(|| live_provider.choice.clone());
+    if choice.model != "openai/gpt-6-luna" {
+        return Err(harness_error(
+            "live cassette recording requires openai/gpt-6-luna",
+        ));
+    }
     let upstream = live_provider
         .base_url
         .clone()

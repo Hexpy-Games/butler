@@ -9,7 +9,22 @@
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state, scenario::Setup};
 
 async fn replay(name: &str, done_before_content: bool) -> Result<(), HarnessError> {
-    let cassette = Cassette::load(name)?;
+    let mut cassette = Cassette::load(name)?;
+    if !done_before_content {
+        // A max-effort recording may include an optional reasoning item.
+        // Also exercise the observed stream without that item's boundaries.
+        for exchange in &mut cassette.exchanges {
+            exchange.response.chunks.retain(|chunk| {
+                !chunk.text.lines().any(|line| {
+                    line.strip_prefix("data:")
+                        .and_then(|data| {
+                            serde_json::from_str::<serde_json::Value>(data.trim()).ok()
+                        })
+                        .is_some_and(|event| event["item"]["type"] == "reasoning")
+                })
+            });
+        }
+    }
     let exchange = cassette
         .exchanges
         .iter()

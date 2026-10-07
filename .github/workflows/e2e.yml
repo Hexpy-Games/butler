@@ -63,10 +63,14 @@ jobs:
         id: credential
         working-directory: ${{ github.workspace }}
         env:
+          RECORD_CASSETTES: ${{ github.event_name == 'workflow_dispatch' && inputs.record_cassettes }}
           CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
         run: |
           $profile = Join-Path $env:USERPROFILE '.butler-e2e-auth/auth.json'
+          if ($env:RECORD_CASSETTES -eq 'true' -and !(Test-Path -LiteralPath $profile -PathType Leaf)) {
+            throw 'Cassette recording requires the persistent owner OAuth profile'
+          }
           if (Test-Path -LiteralPath $profile -PathType Leaf) {
             # Mask before exporting; the dedicated file is refreshed in place.
             Write-Output "::add-mask::$profile"

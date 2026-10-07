@@ -3,6 +3,7 @@ active_steward_relation_not_found
 admitted_model_invalid
 admitted_model_missing
 admitted_reasoning_invalid
+authority_continuation_missing
 authority_continuation_cursor_invalid
 authority_decision_missing
 authority_modify_input_missing
