@@ -2,7 +2,7 @@ import { snapshotFiles, fileDelta } from "./browser-p0-file-snapshot.ts";
 import { hostWindow } from "./browser-p0-host-load.ts";
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { budget, sample, type P0App, type Row, type Sample } from "./browser-p0-measure.ts";
 import { memoryCheckpoint } from "./browser-p0-memory";
@@ -37,22 +37,28 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   const initial = await idleSnapshot(app, "initial");
   const { before: idleBefore, after: idleAfter, delta: initialIdle } = initial;
   console.log(JSON.stringify({ initialIdle }));
+  // Target-task inspection can suspend Electron: keep it outside the histogram.
+  const nativeStart = await memoryCheckpoint(app, evidence, "soak-start-native");
   const measured = await hostWindow("2 h soak", async () => {
     const baselineCPU = await cpuSamples(app);
     const warm = await sample(app), agentWarm = agentRSS(pid);
     const productWarm = await app.main.evaluate("browserP0.productInventory()");
     const sessionsWarm = await app.main.evaluate<number>("browserP0.sample().sessionsCreated");
-    await app.main.evaluate("browserP0.resetDelay()");
+    const measurementStart = await app.main.evaluate<string>("browserP0.resetDelay()");
     await app.main.evaluate(`browserP0.openProductGPU('user', '${origin}/video')`);
     await waitFor(() => app.main.evaluate("browserP0.evaluate('user','video.readyState>=3&&!video.paused')"), "real USER decoded video playing");
     const loop = await runSoakLoop(app, origin, minutes, evidence);
     await app.main.evaluate("browserP0.close('user')");
     await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+    const measurementEnd = await app.main.evaluate<string>("browserP0.finishDelay()");
+    const outliers = await app.main.evaluate("browserP0.delayOutliers()");
     const after = await sample(app), agentAfter = agentRSS(pid);
     const productAfter = await app.main.evaluate("browserP0.productInventory()");
-    return { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter };
+    return { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter, outliers, measurement: { start: measurementStart, end: measurementEnd } };
   });
-  const { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter } = measured;
+  const { baselineCPU, warm, agentWarm, productWarm, sessionsWarm, loop, after, agentAfter, productAfter, outliers, measurement } = measured;
+  writeFileSync(join(evidence, "soak-main-loop.json"), JSON.stringify({ measurement, loop: after.loop, outliers }, null, 2));
+  const nativeEnd = await memoryCheckpoint(app, evidence, "soak-end-native");
   assert.equal((await app.main.evaluate<{ count: number }>("browserP0.productErrors()")).count, 0, "No rejected product lifecycle IPC during soak");
   assert.deepEqual(productAfter, productWarm, "Product tabs/profiles/stills return to warm baseline");
   assert.equal(await app.main.evaluate("browserP0.sample().sessionsCreated"), sessionsWarm, "No per-iteration Session creation");
@@ -75,14 +81,14 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     rows.push({ test: "soak", metric: `${label} unresolved writer changed files`, value: delta.writers.unresolved ?? 0, budget: 0, status: delta.writers.unresolved ? "UNAVAILABLE" : "PASS" });
     rows.push({ test: "soak", metric: `${label} Chromium profile deltas`, value: JSON.stringify(delta), budget: "report internal flushes", status: "DESCRIPTIVE" });
   }
-  return { ownerScale, productWarm, productAfter, ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
+  return { ownerScale, productWarm, productAfter, measurement, outliers, nativeCheckpoints: [nativeStart, nativeEnd], ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
 }
 
-async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string) {
+export async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string, native = false) {
   const startedAt = Date.now(), end = startedAt + minutes * 60_000;
   let iterations = 0, userVisits = 0, nextCheckpoint = startedAt + 15 * 60_000;
   const videoFrames = [await decodedVideoFrames(app)];
-  const checkpoints = [await memoryCheckpoint(app, evidence, "soak-start")];
+  const checkpoints = [await memoryCheckpoint(app, evidence, "soak-start", false, native)];
   const paths = ["nodes", "cpu", "network"], fixtureVisits = { nodes: 0, cpu: 0, network: 0 };
   while (Date.now() < end) {
     const id = `soak-${iterations}`, path = paths[iterations % paths.length]! as keyof typeof fixtureVisits;
@@ -99,13 +105,13 @@ async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence
       const decoded = await decodedVideoFrames(app);
       assert(decoded > videoFrames.at(-1)!, "Real USER video decodes during each soak interval");
       videoFrames.push(decoded);
-      checkpoints.push(await memoryCheckpoint(app, evidence, `soak-${Math.round((Date.now() - startedAt) / 60000)}m`));
+      checkpoints.push(await memoryCheckpoint(app, evidence, `soak-${Math.round((Date.now() - startedAt) / 60000)}m`, false, native));
       nextCheckpoint += 15 * 60_000;
     }
     await Bun.sleep(1000);
   }
   const elapsedMs = Date.now() - startedAt;
-  checkpoints.push(await memoryCheckpoint(app, evidence, "soak-end"));
+  checkpoints.push(await memoryCheckpoint(app, evidence, "soak-end", false, native));
   const decoded = await decodedVideoFrames(app);
   assert(decoded > videoFrames.at(-1)!, "Real USER video still decodes at soak completion");
   videoFrames.push(decoded);
