@@ -4,6 +4,7 @@ mod access_tiers;
 mod agent_context;
 mod agent_exit;
 mod alias_index_drop;
+mod anthropic_cache;
 mod anthropic_requests;
 mod app_state;
 mod app_storage_scale;

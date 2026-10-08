@@ -142,6 +142,18 @@ fn blocks(text: &str, paths: &butler_e2e::e2e::sanitize::Placeholders) -> Value 
 
 pub(super) fn compare(case: &str, requests: &[Value]) -> Result<(), HarnessError> {
     let directory = butler_e2e::e2e::binary::crate_root().join("fixtures/prompt-history");
+    // Use the same immutable build gate as the product binary. Only the tool
+    // hash varies; all prompt content continues to use the original goldens.
+    let gate = if option_env!("BUTLER_FEATURE_BROWSER") == Some("false") {
+        "browser-off"
+    } else {
+        "browser-on"
+    };
+    let tool_hashes: Value =
+        serde_json::from_slice(&std::fs::read(directory.join("tools-by-gate.json"))?)?;
+    let tools_hash = tool_hashes[gate][case]
+        .as_str()
+        .expect("every golden scenario must have a tool hash for the active gates");
     let main: Vec<Value> =
         serde_json::from_slice(&std::fs::read(directory.join(format!("{case}.json")))?)?;
     assert_eq!(
@@ -162,12 +174,17 @@ pub(super) fn compare(case: &str, requests: &[Value]) -> Result<(), HarnessError
             "{case} turn={index} every request"
         );
         for (round, (main, branch)) in main_frames.iter().zip(branch_frames).enumerate() {
-            for field in ["sections", "blocks", "instructions_sha256", "tools_sha256"] {
+            for field in ["sections", "blocks", "instructions_sha256"] {
                 assert_eq!(
                     main[field], branch[field],
                     "{case} turn={index} round={round} section={field}"
                 );
             }
+            assert_eq!(
+                tools_hash,
+                branch["tools_sha256"].as_str().unwrap(),
+                "{case} turn={index} round={round} section=tools_sha256 gate={gate}"
+            );
             for line in branch["history"].as_array().unwrap() {
                 assert!(
                     main["history"].as_array().unwrap().contains(line),

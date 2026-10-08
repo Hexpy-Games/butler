@@ -42,12 +42,15 @@ fn flatten(schema: &mut Map<String, Value>) {
         let mut common: Option<BTreeSet<String>> = None;
         for branch in branches {
             let Some(mut branch) = branch.as_object().cloned() else {
-                common = Some(BTreeSet::new());
+                if keyword != "allOf" {
+                    common = Some(BTreeSet::new());
+                }
                 continue;
             };
             flatten(&mut branch);
             let names = required_names(&branch);
             common = Some(match common {
+                Some(previous) if keyword == "allOf" => previous.union(&names).cloned().collect(),
                 Some(previous) => previous.intersection(&names).cloned().collect(),
                 None => names,
             });

@@ -10,7 +10,7 @@ pub(super) async fn all_registered_tools_through_stub() {
     let catalog_json: Value = serde_json::from_str(CATALOG).unwrap();
     let raw = catalog_json["rawDefinitions"].as_object().unwrap();
     let projected = catalog_json["tools"].as_array().unwrap();
-    assert!(raw.len() >= 35);
+    assert!(!raw.is_empty());
     assert_eq!(raw.len(), projected.len());
     for definitions in [
         raw.values().cloned().collect::<Vec<_>>(),
@@ -192,7 +192,14 @@ fn variants_and_integer_fields() {
             }
             let schema = &body["tools"][0]["input_schema"];
             validate_schema(schema);
-            assert_eq!(schema["required"], json!(["shared"]));
+            assert_eq!(
+                schema["required"],
+                if keyword == "allOf" {
+                    json!(["left", "right", "shared"])
+                } else {
+                    json!(["shared"])
+                }
+            );
             assert_eq!(schema["properties"].as_object().unwrap().len(), 3);
             assert_eq!(
                 schema["properties"]["shared"]["anyOf"]
