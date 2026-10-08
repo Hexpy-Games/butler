@@ -128,7 +128,7 @@ impl AppServer {
         let address = listener.local_addr().map_err(|error| {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
-        let settings = Arc::new(open_settings(runtime, data_root, address).await?);
+        let settings = Arc::new(open_settings(runtime, data_root, address, installation).await?);
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
         let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready.clone());
@@ -358,6 +358,7 @@ async fn open_settings(
     runtime: &AgentRuntime,
     data_root: &std::path::Path,
     address: SocketAddr,
+    installation: &ResolvedInstallation,
 ) -> Result<AppSettingsFactsAdapter, BtccError> {
     AppSettingsFactsAdapter::open(
         runtime.models.configuration.clone(),
@@ -365,6 +366,7 @@ async fn open_settings(
         data_root.to_path_buf(),
         format!("http://{address}"),
         "local".into(),
+        installation.app_version(),
     )
     .await
     .map_err(app_error)
