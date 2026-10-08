@@ -133,7 +133,7 @@ fn layout(body: &Value, ttl: &str, enabled: bool) {
     let content = body["messages"][0]["content"].as_array().unwrap();
     if long {
         assert_eq!(body["system"][0]["cache_control"]["ttl"], ttl);
-        assert_eq!(content[0]["cache_control"]["ttl"], ttl);
+        assert_eq!(content[content.len() - 2]["cache_control"]["ttl"], ttl);
         assert!(
             content[0]["text"]
                 .as_str()
@@ -141,13 +141,14 @@ fn layout(body: &Value, ttl: &str, enabled: bool) {
                 .contains("## Conversation history")
         );
         assert!(
-            content[1]["text"]
+            content.last().unwrap()["text"]
                 .as_str()
                 .unwrap()
+                .trim_start()
                 .starts_with("## Current turn context\n")
         );
         assert!(
-            content[1]["text"]
+            content.last().unwrap()["text"]
                 .as_str()
                 .unwrap()
                 .contains("## Current request")
@@ -242,6 +243,7 @@ async fn anthropic_cache_survives_image_projection() -> Result<(), HarnessError>
             blocks[2]["text"]
                 .as_str()
                 .unwrap()
+                .trim_start()
                 .starts_with("## Current turn context\n")
         );
         assert!(
@@ -271,6 +273,7 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
     let (s, stub, server) = start(ttl, master, verified).await?;
     let enabled = master != "off" && verified;
     let mut previous = String::new();
+    let mut previous_blocks: Vec<String> = Vec::new();
     let mut previous_wire = Vec::new();
     let mut previous_history = String::new();
     let mut moves = 0;
@@ -293,16 +296,31 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
                 .contains("complete cache tool fixture")
         );
         if enabled && ttl != "off" {
-            let stable = &requests[0]["messages"][0]["content"][0];
-            assert_eq!(stable, &requests[1]["messages"][0]["content"][0]);
-            let text = stable["text"].as_str().unwrap();
+            let blocks = history_blocks(&requests[0]);
+            assert_eq!(blocks, history_blocks(&requests[1]));
+            if (1..6).contains(&index) {
+                assert!(
+                    blocks.starts_with(&previous_blocks),
+                    "turn boundary changed at {index}"
+                );
+                assert_eq!(blocks.len(), previous_blocks.len() + 1);
+            }
+            let text = blocks.concat();
             assert!(
-                requests[0]["messages"][0]["content"][1]["text"]
+                requests[0]["messages"][0]["content"]
+                    .as_array()
+                    .unwrap()
+                    .last()
+                    .unwrap()["text"]
                     .as_str()
                     .unwrap()
                     .ends_with(&ask)
             );
             let current_history = history(&s)?;
+            assert!(
+                text.ends_with(&current_history),
+                "history bytes changed at {index}"
+            );
             let moved =
                 !previous_history.is_empty() && !current_history.starts_with(&previous_history);
             if moved {
@@ -328,7 +346,8 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
                 );
             }
             previous_wire = wire;
-            previous = text.to_owned();
+            previous_blocks = blocks;
+            previous = text.clone();
             previous_history = current_history;
             for recent in index.saturating_sub(4)..index {
                 assert!(text.contains(&format!("user: Cache request {recent}:")));
@@ -348,16 +367,35 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
     Ok(())
 }
 
+fn history_blocks(body: &Value) -> Vec<String> {
+    let blocks = body["messages"][0]["content"].as_array().unwrap();
+    let last = blocks
+        .iter()
+        .position(|block| {
+            block["cache_control"]["ttl"] == "1h" || block["cache_control"]["ttl"] == "5m"
+        })
+        .unwrap();
+    blocks[..=last]
+        .iter()
+        .map(|block| block["text"].as_str().unwrap().to_owned())
+        .collect()
+}
+
 fn cached_prefix(body: &Value) -> Vec<u8> {
-    let text = body["messages"][0]["content"][0]["text"].as_str().unwrap();
-    let encoded = serde_json::to_string(text.trim_end()).unwrap();
-    let prefix = &encoded.as_bytes()[..encoded.len() - 1];
-    let wire = serde_json::to_vec(body).unwrap();
+    let texts = history_blocks(body);
+    let mut body = body.clone();
+    for message in body["messages"].as_array_mut().unwrap() {
+        for block in message["content"].as_array_mut().unwrap() {
+            block.as_object_mut().unwrap().remove("cache_control");
+        }
+    }
+    let encoded = serde_json::to_vec(texts.last().unwrap()).unwrap();
+    let wire = serde_json::to_vec(&body).unwrap();
     let end = wire
-        .windows(prefix.len())
-        .position(|bytes| bytes == prefix)
+        .windows(encoded.len())
+        .position(|bytes| bytes == encoded)
         .unwrap()
-        + prefix.len();
+        + encoded.len();
     wire[..end].to_vec()
 }
 
@@ -367,11 +405,11 @@ fn history(s: &Scenario) -> Result<String, HarnessError> {
         "SELECT content FROM btcc_context_documents WHERE source_id='recent-conversation' ORDER BY rowid DESC LIMIT 1",
         [], |row| row.get(0),
     ).optional()?.unwrap_or_default();
-    Ok(serde_json::from_str::<Value>(
-        text.strip_prefix("## Recent Conversation\n\n")
-            .unwrap_or(&text),
-    )
-    .ok()
-    .and_then(|value| value["history"].as_str().map(str::to_owned))
-    .unwrap_or(text))
+    let content = text
+        .strip_prefix("## Recent Conversation\n\n")
+        .unwrap_or(&text);
+    Ok(serde_json::from_str::<Value>(content)
+        .ok()
+        .and_then(|value| value["history"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| content.to_owned()))
 }

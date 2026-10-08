@@ -1,6 +1,11 @@
 //! Explicit Anthropic breakpoints, applied only after carrier serialization.
 use serde_json::{Value, json};
 
+mod history;
+
+#[cfg(test)]
+pub(super) use history::tests::history_chunks_preserve_bytes_and_previous_breakpoint_within_lookback;
+
 use super::ProviderRequestConfig;
 
 /// Other endpoints require an operator's explicit, exact-URL capability assertion.
@@ -86,11 +91,14 @@ fn split_history(messages: &mut [Value], control: &Value, diagnostics: Option<&V
     if text[..boundary].trim().is_empty() {
         return;
     }
-    let stable = json!({"type":"text","text":&text[..boundary],"cache_control":control});
-    let volatile = json!({"type":"text","text":&text[boundary..]});
+    let (mut stable, end) = history::blocks(text, boundary, diagnostics);
+    if let Some(last) = stable.last_mut() {
+        last["cache_control"] = control.clone();
+    }
+    let volatile = json!({"type":"text","text":&text[end..]});
     // Attachments belong to the volatile current request, after the history.
     content[index] = volatile;
-    content.insert(0, stable);
+    content.splice(0..0, stable);
 }
 
 fn cacheable(block: &Value) -> bool {
