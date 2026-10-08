@@ -28,7 +28,7 @@ pub(super) fn apply(body: &mut Value, config: &ProviderRequestConfig, diagnostic
         Ok(_) => None,
     };
     if let Some(system) = body.get_mut("system")
-        && let Some(text) = system.as_str().filter(|text| !text.is_empty())
+        && let Some(text) = system.as_str().filter(|text| !text.trim().is_empty())
         && let Some(control) = &long
     {
         *system = json!([{"type":"text","text":text,"cache_control":control}]);
@@ -95,9 +95,11 @@ fn split_history(messages: &mut [Value], control: &Value, diagnostics: Option<&V
 
 fn cacheable(block: &Value) -> bool {
     match block["type"].as_str() {
-        Some("text") => block["text"].as_str().is_some_and(|text| !text.is_empty()),
+        Some("text") => block["text"]
+            .as_str()
+            .is_some_and(|text| !text.trim().is_empty()),
         Some("tool_result") => match &block["content"] {
-            Value::String(text) => !text.is_empty(),
+            Value::String(text) => !text.trim().is_empty(),
             Value::Array(content) => !content.is_empty(),
             _ => false,
         },
