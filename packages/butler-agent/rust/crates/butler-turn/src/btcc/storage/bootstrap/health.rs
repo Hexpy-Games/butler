@@ -23,8 +23,7 @@ pub(in crate::btcc::storage) fn migrate_current(db: &mut Connection) -> StorageR
 
 /// Successful full validation is the only way to clear a corruption verdict.
 pub fn validate_storage_background(path: &Path, stop: CancellationToken) -> StorageResult<()> {
-    // Reuse the platform's debug-only one-shot fault harness; release builds
-    // never consult its environment or create its marker.
+    // The explicit stub-only injection also exercises the optimized scan owner.
     butler_platform::secure_fs::fault_checkpoint("btcc_scan_busy").map_err(|_| {
         StorageError::sqlite(rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),

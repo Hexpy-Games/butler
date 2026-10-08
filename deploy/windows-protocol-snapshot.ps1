@@ -1,14 +1,14 @@
 param([Parameter(Mandatory)][string]$Output)
 $ErrorActionPreference = 'Stop'
-# Query as required, then hash a registry export: this compares all value types
-# and subkeys without depending on console encoding or Out-String formatting.
-& cmd.exe /d /c 'reg query HKCU\Software\Classes\butler /s 2>NUL' | Out-Null
-$code = $LASTEXITCODE
+# Absence is expected; the registry provider avoids native stderr in PS 5.1.
+$code = if (Test-Path 'HKCU:\Software\Classes\butler') { 0 } else { 1 }
 $export = "$Output.reg"
 try {
     $digest = $null
     if ($code -eq 0) {
+        $ErrorActionPreference = 'Continue'
         & reg export 'HKCU\Software\Classes\butler' $export /y | Out-Null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw 'Could not export the protocol registration' }
         $digest = (Get-FileHash $export -Algorithm SHA256).Hash
     } elseif (Test-Path 'Registry::HKEY_CURRENT_USER\Software\Classes\butler') {

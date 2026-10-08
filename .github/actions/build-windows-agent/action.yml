@@ -33,6 +33,7 @@ runs:
     # Version overrides label fixtures; feature selection follows the original ref.
     - uses: ./.github/actions/product-features
     - uses: ilammy/msvc-dev-cmd@v1
+      if: inputs.owner-runner != 'true'
       with:
         arch: x64
     - uses: actions/download-artifact@v4
@@ -42,13 +43,14 @@ runs:
         path: ${{ runner.temp }}/windows-native-artifact
     - name: Restore native tree with its verified library layout
       if: inputs.native-deps-artifact != ''
-      shell: bash
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        set -euo pipefail
-        root="$(cygpath -u "$RUNNER_TEMP")"
-        mkdir -p "$root/ort-cache/native-deps"
-        MSYS=winsymlinks:nativestrict tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
-          -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
+        $root = $env:RUNNER_TEMP
+        New-Item -ItemType Directory -Force "$root/ort-cache/native-deps" | Out-Null
+        $ErrorActionPreference = 'Continue'
+        tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - uses: ./.github/actions/rust-agent-setup
       if: inputs.owner-runner != 'true'
       with:
@@ -67,21 +69,25 @@ runs:
         node-version: 22
     - name: Build renderer
       working-directory: ${{ github.workspace }}
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
         $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $ErrorActionPreference = 'Continue'
         bun install --frozen-lockfile --ignore-scripts
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $ErrorActionPreference = 'Continue'
         npm.cmd --prefix packages/butler-app/client/ui run build
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Build unsigned release executable
       env:
         GH_TOKEN: ${{ github.token }}
         BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust
       run: |
         $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
@@ -101,20 +107,29 @@ runs:
         $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
         # Owner setup bypasses rust-agent-setup; restore after setting exact flags.
         if ('${{ inputs.owner-runner }}' -eq 'true') {
+          $ErrorActionPreference = 'Continue'
           $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
+        $ErrorActionPreference = 'Continue'
         cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         if ('${{ inputs.owner-runner }}' -eq 'true') {
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
         # A runner has development DLLs installed. Refuse a dependency they hide.
+        $ErrorActionPreference = 'Continue'
         $imports = & dumpbin /dependents $binary
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $imports | Write-Output
         foreach ($line in $imports) {
@@ -132,14 +147,16 @@ runs:
         retention-days: 14
     - name: Package ZIP and shared Agent manifests
       working-directory: ${{ github.workspace }}
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
         $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $ErrorActionPreference = 'Continue'
         python packages/butler-agent/rust/scripts/package-windows-agent.py `
           --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe" `
           --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist `
           --output dist/release/agent --artifact-base-url '${{ inputs.artifact-base-url }}'
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -131,6 +131,7 @@ async function serveUpdate(zip: string) {
     }] });
   } });
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({
+    update: { previews: false }, // This smoke exercises an explicit OFF -> ON choice.
     user: { language: "en" }, metrics: { enabled: false }, system: { defaultModel: "local/stub" },
     models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${server.port}`,
       context_window_tokens: 128000 }] },

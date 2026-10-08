@@ -8,14 +8,13 @@ import os
 import pathlib
 import platform
 import shutil
-import signal
 import subprocess
 import sys
 import tarfile
-import time
 import uuid
 import zipfile
 
+from static_ort_build import check_space, run_build
 import static_ort_host as host
 import static_ort_prebuilt as prebuilt
 
@@ -28,7 +27,6 @@ EXPECTED_ORT_LIBS = (
     "optimizer", "providers", "session", "util",
 )
 MIN_FREE_BYTES = 8 * 1024**3
-MAX_BUILD_SECONDS = 60 * 60
 MAX_DOWNLOAD_SECONDS = 20 * 60
 MAX_ARCHIVE_BYTES = 512 * 1024**2
 
@@ -81,11 +79,6 @@ def root_for_target():
     return target.resolve() / "native-deps"
 
 
-def check_space(root):
-    if shutil.disk_usage(root).free <= MIN_FREE_BYTES:
-        fail("Static ORT build requires more than 8 GiB free in its target cache volume.")
-
-
 def lock_exclusive(stream):
     """A non-blocking exclusive lock held until the process exits."""
     if os.name == "nt":
@@ -101,21 +94,6 @@ def lock_exclusive(stream):
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except busy:
         fail("Another process is preparing the same static ORT cache; retry after it finishes")
-
-
-def terminate_group(process):
-    """Stops a build started in its own process group (or, on Windows, its process tree)."""
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)],
-                       capture_output=True, check=False)
-        process.wait()
-        return
-    os.killpg(process.pid, signal.SIGTERM)
-    try:
-        process.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.wait()
 
 
 def download(spec, destination, target):
@@ -205,9 +183,7 @@ def verified_outputs(lib_path, target):
     if lib_path.name != "Release" or not lib_path.is_dir():
         fail(f"ORT Release directory is missing: {lib_path}")
     build_root = lib_path.parent
-    deps_link = build_root / "_deps"
-    if not deps_link.is_symlink() or deps_link.resolve() != (lib_path / "_deps").resolve():
-        fail("ort-sys _deps link does not point to Release/_deps")
+    prebuilt.verify_deps_alias(lib_path)
     required = [lib_path / spec["static_lib"].format(f"onnxruntime_{name}") for name in EXPECTED_ORT_LIBS]
     required.extend(lib_path / dep for dep in spec["deps"])
     for path in required:
@@ -230,65 +206,6 @@ def verified_outputs(lib_path, target):
     if any(path.is_symlink() or not path.is_file() for path in libraries):
         fail("Static ORT build contains an unexpected library link")
     return {pathlib.PurePath(path.relative_to(build_root)).as_posix(): sha256(path) for path in libraries}
-
-
-def run_build(stage, source, cmake, ninja, eigen, target, lock):
-    spec = TARGETS[target]
-    if target == "windows-x64" and not shutil.which("cl"):
-        fail("The windows-x64 static ORT build must run in a Visual Studio x64 developer environment")
-    parallel = str(lock["build"]["parallel_jobs"])
-    build_root = stage / "build"
-    log = stage / "static-ort-build.log"
-    flags = [
-        "onnxruntime_BUILD_UNIT_TESTS=OFF", "onnxruntime_BUILD_SHARED_LIB=OFF",
-        "onnxruntime_MINIMAL_BUILD=OFF", *spec["cmake_defines"],
-        f"Python_EXECUTABLE={sys.executable}", f"Python3_EXECUTABLE={sys.executable}",
-        f"FETCHCONTENT_SOURCE_DIR_EIGEN={eigen}",
-    ]
-    args = [
-        sys.executable, str(source / "tools/ci_build/build.py"),
-        "--build_dir", str(build_root), "--config", "Release", "--update", "--build",
-        "--skip_submodule_sync", "--skip_tests", "--parallel", parallel,
-        *spec["build_args"],
-        "--cmake_generator", "Ninja", "--cmake_path", str(cmake),
-        "--cmake_extra_defines", *flags,
-    ]
-    env = dict(os.environ)
-    env["PATH"] = f"{ninja.parent}{os.pathsep}{cmake.parent}{os.pathsep}{env.get('PATH', '')}"
-    env["PYTHONUNBUFFERED"] = "1"
-    with log.open("w") as output:
-        process = subprocess.Popen(
-            args, cwd=source, env=env, stdout=output, stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        started = time.monotonic()
-        try:
-            while process.poll() is None:
-                time.sleep(5)
-                check_space(stage)
-                if time.monotonic() - started > MAX_BUILD_SECONDS:
-                    fail("Static ORT build exceeded one hour")
-            if process.returncode:
-                fail(f"Static ORT build failed (exit {process.returncode})")
-        except BaseException as error:
-            if process.poll() is None:
-                terminate_group(process)
-            tail = log.read_text(errors="replace")[-3000:]
-            fail(f"{error}; final build output:\n{tail}")
-    with log.open("a") as output:
-        re2 = subprocess.Popen(
-            [str(cmake), "--build", str(build_root / "Release"), "--target", "re2", "--parallel", parallel],
-            stdout=output, stderr=subprocess.STDOUT, start_new_session=True,
-        )
-        try:
-            re2.wait(timeout=10 * 60)
-        except subprocess.TimeoutExpired:
-            terminate_group(re2)
-            fail("Static ORT re2 dependency build timed out")
-        if re2.returncode:
-            fail(f"Static ORT re2 dependency build failed: {log.read_text(errors='replace')[-3000:]}")
-    (build_root / "_deps").symlink_to("Release/_deps", target_is_directory=True)
-    return build_root / "Release"
 
 
 def prepare(stage, lock, target):
@@ -326,6 +243,7 @@ def prepare(stage, lock, target):
     command([str(ninja), "--version"])
     command([str(protoc), "--version"])
     lib_path = run_build(stage, ort, cmake, ninja, eigen, target, lock)
+    prebuilt.create_deps_alias(stage / "build")
     return lib_path, protoc
 
 
@@ -438,9 +356,8 @@ def main():
                          sort_keys=True))
         return
     lock = target_lock(json.loads(LOCK.read_text()), target)
-    fingerprint = prebuilt.key(SCRIPT, lock, target)
     if args.fingerprint:
-        print(fingerprint)
+        print(prebuilt.key(SCRIPT, lock, target))
         return
     host.rust_identity(lock["rust_target"])
     cache_root = root_for_target()
@@ -448,7 +365,10 @@ def main():
     if args.protoc_only:
         print(json.dumps({"protoc": str(prepare_protoc(cache_root, lock, target))}, sort_keys=True))
         return
-    complete = prepare_cache(cache_root, fingerprint, lock, target, args.build_only, args.require_prebuilt or (os.environ.get("GITHUB_ACTIONS") == "true" and not args.build_only))
+    fingerprint = prebuilt.key(SCRIPT, lock, target)
+    require_prebuilt = args.require_prebuilt or (
+        target != "windows-x64" and os.environ.get("GITHUB_ACTIONS") == "true" and not args.build_only)
+    complete = prepare_cache(cache_root, fingerprint, lock, target, args.build_only, require_prebuilt)
     print(json.dumps({
         "ort_lib_path": str(complete / "build/Release"),
         "protoc": str(complete / f"tools/protoc/bin/protoc{TARGETS[target]['exe']}"),

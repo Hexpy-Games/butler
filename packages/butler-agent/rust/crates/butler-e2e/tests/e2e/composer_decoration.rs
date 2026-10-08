@@ -37,8 +37,12 @@ async fn composer_decoration_settings_are_validated_and_durable() -> Result<(), 
     let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
         .unwrap();
     let version = || {
-        db.query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0))
-            .unwrap()
+        let value = db
+            .query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0))
+            .unwrap();
+        // Finish the observer's own mapped read marks before its baseline.
+        butler_platform::sqlite::sync_wal_index(&db).unwrap();
+        value
     };
     let before = version();
     let repeated =
@@ -78,8 +82,12 @@ async fn storage_operations_finish_before_idle() -> Result<(), HarnessError> {
         .unwrap();
     assert!(bindings >= 2, "the turn created its runtime binding");
     let version = || {
-        db.query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0))
-            .unwrap()
+        let value = db
+            .query_row("PRAGMA data_version", [], |row| row.get::<_, u64>(0))
+            .unwrap();
+        // Finish the observer's own mapped read marks before its baseline.
+        butler_platform::sqlite::sync_wal_index(&db).unwrap();
+        value
     };
     let indexes = wal_indexes(&s.sandbox.data);
     let graph = indexes

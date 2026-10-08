@@ -31,7 +31,7 @@ def artifact_tag(tag, ref):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", default="")
+    parser.add_argument("--tag", nargs="?", const="", default="")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
     tag = artifact_tag(args.tag, os.environ.get("GITHUB_REF", ""))

@@ -1055,6 +1055,7 @@ dependencies = [
  "if-addrs",
  "keyring-core",
  "libproc",
+ "memmap2",
  "nix",
  "roxmltree",
  "rpassword",

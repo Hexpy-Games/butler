@@ -3,6 +3,9 @@ use serde_json::{Value, json};
 
 mod history;
 
+#[cfg(test)]
+pub(super) use history::tests::assert_history_bytes_and_breakpoints;
+
 use super::ProviderRequestConfig;
 
 /// Other endpoints require an operator's explicit, exact-URL capability assertion.

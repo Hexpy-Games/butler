@@ -55,9 +55,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oras-project/setup-oras@v1
+    # SDK and Cargo snapshot identities must observe the selected Windows toolset.
+    - uses: ilammy/msvc-dev-cmd@v1
+      if: runner.os == 'Windows'
       with:
-        version: 1.2.3
+        arch: x64
+    - uses: ./.github/actions/setup-oras
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
@@ -122,10 +125,11 @@ runs:
       run: |
         set -euo pipefail
         if [ "$PREPARED_STATIC_ORT" = "true" ] && [ ! -f "$ORT_CACHE_TARGET/native-deps/ort-$ORT_FINGERPRINT/complete.json" ]; then
-          echo 'Prepared static runtime does not match this runner toolchain/compiler image.' >&2
-          exit 1
+          echo 'Prepared SDK toolset key differs; resolving this runner SDK or building locally.' >&2
         fi
-        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py --require-prebuilt)"
+        sdk_args=()
+        if [ "$RUNNER_OS" != "Windows" ]; then sdk_args+=(--require-prebuilt); fi
+        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py "${sdk_args[@]}")"
         echo "$prepared"
         {
           echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"

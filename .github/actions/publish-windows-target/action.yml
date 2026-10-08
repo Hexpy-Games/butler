@@ -9,7 +9,7 @@ runs:
   steps:
     - name: Match release snapshot optimization flags
       if: inputs.profile == 'release'
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
         'CARGO_PROFILE_RELEASE_LTO=thin' >> $env:GITHUB_ENV
         'CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1' >> $env:GITHUB_ENV

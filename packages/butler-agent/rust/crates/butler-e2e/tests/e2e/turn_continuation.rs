@@ -134,7 +134,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
     assert_eq!(script.requests.lock().unwrap().len(), 1);
     let cards = s.gw.approval_requests("general").await?;
     assert_eq!(cards.len(), 1);
-    paused_transcript::assert_segments(&s, false).await?;
+    paused_transcript::assert_authority_message(&s, false).await?;
     let reference = cards[0]["request_ref"].as_str().unwrap();
     let reply =
         s.gw.post(
@@ -165,9 +165,9 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
         metrics[1]["prefixDiagnostics"]["instructionComponents"]
     );
     assert_eq!(metrics[1]["prefixDiagnostics"]["appendOnly"], true);
-    paused_transcript::assert_segments(&s, true).await?;
+    paused_transcript::assert_authority_message(&s, true).await?;
     s.restart().await?;
-    paused_transcript::assert_segments(&s, true).await?;
+    paused_transcript::assert_authority_message(&s, true).await?;
     s.finish().await?;
     server.abort();
     Ok(())

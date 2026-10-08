@@ -71,6 +71,10 @@ impl ProbeReader {
                 Some(_) | None => GraphRepository::open_readonly(&path)?,
             };
             let result = read(&graph);
+            // Read-only SQLite queries can change the shared WAL read marks.
+            // This retained reader must finish their writeback before parking;
+            // waiting for connection retirement would move it into idle time.
+            graph.sync_wal_index()?;
             if result.is_ok() {
                 *open = Some((path, graph));
             }

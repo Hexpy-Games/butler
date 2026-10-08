@@ -7,6 +7,9 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Force $Output | Out-Null
 $process = Start-Process -FilePath $Setup -PassThru
+$receipt = @{ setup_pid = $process.Id; started_at = $process.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress
+[IO.File]::WriteAllText((Join-Path $Output 'capture-process.json'), $receipt,
+  (New-Object System.Text.UTF8Encoding($false)))
 try {
   $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
   for ($index = 0; $index -lt 40; $index++) {

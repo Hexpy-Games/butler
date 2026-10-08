@@ -44,7 +44,7 @@ impl Connection {
                 // SQLite has released this connection's read marks; other local
                 // connections retain the descriptor through their shared owner.
                 #[cfg(target_os = "macos")]
-                return index.sync().map_err(|error| (None, sql_error(&error)));
+                return index.finish().map_err(|error| (None, sql_error(&error)));
                 #[cfg(not(target_os = "macos"))]
                 Ok(())
             }

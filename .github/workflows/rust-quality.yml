@@ -409,9 +409,7 @@ jobs:
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
-      - uses: oras-project/setup-oras@v1
-        with:
-          version: 1.2.3
+      - uses: ./.github/actions/setup-oras
       - name: Verify Cargo snapshot and native dependency contracts
         working-directory: ${{ github.workspace }}
         run: |
@@ -419,7 +417,12 @@ jobs:
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          states=$(mktemp "$RUNNER_TEMP/workflow-states.XXXXXX")
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" > "$states"
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py --active-workflows "$states"
       - name: Lint GitHub workflows
         working-directory: ${{ github.workspace }}
         run: |

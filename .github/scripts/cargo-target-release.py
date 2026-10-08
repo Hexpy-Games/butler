@@ -10,9 +10,9 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
+import urllib.request
 
 # Build scripts watch the recipe directory; imports must not create new inputs.
 sys.dont_write_bytecode = True
@@ -32,12 +32,30 @@ class UnsuccessfulProducer(ValueError):
     """A completed CI run can contain other failed lanes; never publish those."""
 
 
-def api(endpoint):
+def api(endpoint, method='GET'):
+    """Use the workflow token without requiring GitHub CLI on owner hosts."""
+    url = 'https://api.github.com/' + endpoint
     field = 'jobs' if '/jobs?' in endpoint else 'artifacts' if '/artifacts?' in endpoint else None
-    if field:
-        pages = json.loads(cache.output('gh', 'api', '--paginate', '--slurp', endpoint))
-        return {field: [entry for page in pages for entry in page[field]]}
-    return json.loads(cache.output('gh', 'api', endpoint))
+    entries = []
+    while url:
+        if not url.startswith('https://api.github.com/'):
+            raise ValueError('Untrusted GitHub API pagination URL')
+        request = urllib.request.Request(url, method=method, headers={
+            'Authorization': 'Bearer ' + (os.environ.get('GITHUB_TOKEN') or os.environ['GH_TOKEN']),
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+        })
+        with urllib.request.urlopen(request, timeout=60) as response:
+            if method == 'DELETE':
+                return None
+            value = json.load(response)
+            if not field and not isinstance(value, list):
+                return value
+            entries.extend(value[field] if field else value)
+            links = response.headers.get('Link', '')
+            next_page = re.search(r'<([^>]+)>;\s*rel="next"', links)
+            url = next_page[1] if next_page else None
+    return {field: entries} if field else entries
 
 
 def release(tag):
@@ -233,9 +251,9 @@ def prune(tag, prefix):
     repository = os.environ['GITHUB_REPOSITORY']
     owner = repository.split('/')[0]
     endpoint = f'orgs/{owner}/packages/container/butler-ci%2Fcargo-target/versions'
-    pages = json.loads(cache.output('gh', 'api', '--paginate', '--slurp', endpoint + '?per_page=100'))
+    pages = api(endpoint + '?per_page=100')
     versions = []
-    for entry in (entry for page in pages for entry in page):
+    for entry in pages:
         tags = entry['metadata']['container']['tags']
         matching = [value.removeprefix(tag + '--') for value in tags if value.startswith(tag + '--')]
         if matching:
@@ -246,7 +264,7 @@ def prune(tag, prefix):
         reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{latest}'
         ci_oci.checked('tag', reference, tag, anonymous=False)
     for _, entry in ordered[KEEP:]:
-        subprocess.run(['gh', 'api', '--method', 'DELETE', endpoint + '/' + str(entry['id'])], check=True)
+        api(endpoint + '/' + str(entry['id']), method='DELETE')
 
 
 def publish(directory, run_id):

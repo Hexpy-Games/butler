@@ -1,6 +1,9 @@
 //! Completed memory jobs and native conversation rows, with owner-sized metrics.
 use butler_e2e::e2e::{HarnessError, harness_error};
 use butler_platform::sqlite;
+
+#[path = "history.rs"]
+mod history;
 use rusqlite::{Connection, params};
 use std::{
     fs,
@@ -43,7 +46,7 @@ fn seed_btcc(data: &Path) -> Result<(), HarnessError> {
     let path = data.join("agent-runtime/btcc.sqlite");
     let mut db = sqlite::open(&path)?;
     let tx = db.transaction()?;
-    super::super::authority_permissions::seed_settled_history(&tx, 700_000);
+    history::history(&tx, 700_000);
     tx.commit()?;
     drop(db);
     assert!(fs::metadata(path)?.len() >= 7_000_000_000);

@@ -17,7 +17,7 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access) = self
+        let (snapshot, conversation_access, default_project_folder) = self
             .storage
             .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
@@ -82,7 +82,12 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        Ok(rebuilt_turn(snapshot, assets, &conversation_access))
+        Ok(rebuilt_turn(
+            snapshot,
+            assets,
+            &conversation_access,
+            default_project_folder,
+        ))
     }
 }
 
@@ -91,10 +96,11 @@ fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, Option<String>), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
-    Ok((snapshot, access))
+    let folder = projects::configured_root(db)?.map(|path| path.to_string_lossy().into_owned());
+    Ok((snapshot, access, folder))
 }
 
 fn claimed_snapshot(
@@ -178,9 +184,13 @@ fn rebuilt_turn(
     snapshot: ClaimedNativeSnapshot,
     assets: ResolvedNativeAssets,
     conversation_access: &AccessMode,
+    default_project_folder: Option<String>,
 ) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
+    if let Some(folder) = default_project_folder {
+        context.insert("defaultProjectFolder".into(), folder.into());
+    }
     if let Some(seed) = snapshot.branch_seed.clone() {
         context.insert("branchSeed".into(), seed);
     }
