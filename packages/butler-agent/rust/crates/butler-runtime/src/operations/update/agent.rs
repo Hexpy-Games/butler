@@ -281,7 +281,12 @@ impl AgentArchiveUpdateService {
             .as_deref()
             .filter(|version| !version.trim().is_empty())
             .ok_or(UpdateCode::AgentVersionUnavailable)?;
-        let previews = super::channel::previews(&self.data, request.channel.as_deref()).await;
+        let previews = super::channel::previews(
+            &self.data,
+            request.channel.as_deref(),
+            self.current_version.as_deref(),
+        )
+        .await;
         let source = super::channel::source(
             &self.client,
             &self.shutdown,

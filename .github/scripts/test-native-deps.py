@@ -3,8 +3,11 @@
 import copy
 import hashlib
 import http.server
+import io
 import importlib.util
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -24,6 +27,11 @@ sdk = recipe.prebuilt
 
 class NativeDeps(unittest.TestCase):
     def setUp(self):
+        self.msvc = {"vc_tools_version": "14.44.35207", "ucrt_version": "10.0.26100.0",
+                     "compiler_sha256": "cl", "stl_crt_sha256": {"stl_static": "stl"}}
+        identity = patch.object(sdk.host, "visual_studio_identity", return_value=self.msvc)
+        identity.start()
+        self.addCleanup(identity.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
@@ -35,8 +43,8 @@ class NativeDeps(unittest.TestCase):
     def build(self, stage, lock, target):
         release = stage / 'build/Release'
         release.mkdir(parents=True)
-        (stage / 'build/_deps').symlink_to('Release/_deps', target_is_directory=True)
-        libraries = [f'libonnxruntime_{name}.a' for name in recipe.EXPECTED_ORT_LIBS]
+        libraries = [recipe.TARGETS[target]['static_lib'].format(f'onnxruntime_{name}')
+                     for name in recipe.EXPECTED_ORT_LIBS]
         libraries.extend(recipe.TARGETS[target]['deps'])
         for name in libraries:
             path = release / name
@@ -49,7 +57,8 @@ class NativeDeps(unittest.TestCase):
             path = stage / 'downloads' / filename
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(name.encode())
-        protoc = stage / 'tools/protoc/bin/protoc'
+        sdk.create_deps_alias(stage / 'build')
+        protoc = stage / f"tools/protoc/bin/protoc{recipe.TARGETS[target]['exe']}"
         protoc.parent.mkdir(parents=True)
         protoc.write_bytes(b'pinned protoc')
         protoc.chmod(0o755)
@@ -109,6 +118,61 @@ class NativeDeps(unittest.TestCase):
         print(f'Fake asset: {entry["size"]} bytes; complete download/extract/verify {time.monotonic()-started:.3f}s')
 
     # test-category: security
+    def test_windows_restore_uses_real_deps_without_copy_or_link(self):
+        target = 'windows-x64'
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), target)
+        for name, entry in lock['sources'].items():
+            entry['sha256'] = hashlib.sha256(name.encode()).hexdigest()
+        fingerprint = sdk.key(recipe.SCRIPT, lock, target)
+        producer = self.root / 'producer'
+        producer.mkdir()
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(Path, 'symlink_to', side_effect=PermissionError('WinError 1314')) as link, \
+                patch.object(sdk.shutil, 'copytree', side_effect=PermissionError('WinError 5')) as duplicate, \
+                patch.object(sdk, 'release', return_value=None), \
+                patch.object(recipe.host, 'host_identity', return_value={'producer': 'fixture'}), \
+                patch.object(recipe, 'prepare', side_effect=self.build):
+            complete = recipe.prepare_cache(producer, fingerprint, lock, target, False, False)
+            archive = self.root / 'windows.zip'
+            sdk.pack(complete, archive)
+            entry = {'url': 'https://fixture.invalid/sdk.zip', 'size': archive.stat().st_size,
+                     'digest': f'sha256:{recipe.sha256(archive)}'}
+            consumer = self.root / 'consumer'
+            consumer.mkdir()
+            with patch.object(sdk, 'release', return_value=entry), \
+                    patch.object(sdk, 'request', side_effect=lambda *args, **kwargs: io.BytesIO(archive.read_bytes())), \
+                    patch.object(recipe, 'prepare', side_effect=AssertionError('must not rebuild')):
+                restored = recipe.prepare_cache(consumer, fingerprint, lock, target, False, True)
+                recipe.adopt(restored, fingerprint, lock, target)
+            link.assert_not_called()
+            with zipfile.ZipFile(archive) as source:
+                expected = {item.filename: source.read(item) for item in source.infolist()}
+            actual = {path.relative_to(restored).as_posix(): path.read_bytes()
+                      for path in restored.rglob('*') if path.is_file()
+                      and not path.is_relative_to(restored / 'build/_deps')}
+            self.assertEqual(actual, expected)
+            duplicate.assert_not_called()
+            self.assertFalse((restored / 'build/_deps').exists())
+            self.assertFalse(any(path.is_symlink() for path in restored.rglob('*')))
+            dependency = restored / 'build/Release/_deps/onnx-build/onnx.lib'
+            dependency.write_bytes(b'tampered dependency')
+            with self.assertRaisesRegex(RuntimeError, 'output digest mismatch'):
+                recipe.adopt(restored, fingerprint, lock, target)
+
+    # test-category: security
+    def test_windows_source_checkout_links_are_never_traversed(self):
+        release = self.root / 'build/Release'
+        source = release / '_deps/flatbuffers-src/java/src/test/java'
+        source.mkdir(parents=True)
+        (source / 'DictionaryLookup').symlink_to('missing-fixture', target_is_directory=True)
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(sdk.shutil, 'copytree', side_effect=PermissionError('WinError 5')), \
+                patch.object(Path, 'symlink_to', side_effect=PermissionError('WinError 1314')):
+            sdk.create_deps_alias(release.parent)
+            sdk.verify_deps_alias(release)
+        self.assertFalse((release.parent / '_deps').exists())
+
+    # test-category: security
     def test_asset_digest_mismatch_fails_without_build(self):
         archive = self.root / 'sdk.zip'
         sdk.pack(self.source_cache(), archive)
@@ -141,12 +205,163 @@ class NativeDeps(unittest.TestCase):
         script_dir = self.root / 'scripts'
         script_dir.mkdir()
         script = script_dir / recipe.SCRIPT.name
-        for name in ('prepare-static-ort.py', 'static_ort_host.py', 'static_ort_targets.py'):
+        for name in ('prepare-static-ort.py', 'static_ort_host.py', 'static_ort_targets.py',
+                     'static_ort_build.py', 'static_ort_prebuilt.py', 'static-ort-key-compat.json'):
             (script_dir / name).write_bytes((SCRIPTS / name).read_bytes())
         (self.root / 'rust-toolchain.toml').write_bytes((SCRIPTS.parent / 'rust-toolchain.toml').read_bytes())
         self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
         script.write_text(script.read_text() + '\n# recipe change\n')
+        self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+        for name in ('static_ort_prebuilt.py', 'static_ort_host.py'):
+            path = script_dir / name
+            path.write_text(path.read_text() + '\n# placement/provenance change\n')
+            self.assertEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+        build = script_dir / 'static_ort_build.py'
+        build.write_text(build.read_text().replace('onnxruntime_MINIMAL_BUILD=OFF',
+                                                    'onnxruntime_MINIMAL_BUILD=ON'))
         self.assertNotEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
+
+    # test-category: format-pin
+    def test_unchanged_build_inputs_keep_published_fingerprints(self):
+        compatibility = json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())
+        lock = json.loads(recipe.LOCK.read_text())
+        for target in recipe.TARGETS:
+            projected = recipe.target_lock(lock, target)
+            previous = {'lock': projected, 'target': target,
+                        'recipe': compatibility['published_recipe']}
+            if target == 'windows-x64':
+                previous['msvc'] = self.msvc
+            expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
+            self.assertEqual(sdk.key(recipe.SCRIPT, projected, target), expected)
+
+    # test-category: security
+    def test_windows_key_covers_selected_toolset_stl_and_crt(self):
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), 'windows-x64')
+        original = sdk.key(recipe.SCRIPT, lock, 'windows-x64')
+        for field, value in [('vc_tools_version', '14.51.36231'),
+                             ('ucrt_version', '10.0.28000.0'),
+                             ('compiler_sha256', 'different compiler'),
+                             ('stl_crt_sha256', {'stl_static': 'different STL'})]:
+            changed = {**self.msvc, field: value}
+            with patch.object(sdk.host, 'visual_studio_identity', return_value=changed):
+                self.assertNotEqual(original, sdk.key(recipe.SCRIPT, lock, 'windows-x64'))
+        with patch.object(sdk.host, 'visual_studio_identity', side_effect=RuntimeError('no toolset')):
+            with self.assertRaisesRegex(RuntimeError, 'no toolset'):
+                sdk.key(recipe.SCRIPT, lock, 'windows-x64')
+        legacy = {'lock': lock, 'target': 'windows-x64',
+                  'recipe': json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())['published_recipe']}
+        self.assertNotEqual(original, hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest())
+
+    # test-category: security
+    def test_windows_key_miss_builds_locally_and_other_toolset_cache_is_rejected(self):
+        target = 'windows-x64'
+        lock = recipe.target_lock(json.loads(recipe.LOCK.read_text()), target)
+        for name, entry in lock['sources'].items():
+            entry['sha256'] = hashlib.sha256(name.encode()).hexdigest()
+        original = sdk.key(recipe.SCRIPT, lock, target)
+        with patch.object(sdk.sys, 'platform', 'win32'), \
+                patch.object(sdk, 'release', return_value=None), \
+                patch.object(recipe.host, 'host_identity', return_value={'msvc': self.msvc}), \
+                patch.object(recipe, 'prepare', side_effect=self.build) as build:
+            complete = recipe.prepare_cache(self.root, original, lock, target, False, False)
+            build.assert_called_once()
+            with patch.object(sdk.host, 'visual_studio_identity',
+                              return_value={**self.msvc, 'vc_tools_version': '14.51.36231'}):
+                other = sdk.key(recipe.SCRIPT, lock, target)
+            with self.assertRaisesRegex(RuntimeError, 'fingerprint mismatch'):
+                recipe.adopt(complete, other, lock, target)
+
+    # test-category: pure-logic
+    def test_windows_ci_key_miss_allows_local_build_and_protoc_needs_no_msvc(self):
+        for target, flags, required in [('windows-x64', [], False),
+                                        ('windows-x64', ['--require-prebuilt'], True),
+                                        ('linux-x64', [], True)]:
+            with patch.object(recipe.sys, 'argv', ['prepare-static-ort.py', *flags]), \
+                    patch.object(recipe, 'host_target', return_value=target), \
+                    patch.object(recipe.host, 'rust_identity'), \
+                    patch.object(recipe, 'root_for_target', return_value=self.root), \
+                    patch.dict(os.environ, GITHUB_ACTIONS='true'), \
+                    patch.object(recipe, 'prepare_cache', return_value=self.root) as prepare:
+                recipe.main()
+                self.assertEqual(prepare.call_args.args[-1], required)
+        with patch.object(recipe.sys, 'argv', ['prepare-static-ort.py', '--protoc-only']), \
+                patch.object(recipe, 'host_target', return_value='windows-x64'), \
+                patch.object(recipe.host, 'rust_identity'), \
+                patch.object(recipe, 'root_for_target', return_value=self.root), \
+                patch.object(recipe, 'prepare_protoc', return_value=self.root / 'protoc'), \
+                patch.object(sdk.host, 'visual_studio_identity', side_effect=AssertionError('no MSVC')):
+            recipe.main()
+
+    # test-category: security
+    def test_msvc_identity_uses_selected_environment_and_all_stl_crt_digests(self):
+        tools = self.root / '14.44.35207'
+        ucrt = self.root / 'sdk'
+        paths = ['include/yvals_core.h', 'include/vcruntime.h', 'lib/x64/libcpmt.lib',
+                 'lib/x64/msvcprt.lib', 'lib/x64/libcmt.lib', 'lib/x64/vcruntime.lib',
+                 'lib/x64/libvcruntime.lib',
+                 'bin/Hostx64/x64/cl.exe']
+        for name in paths:
+            path = tools / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
+        for name in ['Include/10.0.26100.0/ucrt/corecrt.h', 'Lib/10.0.26100.0/ucrt/x64/libucrt.lib',
+                     'Lib/10.0.26100.0/ucrt/x64/ucrt.lib']:
+            path = ucrt / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(name.encode())
+        compiler = tools / paths[-1]
+        environment = dict(VCToolsVersion=tools.name, VCToolsInstallDir=str(tools),
+                           UCRTVersion='10.0.26100.0', UniversalCRTSdkDir=str(ucrt))
+        # Restore the real function temporarily: setUp mocks it for cross-platform key tests.
+        spec = importlib.util.spec_from_file_location('host_fixture', SCRIPTS / 'static_ort_host.py')
+        host = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(host)
+        with patch.dict(os.environ, environment), patch.object(host.shutil, 'which', return_value=str(compiler)), \
+                patch.object(host.subprocess, 'run') as banner:
+            banner.return_value.stdout, banner.return_value.stderr = '', 'MSVC fixture version'
+            selected = host.visual_studio_identity()
+            self.assertEqual(selected['vc_tools_version'], tools.name)
+            self.assertEqual(len(selected['stl_crt_sha256']), 10)
+            (tools / paths[0]).write_bytes(b'changed STL')
+            self.assertNotEqual(selected, host.visual_studio_identity())
+            with patch.dict(os.environ, VCToolsVersion='14.51.36231'):
+                with self.assertRaisesRegex(RuntimeError, 'does not match'):
+                    host.visual_studio_identity()
+            with patch.dict(os.environ, VCToolsVersion=''):
+                self.assertEqual(host.visual_studio_identity()['vc_tools_version'], tools.name)
+            banner.assert_not_called()
+
+    # test-category: pure-logic
+    def test_toolset_version_fallback_reads_korean_header_as_bytes(self):
+        tools = self.root / 'selected-toolset'
+        (tools / 'include').mkdir(parents=True)
+        header = tools / 'include/yvals_core.h'
+        with patch.dict(os.environ, VCToolsVersion=''):
+            for macro in ('_MSVC_STL_UPDATE', '_MSVC_STL_VERSION'):
+                header.write_bytes('한국어 주석'.encode('cp949') +
+                                   f'\n#define {macro} 202506L\n'.encode('ascii'))
+                self.assertEqual(sdk.host.toolset_version(tools), f'{macro}=202506')
+            header.write_bytes(b'no version macros')
+            with self.assertRaisesRegex(RuntimeError, 'Missing MSVC toolset identity'):
+                sdk.host.toolset_version(tools)
+            header.unlink()
+            with self.assertRaisesRegex(RuntimeError, 'cannot read yvals_core.h'):
+                sdk.host.toolset_version(tools)
+        with patch.dict(os.environ, VCToolsVersion='14.44.35207'):
+            self.assertEqual(sdk.host.toolset_version(tools), '14.44.35207')
+
+    # test-category: pure-logic
+    def test_subprocess_korean_banner_ignores_locale_codepage(self):
+        # Monkeypatch the process boundary with both UTF-8 and cp949 banner bytes.
+        for stream in ('한국어 Microsoft C/C++ 컴파일러'.encode('utf-8'),
+                       '한국어 Microsoft C/C++ 컴파일러'.encode('cp949')):
+            def run(args, **kwargs):
+                self.assertEqual(kwargs['encoding'], 'utf-8')
+                self.assertEqual(kwargs['errors'], 'replace')
+                output = stream.decode(kwargs['encoding'], kwargs['errors'])
+                return subprocess.CompletedProcess(args, 0, output, '')
+            with patch.object(sdk.host.subprocess, 'run', side_effect=run):
+                self.assertIn('Microsoft C/C++', sdk.host.command(['cl.exe']))
 
     # test-category: security
     def test_inner_archive_and_protoc_digests_remain_required(self):
@@ -251,7 +466,8 @@ class NativeDeps(unittest.TestCase):
         import os
         import subprocess
         completed = subprocess.CompletedProcess([], 0, stdout='Login Succeeded', stderr='')
-        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token'), \
+        with patch.dict(os.environ, HOME=str(self.root), GITHUB_ACTOR='fixture-actor', GH_TOKEN='stub-token',
+                        BUTLER_ORAS_EXECUTABLE=str(self.root / 'oras.exe')), \
                 patch.object(sdk.ci_oci.subprocess, 'run', return_value=completed) as invoke:
             sdk.ci_oci.authenticate()
             arguments = invoke.call_args.args[0]
@@ -260,7 +476,7 @@ class NativeDeps(unittest.TestCase):
             self.assertEqual(os.environ['BUTLER_OCI_AUTH_CONFIG'], config)
             self.assertEqual(invoke.call_args.kwargs['input'], 'stub-token')
             self.assertNotIn('stub-token', arguments)
-            self.assertEqual(arguments[0], 'oras')
+            self.assertEqual(arguments[0], str(self.root / 'oras.exe'))
 
     # test-category: security
     def test_unsafe_archive_is_rejected(self):

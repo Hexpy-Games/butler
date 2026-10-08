@@ -108,17 +108,17 @@ async fn installed_preview_refresh_discovers_new_published_releases() -> Result<
         .fixture(Fixture::Empty)
         .env("BUTLER_APP_VERSION", "0.1.0-preview.6")
         .env("BUTLER_UPDATE_RELEASES_API", &feed.api);
-    // Same on-disk preference as the installed preview.6, with no candidate override.
-    std::fs::write(
-        setup.sandbox.data.join("butler.config.json"),
-        json!({"update":{"previews":true}}).to_string(),
-    )?;
     let mut s = setup.start().await?;
+    assert_eq!(s.gw.settings().await?["update_previews"], true);
     let initial =
         s.gw.post("/updates/check", json!({"component":"app"}))
             .await?;
     assert_eq!(initial.status, 200, "{}", initial.text);
     assert_offer(initial.data(), "0.1.0-preview.6", "0.1.0-preview.6", false);
+    assert!(
+        feed.lists.load(Ordering::SeqCst) > 0,
+        "fresh preview must query release list"
+    );
     feed.published.store(7, Ordering::SeqCst);
     // Status remains cached until the user refreshes; ordinary reads do no network work.
     let before = feed.lists.load(Ordering::SeqCst);

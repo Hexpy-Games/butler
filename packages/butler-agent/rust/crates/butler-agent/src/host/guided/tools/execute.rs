@@ -207,11 +207,18 @@ async fn hold_stub_tool(
     {
         return Ok(());
     }
-    tokio::fs::write(
-        owner.binding.butler_data.join("e2e-held-tool"),
-        call.id.as_bytes(),
-    )
+    let marker = owner.binding.butler_data.join("e2e-held-tool");
+    let call_id = call.id.clone();
+    // Existence is the waiter's signal, so publish only the complete tool ID.
+    tokio::task::spawn_blocking(move || {
+        butler_platform::secure_fs::replace_private(
+            &marker,
+            |file| std::io::Write::write_all(file, call_id.as_bytes()),
+            std::convert::identity,
+        )
+    })
     .await
+    .map_err(|_| integrity("e2e_tool_hold_failed"))?
     .map_err(|_| integrity("e2e_tool_hold_failed"))?;
     while tokio::fs::try_exists(&hold)
         .await

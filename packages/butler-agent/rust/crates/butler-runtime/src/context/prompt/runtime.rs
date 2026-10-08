@@ -70,6 +70,7 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
         ));
     }
     lines.push(format!("Workspace Path: {}", input.binding.workspace_path));
+    lines.extend(default_project_folder(input.request));
     Ok(section(
         "runtime-state",
         "Runtime State",
@@ -77,6 +78,17 @@ pub(super) fn runtime_state(input: RuntimeStateInput<'_>) -> ContextResult<Conte
         "runtime_state",
         "mandatory_hot_cache",
         "session",
+    ))
+}
+
+fn default_project_folder(request: &TurnRequest) -> Option<String> {
+    let path = request
+        .app_turn_context
+        .as_ref()?
+        .get("defaultProjectFolder")?
+        .as_str()?;
+    Some(format!(
+        "User's default project folder: {path}. Projects live there; use this absolute path with file tools when the user refers to their project folder."
     ))
 }
 

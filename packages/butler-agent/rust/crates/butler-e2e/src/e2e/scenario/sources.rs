@@ -125,6 +125,11 @@ pub(super) async fn record_source(
         harness_error("BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials")
     })?;
     let choice = model.unwrap_or_else(|| live_provider.choice.clone());
+    if choice.model != "openai/gpt-6-luna" {
+        return Err(harness_error(
+            "live cassette recording requires openai/gpt-6-luna",
+        ));
+    }
     let upstream = live_provider
         .base_url
         .clone()
@@ -204,12 +209,7 @@ fn git_sha() -> String {
 }
 
 fn now_utc() -> String {
-    std::process::Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default()
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 /// The refresh token of the placeholder login [`route_login_refresh`] gives

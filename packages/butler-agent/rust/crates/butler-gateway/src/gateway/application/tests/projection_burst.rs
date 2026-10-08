@@ -24,7 +24,9 @@ pub(super) async fn assert_burst_projects_other_chat(
     let mut request = command("burst-b-client", "question");
     request.chat_id = b.id.clone();
     request.request.chat_id = Some(json!(b.id));
-    let turn = app.send_message(request).await.unwrap().turn.unwrap().id;
+    let turn = super::projection_tests::dispatched_turn(app, native, request)
+        .await
+        .id;
     let claim = native
         .0
         .lock()

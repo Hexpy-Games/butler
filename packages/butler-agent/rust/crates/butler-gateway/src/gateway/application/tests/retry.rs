@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 
+// test-category: race
 #[tokio::test]
 async fn retry_reuses_the_same_turn_attempt_controls_and_user_message() {
     let native = Arc::new(Native(Mutex::new(Vec::new())));
@@ -20,11 +21,12 @@ async fn retry_reuses_the_same_turn_attempt_controls_and_user_message() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
-    let accepted = app
-        .send_message(command("retry-original", "retry this"))
-        .await
-        .unwrap();
-    let original = accepted.turn.unwrap();
+    let original = super::projection_tests::dispatched_turn(
+        &app,
+        &native,
+        command("retry-original", "retry this"),
+    )
+    .await;
     let turn_id = original.id.clone();
     app.storage
         .execute({

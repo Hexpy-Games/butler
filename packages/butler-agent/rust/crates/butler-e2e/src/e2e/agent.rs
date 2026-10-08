@@ -30,6 +30,7 @@ pub struct Launch {
     pub tmp: PathBuf,
     pub logs: PathBuf,
     pub port: u16,
+    _port_reservation: std::sync::Arc<butler_platform::instance::InstanceLock>,
     /// The gateway token; empty until read from the data folder when the
     /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
@@ -69,6 +70,7 @@ impl Launch {
         )?;
         let tmp = sandbox.root.join("tmp");
         fs::create_dir_all(&tmp)?;
+        let (port, reservation) = ports::reserve()?;
         Ok(Self {
             binary: sandbox.binary.clone(),
             install: sandbox.install.clone(),
@@ -77,7 +79,8 @@ impl Launch {
             home: sandbox.home.clone(),
             tmp,
             logs: sandbox.logs.clone(),
-            port: free_port()?,
+            port,
+            _port_reservation: std::sync::Arc::new(reservation),
             token,
             env: vec![
                 // Child commands clear inherited environment. The product's

@@ -133,7 +133,6 @@ async fn duplicate_assignment_returns_the_running_relation() -> Result<(), Harne
     let s = Setup::new("DELEGATION-ALREADY-RUNNING")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", "0")
         .start()
         .await?;
     s.gw.say("general", stub::OWNER).await?;

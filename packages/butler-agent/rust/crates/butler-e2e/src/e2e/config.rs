@@ -72,7 +72,7 @@ impl ModelChoice {
 /// are passed through the product's own environment variable.
 #[derive(Clone, Debug)]
 pub enum Credential {
-    /// Butler OAuth profile (refreshable), passed as `BUTLER_CODEX_AUTH_PROFILE`.
+    /// Dedicated OAuth profile (Butler or Codex format), refreshed in place.
     CodexProfile(PathBuf),
     /// Codex CLI `auth.json` (read-only mode), passed as `CODEX_AUTH_JSON`.
     CodexAuthJson(PathBuf),
@@ -174,6 +174,9 @@ fn resolve_credential(provider: &str) -> Option<Credential> {
         if let Some(path) = nonempty("BUTLER_E2E_CODEX_PROFILE").map(PathBuf::from) {
             return existing(&path).map(Credential::CodexProfile);
         }
+        if let Some(path) = nonempty("BUTLER_E2E_CODEX_AUTH_JSON").map(PathBuf::from) {
+            return existing(&path).map(Credential::CodexProfile);
+        }
         if let Some(path) = home
             .as_deref()
             .map(|home| home.join(".butler-e2e-auth/auth/openai-codex.json"))
@@ -181,8 +184,7 @@ fn resolve_credential(provider: &str) -> Option<Credential> {
         {
             return Some(Credential::CodexProfile(path));
         }
-        let codex = nonempty("BUTLER_E2E_CODEX_AUTH_JSON")
-            .or_else(|| nonempty("CODEX_AUTH_JSON"))
+        let codex = nonempty("CODEX_AUTH_JSON")
             .map(PathBuf::from)
             .or_else(|| home.map(|home| home.join(".codex/auth.json")));
         return codex
