@@ -128,6 +128,9 @@ impl AppUpdateService {
 
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
+        if self.version.is_none() {
+            return Err(UpdateCode::AppVersionUnavailable.into());
+        }
         let prior = self.progress.snapshot().await;
         if prior["stage"] == "ready" && !request.dry_run {
             validate_request(&request)?;
@@ -143,11 +146,17 @@ impl AppUpdateService {
         }
         let cancel = self.shutdown.child_token();
         self.progress.begin(cancel.clone()).await?;
-        let result = self.apply_now(request, &cancel).await;
+        let mut attempted = false;
+        let result = self.apply_now(request, &cancel, &mut attempted).await;
         match &result {
             Err(error) => {
                 self.progress
-                    .report("failed", None, None, Some(error.code()))
+                    .report(
+                        if attempted { "failed" } else { "completed" },
+                        None,
+                        None,
+                        attempted.then_some(error.code()),
+                    )
                     .await?;
             }
             Ok(status) => {
@@ -172,6 +181,7 @@ impl AppUpdateService {
         &self,
         request: UpdateRequest,
         cancel: &CancellationToken,
+        attempted: &mut bool,
     ) -> Result<Value, UpdateError> {
         let request = self.resolved_request(request).await;
         validate_request(&request)?;
@@ -191,6 +201,9 @@ impl AppUpdateService {
         };
         let mut artifact_path = None;
         if !request.dry_run && status["update_available"] == true {
+            // An available update is now being downloaded, including failures
+            // opening the package source before the first bytes arrive.
+            *attempted = true;
             artifact_path = Some(
                 Box::pin(stage::download(
                     &self.client,
