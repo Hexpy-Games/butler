@@ -245,7 +245,8 @@ class TargetSnapshot(unittest.TestCase):
             self.fixture(root)
             target = root / 'target'
             expected = dict(schema=2, kind='native', platform='linux-x64')
-            env = dict(CARGO_TARGET_DIR=str(target), GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'), RUSTC_WRAPPER='')
+            env = dict(CARGO_TARGET_DIR=str(target), GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'),
+                       RUSTC_WRAPPER='', CARGO_TERM_COLOR='never')
             with patch.dict(os.environ, env), contextlib.chdir(root):
                 self.build(root)
                 with patch.object(cache, 'output', return_value='a' * 40):
