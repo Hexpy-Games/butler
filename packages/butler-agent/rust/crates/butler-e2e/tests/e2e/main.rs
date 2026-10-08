@@ -60,6 +60,7 @@ mod memory_existing;
 mod memory_fixture;
 mod memory_hot_cache;
 mod memory_idle;
+mod memory_import;
 mod memory_wiring;
 mod migration;
 mod monitoring_scale;
