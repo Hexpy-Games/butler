@@ -61,7 +61,9 @@ pub(super) fn anthropic(
         );
     }
     body.insert("messages".into(), json!([{"role":"user","content":prompt}]));
-    Value::Object(body)
+    let mut body = Value::Object(body);
+    super::super::super::anthropic_cache::apply(&mut body, config, None);
+    body
 }
 
 pub(super) fn gemini(
