@@ -1255,7 +1255,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       developer: "개발자",
       usageOverview: "개요",
       remoteAccess: "원격 접속",
-      allowedHosts: "허용 호스트",
     },
     pageSectionDescriptions: {
       grants: "묻지 않고 실행하도록 허용한 작업입니다.",
@@ -1712,6 +1711,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       contentHostPlaceholder: "content.example.com",
       contentHostsDescription: "결과물을 원격에서 열 때 쓰는 터널 이름입니다.",
       hostsDescription: "터널이나 프록시가 쓰는 이름입니다.",
+      hostCount: (n) => n === 0 ? "없음" : `${n}개`,
       noHosts: "없음",
       hostPlaceholder: "butler.example.com",
       addHost: "추가",
