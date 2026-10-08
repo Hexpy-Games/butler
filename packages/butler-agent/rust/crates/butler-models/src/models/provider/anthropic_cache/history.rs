@@ -79,3 +79,6 @@ fn turn_header(line: &str) -> bool {
             Some(_) => false,
         }
 }
+
+#[cfg(test)]
+pub(super) mod tests;

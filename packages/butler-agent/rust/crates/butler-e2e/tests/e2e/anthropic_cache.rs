@@ -127,6 +127,21 @@ fn controls(body: &Value) -> usize {
 
 fn layout(body: &Value, ttl: &str, enabled: bool) {
     assert!(controls(body) <= 4);
+    assert!(
+        body["max_tokens"].as_u64().is_some(),
+        "max_tokens must be an integer"
+    );
+    for field in ["store", "reasoning", "prompt_cache_key"] {
+        assert!(
+            body.get(field).is_none(),
+            "unexpected Anthropic field: {field}"
+        );
+    }
+    for tool in body["tools"].as_array().into_iter().flatten() {
+        assert!(tool["name"].is_string());
+        assert_eq!(tool["input_schema"]["type"], "object");
+        assert!(tool.get("cache_control").is_none());
+    }
     if !enabled {
         assert_eq!(controls(body), 0);
         assert!(body["messages"][0]["content"].is_string());
