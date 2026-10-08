@@ -168,7 +168,7 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
+        jobs = ['source', 'linux-clippy', 'linux-clippy-lint', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
