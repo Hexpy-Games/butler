@@ -725,7 +725,10 @@ const butlerApp = Object.freeze({
     return result;
   },
   memoryRequest: ({ path, method = "GET", body } = {}) => {
-    if (!/^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path)) throw new Error("Invalid memory path");
+    const existing = /^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path);
+    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
+      (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
+    if (!existing && !reset) throw new Error("Invalid memory path");
     return requestJson(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
   },
   listProjects: ({ includeSessions = false } = {}) => {
