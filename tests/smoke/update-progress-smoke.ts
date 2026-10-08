@@ -1,13 +1,79 @@
 // Production Settings renderer + agent-shaped stub snapshots; no model calls.
 import { strict as assert } from "node:assert";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page, Locator } from "playwright";
 import { launchSmokeBrowser } from "../support/smoke-browser";
+import { createNativeAppServer } from "../support/native-app-server";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 
+// Real gateway settings and manifest selection, rendered by production Settings.
+async function assertChannelDefaults() {
+  const output = process.env.BUTLER_UPDATE_CHANNEL_SCREENSHOTS ?? join(tmpdir(), "butler-update-channel");
+  mkdirSync(output, { recursive: true });
+  const browser = await launchSmokeBrowser();
+  let cells = 0;
+  try {
+    for (const [name, version, saved, expected] of [
+      ["fresh-preview", "0.1.0-preview.9", undefined, true],
+      ["explicit-off", "0.1.0-preview.9", false, false],
+      ["fresh-stable", "0.1.0", undefined, false],
+    ] as const) {
+      const scratch = mkdtempSync(join(tmpdir(), "butler-channel-manifest-"));
+      const manifest = join(scratch, "manifest.json");
+      writeFileSync(manifest, JSON.stringify({ artifacts: ["0.1.1-preview.10", "0.0.9"].map(version => ({
+        component: "app", version, channel: version.includes("preview") ? "preview" : "stable",
+        staging_policy: "butler-data-updates", activation_policy: "user-installs-app-package", rollback_policy: "not-managed-by-butler",
+      })) }));
+      const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist"),
+        config: saved === undefined ? {} : { update: { previews: saved } },
+        env: { BUTLER_APP_VERSION: version, BUTLER_APP_UPDATE_MANIFEST: manifest } });
+      try {
+        const settings = await server.api<{ update_previews: boolean }>("/settings");
+        assert.equal(settings.update_previews, expected, name);
+        const checked = await server.api<{ receive_previews: boolean; components: Array<{ update_available: boolean }> }>("/updates/check",
+          { method: "POST", body: JSON.stringify({ component: "app" }) });
+        assert.equal(checked.receive_previews, expected, name);
+        assert.equal(checked.components[0]!.update_available, expected, name);
+        for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
+          await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
+          const page = await browser.newPage({ viewport: { width, height: 900 } });
+          try {
+            await server.signIn(page);
+            await page.goto(server.url);
+            await page.locator('[data-test-class~="composer-card"]').waitFor();
+            await page.keyboard.press("ControlOrMeta+k");
+            const dialog = page.getByRole("dialog", { name: getAppCopy("ko-KR").commandPalette.label });
+            await dialog.getByRole("combobox").fill(getAppCopy("ko-KR").settings.sections.updates);
+            await dialog.getByRole("option").filter({ has: page.getByText(getAppCopy("ko-KR").settings.sections.updates, { exact: true }) }).click();
+            await dialog.waitFor({ state: "hidden" });
+            const control = page.locator('[data-setting-id="update-previews"] [role="switch"]');
+            await control.waitFor();
+            assert.equal(await control.getAttribute("aria-checked"), String(expected), name);
+            await page.evaluate(() => document.fonts.ready);
+            await page.waitForFunction(() => document.getAnimations().every(animation =>
+              animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+            await page.screenshot({ path: join(output, `${name}-${width}-${theme}.png`) });
+            cells++;
+          } finally { await page.close(); }
+        }
+        const config = JSON.parse(readFileSync(join(server.butlerData, "butler.config.json"), "utf8"));
+        assert.equal(config.update?.previews, saved, "effective default never writes config");
+        assert.equal(server.stubModelCalls.length, 0);
+      } finally { await server.stop(); rmSync(scratch, { recursive: true, force: true }); }
+    }
+    console.log(JSON.stringify({ ok: true, channelCases: 3, rendererCells: cells, modelCalls: 0, screenshots: output }));
+  } finally { await browser.close(); }
+}
+
+if (process.argv.includes("--channel-defaults")) {
+  await assertChannelDefaults();
+  process.exit(0);
+}
+
 const uiRoot = resolve("packages/butler-app/client/ui/dist");
-const output = resolve(".tmp/update-progress");
+const output = process.env.BUTLER_UPDATE_PROGRESS_SCREENSHOTS ?? join(tmpdir(), "butler-update-progress");
 mkdirSync(output, { recursive: true });
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = new URL(request.url).pathname;

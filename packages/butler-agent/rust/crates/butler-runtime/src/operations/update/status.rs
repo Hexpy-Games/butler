@@ -24,7 +24,7 @@ impl AppUpdateService {
             .version
             .as_deref()
             .ok_or(UpdateCode::AppVersionUnavailable)?;
-        let previews = super::channel::previews(&self.data, None).await;
+        let previews = super::channel::previews(&self.data, None, self.version.as_deref()).await;
         let saved = self
             .saved()
             .await
@@ -85,7 +85,12 @@ impl AppUpdateService {
     }
 
     pub(super) async fn resolved_request(&self, mut request: UpdateRequest) -> UpdateRequest {
-        let previews = super::channel::previews(&self.data, request.channel.as_deref()).await;
+        let previews = super::channel::previews(
+            &self.data,
+            request.channel.as_deref(),
+            self.version.as_deref(),
+        )
+        .await;
         request.channel = Some(if previews { "preview" } else { "stable" }.into());
         request
     }
@@ -140,7 +145,12 @@ impl AppUpdateService {
             Some(prior)
                 if super::channel::eligible(
                     &json!({"version": prior.get("available_version")}),
-                    super::channel::previews(&self.data, request.channel.as_deref()).await,
+                    super::channel::previews(
+                        &self.data,
+                        request.channel.as_deref(),
+                        self.version.as_deref(),
+                    )
+                    .await,
                 ) =>
             {
                 Value::Object(prior)

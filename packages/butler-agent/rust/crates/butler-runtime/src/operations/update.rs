@@ -3,6 +3,7 @@
 
 mod agent;
 mod channel;
+pub use channel::effective_update_previews;
 mod error;
 mod manifest;
 mod progress;
@@ -252,8 +253,14 @@ impl AppUpdateService {
         status: Value,
     ) -> Result<Value, UpdateError> {
         let mut view = self.view(request, &status);
-        view["receive_previews"] =
-            json!(channel::previews(&self.data, request.channel.as_deref()).await);
+        view["receive_previews"] = json!(
+            channel::previews(
+                &self.data,
+                request.channel.as_deref(),
+                self.version.as_deref()
+            )
+            .await
+        );
         let _write = self.writes.lock().await;
         stage::write_json(&self.data, &self.installation, status::STATUS_LABEL, &view).await?;
         Ok(view)
@@ -328,7 +335,12 @@ impl AppUpdateService {
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
         }
-        let previews = channel::previews(&self.data, request.channel.as_deref()).await;
+        let previews = channel::previews(
+            &self.data,
+            request.channel.as_deref(),
+            self.version.as_deref(),
+        )
+        .await;
         let source = channel::source(
             &self.manifest_client,
             &self.shutdown,
