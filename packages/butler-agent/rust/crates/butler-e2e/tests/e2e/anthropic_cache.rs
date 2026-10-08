@@ -144,8 +144,15 @@ fn layout(body: &Value, ttl: &str, enabled: bool) {
         return;
     }
     let long = ttl != "off";
-    assert_eq!(controls(body), if long { 3 } else { 1 });
     let content = body["messages"][0]["content"].as_array().unwrap();
+    assert_eq!(
+        controls(body),
+        if long {
+            if content.len() > 2 { 4 } else { 3 }
+        } else {
+            1
+        }
+    );
     if long {
         assert_eq!(body["system"][0]["cache_control"]["ttl"], ttl);
         assert_eq!(content[content.len() - 2]["cache_control"]["ttl"], ttl);
@@ -386,7 +393,7 @@ fn history_blocks(body: &Value) -> Vec<String> {
     let blocks = body["messages"][0]["content"].as_array().unwrap();
     let last = blocks
         .iter()
-        .position(|block| {
+        .rposition(|block| {
             block["cache_control"]["ttl"] == "1h" || block["cache_control"]["ttl"] == "5m"
         })
         .unwrap();
@@ -428,3 +435,6 @@ fn history(s: &Scenario) -> Result<String, HarnessError> {
         .and_then(|value| value["history"].as_str().map(str::to_owned))
         .unwrap_or_else(|| content.to_owned()))
 }
+
+#[path = "anthropic_cache_idle.rs"]
+mod idle;
