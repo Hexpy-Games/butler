@@ -217,6 +217,11 @@
   opacity: 0.45;
 }
 
+.pointer[data-flip] .tag {
+  right: var(--space-xs);
+  left: auto;
+}
+
 .layer[data-mode="parked"][data-tone="waiting"] .tag,
 .layer[data-mode="parked"][data-tone="need-input"] .tag {
   background: var(--color-warning-text);

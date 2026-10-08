@@ -33,15 +33,17 @@ export function OutsideRows({ locale, state }: ShowcaseRenderContext & { state: 
     ...copy.rows.map((label, index) => ({ id: `c${index}`, label, icon: <MessageSquare />, drop: state === "conversation" && index === 1, hint: copy.attach, invalid: false })),
   ];
   return (
-    <NavDropScope active={state !== "rest"} payload="outside" aria-label="Rows" data-ds-outside-state={state}>
-      <CollapsibleList scope="outside-rows">
-        {rows.map((row) => (
-          <NavDropTarget key={row.id} data-ds-row={row.id} drop={row.drop ? "outside" : undefined} invalid={row.invalid} indicator={HEADER} hint={row.hint}>
-            <NavRow icon={row.icon} label={row.label} onClick={() => undefined} />
-          </NavDropTarget>
-        ))}
-      </CollapsibleList>
-    </NavDropScope>
+    <div style={{ width: 304, maxWidth: "100%" }}>
+      <NavDropScope active={state !== "rest"} payload="outside" aria-label="Rows" data-ds-outside-state={state}>
+        <CollapsibleList scope="outside-rows">
+          {rows.map((row) => (
+            <NavDropTarget key={row.id} data-ds-row={row.id} drop={row.drop ? "outside" : undefined} invalid={row.invalid} indicator={HEADER} hint={row.hint}>
+              <NavRow icon={row.icon} label={row.label} onClick={() => undefined} />
+            </NavDropTarget>
+          ))}
+        </CollapsibleList>
+      </NavDropScope>
+    </div>
   );
 }
 
@@ -63,7 +65,7 @@ export function OutsideSequence(context: ShowcaseRenderContext) {
 export function AutoScrollRows({ locale }: ShowcaseRenderContext) {
   const copy = COPY[locale];
   return (
-    <div style={{ height: 200, overflowY: "auto" }} data-ds-auto-scroll-list="">
+    <div style={{ width: 304, maxWidth: "100%", height: 200, overflowY: "auto" }} data-ds-auto-scroll-list="">
       <NavDropScope active payload="outside" autoScroll="end" aria-label="Rows">
         <CollapsibleList scope="auto-scroll-rows">
           {[...copy.rows, ...copy.more].map((label) => (

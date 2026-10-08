@@ -1,4 +1,9 @@
 .window {
+  /* The native lights' reserve in a pop-up (hiddenInset): lights at x 20,
+     three 12px buttons, 8px gaps. Own value: the main window's
+     --traffic-controls-width is 0 inside a browser-hosted shell. */
+  --popup-lights-reserve: 72px;
+
   display: flex;
   width: 100%;
   height: 100%;
@@ -21,7 +26,7 @@
 }
 
 .window[data-platform="darwin"] .bar {
-  padding-inline-start: var(--traffic-controls-width);
+  padding-inline-start: var(--popup-lights-reserve);
 }
 
 .lock {

@@ -72,6 +72,8 @@ export function AgentPointer({
   const paint = `agent-pointer-${useId().replace(/[^\w-]/gu, "")}`;
   const trail = mode === "batch" ? steps : from ? [from, at] : [];
   const ring = target && mode !== "scroll";
+  // Near the layer's right edge the tag sits left of the tip, so it is never clipped.
+  const flip = at.x > width - 120;
   return (
     <div className={cn("theme-light", styles.layer, className)} data-slot="agent-pointer" data-mode={mode} data-tone={tone}
       data-reduced={reducedMotion ? "true" : undefined} aria-hidden="true">
@@ -96,7 +98,7 @@ export function AgentPointer({
       ) : null}
       {mode === "click" ? <span className={styles.ripple} style={place(at)} /> : null}
       {mode === "scroll" ? <div className={styles.rail} style={{ height: height * 0.64, translate: `0 ${height * 0.18}px` }}><span className={styles.thumb} /></div> : null}
-      <div className={styles.pointer} style={place(at)}>
+      <div className={styles.pointer} style={place(at)} data-flip={flip || undefined}>
         <svg width="22" height="26" viewBox="0 0 22 26" focusable="false">
           <defs>
             <linearGradient id={paint} x1="0" y1="0" x2="1" y2="1">
@@ -108,7 +110,7 @@ export function AgentPointer({
           <path className={styles.halo} d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" />
           <path className={styles.arrow} d="M2 2 L2 21 L7.2 16.4 L10.6 24 L14 22.5 L10.7 15 L18 15 Z" fill={`url(#${paint})`} />
         </svg>
-        <span className={styles.tag}>{tagText(mode, tone, labels)}</span>
+        {mode === "type" && value ? null : <span className={styles.tag}>{tagText(mode, tone, labels)}</span>}
       </div>
     </div>
   );

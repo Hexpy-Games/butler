@@ -57,7 +57,7 @@ export function PointerStage({ locale, mode, tone, page = "shop", card = 0, redu
       <div ref={setNode} style={{ position: "relative", aspectRatio: "16 / 10", overflow: "hidden", borderRadius: "var(--radius-control)",
         border: "var(--border-hairline) solid var(--line)", backgroundImage: `url("${src}")`, backgroundSize: "cover" }} data-pointer-page={page}>
         {width ? (
-          <AgentPointer mode={mode} tone={tone} at={mode === "batch" ? steps[2]! : at} target={target} steps={steps}
+          <AgentPointer mode={mode} tone={tone} at={mode === "batch" ? steps[2]! : at} target={mode === "batch" ? s(shopCardRect(2)) : target} steps={steps}
             from={mode === "click" || mode === "observe" ? { x: 72 * scale, y: 470 * scale } : undefined}
             value={mode === "type" ? (locale === "ko-KR" ? "사무용 의자" : "office chair") : undefined}
             width={width} height={height} labels={POINTER_LABELS[locale]} reducedMotion={reducedMotion} />

@@ -116,6 +116,12 @@
   transition: none;
 }
 
+/* The peeked sidebar leaves the grid flow; the workspace keeps its column. */
+[data-panel-layout="docked"][data-left-peek="true"]
+  > [data-slot="adaptive-shell-workspace"] {
+  grid-column: 2;
+}
+
 @keyframes peek-in {
   from {
     opacity: 0;

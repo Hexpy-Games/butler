@@ -142,6 +142,10 @@
   animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
 }
 
+.outsideLabel[data-inside] {
+  transform: translate(calc(-100% - var(--space-sm)), -50%);
+}
+
 .outsideLabel[data-invalid="true"] {
   background: var(--color-danger);
 }

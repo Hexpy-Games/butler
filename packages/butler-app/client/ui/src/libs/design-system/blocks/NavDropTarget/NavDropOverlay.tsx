@@ -7,6 +7,9 @@ import styles from "./NavDropTarget.module.css";
 
 type Box = { left: number; top: number; width: number; height: number };
 
+/** Room the label needs past the row's end before it moves inside the row. */
+const LABEL_ROOM = 240;
+
 /** The theme class of the element's scope, so a body portal keeps its tokens (light panel in dark chrome). */
 function themeClassOf(element: Element): string | undefined {
   const scope = element.closest(".theme-dark, .theme-light");
@@ -56,10 +59,12 @@ export function NavDropLabel({ anchor, indicator, invalid, children }: {
   const box = useViewportBox(anchor);
   if (!anchor || !box || typeof document === "undefined") return null;
   const middle = box.top + (indicator ? indicator.top + indicator.height / 2 : box.height / 2);
+  // Past the row's end when there is room (over the next surface), else inside the row's end.
+  const inside = box.left + box.width + LABEL_ROOM > window.innerWidth;
   return createPortal(
     <div className={themeClassOf(anchor)}>
-      <span className={styles.outsideLabel} data-slot="nav-drop-label" data-invalid={invalid || undefined} role="status"
-        style={{ left: box.left + box.width, top: middle }}>
+      <span className={styles.outsideLabel} data-slot="nav-drop-label" data-invalid={invalid || undefined} data-inside={inside || undefined}
+        role="status" style={{ left: box.left + box.width, top: middle }}>
         <Typo.Caption>{children}</Typo.Caption>
       </span>
     </div>,
