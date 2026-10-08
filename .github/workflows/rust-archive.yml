@@ -56,15 +56,13 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      # These four libraries allow panic/unwrap/expect and dead-code lints
-      # under test-support. --all-targets enables it through dev dependencies;
-      # retain their feature-free production check. Other ordinary libraries
-      # and binaries are covered by the workspace all-targets invocation.
-      - name: Clippy strict production libraries and all targets
+      # Linux x64 retains strict production and workspace/all-targets Clippy.
+      # source-check enforces OS-specific production code in butler-platform;
+      # lint its native implementations and contracts on macOS and arm64.
+      - name: Clippy native platform library and contracts
         if: inputs.clippy
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-platform --all-targets --locked --keep-going -- -D warnings
       - name: Build the complete workspace once
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
