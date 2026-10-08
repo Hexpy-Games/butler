@@ -16,7 +16,7 @@ pub(in crate::btcc::storage) fn load_acceptance(
     assert_checkpoint(connection, &key.turn_id, checkpoint_id, checkpoint_revision)?;
     let row = connection
         .query_row(
-            "SELECT normalized_response_json,provider_identity_json FROM \
+            "SELECT normalized_response_json,provider_identity_json,payload_state FROM \
         btcc_model_round_acceptances WHERE turn_id=?1 AND round_id=?2 AND route_digest=?3 \
         AND candidate_index=?4 AND model_ref=?5 AND checkpoint_id=?6 AND checkpoint_revision=?7",
             params![
@@ -28,11 +28,32 @@ pub(in crate::btcc::storage) fn load_acceptance(
                 checkpoint_id,
                 checkpoint_revision
             ],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            },
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    row.map(|(raw, identity)| {
+    row.map(|(raw, identity, state)| {
+        match state {
+            0 => {}
+            2 => {
+                return Err(error(
+                    StorageCode::ModelAcceptanceReclaimed,
+                    "acceptance payload reclaimed",
+                ));
+            }
+            _ => {
+                return Err(error(
+                    StorageCode::ModelAcceptanceFormatUnknown,
+                    "unknown acceptance payload format",
+                ));
+            }
+        }
         let mut value = normalize(&json(&raw, StorageCode::ModelAcceptanceJson)?)?;
         if let Some(raw) = identity {
             value
@@ -76,6 +97,7 @@ pub(in crate::btcc::storage) fn record_acceptance(
 ) -> StorageResult<()> {
     let (checkpoint_id, checkpoint_revision) = checkpoint(&write.key)?;
     let tx = connection.transaction().map_err(StorageError::sqlite)?;
+    assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
     assert_claim(
         &tx,
         &write.binding.turn_id,
@@ -97,7 +119,6 @@ pub(in crate::btcc::storage) fn record_acceptance(
             "BTCC model response acceptance lost exact Turn claim",
         ));
     }
-    assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
     let result = encoded(write)?;
     let normalized = normalize(&result)?;
     let provider = result.get("providerIdentity").map(stringify).transpose()?;
@@ -177,11 +198,17 @@ fn assert_checkpoint(
     revision: u64,
 ) -> StorageResult<()> {
     let row=connection.query_row("SELECT turn.active_checkpoint_id,checkpoint.checkpoint_id,
-        checkpoint.checkpoint_revision,checkpoint.is_active FROM btcc_turns turn LEFT JOIN
+        checkpoint.checkpoint_revision,checkpoint.is_active,turn.semantic_state FROM btcc_turns turn LEFT JOIN
         btcc_checkpoints checkpoint ON checkpoint.checkpoint_id=?1 AND checkpoint.turn_id=turn.turn_id
         AND checkpoint.checkpoint_revision=?2 WHERE turn.turn_id=?3",params![id,revision,turn_id],
-        |r|Ok((r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<u64>>(2)?,r.get::<_,Option<u8>>(3)?)))
+        |r|Ok((r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<u64>>(2)?,r.get::<_,Option<u8>>(3)?,r.get::<_,String>(4)?)))
         .optional().map_err(StorageError::sqlite)?;
+    if row.as_ref().is_some_and(|r| r.4 != "admitted") {
+        return Err(error(
+            StorageCode::ModelAcceptanceTurnSettled,
+            "model acceptance turn settled",
+        ));
+    }
     if !row.is_some_and(|r| {
         r.0.as_deref() == Some(id)
             && r.1.as_deref() == Some(id)

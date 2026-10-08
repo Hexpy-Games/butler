@@ -1,3 +1,4 @@
+import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
@@ -140,6 +141,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
+let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
@@ -319,6 +321,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   startupTimeoutMs: 120_000,
+  startupDeadline: () => storageCorrectionWatch?.deadline() ?? 0,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
   onIntentionalExit: handleIntentionalAgentExit,
@@ -2933,8 +2936,15 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") startupStage("service");
-  if (stage === "agent_ready") startupStage("screen");
+  if (stage === "agent_starting") {
+    startupStage("service");
+    storageCorrectionWatch?.close();
+    storageCorrectionWatch = watchStorageCorrection(butlerDataRoot, (deadline) => startupStage("storage", deadline));
+  }
+  if (stage === "agent_ready") {
+    storageCorrectionWatch?.close(); storageCorrectionWatch = null;
+    startupStage("screen");
+  }
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();

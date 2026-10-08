@@ -139,7 +139,7 @@ fn verify_alias(binary: &Path, alias: &Path) -> io::Result<()> {
     #[cfg(windows)]
     let same_file = same_file::is_same_file(binary, alias)?;
     #[cfg(not(windows))]
-    let same_file = crate::secure_fs::same_file(&fs::metadata(binary)?, &metadata);
+    let same_file = crate::secure_fs::same_metadata(&fs::metadata(binary)?, &metadata);
     if !same_file {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

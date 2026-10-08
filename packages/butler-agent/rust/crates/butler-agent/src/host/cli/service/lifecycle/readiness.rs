@@ -22,7 +22,7 @@ pub(super) async fn wait_until_ready(
     mut child: Option<&mut Child>,
     expected_nonce: Option<String>,
 ) -> Result<InstanceRecord, crate::host::HostError> {
-    let deadline = Instant::now() + START_TIMEOUT;
+    let mut deadline = Instant::now() + START_TIMEOUT;
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(2))
@@ -72,6 +72,9 @@ pub(super) async fn wait_until_ready(
         } else if child.is_none() {
             return Err("native_service_stopped_before_readiness".into());
         }
+        deadline = storage_deadline(&config.data_root)
+            .await
+            .map_or(deadline, |extended| deadline.max(extended));
         if Instant::now() >= deadline {
             return Err("native_service_start_timeout".into());
         }
@@ -255,4 +258,24 @@ pub(super) async fn cleanup_spawned(mut child: Child) {
         let _ = child.kill();
         let _ = child.wait();
     }
+}
+
+/// Read only the bounded startup progress record, outside Tokio workers.
+async fn storage_deadline(data: &Path) -> Option<Instant> {
+    let path = data.join("agent-runtime/storage-correction.json");
+    let time = tokio::task::spawn_blocking(move || {
+        let raw = std::fs::read_to_string(path).ok()?;
+        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        if value["schema"] != "butler.storage-correction-progress.v1" {
+            return None;
+        }
+        chrono::DateTime::parse_from_rfc3339(value["deadlineAt"].as_str()?).ok()
+    })
+    .await
+    .ok()??;
+    let remaining = (time.with_timezone(&chrono::Utc) + chrono::Duration::seconds(30)
+        - chrono::Utc::now())
+    .to_std()
+    .ok()?;
+    Some(Instant::now() + remaining)
 }

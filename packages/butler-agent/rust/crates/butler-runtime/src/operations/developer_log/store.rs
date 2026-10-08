@@ -308,7 +308,7 @@ pub(super) fn retention_regression() {
         let after = fs::metadata(&path).unwrap();
         // An atomic rewrite changes file identity; count appended bytes plus the output.
         bytes_written += line.len() as u64;
-        if !butler_platform::secure_fs::same_file(&before, &after) {
+        if !butler_platform::secure_fs::same_metadata(&before, &after) {
             bytes_written += after.len();
         }
         if turn == 0 {

@@ -27,8 +27,8 @@ export function startupTiming(stage) {
 }
 function publish() { surface?.update(state); displayedAt = performance.now(); }
 function clearStageTimers() { clearTimeout(timeout); clearTimeout(slow); clearTimeout(dwell); }
-export function startupStage(stage) {
-  if (state.failed || !surface || state.stage === stage && timeout) return;
+export function startupStage(stage, deadlineAt = null) {
+  if (state.failed || !surface || state.stage === stage && timeout && stage !== "storage") return;
   clearStageTimers();
   if (timeout) startupTiming(`stage_${state.stage}_end`);
   state = { ...state, stage, state: "working" };
@@ -37,7 +37,8 @@ export function startupStage(stage) {
   if (remaining > 0) dwell = setTimeout(publish, remaining); else publish();
   // Host tuning floor, 2026-10-06: keep 8 s until measured stage p95 warrants more.
   slow = setTimeout(() => { state.state = "slow"; publish(); }, 8000);
-  timeout = setTimeout(failStartup, stage === "service" ? 120_000 : 30_000);
+  timeout = setTimeout(failStartup, stage === "storage" && Number.isFinite(deadlineAt)
+    ? Math.max(0, deadlineAt - Date.now()) : stage === "service" ? 120_000 : 30_000);
 }
 export function failStartup() {
   clearStageTimers();

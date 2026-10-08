@@ -153,3 +153,9 @@ pub(super) fn readiness(db: &Connection, expected: &str) -> StorageResult<()> {
     }
     Ok(())
 }
+
+pub(super) fn correction(db: &Connection) -> StorageResult<()> {
+    canonical_schema(db)?;
+    foreign_keys(db, None)?;
+    references::validate(db)
+}

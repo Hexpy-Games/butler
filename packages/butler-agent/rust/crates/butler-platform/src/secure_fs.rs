@@ -13,7 +13,7 @@ mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
-pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
+pub use fault::{abort_point, checkpoint as fault_checkpoint, write as fault_write};
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -400,15 +400,6 @@ pub fn identity(metadata: &Metadata) -> FileIdentity {
     sys::identity(metadata)
 }
 
-/// Whether two metadata describe the same file: the same [`FileId`]; without
-/// [`FILE_IDS`], the same length and modification time.
-pub fn same_file(left: &Metadata, right: &Metadata) -> bool {
-    match (identity(left).id, identity(right).id) {
-        (Some(left), Some(right)) => left == right,
-        _ => left.len() == right.len() && left.modified().ok() == right.modified().ok(),
-    }
-}
-
 /// Whether this user may create entries in a directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Writability {
@@ -493,6 +484,7 @@ pub fn workspace_test_alias(path: &Path) -> PathBuf {
             .join(path.file_name().unwrap_or_default())
     }
 }
-
 #[cfg(feature = "test-support")]
 pub mod fixture_links;
+mod path_identity;
+pub use path_identity::{same_file, same_metadata};

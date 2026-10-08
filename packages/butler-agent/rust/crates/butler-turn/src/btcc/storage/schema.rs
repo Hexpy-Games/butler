@@ -1,5 +1,6 @@
 pub(super) mod authority;
 pub(super) mod core;
+pub(super) mod correction;
 pub(super) mod effects;
 pub(super) mod legacy;
 pub(super) mod subsession;

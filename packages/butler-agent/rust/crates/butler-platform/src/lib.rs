@@ -51,6 +51,7 @@ pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
 pub mod desktop;
+pub mod fs_space;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;

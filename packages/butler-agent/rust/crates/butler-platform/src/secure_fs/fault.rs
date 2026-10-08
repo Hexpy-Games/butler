@@ -23,3 +23,17 @@ pub fn checkpoint(point: &str) -> io::Result<()> {
     }
     Ok(())
 }
+
+/// Debug-only process interruption at an explicitly selected correction boundary.
+pub fn abort_point(point: &str) {
+    #[cfg(debug_assertions)]
+    if matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var("BUTLER_E2E_ABORT_POINT").as_deref() == Ok(point)
+    {
+        std::process::abort();
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = point;
+}

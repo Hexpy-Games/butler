@@ -143,7 +143,7 @@ pub use project_plan::{
 };
 pub use storage::{
     BtccRepositories, BtccStorage, BtccStorageConfig, CommittedProgressEvent,
-    ContextCompactionRecord, ContextCompactionRepository, ContextDocumentRead,
+    ContextCompactionRecord, ContextCompactionRepository, ContextDocumentRead, CorrectionOutcome,
     ExactProjectWorkResultAuthority, ExactProjectWorkResultIdentity,
     ExactProjectWorkResultVerification, OperationResultReferenceInput, OperationResultRepository,
     ParentResultRoute, PersistedWorkTurnScope, ProcessLiveness, ProjectWorkResultAuthorityFactory,
@@ -154,7 +154,8 @@ pub use storage::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
     begin_storage_startup, bootstrap_fresh_storage, read_activated_storage_manifest,
-    storage_error_is_corruption, storage_scan_delay, validate_storage_background,
+    run_startup_correction, storage_error_is_corruption, storage_scan_delay,
+    validate_storage_background,
 };
 pub use storage::{
     ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,

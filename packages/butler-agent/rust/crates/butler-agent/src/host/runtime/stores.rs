@@ -129,32 +129,71 @@ async fn open_btcc(
     stop: &tokio_util::sync::CancellationToken,
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
-    let bootstrap = tokio::task::spawn_blocking(move || {
-        prepare_btcc_storage(&root, crate::host::build_info::current().version)
-    })
-    .await
-    .map_err(|e| error("storage_bootstrap_worker_failed", e))?
-    .map_err(|e| error("storage_bootstrap_failed", e))?;
+    let cancellation = stop.clone();
+    let (bootstrap, correction) = tokio::task::spawn_blocking(move || {
+        let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
+            .map_err(|e| error("storage_bootstrap_failed", e))?;
+        let correction = butler_turn::btcc::run_startup_correction(
+            &bootstrap.path, &cancellation, |step, duration, bytes| {
+                butler_core::diagnostic!("[btcc-startup] phase=storage_correction step={step} duration_us={} wal_bytes={bytes}", duration.as_micros());
+            },
+        ).map_err(|e| error(e.code(), e.message()))?;
+        Ok::<_, BtccError>((bootstrap, correction))
+    }).await.map_err(|e| error("storage_bootstrap_worker_failed", e))??;
     check_startup(stop)?;
     let host_id = SystemIdentity
         .hostname()
         .map_err(|e| error("runtime_host_identity_failed", e))?;
-    let btcc = BtccStorage::open(BtccStorageConfig {
-        path: bootstrap.path,
+    let config = || btcc_config(&bootstrap.path, &bootstrap.manifest_id, &host_id);
+    let started = std::time::Instant::now();
+    let btcc = match BtccStorage::open(config()).await {
+        Ok(store) => store,
+        Err(e) => {
+            let path = bootstrap.path.clone();
+            let restored = tokio::task::spawn_blocking(move || correction.rollback(&path))
+                .await
+                .map_err(|e| error("storage_correction_open_failed", e))?
+                .map_err(|e| error(e.code(), e.message()))?;
+            if !restored {
+                return Err(error(e.code(), e.message()));
+            }
+            butler_core::diagnostic!(
+                "[btcc-storage] storage_correction_open_failed: {}",
+                e.code()
+            );
+            return BtccStorage::open(config())
+                .await
+                .map_err(|e| error(e.code(), e.message()));
+        }
+    };
+    butler_core::diagnostic!(
+        "[btcc-startup] phase=storage_correction step=open duration_us={}",
+        started.elapsed().as_micros()
+    );
+    let path = bootstrap.path;
+    tokio::task::spawn_blocking(move || correction.opened(&path))
+        .await
+        .map_err(|e| error("storage_correction_open_failed", e))?
+        .map_err(|e| error(e.code(), e.message()))?;
+    Ok(btcc)
+}
+
+fn btcc_config(path: &Path, manifest_id: &str, host_id: &str) -> BtccStorageConfig {
+    BtccStorageConfig {
+        path: path.to_owned(),
         profile: StorageProfile::Durable,
         activation: StorageActivation {
-            manifest_id: bootstrap.manifest_id,
+            manifest_id: manifest_id.to_owned(),
         },
         runtime_owner: RuntimeOwnerIdentity {
             owner_id: uuid::Uuid::new_v4().to_string(),
-            host_id: host_id.clone(),
+            host_id: host_id.to_owned(),
             process_id: std::process::id(),
             process_started_at_ms: u64::try_from(SystemIdentity.now_epoch_millis().max(0))
                 .unwrap_or_default(),
         },
-        process_liveness: Arc::new(ProcessLivenessProbe { host_id }),
-    })
-    .await
-    .map_err(|e| error(e.code(), e.message()))?;
-    Ok(btcc)
+        process_liveness: Arc::new(ProcessLivenessProbe {
+            host_id: host_id.to_owned(),
+        }),
+    }
 }

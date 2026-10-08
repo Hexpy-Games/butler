@@ -15,7 +15,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
         | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_dirs" => &[],
         // SQLite file synchronization consumes the durable filesystem facade.
-        "sqlite" => &["secure_fs"],
+        "sqlite" | "fs_space" => &["secure_fs"],
         "process_control" => &["process_table"],
         // Hook processes compose shell selection and tree containment.
         "hook_process" => &["command_sandbox", "process_control"],
