@@ -41,6 +41,18 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
         assert_eq!(turn_state(&paused), "waiting_for_form", "{paused}");
         let cards = s.gw.approval_requests("general").await?;
         assert_eq!(cards.len(), 3, "every sibling must appear in the App query");
+        let messages = s.gw.messages("general").await?;
+        let assistant: Vec<_> = messages
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .collect();
+        assert_eq!(
+            assistant.len(),
+            1,
+            "one open approval segment: {messages:?}"
+        );
+        assert_eq!(assistant[0]["status"], "streaming");
+        let message_id = assistant[0]["id"].clone();
         assert_eq!(script.requests.lock().unwrap().len(), 1);
         // Restart proves the concurrent results survive without reissuing the batch.
         s.restart().await?;
@@ -79,7 +91,22 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
             s.gw.wait_terminal("general", &id, Duration::from_secs(20))
                 .await?;
         assert_eq!(turn_state(&done), "delivered", "{done}\n{}", s.agent.logs());
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        let messages = s.gw.messages("general").await?;
+        let assistant: Vec<_> = messages
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .collect();
+        assert_eq!(
+            assistant.len(),
+            1,
+            "siblings resume the same segment: {messages:?}"
+        );
+        assert_eq!(assistant[0]["id"], message_id);
+        assert_eq!(assistant[0]["status"], "delivered");
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
         let requests = script.requests.lock().unwrap().clone();
         assert_eq!(
             requests.len(),
@@ -380,7 +407,10 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
             s.gw.wait_terminal("general", &id, Duration::from_secs(20))
                 .await?;
         assert_eq!(turn_state(&done), "cancelled");
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
         let messages = wait_cancelled_rows(&s, &id, allow_first).await?;
         let rows = butler_e2e::e2e::gateway::tool_rows(&messages, &id);
         assert_eq!(rows.len(), 3);
@@ -418,7 +448,10 @@ async fn cancelling_suspended_parallel_batch_settles_every_request_and_row()
         assert_eq!(pending, 0);
         assert_eq!(script.requests.lock().unwrap().len(), 1);
         s.restart().await?;
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
         assert_eq!(
             turn_state(&s.gw.turn("general", &id).await?.unwrap()),
             "cancelled"

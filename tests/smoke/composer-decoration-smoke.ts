@@ -1,6 +1,6 @@
 // Public settings -> real native gateway -> composer; stub providers only.
 import { strict as assert } from "node:assert";
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, statSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import type { NewChatBriefingView, SettingsView } from "../../packages/butler-app/client/ui/src/app/types";
@@ -11,6 +11,7 @@ import { launchSmokeBrowser } from "../support/smoke-browser";
 import { distribution, installDecorationProbe, readDecorationProbe, resetDecorationProbe } from "../support/composer-decoration-probe";
 
 import { verifyDecoratedDraft } from "../support/composer-decoration-draft";
+import { idleSqliteEvidence } from "../support/idle-sqlite-evidence";
 
 const before = Bun.argv.includes("--before");
 const baseline = Bun.argv.includes("--baseline");
@@ -327,6 +328,9 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
       await capture(page, `${key}-${mode}-panel`);
       await panel.getByRole("button", { name: mode === "question" ? copy.interfaceDetails.questionPanel.skip : copy.interfaceDetails.deny, exact: true }).click();
       await page.locator(scene).waitFor(); await openEditor(page); await firstFrame(page);
+      // A dismissed decision can still be completing its accepted turn.
+      // Measure idle only after the public composer leaves its Stop state.
+      await page.getByRole("button", { name: copy.composer.stop, exact: true }).waitFor({ state: "hidden" });
     }
     await settings(page, language);
     const characterSaved = page.waitForResponse(response => new URL(response.url()).pathname === "/settings" && response.request().method() === "PATCH");
@@ -339,14 +343,29 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
     assert.equal(await page.locator(`[data-character="${characterKind}"]`).count(), 0);
     assert.equal(await page.locator("[data-edge-reserve]").count(), 0);
     await capture(page, `${key}-character-off`);
-    const idleDbs = ["app-server/butler-client.sqlite", "agent-runtime/btcc.sqlite"].map(name => new Database(join(server.butlerData, name), { readonly: true }));
+    const idlePaths = ["app-server/butler-client.sqlite", "agent-runtime/btcc.sqlite"].map(name => join(server.butlerData, name));
+    const graphPaths = Object.keys(diskSnapshot(server.butlerData)).filter(path => path.endsWith("/graph.sqlite")).map(path => join(server.butlerData, path));
+    const diagnosticPaths = [...idlePaths, ...graphPaths];
+    const tablesBefore = idleSqliteEvidence(diagnosticPaths, join(out, `${key}-idle-before`));
+    const idleDbs = idlePaths.map(path => new Database(path, { readonly: true }));
     const versions = () => idleDbs.map(db => db.query("PRAGMA data_version").get());
     const diskBefore = diskSnapshot(server.butlerData); const dbBefore = versions();
+    const indexesBefore = new Map(Object.keys(diskBefore).filter(path => path.endsWith(".sqlite-shm"))
+      .map(path => [path, readFileSync(join(server.butlerData, path))]));
     await page.waitForTimeout(5000);
     const diskAfter = diskSnapshot(server.butlerData); const dbAfter = versions();
     idleDbs.forEach(db => db.close());
-    assert.deepEqual(dbAfter, dbBefore, "idle database commits: zero");
+    const tablesAfter = idleSqliteEvidence(diagnosticPaths, join(out, `${key}-idle-after`));
+    console.log(JSON.stringify({ key, idleChangedTables: tablesAfter.map((tables, index) =>
+      Object.keys({ ...tablesBefore[index], ...tables }).filter(name => tablesBefore[index]![name] !== tables[name])) }));
     const changedFiles = Object.keys({ ...diskBefore, ...diskAfter }).filter(path => diskBefore[path] !== diskAfter[path]);
+    console.log(JSON.stringify({ key, idleChangedFiles: changedFiles.map(path => {
+      const before = indexesBefore.get(path);
+      const after = existsSync(join(server.butlerData, path)) ? readFileSync(join(server.butlerData, path)) : Buffer.alloc(0);
+      return { path, before: diskBefore[path], after: diskAfter[path], changedOffsets: before ?
+        Array.from({ length: Math.max(before.length, after.length) }, (_, i) => i).filter(i => before[i] !== after[i]) : null };
+    }) }));
+    assert.deepEqual(dbAfter, dbBefore, "idle database commits: zero");
     assert.deepEqual(changedFiles, [], "idle disk writes: zero");
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ wallpaper: { source: { kind: "live", module: "butler.bloom" } }, composer_decoration: { theme: decorationTheme, character: true } }) });
     await page.reload(); await openEditor(page); await firstFrame(page);

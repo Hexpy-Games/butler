@@ -66,6 +66,9 @@ fn invalid_ledger_id_is_not_sanitized_into_another_project_path() {
     .unwrap();
     assert_eq!(signals.len(), 1);
     assert!(signals[0].summary.is_none());
-    assert!(signals[0].ledger_event_summary.is_empty());
-    assert!(signals[0].open_work_titles.is_empty());
+    assert_eq!(
+        signals[0].ledger_event_summary,
+        [] as [std::string::String; 0]
+    );
+    assert_eq!(signals[0].open_work_titles, [] as [std::string::String; 0]);
 }

@@ -1,3 +1,5 @@
+# Disabled manually in Actions settings; not a release gate.
+# Windows release evidence: windows-preview-smoke.yml, windows-installer.yml, e2e.yml.
 name: Butler Windows Desktop Source
 
 on:
@@ -30,7 +32,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:

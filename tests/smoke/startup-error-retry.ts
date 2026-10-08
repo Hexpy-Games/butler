@@ -112,15 +112,32 @@ try {
   console.log("PASS: native config failure, Open log diagnostics/reveal, actual Retry relaunch and recovered main window");
 } catch (error) {
   console.error(JSON.stringify({ retryFailure: { phase, message: error instanceof Error ? error.message.split("\n")[0] : "unknown" } }));
+  const surface = browser?.contexts()[0]?.pages().find((page) => page.url().includes("lifecycle.html"));
+  const state = await surface?.evaluate(() => (window as any).butlerLifecycle.state()).catch(() => undefined);
+  const progress = join(fixture.data, "app/runtime/foreground/startup-progress.json");
+  try {
+    const record = JSON.parse(readFileSync(progress, "utf8"));
+    console.error(JSON.stringify({ retryProgress: { stage: record.stage, agentPhase: record.agent_phase,
+      windowReady: record.window_ready, timings: record.timings, surface: state && {
+        kind: state.kind, stage: state.stage, state: state.state, failedStage: state.failedStage,
+      }, pages: browser?.contexts()[0]?.pages().map((page) => new URL(page.url()).protocol) } }));
+  } catch { /* A launch failure may precede the progress record. */ }
   throw error;
 } finally {
-  if (successorPid) { try { process.kill(successorPid, "SIGKILL"); } catch { /* already exited */ } }
+  await browser?.close().catch(() => undefined);
+  if (successorPid) {
+    const quit = spawn(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore" });
+    const force = setTimeout(() => { try { process.kill(successorPid!, "SIGKILL"); } catch { /* already exited */ } }, 10_000);
+    try {
+      await once(quit, "exit");
+      await waitFor(() => { try { process.kill(successorPid!, 0); return false; } catch { return true; } }, "Retry cleanup did not exit the successor");
+    } finally { clearTimeout(force); }
+  }
   if (original?.exitCode === null && original.signalCode === null) {
     const exited = once(original, "exit");
     original.kill("SIGTERM");
     const kill = setTimeout(() => original?.kill("SIGKILL"), 10_000);
     try { await exited; } finally { clearTimeout(kill); }
   }
-  await browser?.close().catch(() => undefined);
   fixture.cleanup();
 }

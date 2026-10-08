@@ -4,13 +4,18 @@ if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows'
     throw 'Task Scheduler smoke requires a disposable GitHub Windows runner'
 }
 $ErrorActionPreference = 'Stop'
-$protocolBefore = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
+& "$PSScriptRoot/windows-protocol-snapshot.ps1" -Output "$env:HOME/protocol-before.json"
+$protocolBefore = Get-Content "$env:HOME/protocol-before.json" -Raw
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $name = "ButlerAgent-$sid"
 $testOwnsName = $false
 function Invoke-Startup([string]$Action) {
-    $result = & $Launcher startup $Action --json | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or !$result.ok) { throw "startup $Action failed" }
+    $ErrorActionPreference = 'Continue'
+    $result = & $Launcher startup $Action --json
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw "startup $Action failed" }
+    $result = $result | ConvertFrom-Json
+    if (!$result.ok) { throw "startup $Action failed" }
     return $result.data
 }
 try {
@@ -23,8 +28,11 @@ try {
         throw 'Task XML must use UTF-16LE with a matching declaration and BOM'
     }
     if ((Invoke-Startup status).state -ne 'enabled') { throw 'Startup not enabled' }
-    [xml]$xml = (& schtasks /Query /TN $name /XML) -join "`n"
+    $ErrorActionPreference = 'Continue'
+    $taskXml = (& schtasks /Query /TN $name /XML) -join "`n"
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Task XML query failed' }
+    [xml]$xml = $taskXml
     $scheduler = New-Object -ComObject Schedule.Service
     $scheduler.Connect()
     $definition = $scheduler.GetFolder('\').GetTask($name).Definition
@@ -60,34 +68,57 @@ try {
     # enable runs the job immediately; verify the real service, not just task existence.
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     do {
-        $status = & $Launcher status --json | ConvertFrom-Json
+        $ErrorActionPreference = 'Continue'
+        $status = & $Launcher status --json
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { throw 'Native command failed' }
+        $status = $status | ConvertFrom-Json
         if ($status.data.services.summary.online -eq 1) { break }
         Start-Sleep -Milliseconds 200
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($status.data.services.summary.online -ne 1) { throw 'Scheduled service did not start' }
     Invoke-Startup disable | Out-Null
     if ((Invoke-Startup status).state -ne 'disabled') { throw 'Task not deleted' }
+    $ErrorActionPreference = 'Continue'
     & $Launcher stop --json | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Scheduled service did not stop' }
     # A same-name foreign task must survive enable and disable.
     $xml.Task.Actions.Exec.Command = "$env:SystemRoot\System32\cmd.exe"
     $foreign = Join-Path $env:HOME 'foreign-task.xml'
     $xml.Save($foreign)
+    $ErrorActionPreference = 'Continue'
     & schtasks /Create /TN $name /XML $foreign | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Foreign fixture creation failed' }
+    $ErrorActionPreference = 'Continue'
     $before = (& schtasks /Query /TN $name /XML) -join "`n"
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Foreign task query failed' }
     if ((Invoke-Startup status).state -ne 'foreign') { throw 'Foreign not reported' }
     foreach ($action in @('enable','disable')) {
+        $ErrorActionPreference = 'Continue'
         & $Launcher startup $action --json | Out-Null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -eq 0) { throw "Foreign task accepted by $action" }
     }
+    $ErrorActionPreference = 'Continue'
     $after = (& schtasks /Query /TN $name /XML) -join "`n"
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Foreign task query failed' }
     if ($before -cne $after) { throw 'Foreign task changed' }
+    $ErrorActionPreference = 'Continue'
     & schtasks /Delete /TN $name /F | Out-Null
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw 'Native command failed' }
     Invoke-Startup enable | Out-Null
+    $ErrorActionPreference = 'Continue'
     & $Launcher uninstall --keep-data --yes --json | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Uninstall failed' }
+    $ErrorActionPreference = 'Continue'
     & schtasks /Query /TN $name /XML 2>$null | Out-Null
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -eq 0) { throw 'Uninstall retained task' }
     'PASS Task Scheduler: XML, enable/run, disable/delete, foreign preservation, uninstall'
 } finally {
@@ -97,16 +128,30 @@ try {
     $owned = @(Get-CimInstance Win32_Process | Where-Object {
         $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq $expectedExecutable
     } | ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
-    if (Test-Path $Launcher) { & $Launcher stop --json | Out-Null }
+    $cleanupCodes = @()
+    if (Test-Path $Launcher) {
+        $ErrorActionPreference = 'Continue'
+        & $Launcher stop --json | Out-Null
+        $ErrorActionPreference = 'Stop'
+        $cleanupCodes += $LASTEXITCODE
+    }
     if ($testOwnsName) {
+        $ErrorActionPreference = 'Continue'
         & schtasks /End /TN $name 2>$null | Out-Null
+        $ErrorActionPreference = 'Stop'
+        $cleanupCodes += $(if ($LASTEXITCODE -in @(0,1)) { 0 } else { $LASTEXITCODE })
+        $ErrorActionPreference = 'Continue'
         & schtasks /Delete /TN $name /F 2>$null | Out-Null
+        $ErrorActionPreference = 'Stop'
+        $cleanupCodes += $(if ($LASTEXITCODE -in @(0,1)) { 0 } else { $LASTEXITCODE })
     }
     foreach ($process in $owned) {
         if (!$process.HasExited) { $process.Kill() }
         $process.WaitForExit()
     }
-    $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
+    & "$PSScriptRoot/windows-protocol-snapshot.ps1" -Output "$env:HOME/protocol-after.json"
+    $protocolAfter = Get-Content "$env:HOME/protocol-after.json" -Raw
     if ($protocolBefore -cne $protocolAfter) { throw 'Protocol registry changed' }
+    if (@($cleanupCodes | Where-Object { $_ -ne 0 }).Count) { throw 'Task cleanup failed' }
 }
 $global:LASTEXITCODE = 0

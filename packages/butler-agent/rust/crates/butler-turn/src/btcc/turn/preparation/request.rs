@@ -291,6 +291,7 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
         }
         for (source, target) in [
             ("branchSeed", "branchSeed"),
+            ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
         ] {
             if let Some(value) = app.get(source).filter(|value| js_truthy(value)) {

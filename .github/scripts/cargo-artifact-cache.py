@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 import tarfile
+import tomllib
 
 # Build scripts watch the recipe directory; imports must not create new inputs.
 sys.dont_write_bytecode = True
@@ -47,6 +48,10 @@ def native_identity(platform, target):
 
 def identity(platform, mode, kind):
     runtime = os.environ.get('ORT_LIB_PATH', '')
+    if runtime and mode == 'static-ort':
+        # Setup already verifies every SDK library. Its complete manifest, not
+        # a runner-specific extraction path, identifies the pinned native bits.
+        runtime = {'static_manifest_sha256': digest(Path(runtime).parent.parent / 'complete.json')}
     compiler = output('rustc', '-vV')
     target = os.environ.get('CARGO_BUILD_TARGET', compiler.split('host: ')[1].splitlines()[0])
     native_compiler = native_identity(platform, compiler.split('host: ')[1].splitlines()[0])
@@ -59,6 +64,8 @@ def identity(platform, mode, kind):
                Path('.cargo/config.toml'), Path('../../../.cargo/config.toml')]
                if path.is_file()}
     return dict(schema=2, platform=platform, mode=mode, kind=kind, profile=profile,
+                profile_config=(tomllib.loads(Path('Cargo.toml').read_text()).get('profile', {})
+                                if Path('Cargo.toml').is_file() else {}),
                 features=features, target=target, compiler=compiler, native_compiler=native_compiler, runtime=runtime,
                 lock=digest(Path('Cargo.lock')), configs=configs,
                 native_recipe={path.name: digest(path) for path in Path('scripts').glob('*')
@@ -79,6 +86,19 @@ def artifact_name(expected):
     return f'cargo-build-cache-{expected["platform"]}-{key}'
 
 
+def compatible_identity(expected):
+    compatible = dict(expected)
+    compatible.pop('lock', None)
+    compatible['configs'] = {name: value for name, value in expected.get('configs', {}).items()
+                             if Path(name).name != 'Cargo.toml'}
+    return compatible
+
+
+def matches(actual, expected, compatible=False):
+    return (compatible_identity(actual) == compatible_identity(expected)
+            if compatible else actual == expected)
+
+
 def valid_producer(run, jobs, repository, platform, kind):
     if run['head_repository']['full_name'] != repository:
         return False
@@ -93,9 +113,9 @@ def valid_producer(run, jobs, repository, platform, kind):
                for job in jobs)
 
 
-def verify(directory, expected):
+def verify(directory, expected, compatible=False):
     metadata = json.loads((directory / 'cache.json').read_text())
-    if metadata['identity'] != expected:
+    if not matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo build-cache identity mismatch')
     if expected.get('schema') == 2 and not metadata.get('sources_sha256'):
         raise ValueError('Cargo snapshot has no source manifest digest')
@@ -191,6 +211,13 @@ if __name__ == '__main__':
         import importlib
         sys.path.insert(0, str(Path(__file__).parent))
         importlib.import_module('cargo-target-release').restore(expected)
+    elif command == 'target':
+        import importlib
+        print(importlib.import_module('cargo-target-release').persistent_target(expected))
+    elif command == 'save-local':
+        import importlib
+        local = importlib.import_module('cargo-target-release')
+        local.save_local(Path(os.environ['CARGO_TARGET_DIR']), expected)
     elif command == 'record':
         record(Path(os.environ['RUNNER_TEMP']) / 'cargo-build-cache', expected, target=os.environ.get('CARGO_TARGET_DIR', 'target'))
     else:

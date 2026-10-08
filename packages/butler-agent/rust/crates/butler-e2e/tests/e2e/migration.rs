@@ -118,7 +118,13 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
         let path = s.sandbox.data.join("app-server/butler-client.sqlite");
         let db = sqlite::open(&path).unwrap();
         db.execute_batch(
-            "ALTER TABLE chats DROP COLUMN pinned;
+            "DROP VIEW app_owned_messages;
+             DROP VIEW app_message_owners;
+             DROP TRIGGER general_history_delete;
+             DROP TABLE app_general_history;
+             DROP INDEX messages_chat_rowid_idx;
+             DROP INDEX chats_archived_idx;
+             ALTER TABLE chats DROP COLUMN pinned;
              ALTER TABLE chats DROP COLUMN archived;
              ALTER TABLE chats ADD COLUMN legacy_note TEXT;
              UPDATE chats SET legacy_note = 'imported-from-v0';",
@@ -126,6 +132,7 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
         .unwrap();
     }
     s.gw = s.agent.start_again().await?;
+    assert_current_ownership_schema(&s)?;
     let chats = s.gw.get("/chats").await?;
     for (id, title) in &ids {
         assert!(
@@ -156,6 +163,29 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
     assert_eq!(chat_rows(&s), first, "second start rewrote chats");
     s.gw = s.agent.start_again().await?;
     s.finish().await
+}
+
+fn assert_current_ownership_schema(s: &Scenario) -> Result<(), HarnessError> {
+    let db = sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    for (kind, name) in [
+        ("view", "app_owned_messages"),
+        ("view", "app_message_owners"),
+        ("trigger", "general_history_delete"),
+        ("table", "app_general_history"),
+        ("index", "messages_chat_rowid_idx"),
+        ("index", "chats_archived_idx"),
+    ] {
+        let count: i64 = db.query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type=?1 AND name=?2",
+            [kind, name],
+            |row| row.get(0),
+        )?;
+        assert_eq!(count, 1, "migration did not restore {name}");
+    }
+    Ok(())
 }
 
 /// The App DB chat rows MIG-01b checks, including the unknown column.

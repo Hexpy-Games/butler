@@ -81,9 +81,13 @@ fn identifying_id(value: &Value) -> bool {
 pub(super) fn redact(value: &mut Value, now_ms: i64) -> bool {
     match value {
         Value::Object(object) => redact_object(object, now_ms),
-        Value::Array(items) => items
-            .iter_mut()
-            .fold(false, |changed, item| redact(item, now_ms) || changed),
+        Value::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= redact(item, now_ms);
+            }
+            changed
+        }
         _ => false,
     }
 }

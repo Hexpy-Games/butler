@@ -1,3 +1,4 @@
+. "$PSScriptRoot/windows-job-tree.ps1"
 # Read-only process probes for #470; no installer or shell registrations.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:TEMP ('powershell-diagnosis-' + [guid]::NewGuid().ToString('N'))
@@ -41,7 +42,7 @@ try {
         $info.StandardOutputEncoding = [Text.UTF8Encoding]::new()
         $info.StandardErrorEncoding = [Text.UTF8Encoding]::new()
         $info.WorkingDirectory = "$profile/data"
-        $info.Environment.Clear()
+        $info.EnvironmentVariables.Clear()
         $keys = $common
         if ($entry.Key.StartsWith('minimal-runtime')) {
             $keys = @('ComSpec','PATH','PATHEXT','SystemDrive','SystemRoot','windir')
@@ -51,24 +52,22 @@ try {
         }
         foreach ($key in $keys) {
             $value = [Environment]::GetEnvironmentVariable($key)
-            if ($null -ne $value) { $info.Environment[$key] = $value }
+            if ($null -ne $value) { $info.EnvironmentVariables[$key] = $value }
         }
-        $info.Environment['HOME'] = "$profile/home"
-        $info.Environment['USERPROFILE'] = "$profile/home"
-        $info.Environment['LOCALAPPDATA'] = "$profile/local"
-        $info.Environment['APPDATA'] = "$profile/roaming"
-        $info.Environment['TEMP'] = "$profile/tmp"
-        $info.Environment['TMP'] = "$profile/tmp"
-        $info.Environment['BUTLER_DATA'] = "$profile/data"
-        $info.Environment['PYTHONIOENCODING'] = 'utf-8'
-        $info.Environment['PYTHONUTF8'] = '1'
+        $info.EnvironmentVariables['HOME'] = "$profile/home"
+        $info.EnvironmentVariables['USERPROFILE'] = "$profile/home"
+        $info.EnvironmentVariables['LOCALAPPDATA'] = "$profile/local"
+        $info.EnvironmentVariables['APPDATA'] = "$profile/roaming"
+        $info.EnvironmentVariables['TEMP'] = "$profile/tmp"
+        $info.EnvironmentVariables['TMP'] = "$profile/tmp"
+        $info.EnvironmentVariables['BUTLER_DATA'] = "$profile/data"
+        $info.EnvironmentVariables['PYTHONIOENCODING'] = 'utf-8'
+        $info.EnvironmentVariables['PYTHONUTF8'] = '1'
         if ($entry.Key -eq 'complete-runtime-managed-module-path-downloads') {
-            $info.Environment['PSModulePath'] = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules;$env:ProgramFiles\WindowsPowerShell\Modules;$profile\home\Documents\WindowsPowerShell\Modules"
+            $info.EnvironmentVariables['PSModulePath'] = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules;$env:ProgramFiles\WindowsPowerShell\Modules;$profile\home\Documents\WindowsPowerShell\Modules"
         }
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($prefix + $entry.Value))
-        foreach ($argument in @('-NoLogo','-NoProfile','-NonInteractive','-OutputFormat','Text','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded)) {
-            $info.ArgumentList.Add($argument)
-        }
+        $info.Arguments = '-NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand ' + $encoded
         $process = [Diagnostics.Process]::new()
         $process.StartInfo = $info
         $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -93,4 +92,4 @@ try {
             $process.Dispose()
         }
     }
-} finally { Remove-Item $root -Recurse -Force }
+} finally { Remove-JobTree $root }

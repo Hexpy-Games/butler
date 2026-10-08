@@ -11,19 +11,28 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oras-project/setup-oras@v1
-      with:
-        version: 1.2.3
-    - uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+    - name: Trust only this job workspace
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $workspace = $env:GITHUB_WORKSPACE.Replace('\', '/')
+        @('GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', "GIT_CONFIG_VALUE_0=$workspace") |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    - uses: ./.github/actions/windows-owner-discovery
+    - name: Require existing owner tools
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        foreach ($tool in @('python', 'cargo', 'rustc', 'rustup', 'cl', 'bun', 'node')) {
+          if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
+        }
+        @('RUSTUP_AUTO_INSTALL=0', 'RUSTUP_TOOLCHAIN=1.99.0') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     - name: Isolate job profile and snapshot protocol registration
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: ${{ github.workspace }}
       run: |
         if ('${{ inputs.workflow }}' -notmatch '^[a-zA-Z0-9_-]+$') { throw 'Invalid cache namespace' }
         $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString('N'))
-        $cache = Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner'
+        # A sibling in this runner's _work tree survives checkout's git clean.
+        $cache = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'butler-windows-owner'
         New-Item -ItemType Directory -Force "$root/home","$root/data","$root/local","$root/roaming","$root/tmp" | Out-Null
         & ./deploy/windows-protocol-snapshot.ps1 -Output "$root/protocol-before.json"
         # Keep build resource use bounded and preserve task identity if the
@@ -34,27 +43,50 @@ runs:
         if ($memory) {
           "Native build: cargo_jobs=8 total_mib=$([math]::Round($memory.TotalVisibleMemorySize / 1024)) free_mib=$([math]::Round($memory.FreePhysicalMemory / 1024))"
         }
-        @("OWNER_JOB_ROOT=$root", "CARGO_TARGET_DIR=$cache/${{ inputs.workflow }}",
+        @("OWNER_JOB_ROOT=$root", "OWNER_CACHE_ROOT=$cache", "CARGO_TARGET_DIR=$cache/${{ inputs.workflow }}",
+          "BUTLER_PERSISTENT_TARGET=$cache/${{ inputs.workflow }}",
           "CARGO_HOME=$env:USERPROFILE\.cargo", "RUSTUP_HOME=$env:USERPROFILE\.rustup",
           "PYTHONDONTWRITEBYTECODE=1", "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=",
           "BUTLER_SECRET_STORE=file", "BUTLER_PLATFORM_SYSTEM_SECRETS=0", "BUTLER_APP_DISABLE_SHELL_REGISTRATION=1",
           "BUN_INSTALL_CACHE_DIR=$cache/bun",
           "HOME=$root/home", "BUTLER_DATA=$root/data", "LOCALAPPDATA=$root/local",
           "APPDATA=$root/roaming", "TEMP=$root/tmp", "TMP=$root/tmp",
-          "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") >> $env:GITHUB_ENV
+          "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         exit 0
+    - name: Verify existing pinned Rust toolchain
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        rustup run 1.99.0 rustc --version
+        if ($LASTEXITCODE -ne 0) { throw 'Rust 1.99.0 must already be installed on the owner runner.' }
+        rustup run 1.99.0 cargo clippy --version
+        if ($LASTEXITCODE -ne 0) { throw 'The existing Rust 1.99.0 toolchain requires Clippy.' }
+        rustup run 1.99.0 rustfmt --version
+        if ($LASTEXITCODE -ne 0) { throw 'The existing Rust 1.99.0 toolchain requires rustfmt.' }
+        $ErrorActionPreference = 'Stop'
+    - uses: ./.github/actions/setup-oras
+    - name: Prepare job-scoped snapshot compressor
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $compressor = python "$env:GITHUB_WORKSPACE/.github/scripts/prepare-windows-zstd.py"
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { throw 'Portable snapshot compressor preparation failed' }
+        $compressor | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     - name: Verify or prepare pinned static ORT
-      shell: pwsh
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust
       run: |
         $cargoTarget = $env:CARGO_TARGET_DIR
         try {
-          $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE 'target/windows-owner/ort-cache'
+          $env:CARGO_TARGET_DIR = Join-Path $env:OWNER_CACHE_ROOT 'ort-cache'
           $sdkArgs = @()
           if ('${{ inputs.require-prebuilt }}' -eq 'true') { $sdkArgs += '--require-prebuilt' }
+          $ErrorActionPreference = 'Continue'
           $prepared = python scripts/prepare-static-ort.py @sdkArgs
+          $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { throw 'Static ORT preparation/hash verification failed' }
           $native = $prepared | ConvertFrom-Json
           @("ORT_LIB_PATH=$($native.ort_lib_path)", "PROTOC=$($native.protoc)",
-            'ORT_PREFER_DYNAMIC_LINK=0', 'ORT_SKIP_DOWNLOAD=1') >> $env:GITHUB_ENV
+            'ORT_PREFER_DYNAMIC_LINK=0', 'ORT_SKIP_DOWNLOAD=1') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         } finally { $env:CARGO_TARGET_DIR = $cargoTarget }

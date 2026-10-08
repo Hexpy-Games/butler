@@ -15,16 +15,25 @@ import urllib.parse
 import zipfile
 
 import ci_oci
+import static_ort_host as host
 
 REPOSITORY = 'Hexpy-Games/butler'
 MAX_BYTES = 2 * 1024**3
 
 
 def key(script, lock, target):
-    inputs = {'lock': lock, 'target': target, 'recipe': {}}
-    for path in (script, script.with_name('static_ort_host.py'), Path(__file__).resolve(), script.with_name('static_ort_targets.py'),
+    recipe = {}
+    for path in (script.with_name('static_ort_build.py'), script.with_name('static_ort_targets.py'),
                  script.parent.parent / 'rust-toolchain.toml'):
-        inputs['recipe'][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        recipe[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    # Preserve the immutable SDK namespace only for the exact original build recipe.
+    # The projected lock and target remain part of the hash in both namespaces.
+    compatibility = json.loads(script.with_name('static-ort-key-compat.json').read_text())
+    if recipe == compatibility['build_recipe']:
+        recipe = compatibility['published_recipe']
+    inputs = {'lock': lock, 'target': target, 'recipe': recipe}
+    if target == 'windows-x64':
+        inputs['msvc'] = host.visual_studio_identity()
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
@@ -52,7 +61,7 @@ def request(url, *, binary=False):
 
 def release(fingerprint, target, *, anonymous=True):
     reference = f'{ci_oci.REGISTRY}/native-deps:{target}-{fingerprint}'
-    if shutil.which('oras') is None:
+    if shutil.which(os.environ.get('BUTLER_ORAS_EXECUTABLE', 'oras')) is None:
         return None  # Developer builds can compile the SDK without oras installed.
     published = ci_oci.manifest(reference, anonymous=anonymous)
     if published is None:
@@ -106,7 +115,25 @@ def unpack(archive, stage):
             path = stage / item.filename
             if path.is_file():
                 path.chmod((item.external_attr >> 16) & 0o777 or 0o644)
-    (stage / 'build/_deps').symlink_to('Release/_deps', target_is_directory=True)
+    create_deps_alias(stage / 'build')
+
+
+def create_deps_alias(build_root):
+    """ort-sys's empty profile reads Release/_deps directly on Windows."""
+    if sys.platform == 'win32':
+        verify_deps_alias(build_root / 'Release')
+    else:
+        (build_root / '_deps').symlink_to('Release/_deps', target_is_directory=True)
+
+
+def verify_deps_alias(lib_path):
+    if not (lib_path / '_deps').is_dir() or (lib_path / '_deps').is_symlink():
+        raise RuntimeError('ORT dependency directory is missing or linked')
+    if sys.platform == 'win32':
+        return
+    alias = lib_path.parent / '_deps'
+    if not alias.is_symlink() or alias.resolve() != (lib_path / '_deps').resolve():
+        raise RuntimeError('ort-sys _deps link does not point to Release/_deps')
 
 
 def restore(root, fingerprint, lock, target, adopt):
@@ -145,11 +172,11 @@ def pack(complete, destination):
 
 def publish(script, target):
     """A serialized producer commits a complete verified artifact exactly once."""
-    fingerprint = subprocess.check_output([sys.executable, str(script), '--target', target, '--fingerprint'], text=True).strip()
+    fingerprint = subprocess.check_output([sys.executable, str(script), '--target', target, '--fingerprint'], encoding="utf-8", errors="replace").strip()
     if release(fingerprint, target, anonymous=False) is not None:
         print('Native OCI key already published; no build or mutation')
         return
-    result = json.loads(subprocess.check_output([sys.executable, str(script), '--target', target, '--build-only'], text=True))
+    result = json.loads(subprocess.check_output([sys.executable, str(script), '--target', target, '--build-only'], encoding="utf-8", errors="replace"))
     complete = Path(result['ort_lib_path']).parent.parent
     asset = names(fingerprint, target)[1]
     with tempfile.TemporaryDirectory() as temporary:

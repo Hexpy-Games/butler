@@ -37,7 +37,7 @@ async fn favicon_endpoint_rejects_unsafe_hosts_and_serves_immutable_cache()
     let stale = path(&root, "stale.invalid");
     fs::write(&stale, &png)?;
     fs::File::open(&stale)?.set_times(
-        fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(31 * 86400)),
+        fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_hours(744)),
     )?;
     let mut s = setup.start().await?;
     let unauthorized =

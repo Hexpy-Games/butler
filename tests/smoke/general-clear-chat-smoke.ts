@@ -1,6 +1,6 @@
 // Public UI flow against an isolated native gateway and a stub model.
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { Page } from "playwright";
@@ -47,6 +47,25 @@ async function archives(page: Page) {
   await page.getByRole("button", { name: copy.space.menu, exact: true }).click();
   await page.getByRole("menuitem", { name: new RegExp(copy.space.archives) }).click();
 }
+async function desktopBridge(page: Page, server: NativeAppServerHandle) {
+  const preload = readFileSync(resolve("packages/butler-app/client/electron/preload.cjs"), "utf8");
+  await page.addInitScript({ content: `window.installClearSmokePreload = () => {
+    const process = { env: { BUTLER_APP_SERVER_URL: ${JSON.stringify(server.url)} }, argv: [], platform: "darwin" };
+    const require = () => ({
+      contextBridge: { exposeInMainWorld: (name, value) => {
+        if (name === "butlerApp") window.butlerApp = {
+          clearGeneral: input => value.clearGeneral(input).finally(() => { delete window.butlerApp; }),
+        };
+      } },
+      ipcRenderer: {
+        invoke: async channel => channel === "butler:get-server-url" ? ${JSON.stringify(server.url)}
+          : channel === "butler:get-local-auth-headers" ? ${JSON.stringify(server.authHeaders)} : null,
+        on() {}, removeListener() {},
+      },
+    });
+    ${preload}
+  };` });
+}
 async function seed(server: NativeAppServerHandle) {
   await server.api("/messages", { method: "POST", body: JSON.stringify({
     chat_id: "general", text: "비우기 전 대화입니다.", client_message_id: crypto.randomUUID(),
@@ -72,6 +91,7 @@ async function capture(width: number, theme: "light" | "dark") {
     await seed(server);
     const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: theme });
     await server.signIn(page);
+    await desktopBridge(page, server);
     await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
       key: LEGACY_FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
     });
@@ -109,6 +129,7 @@ async function capture(width: number, theme: "light" | "dark") {
     await (await sidebar(page)).locator('[data-test-class~="tree-row"]').first().click();
     await rowMenu(page);
     await clearItem.click();
+    await page.evaluate("window.installClearSmokePreload()");
     await dialog.getByRole("button", { name: copy.clearChat.clear, exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     await page.getByText("비우기 전 대화입니다.", { exact: true }).waitFor({ state: "hidden" });
@@ -124,6 +145,18 @@ async function capture(width: number, theme: "light" | "dark") {
     await page.locator('[data-test-class="titlebar-title"]').filter({ hasText: archived.title }).waitFor();
     assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), archived.title);
     await shot(page, cell, "opened-archive");
+    await (await sidebar(page)).locator('[data-test-class~="tree-row"]').first().click();
+    await rowMenu(page);
+    await clearItem.click();
+    const response = page.waitForResponse(reply => reply.url().endsWith("/sessions/general/clear") && reply.request().method() === "POST");
+    await page.evaluate("window.installClearSmokePreload()");
+    await dialog.getByRole("button", { name: copy.clearChat.clear, exact: true }).click();
+    const clearedEmpty = await response;
+    assert.equal(clearedEmpty.status(), 200);
+    assert.equal((await clearedEmpty.json()).data.session.id, "general");
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal((await server.api<SessionView>("/session-view?session_id=general")).messages.length, 0);
+    assert.equal(await page.getByText(copy.clearChat.failed, { exact: true }).count(), 0);
   } finally { await browser.close(); await server.stop(); rmSync(dir, { recursive: true, force: true }); }
 }
 for (const width of [1280, 375]) for (const theme of ["light", "dark"] as const) await capture(width, theme);

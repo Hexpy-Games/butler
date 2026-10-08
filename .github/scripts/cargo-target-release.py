@@ -10,9 +10,9 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
+import urllib.request
 
 # Build scripts watch the recipe directory; imports must not create new inputs.
 sys.dont_write_bytecode = True
@@ -32,12 +32,30 @@ class UnsuccessfulProducer(ValueError):
     """A completed CI run can contain other failed lanes; never publish those."""
 
 
-def api(endpoint):
+def api(endpoint, method='GET'):
+    """Use the workflow token without requiring GitHub CLI on owner hosts."""
+    url = 'https://api.github.com/' + endpoint
     field = 'jobs' if '/jobs?' in endpoint else 'artifacts' if '/artifacts?' in endpoint else None
-    if field:
-        pages = json.loads(cache.output('gh', 'api', '--paginate', '--slurp', endpoint))
-        return {field: [entry for page in pages for entry in page[field]]}
-    return json.loads(cache.output('gh', 'api', endpoint))
+    entries = []
+    while url:
+        if not url.startswith('https://api.github.com/'):
+            raise ValueError('Untrusted GitHub API pagination URL')
+        request = urllib.request.Request(url, method=method, headers={
+            'Authorization': 'Bearer ' + (os.environ.get('GITHUB_TOKEN') or os.environ['GH_TOKEN']),
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+        })
+        with urllib.request.urlopen(request, timeout=60) as response:
+            if method == 'DELETE':
+                return None
+            value = json.load(response)
+            if not field and not isinstance(value, list):
+                return value
+            entries.extend(value[field] if field else value)
+            links = response.headers.get('Link', '')
+            next_page = re.search(r'<([^>]+)>;\s*rel="next"', links)
+            url = next_page[1] if next_page else None
+    return {field: entries} if field else entries
 
 
 def release(tag):
@@ -83,11 +101,11 @@ def download(entry, destination):
     ci_oci.fetch(entry, destination)
 
 
-def fetch_snapshot(published, manifest, directory, expected):
+def fetch_snapshot(published, manifest, directory, expected, compatible=False):
     download(manifest, directory / 'generation.json')
     generation = json.loads((directory / 'generation.json').read_text())
     metadata = generation['metadata']
-    if metadata['identity'] != expected:
+    if not cache.matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo snapshot identity mismatch')
     trusted(metadata)
     if not generation['chunks'] or len(set(generation['chunks'])) != len(generation['chunks']):
@@ -104,11 +122,27 @@ def fetch_snapshot(published, manifest, directory, expected):
     source_name = manifest['name'][:-5] + '-sources.json'
     download(assets[source_name], directory / 'sources.json')
     (directory / 'cache.json').write_text(json.dumps(metadata))
-    cache.verify(directory, expected)
+    cache.verify(directory, expected, compatible)
 
 
 def restore(expected):
+    local = persistent_target(expected)
+    if local and restore_local(local, expected):
+        return True
     published = release(tag_name(expected))
+    selected_identity = expected
+    compatible = False
+    if not published and 'profile_config' in expected:
+        # Existing snapshots already pin the exact manifest digest, which
+        # proves these same profile settings. Keep that safe warm upgrade path.
+        legacy = dict(expected, runtime=os.environ.get('ORT_LIB_PATH', ''))
+        legacy.pop('profile_config')
+        published = release(tag_name(legacy))
+        if published:
+            selected_identity = legacy
+    if not published:
+        published = release(compatible_tag(expected))
+        compatible = True
     candidates = generations(published['assets']) if published else []
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
@@ -116,16 +150,53 @@ def restore(expected):
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
         try:
-            fetch_snapshot(published, candidates[0], directory, expected)
+            fetch_snapshot(published, candidates[0], directory, selected_identity, compatible)
         except UnsuccessfulProducer:
             print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
             return False
-        restore_tree(directory, expected)
+        restore_tree(directory, selected_identity, compatible)
     return True
 
 
-def restore_tree(directory, expected):
-    cache.verify(directory, expected)
+def persistent_target(expected):
+    base = os.environ.get('BUTLER_PERSISTENT_TARGET')
+    if not base:
+        return None
+    # Ref isolation prevents a PR's build scripts/outputs entering main or tags.
+    ref = cache.hashlib.sha256(os.environ['GITHUB_REF'].encode()).hexdigest()[:16]
+    target = Path(base) / ref / compatible_tag(expected)
+    target.mkdir(parents=True, exist_ok=True)
+    os.environ['CARGO_TARGET_DIR'] = str(target)
+    with open(os.environ['GITHUB_ENV'], 'a') as output:
+        output.write(f'CARGO_TARGET_DIR={target}\n')
+    return target
+
+
+def restore_local(target, expected):
+    marker = target / 'ci-local.json'
+    if not marker.is_file():
+        return False
+    metadata = json.loads(marker.read_text())
+    if not cache.matches(metadata['identity'], expected, compatible=True):
+        raise ValueError('Local Cargo target identity mismatch')
+    sources = target / 'ci-local-sources.json'
+    if cache.digest(sources) != metadata['sources_sha256']:
+        raise ValueError('Local Cargo source digest mismatch')
+    cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']), json.loads(sources.read_text()))
+    print('Reused isolated runner-local Cargo target; Cargo verifies unit fingerprints.')
+    return True
+
+
+def save_local(target, expected):
+    # Capture only after a successful build. A failed compile must retain the
+    # previous digest so changed sources stay dirty on the next checkout.
+    sources = target / 'ci-local-sources.json'
+    sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
+    (target / 'ci-local.json').write_text(json.dumps(dict(identity=expected, sources_sha256=cache.digest(sources))))
+
+
+def restore_tree(directory, expected, compatible=False):
+    cache.verify(directory, expected, compatible)
     directory = directory.resolve()
     target = Path(os.environ.get('CARGO_TARGET_DIR', 'target')).absolute()
     # Do not merge newer/foreign fingerprints or executables into the snapshot.
@@ -149,6 +220,10 @@ def restore_tree(directory, expected):
 
 def tag_name(expected):
     return cache.artifact_name(expected).removeprefix('cargo-build-cache-')
+
+
+def compatible_tag(expected):
+    return 'compatible-' + tag_name(cache.compatible_identity(expected))
 
 
 def split(archive, directory, prefix):
@@ -176,9 +251,9 @@ def prune(tag, prefix):
     repository = os.environ['GITHUB_REPOSITORY']
     owner = repository.split('/')[0]
     endpoint = f'orgs/{owner}/packages/container/butler-ci%2Fcargo-target/versions'
-    pages = json.loads(cache.output('gh', 'api', '--paginate', '--slurp', endpoint + '?per_page=100'))
+    pages = api(endpoint + '?per_page=100')
     versions = []
-    for entry in (entry for page in pages for entry in page):
+    for entry in pages:
         tags = entry['metadata']['container']['tags']
         matching = [value.removeprefix(tag + '--') for value in tags if value.startswith(tag + '--')]
         if matching:
@@ -189,7 +264,7 @@ def prune(tag, prefix):
         reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{latest}'
         ci_oci.checked('tag', reference, tag, anonymous=False)
     for _, entry in ordered[KEEP:]:
-        subprocess.run(['gh', 'api', '--method', 'DELETE', endpoint + '/' + str(entry['id'])], check=True)
+        api(endpoint + '/' + str(entry['id']), method='DELETE')
 
 
 def publish(directory, run_id):
@@ -198,7 +273,7 @@ def publish(directory, run_id):
         raise ValueError('Cargo snapshot run mismatch')
     trusted(metadata, publishing=True)
     cache.verify(directory, metadata['identity'])
-    tag = tag_name(metadata['identity'])
+    tag = compatible_tag(metadata['identity'])
     prefix = f'{int(run_id)}-{int(metadata["run_attempt"])}'
     reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{prefix}'
     committed = ci_oci.manifest(reference, anonymous=False)
@@ -220,6 +295,7 @@ def publish(directory, run_id):
             if json.loads(download_manifest.read_text())['metadata'] != metadata:
                 raise ValueError('Committed Cargo generation cannot be overwritten')
     ci_oci.checked('tag', reference, tag, anonymous=False)
+    ci_oci.checked('tag', reference, tag_name(metadata['identity']), anonymous=False)
     if os.environ.get('BUTLER_OCI_LAYOUT') != '1':
         prune(tag, prefix)
 

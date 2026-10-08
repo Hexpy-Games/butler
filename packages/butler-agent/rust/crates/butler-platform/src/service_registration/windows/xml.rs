@@ -215,10 +215,11 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<String, Error> {
             return Err(Error::InvalidValue);
         }
         let words = bytes
-            .chunks_exact(2)
-            .map(|chunk| chunk.try_into().map(u16::from_le_bytes))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| Error::InvalidValue)?;
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|chunk| u16::from_le_bytes(*chunk))
+            .collect::<Vec<_>>();
         String::from_utf16(&words).map_err(|_| Error::InvalidValue)
     } else {
         std::str::from_utf8(bytes)

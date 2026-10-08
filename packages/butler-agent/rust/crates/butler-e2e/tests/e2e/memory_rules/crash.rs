@@ -205,7 +205,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 assert_eq!(support::active_rules(&s.sandbox.data).len(), 1);
             } else {
                 assert!(!section.contains("6401"));
-                assert!(support::active_rules(&s.sandbox.data).is_empty());
+                assert_eq!(support::active_rules(&s.sandbox.data), [] as [serde_json::Value; 0]);
             }
             eprintln!(
                 "RULES-CRASH stage={stage} tool={tool_name} applied_once=true active_and_followup_delivered=true admission_while_leased=true"
@@ -342,13 +342,25 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
     let output = support::result(&s, &busy_chat, &busy_turn, "forget_explicit_memory").await?;
     assert_eq!(output["ok"], false, "{output}");
     assert_eq!(output["error"]["message"], "rule_write_busy", "{output}");
+    assert_eq!(output["error"], output["output"]["error"], "{output}");
+    assert!(
+        output["recovery_feedback"]
+            .as_str()
+            .is_some_and(|feedback| feedback
+                .contains("Do not repeat an unchanged failing operation")
+                && feedback.contains("rule_write_busy")),
+        "{output}"
+    );
     assert_eq!(std::fs::read(root.join("pending.json"))?, pending);
     assert_eq!(std::fs::read(root.join("manifest.json"))?, manifest);
     assert_eq!(std::fs::read_dir(root.join("operations"))?.count(), 1);
     s.agent.kill9()?;
     s.restart().await?;
     support::until(|| !root.join("pending.json").exists()).await;
-    assert!(support::active_rules(&s.sandbox.data).is_empty());
+    assert_eq!(
+        support::active_rules(&s.sandbox.data),
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(std::fs::read_dir(root.join("operations"))?.count(), 2);
     eprintln!(
         "RULES-LEASE-CANCEL cancelled_waiter_writes=0 busy_waiter_writes=0 holding_operation_recovered=true"

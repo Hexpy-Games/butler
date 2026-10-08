@@ -51,7 +51,8 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
 | `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; both default to `openai/gpt-6-luna@max` (owner decision: automated real calls never use gpt-6-sol or -astra) |
 | `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile, the default live credential (default `~/.butler-e2e-auth/auth/openai-codex.json`); refreshable, so LIVE-10 runs against it |
-| `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Fallback when no test profile exists: Codex CLI auth file (default `~/.codex/auth.json`), passed by path, read-only; never read by the harness |
+| `BUTLER_E2E_CODEX_AUTH_JSON` | Dedicated Codex-format `auth.json`, passed by path and refreshed atomically in place; never copied by the harness |
+| `CODEX_AUTH_JSON` | Read-only Codex CLI fallback (default `~/.codex/auth.json`); never read by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |
 | `BUTLER_E2E_BASE_URL` | upstream override |
 | `BUTLER_E2E_RECORD=1` | record mode |
@@ -63,11 +64,13 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 The live tier passes the test profile to the agent as an absolute
 `BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
 never reads the token values) and runs without `OPENAI_API_KEY`, so the
-subscription is used. The profile comes from a separate test-only login
-(`butler auth login --data ~/.butler-e2e-auth`, owner's browser); without
-it the harness falls back to the read-only Codex CLI file and LIVE-10 is
-SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
-one profile cannot race.
+subscription is used. CI uses the dedicated Codex login described in
+[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-windows-owner-runner),
+selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
+(`butler auth login --data ~/.butler-e2e-auth`) also works. Without either,
+the harness falls back to the read-only Codex CLI file and LIVE-10 is
+SKIPPED. Run the live tier with `--test-threads=1`; CI also serializes live
+jobs across release branches so refreshes of the one profile cannot race.
 
 ## Quota polling
 
@@ -275,7 +278,16 @@ containing the helper (including helper modules), and prints every budget's
 source location before execution. The contention binary is also retained for its
 minimum lock-hold assertion. PERF-IDLE uses its documented separate release
 `cargo test` runner, because its five-minute sampling exceeds nextest's existing
-watchdog. No budget or timeout is increased.
+watchdog. Performance budgets remain unchanged.
+
+The hooks idle observation runs in the serial perf tier with all three 60-second
+windows. Its six-minute nextest deadline accommodates the 180-second observation,
+startup, terminal retention settlement and shutdown. The Browser attached-host
+idle observation retains its full 600 seconds with a twelve-minute deadline and
+runs only against Browser-on builds. Both overrides name exactly one test.
+Release archives and E2E selection use the same product feature metadata as the
+native Agent. Browser-off builds run the public absence contract, excluding the
+enabled Browser scenarios; the hidden feature is not a release prerequisite.
 
 Budgets before PR #441's revision and after this correction (strict `<` bounds):
 

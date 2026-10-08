@@ -1,3 +1,4 @@
+// test-category: race
 // The native gateway harness must never leak processes: every tracked child
 // (and its process group) is killed and its temp dirs removed on stop, normal
 // exit, SIGINT, SIGTERM, an uncaught exception, and test-runner teardown.

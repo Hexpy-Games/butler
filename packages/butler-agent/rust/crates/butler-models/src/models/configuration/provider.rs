@@ -53,7 +53,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
     }
 
     fn resolve<'a>(&'a self, request: ProviderConfigRequest<'a>) -> ProviderConfigFuture<'a> {
-        Box::pin(async move { self.resolve_request(request).await.map_err(Box::new) })
+        Box::pin(self.resolve_request(request))
     }
 
     fn sizing_snapshot(
@@ -74,7 +74,7 @@ impl ModelConfiguration {
     async fn resolve_request(
         &self,
         request: ProviderConfigRequest<'_>,
-    ) -> Result<ProviderRequestConfig, ProviderRequestError> {
+    ) -> Result<ProviderRequestConfig, Box<ProviderRequestError>> {
         let root = self.selected_root(request.butler_data);
         let read = self.read_from(&root).await.map_err(|_| {
             provider_error(
@@ -153,8 +153,7 @@ impl ModelConfiguration {
             registered,
             local_base,
             auth.mode(),
-        )
-        .map_err(|failure| *failure)?;
+        )?;
         let policy = self.round_policy(&metadata.provider_id);
         let prompt_cache = if metadata.provider_id == "openai" {
             self.prompt_cache(&read, &root)
@@ -198,7 +197,7 @@ impl ModelConfiguration {
         provider: &str,
         model_ref: &str,
         registered: Option<&RegisteredHostedModelConfig>,
-    ) -> Result<ProviderAuth, ProviderRequestError> {
+    ) -> Result<ProviderAuth, Box<ProviderRequestError>> {
         if let Some(config) = registered {
             if config.auth_type == ProviderAuthMethod::ApiKey {
                 let record = config
@@ -367,10 +366,10 @@ fn registered_config<'a>(
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn auth_error(error: AuthError) -> ProviderRequestError {
+fn auth_error(error: AuthError) -> Box<ProviderRequestError> {
     provider_error(error.code, "authentication", error.message)
 }
-fn provider_error(code: &str, api: &str, message: &str) -> ProviderRequestError {
+fn provider_error(code: &str, api: &str, message: &str) -> Box<ProviderRequestError> {
     provider_error_for("openai", code, api, message)
 }
 fn provider_error_for(
@@ -378,8 +377,8 @@ fn provider_error_for(
     code: &str,
     api: &str,
     message: &str,
-) -> ProviderRequestError {
-    ProviderRequestError {
+) -> Box<ProviderRequestError> {
+    Box::new(ProviderRequestError {
         code: code.into(),
         message: message.into(),
         provider: provider.into(),
@@ -400,7 +399,7 @@ fn provider_error_for(
         provider_error_code: None,
         provider_error_type: None,
         provider_error_details: None,
-    }
+    })
 }
 
 impl ModelConfiguration {

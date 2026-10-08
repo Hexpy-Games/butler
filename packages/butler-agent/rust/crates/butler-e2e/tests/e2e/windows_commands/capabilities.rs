@@ -1,4 +1,6 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
+#[path = "capabilities/approval_resume.rs"]
+mod approval_resume;
 #[path = "capabilities/current_work.rs"]
 mod current_work;
 #[path = "capabilities/delegation.rs"]
@@ -182,9 +184,12 @@ async fn operation(
         );
     }
     let turn = turn?;
+    assert_eq!(turn["execution_controls"]["access_mode"], access.as_str());
     if turn_state(&turn) == "waiting_for_form" {
-        assert!(!case.refused, "Refused operation must not request approval");
+        // Stored ask_first is Ask every time: command admission precedes the
+        // executor's credential refusal. Allow must never bypass that refusal.
         assert_eq!(access, Access::AskAlways);
+        assert!(script.result.lock().unwrap().is_none(), "ran before Allow");
         let cards = s.gw.approval_requests(chat).await?;
         let card = cards
             .iter()
@@ -262,15 +267,18 @@ async fn operation(
             )
             .await?;
         assert_eq!(reply.status, 202, "{}", reply.text);
-    } else if access == Access::AskAlways && !case.refused {
+        assert_eq!(reply.data()["decision"], "allowed");
+    } else if access == Access::AskAlways {
         panic!(
             "Mutation/command must show an approval card: {turn}; result={:?}",
             script.result.lock().unwrap()
         );
     }
-    let turn =
-        s.gw.wait_terminal(chat, &id, Duration::from_secs(15))
-            .await?;
+    let terminal = s.gw.wait_terminal(chat, &id, Duration::from_secs(15)).await;
+    if terminal.is_err() {
+        super::log_approval_timeout_diagnostics(s, chat, &id).await?;
+    }
+    let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let (output, elapsed) = script
         .result
@@ -403,14 +411,14 @@ async fn setup(
     let cases = cases(&setup.sandbox.data);
     let (url, script, server) = provider::start(cases[0].clone()).await?;
     let home = setup.sandbox.home.clone();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(access)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", port)
+        // Match the installed App, not the runner's PowerShell console and
+        // its potentially large third-party module discovery path.
+        .env("PSModulePath", "")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .env("USERPROFILE", home.display().to_string())
         .env(
             "LOCALAPPDATA",
@@ -438,7 +446,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         verify(&s, index, &output)?;
     }
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests(&chat).await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests(&chat).await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     eprintln!(
         "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",

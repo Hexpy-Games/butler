@@ -818,7 +818,6 @@ dependencies = [
  "butler-platform",
  "embed-manifest",
  "semver",
- "tokio",
 ]
 
 [[package]]
@@ -1055,6 +1054,7 @@ dependencies = [
  "if-addrs",
  "keyring-core",
  "libproc",
+ "memmap2",
  "nix",
  "roxmltree",
  "rpassword",

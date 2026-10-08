@@ -94,20 +94,10 @@ impl GuidedCatalogSnapshot {
     }
     /// Parses the catalog JSON.
     pub fn parse(json: &str) -> Result<Self, crate::btcc::BtccError> {
-        let mut catalog: Self = serde_json::from_str(json).map_err(|error| {
+        serde_json::from_str(json).map_err(|error| {
             crate::btcc::BtccError::detected(BtccCode::GuidedCatalogInvalid, error.to_string())
                 .with_source(error)
-        })?;
-        catalog
-            .tools
-            .retain(|tool| butler_core::product_features::tool_enabled(&tool.name));
-        for names in catalog.profiles.values_mut() {
-            names.retain(|name| butler_core::product_features::tool_enabled(name));
-        }
-        catalog
-            .worker_default
-            .retain(|name| butler_core::product_features::tool_enabled(name));
-        Ok(catalog)
+        })
     }
     pub(super) fn tool(&self, name: &str) -> Option<&GuidedCatalogTool> {
         self.tools.iter().find(|tool| tool.name == name)

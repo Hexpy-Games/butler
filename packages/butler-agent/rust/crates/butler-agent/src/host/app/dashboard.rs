@@ -122,13 +122,13 @@ fn binding(app_project_id: String, ledger_project_id: String) -> ProjectLedgerBi
 fn map_error(error: ProjectLedgerReadError) -> AppProjectDashboardLedgerError {
     match error {
         ProjectLedgerReadError::DashboardChanged => AppProjectDashboardLedgerError::Changed,
-        ProjectLedgerReadError::DashboardUnavailable { code: _, .. } => {
+        ProjectLedgerReadError::DashboardUnavailable { .. } => {
             AppProjectDashboardLedgerError::unavailable().with_source(error)
         }
-        ProjectLedgerReadError::Resolution { code: _, .. }
-        | ProjectLedgerReadError::RecordShow { code: _, .. }
-        | ProjectLedgerReadError::Owner { code: _, .. }
-        | ProjectLedgerReadError::DashboardInternal { code: _, .. } => {
+        ProjectLedgerReadError::Resolution { .. }
+        | ProjectLedgerReadError::RecordShow { .. }
+        | ProjectLedgerReadError::Owner { .. }
+        | ProjectLedgerReadError::DashboardInternal { .. } => {
             AppProjectDashboardLedgerError::internal().with_source(error)
         }
     }

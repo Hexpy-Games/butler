@@ -192,7 +192,7 @@ fn exchange_directories_swaps_both_trees_atomically() {
     fs::write(left.join("name"), "left").unwrap();
     fs::write(right.join("name"), "right").unwrap();
     match exchange_directories(&left, &right) {
-        Err(ExchangeError::Unsupported) => assert!(cfg!(windows)),
+        Err(ExchangeError::Unsupported) if cfg!(windows) => {}
         result => {
             result.unwrap();
             assert_eq!(fs::read_to_string(left.join("name")).unwrap(), "right");
@@ -213,10 +213,11 @@ fn no_follow_opens_refuse_a_symbolic_link() {
     let target = directory.join("target");
     let link = directory.join("link");
     fs::write(&target, "secret").unwrap();
-    if let Err(error) = symlink(&target, &link) {
+    match symlink(&target, &link) {
+        Ok(()) => {}
         // Windows creates links only with Developer Mode or the privilege.
-        assert!(cfg!(windows), "{error}");
-        return;
+        Err(_) if cfg!(windows) => return,
+        Err(error) => panic!("cannot create fixture link: {error}"),
     }
     assert!(open_read_no_follow(&link).is_err());
     assert_eq!(

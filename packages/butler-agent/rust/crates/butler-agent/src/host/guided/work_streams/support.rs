@@ -176,7 +176,7 @@ pub(super) fn progress(items: &[Value]) -> Value {
     let completed = count("completed");
     let cancelled = count("cancelled");
     let denominator = pending + active + completed;
-    json!({"total":items.len(),"pending":pending,"in_progress":active,"completed":completed,"cancelled":cancelled,"active":pending+active,"progress_pct":if denominator==0{100}else{(completed*100+denominator/2)/denominator},"current":items.iter().find(|i|string(i,"status").as_deref()==Some("in_progress")).cloned()})
+    json!({"total":items.len(),"pending":pending,"in_progress":active,"completed":completed,"cancelled":cancelled,"active":pending+active,"progress_pct":(completed*100+denominator/2).checked_div(denominator).unwrap_or(100),"current":items.iter().find(|i|string(i,"status").as_deref()==Some("in_progress")).cloned()})
 }
 pub(super) fn stable_stream_id(scope: &WorkStreamScope, list: &str) -> String {
     let mut h = Sha1::new();

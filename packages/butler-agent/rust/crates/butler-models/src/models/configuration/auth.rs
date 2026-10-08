@@ -16,7 +16,7 @@ mod url;
 use io::{read_json_object, response_json, write_mode_600};
 use jwt::{account_id_from_access_token, codex_account_id, email_from_access_token};
 pub use profile::OpenAiAuthProfile;
-use profile::{copy_string, update_claim, update_number, update_string};
+use profile::{copy_string, update_claim, update_number};
 
 use super::{ModelConfigurationClock, ModelConfigurationEnvironment};
 use crate::models::{ProviderAuth, ProviderAuthMode};
@@ -101,8 +101,9 @@ impl AuthOwner<'_> {
             if rejected_now || self.is_expiring(&profile) {
                 profile = self.refresh_once(profile).await?;
             }
-            let account_id =
-                account_id_from_access_token(&profile.access_token).unwrap_or_default();
+            let account_id = codex_account_id(&profile.raw, &profile.access_token)
+                .or_else(|| account_id_from_access_token(&profile.access_token))
+                .unwrap_or_default();
             return self.codex_auth(
                 ProviderAuthMode::CodexSubscription,
                 &profile.access_token,
@@ -164,20 +165,7 @@ impl AuthOwner<'_> {
     }
 
     pub(super) async fn read_butler_profile(&self) -> Option<OpenAiAuthProfile> {
-        let raw = read_json_object(&self.butler_profile_path()).await?;
-        if raw.get("type").and_then(Value::as_str) != Some("oauth") {
-            return None;
-        }
-        let access_token = raw.get("accessToken")?.as_str()?.to_owned();
-        Some(OpenAiAuthProfile {
-            refresh_token: raw
-                .get("refreshToken")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-            expires_at: raw.get("expiresAt").and_then(Value::as_f64),
-            access_token,
-            raw,
-        })
+        profile::from_raw(read_json_object(&self.butler_profile_path()).await?)
     }
 
     /// Refreshes `profile` under the process-shared profile lock, unless the
@@ -232,34 +220,14 @@ impl AuthOwner<'_> {
             )
             .with_source(source)
         })?;
-        let mut raw = profile.raw;
-        let access = token
-            .get("access_token")
-            .and_then(Value::as_str)
-            .unwrap_or(&profile.access_token)
-            .to_owned();
-        raw.insert("accessToken".into(), access.clone().into());
-        update_string(&mut raw, "refreshToken", token.get("refresh_token"));
-        update_number(
-            &mut raw,
-            "expiresAt",
-            token.get("expires_in"),
+        let profile = profile::rotated(
+            profile,
+            &token,
             self.clock.now_epoch_millis(),
+            &self.clock.now_iso(),
         );
-        update_claim(&mut raw, "accountId", account_id_from_access_token(&access));
-        update_claim(&mut raw, "email", email_from_access_token(&access));
-        update_string(&mut raw, "scope", token.get("scope"));
-        raw.insert("updatedAt".into(), self.clock.now_iso().into());
-        self.write_profile(&raw).await?;
-        Ok(OpenAiAuthProfile {
-            refresh_token: raw
-                .get("refreshToken")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-            expires_at: raw.get("expiresAt").and_then(Value::as_f64),
-            access_token: access,
-            raw,
-        })
+        self.write_profile(&profile.raw).await?;
+        Ok(profile)
     }
 
     pub(crate) async fn exchange_code(

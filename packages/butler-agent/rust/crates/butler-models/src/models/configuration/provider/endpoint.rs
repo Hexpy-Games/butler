@@ -58,12 +58,12 @@ pub(super) fn resolve(
     }
     if provider == "local" {
         let Some(base) = local_base else {
-            return Err(Box::new(provider_error_for(
+            return Err(provider_error_for(
                 provider,
                 "provider_configuration_missing",
                 "configuration",
                 "Local model is not registered.",
-            )));
+            ));
         };
         let base = trim_slashes(base);
         let url = if base.ends_with("/chat/completions") {
@@ -117,11 +117,11 @@ fn gemini_endpoint(base: &str, model: &str) -> String {
 }
 fn parse_endpoint(provider: &str, value: &str) -> Result<Url, Box<ProviderRequestError>> {
     Url::parse(value).map_err(|_| {
-        Box::new(provider_error_for(
+        provider_error_for(
             provider,
             "provider_endpoint_invalid",
             "configuration",
             "Provider endpoint is invalid.",
-        ))
+        )
     })
 }

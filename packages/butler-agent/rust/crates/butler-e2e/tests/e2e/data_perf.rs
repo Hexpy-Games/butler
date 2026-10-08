@@ -252,7 +252,7 @@ fn assert_view(
     let answer = Cassette::load("TURN-01")?.exchanges[0]
         .response
         .output_text();
-    for pair in messages.chunks_exact(2) {
+    for pair in messages.as_chunks::<2>().0 {
         assert_eq!(pair[0]["role"], "user");
         assert_eq!(pair[1]["role"], "assistant");
         assert_eq!(pair[0]["text"], NUMBERS);

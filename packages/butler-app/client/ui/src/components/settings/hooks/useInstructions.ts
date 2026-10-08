@@ -58,7 +58,7 @@ export function useInstructions(refreshSummary: () => Promise<void>) {
       const next = await reload(true);
       await refreshSummary();
       const target = next[Math.min(index, next.length - 1)];
-      requestAnimationFrame(() => { if (target) document.getElementById(`instruction-delete-${target.handle}`)?.focus(); });
+      requestAnimationFrame(() => { if (target) document.getElementById(`instruction-${target.handle}`)?.querySelector<HTMLElement>("[aria-expanded]")?.focus(); });
     } catch { notifyStatus(copy.deleteFailed, { id: "instruction", tone: "error" }); }
     finally { setDeleting(undefined); busy.current = false; }
   };

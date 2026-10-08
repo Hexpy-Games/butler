@@ -68,7 +68,6 @@ pub mod js_date;
 pub mod json;
 pub mod json_lines;
 pub mod locale;
-pub mod product_features;
 pub mod public_text;
 pub mod segmentation;
 pub mod tool_protocol;

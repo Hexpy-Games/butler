@@ -8,6 +8,7 @@
 #[path = "hooks/cancellation.rs"]
 mod cancellation;
 use super::delegate_followup::stub as child_stub;
+mod idle;
 #[path = "hooks/limits.rs"]
 mod limits;
 #[path = "hooks/stub.rs"]
@@ -226,7 +227,10 @@ async fn hooks_pretool_deny_is_model_feedback_without_tool_or_card() -> Result<(
     let (turn_id, turn) = s.turn("general", "Run the hook test command.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert!(!s.sandbox.home.join("tool-ran").exists());
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
     assert_eq!(rows.len(), 2, "{rows:?}");
     let denied = rows
@@ -314,7 +318,7 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
         .lines()
         .map(|p| p.trim().parse().unwrap())
         .collect();
-    assert!(!pids.is_empty());
+    assert_ne!(pids, [] as [u32; 0]);
     for pid in pids {
         assert_eq!(
             process_control::liveness(pid),
@@ -333,36 +337,6 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
         )
         .await?;
     assert_eq!(blocked.status, 422, "{blocked:?}");
-    s.finish().await
-}
-#[tokio::test]
-async fn hooks_no_config_idle_has_zero_writes_for_three_windows() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = setup("HOOK-IDLE")?.start().await?;
-    // Startup completes before observing unchanged idle database versions.
-    s.turn("general", "Settle startup.").await?;
-    let app = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
-    let btcc = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let version = |db: &rusqlite::Connection| {
-        db.query_row("PRAGMA data_version", [], |r| r.get::<_, u64>(0))
-            .unwrap()
-    };
-    let before = (version(&app), version(&btcc));
-    for window in 0..3 {
-        tokio::time::sleep(Duration::from_secs(60)).await;
-        assert!(!s.sandbox.data.join("hooks.json").exists());
-        assert_eq!(
-            (version(&app), version(&btcc)),
-            before,
-            "idle window {window}"
-        );
-        assert_eq!(
-            api(&s, Method::GET, "/hooks/runs", None).await?.data(),
-            &json!([])
-        );
-        eprintln!("HOOK-IDLE window={window}: hook writes=0, DB commits=0, runs=0");
-    }
-    drop((app, btcc));
     s.finish().await
 }
 #[tokio::test]
