@@ -52,7 +52,7 @@ async fn fresh_connected_provider_without_model_uses_routine_on_wire() -> Result
     let (_, turn) = s.turn("general", &prompt).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
-    assert!(!requests.is_empty());
+    assert_ne!(requests, [] as [serde_json::Value; 0]);
     assert!(
         requests.iter().all(|r| r["model"] == "gpt-6.1-sol"),
         "{requests:?}"

@@ -232,7 +232,7 @@ class WindowsSafety(unittest.TestCase):
                      'winget upgrade python', 'msiexec.exe /i python.msi',
                      r'Set-ItemProperty -Path HKLM:\Software -Name value -Value 1',
                      r"Set-ItemProperty 'HKCU:\Software' value 1", r'reg add HKCU\Software',
-                     'setx PATH value', 'rustup toolchain install 1.91.0',
+                     'setx PATH value', 'rustup toolchain install 1.99.0',
                      'python -m pip install package', '$env:GITHUB_PATH']
         for source in forbidden:
             with self.subTest(source=source):

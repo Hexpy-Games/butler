@@ -11,9 +11,6 @@ on:
       clippy:
         type: boolean
         default: false
-      product-gate:
-        type: boolean
-        default: false
       ort-mode:
         type: string
         default: prebuilt-ort
@@ -45,7 +42,6 @@ jobs:
         working-directory: packages/butler-agent/rust
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
@@ -135,16 +131,6 @@ jobs:
           mode: ${{ inputs.ort-mode }}
           kind: dev
           producer: Build archives (${{ inputs.platform }})
-      - name: Build gate-off Agent using the same workspace dependency features
-        if: inputs.product-gate
-        env:
-          BUTLER_FEATURE_BROWSER: "false"
-          GITHUB_REF_NAME: v0.1.0-preview.99
-        run: |
-          # Keep the default-on archive/harness and snapshot intact. Reuse the
-          # unified dependency graph instead of a cold package-only build.
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8
-          cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
       - uses: actions/upload-artifact@v4
         with:
           name: rust-${{ inputs.platform }}

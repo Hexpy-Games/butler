@@ -70,7 +70,7 @@ async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
         admitted_messages[0].message.turn_id.as_deref(),
         Some("ct_admission")
     );
-    assert!(!admitted_messages[0].message.id.is_empty());
+    assert_ne!(admitted_messages[0].message.id, "");
     let conflict = ConversationAdmissionTurn::begin(make_input("changed", observer.clone()))
         .await
         .unwrap();

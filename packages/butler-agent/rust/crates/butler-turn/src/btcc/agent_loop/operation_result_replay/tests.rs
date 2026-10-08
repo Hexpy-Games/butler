@@ -253,7 +253,10 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
             .list_tool(arguments.as_object().unwrap())
             .await
             .unwrap();
-        assert!(page["entries"].as_array().unwrap().is_empty());
+        assert_eq!(
+            page["entries"].as_array().unwrap().as_slice(),
+            [] as [serde_json::Value; 0]
+        );
     }
     assert!(
         runtime

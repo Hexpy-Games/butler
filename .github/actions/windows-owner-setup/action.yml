@@ -21,10 +21,10 @@ runs:
     - name: Require existing owner tools
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        foreach ($tool in @('python', 'cargo', 'rustc', 'cl', 'bun', 'node')) {
+        foreach ($tool in @('python', 'cargo', 'rustc', 'rustup', 'cl', 'bun', 'node')) {
           if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
         }
-        @('RUSTUP_AUTO_INSTALL=0', 'RUSTUP_TOOLCHAIN=1.91.0') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        @('RUSTUP_AUTO_INSTALL=0', 'RUSTUP_TOOLCHAIN=1.99.0') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     - name: Isolate job profile and snapshot protocol registration
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: ${{ github.workspace }}
@@ -53,6 +53,17 @@ runs:
           "APPDATA=$root/roaming", "TEMP=$root/tmp", "TMP=$root/tmp",
           "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         exit 0
+    - name: Verify existing pinned Rust toolchain
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        rustup run 1.99.0 rustc --version
+        if ($LASTEXITCODE -ne 0) { throw 'Rust 1.99.0 must already be installed on the owner runner.' }
+        rustup run 1.99.0 cargo clippy --version
+        if ($LASTEXITCODE -ne 0) { throw 'The existing Rust 1.99.0 toolchain requires Clippy.' }
+        rustup run 1.99.0 rustfmt --version
+        if ($LASTEXITCODE -ne 0) { throw 'The existing Rust 1.99.0 toolchain requires rustfmt.' }
+        $ErrorActionPreference = 'Stop'
     - uses: ./.github/actions/setup-oras
     - name: Prepare job-scoped snapshot compressor
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"

@@ -50,7 +50,7 @@ async fn lease_less_claim_is_recovered_after_restart() -> Result<(), HarnessErro
         "enqueuedAt":"2026-09-30T00:00:00Z","attempts":0,"metadata":{}}))?,
     )?;
     fs::File::options().write(true).open(&path)?.set_times(
-        fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(17 * 60)),
+        fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_mins(17)),
     )?;
     let s = setup.start().await?;
     let deadline = Instant::now() + Duration::from_secs(5);

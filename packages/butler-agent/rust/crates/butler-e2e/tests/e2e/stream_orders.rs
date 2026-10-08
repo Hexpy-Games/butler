@@ -43,7 +43,7 @@ async fn replay(name: &str, done_before_content: bool) -> Result<(), HarnessErro
         "fixture must exercise the observed order"
     );
     let expected = exchange.response.output_text();
-    assert!(!expected.is_empty());
+    assert_ne!(expected, "");
     let prompt = exchange.request.key.user_request.clone();
     let s = Setup::new(&format!("STREAM-ORDER-{name}"))?
         .stub_cassette(cassette)

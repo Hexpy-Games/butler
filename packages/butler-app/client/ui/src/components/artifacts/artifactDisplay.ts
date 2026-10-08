@@ -1,4 +1,3 @@
-import { browserFeatureEnabled } from "@/app/productFeatures";
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
@@ -66,7 +65,7 @@ export function formatArtifactSize(bytes: number): string {
 export function artifactPreviewMode(
   artifact: SessionArtifactSummary,
 ): ArtifactPreviewMode {
-  if (artifact.kind === "web") return browserFeatureEnabled ? "web" : "unsupported";
+  if (artifact.kind === "web") return "web";
   const extension = artifactExtension(
     artifact.title || artifact.safe_path_label,
   );

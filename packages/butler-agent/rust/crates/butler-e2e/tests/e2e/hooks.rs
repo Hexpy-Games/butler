@@ -227,7 +227,10 @@ async fn hooks_pretool_deny_is_model_feedback_without_tool_or_card() -> Result<(
     let (turn_id, turn) = s.turn("general", "Run the hook test command.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert!(!s.sandbox.home.join("tool-ran").exists());
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
     assert_eq!(rows.len(), 2, "{rows:?}");
     let denied = rows
@@ -315,7 +318,7 @@ async fn hooks_timeout_kills_tree_and_follows_failclosed() -> Result<(), Harness
         .lines()
         .map(|p| p.trim().parse().unwrap())
         .collect();
-    assert!(!pids.is_empty());
+    assert_ne!(pids, [] as [u32; 0]);
     for pid in pids {
         assert_eq!(
             process_control::liveness(pid),

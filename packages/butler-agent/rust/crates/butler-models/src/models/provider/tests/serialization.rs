@@ -241,7 +241,10 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             result.text.as_deref(),
             Some("Visible\n\n```text\nanalysis: preserved\n```")
         );
-        assert!(result.tool_calls.is_empty());
+        assert_eq!(
+            result.tool_calls,
+            [] as [butler_turn::btcc::ModelRoundToolCall; 0]
+        );
     }
 }
 

@@ -99,7 +99,7 @@ async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, H
         assert_eq!(view["message_window"]["has_more"], false);
         let messages = view["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 4, "{view}");
-        for pair in messages.chunks_exact(2) {
+        for pair in messages.as_chunks::<2>().0 {
             assert_eq!(pair[0]["role"], "user");
             assert_eq!(pair[0]["text"], NUMBERS);
             assert_eq!(pair[1]["role"], "assistant");

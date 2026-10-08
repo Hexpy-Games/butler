@@ -178,8 +178,7 @@ fn normalize(value: &str, allowed: &HashSet<&str>) -> Option<String> {
     let final_segment = value
         .split(':')
         .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .next_back()
+        .rfind(|value| !value.is_empty())
         .unwrap_or(value);
     Some(
         if allowed.contains(value) {

@@ -38,7 +38,7 @@ impl AcceptedPlanProducer {
             .await
         {
             Ok(show) => show,
-            Err(ProjectLedgerReadError::RecordShow { code: _, .. }) => return Ok(None),
+            Err(ProjectLedgerReadError::RecordShow { .. }) => return Ok(None),
             Err(error) => return Err(error),
         };
         Ok(accepted_project_plan(

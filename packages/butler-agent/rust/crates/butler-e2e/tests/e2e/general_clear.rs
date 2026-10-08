@@ -137,7 +137,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         eprintln!("{line}");
     }
     let archived = cleared.data()["archived_session"]["id"].as_str().unwrap();
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(ordered_message_ids(&db, archived)?, ordered_before);
     let moved_file: String = db.query_row(
         "SELECT owner_session_id FROM message_files WHERE id=?1",
@@ -161,7 +164,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     assert_eq!(std::fs::read(&transferred.0)?, transcript_bytes);
     support::verify_archive_cursors(&s, archived).await?;
     let archived_messages = s.gw.messages(archived).await?;
-    assert!(!archived_messages.is_empty());
+    assert_ne!(archived_messages, [] as [serde_json::Value; 0]);
     let count: i64 = db.query_row(
         "SELECT COUNT(*) FROM app_owned_messages WHERE chat_id=?1",
         [archived],
@@ -285,7 +288,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         )
         .await?;
     assert_eq!(again.status, 200, "{}", again.text);
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert_ne!(again.data()["archived_session"]["id"], archived);
     butler_e2e::assert_wall_clock_budget!(
         write_lock,
@@ -300,7 +306,6 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
 #[tokio::test]
 async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let browser = std::env::var("BUTLER_E2E_EXPECT_BROWSER").as_deref() != Ok("false");
     let mut cassette = super::browser_outputs::stub::cassette()?;
     cassette
         .exchanges
@@ -317,8 +322,8 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
         .unwrap()
         .iter()
         .find(|a| a["kind"] == "web")
-        .cloned();
-    assert_eq!(output.is_some(), browser);
+        .cloned()
+        .expect("published web output");
     let cleared =
         s.gw.post("/sessions/general/clear", json!({"title":"Saved outputs"}))
             .await?;
@@ -332,17 +337,13 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
         s.gw.get(&format!("/artifacts?session_id={archive}"))
             .await?;
     support::verify_archived_outputs(before.data(), kept.data(), archive);
-    if let Some(output) = &output {
-        assert!(s.gw.messages(archive).await?.iter().any(|m| {
-            m["artifacts"]
-                .as_array()
-                .is_some_and(|a| a.iter().any(|a| a["id"] == output["id"]))
-        }));
-    }
+    assert!(s.gw.messages(archive).await?.iter().any(|m| {
+        m["artifacts"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|a| a["id"] == output["id"]))
+    }));
     s.agent.terminate().await?;
-    if browser {
-        seed_interrupted_output_transfer(&s.sandbox.data, archive)?;
-    }
+    seed_interrupted_output_transfer(&s.sandbox.data, archive)?;
     s.gw = s.agent.start_again().await?;
     let restored =
         s.gw.get(&format!("/artifacts?session_id={archive}"))
@@ -442,10 +443,8 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
     s.turn("general", "Publish").await?;
     let fresh_output = s.gw.get("/artifacts?session_id=general").await?;
     let fresh_cards = output_cards(fresh_output.data());
-    assert_eq!(fresh_cards.len(), usize::from(browser));
-    if let Some(output) = &output {
-        assert_ne!(fresh_cards[0]["id"], output["id"]);
-    }
+    assert_eq!(fresh_cards.len(), 1);
+    assert_ne!(fresh_cards[0]["id"], output["id"]);
     let archived_again =
         s.gw.get(&format!("/artifacts?session_id={archive}"))
             .await?;
@@ -458,10 +457,8 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
     s.turn("general", "Again").await?;
     let revised = s.gw.get("/artifacts?session_id=general").await?;
     let revised_cards = output_cards(revised.data());
-    assert_eq!(revised_cards.len(), usize::from(browser));
-    if browser {
-        assert_eq!(revised_cards[0]["id"], fresh_cards[0]["id"]);
-    }
+    assert_eq!(revised_cards.len(), 1);
+    assert_eq!(revised_cards[0]["id"], fresh_cards[0]["id"]);
     drop(db);
     s.finish().await
 }

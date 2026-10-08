@@ -169,7 +169,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     let forced_took = started.elapsed();
     eprintln!("USE-07 POST /updates/check: {forced_took:?}");
     // Minimum injected delay proves that forced refresh actually hit the network.
-    assert!(forced_took >= DELAY - Duration::from_millis(500));
+    assert!(forced_took >= DELAY.checked_sub(Duration::from_millis(500)).unwrap());
     assert_eq!(manifest.hits(), hits + 1);
 
     // A manifest the App cannot use is a status, and reads stay instant.

@@ -175,8 +175,7 @@ pub(crate) fn test_only(attributes: &[Attribute]) -> bool {
         attribute.path().is_ident("cfg")
             && attribute
                 .parse_args::<Meta>()
-                .ok()
-                .is_some_and(|meta| test_condition(&meta) == Some(false))
+                .is_ok_and(|meta| test_condition(&meta) == Some(false))
     })
 }
 

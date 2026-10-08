@@ -126,7 +126,7 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
     assert_eq!(schedule["interval_seconds"], 86400);
     assert_eq!(schedule["next_run_at"], "2098-12-31T22:00:00.000Z");
     assert_eq!(schedule["access_mode"], "ask_first");
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     assert_authority(&s, &turn_id, "create_automation")?;
     let requests = s.provider()?.requests();
     let tools = requests[0]["tools"].to_string();
@@ -145,11 +145,12 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
         rows.iter()
             .all(|r| r["safe_tool_name"] != "delegate_to_steward")
     );
-    assert!(
+    assert_eq!(
         s.gw.get("/session-view?session_id=general").await?.data()["steward_children"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        [] as [serde_json::Value; 0]
     );
     schedule_prompt_budget::assert_budget();
     manage_schedule(&s).await?;
@@ -228,7 +229,7 @@ async fn manage_schedule(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), 
             },
         )?;
     }
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     Ok(())
 }
 

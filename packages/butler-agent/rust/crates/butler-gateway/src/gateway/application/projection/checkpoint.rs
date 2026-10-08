@@ -121,7 +121,7 @@ fn encode(bytes: &[u8]) -> String {
 }
 fn decode(value: &str) -> Vec<u8> {
     let mut output = Vec::with_capacity(value.len() / 4 * 3);
-    for chunk in value.as_bytes().chunks_exact(4) {
+    for chunk in value.as_bytes().as_chunks::<4>().0 {
         let Some(a) = index(chunk[0]) else {
             return Vec::new();
         };
