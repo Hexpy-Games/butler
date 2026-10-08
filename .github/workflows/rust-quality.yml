@@ -50,44 +50,58 @@ jobs:
       - name: Check Rust source rules
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
 
-  linux-clippy:
+  linux-clippy-lint:
     needs: changes
+    if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy-lint']
+    uses: ./.github/workflows/rust-clippy.yml
+
+  linux-clippy:
+    needs: [changes, linux-archive, linux-clippy-lint]
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy']
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: 'off'
+      CARGO_PROFILE_TEST_SPLIT_DEBUGINFO: 'off'
     steps:
       - uses: actions/checkout@v4
       - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
-          components: clippy
+          restore-cargo-target: 'false'
           native-deps: prebuilt-ort
           cache-key: archive-linux-x64
           artifact-cache-platform: linux-x64
           artifact-cache-kind: dev
           save-cargo-cache: 'false'
-      # These four libraries allow panic/unwrap/expect and dead-code lints
-      # under test-support. --all-targets enables it through dev dependencies;
-      # retain their feature-free production check. Other ordinary libraries
-      # and binaries are covered by the workspace all-targets invocation.
-      - name: Clippy production libraries with stricter cfg lints
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-linux-x64
+          path: ${{ runner.temp }}/rust-archive
+      - name: Prepare prebuilt product gate binaries
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" prepare "$RUNNER_TEMP/browser-e2e" "$RUNNER_TEMP/rust-archive/tests.tar.zst"
       - name: Verify existing Browser stub contracts and product gate (default on)
         env:
           BUTLER_E2E_TIER: stub
+          BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e browser_outputs:: -- --nocapture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" run "$RUNNER_TEMP/browser-e2e" browser_outputs::
       - name: Verify Browser product gate with real stub turns (release off)
         env:
           BUTLER_FEATURE_BROWSER: "false"
           BUTLER_E2E_EXPECT_BROWSER: "false"
           BUTLER_E2E_TIER: stub
+          BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent-browser-off
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked -p butler-core -p butler-turn -p butler-gateway -p butler-agent --lib -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e browser_product_gate_controls_routes_and_model_tools -- --nocapture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" run "$RUNNER_TEMP/browser-e2e" browser_product_gate_controls_routes_and_model_tools
 
   linux-native:
     permissions:
@@ -100,7 +114,7 @@ jobs:
     with:
       runner: ubuntu-24.04
       platform: linux-x64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-archive:
     permissions:
@@ -112,6 +126,7 @@ jobs:
     uses: ./.github/workflows/rust-archive.yml
     with:
       ort-mode: prebuilt-ort
+      product-gate: true
 
   linux-perf-archive:
     permissions:
@@ -158,7 +173,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-arm64-archive:
     permissions:
@@ -394,6 +409,12 @@ jobs:
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
+      - uses: ./.github/actions/setup-oras
+      - name: Verify Cargo snapshot and native dependency contracts
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
         env:
@@ -414,7 +435,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, lint, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, lint, source, linux-clippy, linux-clippy-lint, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -423,7 +444,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
+          groups: '{"workflows": ["lint"], "rust": ["source", "linux-clippy", "linux-clippy-lint", "linux-native", "linux-archive", "linux-tests", "linux-perf-archive", "linux-perf", "macos-native", "macos-archive", "macos-tests", "macos-perf-archive", "macos-perf", "linux-arm64-tests", "linux-arm64-perf-archive", "linux-arm64-perf"], "ui": ["ui"], "site": ["site"], "ds": ["ds"], "package": ["macos-native", "macos-archive", "macos-updates", "macos-package"], "linux-package": ["linux-native", "linux-arm64-native", "linux-package-x64", "linux-package-arm64", "linux-archive", "linux-arm64-archive"], "install": ["linux-native", "linux-arm64-native", "macos-native", "install-x64", "install-arm64", "install-macos", "install-merge", "linux-archive", "linux-arm64-archive", "macos-archive"]}'
           workflow: rust-quality.yml
       - name: Require every selected check
         env:

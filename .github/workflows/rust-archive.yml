@@ -11,6 +11,9 @@ on:
       clippy:
         type: boolean
         default: false
+      product-gate:
+        type: boolean
+        default: false
       ort-mode:
         type: string
         default: prebuilt-ort
@@ -28,6 +31,12 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
+      # Keep filename/line backtraces inside the archived executables, without
+      # packed split-debug postprocessing (dsymutil/dwp) or missing sidecars.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: 'off'
+      CARGO_PROFILE_TEST_SPLIT_DEBUGINFO: 'off'
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       # Read-only build provenance must not refresh the index it tracks.
       GIT_OPTIONAL_LOCKS: "0"
@@ -48,15 +57,13 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      # These four libraries allow panic/unwrap/expect and dead-code lints
-      # under test-support. --all-targets enables it through dev dependencies;
-      # retain their feature-free production check. Other ordinary libraries
-      # and binaries are covered by the workspace all-targets invocation.
-      - name: Clippy strict production libraries and all targets
+      # Linux x64 retains strict production and workspace/all-targets Clippy.
+      # source-check enforces OS-specific production code in butler-platform;
+      # lint its native implementations and contracts on macOS and arm64.
+      - name: Clippy native platform library and contracts
         if: inputs.clippy
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-platform --all-targets --locked --keep-going -- -D warnings
       - name: Build the complete workspace once
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -121,13 +128,6 @@ jobs:
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-${{ inputs.platform }}
-          path: ${{ runner.temp }}/rust-archive/*
-          if-no-files-found: error
-          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
-          compression-level: 1
       - uses: ./.github/actions/publish-cargo-target
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
@@ -135,3 +135,20 @@ jobs:
           mode: ${{ inputs.ort-mode }}
           kind: dev
           producer: Build archives (${{ inputs.platform }})
+      - name: Build gate-off Agent using the same workspace dependency features
+        if: inputs.product-gate
+        env:
+          BUTLER_FEATURE_BROWSER: "false"
+          GITHUB_REF_NAME: v0.1.0-preview.99
+        run: |
+          # Keep the default-on archive/harness and snapshot intact. Reuse the
+          # unified dependency graph instead of a cold package-only build.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8
+          cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive/*
+          if-no-files-found: error
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
+          compression-level: 1
