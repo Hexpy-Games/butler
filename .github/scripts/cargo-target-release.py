@@ -108,10 +108,15 @@ def fetch_snapshot(published, manifest, directory, expected):
 
 
 def restore(expected):
+    local = persistent_target(expected)
+    if local and restore_local(local, expected):
+        return True
     published = release(tag_name(expected))
     candidates = generations(published['assets']) if published else []
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
+        if local:
+            save_local(local, expected)
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
@@ -119,9 +124,49 @@ def restore(expected):
             fetch_snapshot(published, candidates[0], directory, expected)
         except UnsuccessfulProducer:
             print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
+            if local:
+                save_local(local, expected)
             return False
         restore_tree(directory, expected)
+    if local:
+        save_local(local, expected)
     return True
+
+
+def persistent_target(expected):
+    base = os.environ.get('BUTLER_PERSISTENT_TARGET')
+    if not base:
+        return None
+    # Ref isolation prevents a PR's build scripts/outputs entering main or tags.
+    ref = cache.hashlib.sha256(os.environ['GITHUB_REF'].encode()).hexdigest()[:16]
+    target = Path(base) / ref / tag_name(expected)
+    target.mkdir(parents=True, exist_ok=True)
+    os.environ['CARGO_TARGET_DIR'] = str(target)
+    with open(os.environ['GITHUB_ENV'], 'a') as output:
+        output.write(f'CARGO_TARGET_DIR={target}\n')
+    return target
+
+
+def restore_local(target, expected):
+    marker = target / 'ci-local.json'
+    if not marker.is_file():
+        return False
+    metadata = json.loads(marker.read_text())
+    if metadata['identity'] != expected:
+        raise ValueError('Local Cargo target identity mismatch')
+    sources = target / 'ci-local-sources.json'
+    if cache.digest(sources) != metadata['sources_sha256']:
+        raise ValueError('Local Cargo source digest mismatch')
+    cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']), json.loads(sources.read_text()))
+    save_local(target, expected)
+    print('Reused isolated runner-local Cargo target; Cargo verifies unit fingerprints.')
+    return True
+
+
+def save_local(target, expected):
+    sources = target / 'ci-local-sources.json'
+    sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
+    (target / 'ci-local.json').write_text(json.dumps(dict(identity=expected, sources_sha256=cache.digest(sources))))
 
 
 def restore_tree(directory, expected):
