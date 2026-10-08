@@ -108,6 +108,9 @@ runs:
         # Owner setup bypasses rust-agent-setup; restore after setting exact flags.
         if ('${{ inputs.owner-runner }}' -eq 'true') {
           $ErrorActionPreference = 'Continue'
+          $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -116,6 +119,12 @@ runs:
         cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if ('${{ inputs.owner-runner }}' -eq 'true') {
+          $ErrorActionPreference = 'Continue'
+          python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
         # A runner has development DLLs installed. Refuse a dependency they hide.
         $ErrorActionPreference = 'Continue'

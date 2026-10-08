@@ -36,6 +36,34 @@ spec.loader.exec_module(windows_tests)
 WindowsSafety = windows_tests.WindowsSafety
 
 
+class ArchivedLibtest(unittest.TestCase):
+    # test-category: pure-logic
+    def test_prepare_creates_destination_and_preserves_original_libtest_invocation(self):
+        spec = importlib.util.spec_from_file_location('archived_libtest', ROOT / 'run-archive-libtest.py')
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / 'missing' / 'extract'
+            suite = {'binary-name': 'e2e', 'binary-path': str(directory / 'e2e'), 'cwd': temporary,
+                     'testcases': {'browser_outputs::idle': {'ignored': False},
+                                   'other::test': {'ignored': False}}}
+            def listing(command, **kwargs):
+                self.assertTrue(directory.is_dir())
+                self.assertEqual(command[command.index('--extract-to') + 1], str(directory))
+                return json.dumps({'rust-suites': {'e2e': suite}})
+            with patch.object(runner.subprocess, 'check_output', side_effect=listing):
+                runner.prepare('complete.tar.zst', directory)
+            with patch.object(runner.subprocess, 'call', return_value=0) as execute, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.run(directory, 'browser_outputs::'), 0)
+                self.assertEqual(execute.call_args.args[0], [suite['binary-path'], 'browser_outputs::', '--nocapture'])
+                self.assertEqual(execute.call_args.kwargs['cwd'], temporary)
+                self.assertNotIn('timeout', execute.call_args.kwargs)
+                with self.assertRaisesRegex(ValueError, 'empty'):
+                    runner.run(directory, 'not_present')
+                self.assertEqual(execute.call_count, 1)
+
+
 class ArtifactTrust(unittest.TestCase):
     # test-category: security
     def test_reuse_checks_actual_checkout_manifest_before_downloading_payload(self):
@@ -105,7 +133,7 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
+        jobs = ['source', 'linux-clippy', 'linux-clippy-lint', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'macos-updates', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
                 'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
