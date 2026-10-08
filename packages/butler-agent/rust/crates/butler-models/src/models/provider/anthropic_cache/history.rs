@@ -25,7 +25,12 @@ pub(super) fn blocks(
     if offsets.is_empty() {
         return (vec![block(&text[..boundary])], boundary);
     }
-    let mut output = vec![block(&text[..offsets[0]])];
+    // A bounded window may gain/change a dropped-turn digest. It belongs to
+    // history, never the independently cacheable stable documents prefix.
+    let mut output = vec![block(&text[..start])];
+    if offsets[0] > start {
+        output.push(block(&text[start..offsets[0]]));
+    }
     // Completed older chunks always cover the same 16 turns. Keep at least
     // two individual recent turns: even when a chunk closes, yesterday's end
     // remains a boundary immediately before the newly appended turn.

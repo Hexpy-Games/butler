@@ -92,6 +92,11 @@ fn split_history(messages: &mut [Value], control: &Value, diagnostics: Option<&V
         return;
     }
     let (mut stable, end) = history::blocks(text, boundary, diagnostics);
+    // Pin the stable docs even when the bounded history window rolls over.
+    // Alongside system, history-end and current-round this uses at most four.
+    if let Some(first) = stable.first_mut() {
+        first["cache_control"] = control.clone();
+    }
     if let Some(last) = stable.last_mut() {
         last["cache_control"] = control.clone();
     }
