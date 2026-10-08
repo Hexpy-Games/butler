@@ -69,7 +69,7 @@ async fn sec_01_cli_started_agent_owns_and_enforces_its_token() -> Result<(), Ha
         .sandbox
         .data
         .join("state/app-gateway/project-folder-token-secret");
-    assert!(!std::fs::read_to_string(&secret)?.trim().is_empty());
+    assert_ne!(std::fs::read_to_string(&secret)?.trim(), "");
     assert!(is_private(&secret), "folder secret not private");
 
     // An API path ending in an asset extension is not a public asset.
@@ -173,7 +173,10 @@ async fn sec_02_foreign_host_and_origin_are_refused() -> Result<(), HarnessError
         before,
         "refused call changed state"
     );
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     s.finish().await
 }
 

@@ -175,7 +175,10 @@ async fn replay(
         elapsed.as_secs_f64() * 1000.
     );
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     assert!(
         s.gw.messages("general")
@@ -210,7 +213,7 @@ fn verify(
     let listing: Value = serde_json::from_str(stdout)?;
     assert_eq!(listing["DownloadsPath"].as_str(), downloads.to_str());
     assert!(listing["Source"].as_str().unwrap().starts_with("HKCU:"));
-    assert!(!listing["RawPath"].as_str().unwrap().is_empty());
+    assert_ne!(listing["RawPath"].as_str().unwrap(), "");
     let items = listing["Items"].as_array().expect("all top-level entries");
     assert_eq!(items.len(), before.len(), "complete listing");
     let mut seen = BTreeMap::new();

@@ -19,7 +19,7 @@ use crate::coordination::CognitionWriteLease;
 use super::manifest::{ContinuityRecoveryManifest, RecoveryAfter};
 use super::{ContinuityRecoveryAction, manifest, workspace};
 
-const LOCK_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
+const LOCK_STALE_AFTER: Duration = Duration::from_mins(10);
 
 pub(super) fn project_cache_path(workspace: &Path) -> CognitionResult<PathBuf> {
     workspace::hot_cache_path(workspace)

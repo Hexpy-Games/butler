@@ -329,8 +329,7 @@ fn bounded_tokens(text: &str) -> u64 {
 
 fn configured_text(path: &std::path::Path) -> bool {
     std::fs::read_to_string(path)
-        .ok()
-        .is_some_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
+        .is_ok_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
 }
 
 fn bounded_recent(messages: &[crate::gateway::MessageRecord]) -> String {

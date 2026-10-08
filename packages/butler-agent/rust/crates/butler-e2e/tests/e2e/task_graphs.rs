@@ -33,7 +33,10 @@ async fn task_graphs_existing_plans_documents_and_dependencies() -> Result<(), H
     }
     let empty = s.gw.get("/sessions/general/task-graphs").await?;
     assert_eq!(empty.status, 200);
-    assert!(empty.data()["graphs"].as_array().unwrap().is_empty());
+    assert_eq!(
+        empty.data()["graphs"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     s.agent.terminate().await?;
     for (count, _, hint) in &chats {
         fixture::seed(&s.sandbox.data, hint, *count)?;

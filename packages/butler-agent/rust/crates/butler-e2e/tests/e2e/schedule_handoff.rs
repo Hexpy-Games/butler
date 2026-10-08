@@ -122,7 +122,7 @@ async fn assert_results(
                 .contains("Granted tools in this delegated session")
         })
         .collect();
-    assert!(!child.is_empty());
+    assert_ne!(child, [] as [&serde_json::Value; 0]);
     assert!(
         child
             .iter()

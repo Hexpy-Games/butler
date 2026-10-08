@@ -32,7 +32,7 @@ impl PruneMetricObserver for TestPruneMetrics {
 }
 impl ToolOutputIdentity for FixedIdentity {
     fn now(&self) -> SystemTime {
-        SystemTime::UNIX_EPOCH + Duration::from_secs(1_789_776_000)
+        SystemTime::UNIX_EPOCH + Duration::from_hours(497_160)
     }
     fn uuid(&self) -> String {
         "01234567-89ab-4def-8123-456789abcdef".into()

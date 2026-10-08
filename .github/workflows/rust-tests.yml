@@ -79,7 +79,6 @@ jobs:
           else
             cp "$RUNNER_TEMP/rust-archive/shard-$SHARD.txt" "$RUNNER_TEMP/rust-archive/install.txt"
           fi
-      - uses: ./.github/actions/product-features
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
@@ -121,7 +120,6 @@ jobs:
         with:
           name: agent-payload-${{ inputs.platform }}
           path: ${{ runner.temp }}/production-agent
-      - uses: ./.github/actions/product-features
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst

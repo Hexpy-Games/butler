@@ -97,7 +97,7 @@ async fn external_queue_and_stop_flag_preserve_complete_delivery() -> Result<(),
         .output_text();
     assert_complete(&s.sandbox.data, &originals, answer.trim())?;
     assert_eq!(s.provider()?.requests().len(), 3);
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     let pid = s.agent.pid().unwrap();
     std::fs::write(s.sandbox.data.join("locks/butler-shutdown"), b"stop\n")?;
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -121,7 +121,7 @@ async fn external_queue_and_stop_flag_preserve_complete_delivery() -> Result<(),
         3,
         "restart repeated completed effects"
     );
-    assert!(s.provider()?.misses().is_empty());
+    assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     s.finish().await
 }
 

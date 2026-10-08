@@ -199,7 +199,10 @@ async fn hooks_allow_cannot_enable_read_only_write() -> Result<(), HarnessError>
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert_eq!(s.gw.settings().await?["wallpaper"], before);
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert!(
         s.provider()?
             .requests()

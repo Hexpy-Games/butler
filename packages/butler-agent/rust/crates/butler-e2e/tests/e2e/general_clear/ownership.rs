@@ -44,9 +44,15 @@ async fn general_clear_extent_is_atomic_and_does_not_capture_reused_rowids()
         super::support::ordered_message_ids(&snapshot, "general")?,
         vec!["old"]
     );
-    assert!(super::support::ordered_message_ids(&snapshot, &archive)?.is_empty());
+    assert_eq!(
+        super::support::ordered_message_ids(&snapshot, &archive)?,
+        [] as [std::string::String; 0]
+    );
     snapshot.execute_batch("COMMIT")?;
-    assert!(super::support::ordered_message_ids(&snapshot, "general")?.is_empty());
+    assert_eq!(
+        super::support::ordered_message_ids(&snapshot, "general")?,
+        [] as [std::string::String; 0]
+    );
     assert_eq!(
         super::support::ordered_message_ids(&snapshot, &archive)?,
         vec!["old"]
@@ -54,9 +60,12 @@ async fn general_clear_extent_is_atomic_and_does_not_capture_reused_rowids()
     assert_scoped_cursor_work(&snapshot, &archive)?;
     drop(snapshot);
     assert_eq!(s.gw.messages(&archive).await?[0]["id"], "old");
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     let empty = clear(&s, "Empty General").await?;
-    assert!(s.gw.messages(&empty).await?.is_empty());
+    assert_eq!(s.gw.messages(&empty).await?, [] as [serde_json::Value; 0]);
     assert_eq!(
         s.gw.delete("/sessions/other?permanent=true").await?.status,
         200
@@ -81,11 +90,14 @@ async fn general_clear_extent_is_atomic_and_does_not_capture_reused_rowids()
     drop(db);
     s.gw = s.agent.start_again().await?;
     assert_eq!(s.gw.messages("general").await?[0]["id"], "fresh");
-    assert!(s.gw.messages(&empty).await?.is_empty());
+    assert_eq!(s.gw.messages(&empty).await?, [] as [serde_json::Value; 0]);
     let fresh_archive = clear(&s, "Fresh General").await?;
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(
         s.gw.messages(&fresh_archive).await?[0]["text"],
         "Fresh history"

@@ -21,7 +21,7 @@ async fn terminal_settlement_delivers_without_filesystem_notifications() -> Resu
     let cassette = Cassette::load("Q-02")?;
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
     let expected = cassette.exchanges[0].response.output_text();
-    assert!(!expected.is_empty());
+    assert_ne!(expected, "");
     let s = Setup::new("TURN-SETTLEMENT-WAKE")?
         .stub_cassette(cassette)
         .env("BUTLER_E2E_TIER", "stub")

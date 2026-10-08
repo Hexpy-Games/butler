@@ -190,9 +190,9 @@ async fn chat_closure_retires_session_instruction_and_keeps_lasting_instruction(
         s.gw.patch(&format!("/sessions/{a}"), json!({"archived":true}))
             .await?;
     assert_eq!(archived.status, 200, "{}", archived.text);
-    assert!(rows(&s).await?.is_empty());
+    assert_eq!(rows(&s).await?, [] as [serde_json::Value; 0]);
     s.restart().await?;
-    assert!(rows(&s).await?.is_empty());
+    assert_eq!(rows(&s).await?, [] as [serde_json::Value; 0]);
     assert!(!prompt(&s, "general").await?.contains("mango-chat-style"));
     s.finish().await
 }

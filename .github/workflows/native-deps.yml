@@ -51,7 +51,7 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.99.0
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
         with:
@@ -76,7 +76,7 @@ jobs:
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     env:
       RUSTUP_AUTO_INSTALL: '0'
-      RUSTUP_TOOLCHAIN: '1.91.0'
+      RUSTUP_TOOLCHAIN: '1.99.0'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
           $ErrorActionPreference = 'Continue'
           rustc --version
           $ErrorActionPreference = 'Stop'
-          if ($LASTEXITCODE -ne 0) { throw 'Existing Rust 1.91.0 is required; no installation attempted' }
+          if ($LASTEXITCODE -ne 0) { throw 'Existing Rust 1.99.0 is required; no installation attempted' }
           foreach ($name in @('VCToolsInstallDir', 'UCRTVersion', 'UniversalCRTSdkDir')) {
             if (![Environment]::GetEnvironmentVariable($name)) { throw "Existing MSVC developer environment requires $name; no host changes attempted" }
           }

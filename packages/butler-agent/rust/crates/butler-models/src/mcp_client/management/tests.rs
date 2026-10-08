@@ -75,5 +75,8 @@ async fn registry_crud_redacts_literals_and_patch_retains_secret_placeholders() 
         serde_json::from_slice(&fs::read(scratch.0.join("config/mcp-servers.json")).unwrap())
             .unwrap();
     assert!(persisted.get("unknown_root_field").is_none());
-    assert!(persisted["servers"].as_array().unwrap().is_empty());
+    assert_eq!(
+        persisted["servers"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
 }
