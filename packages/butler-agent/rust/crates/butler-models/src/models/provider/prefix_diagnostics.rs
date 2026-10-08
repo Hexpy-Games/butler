@@ -372,7 +372,7 @@ pub(super) fn reported_usage(prefix: &mut Value, response: &Value) {
     .find_map(|path| response.pointer(path).filter(|value| value.is_number()))
     .cloned()
     .unwrap_or(Value::Null);
-    if prefix["providerId"] == "anthropic"
+    if (prefix["providerId"] == "anthropic" || response["type"] == "message")
         && let Some(input) = prefix["providerReportedInputTokens"].as_f64()
     {
         prefix["providerReportedInputTokens"] = json!(
@@ -387,6 +387,15 @@ pub(super) fn reported_usage(prefix: &mut Value, response: &Value) {
                     .unwrap_or(0.0)
         );
     }
+    prefix["providerReportedCacheWriteTokens"] =
+        super::result::cache_write_tokens(response).map_or(Value::Null, |value| json!(value));
+    prefix["providerReportedCacheWrite1hTokens"] =
+        super::result::cache_write_1h_tokens(response).map_or(Value::Null, |value| json!(value));
+    prefix["providerReportedCacheWrite5mTokens"] = response
+        .pointer("/usage/cache_creation/ephemeral_5m_input_tokens")
+        .filter(|value| value.is_number())
+        .cloned()
+        .unwrap_or(Value::Null);
     prefix["providerReportedOutputTokens"] = [
         "/usage/output_tokens",
         "/usage/completion_tokens",

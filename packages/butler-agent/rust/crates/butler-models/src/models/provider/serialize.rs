@@ -61,11 +61,31 @@ pub(super) fn body_with_continuation(
         .flatten();
     let body = match carrier {
         Carrier::Responses => responses(request, config, continuation.as_mut())?,
-        Carrier::Anthropic => anthropic(request, &config.metadata, &config.wire_model),
+        Carrier::Anthropic => anthropic(request, config),
         Carrier::Gemini => gemini(request),
         Carrier::Chat { stream } => chat(request, &config.metadata, &config.wire_model, stream)?,
     };
     Ok((body, continuation.map(|value| value.successful)))
+}
+
+/// Finish every content projection before placing Anthropic cache breakpoints.
+pub(super) async fn body_with_visual(
+    request: &ModelRoundRequest<'_>,
+    config: &ProviderRequestConfig,
+    carrier: Carrier,
+) -> Result<(Value, Option<LegacyProjection>), butler_turn::btcc::ModelRoundError> {
+    let (mut body, continuation) = body_with_continuation(request, config, carrier)?;
+    super::visual::apply(&mut body, request, carrier).await?;
+    if matches!(carrier, Carrier::Anthropic) {
+        super::anthropic_cache::apply(
+            &mut body,
+            config,
+            request
+                .usage_attribution
+                .and_then(|value| value.prompt_diagnostics.as_ref()),
+        );
+    }
+    Ok((body, continuation))
 }
 
 fn responses(
@@ -291,11 +311,8 @@ fn cache_scope(value: Option<&str>) -> String {
     output.trim_matches(['-', ':']).to_owned()
 }
 
-fn anthropic(
-    request: &ModelRoundRequest<'_>,
-    _metadata: &ModelProviderMetadata,
-    model: &str,
-) -> Value {
+fn anthropic(request: &ModelRoundRequest<'_>, config: &ProviderRequestConfig) -> Value {
+    let model = config.wire_model.as_str();
     let mut body = Map::new();
     body.insert("model".into(), model.into());
     if let Some(value) = request
