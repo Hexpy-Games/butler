@@ -21,7 +21,18 @@ Any container that owns expandable row state.
 ## Best practice
 Icon, title, metadata and chevron share the first title baseline. Descriptions
 wrap below the title; expanded content uses the same title inset, with or without
-an icon. Plain rows have no horizontal inset.
+an icon.
+
+## Geometry (owner-approved; do not change without DS approval)
+- The title line is vertically centred in the trigger and its hover/open
+  fill on both surfaces, including plain rows where Clickable's minimum
+  height is taller than one line (`align-content: center`).
+- Plain rows: the chevron sits on the card's content edge, aligned with the
+  labels of neighbouring cards; the hover fill bleeds `--space-sm` past it
+  on both sides.
+- Selection rows: the trigger is inset by `--space-sm` inside its fill.
+- Review every change against the States matrix (each surface and content
+  shape in default, hover, focus-visible and open) in light and dark.
 
 Pass domain labels as text and keep block children presentational.
 Use `surface="plain"` when the disclosure only controls a timeline or nested
