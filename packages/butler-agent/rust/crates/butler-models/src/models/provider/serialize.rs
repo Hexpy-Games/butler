@@ -1,3 +1,4 @@
+mod anthropic_schema;
 mod input;
 mod messages;
 mod reasoning;
@@ -228,8 +229,9 @@ fn anthropic(
     }
     let max = request
         .max_output_tokens
-        .filter(|value| js_truthy_number(*value))
-        .unwrap_or(4096.0);
+        .and_then(|value| value.to_string().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(4096);
     body.insert("max_tokens".into(), max.into());
     body.insert(
         "messages".into(),
@@ -367,7 +369,7 @@ fn chat_tool(tool: &ModelRoundTool) -> Value {
     serde_json::json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.parameters}})
 }
 fn anthropic_tool(tool: &ModelRoundTool) -> Value {
-    serde_json::json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters})
+    anthropic_schema::tool(tool)
 }
 fn gemini_tool(tool: &ModelRoundTool) -> Value {
     serde_json::json!({"name":tool.name,"description":tool.description,"parameters":tool.parameters})

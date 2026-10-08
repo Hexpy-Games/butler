@@ -13,6 +13,7 @@ use url::Url;
 
 use super::*;
 
+mod anthropic_schema;
 mod continuation;
 mod prompt;
 mod serialization;

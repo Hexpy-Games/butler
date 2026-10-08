@@ -328,7 +328,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     );
     let anthropic_body =
         serialize::body(&input, &anthropic, serialize::Carrier::Anthropic).unwrap();
-    assert_eq!(anthropic_body["max_tokens"], 4096.0);
+    assert_eq!(anthropic_body["max_tokens"].as_u64(), Some(4096));
     assert_eq!(anthropic_body["thinking"]["type"], "adaptive");
     assert_eq!(anthropic_body["tool_choice"]["type"], "any");
 
