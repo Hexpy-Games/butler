@@ -544,7 +544,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (url.pathname.startsWith("/memory/")) {
     return await callBridge<T>(bridge, "memoryRequest", {
-      path: url.pathname, method, body: parseBody(options.body),
+      path: url.pathname, method,
+      ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
