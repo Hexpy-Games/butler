@@ -7,6 +7,8 @@ import { waitFor } from "./browser-p0-app";
 import type { P0App } from "./browser-p0-measure";
 
 export async function openBrowserArea(app: P0App) {
+  await app.page.waitForFunction(() => Array.from(document.querySelectorAll("button,[role=button]"))
+    .some(e => (e.getAttribute("aria-label") || e.textContent)?.trim() === "브라우저"));
   await app.page.clickText("브라우저", "button,[role=button]");
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-area"]')));
 }

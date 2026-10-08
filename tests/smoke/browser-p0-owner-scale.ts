@@ -1,4 +1,5 @@
 import { seedP0BtccScale } from "./browser-p0-btcc-scale.ts";
+import { seedP0FileScale } from "./browser-p0-file-scale.ts";
 import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
 import { statSync, statfsSync } from "node:fs";
@@ -34,7 +35,8 @@ export function seedP0OwnerScale(data: string) {
   assert.equal(counts.chats, 600); assert.equal(counts.events, 300000); assert.equal(counts.messages, 3000);
   assert(appBytes >= 1_300_000_000); assert(counts.transcriptBytes >= 290_000_000);
   const btcc = seedP0BtccScale(data);
-  return { btcc, ...counts, appBytes, chatId: "p0-c599" };
+  const files = seedP0FileScale(data);
+  return { btcc, files, ...counts, appBytes, chatId: "p0-c599" };
 }
 
 /** The full DBs and their transaction WALs must fit before any fixture write. */
