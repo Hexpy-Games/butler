@@ -411,6 +411,9 @@ jobs:
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
+      - uses: oras-project/setup-oras@v1
+        with:
+          version: 1.2.3
       - name: Verify Cargo snapshot and native dependency contracts
         working-directory: ${{ github.workspace }}
         run: |
