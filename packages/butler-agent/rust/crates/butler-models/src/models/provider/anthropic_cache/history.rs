@@ -2,9 +2,6 @@
 //! so appending a turn does not alter the previous turn's final block.
 use serde_json::{Value, json};
 
-const CHUNK_TURNS: usize = 16;
-const RECENT_TURNS: usize = 2;
-
 pub(super) fn blocks(
     text: &str,
     boundary: usize,
@@ -31,16 +28,10 @@ pub(super) fn blocks(
     if offsets[0] > start {
         output.push(block(&text[start..offsets[0]]));
     }
-    // Completed older chunks always cover the same 16 turns. Keep at least
-    // two individual recent turns: even when a chunk closes, yesterday's end
-    // remains a boundary immediately before the newly appended turn.
-    let chunked = offsets.len().saturating_sub(RECENT_TURNS) / CHUNK_TURNS * CHUNK_TURNS;
-    let mut index = 0;
-    while index < offsets.len() {
-        let next = index + if index < chunked { CHUNK_TURNS } else { 1 };
-        let finish = offsets.get(next).copied().unwrap_or(end);
-        output.push(block(&text[offsets[index]..finish]));
-        index = next;
+    // Keep every turn append-only; the previous breakpoint is one block back.
+    for (index, begin) in offsets.iter().enumerate() {
+        let finish = offsets.get(index + 1).copied().unwrap_or(end);
+        output.push(block(&text[*begin..finish]));
     }
     (output, end)
 }

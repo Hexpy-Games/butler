@@ -3,9 +3,6 @@ use serde_json::{Value, json};
 
 mod history;
 
-#[cfg(test)]
-pub(super) use history::tests::history_chunks_preserve_bytes_and_previous_breakpoint_within_lookback;
-
 use super::ProviderRequestConfig;
 
 /// Other endpoints require an operator's explicit, exact-URL capability assertion.
@@ -19,7 +16,12 @@ pub(super) fn apply(body: &mut Value, config: &ProviderRequestConfig, diagnostic
         .and_then(|value| url::Url::parse(&value).ok())
         .is_some_and(|value| value == config.endpoint);
     let enabled = (official || verified)
-        && std::env::var("BUTLER_ANTHROPIC_PROMPT_CACHE").as_deref() != Ok("off");
+        && !std::env::var("BUTLER_ANTHROPIC_PROMPT_CACHE").is_ok_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "off" | "0" | "false" | "no"
+            )
+        });
     if let Some(messages) = body.get_mut("messages").and_then(Value::as_array_mut) {
         normalize(messages, enabled);
     }
@@ -29,8 +31,11 @@ pub(super) fn apply(body: &mut Value, config: &ProviderRequestConfig, diagnostic
     let long = match std::env::var("BUTLER_ANTHROPIC_CACHE_TTL").as_deref() {
         Ok("5m") => Some(json!({"type":"ephemeral","ttl":"5m"})),
         Ok("1h") | Err(_) => Some(json!({"type":"ephemeral","ttl":"1h"})),
-        // Off or an invalid setting disables the long breakpoints.
-        Ok(_) => None,
+        Ok("off") => None,
+        Ok(_) => {
+            eprintln!("warning: invalid BUTLER_ANTHROPIC_CACHE_TTL; using default 1h");
+            Some(json!({"type":"ephemeral","ttl":"1h"}))
+        }
     };
     if let Some(system) = body.get_mut("system")
         && let Some(text) = system.as_str().filter(|text| !text.trim().is_empty())
