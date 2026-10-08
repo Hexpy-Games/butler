@@ -322,8 +322,8 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
         .unwrap()
         .iter()
         .find(|a| a["kind"] == "web")
-        .unwrap()
-        .clone();
+        .cloned()
+        .expect("published web output");
     let cleared =
         s.gw.post("/sessions/general/clear", json!({"title":"Saved outputs"}))
             .await?;
@@ -336,10 +336,7 @@ async fn general_clear_preserves_outputs_and_routes_deferred_answers() -> Result
     let kept =
         s.gw.get(&format!("/artifacts?session_id={archive}"))
             .await?;
-    let kept_outputs = output_cards(kept.data());
-    assert_eq!(kept_outputs.len(), 1);
-    assert_eq!(kept_outputs[0]["id"], output["id"]);
-    assert_eq!(kept_outputs[0]["session_id"], archive);
+    support::verify_archived_outputs(before.data(), kept.data(), archive);
     assert!(s.gw.messages(archive).await?.iter().any(|m| {
         m["artifacts"]
             .as_array()

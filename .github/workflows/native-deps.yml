@@ -6,6 +6,7 @@ on:
     paths:
       - packages/butler-agent/rust/scripts/prepare-static-ort.py
       - packages/butler-agent/rust/scripts/static_ort_*.py
+      - packages/butler-agent/rust/scripts/static-ort-key-compat.json
       - packages/butler-agent/rust/scripts/static-ort.lock.json
       - packages/butler-agent/rust/rust-toolchain.toml
       - .github/workflows/native-deps.yml
@@ -18,23 +19,34 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
+    name: Publish ${{ matrix.label }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: linux-x64
             runner: ubuntu-24.04
+            label: linux-x64
           - target: linux-arm64
             runner: ubuntu-24.04-arm
+            label: linux-arm64
           - target: macos-arm64
             runner: macos-15
+            label: macos-arm64
           - target: windows-x64
             runner: windows-latest
+            label: windows-hosted
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        env:
+          # Process scope only; the runner service policy remains unchanged.
+          PSExecutionPolicyPreference: Bypass
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@master
@@ -44,14 +56,56 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arch: x64
-      - uses: oras-project/setup-oras@v1
-        with:
-          version: 1.2.3
+      - uses: ./.github/actions/setup-oras
       - name: Build once and publish verified SDK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_TARGET: ${{ matrix.target }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
+          PYTHONDONTWRITEBYTECODE: '1'
+          RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"
+  windows-owner:
+    name: Publish windows-owner
+    runs-on: [self-hosted, Windows, X64, butler-win]
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+    env:
+      RUSTUP_AUTO_INSTALL: '0'
+      RUSTUP_TOOLCHAIN: '1.99.0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-discovery
+      - name: Verify existing owner toolchain
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python -c "import sys; sys.exit('Owner runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { throw 'Existing Python 3.12 is required; no installation attempted' }
+          foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake')) {
+            if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
+          }
+          $ErrorActionPreference = 'Continue'
+          rustc --version
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { throw 'Existing Rust 1.99.0 is required; no installation attempted' }
+          foreach ($name in @('VCToolsInstallDir', 'UCRTVersion', 'UniversalCRTSdkDir')) {
+            if (![Environment]::GetEnvironmentVariable($name)) { throw "Existing MSVC developer environment requires $name; no host changes attempted" }
+          }
+      - uses: ./.github/actions/setup-oras
+      - name: Build and publish owner-toolset SDK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_TARGET: windows-x64
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-owner/native-deps
+          RUSTC_WRAPPER: ''
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps $env:NATIVE_TARGET
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { throw 'Native SDK publication failed' }

@@ -24,7 +24,7 @@ impl AppUpdateService {
             .version
             .as_deref()
             .ok_or(UpdateCode::AppVersionUnavailable)?;
-        let previews = super::channel::previews(&self.data, None).await;
+        let previews = super::channel::previews(&self.data, None, self.version.as_deref()).await;
         let saved = self
             .saved()
             .await
@@ -60,6 +60,9 @@ impl AppUpdateService {
     /// (`check_state: "unavailable"`), not a failure.
     pub async fn refresh(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
+        if self.version.is_none() {
+            return Err(UpdateCode::AppVersionUnavailable.into());
+        }
         let prior = self.progress.snapshot().await;
         if matches!(
             prior["stage"].as_str(),
@@ -69,24 +72,9 @@ impl AppUpdateService {
         }
         self.progress.report("checking", None, None, None).await?;
         let result = self.refresh_now(self.resolved_request(request).await).await;
-        let code = match &result {
-            Err(error) => Some(error.code().to_owned()),
-            Ok(view) => view["components"][0]["check_error"]
-                .as_str()
-                .map(str::to_owned),
-        };
-        self.progress
-            .report(
-                if code.is_some() {
-                    "failed"
-                } else {
-                    "completed"
-                },
-                None,
-                None,
-                code.as_deref(),
-            )
-            .await?;
+        // Checking a feed is not a download/install attempt. Keep diagnostics
+        // in check_state/check_error and let unavailable statuses retry quietly.
+        self.progress.report("completed", None, None, None).await?;
         match result {
             Ok(mut view) => {
                 view["progress"] = self.progress.snapshot().await;
@@ -97,7 +85,12 @@ impl AppUpdateService {
     }
 
     pub(super) async fn resolved_request(&self, mut request: UpdateRequest) -> UpdateRequest {
-        let previews = super::channel::previews(&self.data, request.channel.as_deref()).await;
+        let previews = super::channel::previews(
+            &self.data,
+            request.channel.as_deref(),
+            self.version.as_deref(),
+        )
+        .await;
         request.channel = Some(if previews { "preview" } else { "stable" }.into());
         request
     }
@@ -152,7 +145,12 @@ impl AppUpdateService {
             Some(prior)
                 if super::channel::eligible(
                     &json!({"version": prior.get("available_version")}),
-                    super::channel::previews(&self.data, request.channel.as_deref()).await,
+                    super::channel::previews(
+                        &self.data,
+                        request.channel.as_deref(),
+                        self.version.as_deref(),
+                    )
+                    .await,
                 ) =>
             {
                 Value::Object(prior)

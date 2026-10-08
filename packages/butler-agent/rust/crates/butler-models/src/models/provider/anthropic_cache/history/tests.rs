@@ -5,9 +5,8 @@
 )]
 use super::*;
 
-// test-category: format-pin
-#[test]
-fn history_blocks_preserve_bytes_and_previous_breakpoint_within_lookback() {
+// Invoked by the existing Anthropic format-pin stub test.
+pub(in crate::models::provider) fn assert_history_bytes_and_breakpoints() {
     let mut previous: Vec<Value> = Vec::new();
     for count in 1..=66 {
         let turns = (0..count)

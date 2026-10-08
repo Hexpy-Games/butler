@@ -61,7 +61,9 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
-    if access == Access::AskAlways && !refused {
+    // Permission-tiers D1/R1: every normal-chat command asks in AskAlways,
+    // including commands the executor will subsequently refuse as protected.
+    if access == Access::AskAlways {
         approve_exact(&s, &id, &command).await?;
     }
     let turn =
@@ -165,6 +167,7 @@ pub(super) async fn approve_exact(
         .await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
+    assert_eq!(requests.len(), 1, "one exact command approval");
     let card = requests
         .iter()
         .find(|r| r["source_turn_id"] == id && r["approval"]["action_kind"] == "run_command")
@@ -176,6 +179,7 @@ pub(super) async fn approve_exact(
         let text = s.gw.operation_output(id, &row).await.unwrap_or_default();
         assert!(!text.contains("registry_downloads="), "ran before Allow");
         assert!(!text.contains("보고서.txt"), "ran before Allow");
+        assert!(!text.contains("protected-canary"), "read before Allow");
     }
     let reference = card["request_ref"].as_str().unwrap();
     let allowed =

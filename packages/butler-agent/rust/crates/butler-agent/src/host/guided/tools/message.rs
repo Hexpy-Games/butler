@@ -32,10 +32,19 @@ pub(super) fn result_message(
         && let Some(tool_error) = &result.error
     {
         content.push_str(",\"error\":");
-        let value = serde_json::to_value(tool_error).map_err(|source| {
-            error("guided_tool_provider_serialization_failed").with_source(source)
-        })?;
+        // Recovery guidance belongs beside the source error. Keep its stable
+        // code/message intact for clients and model-visible refusal receipts.
+        let value = source_error(result)?.unwrap_or(serde_json::to_value(tool_error).map_err(
+            |source| error("guided_tool_provider_serialization_failed").with_source(source),
+        )?);
         append_value(&mut content, &value)?;
+        if value["message"].as_str() != Some(&tool_error.message) {
+            content.push_str(",\"recovery_feedback\":");
+            append_value(
+                &mut content,
+                &serde_json::Value::String(tool_error.message.clone()),
+            )?;
+        }
     }
     if let Some(output) = &result.output {
         content.push_str(",\"output\":");
@@ -61,6 +70,20 @@ pub(super) fn result_message(
         operation_result_call_id: references.operation_result_call_id.clone(),
         continuation_item_id: None,
     })
+}
+
+fn source_error(result: &ToolResult) -> Result<Option<serde_json::Value>, BtccError> {
+    let Some(output) = &result.output else {
+        return Ok(None);
+    };
+    let field = output
+        .field("error")
+        .map_err(|source| error("guided_tool_provider_serialization_failed").with_source(source))?;
+    let value: Option<serde_json::Value> = field
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|source| error("guided_tool_provider_serialization_failed").with_source(source))?;
+    Ok(value.filter(|value| value["code"].is_string() && value["message"].is_string()))
 }
 
 /// Appends the provider-shaped `output` object of a tool result to `content`.

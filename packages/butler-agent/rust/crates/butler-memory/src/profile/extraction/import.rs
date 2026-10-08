@@ -19,6 +19,8 @@ use crate::profile::ProfileCode;
 use butler_core::json::Utf16Prefix;
 use butler_models::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 
+const MAX_IMPORT_UTF16_UNITS: usize = 60_000;
+
 /// Imports another assistant's profile export as candidates, then
 /// consolidates the profile.
 pub(super) async fn run(
@@ -36,7 +38,7 @@ pub(super) async fn run(
         let stable = stable_count(&dependencies).await?;
         return Ok(base(consent.mode, source, None, model_config, stable));
     }
-    let text = normalize_text(&options.text);
+    let text = normalize_text(&options.text)?;
     let hash = import_hash(&source, &text);
     let id = format!("third_party_profile_import:{source}:{hash}");
     if text.is_empty() {
@@ -190,7 +192,7 @@ async fn store_candidates(
                     confidence: candidate.confidence,
                     sensitive_domain: candidate.sensitive_domain,
                     evidence_ref: Some(evidence),
-                    evidence_observed_at: None,
+                    evidence_observed_at: Some(now.clone()),
                     expires_or_decay: candidate.expires_or_decay,
                 },
                 &now,
@@ -233,10 +235,16 @@ async fn stable_count(dependencies: &Dependencies) -> ProfileResult<usize> {
     runtime::blocking(move || Ok(storage::stable_entries(&root)?.len())).await
 }
 
-fn normalize_text(value: &str) -> Utf16Prefix<'static> {
+fn normalize_text(value: &str) -> ProfileResult<Utf16Prefix<'static>> {
+    if value.encode_utf16().nth(MAX_IMPORT_UTF16_UNITS).is_some() {
+        return Err(ProfileError::new(
+            ProfileCode::ProfileDataInvalid,
+            "Profile import text exceeds 60,000 UTF-16 units.",
+        ));
+    }
     let normalized = value.replace("\r\n", "\n");
     let trimmed = butler_core::public_text::trim_js_whitespace(&normalized).to_owned();
-    Utf16Prefix::new(trimmed, 60_000)
+    Ok(Utf16Prefix::new(trimmed, MAX_IMPORT_UTF16_UNITS))
 }
 fn normalize_source(value: Option<&str>) -> String {
     let value = value
@@ -280,7 +288,6 @@ fn import_prompt(
 ) -> ProfileResult<String> {
     let literal = text
         .collapse_whitespace(butler_core::public_text::is_js_whitespace)
-        .prefix(18_000)
         .json_literal()
         .map_err(|source| {
             ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
@@ -397,7 +404,7 @@ pub(crate) mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let source = normalize_source(Some(" Other Assistant! "));
-        let text = normalize_text("  First\r\nsecond\t🙂  ");
+        let text = normalize_text("  First\r\nsecond\t🙂  ").unwrap();
         let hash = import_hash(&source, &text);
         let id = format!("third_party_profile_import:{source}:{hash}");
         assert_eq!(source, golden["source"]);

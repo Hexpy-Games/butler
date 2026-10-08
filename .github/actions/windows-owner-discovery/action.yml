@@ -1,0 +1,11 @@
+name: Discover existing owner Windows tools
+description: Read existing Python and developer tools into the job environment only
+runs:
+  using: composite
+  steps:
+    - name: Discover existing Python 3.12
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: '& "${{ github.action_path }}/python.ps1"'
+    - name: Discover existing developer tools
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: '& "${{ github.action_path }}/tools.ps1"'

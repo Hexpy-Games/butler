@@ -44,8 +44,9 @@ pub(super) async fn snapshot(
 }
 
 fn load(root: &Path, cache: &SnapshotCache) -> Option<String> {
-    let exists = |name: &str| match std::fs::symlink_metadata(root.join(name)) {
-        Ok(_) => true,
+    let exists = |name: &str| match butler_platform::secure_fs::exact_entry_exists(&root.join(name))
+    {
+        Ok(exists) => exists,
         Err(error) => error.kind() != std::io::ErrorKind::NotFound,
     };
     let conventional = exists("AGENTS.md");

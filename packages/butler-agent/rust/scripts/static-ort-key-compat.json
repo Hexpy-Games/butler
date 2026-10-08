@@ -1,0 +1,14 @@
+{
+  "build_recipe": {
+    "rust-toolchain.toml": "57dc91c7ef18e7f2f5b5b52265f2eb79c240359fbdebdf3d2f9661de3143a2e6",
+    "static_ort_build.py": "5dcca6c61865ffaee0095a7191fbe1097e3029a41576432590d6187839794cd4",
+    "static_ort_targets.py": "ba627104883fc20facc9605c9ce84d75c900cbae0dfea45c3471f5eeba75307b"
+  },
+  "published_recipe": {
+    "prepare-static-ort.py": "7aa2ca63efc5a268949060576a7cb74acbecff7b373a763c096566ff876d1df0",
+    "rust-toolchain.toml": "57dc91c7ef18e7f2f5b5b52265f2eb79c240359fbdebdf3d2f9661de3143a2e6",
+    "static_ort_host.py": "01d9167ac95a15ef823c0d297cea444587c195317948e5a5f2520b4449a429bb",
+    "static_ort_prebuilt.py": "20fc1ac5ec89bd07fd20f80e3db755633433e89bb87bf1583f492bb72a22b1f7",
+    "static_ort_targets.py": "ba627104883fc20facc9605c9ce84d75c900cbae0dfea45c3471f5eeba75307b"
+  }
+}

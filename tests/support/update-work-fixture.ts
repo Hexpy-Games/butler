@@ -1,6 +1,34 @@
 import { strict as assert } from "node:assert";
 import type { ElectronPage } from "./electron-page-cdp.ts";
 
+type AcceptedWork = {
+  turn_id?: string;
+  turn?: { id?: string; turn_id?: string };
+  queued?: { id: string; turn_id?: string; client_message_id?: string };
+};
+
+async function dispatchedUpdateTurn(page: ElectronPage, chat: string, accepted: AcceptedWork, isHeld: () => boolean) {
+  let turn = accepted.turn_id ?? accepted.turn?.id ?? accepted.turn?.turn_id ?? accepted.queued?.turn_id;
+  const queuedId = accepted.queued?.id;
+  const messageId = accepted.queued?.client_message_id;
+  assert.ok(turn || (queuedId && messageId), "The send must return a turn or an exact queued receipt.");
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (!turn) {
+      // Pending queue views omit dispatched entries. The receipt retains the
+      // canonical user-message identity, which the public turn view preserves.
+      const { turns } = await page.expression<{ turns: Array<{ id: string; user_message_id?: string }> }>(
+        `window.butlerApp.listTurns(${JSON.stringify({ chatId: chat })})`);
+      const matches = turns.filter(candidate => candidate.user_message_id === messageId);
+      assert.ok(matches.length <= 1, "The accepted message must dispatch exactly once.");
+      turn = matches[0]?.id;
+    }
+    if (turn && isHeld()) return turn;
+    await new Promise(done => setTimeout(done, 100));
+  }
+  throw new Error("The accepted update fixture work was not dispatched.");
+}
+
 /** Matches the canonical current request, excluding later user-role context updates. */
 export function updateFixtureWord(messages: Array<{ role?: string; content?: unknown }> = []) {
   const texts = messages.filter(message => message.role === "user").map(message => {
@@ -50,10 +78,12 @@ export function updateWorkFixture(mode: string) {
     },
     async start(page: ElectronPage, chat: string) {
       sessionId = chat;
-      const accepted = await page.expression<{ turn_id?: string; turn?: { id?: string; turn_id?: string } }>(`window.butlerApp.sendMessage(${JSON.stringify({
+      const receipt = await page.expression<{ ok: boolean; data?: AcceptedWork }>(`window.butlerApp.sendMessage(${JSON.stringify({
         chatId: chat, text: "Reply with exactly the word: one", clientMessageId: crypto.randomUUID(), model: "local/stub",
       })})`);
-      original = accepted.turn_id ?? accepted.turn?.id ?? accepted.turn?.turn_id ?? "";
+      assert.equal(receipt.ok, true, "The preload bridge must accept the fixture message.");
+      assert.ok(receipt.data);
+      original = await dispatchedUpdateTurn(page, chat, receipt.data, () => activeRequests === 1);
       assert.ok(original);
       for (const text of ["Reply with exactly the word: waiting", "Reply with exactly the word: done"]) {
         await page.expression(`window.butlerApp.queueMessage(${JSON.stringify({ chatId: chat, text, model: "local/stub" })})`);

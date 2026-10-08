@@ -481,6 +481,6 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "butler-h1b-{label}-{}-{}.sqlite",
         std::process::id(),
-        Clock(AtomicU64::new(1)).new_uuid()
+        uuid::Uuid::new_v4()
     ))
 }
