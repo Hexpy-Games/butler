@@ -145,8 +145,29 @@ def check(repository, candidate, sha):
         raise ValueError('Integration proof missing: ' + ', '.join(missing))
 
 
+# Files read only by the tag build itself. Commits touching nothing else
+# reuse their first parent's integration evidence (and waivers).
+RELEASE_ONLY = {'.github/workflows/release.yml', '.github/workflows/npm-publish.yml',
+                '.github/scripts/integration-proof.py'}
+
+
+def proven_sha(sha):
+    while True:
+        parent = changes.command('git', 'rev-parse', f'{sha}^1')
+        changed = set(changes.command('git', 'diff', '--name-only', parent, sha).split())
+        if not changed or not changed <= RELEASE_ONLY:
+            return sha
+        print(f'{sha}: release-only changes {sorted(changed)}; using evidence of {parent}')
+        sha = parent
+
+
 if __name__ == '__main__':
     tag = os.environ['GITHUB_REF_NAME']
     if not re.fullmatch(r'v\d+\.\d+\.\d+(-preview\.\d+)?', tag):
         raise ValueError(f'Invalid release tag: {tag}')
-    check(os.environ['GITHUB_REPOSITORY'], tag[1:], changes.command('git', 'rev-parse', 'HEAD'))
+    head = changes.command('git', 'rev-parse', 'HEAD')
+    sha = proven_sha(head)
+    if sha != head:
+        # Input hashes read the checkout tree; prove the evidenced commit's tree.
+        changes.command('git', 'checkout', '--quiet', '--detach', sha)
+    check(os.environ['GITHUB_REPOSITORY'], tag[1:], sha)
