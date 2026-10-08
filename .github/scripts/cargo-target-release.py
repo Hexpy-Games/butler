@@ -112,7 +112,16 @@ def restore(expected):
     if local and restore_local(local, expected):
         return True
     published = release(tag_name(expected))
+    selected_identity = expected
     compatible = False
+    if not published and 'profile_config' in expected:
+        # Existing snapshots already pin the exact manifest digest, which
+        # proves these same profile settings. Keep that safe warm upgrade path.
+        legacy = dict(expected, runtime=os.environ.get('ORT_LIB_PATH', ''))
+        legacy.pop('profile_config')
+        published = release(tag_name(legacy))
+        if published:
+            selected_identity = legacy
     if not published:
         published = release(compatible_tag(expected))
         compatible = True
@@ -123,11 +132,11 @@ def restore(expected):
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
         try:
-            fetch_snapshot(published, candidates[0], directory, expected, compatible)
+            fetch_snapshot(published, candidates[0], directory, selected_identity, compatible)
         except UnsuccessfulProducer:
             print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
             return False
-        restore_tree(directory, expected, compatible)
+        restore_tree(directory, selected_identity, compatible)
     return True
 
 

@@ -19,6 +19,21 @@ cache = snapshots.cache
 
 class TargetSnapshot(unittest.TestCase):
     # test-category: security
+    def test_upgrade_accepts_only_exact_legacy_manifest_identity(self):
+        expected = dict(platform='linux-x64', profile_config={}, runtime='', lock='pinned',
+                        configs={'Cargo.toml': 'pinned'})
+        legacy = dict(expected)
+        legacy.pop('profile_config')
+        published = {'assets': [{'name': '42-1.json'}]}
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary, ORT_LIB_PATH=''), \
+                patch.object(snapshots, 'release', side_effect=[None, published]) as lookup, \
+                patch.object(snapshots, 'fetch_snapshot') as fetch, patch.object(snapshots, 'restore_tree') as adopt:
+            self.assertTrue(snapshots.restore(expected))
+            self.assertEqual(lookup.call_args.args[0], snapshots.tag_name(legacy))
+            self.assertEqual(fetch.call_args.args[3:], (legacy, False))
+            self.assertEqual(adopt.call_args.args[1:], (legacy, False))
+
+    # test-category: security
     def test_compatible_snapshot_relaxes_only_lock_and_manifest_digest(self):
         expected = dict(schema=2, platform='linux-x64', kind='native', compiler='pinned',
                         target='linux', profile='release', features='static-ort', lock='old',
