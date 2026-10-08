@@ -31,6 +31,12 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: "8"
+      # Keep filename/line backtraces inside the archived executables, without
+      # packed split-debug postprocessing (dsymutil/dwp) or missing sidecars.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_PROFILE_DEV_SPLIT_DEBUGINFO: 'off'
+      CARGO_PROFILE_TEST_SPLIT_DEBUGINFO: 'off'
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       # Read-only build provenance must not refresh the index it tracks.
       GIT_OPTIONAL_LOCKS: "0"
