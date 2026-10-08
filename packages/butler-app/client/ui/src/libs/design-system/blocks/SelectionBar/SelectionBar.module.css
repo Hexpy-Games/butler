@@ -1,0 +1,92 @@
+/* A solid pill (never glass: it sits over live pages), one line always. */
+.bar {
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - var(--space-lg) * 2);
+  height: var(--browser-band-height);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs) 0 var(--space-sm);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--popover);
+  box-shadow: var(--shadow-window);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  white-space: nowrap;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.bar[data-placement="floating"] {
+  position: absolute;
+  z-index: 3;
+  bottom: var(--space-lg);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bar[data-compact] {
+  height: var(--control-height-lg);
+}
+
+.bar[data-dimmed] {
+  opacity: 0.55;
+}
+
+.bar [data-slot="button-container"] {
+  flex-wrap: nowrap;
+}
+
+.count {
+  display: grid;
+  min-width: calc(var(--space-xl) + var(--border-width-strong));
+  height: calc(var(--space-xl) + var(--border-width-strong));
+  flex: none;
+  padding: 0 var(--space-xs);
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  flex: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.separator {
+  width: var(--border-hairline);
+  height: var(--icon-size-sm);
+  flex: none;
+  background: var(--line-strong);
+}
+
+.wide,
+.narrow {
+  display: flex;
+  flex: none;
+}
+
+.narrow {
+  display: none;
+}
+
+/* Narrow page cards: icon-only actions (tooltips keep the words). */
+@container page-card (width < 560px) {
+  .wide {
+    display: none;
+  }
+
+  .narrow {
+    display: flex;
+  }
+}
+
+@container page-card (width < 320px) {
+  .label {
+    display: none;
+  }
+}

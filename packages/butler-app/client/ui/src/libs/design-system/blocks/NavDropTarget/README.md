@@ -74,5 +74,15 @@ density.
 - Do not use it for lists without drag and drop; use `NavRow` alone.
 - Do not add drop indicator CSS in product code.
 
+## Outside payloads
+Picked page elements or a browser tab dragged over the sidebar use
+`drop="outside"`: an inset ring and a label beside the row (`hint`, e.g. Add
+to ‘Trip’), or with `invalid` a dashed danger ring and the reason. Wrap the
+tree in `NavDropScope payload="outside"`: no row opens a slot, reorders or
+expands, so row positions never change during the drag. `useNavDropAutoScroll`
+scrolls the list while the pointer is within 40px of its top or bottom edge
+(`navDropAutoScrollStep` is the per-frame step) and `NavDropScope autoScroll`
+shows the edge band.
+
 ## Tags
 navigation, sidebar, drag, drop, reorder

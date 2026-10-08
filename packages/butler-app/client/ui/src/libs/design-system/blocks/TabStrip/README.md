@@ -36,5 +36,11 @@ Keep state in the container. Pass `panelId` (the `NativeViewSlot` id) so tabs po
 ## Wrong use cases
 Do not use it for in-panel view switching; use `Tabs`.
 
+## A conversation's own pane
+`hideChip` drops the chip when the strip shows a single group of any kind (a
+conversation's browser pane; the title bar names it) and shows its tabs at
+full strength. `trailing` holds row-end controls (Bring in a tab); they stay
+out of the tab focus order. Keyboard moves and drag work as before.
+
 ## Tags
 browser, tabs, tablist, groups, drag, reorder, conversation

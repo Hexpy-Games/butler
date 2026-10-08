@@ -1,0 +1,247 @@
+/* Butler's pointer layer (overlay renderer). Everything is placed with
+   translate, so moving between targets glides on --motion-pointer-glide
+   (0 under reduced motion: it jumps). */
+.layer {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.layer > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.pointer,
+.ring,
+.valueChip,
+.stop {
+  transition: translate var(--motion-pointer-glide) var(--motion-ease-standard);
+}
+
+.trail {
+  overflow: visible;
+}
+
+.trail polyline {
+  fill: none;
+  stroke: var(--butler-ink-purple);
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  stroke-width: var(--border-width-strong);
+  opacity: 0.7;
+}
+
+/* The target ring: dashed while reading, solid while acting. */
+.ring {
+  border: var(--border-width-strong) dashed
+    color-mix(in srgb, var(--butler-ink-purple) 75%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--butler-ink-blue) 7%, transparent);
+}
+
+.layer[data-mode="click"] .ring {
+  border-style: solid;
+  border-color: var(--butler-ink-purple);
+}
+
+.layer[data-mode="type"] .ring {
+  border-style: solid;
+  border-color: var(--butler-ink-blue);
+  background: transparent;
+}
+
+.layer[data-mode="parked"] .ring {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  background: transparent;
+}
+
+.layer[data-tone="waiting"] .ring {
+  border: var(--border-width-strong) solid var(--color-warning-text);
+  background: color-mix(in srgb, var(--color-warning-bg) 45%, transparent);
+}
+
+.layer[data-tone="need-input"] .ring {
+  border: var(--border-width-strong) solid var(--color-warning-text);
+  background: transparent;
+}
+
+.ringTag,
+.valueChip,
+.tag {
+  padding: 1px var(--space-sm);
+  border-radius: var(--radius-pill);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
+}
+
+.ringTag {
+  position: absolute;
+  top: calc(var(--space-xl) * -1 - var(--border-width-strong));
+  left: calc(var(--border-width-strong) * -1);
+  background: var(--butler-ink-purple);
+}
+
+.caret {
+  position: absolute;
+  top: 22%;
+  right: 20%;
+  width: var(--border-width-strong);
+  height: 56%;
+  background: var(--butler-ink-blue);
+  animation: caret-blink var(--pulse-duration) steps(1) var(--motion-loop-count);
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.valueChip {
+  background: var(--butler-ink-blue);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Click: rings spread from the point once per beat; static when reduced. */
+.ripple {
+  width: var(--space-4xl);
+  height: var(--space-4xl);
+  margin: calc(var(--space-4xl) / -2) 0 0 calc(var(--space-4xl) / -2);
+  border: var(--border-width-strong) solid var(--butler-ink-pink);
+  border-radius: var(--radius-pill);
+  box-shadow:
+    0 0 0 8px color-mix(in srgb, var(--butler-ink-pink) 18%, transparent),
+    0 0 0 18px color-mix(in srgb, var(--butler-ink-pink) 8%, transparent);
+  animation: ripple var(--pulse-duration) var(--motion-ease-emphasized)
+    var(--motion-loop-count);
+}
+
+@keyframes ripple {
+  from {
+    opacity: 1;
+    scale: 0.4;
+  }
+}
+
+.stop {
+  display: grid;
+  width: var(--space-xl);
+  height: var(--space-xl);
+  margin: calc(var(--space-xl) / -2) 0 0 calc(var(--space-xl) / -2);
+  place-items: center;
+  border: var(--border-width-strong) solid var(--neutral-white);
+  border-radius: var(--radius-pill);
+  background: var(--butler-ink-purple);
+  box-shadow: var(--browser-overlay-shadow);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.stop[data-done] {
+  background: color-mix(
+    in srgb,
+    var(--butler-ink-purple) 55%,
+    var(--neutral-white)
+  );
+}
+
+.rail {
+  right: var(--space-md);
+  left: auto;
+  width: 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--butler-ink-purple) 18%, transparent);
+}
+
+.thumb {
+  position: absolute;
+  top: 40%;
+  left: 0;
+  width: 100%;
+  height: 30%;
+  border-radius: inherit;
+  background: linear-gradient(var(--butler-ink-blue), var(--butler-ink-pink));
+}
+
+/* The arrow: a dark halo under a white keyline, so its outline reads on
+   white (halo), black (keyline) and photo pages; the riso fill inside. */
+.pointer {
+  z-index: 2;
+  margin: -2px 0 0 -2px;
+}
+
+.pointer svg {
+  display: block;
+  overflow: visible;
+}
+
+.halo {
+  fill: none;
+  stroke: var(--grayscale-11);
+  stroke-linejoin: round;
+  stroke-width: 4;
+  opacity: 0.85;
+}
+
+.arrow {
+  stroke: var(--neutral-white);
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.tag {
+  position: absolute;
+  top: var(--space-xl);
+  left: var(--space-lg);
+  border: 1.5px solid var(--neutral-white);
+  background: linear-gradient(
+    90deg,
+    var(--butler-ink-blue),
+    var(--butler-ink-purple)
+  );
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--grayscale-11) 60%, transparent);
+}
+
+/* Parked: the arrow fades and nothing moves; the tag stays readable. */
+.layer[data-mode="parked"] .pointer svg {
+  opacity: 0.45;
+}
+
+.layer[data-mode="parked"][data-tone="waiting"] .tag,
+.layer[data-mode="parked"][data-tone="need-input"] .tag {
+  background: var(--color-warning-text);
+}
+
+/* Reduced motion: no glide (the token is 0), no trail, a static ripple and
+   caret. `data-reduced` forces it for a renderer with its own setting. */
+.layer[data-reduced] .trail {
+  display: none;
+}
+
+.layer[data-reduced] > *,
+.layer[data-reduced] .caret,
+.layer[data-reduced] .ripple {
+  transition: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trail {
+    display: none;
+  }
+
+  .caret,
+  .ripple {
+    animation: none;
+  }
+}

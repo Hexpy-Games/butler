@@ -1,0 +1,39 @@
+import type { ShowcaseGuidance } from "../../showcase";
+import { Typo } from "../../components/Typo";
+import { DragPreview } from "./DragPreview";
+
+const CROP = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23dfe4ea'/%3E%3Crect x='22' y='12' width='16' height='24' rx='4' fill='%23353a42'/%3E%3C/svg%3E";
+
+// #region recipe: Dragging two picks
+function TwoPicks() {
+  return <DragPreview kind="elements" images={[{ src: CROP }, { src: CROP }]} />;
+}
+// #endregion
+
+// #region recipe: Dragging a tab
+function LiftedTab() {
+  return <DragPreview kind="tab" title="Search results — Shop" />;
+}
+// #endregion
+
+export const guidance: ShowcaseGuidance = {
+  purpose: "What follows the pointer while picks or a browser tab are dragged: stacked crops with a count, or the lifted tab, with an invalid badge.",
+  whenToUse: ["The drag image for picked elements (to the chat, a conversation, the library)", "A tab dragged from the pane to the sidebar"],
+  whenNotToUse: [
+    { when: "Reordering rows inside the sidebar", use: "NavDropTarget" },
+    { when: "Reordering tabs inside the strip", use: "TabStrip" },
+  ],
+  recipes: [
+    { name: "Dragging two picks", description: "Two crops, turned apart, with the count.", render: () => <TwoPicks /> },
+    { name: "Dragging a tab", description: "The strip's tab, lifted on --shadow-drag-lift.", render: () => <LiftedTab /> },
+  ],
+  doDont: [
+    {
+      do: { caption: "Flip `invalid` over a target that cannot take the payload; the target shows the reason.", render: () => <DragPreview kind="elements" images={[{ src: CROP }]} invalid /> },
+      dont: { caption: "Do not put words in the preview; the drop label beside the target says what will happen.", render: () => <Typo.Caption>Drop here to attach 2 elements</Typo.Caption> },
+    },
+  ],
+  content: ["Numbers only on the badge (12, 99+)."],
+  accessibility: ["Purely visual (aria-hidden); drags have a keyboard path elsewhere (menus: Add to chat, Move to conversation)."],
+  tokens: ["--shadow-drag-lift", "--accent", "--color-danger", "--radius-control"],
+};

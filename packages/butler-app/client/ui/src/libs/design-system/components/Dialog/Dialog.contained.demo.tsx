@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
+import { dsStyle } from "../../lib/internal";
 import { Box } from "../Box";
 import { Button } from "../Button";
 import { Stack } from "../Stack";
@@ -28,8 +29,8 @@ export function ContainedDialogDemo({ locale }: ShowcaseRenderContext) {
   return (
     <Stack gap="sm">
       <div ref={setCard} style={{ position: "relative", height: 300, overflow: "hidden", borderRadius: "var(--radius-popover)",
-        border: "var(--border-hairline) solid var(--line)", background: "var(--surface-raised)" }}>
-        <Box padding="md"><Typo.Caption tone="secondary">{copy.page}</Typo.Caption></Box>
+        border: "var(--border-hairline) solid var(--line)" }}>
+        <Box surface="raised" padding="md" style={dsStyle({ height: "100%" })}><Typo.Caption tone="secondary">{copy.page}</Typo.Caption></Box>
         {card ? (
           <Dialog open={open} onOpenChange={setOpen} modal={false}>
             <DialogContent container={card} showCloseButton={false} role="alertdialog">

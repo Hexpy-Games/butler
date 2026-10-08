@@ -6,6 +6,7 @@ import { Stack } from "../../components/Stack";
 import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
+import { ElementChip } from "../ElementChip";
 import styles from "./AttachmentList.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -21,6 +22,11 @@ export interface AttachmentListItem {
   };
   /** Kept but not sendable; a short reason (a few words) shown in the name tooltip. */
   blockedReason?: string;
+  /**
+   * A picked page element (ElementChip kind): `thumbnail` is its crop, `name` its title, `site` its host.
+   * Element chips lead the list in one wrapping row, removable only when `onRemove` is set.
+   */
+  element?: { site: string };
 }
 
 export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProps {
@@ -28,6 +34,8 @@ export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProp
   emptyLabel?: string;
   onRemove?: (id: string) => void;
   variant?: "list" | "chips";
+  /** Element chips: the remove button label ("Remove"; the title is appended). */
+  removeLabel?: string;
 }
 
 export function AttachmentList({
@@ -37,6 +45,7 @@ export function AttachmentList({
   className,
   variant = "list",
   windowDrag,
+  removeLabel = "Remove",
 }: AttachmentListProps) {
   if (items.length === 0) {
     return (
@@ -52,7 +61,15 @@ export function AttachmentList({
       data-slot="attachment-list"
       gap={variant === "chips" ? "none" : "xs"}
     >
-      {items.map((item) => (
+      {items.some((item) => item.element) ? (
+        <div className={styles.elements} data-slot="attachment-elements">
+          {items.filter((item) => item.element).map((item) => (
+            <ElementChip key={item.id} src={item.thumbnail?.src ?? ""} title={item.name} site={item.element!.site}
+              removeLabel={removeLabel} onRemove={onRemove ? () => onRemove(item.id) : undefined} />
+          ))}
+        </div>
+      ) : null}
+      {items.filter((item) => !item.element).map((item) => (
         <div
           className={styles.item}
           data-blocked={item.blockedReason ? "true" : undefined}

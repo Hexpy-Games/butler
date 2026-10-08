@@ -1,0 +1,111 @@
+/* One line: label and actions keep their size, only the detail truncates. */
+.band {
+  container-name: page-band;
+  container-type: inline-size;
+  display: flex;
+  height: var(--browser-band-height);
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-md) var(--space-sm);
+  border-bottom: var(--border-hairline) solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-tight);
+}
+
+.text {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.icon,
+.label,
+.hint,
+.actions {
+  flex: none;
+}
+
+.label,
+.hint {
+  white-space: nowrap;
+}
+
+.detail {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.separator {
+  width: var(--border-hairline);
+  height: var(--icon-size-sm);
+  flex: none;
+  background: var(--line-strong);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.actions [data-slot="button-container"] {
+  flex-wrap: nowrap;
+}
+
+/* Butler holds the page: the riso inks, as on the page card's edge. */
+.band[data-tone="agent"] {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--butler-ink-purple) 25%,
+    transparent
+  );
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--butler-ink-blue) 10%, var(--surface-raised)),
+    color-mix(in srgb, var(--butler-ink-purple) 8%, var(--surface-raised)) 55%,
+    color-mix(in srgb, var(--butler-ink-pink) 8%, var(--surface-raised))
+  );
+}
+
+.band[data-tone="pick"] {
+  border-bottom-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
+}
+
+.band[data-tone="waiting"],
+.band[data-tone="warning"] {
+  border-bottom-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+
+.band[data-tone="waiting"] .icon,
+.band[data-tone="warning"] .icon {
+  color: var(--color-warning-text);
+}
+
+.band[data-tone="info"] {
+  border-bottom-color: var(--color-info-border);
+  background: var(--color-info-bg);
+}
+
+.band[data-tone="user"] {
+  background: var(--muted);
+}
+
+@container page-band (width < 560px) {
+  .hint {
+    display: none;
+  }
+}
+
+@container page-band (width < 360px) {
+  .separator,
+  .detail {
+    display: none;
+  }
+}

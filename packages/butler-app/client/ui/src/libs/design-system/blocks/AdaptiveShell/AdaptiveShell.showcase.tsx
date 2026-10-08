@@ -7,6 +7,7 @@ import { PanelLeft, PanelRightClose } from "../../components/Icons";
 import { ChromeFloatingToggleLayer } from "../ChromeFrame";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { ConversationFrameDemo } from "../BrowserPane/fixtures/ConversationFrame";
 import {
   AdaptivePanelResizeHandle,
   AdaptivePanelTitlebar,
@@ -95,4 +96,29 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Sidebar, workspace and inspector", states: ["open", "collapsed"], widths: ["375", "app", "wide"], render: (context) => <ShellDemo context={context} /> },
+  {
+    // AdaptiveShellSplit: chat | browser pane in the workspace's second row; drag or arrow-key the boundary (340–560px).
+    name: "Conversation frame: chat | browser pane (resizable)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} />,
+  },
+  {
+    // AdaptiveShellPeekEdge: the collapsed sidebar floats over the workspace while the pointer is on it.
+    name: "Sidebar peek",
+    states: ["open"],
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1100} height={800} sidebar="peek" />,
+  },
+  {
+    // useSidebarAutoCollapse: 1100 − 304 − 400 leaves a 396px page, so the sidebar steps aside; at 1440 it stays.
+    name: "Auto-collapse below a 720px page",
+    states: ["collapsed"],
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Stack gap="md">
+        <ConversationFrameDemo locale={locale} width={1440} height={700} autoCollapse />
+        <ConversationFrameDemo locale={locale} width={1100} height={700} autoCollapse />
+      </Stack>
+    ),
+  },
 ];

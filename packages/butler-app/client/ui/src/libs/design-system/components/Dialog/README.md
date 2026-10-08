@@ -45,5 +45,11 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
+## Anchored in a container
+`DialogContent container={element}` anchors the dialog inside that element
+(a PageCard's `contentRef`): it sits near the container's top and the scrim
+covers only the container. Use it with `<Dialog modal={false}>` so the rest
+of the window stays usable; outside clicks do not dismiss it.
+
 ## Tags
 overlay, confirmation, focused-task

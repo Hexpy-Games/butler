@@ -36,5 +36,11 @@ explanations.
 ## Wrong use cases
 Do not use it for project documents. Use `DocumentTile`.
 
+## Element chips
+Items with `element: { site }` (picked page elements) render as
+`ElementChip`: the crop (`thumbnail.src`), the title (`name`) and the site.
+They lead the list in one wrapping row, removable when `onRemove` is set
+(`removeLabel` names the button) and read-only in sent messages.
+
 ## Tags
 attachment, file, composer, message

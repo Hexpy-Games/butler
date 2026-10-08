@@ -1,0 +1,145 @@
+/* The page card: an elevated surface the native view is laid into. The
+   inner box clips (and keeps a 1px hairline border, so the content area,
+   and with it the native view, never moves); holder edges are drawn by
+   ::after over the border and 1px outside it. */
+@property --page-card-edge-angle {
+  inherits: false;
+  initial-value: 135deg;
+  syntax: "<angle>";
+}
+
+.card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border-radius: var(--radius-popover);
+  box-shadow: var(--browser-card-shadow);
+}
+
+.inner {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: inherit;
+  background: var(--surface-raised);
+}
+
+.card::after {
+  position: absolute;
+  z-index: 3;
+  inset: calc(var(--border-hairline) * -1);
+  border-radius: calc(var(--radius-popover) + var(--border-hairline));
+  content: "";
+  pointer-events: none;
+}
+
+/* Butler holds the tab: a slowly turning riso edge and a soft glow. The
+   loop runs on --motion-agent-edge and --motion-loop-count, both 0 under
+   reduced motion, which leaves a static edge at 135deg. */
+.card[data-holder="butler"] {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--butler-ink-purple) 10%, transparent),
+    0 8px 32px color-mix(in srgb, var(--butler-ink-blue) 22%, transparent);
+}
+
+.card[data-holder="butler"]::after {
+  padding: var(--border-width-strong);
+  background: conic-gradient(
+    from var(--page-card-edge-angle),
+    var(--butler-ink-blue),
+    var(--butler-ink-purple),
+    var(--butler-ink-pink),
+    var(--butler-ink-blue)
+  );
+  mask:
+    linear-gradient(var(--neutral-white) 0 0) content-box,
+    linear-gradient(var(--neutral-white) 0 0);
+  mask-composite: exclude;
+  animation: page-card-edge var(--motion-agent-edge) var(--motion-ease-linear)
+    var(--motion-loop-count);
+}
+
+@keyframes page-card-edge {
+  from {
+    --page-card-edge-angle: 135deg;
+  }
+
+  to {
+    --page-card-edge-angle: 495deg;
+  }
+}
+
+/* You hold the tab: no colour, a strong neutral edge. */
+.card[data-holder="user"]::after {
+  border: 1.5px solid var(--line-strong);
+}
+
+/* An approval waits: the edge stops and turns amber. */
+.card[data-holder="waiting"] {
+  box-shadow:
+    0 0 0 4px var(--color-warning-bg),
+    var(--browser-card-shadow);
+}
+
+.card[data-holder="waiting"]::after {
+  border: var(--border-width-strong) solid
+    color-mix(in srgb, var(--color-warning-text) 70%, transparent);
+}
+
+.loadLine {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+}
+
+/* The page area: the native view's rect, and the container overlays and
+   anchored dialogs position in. */
+.content {
+  container-name: page-card;
+  container-type: size;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/* A fixed-size page (Butler's tabs) letterboxes on the muted fill. */
+.slot[data-fixed-page] {
+  background: var(--muted);
+}
+
+.scaleNote {
+  position: absolute;
+  top: calc(
+    min(100cqh, 100cqw * var(--page-card-viewport-ratio)) + var(--space-sm)
+  );
+  left: 50%;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.internal {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  background: var(--workspace-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card[data-holder="butler"]::after {
+    animation: none;
+  }
+}

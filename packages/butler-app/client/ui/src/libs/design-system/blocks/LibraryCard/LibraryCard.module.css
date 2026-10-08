@@ -1,0 +1,109 @@
+/* Media on top; title and source below; the menu at the title row's end. */
+.layout {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+}
+
+.open {
+  display: block;
+  min-width: 0;
+  grid-column: 1 / -1;
+  text-align: start;
+}
+
+.body {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  grid-column: 1 / -1;
+}
+
+.media {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  margin-bottom: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--muted);
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A text scrap previews its words, not a picture of them. */
+.quote {
+  display: -webkit-box;
+  align-self: center;
+  overflow: hidden;
+  margin: var(--space-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.document {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: calc(var(--space-xs) + var(--border-width-strong));
+  padding: var(--space-md);
+}
+
+.document span {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.document span:first-child {
+  width: 60%;
+  height: 9px;
+  background: var(--text-tertiary);
+}
+
+.document span:last-child {
+  width: 72%;
+}
+
+.tag {
+  position: absolute;
+  top: var(--space-xs);
+  left: var(--space-xs);
+}
+
+.title,
+.meta {
+  min-width: 0;
+  overflow: hidden;
+  padding-inline-end: var(--control-height-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.meta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+}
+
+/* The menu sits on the title row, beside the title (never over the media). */
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}

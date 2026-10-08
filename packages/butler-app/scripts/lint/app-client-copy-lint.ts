@@ -138,8 +138,9 @@ const collectStrings = (value: unknown): string[] => {
   return value && typeof value === "object" ? Object.values(value).flatMap(collectStrings) : [];
 };
 for (const text of collectStrings(getAppCopy("ko-KR"))) {
-  if (!/워커|작업자|버틀러|타임존|보관함|Butler App|자동화/u.test(text)) continue;
-  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text, reason: "use the approved Korean glossary (Worker, Butler, 시간대, 아카이브, 예약 작업)" });
+  // Korean copy names the product 버틀러 (AGENTS.md UI copy rule; owner-approved browser copy, 2026-10-08).
+  if (!/워커|작업자|타임존|보관함|Butler App|자동화/u.test(text)) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text, reason: "use the approved Korean glossary (Worker, 시간대, 아카이브, 예약 작업)" });
 }
 for (const text of collectStrings(getAppCopy("en-US"))) {
   if (!/\bautomations?\b|\bscheduled tasks?\b/iu.test(text)) continue;
