@@ -7,7 +7,7 @@ import { checkCapturedActivity } from "./activity-capture-support";
 import { smokeBrowserArgs } from "../support/smoke-browser";
 
 const uiRoot = resolve("packages/butler-app/client/ui/dist");
-const output = resolve(".tmp/activity-layout");
+const output = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/activity-layout");
 mkdirSync(output, { recursive: true });
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const path = new URL(request.url).pathname;
