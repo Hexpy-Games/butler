@@ -1247,7 +1247,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       developer: "Developer",
       usageOverview: "Overview",
       remoteAccess: "Remote access",
-      allowedHosts: "Allowed hosts",
     },
     pageSectionDescriptions: {
       grants: "Actions Butler runs without asking.",
@@ -1705,6 +1704,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       contentHostPlaceholder: "content.example.com",
       contentHostsDescription: "Tunnel hostname for opening outputs remotely.",
       hostsDescription: "Names a tunnel or proxy uses.",
+      hostCount: (n) => n === 0 ? "None" : n === 1 ? "1 host" : `${n} hosts`,
       noHosts: "None",
       hostPlaceholder: "butler.example.com",
       addHost: "Add",

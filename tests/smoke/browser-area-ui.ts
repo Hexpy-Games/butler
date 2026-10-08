@@ -7,8 +7,14 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { launchSmokeBrowser } from "../support/smoke-browser";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
+import { captureAllowedHosts } from "../support/allowed-hosts-acceptance";
 import { createNativeAppServer } from "../support/native-app-server";
+
+const securityOnly = process.env.BUTLER_BROWSER_UI_SECURITY_ONLY === "1";
+const securityCells = [true, false].flatMap(enabled => ["ko", "en"].flatMap(locale =>
+  ["light", "dark"].flatMap(theme => [1440, 375].map(width => `${enabled}-${locale}-${theme}-${width}`))));
+if (securityOnly && await runSmokeCases(securityCells, "BUTLER_ALLOWED_HOSTS_CELL", import.meta.filename)) process.exit(0);
 
 const root = process.cwd();
 // Exercise release selection and the real sandbox preload in this smoke.
@@ -48,12 +54,21 @@ await build({ configFile: false, root: scratch, logLevel: "error",
   resolve: { alias: { "@/butler-ds": resolve(uiRoot, "src/libs/design-system/index.ts"), "@": resolve(uiRoot, "src"), "react-dom": resolve(uiRoot, "node_modules/react-dom"), "react": resolve(uiRoot, "node_modules/react") } },
   build: { outDir: join(scratch, "dist"), rollupOptions: { input: entry } } });
 }
-await buildHarness();
+await buildHarness(securityOnly ? process.env.BUTLER_ALLOWED_HOSTS_CELL?.startsWith("true-") : undefined);
+let allowedHosts = ["one.example.com"];
+let contentHosts: string[] = [];
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
   if (path === "/security") return Response.json({ protocol_version: "butler.app.v1", data: {
-    remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: [], content_hosts: [],
+    remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: allowedHosts, content_hosts: contentHosts,
   } });
+  if (path === "/settings" && request.method === "PATCH") {
+    const { security } = await request.json();
+    if (securityOnly) console.log("Security fixture save", JSON.stringify(security));
+    if (security.allowed_hosts) allowedHosts = security.allowed_hosts;
+    if (security.content_hosts) contentHosts = security.content_hosts;
+    return Response.json({ protocol_version: "butler.app.v1", data: {} });
+  }
   if (path === "/authority-requests") return Response.json({ protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], items: [], permissions: [] } });
   if (path.startsWith("/outputs/")) return Response.json({ protocol_version: "butler.app.v1", data: { url: "https://example.org/output.html", revision: 1, revisions: [1] } });
   const file = Bun.file(join(scratch, "dist", path === "/" ? "index.html" : path));
@@ -61,20 +76,14 @@ const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) 
 } });
 const browser = await launchSmokeBrowser();
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
-async function captureSecurity(enabled: boolean) {
-  for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
-    const page = await browser.newPage({ viewport: { width, height: 900 } });
-    try {
-      await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}&state=security`);
-      await page.locator('[data-test-class="settings-security-advanced"]').click();
-      if (enabled) await page.getByPlaceholder("content.example.com").waitFor();
-      assert.equal(await page.getByPlaceholder("content.example.com").count(), enabled ? 1 : 0);
-      await page.screenshot({ path: join(evidence!, `gate-${enabled ? "on" : "off"}-${locale}-${theme}-${width}-security.png`) });
-    } finally { await page.close(); }
-  }
-}
 
 try {
+  if (securityOnly) {
+    for (const enabled of [true, false]) {
+      if (process.env.BUTLER_ALLOWED_HOSTS_CELL && !process.env.BUTLER_ALLOWED_HOSTS_CELL.startsWith(`${enabled}-`)) continue;
+      await captureAllowedHosts(browser, `http://127.0.0.1:${server.port}`, evidence, enabled);
+    }
+  } else {
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     for (const state of ["empty", "idle", "crash", "disabled"]) {
@@ -126,9 +135,9 @@ try {
   assert.equal(outputOwner?.url, "https://example.org/output.html");
   await output.screenshot({ path: join(evidence, "harness-ko-light-output-open.png") });
   await output.close();
-  await captureSecurity(true);
+  await captureAllowedHosts(browser, `http://127.0.0.1:${server.port}`, evidence, true);
   await buildHarness(false);
-  await captureSecurity(false);
+  await captureAllowedHosts(browser, `http://127.0.0.1:${server.port}`, evidence, false);
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     for (const width of [1440, 390]) for (const state of ["idle", "output"]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -159,7 +168,8 @@ try {
   await mobile.screenshot({ path: join(evidence, "web-390-no-browser.png") });
   await mobile.close();
   }
-  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 54, native: false, viewport: 1440, webWidth: 390 }));
+  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 70, native: false, viewport: 1440, webWidth: 390 }));
+}
 } finally {
   await browser.close(); server.stop(true); await gateway?.stop(); rmSync(scratch, { recursive: true, force: true });
 }

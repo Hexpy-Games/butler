@@ -134,3 +134,9 @@ test("settings titles never use the A / B style in either locale", () => {
     expect(titles.filter((text) => /\S\s*\/\s*\S/u.test(text)), locale).toEqual([]);
   }
 });
+
+// test-category: pure-logic
+test("security host counts use native singular and plural copy", () => {
+  expect([0, 1, 3].map(getAppCopy("ko-KR").settings.security.hostCount)).toEqual(["없음", "1개", "3개"]);
+  expect([0, 1, 3].map(getAppCopy("en-US").settings.security.hostCount)).toEqual(["None", "1 host", "3 hosts"]);
+});
