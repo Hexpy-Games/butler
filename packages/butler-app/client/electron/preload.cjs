@@ -812,6 +812,10 @@ const butlerApp = Object.freeze({
       archived,
     }),
   }),
+  clearGeneral: ({ title }) => requestJson("/sessions/general/clear", {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  }),
   archiveSession: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/archive`, {
     method: "POST",
     body: JSON.stringify({}),

@@ -606,6 +606,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       idempotencyKey: body.idempotency_key,
     });
   }
+  if (method === "POST" && url.pathname === "/sessions/general/clear") {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "clearGeneral", { title: body.title });
+  }
   const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/u);
   if (method === "PATCH" && sessionMatch) {
     const body = parseBody(options.body);
