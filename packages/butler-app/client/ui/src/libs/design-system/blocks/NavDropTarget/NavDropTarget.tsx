@@ -1,12 +1,19 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { Stack, type LayoutElement } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./NavDropTarget.module.css";
 import { dsClass } from "../../lib/internal";
+import type { NavDropAutoScrollEdge } from "./navDropAutoScroll";
+import { NavDropEdge, NavDropLabel } from "./NavDropOverlay";
 
-export type NavDropPosition = "before" | "after" | "inside" | "group";
+/**
+ * Row drags: `before`/`after` open an insert slot, `inside`/`group` ring the header.
+ * `outside`: a payload from outside the tree (picked elements, a browser tab) is over this row;
+ * a ring and a label, and no row ever moves.
+ */
+export type NavDropPosition = "before" | "after" | "inside" | "group" | "outside";
 
 export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "style"> {
   /** Where a dragged row would land relative to this row, while it hovers. */
@@ -15,8 +22,10 @@ export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTML
   dragging?: boolean;
   /** The row header box inside this item (a folder's children sit below it), in px from the item top. */
   indicator?: { top: number; height: number };
-  /** Short label over the row for `group` drops ("Group together"). */
+  /** Short label over the row for `group` drops ("Group together"), or beside it for `outside` drops ("Add to ‘Trip’"). */
   hint?: ReactNode;
+  /** An `outside` payload cannot drop here: a dashed danger ring and label ("Can't drop here"). */
+  invalid?: boolean;
   children: ReactNode;
 }
 
@@ -27,18 +36,21 @@ export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTML
  * `lib/dropZones`); the block owns how it looks and moves. Items must be
  * `CollapsibleList` rows inside a `NavDropScope`.
  */
-export function NavDropTarget({ drop, dragging = false, indicator, hint, className, children, ...props }: NavDropTargetProps) {
+export function NavDropTarget({ drop, dragging = false, indicator, hint, invalid = false, className, children, ...props }: NavDropTargetProps) {
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
   const style = indicator
     ? ({ "--drop-row-top": `${indicator.top}px`, "--drop-row-height": `${indicator.height}px` } as CSSProperties)
     : undefined;
   return (
     <div
       {...props}
+      ref={setNode}
       className={cn(styles.item, className)}
       style={style}
       data-slot="nav-drop-target"
       data-drop={drop}
       data-dragging={dragging || undefined}
+      data-invalid={drop === "outside" && invalid ? "true" : undefined}
     >
       {children}
       {drop === "group" && hint ? (
@@ -46,6 +58,7 @@ export function NavDropTarget({ drop, dragging = false, indicator, hint, classNa
           <Typo.Caption>{hint}</Typo.Caption>
         </span>
       ) : null}
+      {drop === "outside" && hint ? <NavDropLabel anchor={node} indicator={indicator} invalid={invalid}>{hint}</NavDropLabel> : null}
     </div>
   );
 }
@@ -68,6 +81,10 @@ export function NavRootDropZone({ active = false, className, children, ...props 
 export interface NavDropScopeProps extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "style"> {
   /** A drag is in progress over this tree: rows may move to open a slot. */
   active?: boolean;
+  /** `outside`: the drag carries something from outside the tree; rows never move or open a slot. */
+  payload?: "rows" | "outside";
+  /** The list is auto-scrolling (useNavDropAutoScroll `edge`): a band with a chevron at that edge. */
+  autoScroll?: NavDropAutoScrollEdge | null;
   as?: LayoutElement;
   children: ReactNode;
 }
@@ -78,7 +95,7 @@ export interface NavDropScopeProps extends Omit<DsBaseProps<HTMLAttributes<HTMLE
  * lets folded rows paint the moved rows below their clip. Put the product's
  * drag-over and drop handlers here and hit-test rows with `lib/dropZones`.
  */
-export function NavDropScope({ active = false, as = "div", className, children, ...props }: NavDropScopeProps) {
+export function NavDropScope({ active = false, payload = "rows", autoScroll, as = "div", className, children, ...props }: NavDropScopeProps) {
   return (
     <Stack
       {...props}
@@ -87,8 +104,10 @@ export function NavDropScope({ active = false, as = "div", className, children, 
       className={dsClass(styles.scope, className)}
       data-slot="nav-drop-scope"
       data-active={active ? "true" : undefined}
+      data-payload={payload === "outside" ? "outside" : undefined}
     >
       {children}
+      {active && autoScroll ? <NavDropEdge edge={autoScroll} /> : null}
     </Stack>
   );
 }

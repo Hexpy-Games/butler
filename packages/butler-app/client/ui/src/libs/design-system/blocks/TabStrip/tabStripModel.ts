@@ -43,14 +43,18 @@ export type TabStripItem =
 export const tabKey = (tabId: string) => `tab:${tabId}`;
 export const chipKey = (groupId: string) => `chip:${groupId}`;
 
-/** The `mine` group shows its chip only beside other groups. */
-export function showsChip(group: TabStripGroup, groups: readonly TabStripGroup[]): boolean {
+/**
+ * The `mine` group shows its chip only beside other groups. `hideChip` drops the chip of a lone group
+ * of any kind (a conversation's own pane, whose title bar already names it).
+ */
+export function showsChip(group: TabStripGroup, groups: readonly TabStripGroup[], hideChip = false): boolean {
+  if (hideChip && groups.length === 1) return false;
   return group.kind !== "mine" || groups.length > 1;
 }
 
-export function stripItems(groups: readonly TabStripGroup[]): TabStripItem[] {
+export function stripItems(groups: readonly TabStripGroup[], hideChip = false): TabStripItem[] {
   return groups.flatMap((group): TabStripItem[] => [
-    ...(showsChip(group, groups) ? [{ key: chipKey(group.id), kind: "chip" as const, groupId: group.id }] : []),
+    ...(showsChip(group, groups, hideChip) ? [{ key: chipKey(group.id), kind: "chip" as const, groupId: group.id }] : []),
     ...(group.collapsed ? [] : group.tabs.map((tab) => ({ key: tabKey(tab.id), kind: "tab" as const, groupId: group.id, tabId: tab.id }))),
   ]);
 }

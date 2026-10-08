@@ -6,7 +6,8 @@ import type { DsBaseProps } from "../../lib/dsProps";
  */
 
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
+import type { HugeiconsIconProps } from "@hugeicons/react";
+import { createIcon } from "./iconBase";
 // Named imports keep the bundle to the glyphs mapped below.
 import {
   Activity01Icon, Add01Icon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
@@ -24,25 +25,8 @@ import {
   TerminalIcon, Tick02Icon, Time03Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
-/** Icon size scale; mirrors --icon-size-sm/md/lg in tokens.css. */
-export const ICON_SIZE = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32, "3xl": 48 } as const;
-export type IconSize = keyof typeof ICON_SIZE;
-
-// Icon component props extending Hugeicons with simplified API
-export interface IconProps extends Omit<DsBaseProps<HugeiconsIconProps>, "icon" | "size"> {
-  size?: IconSize | number;
-}
-
-// Helper to create icon component
-function createIcon(icon: IconSvgElement) {
-  return ({ size = "md", ...props }: IconProps) => (
-    <HugeiconsIcon
-      icon={icon}
-      size={typeof size === "string" ? ICON_SIZE[size] : size}
-      {...props}
-    />
-  );
-}
+export { ICON_SIZE, type IconProps, type IconSize } from "./iconBase";
+export * from "./BrowserIcons";
 
 // Export individual icon components. A glyph is mapped once; alternate
 // names (kept for shadcn-style call sites) alias the same component.
@@ -65,6 +49,8 @@ export const ChevronDown = createIcon(ArrowDown01Icon);
 export const ChevronDownIcon = ChevronDown;
 export const ChevronRight = createIcon(ArrowRight01Icon);
 export const ChevronRightIcon = ChevronRight;
+/** Forward navigation (toolbar, beside ArrowLeft): the ChevronRight glyph. */
+export const ArrowRight = ChevronRight;
 export const ChevronUpIcon = createIcon(ArrowUp01Icon);
 export const ChevronsUpDown = createIcon(ArrowUpDownIcon);
 export const Collapse = createIcon(CollapseIcon);

@@ -18,6 +18,7 @@ export interface TabStripScope {
   activeTabId: string | null;
   panelId?: string;
   labels: TabStripLabels;
+  hideChip: boolean;
   nav: TabStripNavigation;
   entering: ReadonlySet<string>;
   draggable: boolean;
@@ -68,7 +69,7 @@ export function TabStripGroupView({ group, scope }: { group: TabStripGroup; scop
   const open = !group.collapsed && group.tabs.length > 0;
   return (
     <div className={styles.group} data-kind={group.kind} data-collapsed={group.collapsed || undefined}>
-      {showsChip(group, scope.groups) ? <TabStripChip group={group} scope={scope} /> : null}
+      {showsChip(group, scope.groups, scope.hideChip) ? <TabStripChip group={group} scope={scope} /> : null}
       {open ? (
         <div role="tablist" aria-label={groupLabel(group, scope.labels)} aria-orientation="horizontal" className={styles.tabs}>
           {group.tabs.map((tab) => <TabStripTabView key={tab.id} tab={tab} groupId={group.id} scope={scope} />)}

@@ -86,6 +86,8 @@ function DialogContent({
   size = "sm",
   layout = "flow",
   maxHeight = "full",
+  container,
+  onInteractOutside,
   ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>> & {
   glassRadius?: TintedGlassRadius;
@@ -98,11 +100,22 @@ function DialogContent({
   layout?: DialogLayout;
   /** `3/5`: at most 60% of the viewport height (live transcripts). */
   maxHeight?: "full" | "3/5";
+  /**
+   * Anchors the dialog inside this element (a page card) instead of the window: it sits near the
+   * container's top and its scrim covers only the container (which must be positioned). Pair it with
+   * `<Dialog modal={false}>` so the rest of the app stays usable; outside clicks do not dismiss it.
+   */
+  container?: HTMLElement | null;
 }) {
+  const contained = container !== undefined;
   return (
-    <DialogPortal>
-      <DialogOverlay data-motion={motion} />
+    <DialogPortal container={container ?? undefined}>
+      {contained
+        ? <div className={styles.overlay} data-slot="dialog-overlay" data-contained="" data-state="open" aria-hidden="true" />
+        : <DialogOverlay data-motion={motion} />}
       <DialogPrimitive.Content
+        data-contained={contained ? "" : undefined}
+        onInteractOutside={contained ? (event) => { onInteractOutside?.(event); event.preventDefault(); } : onInteractOutside}
         data-slot="dialog-content"
         data-motion={motion}
         data-glass="popover"

@@ -1,0 +1,138 @@
+/* Conversation frame (AdaptiveShellSplit) and sidebar peek. The split sits
+   in the workspace's second grid row, under a titlebar that spans it. */
+.split {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The chat column is its own `workspace` container, so the conversation
+   inside lays out exactly as it does at that workspace width. */
+.chat {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  container-name: workspace;
+  container-type: inline-size;
+}
+
+.chat > * {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.split[data-pane-open] > .chat {
+  width: var(--browser-chat-width);
+  flex: none;
+}
+
+/* A 9px grab zone over the boundary; it takes no width of its own. */
+.splitHandle {
+  position: relative;
+  z-index: 2;
+  width: 9px;
+  flex: none;
+  margin-inline: calc(var(--space-xs) * -1);
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+.splitHandle[data-locked] {
+  cursor: default;
+}
+
+.splitHandle::after {
+  position: absolute;
+  inset: var(--space-md) 4px;
+  width: var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--line-strong);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.splitHandle:not([data-locked]):hover::after,
+.splitHandle:active::after,
+.splitHandle:focus-visible::after {
+  opacity: 1;
+}
+
+.splitHandle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+/* The pane enters from its side; the native view inside tracks it (the
+   NativeViewSlot tracker shows the still while ancestors move). Reduced
+   motion zeroes the distance token, leaving the fade. */
+.pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  animation: pane-in var(--motion-slow) var(--motion-ease-emphasized);
+}
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--motion-distance-lg));
+  }
+}
+
+/* Sidebar peek: the collapsed sidebar floats over the workspace as a card
+   while the pointer is on it. The track stays collapsed, nothing reflows. */
+.peekEdge {
+  position: absolute;
+  z-index: var(--z-drawer);
+  inset-block: 0;
+  left: 0;
+  width: var(--space-sm);
+}
+
+[data-panel-layout="docked"][data-left-peek="true"]
+  > .peekable.peekable[data-open="false"] {
+  position: absolute;
+  z-index: var(--z-drawer);
+  inset-block: var(--space-sm);
+  left: var(--space-sm);
+  width: var(--sidebar-width);
+  height: auto;
+  border: var(--border-hairline) solid var(--line-strong);
+  border-radius: var(--radius-popover);
+  background: var(--adaptive-panel-bg);
+  box-shadow: var(--shadow-window);
+  transform: none;
+  visibility: visible;
+  animation: peek-in var(--motion-base) var(--motion-ease-standard);
+  transition: none;
+}
+
+@keyframes peek-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--motion-distance-md) * -1));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane,
+  [data-panel-layout="docked"][data-left-peek="true"]
+    > .peekable.peekable[data-open="false"] {
+    animation-name: fade-in;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}

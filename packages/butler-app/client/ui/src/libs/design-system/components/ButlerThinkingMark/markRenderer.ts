@@ -1,4 +1,4 @@
-import { inkForButlerMarkTheme, RISO_INKS, type ButlerMarkTheme } from "./butlerMarkTheme";
+import { inkForButlerMarkTheme, risoInksFor, type ButlerMarkTheme } from "./butlerMarkTheme";
 import { DESIGN_SIZE, MAX_STEP_S } from "./thinking-mark/constants";
 import { createSurface, drawFrame, resizeSurface } from "./thinking-mark/canvas-drawing";
 import { MorphSim } from "./thinking-mark/motion";
@@ -16,7 +16,8 @@ export function createMarkRenderer(canvas: HTMLCanvasElement, inputs: MarkLoopIn
   if (!ctx) return null;
   const sim = (inputs.sim.current ??= new MorphSim());
   const theme = inputs.theme ?? resolveMarkTheme(canvas);
-  let surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), RISO_INKS[theme]);
+  // Riso inks come from the --butler-ink-* tokens on the canvas (RISO_INKS when absent).
+  let surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), risoInksFor(canvas, theme, resolveMarkTheme(canvas)));
   const draw = () => drawFrame(surface, sim, inputs.isReduced());
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
@@ -30,7 +31,7 @@ export function createMarkRenderer(canvas: HTMLCanvasElement, inputs: MarkLoopIn
     sim, draw, resize,
     theme() {
       const next = resolveMarkTheme(canvas);
-      surface = createSurface(ctx, inkForButlerMarkTheme(next, inputs.themeColors), RISO_INKS[next]);
+      surface = createSurface(ctx, inkForButlerMarkTheme(next, inputs.themeColors), risoInksFor(canvas, next, next));
       resize();
     },
     render(time: number) {

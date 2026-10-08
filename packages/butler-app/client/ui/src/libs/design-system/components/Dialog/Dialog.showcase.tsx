@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./Dialog";
+import { ContainedDialogDemo } from "./Dialog.contained.demo";
 
 export const meta: ShowcaseMeta = {
   title: "Dialog",
@@ -95,6 +96,7 @@ function ReaderDialog({ context }: { context: ShowcaseRenderContext }) {
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Anchored in a page card (container)", states: ["open"], render: (context) => <ContainedDialogDemo {...context} /> },
   { name: "Rename conversation", states: ["open"], render: (context) => <RenameDialog context={context} /> },
   {
     name: "Edit project description",
