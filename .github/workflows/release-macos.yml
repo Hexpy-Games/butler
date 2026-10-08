@@ -16,7 +16,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - uses: ./.github/actions/product-features
 
       # The runner context is not available in job-level env.
       - name: Select the native Agent payload directory

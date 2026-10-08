@@ -1,4 +1,3 @@
-import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Globe2, NavRow, Stack, Tooltip } from "@/butler-ds";
@@ -10,7 +9,7 @@ export function BrowserEntry() {
   useEffect(connectBrowser, []);
   const enabled = useBrowserState((state) => state.enabled);
   const active = useButlerStore((state) => state.view.kind === "browser");
-  if (!browserFeatureEnabled || !window.butlerBrowser) return null;
+  if (!window.butlerBrowser) return null;
   return <Tooltip label={!enabled ? appCopy.browser.updateRequired : undefined}>
     <Stack><NavRow icon={<Globe2 />} label={appCopy.browser.title} active={active} disabled={!enabled}
       onClick={() => void openBrowser()} dataTestClass="browser-entry" /></Stack>

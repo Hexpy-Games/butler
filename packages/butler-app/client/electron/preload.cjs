@@ -1366,7 +1366,7 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
   return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
-if (!process.argv.includes("--butler-browser-disabled")) contextBridge.exposeInMainWorld("butlerBrowser", {
+contextBridge.exposeInMainWorld("butlerBrowser", {
   call: browserCall,
   subscribe: (handler) => {
     const listener = (_event, state) => handler(state);

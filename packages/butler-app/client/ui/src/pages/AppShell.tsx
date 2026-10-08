@@ -1,4 +1,3 @@
-import { browserFeatureEnabled } from "@/app/productFeatures";
 import { startupPaintReady } from "@/app/startupReady";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useEffect } from "react";
@@ -236,7 +235,7 @@ function AppWorkspaceShell() {
             <Stack fill gap="none">
               <LiveConnectionNotice />
               <Stack fill gap="none">
-                {browserFeatureEnabled && view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
+                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
                   <ErrorBoundary key={view.kind} scope="schedules"><AutomationsView /></ErrorBoundary>
                 ) : view.kind === "project-dashboard" ? (
@@ -269,7 +268,7 @@ function AppWorkspaceShell() {
           open={effectiveRightOpen}
         >
           <ErrorBoundary scope="inspector">
-            {browserFeatureEnabled && view.kind === "browser" ? (
+            {view.kind === "browser" ? (
               <InspectorShell id="butler-right-inspector" activeTab="conversation"
                 tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
                 onTabChange={() => undefined}>

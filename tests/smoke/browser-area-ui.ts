@@ -1,8 +1,6 @@
 /** Browser UI acceptance uses real product containers, no native-view claims. */
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { readProductFeatures } from "../../packages/butler-app/client/electron/product-features.mjs";
 import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,30 +9,18 @@ import { launchSmokeBrowser } from "../support/smoke-browser";
 import { createNativeAppServer } from "../support/native-app-server";
 
 const root = process.cwd();
-// Exercise release selection and the real sandbox preload in this smoke.
-for (const ref of ["refs/heads/main", "refs/heads/release/0.1.0-preview.11", "refs/tags/v0.1.0-preview.11", "refs/tags/v0.1.0-preview.10"]) {
-  const result = JSON.parse(execFileSync("python3", [".github/scripts/product-features.py"], {
-    env: { ...process.env, GITHUB_REF: ref, GITHUB_REF_NAME: ref.split("/").at(-1)!, GITHUB_ENV: "" }, encoding: "utf8",
-  }));
-  assert.equal(result.browser, !(["refs/tags/v0.1.0-preview.11", "refs/heads/release/0.1.0-preview.11"].includes(ref)));
-}
-for (const enabled of [true, false]) {
-  const exposed = new Set<string>();
-  runInNewContext(readFileSync("packages/butler-app/client/electron/preload.cjs", "utf8"), {
-    URL, URLSearchParams,
-    process: { env: { BUTLER_APP_SERVER_PORT: "12345" }, argv: enabled ? [] : ["--butler-browser-disabled"] },
-    require: () => ({ contextBridge: { exposeInMainWorld: (name: string) => exposed.add(name) }, ipcRenderer: { on() {}, invoke() {} } }),
-  });
-  assert(exposed.has("butlerApp"));
-  assert.equal(exposed.has("butlerBrowser"), enabled);
-}
-assert.equal(readProductFeatures(undefined).browser, true);
+// The sandbox preload always exposes Browser IPC.
+const exposed = new Set<string>();
+runInNewContext(readFileSync("packages/butler-app/client/electron/preload.cjs", "utf8"), {
+  URL, URLSearchParams,
+  process: { env: { BUTLER_APP_SERVER_PORT: "12345" }, argv: [] },
+  require: () => ({ contextBridge: { exposeInMainWorld: (name: string) => exposed.add(name) }, ipcRenderer: { on() {}, invoke() {} } }),
+});
+assert(exposed.has("butlerApp"));
+assert(exposed.has("butlerBrowser"));
 
 const scratch = mkdtempSync(join(tmpdir(), "browser-ui-"));
-for (const enabled of [true, false]) {
-  writeFileSync(join(scratch, "product-features.json"), JSON.stringify({ browser: enabled }));
-  assert.equal(readProductFeatures(scratch).browser, enabled);
-}
+
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 if (!evidence) throw new Error("BUTLER_BROWSER_EVIDENCE is required");
 mkdirSync(evidence, { recursive: true });
@@ -42,9 +28,8 @@ const uiRoot = resolve(root, "packages/butler-app/client/ui");
 const { build } = await import(resolve(uiRoot, "node_modules/vite/dist/node/index.js"));
 const entry = join(scratch, "index.html");
 writeFileSync(entry, `<style>html,body,#root{height:100%;margin:0}</style><div id="root"></div><script type="module" src="${resolve(root, "tests/support/browser-area-harness.tsx")}"></script>`);
-async function buildHarness(browserEnabled?: boolean) {
+async function buildHarness() {
 await build({ configFile: false, root: scratch, logLevel: "error",
-  define: browserEnabled === undefined ? {} : { __BUTLER_BROWSER_ENABLED__: browserEnabled },
   resolve: { alias: { "@/butler-ds": resolve(uiRoot, "src/libs/design-system/index.ts"), "@": resolve(uiRoot, "src"), "react-dom": resolve(uiRoot, "node_modules/react-dom"), "react": resolve(uiRoot, "node_modules/react") } },
   build: { outDir: join(scratch, "dist"), rollupOptions: { input: entry } } });
 }
@@ -61,15 +46,15 @@ const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) 
 } });
 const browser = await launchSmokeBrowser();
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
-async function captureSecurity(enabled: boolean) {
+async function captureSecurity() {
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     try {
       await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}&state=security`);
       await page.locator('[data-test-class="settings-security-advanced"]').click();
-      if (enabled) await page.getByPlaceholder("content.example.com").waitFor();
-      assert.equal(await page.getByPlaceholder("content.example.com").count(), enabled ? 1 : 0);
-      await page.screenshot({ path: join(evidence!, `gate-${enabled ? "on" : "off"}-${locale}-${theme}-${width}-security.png`) });
+      await page.getByPlaceholder("content.example.com").waitFor();
+      assert.equal(await page.getByPlaceholder("content.example.com").count(), 1);
+      await page.screenshot({ path: join(evidence!, `gate-on-${locale}-${theme}-${width}-security.png`) });
     } finally { await page.close(); }
   }
 }
@@ -126,28 +111,8 @@ try {
   assert.equal(outputOwner?.url, "https://example.org/output.html");
   await output.screenshot({ path: join(evidence, "harness-ko-light-output-open.png") });
   await output.close();
-  await captureSecurity(true);
-  await buildHarness(false);
-  await captureSecurity(false);
-  for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
-    for (const width of [1440, 390]) for (const state of ["idle", "output"]) {
-      const page = await browser.newPage({ viewport: { width, height: 900 } });
-      await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}&state=${state}`);
-      await page.getByRole("button", { name: "Overlay", exact: true }).waitFor();
-      assert.equal(await page.locator('[data-test-class="browser-entry"]').count(), 0);
-      assert.equal(await page.locator('[data-test-class="browser-area"]').count(), 0);
-      assert.equal(await page.locator("iframe").count(), 0, "output viewer is absent");
-      assert.equal(await page.getByText(locale === "ko" ? "브라우저" : "Browser", { exact: true }).count(), 0);
-      const facts = await page.evaluate(async () => {
-        const bridge = (window as unknown as { butlerBrowser: { call(op: string): Promise<{ tabs: unknown[] }> } }).butlerBrowser;
-        return bridge.call("state");
-      });
-      assert.equal(facts.tabs.length, state === "idle" ? 1 : 0, "gate-off never creates a tab");
-      await page.screenshot({ path: join(evidence, `gate-off-${locale}-${theme}-${width}-${state}.png`) });
-      await page.close();
-    }
-  }
-  console.log("Browser UI: default-on behavior and gate-off entry/area/output checks passed (16 off cells)");
+  await captureSecurity();
+  console.log("Browser UI: entry, area, output and security checks passed");
   if (process.env.BUTLER_BROWSER_UI_HARNESS_ONLY !== "1") {
   gateway = await createNativeAppServer({ uiRoot: resolve(uiRoot, "dist") });
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -159,7 +124,7 @@ try {
   await mobile.screenshot({ path: join(evidence, "web-390-no-browser.png") });
   await mobile.close();
   }
-  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 54, native: false, viewport: 1440, webWidth: 390 }));
+  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 30, native: false, viewport: 1440, webWidth: 390 }));
 } finally {
   await browser.close(); server.stop(true); await gateway?.stop(); rmSync(scratch, { recursive: true, force: true });
 }

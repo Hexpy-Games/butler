@@ -82,7 +82,6 @@ async function launch(): Promise<Page> {
   connected = page;
   await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);
   assert.match(await main<string>("process.versions.electron"), /^44\./u);
-  if (process.env.BUTLER_E2E_EXPECT_BROWSER === "false") return page;
   await main(`(async () => {
     const module=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/browser/tabs.mjs"))});
     const dummy=module.createUserBrowser({getPath:()=>${JSON.stringify(join(dir, "profile"))},on:()=>{}},()=>null);
@@ -233,21 +232,6 @@ try {
   let page = await launch();
   await main(`${win}.setSize(1440, 900)`);
   await page.waitForFunction(() => innerWidth === 1440);
-  if (process.env.BUTLER_E2E_EXPECT_BROWSER === "false") {
-    await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class~="composer-card"]')));
-    assert.equal(await page.expression("typeof window.butlerBrowser"), "undefined");
-    assert.equal(await main(`${electronModule}.ipcMain._invokeHandlers.has('butler-browser:call')`), false);
-    assert.equal(await main<number>(nativeCount), 0);
-    for (const shortcut of ["t", "w", "r"]) {
-      await main(`${win}.webContents.sendInputEvent({type:'keyDown',keyCode:'${shortcut}',modifiers:['control','meta']})`);
-    }
-    assert.equal(await main<number>(nativeCount), 0, "shortcuts cannot create native tabs");
-    assert.equal(await page.expression("document.querySelectorAll('[data-test-class=browser-entry],[data-test-class=browser-area]').length"), 0);
-    const response = await fetch(new URL("/internal/browser-host", gateway.url), { headers: gateway.authHeaders });
-    assert.equal(response.status, 404);
-    await shot(page, "gate-off-workspace");
-    console.log("Gate-off Electron: no Browser preload, IPC, native tabs, entry, shortcuts or host route");
-  } else {
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
   await quitAndStop(page);
   page=await launch();await main(`${win}.setSize(1440,900)`);
@@ -348,8 +332,7 @@ try {
       await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
     }
   }
-  }
-  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, logs, tabs: process.env.BUTLER_E2E_EXPECT_BROWSER === "false" ? 0 : (await state(page)).tabs.length }));
+  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, logs, tabs: (await state(page)).tabs.length }));
 } catch (error) {
   writeFileSync(join(evidence, "electron-failure.txt"), `${String(error)}\n${logs.join("\n")}`);
   if (gateway) {
