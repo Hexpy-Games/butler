@@ -88,13 +88,15 @@ jobs:
           name: rust-linux-x64
           path: ${{ runner.temp }}/rust-archive
       - name: Prepare prebuilt product gate binaries
-        run: chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" prepare "$RUNNER_TEMP/browser-e2e" "$RUNNER_TEMP/rust-archive/tests.tar.zst"
       - name: Verify existing Browser stub contracts and product gate (default on)
         env:
           BUTLER_E2E_TIER: stub
           BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest run --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD" -E 'binary(=e2e) and test(browser_outputs::)' --no-capture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" run "$RUNNER_TEMP/browser-e2e" browser_outputs::
       - name: Verify Browser product gate with real stub turns (release off)
         env:
           BUTLER_FEATURE_BROWSER: "false"
@@ -103,7 +105,7 @@ jobs:
           BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent-browser-off
         run: |
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked -p butler-core -p butler-turn -p butler-gateway -p butler-agent --lib -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest run --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD" -E 'binary(=e2e) and test(browser_product_gate_controls_routes_and_model_tools)' --no-capture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-archive-libtest.py" run "$RUNNER_TEMP/browser-e2e" browser_product_gate_controls_routes_and_model_tools
 
   linux-native:
     permissions:
