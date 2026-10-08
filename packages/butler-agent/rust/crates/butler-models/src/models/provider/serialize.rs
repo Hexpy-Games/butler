@@ -1,3 +1,4 @@
+mod anthropic_schema;
 mod input;
 mod messages;
 mod reasoning;
@@ -368,7 +369,7 @@ fn chat_tool(tool: &ModelRoundTool) -> Value {
     serde_json::json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.parameters}})
 }
 fn anthropic_tool(tool: &ModelRoundTool) -> Value {
-    serde_json::json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters})
+    anthropic_schema::tool(tool)
 }
 fn gemini_tool(tool: &ModelRoundTool) -> Value {
     serde_json::json!({"name":tool.name,"description":tool.description,"parameters":tool.parameters})
