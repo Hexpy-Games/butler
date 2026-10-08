@@ -980,6 +980,11 @@
   --butler-ink-pink: rgb(255, 112, 190);
   --browser-card-shadow:
     0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4%,
+    var(--workspace-bg)
+  );
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
   --popover: var(--color-surface-overlay);
@@ -1130,6 +1135,11 @@
   --butler-ink-pink: rgb(255, 72, 176);
   --browser-card-shadow:
     0 1px 2px rgba(15, 18, 22, 0.05), 0 6px 20px rgba(15, 18, 22, 0.06);
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 4%,
+    var(--workspace-bg)
+  );
   --secondary: rgba(32, 35, 39, 0.08);
   --secondary-border: transparent;
   --muted: rgba(32, 35, 39, 0.06);
@@ -1180,12 +1190,6 @@
   --destructive: var(--danger);
   --border: var(--line);
   --input: var(--line);
-  /* Browser pane sheet: a faint tint of the workspace behind the page card. */
-  --browser-pane-bg: color-mix(
-    in srgb,
-    var(--text-primary) 4%,
-    var(--workspace-bg)
-  );
 }
 
 .sidebar-solid {
