@@ -20,6 +20,71 @@ cache = snapshots.cache
 
 class TargetSnapshot(unittest.TestCase):
     # test-category: security
+    def test_upgrade_accepts_only_exact_legacy_manifest_identity(self):
+        expected = dict(platform='linux-x64', profile_config={}, runtime='', lock='pinned',
+                        configs={'Cargo.toml': 'pinned'})
+        legacy = dict(expected)
+        legacy.pop('profile_config')
+        published = {'assets': [{'name': '42-1.json'}]}
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, RUNNER_TEMP=temporary, ORT_LIB_PATH=''), \
+                patch.object(snapshots, 'release', side_effect=[None, published]) as lookup, \
+                patch.object(snapshots, 'fetch_snapshot') as fetch, patch.object(snapshots, 'restore_tree') as adopt:
+            self.assertTrue(snapshots.restore(expected))
+            self.assertEqual(lookup.call_args.args[0], snapshots.tag_name(legacy))
+            self.assertEqual(fetch.call_args.args[3:], (legacy, False))
+            self.assertEqual(adopt.call_args.args[1:], (legacy, False))
+
+    # test-category: security
+    def test_compatible_snapshot_relaxes_only_lock_and_manifest_digest(self):
+        expected = dict(schema=2, platform='linux-x64', kind='native', compiler='pinned',
+                        target='linux', profile='release', features='static-ort', lock='old',
+                        configs={'Cargo.toml': 'old', '.cargo/config.toml': 'fixed'},
+                        profile_config={'release': {'lto': 'thin'}}, flags={}, runtime='static')
+        changed = dict(expected, lock='new', configs=dict(expected['configs'], **{'Cargo.toml': 'new'}))
+        self.assertNotEqual(snapshots.tag_name(expected), snapshots.tag_name(changed))
+        self.assertEqual(snapshots.compatible_tag(expected), snapshots.compatible_tag(changed))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'cache.tar.zst').write_bytes(b'complete snapshot')
+            (root / 'sources.json').write_text('[]')
+            metadata = dict(identity=expected, sha256=cache.digest(root / 'cache.tar.zst'),
+                            sources_sha256=cache.digest(root / 'sources.json'))
+            (root / 'cache.json').write_text(json.dumps(metadata))
+            cache.verify(root, changed, compatible=True)
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                cache.verify(root, changed)
+            for field in ['compiler', 'target', 'profile', 'features', 'flags', 'runtime', 'profile_config']:
+                with self.assertRaisesRegex(ValueError, 'identity'):
+                    cache.verify(root, dict(changed, **{field: 'different'}), compatible=True)
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                cache.verify(root, dict(changed, configs={'.cargo/config.toml': 'different'}), compatible=True)
+            (root / 'cache.tar.zst').write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError, 'digest'):
+                cache.verify(root, changed, compatible=True)
+
+    # test-category: security
+    def test_persistent_target_reuses_complete_local_outputs_and_isolates_refs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            expected = dict(platform='windows-x64', kind='native', profile='ci-fast', lock='old')
+            env = dict(BUTLER_PERSISTENT_TARGET=str(root / 'runner-cache'), GITHUB_REF='refs/pull/1/merge',
+                       GITHUB_ENV=str(root / 'env'), GITHUB_WORKSPACE=str(root))
+            with patch.dict(os.environ, env), patch.object(cache.source_times, 'capture', return_value=[]), \
+                    patch.object(cache.source_times, 'restore') as freshness, patch.object(snapshots, 'release') as remote:
+                target = snapshots.persistent_target(expected)
+                snapshots.save_local(target, expected)
+                (target / 'complete').write_bytes(b'all outputs')
+                self.assertTrue(snapshots.restore(dict(expected, lock='new')))
+                self.assertEqual((target / 'complete').read_bytes(), b'all outputs')
+                remote.assert_not_called()
+                freshness.assert_called_once()
+                with patch.dict(os.environ, GITHUB_REF='refs/heads/main'):
+                    self.assertNotEqual(target, snapshots.persistent_target(expected))
+                self.assertNotEqual(target, snapshots.persistent_target(dict(expected, profile='release')))
+                (target / 'ci-local-sources.json').write_text('tampered')
+                with self.assertRaisesRegex(ValueError, 'digest'):
+                    snapshots.restore_local(target, expected)
+    # test-category: security
     def test_https_api_without_gh_preserves_pages_and_delete(self):
         def response(value, link=''):
             stream = io.BytesIO(json.dumps(value).encode())
@@ -156,6 +221,10 @@ class TargetSnapshot(unittest.TestCase):
                 manifest = snapshots.generations(published['assets'])[0]
                 snapshots.fetch_snapshot(published, manifest, consumer, expected)
                 self.assertEqual((consumer / 'cache.tar.zst').read_bytes(), (producer / 'cache.tar.zst').read_bytes())
+                with patch.object(snapshots, 'restore_tree') as adopt:
+                    nearest = dict(expected, lock='changed dependency resolution')
+                    self.assertTrue(snapshots.restore(nearest))
+                    self.assertEqual(adopt.call_args.args[1:], (nearest, True))
                 self.assertEqual(len(published['assets']), 6)  # Four chunks, sources, manifest.
                 snapshots.publish(producer, 42)  # An existing generation is never pushed again.
                 with patch.object(snapshots.ci_oci, 'push', side_effect=AssertionError('overwrite')):
@@ -207,13 +276,29 @@ class TargetSnapshot(unittest.TestCase):
             self.fixture(root)
             target = root / 'target'
             expected = dict(schema=2, kind='native', platform='linux-x64')
-            env = dict(CARGO_TARGET_DIR=str(target), GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'), RUSTC_WRAPPER='')
+            env = dict(CARGO_TARGET_DIR=str(target), GITHUB_WORKSPACE=str(root), GITHUB_OUTPUT=str(root / 'output'),
+                       RUSTC_WRAPPER='', CARGO_TERM_COLOR='never')
             with patch.dict(os.environ, env), contextlib.chdir(root):
                 self.build(root)
                 with patch.object(cache, 'output', return_value='a' * 40):
                     cache.record(root / 'snapshot', expected)
                 snapshots.restore_tree(root / 'snapshot', expected)
                 self.assertNotIn('Compiling', self.build(root))
+                # A package version/lock change must restore the verified
+                # nearest snapshot and rebuild the dependency's consumers,
+                # while retaining unrelated complete core outputs.
+                expected['lock'] = cache.digest(root / 'Cargo.lock')
+                with patch.object(cache, 'output', return_value='a' * 40):
+                    cache.record(root / 'snapshot', expected)
+                manifest = root / 'gateway/Cargo.toml'
+                manifest.write_text(manifest.read_text().replace('0.1.0', '0.1.1'))
+                subprocess.run(['cargo', 'generate-lockfile', '--offline'], cwd=root, check=True)
+                changed_identity = dict(expected, lock=cache.digest(root / 'Cargo.lock'))
+                snapshots.restore_tree(root / 'snapshot', changed_identity, compatible=True)
+                dependency = self.build(root)
+                self.assertIn('Compiling gateway ', dependency)
+                self.assertIn('Compiling app ', dependency)
+                self.assertNotIn('Compiling core ', dependency)
                 source = root / 'gateway/src/lib.rs'
                 source.write_text('pub fn value() -> u32 { core::value() + 1 }')
                 os.utime(source, (1, 1))  # Changed contents beat even an old mtime.
