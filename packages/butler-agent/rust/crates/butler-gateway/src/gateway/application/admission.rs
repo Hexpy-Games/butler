@@ -187,7 +187,7 @@ fn is_user_attachment_for_message(
     chat_id: &str,
 ) -> Result<bool, AppStorageError> {
     db.query_row(
-        "SELECT 1 FROM message_attachments a JOIN messages m ON m.id=a.message_id \
+        "SELECT 1 FROM message_attachments a JOIN app_owned_messages m ON m.id=a.message_id \
          WHERE a.file_id=?1 AND m.id=?2 AND m.chat_id=?3 AND m.role='user'",
         params![file_id, message_id, chat_id],
         |_| Ok(()),

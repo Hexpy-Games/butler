@@ -100,7 +100,7 @@ impl OutputStore {
             return Err(error("output_title_too_long"));
         }
         let snapshot = super::snapshot::collect(&request)?;
-        let id = hash(format!("{}\0{}", request.session_id, snapshot.source).as_bytes());
+        let id = self.publication_id(&request.session_id, &snapshot.source)?;
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {
             self.read(&id)?
@@ -150,6 +150,20 @@ impl OutputStore {
         self.persist(&path, &output)?;
         Ok((output, written))
     }
+    fn publication_id(&self, session: &str, source: &str) -> std::io::Result<String> {
+        let generation = self.root.join("generations").join(hash(session.as_bytes()));
+        let mut identity = format!("{session}\0{source}");
+        if generation.exists() {
+            let mut value = String::new();
+            std::io::Read::read_to_string(
+                &mut secure_fs::open_read_no_follow(&generation)?,
+                &mut value,
+            )?;
+            identity.push('\0');
+            identity.push_str(&value);
+        }
+        Ok(hash(identity.as_bytes()))
+    }
     fn persist(&self, path: &Path, output: &Output) -> std::io::Result<()> {
         secure_fs::create_private_dir_all(path.parent().ok_or_else(|| error("manifest_parent"))?)?;
         let bytes = serde_json::to_vec(output).map_err(std::io::Error::other)?;
@@ -193,6 +207,32 @@ impl OutputStore {
             .get(path)
             .ok_or_else(|| error("output_file_not_found"))?;
         secure_fs::open_read_no_follow(&self.blob(sha)?)
+    }
+    /// Replayable ownership transfer. Keep source markers until every manifest and
+    /// index reference has moved, so a crash at any write can replay the same set.
+    pub fn transfer_session(&self, source: &str, target: &str) -> std::io::Result<()> {
+        let _lock = CHANGES
+            .lock()
+            .map_err(|_| error("output_store_unavailable"))?;
+        let source_dir = self.root.join("sessions").join(hash(source.as_bytes()));
+        for mut output in self.list(source)? {
+            output.session_id = target.to_owned();
+            self.persist(&self.manifest(&output.output_id)?, &output)?;
+        }
+        super::index::transfer(&self.root.join("index.sqlite"), source, target)?;
+        if source_dir.exists() {
+            std::fs::remove_dir_all(source_dir)?;
+        }
+        // The archive id is a durable new publication generation. Replays write
+        // the same value; deleting an archive cannot make new outputs reuse its URLs.
+        let generations = self.root.join("generations");
+        secure_fs::create_private_dir_all(&generations)?;
+        secure_fs::replace_private(
+            &generations.join(hash(source.as_bytes())),
+            |file| std::io::Write::write_all(file, target.as_bytes()),
+            |e| e,
+        )?;
+        Ok(())
     }
     /// Only session archive/delete runs GC; request paths never scan blobs.
     pub fn remove_session(&self, session: &str) -> std::io::Result<()> {

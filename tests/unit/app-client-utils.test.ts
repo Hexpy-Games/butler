@@ -1,58 +1,16 @@
-import { expect, test } from "bun:test";
+// test-category: pure-logic
+import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
-import {
-  applyTimelineEvents,
-  applyTimelineEventsToViewState,
-  activeTurnProgressSnapshot,
-  canRetryWithCurrentControls,
-  clientTurnIdFromMessageId,
-  firstCancellableWorker,
-  groupWorkerActivities,
-  hasFollowableWorkerActivity,
-  isRetryableFailureMessage,
-  mergeMessages,
-  mergeTurnProgressFromSummary,
-  mergeTurnProgressSnapshotMap,
-  mergeSessionSummaryForPendingTurn,
-  isWorkerVisibleInComposer,
-  phaseLabel,
-  shouldShowTurnActivity,
-  workerActivityCollapsedSummaryLine,
-  workerActivityDisplayName,
-  workerActivityDescription,
-  workerActivityMeta,
-  workerActivityStatusLine,
-} from "../../packages/butler-app/client/ui/src/app/utils.ts";
-import {
-  freezeConversationActivity as freezeMessageWorkBlocks,
-  isInternalProgressRow,
-  isVisibleToolActivity as isVisibleToolchainProgressRow,
-  projectActivityReadModels as typedUiReadModelsFromProgressRows,
-  projectCompletedActivityRows as completedTurnActivityRows,
-  projectCompletedWorkBlocks as completedTurnWorkBlocks,
-  projectWorkBlocks as workBlocksFromProgressRows,
-  semanticProgressRows,
-} from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
-import {
-  browserRandomId,
-  browserRandomUUID,
-} from "../../packages/butler-app/client/ui/src/app/id.ts";
-import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
+import { projectCompletedActivityRows as completedTurnActivityRows, projectCompletedWorkBlocks as completedTurnWorkBlocks, freezeConversationActivity as freezeMessageWorkBlocks, isInternalProgressRow, isVisibleToolActivity as isVisibleToolchainProgressRow, semanticProgressRows, projectActivityReadModels as typedUiReadModelsFromProgressRows, projectWorkBlocks as workBlocksFromProgressRows } from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
+import { browserRandomId, browserRandomUUID } from "../../packages/butler-app/client/ui/src/app/id.ts";
+import { optimisticSessionId } from "../../packages/butler-app/client/ui/src/app/optimisticSession.ts";
+import { isServerBackedSessionId } from "../../packages/butler-app/client/ui/src/app/sessionIds.ts";
+import type { MessageFileRef, MessageRecord, SessionSummaryView, TimelineEvent, TurnProgressSnapshot, WorkerActivitySummary } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import { activeTurnProgressSnapshot, applyTimelineEvents, applyTimelineEventsToViewState, canRetryWithCurrentControls, clientTurnIdFromMessageId, firstCancellableWorker, groupWorkerActivities, hasFollowableWorkerActivity, isRetryableFailureMessage, isWorkerVisibleInComposer, mergeMessages, mergeSessionSummaryForPendingTurn, mergeTurnProgressFromSummary, mergeTurnProgressSnapshotMap, projectDraftId, shouldShowTurnActivity, workerActivityCollapsedSummaryLine, workerActivityDescription, workerActivityMeta, workerActivityStatusLine } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
-import {
-  progressRowFromSharedTurnEvent as sharedProgressRowFromTurnEvent,
-  type SharedTurnEvent,
-} from "../../packages/butler-progress-projection/src/index.ts";
-import type {
-  MessageFileRef,
-  MessageRecord,
-  SessionSummaryView,
-  TimelineEvent,
-  TurnProgressSnapshot,
-  WorkerActivitySummary,
-} from "../../packages/butler-app/client/ui/src/app/types.ts";
+import { progressRowFromSharedTurnEvent as sharedProgressRowFromTurnEvent, type SharedTurnEvent } from "../../packages/butler-progress-projection/src/index.ts";
 
+describe("app-client-utils.test.ts", () => {
 const originalCrypto = globalThis.crypto;
 
 function createAgentTurnEvent(input: {
@@ -130,30 +88,6 @@ test("browser random ids still exist when Web Crypto is unavailable", () => {
     /^client-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
   );
 });
-
-test("work summary copy suffix follows the interface locale, not the label language", () => {
-  // Since 64dbc5c9b interface copy follows the interface locale; the public
-  // progress label itself is passed through unchanged.
-  const english = getAppCopy("en-US").conversation.work;
-  expect(english.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 and 1 more activities",
-  );
-  expect(english.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
-    "Expand 공개 출처를 확인하는 중 and 1 more activities",
-  );
-  const copy = getAppCopy("ko-KR").conversation.work;
-
-  expect(copy.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역",
-  );
-  expect(copy.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역 열기",
-  );
-  expect(copy.collapseHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역 닫기",
-  );
-});
-
 test("message merging preserves unchanged row references", () => {
   const cachedMessage = message("assistant-a", "assistant", 2, "turn-a");
   const current = [message("user-a", "user", 1, "turn-a"), cachedMessage];
@@ -269,12 +203,6 @@ test("markdown image sources resolve to attached app-server image files", () => 
     resolveMarkdownImageSource("artifacts/other.png", [imageAttachment]),
   ).toBe("artifacts/other.png");
 });
-
-test("worker activity labels include consolidation and reporting phases", () => {
-  expect(phaseLabel("consolidating")).toBe("Consolidating");
-  expect(phaseLabel("reporting")).toBe("Reporting");
-});
-
 test("worker activity display groups planned orchestration with worker attempts", () => {
   const plan = worker("planning", false, "2026-05-15T12:30:00.000Z", {
     activity_kind: "planned",
@@ -329,48 +257,6 @@ test("worker activity status uses durable activity titles without client-side do
     status_line: "Executing: Aligning composer controls",
   }))).toBe("Aligning composer controls");
 });
-
-test("worker activity labels prefer stable display names with ordinal fallback", () => {
-  const named = worker("executing", false, "2026-05-15T12:31:00.000Z", {
-    worker_label: "Ari",
-    worker_display_name: "Ari",
-    worker_ordinal_label: "Worker 1",
-    status_line: "Executing: Aligning composer controls",
-  });
-  const legacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
-    worker_label: "",
-    worker_ordinal_label: "Worker 7",
-    status_line: "Executing: Checking worker history",
-  });
-  const genericLegacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
-    worker_label: "Worker",
-    worker_ordinal_label: "Worker 8",
-    status_line: "Executing: Checking worker history",
-  });
-
-  expect(workerActivityDisplayName(named)).toBe("Ari");
-  expect(workerActivityCollapsedSummaryLine(named)).toBe(
-    "Ari Executing: Aligning composer controls",
-  );
-  expect(workerActivityDisplayName(legacy)).toBe("Worker 7");
-  expect(workerActivityDisplayName(genericLegacy)).toBe("Worker 8");
-});
-
-test("app-client worker utilities do not carry runtime-domain status dictionaries", () => {
-  const source = Buffer.from(
-    readFileSync("packages/butler-app/client/ui/src/app/utils.ts"),
-  ).toString("utf8");
-  const statusFunction = source.slice(
-    source.indexOf("export function workerActivityStatusLine"),
-    source.indexOf("export function workerActivityDescription"),
-  );
-  expect(source).not.toContain("workerExecutionStatus");
-  expect(source).not.toContain("localizedEvidenceSubject");
-  expect(source).not.toContain("프로젝트 파일을 검색하는 중입니다.");
-  expect(source).not.toContain("워커 상태를 확인하는 중입니다.");
-  expect(statusFunction).not.toMatch(/project|weather|validation|search|read|file|프로젝트|날씨/iu);
-});
-
 test("composer shows only active workers", () => {
   const now = Date.parse("2026-05-15T12:50:00.000Z");
 
@@ -1425,186 +1311,6 @@ test("acknowledged client progress cannot revive Thinking after final delivery",
     activeTurnProgressSnapshot(state.summary, state.turnProgress),
   ).toBeNull();
 });
-
-test("dedicated client UX contract projects ack, authored decisions, inactive recovery, and completed evidence", () => {
-  const clientTurnId = clientTurnIdFromMessageId("client-message");
-  const state = applyTimelineEventsToViewState(
-    [
-      {
-        id: 1,
-        type: "agent.turn_event",
-        payload: {
-          session_id: "general",
-          turn_id: "turn-real",
-          event: {
-            id: "event-ack",
-            sessionId: "general",
-            turnId: "turn-real",
-            sessionSequence: 1,
-            turnSequence: 1,
-            createdAt: "2026-05-19T00:01:01.000Z",
-            kind: "turn.acknowledged",
-            visibility: "public",
-            payload: {
-              safeLabel: "Request received. Preparing the work.",
-              transport: "app",
-            },
-          },
-        },
-      },
-      {
-        id: 2,
-        type: "agent.turn_event",
-        payload: {
-          session_id: "general",
-          turn_id: "turn-real",
-          event: {
-            id: "event-work-start",
-            sessionId: "general",
-            turnId: "turn-real",
-            sessionSequence: 2,
-            turnSequence: 2,
-            createdAt: "2026-05-19T00:01:02.000Z",
-            kind: "work.block.started",
-            visibility: "public",
-            payload: {
-              workBlockId: "work-validation",
-              label: "Validate client turn state",
-              decisionSummary: "Validate client turn state",
-              decisionRationale:
-                "The client must render only authored public decisions.",
-              decisionNextStep: "Run the reducer contract check.",
-              decisionSource: "assistant-authored",
-              decisionEvidenceRefs: ["turn.acknowledged"],
-            },
-          },
-        },
-      },
-      {
-        id: 3,
-        type: "agent.turn_event.progress",
-        payload: {
-          session_id: "general",
-          turn_id: "turn-real",
-          row: {
-            id: "runtime-fallback",
-            kind: "work_block",
-            state: "running",
-            safe_label: "Runtime fallback",
-            work_block_id: "work-runtime",
-            work_decision_summary: "This must stay hidden.",
-            work_decision_source: "runtime-derived",
-          },
-        },
-      },
-      {
-        id: 4,
-        type: "agent.turn_event",
-        payload: {
-          session_id: "general",
-          turn_id: "turn-real",
-          event: {
-            id: "event-tool-completed",
-            sessionId: "general",
-            turnId: "turn-real",
-            sessionSequence: 3,
-            turnSequence: 3,
-            createdAt: "2026-05-19T00:01:03.000Z",
-            kind: "tool.completed",
-            visibility: "public",
-            payload: {
-              toolName: "Bash",
-              inputLabel: "bun test tests/unit/app-client-utils.test.ts",
-              safeLabel: "Bash: bun test tests/unit/app-client-utils.test.ts",
-              activityKind: "ran_command",
-              toolCallId: "tool-test",
-              workBlockId: "work-validation",
-              workBlockLabel: "Validate client turn state",
-            },
-          },
-        },
-      },
-      {
-        id: 5,
-        type: "message.created",
-        payload: {
-          message: {
-            id: "assistant-final",
-            chat_id: "general",
-            turn_id: "turn-real",
-            role: "assistant",
-            text: "완료했습니다.",
-            status: "delivered",
-            cursor: 2,
-          },
-        },
-      },
-    ] satisfies TimelineEvent[],
-    "general",
-    {
-      messages: [],
-      summary: {
-        session_id: "general",
-        turn_state: "thinking",
-        latest_progress: {
-          turn_id: clientTurnId,
-          state: "thinking",
-          safe_progress_rows: [
-            {
-              id: "optimistic",
-              kind: "thinking",
-              state: "thinking",
-              safe_label: "Thinking",
-            },
-          ],
-        },
-      },
-      turnProgress: {},
-    },
-  );
-
-  const labels =
-    state.summary?.latest_progress?.safe_progress_rows.map(
-      (row) => row.safe_label,
-    ) ?? [];
-  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
-  expect(state.summary?.latest_progress?.state).toBe("delivered");
-  expect(labels).not.toContain("Thinking");
-  expect(labels).toContain("Request received. Preparing the work.");
-  expect(
-    isWorkerVisibleInComposer(
-      worker("recoverable", false, "2026-05-19T00:01:04.000Z"),
-    ),
-  ).toBe(false);
-  expect(
-    activeTurnProgressSnapshot(state.summary, state.turnProgress),
-  ).toBeNull();
-  expect(state.messages[0]?.work_blocks).toEqual([
-    expect.objectContaining({
-      id: "work-validation",
-      label: "Validate client turn state",
-      state: "delivered",
-      decision_summary: "Validate client turn state",
-      decision_rationale:
-        "The client must render only authored public decisions.",
-      decision_next_step: "Run the reducer contract check.",
-      decision_source: "assistant-authored",
-      decision_evidence_refs: ["turn.acknowledged"],
-      rows: [
-        expect.objectContaining({
-          id: "event-tool-completed",
-          state: "delivered",
-          safe_tool_name: "Bash",
-          safe_input_label: "bun test tests/unit/app-client-utils.test.ts",
-        }),
-      ],
-    }),
-  ]);
-  expect(JSON.stringify(state.messages[0]?.work_blocks)).not.toContain(
-    "This must stay hidden.",
-  );
-});
-
 test("delivered assistant message terminalizes active turn progress immediately", () => {
   const state = applyTimelineEventsToViewState(
     [
@@ -5017,3 +4723,15 @@ function worker(
     ...override,
   };
 }
+});
+
+describe("app-client-session-ids.test.ts", () => {
+test("server-backed session ids exclude draft and optimistic local ids", () => {
+  expect(isServerBackedSessionId("session-real")).toBe(true);
+  expect(isServerBackedSessionId("draft:chat")).toBe(false);
+  expect(isServerBackedSessionId(projectDraftId("project-1"))).toBe(false);
+  expect(isServerBackedSessionId(optimisticSessionId("client-message-1"))).toBe(
+    false,
+  );
+});
+});

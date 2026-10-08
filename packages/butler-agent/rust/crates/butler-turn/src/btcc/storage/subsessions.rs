@@ -106,6 +106,7 @@ pub(crate) struct ChildCompletion {
     pub status: String,
     pub summary: String,
     pub failure_reason: Option<String>,
+    pub failure_code: Option<String>,
     pub evidence_refs: Vec<String>,
     pub handoff: Option<crate::btcc::CapabilityHandoff>,
 }

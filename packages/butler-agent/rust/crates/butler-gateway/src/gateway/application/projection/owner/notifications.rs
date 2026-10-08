@@ -47,7 +47,6 @@ pub(super) fn settlement_listener(
 }
 
 pub(super) fn observe_filesystem() -> bool {
-    !(cfg!(debug_assertions)
-        && std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+    !(std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_DISABLE_PROJECTION_WATCH").as_deref() == Ok("1"))
 }

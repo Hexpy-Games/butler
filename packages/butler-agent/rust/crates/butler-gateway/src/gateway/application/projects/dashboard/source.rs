@@ -185,8 +185,9 @@ fn read_report(
 ) -> Result<Report, AppStorageError> {
     let row = db
         .query_row(
-            "SELECT m.id,m.chat_id,c.title,m.text,m.updated_at,length(m.text),substr(m.text,1,1200) \
-             FROM chats c JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 AND m.id=?2 \
+            "SELECT m.id,c.id,c.title,m.text,m.updated_at,length(m.text),substr(m.text,1,1200) \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 AND m.id=?2 \
              AND m.role='assistant' AND m.status='delivered' AND \
              NOT (m.safe_error_code IS NOT NULL AND m.safe_error_code IN \
              ('app_turn_queue_failed','goal_completion_incomplete'))",

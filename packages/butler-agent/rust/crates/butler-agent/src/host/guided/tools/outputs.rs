@@ -1,7 +1,7 @@
 //! Session-bound publication and bounded App self-check.
 use super::GuidedTools;
 use butler_runtime::outputs::{OutputStore, PublishRequest};
-use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
 
 pub(super) async fn publish(
@@ -9,7 +9,10 @@ pub(super) async fn publish(
     invocation: &GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<butler_core::json::JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
+    if matches!(
+        super::access::for_kind(owner, butler_turn::btcc::CapabilityKind::ButlerOutput),
+        butler_turn::btcc::AccessDecision::Deny(_)
+    ) {
         return super::dispatch::encoded(&json!({"ok":false,"error":"tool_not_admitted"}));
     }
     let args = &call.arguments;

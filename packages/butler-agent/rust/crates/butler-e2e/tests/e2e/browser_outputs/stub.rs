@@ -4,12 +4,13 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
-pub(super) fn cassette() -> Result<Cassette, HarnessError> {
+pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut c = Cassette::load("TOOL-01")?;
     c.exchanges.clear();
     for history in 0..=12 {
         for (prompt, path) in [
+            ("Feature gate", "site"),
             ("Publish", "site"),
             ("Again", "site"),
             ("Fix", "site"),
@@ -22,6 +23,13 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
             ("Spaced", "site/space +%.html"),
         ] {
             let mut steps = Vec::new();
+            if prompt == "Feature gate" {
+                steps.push(("tool_search", json!({"query":"output_","limit":50})));
+                steps.push((
+                    "tool_describe",
+                    json!({"ids":["native:output_check","native:output_publish"]}),
+                ));
+            }
             if prompt == "Publish" {
                 steps.push(("write_file",json!({"path":"site/index.html","content":"<!doctype html><h1>Output</h1><script src='./app.js'></script>","create_parents":true})));
                 steps.push(("write_file",json!({"path":"site/app.js","content":"localStorage.setItem('output','ready');document.querySelector('h1').textContent='Ready';","create_parents":true})));
@@ -40,7 +48,7 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
                         json!({"id":"native:output_check","arguments":{"output_id":id,"include_image":prompt == "Images"}}),
                     ));
                 }
-            } else {
+            } else if prompt != "Feature gate" {
                 steps.push(("output_publish", json!({"path":path,"title":if prompt == "Spaced" { "출".repeat(200) } else { "Output".into() }})));
             }
             let mut round = vec!["user".to_owned(); history];

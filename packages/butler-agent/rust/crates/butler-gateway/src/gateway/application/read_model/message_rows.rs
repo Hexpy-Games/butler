@@ -34,7 +34,7 @@ pub(in crate::gateway::application) fn streaming_message(
     let sql = concat!(
         "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,",
         "conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,",
-        "safe_error_code,retryable,plan_json FROM messages m ",
+        "safe_error_code,retryable,plan_json FROM app_owned_messages m ",
         "WHERE id=?1 AND chat_id=?2 AND turn_id=?3 AND role='assistant' AND status='streaming' ",
         "AND EXISTS(SELECT 1 FROM turns WHERE id=?3 AND state IN ",
         "('accepted','thinking','streaming','waiting_for_tool','retrying','cancelling')) ",

@@ -86,6 +86,39 @@ impl AppApplication {
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)
     }
+    pub(super) async fn recover_output_transfers(&self) -> Result<(), GatewayApplicationError> {
+        let pending = self
+            .storage
+            .read(|db| {
+                let mut query = db
+                    .prepare("SELECT archive_id FROM app_output_transfers ORDER BY rowid")
+                    .map_err(super::AppStorageError::sqlite)?;
+                query
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .map_err(super::AppStorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(super::AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        for archive in pending {
+            let store = OutputStore::new(&self.butler_data);
+            let target = archive.clone();
+            tokio::task::spawn_blocking(move || store.transfer_session("general", &target))
+                .await
+                .map_err(GatewayApplicationError::internal_from)?
+                .map_err(GatewayApplicationError::internal_from)?;
+            self.storage.execute(move |db| {
+                let tx = db.savepoint().map_err(super::AppStorageError::sqlite)?;
+                tx.execute("DELETE FROM app_output_transfers WHERE archive_id=?1", [&archive])
+                    .map_err(super::AppStorageError::sqlite)?;
+                tx.execute("DELETE FROM app_session_context_gate WHERE session_id='general' AND owner_kind='relocate' AND owner_id=?1", [&archive])
+                    .map_err(super::AppStorageError::sqlite)?;
+                tx.commit().map_err(super::AppStorageError::sqlite)
+            }).await.map_err(app_error)?;
+        }
+        Ok(())
+    }
     pub(super) async fn collect_session_outputs(
         &self,
         session: String,

@@ -48,7 +48,7 @@ fn matching_prefix(content: &str, prompt: &str) -> String {
     }
 }
 
-fn loaded_excerpt(id: &str, content: &str, prompt: &str) -> String {
+pub(super) fn loaded_excerpt(id: &str, content: &str, prompt: &str) -> String {
     let needle = format!(
         "[Context excerpt elided; original {} bytes; source {id};",
         content.len()

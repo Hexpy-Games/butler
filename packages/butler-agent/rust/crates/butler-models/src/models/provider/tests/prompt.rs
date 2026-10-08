@@ -137,7 +137,13 @@ async fn anthropic_prompt_serializes_registered_default_output() {
         .unwrap();
     let request = server.await.unwrap();
     assert_eq!(result.text, "done");
-    assert!(String::from_utf8_lossy(&request).contains(r#""max_tokens":4096"#));
+    let offset = request
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .unwrap()
+        + 4;
+    let wire: serde_json::Value = serde_json::from_slice(&request[offset..]).unwrap();
+    assert_eq!(wire["max_tokens"].as_u64(), Some(4096));
 }
 
 #[tokio::test]

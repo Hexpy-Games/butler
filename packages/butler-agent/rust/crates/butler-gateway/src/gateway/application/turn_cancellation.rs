@@ -127,7 +127,7 @@ impl AppApplication {
             .dependencies
             .native_ingress
             .enqueue_cancel(AppCancellation {
-                session_id: app_session_hint(&chat_id),
+                session_id: self.runtime_hint(&chat_id).await?,
                 chat_id,
                 request_id: format!("cancel:{turn_id}"),
                 turn_id: turn_id.clone(),

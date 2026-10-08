@@ -1,3 +1,4 @@
+// test-category: security
 /// <reference types="bun" />
 
 import { afterEach, expect, mock, test } from "bun:test";

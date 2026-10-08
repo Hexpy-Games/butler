@@ -1,5 +1,6 @@
 //! Physical provider request ownership and carrier dispatch.
 
+mod anthropic_cache;
 mod continuation;
 mod contracts;
 mod local_stream;

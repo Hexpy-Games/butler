@@ -51,7 +51,7 @@ pub(super) fn project_failed(
             .map(|v| short_text(&v, 240))
             .unwrap_or_else(|| "Butler could not complete this turn.".into())
     };
-    let existing: Option<String> = db.query_row("SELECT id FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
+    let existing: Option<String> = db.query_row("SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     let message_id = existing.as_deref().unwrap_or(&ids.message_id);
     if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![label,code,retryable,now,message_id]) }
     else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,label,now,code,retryable]) }

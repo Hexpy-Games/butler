@@ -1,3 +1,4 @@
+import { browserFeatureEnabled } from "@/app/productFeatures";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -22,7 +23,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
   const draft = useSettingsUIStore(useShallow(state => state.draft && ({
-    access_mode: state.draft.access_mode, diagnostics_enabled: state.draft.diagnostics_enabled,
+    diagnostics_enabled: state.draft.diagnostics_enabled,
   })));
   const update = useSettingsUIStore(state => state.update);
   const setSettings = useButlerStore(state => state.setSettings);
@@ -88,12 +89,12 @@ export const SecuritySettings = memo(function SecuritySettings() {
             disabled={busy !== null}
             onSave={security.saveAllowedHosts}
           />
-          <SecurityAllowedHostsField
+          {browserFeatureEnabled && <SecurityAllowedHostsField
             content
             hosts={view.content_hosts ?? []}
             disabled={busy !== null}
             onSave={security.saveContentHosts}
-          />
+          />}
         </SettingsSection>
       )}
     </SettingsPage>

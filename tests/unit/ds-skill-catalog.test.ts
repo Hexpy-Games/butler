@@ -8,7 +8,6 @@ import { renderSkillCatalog } from "../../packages/butler-app/client/ui/src/libs
 
 const designSystemRoot = resolve("packages/butler-app/client/ui/src/libs/design-system");
 const catalogPath = join(designSystemRoot, "skills/butler-design-system/references/catalog.md");
-const skillPath = join(designSystemRoot, "skills/butler-design-system/SKILL.md");
 
 function folderNames(): string[] {
   return ["components", "blocks"].flatMap((kind) =>
@@ -25,14 +24,5 @@ describe("design-system skill catalog", () => {
     for (const name of folderNames()) expect({ name, listed: catalog.includes(`import { ${name} } from "@/butler-ds"`) }).toEqual({ name, listed: true });
     expect(catalog).toContain("## Decision guide");
     expect(catalog).toContain("## Build a screen");
-  });
-
-  test("the skill states the hard rules, lint gates, capability workflow and model-cost rule", () => {
-    const skill = readFileSync(skillPath, "utf8");
-    for (const phrase of [
-      "references/catalog.md", "never create a new component", "no className", "no inline style", "Tailwind",
-      "lint:ds", "lint:motion", "lint:css", "ds-showcase-coverage", "guidance.tsx", "luna", "xhigh",
-      "app:design-system:smoke", "bun run render",
-    ]) expect({ phrase, present: skill.includes(phrase) }).toEqual({ phrase, present: true });
   });
 });

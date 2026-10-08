@@ -1,7 +1,5 @@
 //! Source-shaped transcript filename admission for the projection watcher.
 
-use rusqlite::OptionalExtension;
-
 use super::super::{sync_chat_once, sync_deferred_once};
 use super::ProjectionContext;
 use crate::gateway::GatewayApplicationError;
@@ -16,10 +14,10 @@ pub(super) async fn open_turn_transcripts(
         .inspect(|db| {
             let mut statement = db
                 .prepare(
-                    "SELECT chat_id FROM turns WHERE state IN (\
+                    "SELECT COALESCE(c.runtime_session_hint,'butler/app-'||c.id) FROM chats c WHERE c.id IN (SELECT chat_id FROM turns WHERE state IN (\
                      'queued','accepted','thinking','streaming','waiting_for_form',\
                      'waiting_for_tool','cancelling','retrying') \
-                     UNION SELECT chat_id FROM app_transport_projection_staged_outbounds",
+                     UNION SELECT chat_id FROM app_transport_projection_staged_outbounds)",
                 )
                 .map_err(super::super::super::storage::AppStorageError::sqlite)?;
             statement
@@ -32,7 +30,7 @@ pub(super) async fn open_turn_transcripts(
         .map_err(super::super::super::app_error)?;
     Ok(chats
         .into_iter()
-        .map(|chat| transcript_file(&chat))
+        .map(|hint| transcript_file(&hint))
         .collect())
 }
 
@@ -50,19 +48,18 @@ pub(super) async fn resolve_chat_file(
     let chat = context
         .storage
         .inspect(move |db| {
-            db.query_row("SELECT id FROM chats WHERE id=?1", [&candidate], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()
-            .map_err(super::super::super::storage::AppStorageError::sqlite)
+            crate::gateway::application::sessions::identity::resolve_owner(
+                db,
+                &format!("butler/app-{candidate}"),
+            )
         })
         .await
         .map_err(super::super::super::app_error)?;
-    Ok(chat.filter(|id| transcript_file(id) == file))
+    Ok(chat)
 }
 
 fn transcript_file(chat: &str) -> String {
-    let session = crate::gateway::application::snapshot_input::session_hint(chat);
+    let session = chat;
     format!(
         "{}.jsonl",
         session.replace(

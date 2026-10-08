@@ -239,6 +239,7 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
         })
         .await
         .unwrap();
+    verify_readonly_history(&store, true).await;
     let prompt = store
         .read_prompt_material("cs_fixed", Some(10.0))
         .await
@@ -256,6 +257,7 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
         })
         .await
         .unwrap();
+    verify_readonly_history(&store, false).await;
     assert!(store.read_summaries("cs_fixed").await.unwrap().is_empty());
     let restored = store
         .read_message_by_id("cm_request")
@@ -388,4 +390,53 @@ fn migration_errors_are_atomic() {
     schema::ensure(&mut db, &clock).unwrap();
     let columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_messages') WHERE name LIKE 'origin_%'", [], |row| row.get(0)).unwrap();
     assert_eq!(columns, 5);
+}
+
+async fn verify_readonly_history(store: &AgentConversationStore, valid: bool) {
+    if valid {
+        let resumed = store
+            .finalize_turn(FinalizeTurnInput {
+                turn_id: "ct_fixed".into(),
+                status: None,
+                completed_at: Some("2099-01-01T00:00:00Z".into()),
+                outcome_capsule: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            resumed.completed_at.as_deref(),
+            Some("2099-01-01T00:00:00Z")
+        );
+    }
+
+    store
+        .execute(move |db| {
+            let before = db.total_changes();
+            let window = super::super::history_window::read(db, "cs_fixed", 10_000)?;
+            assert_eq!(
+                db.total_changes(),
+                before,
+                "assembly must perform zero writes"
+            );
+            assert_eq!(!window.material.summaries.is_empty(), valid);
+            if !valid {
+                assert!(
+                    window
+                        .material
+                        .semantic_tail
+                        .iter()
+                        .any(|m| m.message.id == "cm_request")
+                );
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let (a, b) = tokio::join!(
+        store.read_history_window("cs_fixed", 10_000),
+        store.read_history_window("cs_fixed", 10_000)
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(a.material, b.material);
+    assert_eq!(a.digest, b.digest);
 }

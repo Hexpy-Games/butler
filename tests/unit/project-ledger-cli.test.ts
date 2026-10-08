@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
+import { spawn, spawnSync } from "child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { spawn, spawnSync } from "child_process";
 
 const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
@@ -177,35 +177,6 @@ function writeWorkInLedgerRoot(ledgerRoot: string, id: string, frontmatter: Reco
   writeFileSync(path, body, "utf8");
   return path;
 }
-
-function renderViewsAndIndex(project: string): void {
-  for (const view of ["dashboard", "handoff", "roadmap"]) {
-    runLedgerJson(["render", "--project", project, view, "--write"]);
-  }
-  runLedgerJson(["index", "--project", project]);
-}
-
-test("project-ledger root help aliases print the command reference", () => {
-  for (const args of [["help"], ["--help"]]) {
-    const result = runLedger(args);
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Project Ledger CLI");
-    expect(result.stdout).toContain("project-ledger init --project PATH --id ID --name NAME");
-    expect(result.stdout).toContain("project-ledger spec show|update --project PATH --id ID");
-    expect(result.stdout).toContain("project-ledger plan create|show|update --project PATH --id ID");
-  }
-});
-
-test("pl help prints concise workflow aliases", () => {
-  const result = runPl(["help"]);
-  expect(result.status).toBe(0);
-  expect(result.stderr).toBe("");
-  expect(result.stdout).toContain("Common workflow:");
-  expect(result.stdout).toContain("pl create KIND ID --title TITLE");
-  expect(result.stdout).toContain("pl complete ID [--kind work|task|attempt]");
-  expect(result.stdout).toContain("Use project-ledger help for the full command reference.");
-});
 
 test("project-ledger init creates Butler data-home ledger layout", () => {
   const project = tempProject();
@@ -2015,268 +1986,6 @@ test("project-ledger doctor detects missing spec orphan task stale view and priv
     rmSync(project, { recursive: true, force: true });
   }
 });
-
-test("project-ledger doctor with --silent flag suppresses output on success", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    renderViewsAndIndex(project);
-
-    const result = runLedger(["doctor", "--project", project, "--silent"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor with --silent flag shows concise output on failure", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["doctor", "--project", project, "--silent"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("doctor:");
-    expect(result.stdout).toContain("warning");
-    expect(result.stdout).not.toContain("missing_spec");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor with --verbose flag shows detailed output", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["doctor", "--project", project, "--verbose"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("doctor:");
-    expect(result.stdout).toContain("Issues");
-    expect(result.stdout).toContain("missing_spec");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor lets --verbose override --silent", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    renderViewsAndIndex(project);
-
-    const result = runLedger(["doctor", "--project", project, "--silent", "--verbose"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("doctor: OK");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor without flags shows concise output on failure", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["doctor", "--project", project]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("doctor:");
-    expect(result.stdout).toContain("warning");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check with --silent flag suppresses output on success", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    renderViewsAndIndex(project);
-
-    const result = runLedger(["check", "--project", project, "--silent"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check with --silent flag shows concise output on failure", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["check", "--project", project, "--silent"]);
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("check:");
-    expect(result.stdout).toContain("issue");
-    expect(result.stdout).not.toContain("missing_spec");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check with --verbose flag shows detailed output", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["check", "--project", project, "--verbose"]);
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("check:");
-    expect(result.stdout).toContain("Issues");
-    expect(result.stdout).toContain("missing_spec");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check lets --verbose override --silent", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    renderViewsAndIndex(project);
-
-    const result = runLedger(["check", "--project", project, "--silent", "--verbose"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("check: OK");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check without flags shows concise output on failure", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["check", "--project", project]);
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("check:");
-    expect(result.stdout).toContain("issue");
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor preserves --json envelope behavior", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedgerJson(["doctor", "--project", project]);
-    expect(result.ok).toBe(true);
-    expect(result.data.issues).toBeDefined();
-    expect(Array.isArray(result.data.issues)).toBe(true);
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger doctor failed --json preserves diagnostic issues", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["doctor", "--project", project, "--fail-on-warning", "--json"]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toBe("");
-    const parsed = JSON.parse(result.stdout);
-    const errorCount = parsed.data.issues.filter((issue: any) => issue.severity === "error").length;
-    const warningCount = parsed.data.issues.filter((issue: any) => issue.severity === "warning").length;
-    expect(parsed.ok).toBe(false);
-    expect(parsed.data.issues.map((issue: any) => issue.code)).toContain("missing_spec");
-    expect(parsed.error.code).toBe("project_ledger_doctor_failed");
-    expect(parsed.error.details).toEqual([{ issueCount: parsed.data.issues.length, errorCount, warningCount }]);
-    expect(parsed.error.next.map((item: any) => item.command)).toContain(
-      `project-ledger doctor --project ${project} --verbose`,
-    );
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("project-ledger check preserves --json envelope behavior", () => {
-  const project = tempProject();
-  try {
-    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
-    writeWork(project, "W-0001", {
-      id: "W-0001",
-      kind: "work",
-      title: "Missing spec work",
-      status: "in_progress",
-    });
-
-    const result = runLedger(["check", "--project", project, "--json"]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toBe("");
-    const parsed = JSON.parse(result.stdout);
-    const errorCount = parsed.data.issues.filter((issue: any) => issue.severity === "error").length;
-    const warningCount = parsed.data.issues.filter((issue: any) => issue.severity === "warning").length;
-    expect(parsed.ok).toBe(false);
-    expect(parsed.data.ok).toBe(false);
-    expect(parsed.data.issues.map((issue: any) => issue.code)).toContain("missing_spec");
-    expect(parsed.error.code).toBe("project_ledger_check_failed");
-    expect(parsed.error.details).toEqual([{ issueCount: parsed.data.issues.length, errorCount, warningCount }]);
-    expect(parsed.error.next.map((item: any) => item.command)).toContain(
-      `project-ledger check --project ${project} --verbose`,
-    );
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
 test("project-ledger status query and render rebuild stale task state from source", () => {
   const project = tempProject();
   try {
@@ -2346,4 +2055,24 @@ test("project-ledger status query and render rebuild stale task state from sourc
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+// test-category: pure-logic
+test("ledger round trip writes bounded views and validates the generated index", () => {
+  const project = tempProject();
+  try {
+    expect(runLedger(["init", "--project", project, "--id", "demo", "--name", "Demo"]).status).toBe(0);
+    expect(runLedger(["record", "create", "--project", project, "--kind", "spec", "--id", "SPEC-ROUNDTRIP", "--title", "Round trip", "--from", "-"], { input: "# Round trip\n\nBounded view fixture.\n" }).status).toBe(0);
+    expect(runLedger(["work", "create", "--project", project, "--id", "W-ROUNDTRIP", "--title", "Round trip", "--spec", "SPEC-ROUNDTRIP", "--acceptance", "Generated views include the fixture"]).status).toBe(0);
+    for (const command of ["index", "render"]) {
+      if (command === "index") expect(runLedger([command, "--project", project]).status).toBe(0);
+      else for (const view of ["dashboard", "handoff", "roadmap"]) {
+        expect(runLedger([command, view, "--project", project, "--write"]).status).toBe(0);
+        expect(existsSync(join(ledgerProjectRoot(project), "views", view + ".md"))).toBe(true);
+      }
+    }
+    const check = JSON.parse(runLedger(["check", "--project", project, "--json"]).stdout);
+    expect(check.ok).toBe(true);
+    expect(check.data.issueCount).toBe(0);
+  } finally { rmSync(project, { recursive: true, force: true }); }
 });

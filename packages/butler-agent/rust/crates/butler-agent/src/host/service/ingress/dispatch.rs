@@ -406,16 +406,24 @@ async fn complete_subsession_child(
                 super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
-    let (content, failed) = match &outcome.result {
+    let (content, failed, failure_code) = match &outcome.result {
         TurnOutcomeKind::Delivered(value) => (
             value.content.as_str(),
             value.runtime_failure.is_some()
                 || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+            value
+                .runtime_failure
+                .as_ref()
+                .map(|failure| failure.code.as_str()),
         ),
         TurnOutcomeKind::AlreadyDelivered(value) => (
             value.content.as_str(),
             value.runtime_failure.is_some()
                 || value.execution_outcome == Some(butler_turn::btcc::ExecutionOutcome::Failed),
+            value
+                .runtime_failure
+                .as_ref()
+                .map(|failure| failure.code.as_str()),
         ),
         TurnOutcomeKind::Suspended { .. } => {
             return subsessions
@@ -430,9 +438,19 @@ async fn complete_subsession_child(
     // Result delivery and Work disposition are independent. Keep unfinished
     // Work intact; only an explicit failure makes a delivered result fail.
     let status = if failed { "failed" } else { "success" };
-    subsessions
-        .complete_child(session_id, turn_id, status, content.to_owned())
-        .await
+    let completion = match failure_code {
+        Some(code) => {
+            subsessions
+                .complete_failed_child(session_id, turn_id, code)
+                .await
+        }
+        None => {
+            subsessions
+                .complete_child(session_id, turn_id, status, content.to_owned())
+                .await
+        }
+    };
+    completion
         .map_err(|error| super::IngressError::new("subsession_result_commit_failed", error.code()))
 }
 

@@ -1,10 +1,8 @@
 //! Reuse unchanged serialized components, including their exact field order.
 use std::sync::Arc;
 
-use serde_json::Value;
-use sha2::{Digest, Sha256};
-
 use butler_turn::btcc::ModelRoundError;
+use serde_json::Value;
 
 const CACHE_BYTES: usize = 32 * 1024 * 1024;
 const CACHE_ITEMS: usize = 4096;
@@ -12,7 +10,7 @@ const CACHE_ITEMS: usize = 4096;
 pub(in crate::models::provider) struct Component {
     source: Option<Value>,
     pub(in crate::models::provider) encoded: String,
-    pub(in crate::models::provider) hash: String,
+    pub(in crate::models::provider) hash: Option<String>,
     bytes: usize,
 }
 
@@ -20,30 +18,9 @@ pub(in crate::models::provider) struct Component {
 pub(in crate::models::provider) struct Cache {
     items: Vec<Option<Arc<Component>>>,
     bytes: usize,
-    prefix: Vec<u8>,
-    prefix_hash: Sha256,
 }
 
 impl Cache {
-    /// Extend a digest only after comparing every previously hashed byte.
-    /// Mutation, truncation and interleaved sessions restart the exact digest.
-    pub(in crate::models::provider) fn prefix_hash(&mut self, prefix: &[u8]) -> String {
-        const PREFIX_BYTES: usize = 16 * 1024 * 1024;
-        if prefix.len() > PREFIX_BYTES {
-            self.prefix = Vec::new();
-            self.prefix_hash = Sha256::new();
-            return super::hash(prefix);
-        }
-        if !prefix.starts_with(&self.prefix) {
-            self.prefix.clear();
-            self.prefix_hash = Sha256::new();
-        }
-        let appended = &prefix[self.prefix.len()..];
-        self.prefix_hash.update(appended);
-        self.prefix.extend_from_slice(appended);
-        format!("{:x}", self.prefix_hash.clone().finalize())
-    }
-
     pub(in crate::models::provider) fn array_json(
         &mut self,
         items: &[Value],
@@ -53,7 +30,7 @@ impl Cache {
             if index > 0 {
                 output.push(',');
             }
-            output.push_str(&self.component(index, value)?.encoded);
+            output.push_str(&self.component(index, value, false)?.encoded);
         }
         output.push(']');
         Ok(output)
@@ -63,6 +40,7 @@ impl Cache {
         &mut self,
         index: usize,
         value: &Value,
+        include_hash: bool,
     ) -> Result<Arc<Component>, ModelRoundError> {
         if let Some(Some(item)) = self.items.get(index)
             && item
@@ -79,7 +57,7 @@ impl Cache {
         let retained = bytes <= CACHE_BYTES && index < CACHE_ITEMS;
         let item = Arc::new(Component {
             source: retained.then(|| value.clone()),
-            hash: super::hash(&encoded),
+            hash: include_hash.then(|| super::hash(&encoded)),
             encoded,
             bytes,
         });

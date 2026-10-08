@@ -43,7 +43,8 @@ regenerate after the app copy or the Korean pages change.
 | 공개 답변 | **Published reply** | projects |
 | 공개된 결과 자료 | **Published results** | projects |
 | 교체 | **Replace** | models/cloud, settings, troubleshooting |
-| 권한 | **Permission** (`composer.permission`)<br />**Permissions** (`settings.pageSections.permissions`) | basics/conversation, scheduled-tasks, settings, troubleshooting |
+| 권한 | **Permission** (`composer.permission`) | basics/conversation, scheduled-tasks, troubleshooting |
+| 기본 권한 | **Default permission** (`settings.pageSections.defaultPermission`) | settings |
 | 균형 | **Balanced** | settings |
 | 그룹 만들기 | **Create group** | basics/sidebar-and-spaces |
 | 그룹 이름 | **Group name** | basics/sidebar-and-spaces |

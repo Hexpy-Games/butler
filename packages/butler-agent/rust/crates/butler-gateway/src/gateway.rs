@@ -11,6 +11,7 @@ mod auth;
 mod crypto;
 mod devices;
 mod http;
+mod idle_probe;
 mod image_files;
 mod live;
 mod message_validation;
@@ -203,6 +204,9 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
+        Box::pin(async move { Ok(app_session_hint(&chat)) })
+    }
     fn check_app_update(
         &self,
         request: butler_runtime::operations::UpdateRequest,

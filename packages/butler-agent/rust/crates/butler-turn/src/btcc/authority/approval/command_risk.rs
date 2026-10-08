@@ -2,7 +2,7 @@
 //! classifier cannot prove from this explicit table is high risk.
 use super::ApprovalRisk;
 
-pub(super) fn command_risk(line: &str) -> ApprovalRisk {
+pub(in crate::btcc) fn command_risk(line: &str) -> ApprovalRisk {
     // Fail closed on shell evaluation, redirection, quoting and control syntax.
     if line
         .chars()

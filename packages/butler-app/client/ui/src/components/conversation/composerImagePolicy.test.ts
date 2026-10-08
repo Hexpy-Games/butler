@@ -1,3 +1,4 @@
+// test-category: race
 import { expect, test } from "bun:test";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import type { AppModelSummary } from "@/app/types.ts";
