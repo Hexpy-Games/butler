@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 struct Stub {
     requests: Mutex<Vec<Value>>,
+    text_only: std::sync::atomic::AtomicBool,
 }
 
 async fn reply(State(stub): State<Arc<Stub>>, Json(body): Json<Value>) -> Json<Value> {
@@ -31,7 +32,10 @@ async fn reply(State(stub): State<Arc<Stub>>, Json(body): Json<Value>) -> Json<V
             .as_array()
             .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "tool_result"))
     });
-    let mut content = if !tool_round && !body["tools"].is_null() {
+    let use_tool = !tool_round
+        && !body["tools"].is_null()
+        && !stub.text_only.load(std::sync::atomic::Ordering::Relaxed);
+    let mut content = if use_tool {
         json!([{"type":"tool_use","id":"cache_read","name":"read_file",
             "input":{"requests":[{"path":"cache-input.txt"}]}}])
     } else {
@@ -41,7 +45,7 @@ async fn reply(State(stub): State<Arc<Stub>>, Json(body): Json<Value>) -> Json<V
     content[0]["cache_control"] = json!({"type":"ephemeral"});
     Json(json!({"id":"msg_cache","type":"message","role":"assistant",
         "model":body["model"],"content":content,
-        "stop_reason":if tool_round {"end_turn"} else {"tool_use"},
+        "stop_reason":if use_tool {"tool_use"} else {"end_turn"},
         "usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":200,
             "cache_creation_input_tokens":300,"cache_creation":{
                 "ephemeral_1h_input_tokens":250,"ephemeral_5m_input_tokens":50}}}))
@@ -203,7 +207,11 @@ async fn anthropic_cache_turns_rounds_ttls_and_endpoint_gate() -> Result<(), Har
         ("1h", "on", true),
         ("5m", "on", true),
         ("off", "on", true),
-        ("1h", "off", true),
+        ("invalid", "on", true),
+        ("1h", "OFF", true),
+        ("1h", "0", true),
+        ("1h", "FaLsE", true),
+        ("1h", "No", true),
         ("1h", "on", false),
     ] {
         run(ttl, master, verified).await?;
@@ -278,13 +286,18 @@ async fn anthropic_cache_survives_image_projection() -> Result<(), HarnessError>
 
 async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError> {
     let (s, stub, server) = start(ttl, master, verified).await?;
-    let enabled = master != "off" && verified;
+    let enabled = !matches!(
+        master.to_ascii_lowercase().as_str(),
+        "off" | "0" | "false" | "no"
+    ) && verified;
+    let invalid_ttl = !matches!(ttl, "1h" | "5m" | "off");
+    let ttl = if invalid_ttl { "1h" } else { ttl };
     let mut previous = String::new();
     let mut previous_blocks: Vec<String> = Vec::new();
     let mut previous_wire = Vec::new();
     let mut previous_history = String::new();
     let mut moves = 0;
-    let turns: usize = if ttl == "1h" && enabled { 16 } else { 2 };
+    let turns: usize = if ttl == "1h" && enabled { 36 } else { 2 };
     for index in 0..turns {
         let begin = stub.requests.lock().unwrap().len();
         let ask = format!(
@@ -305,13 +318,6 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
         if enabled && ttl != "off" {
             let blocks = history_blocks(&requests[0]);
             assert_eq!(blocks, history_blocks(&requests[1]));
-            if (1..6).contains(&index) {
-                assert!(
-                    blocks.starts_with(&previous_blocks),
-                    "turn boundary changed at {index}"
-                );
-                assert_eq!(blocks.len(), previous_blocks.len() + 1);
-            }
             let text = blocks.concat();
             assert!(
                 requests[0]["messages"][0]["content"]
@@ -346,7 +352,12 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
                 );
             }
             let wire = cached_prefix(&requests[0]);
-            if index >= 2 && !moved {
+            if index >= 1 && !moved {
+                assert!(
+                    blocks.starts_with(&previous_blocks),
+                    "blocks changed at {index}"
+                );
+                assert_eq!(blocks.len(), previous_blocks.len() + 1);
                 assert!(
                     wire.starts_with(&previous_wire),
                     "wire prefix changed at {index}"
@@ -361,8 +372,15 @@ async fn run(ttl: &str, master: &str, verified: bool) -> Result<(), HarnessError
             }
         }
     }
-    if turns == 16 {
+    if turns == 36 {
         assert!(moves > 0, "history fixture never moved its start");
+    }
+    if invalid_ttl {
+        assert!(
+            s.agent
+                .logs()
+                .contains("warning: invalid BUTLER_ANTHROPIC_CACHE_TTL; using default 1h")
+        );
     }
     usage(&s)?;
     eprintln!(
@@ -423,3 +441,6 @@ fn history(s: &Scenario) -> Result<String, HarnessError> {
 
 #[path = "anthropic_cache_idle.rs"]
 mod idle;
+
+#[path = "anthropic_cache_append.rs"]
+mod append;

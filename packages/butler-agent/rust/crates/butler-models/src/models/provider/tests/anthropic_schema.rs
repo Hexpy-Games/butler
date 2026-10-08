@@ -1,4 +1,4 @@
-//! Full catalog wire regression; invoked by the existing format-pin stub test.
+//! Standalone full catalog wire regression.
 use super::*;
 use butler_turn::btcc::ModelRoundTool;
 use serde_json::{Value, json};
@@ -6,7 +6,9 @@ use serde_json::{Value, json};
 const CATALOG: &str =
     include_str!("../../../../../butler-runtime/src/capabilities/catalog/catalog.json");
 
-pub(super) async fn all_registered_tools_through_stub() {
+// test-category: format-pin
+#[tokio::test]
+async fn all_registered_tools_through_stub() {
     let catalog_json: Value = serde_json::from_str(CATALOG).unwrap();
     let raw = catalog_json["rawDefinitions"].as_object().unwrap();
     let projected = catalog_json["tools"].as_array().unwrap();
@@ -192,7 +194,14 @@ fn variants_and_integer_fields() {
             }
             let schema = &body["tools"][0]["input_schema"];
             validate_schema(schema);
-            assert_eq!(schema["required"], json!(["shared"]));
+            assert_eq!(
+                schema["required"],
+                if keyword == "allOf" {
+                    json!(["left", "right", "shared"])
+                } else {
+                    json!(["shared"])
+                }
+            );
             assert_eq!(schema["properties"].as_object().unwrap().len(), 3);
             assert_eq!(
                 schema["properties"]["shared"]["anyOf"]

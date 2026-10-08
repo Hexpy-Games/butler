@@ -5,10 +5,10 @@
 )]
 use super::*;
 
-pub(in crate::models::provider) fn history_chunks_preserve_bytes_and_previous_breakpoint_within_lookback()
- {
-    let mut previous = String::new();
-    let mut frozen = Vec::new();
+// test-category: format-pin
+#[test]
+fn history_blocks_preserve_bytes_and_previous_breakpoint_within_lookback() {
+    let mut previous: Vec<Value> = Vec::new();
     for count in 1..=66 {
         let turns = (0..count)
             .map(|index| {
@@ -31,28 +31,11 @@ pub(in crate::models::provider) fn history_chunks_preserve_bytes_and_previous_br
             .collect::<Vec<_>>();
         assert_eq!(format!("{}{}", strings.concat(), &text[end..]), text);
         assert_eq!(strings[0], stable);
-        assert!(strings.len() <= 1 + count / CHUNK_TURNS + CHUNK_TURNS + RECENT_TURNS);
+        assert_eq!(blocks.len(), count + 1);
         if count > 1 {
-            let mut prefix = String::new();
-            let position = strings
-                .iter()
-                .position(|block| {
-                    prefix.push_str(block);
-                    prefix == previous
-                })
-                .expect("previous breakpoint must remain a block boundary");
-            assert!(strings.len() - position <= 20);
+            assert_eq!(&blocks[..previous.len()], previous.as_slice());
+            assert_eq!(blocks.len() - previous.len(), 1);
         }
-        let chunks = count.saturating_sub(RECENT_TURNS) / CHUNK_TURNS;
-        let formed = strings[1..=chunks]
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect::<Vec<_>>();
-        assert!(
-            formed.starts_with(&frozen),
-            "formed chunk changed at {count}"
-        );
-        frozen = formed;
-        previous = strings.concat();
+        previous = blocks;
     }
 }

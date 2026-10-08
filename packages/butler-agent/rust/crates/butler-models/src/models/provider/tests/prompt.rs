@@ -87,10 +87,8 @@ fn prompt_request<'a>(
     }
 }
 
-// test-category: format-pin
 #[tokio::test]
 async fn anthropic_prompt_serializes_registered_default_output() {
-    super::anthropic_schema::all_registered_tools_through_stub().await;
     let body = br#"{"content":[{"type":"text","text":"done"}],"usage":{"input_tokens":3,"output_tokens":2}}"#;
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
