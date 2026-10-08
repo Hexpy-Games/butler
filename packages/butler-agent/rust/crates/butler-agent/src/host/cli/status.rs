@@ -106,7 +106,8 @@ pub(crate) async fn run_native_status_cli(
             .await;
             let model = models.status_value(&metrics.model_telemetry());
             let services = service_health(&data_root);
-            let previews = update_previews(&models.configuration).await;
+            let previews =
+                update_previews(&models.configuration, installation.app_version().as_deref()).await;
             let version = crate::host::build_info::current().version;
             let memory_model = super::status_memory::read(&data_root, &installation).await;
             let text = format!(
@@ -334,13 +335,16 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
     ExitCode::from(1)
 }
 
-async fn update_previews(configuration: &butler_models::models::ModelConfiguration) -> bool {
-    configuration
+async fn update_previews(
+    configuration: &butler_models::models::ModelConfiguration,
+    app_version: Option<&str>,
+) -> bool {
+    let saved = configuration
         .read()
         .await
         .map(|read| read.config)
         .unwrap_or_default()
         .pointer("/update/previews")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
+        .and_then(Value::as_bool);
+    operations::effective_update_previews(saved, app_version)
 }

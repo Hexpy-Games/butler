@@ -12,7 +12,7 @@ SCRIPT = Path(__file__).with_name("product-features.py")
 
 
 class ProductFeatures(unittest.TestCase):
-    def select(self, ref, tag="", present=True):
+    def select(self, ref, tag="", present=True, tag_args=None):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             releases = root / ".github" / "releases"
@@ -23,7 +23,7 @@ class ProductFeatures(unittest.TestCase):
             env = dict(os.environ, GITHUB_REF=ref, GITHUB_REF_NAME="overridden-version",
                        GITHUB_ENV=str(output))
             result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(root),
-                                     "--tag", tag], env=env, check=True,
+                                     *(tag_args if tag_args is not None else ["--tag", tag])], env=env, check=True,
                                     capture_output=True, text=True)
             features = json.loads(result.stdout)
             self.assertEqual(output.read_text(),
@@ -36,7 +36,10 @@ class ProductFeatures(unittest.TestCase):
 
     # test-category: pure-logic
     def test_release_branch(self):
-        self.assertEqual(self.select("refs/heads/release/0.1.0-preview.11"), {"browser": False})
+        for args in [[], ["--tag"], ["--tag="], ["--tag", ""]]:
+            with self.subTest(args=args):
+                self.assertEqual(self.select("refs/heads/release/0.1.0-preview.11",
+                                             tag_args=args), {"browser": False})
 
     # test-category: pure-logic
     def test_other_branch_and_local_default_on(self):

@@ -82,6 +82,7 @@ fn interrupted_children() {
             .args(["--exact", "gateway::message_file_store::tests::source_artifact_is_stored_once_with_original_metadata", "--nocapture"])
             .env("HOME", isolation.join("home"))
             .env("BUTLER_DATA", isolation.join("data"))
+            .env("BUTLER_E2E_TIER", "stub")
             .env("BUTLER_FILE_TEST_CHILD", point)
             .env("BUTLER_E2E_FILE_FAULT", point)
             .env("BUTLER_E2E_FILE_FAULT_MARKER", &marker)

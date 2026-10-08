@@ -71,7 +71,7 @@ impl TurnRuntime {
                 .unwrap_or(turn);
         }
         if let Some(reason) = turn.suspension {
-            return Ok((suspended(&turn.turn_id, reason), fresh));
+            return Ok((suspended(&turn, reason), fresh));
         }
         if turn.semantic_state == TurnSemanticState::Admitted {
             self.publish_state(conversation, &turn, &destination).await;
@@ -86,7 +86,7 @@ impl TurnRuntime {
             .await?;
         }
         if let Some(reason) = turn.suspension {
-            return Ok((suspended(&turn.turn_id, reason), fresh));
+            return Ok((suspended(&turn, reason), fresh));
         }
         if turn.semantic_state == TurnSemanticState::Cancelled {
             self.supervisor.observe_terminal(&turn.turn_id);
@@ -368,11 +368,25 @@ fn stop_outcome(turn_id: &str, outcome: StopPersistenceOutcome) -> TurnOutcomeKi
     }
 }
 
-fn suspended(turn_id: &str, reason: SuspensionReason) -> TurnOutcome {
+fn suspended(turn: &TurnRecord, reason: SuspensionReason) -> TurnOutcome {
+    // Questions share the durable authority decision machinery, but only a
+    // question ends the visible message segment. Snapshot the actual parked
+    // call here so transport replay never depends on later request decisions.
+    let question = turn
+        .authority_continuation
+        .as_ref()
+        .is_some_and(|continuation| {
+            continuation
+                .batch
+                .calls
+                .get(continuation.batch.next_call_index)
+                .is_some_and(|call| call.name == "ask_user")
+        });
     TurnOutcome {
         result: TurnOutcomeKind::Suspended {
-            turn_id: turn_id.into(),
+            turn_id: turn.turn_id.clone(),
             reason: match reason {
+                SuspensionReason::AuthorityPending if question => "question_pending",
                 SuspensionReason::AuthorityPending => "authority_pending",
                 SuspensionReason::WaitingForWorker => "waiting_for_worker",
             }

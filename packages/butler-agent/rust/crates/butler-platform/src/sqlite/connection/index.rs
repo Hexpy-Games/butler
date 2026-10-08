@@ -1,4 +1,5 @@
 //! macOS mapped-index writeback without closing a descriptor under SQLite locks.
+use memmap2::{MmapOptions, MmapRaw};
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -25,7 +26,35 @@ fn poison<T>(_: std::sync::PoisonError<T>) -> io::Error {
 pub(super) struct IndexOwner(Option<Arc<Index>>);
 struct Index {
     path: PathBuf,
-    file: Mutex<Option<File>>,
+    file: Mutex<Option<IndexFile>>,
+}
+struct IndexFile {
+    mapped: Option<MmapRaw>,
+    file: File,
+}
+impl IndexFile {
+    fn sync(&mut self) -> io::Result<()> {
+        let len = usize::try_from(self.file.metadata()?.len()).map_err(io::Error::other)?;
+        if self.mapped.as_ref().map(MmapRaw::len) != Some(len) {
+            self.mapped = if len == 0 {
+                None
+            } else {
+                // Raw maps expose no Rust references to SQLite's concurrently
+                // changed bytes. Remapping never opens/closes another descriptor.
+                Some(MmapOptions::new().len(len).map_raw_read_only(&self.file)?)
+            };
+        }
+        if let Some(mapped) = &self.mapped {
+            // fsync alone can leave mapped dirty pages and their mtime for
+            // Darwin's delayed writeback. MS_SYNC finishes them during work.
+            mapped.flush()?;
+        }
+        // The WAL-index is rebuildable shared memory, not durable DB content.
+        // MS_SYNC above finishes delayed mapped writeback before idle. An extra
+        // sync_all invokes macOS F_FULLFSYNC on every read/write completion and
+        // serializes unrelated database work behind a device-cache flush.
+        Ok(())
+    }
 }
 impl IndexOwner {
     pub(super) fn new(connection: &rusqlite::Connection) -> io::Result<Self> {
@@ -59,6 +88,19 @@ impl IndexOwner {
     pub(super) fn sync(&self) -> io::Result<()> {
         self.0.as_ref().map_or(Ok(()), |owner| owner.sync())
     }
+    pub(super) fn finish(mut self) -> io::Result<()> {
+        let result = self.sync();
+        self.0 = None;
+        result
+    }
+}
+impl Drop for IndexOwner {
+    fn drop(&mut self) {
+        // Connection drops its raw SQLite field first. RAII health/admission
+        // probes and retired readers must finish their read-mark writeback too.
+        // Explicit close uses finish() to report errors without syncing twice.
+        let _closed = self.sync();
+    }
 }
 impl Index {
     fn sync(&self) -> io::Result<()> {
@@ -67,12 +109,17 @@ impl Index {
             let mut path = self.path.as_os_str().to_os_string();
             path.push("-shm");
             match crate::secure_fs::open_read_no_follow(std::path::Path::new(&path)) {
-                Ok(opened) => *file = Some(opened),
+                Ok(opened) => {
+                    *file = Some(IndexFile {
+                        mapped: None,
+                        file: opened,
+                    });
+                }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
                 Err(error) => return Err(error),
             }
         }
-        file.as_ref().map_or(Ok(()), File::sync_all)
+        file.as_mut().map_or(Ok(()), IndexFile::sync)
     }
 }
 impl Drop for Index {

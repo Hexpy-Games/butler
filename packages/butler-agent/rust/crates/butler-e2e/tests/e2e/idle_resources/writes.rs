@@ -113,6 +113,9 @@ fn snapshot(root: &Path) -> std::io::Result<BTreeMap<PathBuf, (u64, SystemTime)>
     Ok(files)
 }
 fn data_version(db: &Connection) -> u64 {
-    db.query_row("PRAGMA data_version", [], |row| row.get(0))
-        .unwrap()
+    let version = db
+        .query_row("PRAGMA data_version", [], |row| row.get(0))
+        .unwrap();
+    butler_platform::sqlite::sync_wal_index(db).unwrap();
+    version
 }

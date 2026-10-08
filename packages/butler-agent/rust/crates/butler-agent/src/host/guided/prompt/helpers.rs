@@ -24,3 +24,10 @@ pub(super) fn nonempty_array(turn: &TurnRecord, field: &str) -> bool {
         .and_then(Value::as_array)
         .is_some_and(|value| !value.is_empty())
 }
+
+pub(super) fn default_project_folder(context: &Value) -> Option<String> {
+    let path = context.get("defaultProjectFolder")?.as_str()?;
+    Some(format!(
+        "User's default project folder: {path}. Projects live there; use this absolute path with file tools when the user refers to their project folder."
+    ))
+}

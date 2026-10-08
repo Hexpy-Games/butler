@@ -81,6 +81,12 @@ pub(super) fn branch_project_created_event(
 }
 
 pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, AppStorageError> {
+    let path = configured_root(db)?.unwrap_or_else(|| fallback.to_path_buf());
+    absolute_root(path)
+}
+
+/// Read the current setting without substituting a workspace when it is unset.
+pub(super) fn configured_root(db: &Connection) -> Result<Option<PathBuf>, AppStorageError> {
     let encoded: Option<String> = db
         .query_row(
             "SELECT value_json FROM app_settings WHERE key='default-project-workspace-root'",
@@ -94,9 +100,13 @@ pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, 
         .and_then(|value| serde_json::from_str::<Value>(value).ok())
         .and_then(|value| value.as_str().map(str::to_owned))
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty());
-    let path = stored
-        .map(PathBuf::from)
-        .unwrap_or_else(|| fallback.to_path_buf());
+    let Some(path) = stored.map(PathBuf::from) else {
+        return Ok(None);
+    };
+    absolute_root(path).map(Some)
+}
+
+fn absolute_root(path: PathBuf) -> Result<PathBuf, AppStorageError> {
     if path.is_absolute() {
         Ok(path)
     } else {

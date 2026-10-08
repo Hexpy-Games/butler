@@ -1,4 +1,5 @@
 param([Parameter(Mandatory = $true)][string]$PackageRoot)
+. "$PSScriptRoot/windows-job-tree.ps1"
 $ErrorActionPreference = 'Stop'
 $saved = @{}
 foreach ($name in @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP','BUTLER_SMOKE_PROFILE_ROOT')) {
@@ -24,7 +25,7 @@ try {
             throw 'Portable smoke changed owner protocol registration'
         }
     } finally {
-        try { Remove-Item -Recurse -Force $root }
+        try { Remove-JobTree $root }
         finally {
             foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
         }

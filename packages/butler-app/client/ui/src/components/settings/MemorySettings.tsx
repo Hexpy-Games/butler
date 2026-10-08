@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { ButtonContainer, SettingsSection, Stack, Typo } from "@/butler-ds";
+import { ButtonContainer, ScrollArea, SettingsSection, Stack, Typo } from "@/butler-ds";
 import { SettingsPage } from "./SettingsPage";
 import { useMemorySummary } from "./hooks/useMemorySummary";
 import { useInstructions } from "./hooks/useInstructions";
@@ -20,6 +21,7 @@ export function MemorySettings() {
   const copy = appCopy.settings;
   const summary = useMemorySummary();
   const instructions = useInstructions(summary.reload);
+  const [expanded, setExpanded] = useState<string>();
   const operation = useMemoryOperation(summary.inventory?.operation, summary.reload);
   const project = useProjectMemory(summary.projects);
   const reset = useMemoryReset(summary.inventory?.operation, summary.reload);
@@ -33,8 +35,11 @@ export function MemorySettings() {
     <SettingsSection id="instructions" kind="list" title={copy.pageSections.instructions} description={copy.pageSectionDescriptions.instructions}
       state={instructions.state} emptyMessage={instructions.unavailable ? copy.memory.unavailable : copy.memory.instructionsEmpty} onRetry={instructions.reload}>
       <MemoryFacts card={card("pinned")} />
-      {instructions.rows.map((item) => <InstructionRow key={item.handle} item={item} deleting={instructions.deleting === item.handle}
-        locked={Boolean(instructions.deleting) || reset.kind === "project_memory"} lockReason={reset.kind === "project_memory" ? copy.memory.inUse : undefined} onDelete={() => { void instructions.remove(item); }} />)}
+      <ScrollArea maxHeight="sm" dataTestClass="instruction-list"><Stack gap="none">
+        {instructions.rows.map((item) => <InstructionRow key={item.handle} item={item} open={expanded === item.handle}
+          onToggle={() => setExpanded(expanded === item.handle ? undefined : item.handle)} deleting={instructions.deleting === item.handle}
+          locked={Boolean(instructions.deleting) || reset.kind === "project_memory"} lockReason={reset.kind === "project_memory" ? copy.memory.inUse : undefined} onDelete={() => { void instructions.remove(item); }} />)}
+      </Stack></ScrollArea>
     </SettingsSection>
     <SettingsSection id="chat-memory" kind="status" title={copy.pageSections.chatMemory} description={copy.pageSectionDescriptions.chatMemory}
       state={cardState(summary.state, chat)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}

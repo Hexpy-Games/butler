@@ -43,6 +43,13 @@ pub(super) fn codex_account_id(auth: &Map<String, Value>, token: &str) -> Option
         })
 }
 
+pub(super) fn expires_at(token: &str) -> Option<f64> {
+    decode_jwt_payload(token)?
+        .get("exp")?
+        .as_f64()
+        .map(|seconds| seconds * 1000.0)
+}
+
 fn decode_jwt_payload(token: &str) -> Option<Map<String, Value>> {
     let part = token.split('.').nth(1)?;
     let mut normalized = part

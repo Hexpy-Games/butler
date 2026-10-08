@@ -19,11 +19,24 @@ async fn preview_channel_persists_and_orders_semver() -> Result<(), HarnessError
     std::fs::write(&manifest, json!({"artifacts":artifacts}).to_string())?;
     let setup = setup.env("BUTLER_APP_UPDATE_MANIFEST", manifest.to_string_lossy());
     let mut s = setup.start().await?;
-    let off =
+    assert_eq!(s.gw.settings().await?["update_previews"], true);
+    let fresh =
         s.gw.post("/updates/check", json!({"component":"app"}))
             .await?;
-    assert_eq!(off.status, 200, "{}", off.text);
-    assert_eq!(off.data()["components"][0]["update_available"], false);
+    assert_eq!(fresh.status, 200, "{}", fresh.text);
+    assert_eq!(fresh.data()["receive_previews"], true);
+    assert_eq!(
+        fresh.data()["components"][0]["available_version"],
+        "0.1.0-preview.10"
+    );
+    let config_path = s.sandbox.data.join("butler.config.json");
+    if config_path.exists() {
+        let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+        assert!(
+            saved.pointer("/update/previews").is_none(),
+            "default must not be persisted"
+        );
+    }
     let enabled =
         s.gw.patch("/settings", json!({"update_previews":true}))
             .await?;
@@ -45,6 +58,16 @@ async fn preview_channel_persists_and_orders_semver() -> Result<(), HarnessError
         s.gw.patch("/settings", json!({"update_previews":false}))
             .await?;
     assert_eq!(disabled.status, 200);
+    assert_eq!(disabled.data()["update_previews"], false);
+    s.restart().await?;
+    assert_eq!(s.gw.settings().await?["update_previews"], false);
+    let off =
+        s.gw.post("/updates/check", json!({"component":"app"}))
+            .await?;
+    assert_eq!(off.data()["receive_previews"], false);
+    assert_eq!(off.data()["components"][0]["update_available"], false);
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+    assert_eq!(saved["update"]["previews"], false);
     let hidden = s.gw.get("/updates").await?;
     assert_eq!(hidden.data()["components"][0]["update_available"], false);
     let settled =
@@ -110,6 +133,12 @@ async fn stable_install_can_receive_preview_then_newer_stable() -> Result<(), Ha
         .env("BUTLER_APP_UPDATE_MANIFEST", manifest.to_string_lossy())
         .start()
         .await?;
+    assert_eq!(s.gw.settings().await?["update_previews"], false);
+    let fresh =
+        s.gw.post("/updates/check", json!({"component":"app"}))
+            .await?;
+    assert_eq!(fresh.data()["receive_previews"], false);
+    assert_eq!(fresh.data()["components"][0]["update_available"], false);
     assert_eq!(
         s.gw.patch("/settings", json!({"update_previews":true}))
             .await?

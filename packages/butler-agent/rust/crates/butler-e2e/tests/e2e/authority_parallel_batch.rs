@@ -41,6 +41,18 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
         assert_eq!(turn_state(&paused), "waiting_for_form", "{paused}");
         let cards = s.gw.approval_requests("general").await?;
         assert_eq!(cards.len(), 3, "every sibling must appear in the App query");
+        let messages = s.gw.messages("general").await?;
+        let assistant: Vec<_> = messages
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .collect();
+        assert_eq!(
+            assistant.len(),
+            1,
+            "one open approval segment: {messages:?}"
+        );
+        assert_eq!(assistant[0]["status"], "streaming");
+        let message_id = assistant[0]["id"].clone();
         assert_eq!(script.requests.lock().unwrap().len(), 1);
         // Restart proves the concurrent results survive without reissuing the batch.
         s.restart().await?;
@@ -79,6 +91,18 @@ async fn parallel_file_approvals_are_visible_and_individually_resumable() -> Res
             s.gw.wait_terminal("general", &id, Duration::from_secs(20))
                 .await?;
         assert_eq!(turn_state(&done), "delivered", "{done}\n{}", s.agent.logs());
+        let messages = s.gw.messages("general").await?;
+        let assistant: Vec<_> = messages
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .collect();
+        assert_eq!(
+            assistant.len(),
+            1,
+            "siblings resume the same segment: {messages:?}"
+        );
+        assert_eq!(assistant[0]["id"], message_id);
+        assert_eq!(assistant[0]["status"], "delivered");
         assert!(s.gw.approval_requests("general").await?.is_empty());
         let requests = script.requests.lock().unwrap().clone();
         assert_eq!(

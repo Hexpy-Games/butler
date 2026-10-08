@@ -27,9 +27,33 @@ mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::{tool_rows, turn_state},
-    scenario::Setup,
+    scenario::{Scenario, Setup},
 };
 use serde_json::Value;
+
+async fn log_approval_timeout_diagnostics(
+    scenario: &Scenario,
+    chat_id: &str,
+    turn_id: &str,
+) -> Result<(), HarnessError> {
+    let turn = scenario.gw.turn(chat_id, turn_id).await?;
+    let approvals = scenario.gw.approval_requests(chat_id).await?;
+    let matching_approvals = approvals
+        .iter()
+        .filter(|approval| approval["source_turn_id"] == turn_id)
+        .count();
+    eprintln!(
+        "Windows command approval timeout: turn={turn_id} state={} pending_approvals={} matching_approvals={matching_approvals}",
+        turn.as_ref().map(turn_state).unwrap_or("missing"),
+        approvals.len()
+    );
+    for line in scenario.agent.logs().lines().filter(|line| {
+        line.contains("command_phase_timing") || line.contains("command_process_timing")
+    }) {
+        eprintln!("{line}");
+    }
+    Ok(())
+}
 
 async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     let mut setup = Setup::new(case)?
