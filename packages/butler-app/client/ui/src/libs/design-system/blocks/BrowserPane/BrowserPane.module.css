@@ -35,6 +35,8 @@
 }
 
 .toolbar {
+  container-name: browser-toolbar;
+  container-type: inline-size;
   display: flex;
   min-width: 0;
   height: var(--browser-band-height);
@@ -58,6 +60,18 @@
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+/* Narrow panes keep the address readable: only the last page action (More,
+   which carries the others) stays. */
+@container browser-toolbar (width < 520px) {
+  .address {
+    min-width: calc(var(--space-4xl) * 3);
+  }
+
+  .group:last-child [data-slot="button-container"] > :not(:last-child) {
+    display: none;
+  }
 }
 
 .stage {

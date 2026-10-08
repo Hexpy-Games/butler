@@ -33,7 +33,9 @@ page card through `panelId`.
 
 ## Responsive behavior
 The pane fills the split pane (or the workspace row) and never sets a width;
-the toolbar's address takes the remaining width and truncates.
+the toolbar's address takes the remaining width and truncates. Below a 520px
+toolbar only the last page action stays (make it More, carrying the others),
+so the address keeps at least 120px.
 
 ## Wrong use cases
 - Do not lay glass over the page top: the page is a native view that glass
