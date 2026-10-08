@@ -48,7 +48,7 @@ const labels = {
     showMore: "더 보기",
     showLess: "접기",
     token: "배포 전에 https://example.com/releases/2026-09-25/artifacts/butler-desktop-universal-build-0123456789abcdef0123456789abcdef/manifest.json?download=true&signature=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 를 확인해 줘.",
-    placeholder: "Butler에게 물어보기",
+    placeholder: "버틀러에게 물어보기",
     messages: [
       "보내기 전에 최종 보고서에 스크린샷을 추가해 줘.",
       "MCP 비밀 값은 계속 가려진다는 점도 적어 줘.",

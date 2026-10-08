@@ -4,7 +4,7 @@ pub(super) const ROUTES: &[Entry] = &[
     route!(
         "install",
         "butler install --from ARCHIVE|URL [--sha256 HEX] [--no-restart]",
-        "Butler를 설치합니다. / Install Butler.",
+        "버틀러를 설치합니다. / Install Butler.",
         "core"
     ),
     route!(
@@ -34,7 +34,7 @@ pub(super) const ROUTES: &[Entry] = &[
     route!(
         "open",
         "butler open [--no-browser] [--json] [--data PATH]",
-        "Butler를 엽니다. / Open Butler.",
+        "버틀러를 엽니다. / Open Butler.",
         "core"
     ),
     route!(
@@ -107,7 +107,7 @@ pub(super) const ROUTES: &[Entry] = &[
     route!(
         "uninstall",
         "butler uninstall [--keep-data|--purge-data] --yes [--dry-run]",
-        "Butler를 제거합니다. / Uninstall Butler.",
+        "버틀러를 제거합니다. / Uninstall Butler.",
         "core"
     ),
     route!(

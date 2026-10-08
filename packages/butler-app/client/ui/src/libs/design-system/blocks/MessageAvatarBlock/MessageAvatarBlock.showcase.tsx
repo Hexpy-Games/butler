@@ -13,7 +13,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { system: "System messages keep a Bot avatar; assistant turns show the Butler mark in the status line instead.", roles: "assistant (active) · user · system" },
-  "ko-KR": { system: "시스템 메시지는 Bot 아바타를 쓰고, 어시스턴트 턴은 상태 줄에 Butler 마크를 보여 줍니다.", roles: "assistant (active) · user · system" },
+  "ko-KR": { system: "시스템 메시지는 Bot 아바타를 쓰고, 어시스턴트 턴은 상태 줄에 버틀러 마크를 보여 줍니다.", roles: "assistant (active) · user · system" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

@@ -18,7 +18,7 @@ const labels = {
     back: "Back", accept: "Accept",
   },
   "ko-KR": {
-    steps: ["언어", "안전", "설치", "모델"], title: "안전", body: "Butler는 허용한 권한으로 컴퓨터에서 작업합니다.",
+    steps: ["언어", "안전", "설치", "모델"], title: "안전", body: "버틀러는 허용한 권한으로 컴퓨터에서 작업합니다.",
     items: ["전체 권한을 주기 전에 명령을 확인하세요.", "공유 프로젝트에 비밀 정보를 두지 마세요.", "언제든 워커를 멈출 수 있습니다."],
     back: "뒤로", accept: "동의",
   },
@@ -47,7 +47,7 @@ function Wizard({ context, tone }: { context: ShowcaseRenderContext; tone: "ligh
 
 const focusLabels = {
   "en-US": { title: "Welcome to Butler", body: "Butler works for you on this computer.", agree: "Agree and continue" },
-  "ko-KR": { title: "반갑습니다", body: "Butler는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
+  "ko-KR": { title: "반갑습니다", body: "버틀러는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
 } as const;
 
 function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {

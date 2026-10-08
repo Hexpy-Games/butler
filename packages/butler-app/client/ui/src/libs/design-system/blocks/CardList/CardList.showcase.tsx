@@ -28,7 +28,7 @@ const labels = {
       ["project-ledger", "프로젝트 기록을 살펴보고 조회하고 검증합니다.", "core", true],
       ["browser", "로컬 웹 대상을 열어 살펴봅니다.", "user", false],
       ["butler-ship-feature", "명세, 작업, 검토, 검증 순서로 작업을 진행합니다.", "core", true],
-      ["butler-design-system", "Butler 디자인 시스템으로만 UI를 조립합니다.", "project", true],
+      ["butler-design-system", "버틀러 디자인 시스템으로만 UI를 조립합니다.", "project", true],
     ],
   },
 } as const;
