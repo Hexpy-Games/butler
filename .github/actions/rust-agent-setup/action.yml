@@ -7,6 +7,9 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  restore-cargo-target:
+    description: Restore Cargo compilation caches; archive-only consumers need none.
+    default: 'true'
   snapshot-profile:
     description: Cargo profile for the target snapshot lane.
     default: ""
@@ -158,6 +161,7 @@ runs:
     # The quota-limited cache holds downloaded dependencies only. Persistent
     # target outputs have one verified restore path, from verified GHCR OCI artifacts.
     - name: Cache Cargo downloads
+      if: inputs.restore-cargo-target == 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
@@ -182,6 +186,7 @@ runs:
         if [ -n "$SNAPSHOT_TARGET" ]; then echo "CARGO_BUILD_TARGET=$SNAPSHOT_TARGET" >> "$GITHUB_ENV"; fi
 
     - name: Restore persistent main Cargo snapshot and validated source freshness
+      if: inputs.restore-cargo-target == 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
