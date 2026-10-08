@@ -79,11 +79,13 @@ jobs:
           RUSTFLAGS: -C target-feature=+crt-static
           BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
         run: |
-          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/product-features.py"
+          $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: ./.github/actions/publish-windows-target
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
@@ -188,6 +190,13 @@ jobs:
           cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve successful runner-local debug target
+        if: steps.build.outcome == 'success'
+        env:
+          TARGET_SNAPSHOT_PROFILE: debug
+          TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort dev
       - name: Upload Cargo build timings
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

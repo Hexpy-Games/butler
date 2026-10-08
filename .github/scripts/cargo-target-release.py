@@ -83,11 +83,11 @@ def download(entry, destination):
     ci_oci.fetch(entry, destination)
 
 
-def fetch_snapshot(published, manifest, directory, expected):
+def fetch_snapshot(published, manifest, directory, expected, compatible=False):
     download(manifest, directory / 'generation.json')
     generation = json.loads((directory / 'generation.json').read_text())
     metadata = generation['metadata']
-    if metadata['identity'] != expected:
+    if not cache.matches(metadata['identity'], expected, compatible):
         raise ValueError('Cargo snapshot identity mismatch')
     trusted(metadata)
     if not generation['chunks'] or len(set(generation['chunks'])) != len(generation['chunks']):
@@ -104,7 +104,7 @@ def fetch_snapshot(published, manifest, directory, expected):
     source_name = manifest['name'][:-5] + '-sources.json'
     download(assets[source_name], directory / 'sources.json')
     (directory / 'cache.json').write_text(json.dumps(metadata))
-    cache.verify(directory, expected)
+    cache.verify(directory, expected, compatible)
 
 
 def restore(expected):
@@ -112,24 +112,22 @@ def restore(expected):
     if local and restore_local(local, expected):
         return True
     published = release(tag_name(expected))
+    compatible = False
+    if not published:
+        published = release(compatible_tag(expected))
+        compatible = True
     candidates = generations(published['assets']) if published else []
     if not candidates:
         print('No persistent CI snapshot for this lane; cold Cargo build follows.')
-        if local:
-            save_local(local, expected)
         return False
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
         directory = Path(temporary)
         try:
-            fetch_snapshot(published, candidates[0], directory, expected)
+            fetch_snapshot(published, candidates[0], directory, expected, compatible)
         except UnsuccessfulProducer:
             print('Cargo snapshot producer is not successful yet; cold Cargo build follows.')
-            if local:
-                save_local(local, expected)
             return False
-        restore_tree(directory, expected)
-    if local:
-        save_local(local, expected)
+        restore_tree(directory, expected, compatible)
     return True
 
 
@@ -139,7 +137,7 @@ def persistent_target(expected):
         return None
     # Ref isolation prevents a PR's build scripts/outputs entering main or tags.
     ref = cache.hashlib.sha256(os.environ['GITHUB_REF'].encode()).hexdigest()[:16]
-    target = Path(base) / ref / tag_name(expected)
+    target = Path(base) / ref / compatible_tag(expected)
     target.mkdir(parents=True, exist_ok=True)
     os.environ['CARGO_TARGET_DIR'] = str(target)
     with open(os.environ['GITHUB_ENV'], 'a') as output:
@@ -152,25 +150,26 @@ def restore_local(target, expected):
     if not marker.is_file():
         return False
     metadata = json.loads(marker.read_text())
-    if metadata['identity'] != expected:
+    if not cache.matches(metadata['identity'], expected, compatible=True):
         raise ValueError('Local Cargo target identity mismatch')
     sources = target / 'ci-local-sources.json'
     if cache.digest(sources) != metadata['sources_sha256']:
         raise ValueError('Local Cargo source digest mismatch')
     cache.source_times.restore(Path(os.environ['GITHUB_WORKSPACE']), json.loads(sources.read_text()))
-    save_local(target, expected)
     print('Reused isolated runner-local Cargo target; Cargo verifies unit fingerprints.')
     return True
 
 
 def save_local(target, expected):
+    # Capture only after a successful build. A failed compile must retain the
+    # previous digest so changed sources stay dirty on the next checkout.
     sources = target / 'ci-local-sources.json'
     sources.write_text(json.dumps(cache.source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
     (target / 'ci-local.json').write_text(json.dumps(dict(identity=expected, sources_sha256=cache.digest(sources))))
 
 
-def restore_tree(directory, expected):
-    cache.verify(directory, expected)
+def restore_tree(directory, expected, compatible=False):
+    cache.verify(directory, expected, compatible)
     directory = directory.resolve()
     target = Path(os.environ.get('CARGO_TARGET_DIR', 'target')).absolute()
     # Do not merge newer/foreign fingerprints or executables into the snapshot.
@@ -194,6 +193,10 @@ def restore_tree(directory, expected):
 
 def tag_name(expected):
     return cache.artifact_name(expected).removeprefix('cargo-build-cache-')
+
+
+def compatible_tag(expected):
+    return 'compatible-' + tag_name(cache.compatible_identity(expected))
 
 
 def split(archive, directory, prefix):
@@ -243,7 +246,7 @@ def publish(directory, run_id):
         raise ValueError('Cargo snapshot run mismatch')
     trusted(metadata, publishing=True)
     cache.verify(directory, metadata['identity'])
-    tag = tag_name(metadata['identity'])
+    tag = compatible_tag(metadata['identity'])
     prefix = f'{int(run_id)}-{int(metadata["run_attempt"])}'
     reference = f'{ci_oci.REGISTRY}/cargo-target:{tag}--{prefix}'
     committed = ci_oci.manifest(reference, anonymous=False)
@@ -265,6 +268,7 @@ def publish(directory, run_id):
             if json.loads(download_manifest.read_text())['metadata'] != metadata:
                 raise ValueError('Committed Cargo generation cannot be overwritten')
     ci_oci.checked('tag', reference, tag, anonymous=False)
+    ci_oci.checked('tag', reference, tag_name(metadata['identity']), anonymous=False)
     if os.environ.get('BUTLER_OCI_LAYOUT') != '1':
         prune(tag, prefix)
 
