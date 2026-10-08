@@ -818,7 +818,6 @@ dependencies = [
  "butler-platform",
  "embed-manifest",
  "semver",
- "tokio",
 ]
 
 [[package]]

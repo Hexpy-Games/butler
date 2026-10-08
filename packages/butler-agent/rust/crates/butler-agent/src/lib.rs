@@ -12,11 +12,11 @@
 //! - `butler-memory`: cognition, profile, work records, write coordination.
 //! - `butler-gateway`: the App HTTP and WebSocket API.
 //!
-//! Start reading at [`main`] and `host::runtime`, which composes every service.
+//! Start reading at [`run`] and `host::runtime`, which composes every service.
 
 mod host;
 
-pub use host::cli::command::{Command, main};
+pub use host::cli::command::{Command, main, run};
 
 // The historical butler_agent API remains in the provenance-free butler-host package.
 pub use host::build_info::BuildInfo;
