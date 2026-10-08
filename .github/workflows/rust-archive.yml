@@ -11,6 +11,9 @@ on:
       clippy:
         type: boolean
         default: false
+      product-gate:
+        type: boolean
+        default: false
       ort-mode:
         type: string
         default: prebuilt-ort
@@ -120,13 +123,6 @@ jobs:
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-${{ inputs.platform }}
-          path: ${{ runner.temp }}/rust-archive/*
-          if-no-files-found: error
-          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
-          compression-level: 1
       - uses: ./.github/actions/publish-cargo-target
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
@@ -134,3 +130,20 @@ jobs:
           mode: ${{ inputs.ort-mode }}
           kind: dev
           producer: Build archives (${{ inputs.platform }})
+      - name: Build gate-off Agent using the same workspace dependency features
+        if: inputs.product-gate
+        env:
+          BUTLER_FEATURE_BROWSER: "false"
+          GITHUB_REF_NAME: v0.1.0-preview.99
+        run: |
+          # Keep the default-on archive/harness and snapshot intact. Reuse the
+          # unified dependency graph instead of a cold package-only build.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8
+          cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive/*
+          if-no-files-found: error
+          retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
+          compression-level: 1

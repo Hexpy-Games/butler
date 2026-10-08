@@ -51,7 +51,7 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
 
   linux-clippy:
-    needs: changes
+    needs: [changes, linux-archive]
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy']
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
@@ -75,19 +75,30 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-linux-x64
+          path: ${{ runner.temp }}/rust-archive
+      - name: Prepare prebuilt product gate binaries
+        run: chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/butler-agent-browser-off"
       - name: Verify existing Browser stub contracts and product gate (default on)
         env:
           BUTLER_E2E_TIER: stub
+          BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent
         run: |
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e browser_outputs:: -- --nocapture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest run --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD" -E 'binary(=e2e) and test(browser_outputs::)' --no-capture
       - name: Verify Browser product gate with real stub turns (release off)
         env:
           BUTLER_FEATURE_BROWSER: "false"
           BUTLER_E2E_EXPECT_BROWSER: "false"
           BUTLER_E2E_TIER: stub
+          BUTLER_E2E_BIN: ${{ runner.temp }}/rust-archive/butler-agent-browser-off
         run: |
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --locked -p butler-core -p butler-turn -p butler-gateway -p butler-agent --lib -- -D warnings
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e browser_product_gate_controls_routes_and_model_tools -- --nocapture
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest run --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD" -E 'binary(=e2e) and test(browser_product_gate_controls_routes_and_model_tools)' --no-capture
 
   linux-native:
     permissions:
@@ -112,6 +123,7 @@ jobs:
     uses: ./.github/workflows/rust-archive.yml
     with:
       ort-mode: prebuilt-ort
+      product-gate: true
 
   linux-perf-archive:
     permissions:
