@@ -163,7 +163,8 @@ fn source_excerpts(sources: &Value) -> Value {
     if let Some(items) = sources.as_array_mut() {
         for item in items {
             if let Some(object) = item.as_object_mut() {
-                for key in ["safeExcerpt"] {
+                {
+                    let key = "safeExcerpt";
                     if let Some(text) = object.get(key).and_then(Value::as_str) {
                         let excerpt = excerpts::text(
                             text,

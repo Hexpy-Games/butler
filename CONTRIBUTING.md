@@ -19,7 +19,7 @@ This guide covers the repository layout, running Butler from source, the checks 
 
 ### Rust crates
 
-The workspace in `packages/butler-agent/rust` uses Rust 1.91.0, pinned in `rust-toolchain.toml`.
+The workspace in `packages/butler-agent/rust` uses Rust 1.99.0, pinned in `rust-toolchain.toml`.
 
 | Crate | Role |
 | --- | --- |

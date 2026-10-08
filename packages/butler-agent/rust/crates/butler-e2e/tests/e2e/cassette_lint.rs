@@ -14,6 +14,27 @@ use std::path::Path;
 use butler_e2e::e2e::cassette::{self, load_from};
 use butler_e2e::e2e::sanitize;
 
+// test-category: security
+#[test]
+fn sanitization_redacts_every_array_item_and_preserves_public_content() {
+    let body = serde_json::json!([
+        {"account_id": "fixture-first", "position": 1},
+        {"rows": [{"account_id": "fixture-second", "position": 2}]},
+        {"position": 3, "label": "kept"}
+    ]);
+    let sanitized =
+        sanitize::sanitize_body_at(&body.to_string(), &sanitize::Placeholders::default(), 0);
+    let actual: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+    assert_eq!(
+        actual,
+        serde_json::json!([
+            {"account_id": "{{ACCOUNT}}", "position": 1},
+            {"rows": [{"account_id": "{{ACCOUNT}}", "position": 2}]},
+            {"position": 3, "label": "kept"}
+        ])
+    );
+}
+
 fn scenario_dirs(root: &Path, prefix: &str, out: &mut Vec<(String, std::path::PathBuf)>) {
     let Ok(entries) = fs::read_dir(root) else {
         return;

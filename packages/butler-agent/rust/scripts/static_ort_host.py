@@ -32,8 +32,8 @@ def command(args, *, cwd=None):
 def rust_identity(rust_target):
     rustc = command(["rustc", "--version", "--verbose"], cwd=RUST_ROOT)
     rustc_fields = dict(line.split(": ", 1) for line in rustc.splitlines() if ": " in line)
-    if rustc_fields.get("release") != "1.91.0" or rustc_fields.get("host") != rust_target:
-        fail("Static ORT preparation requires the pinned Rust 1.91.0 toolchain.")
+    if rustc_fields.get("release") != "1.99.0" or rustc_fields.get("host") != rust_target:
+        fail("Static ORT preparation requires the pinned Rust 1.99.0 toolchain.")
     return rustc
 
 

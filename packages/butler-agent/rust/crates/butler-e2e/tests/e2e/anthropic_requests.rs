@@ -88,7 +88,7 @@ async fn anthropic_requests_accept_registered_tool_schemas() -> Result<(), Harne
     let (_, turn) = s.turn("general", "Reply briefly.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let bodies = requests.lock().unwrap().clone();
-    assert!(!bodies.is_empty());
+    assert_ne!(bodies, [] as [serde_json::Value; 0]);
     for body in &bodies {
         assert!(body["max_tokens"].as_u64().is_some());
         let tools = body["tools"].as_array().unwrap();

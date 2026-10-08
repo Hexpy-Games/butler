@@ -412,9 +412,10 @@ async fn serves_clients(base_url: &str, auth: butler_gateway::gateway::LocalAuth
     if !response.status().is_success() {
         return false;
     }
-    response.json::<Value>().await.ok().is_some_and(|body| {
-        body["protocol_version"] == "butler.app.v1" && body["data"]["ok"] == true
-    })
+    response
+        .json::<Value>()
+        .await
+        .is_ok_and(|body| body["protocol_version"] == "butler.app.v1" && body["data"]["ok"] == true)
 }
 
 #[expect(

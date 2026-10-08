@@ -68,7 +68,7 @@ class TargetSnapshot(unittest.TestCase):
 
     # test-category: pure-logic
     def test_key_changes_for_each_compatibility_input(self):
-        with patch.object(cache, 'output', return_value='rustc 1.91\nhost: x86_64-unknown-linux-gnu'), \
+        with patch.object(cache, 'output', return_value='rustc 1.99\nhost: x86_64-unknown-linux-gnu'), \
                 patch.object(cache, 'digest', return_value='locked'):
             expected = cache.identity('linux-x64', 'prebuilt-ort', 'native')
             for variable in ['RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_PROFILE_RELEASE_LTO',

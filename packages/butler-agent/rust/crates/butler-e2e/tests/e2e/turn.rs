@@ -150,7 +150,7 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    assert!(!answer.trim().is_empty());
+    assert_ne!(answer.trim(), "");
     assert_eq!(
         created["payload"]["message"]["text"],
         answer.as_str(),

@@ -205,7 +205,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 assert_eq!(support::active_rules(&s.sandbox.data).len(), 1);
             } else {
                 assert!(!section.contains("6401"));
-                assert!(support::active_rules(&s.sandbox.data).is_empty());
+                assert_eq!(support::active_rules(&s.sandbox.data), [] as [serde_json::Value; 0]);
             }
             eprintln!(
                 "RULES-CRASH stage={stage} tool={tool_name} applied_once=true active_and_followup_delivered=true admission_while_leased=true"
@@ -348,7 +348,10 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
     s.agent.kill9()?;
     s.restart().await?;
     support::until(|| !root.join("pending.json").exists()).await;
-    assert!(support::active_rules(&s.sandbox.data).is_empty());
+    assert_eq!(
+        support::active_rules(&s.sandbox.data),
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(std::fs::read_dir(root.join("operations"))?.count(), 2);
     eprintln!(
         "RULES-LEASE-CANCEL cancelled_waiter_writes=0 busy_waiter_writes=0 holding_operation_recovered=true"

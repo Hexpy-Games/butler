@@ -199,7 +199,7 @@ fn usage(s: &Scenario) -> Result<(), HarnessError> {
         .iter()
         .filter(|row| row["model"] == "anthropic/claude-sonnet-5")
         .collect();
-    assert!(!rows.is_empty());
+    assert_ne!(rows, [] as [&serde_json::Value; 0]);
     for row in rows {
         assert_eq!(row["promptTokens"], 600);
         assert_eq!(row["cachedTokens"], 200);
@@ -268,7 +268,7 @@ async fn anthropic_cache_survives_image_projection() -> Result<(), HarnessError>
                 .contains("## Conversation history")
         );
         assert_eq!(blocks[1]["type"], "image");
-        assert!(!blocks[1]["source"]["data"].as_str().unwrap().is_empty());
+        assert_ne!(blocks[1]["source"]["data"].as_str().unwrap(), "");
         assert!(
             blocks[2]["text"]
                 .as_str()

@@ -36,13 +36,22 @@ runs:
         }
         @("OWNER_JOB_ROOT=$root", "CARGO_TARGET_DIR=$cache/${{ inputs.workflow }}",
           "CARGO_HOME=$env:USERPROFILE\.cargo", "RUSTUP_HOME=$env:USERPROFILE\.rustup",
-          "PYTHONDONTWRITEBYTECODE=1", "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=",
+          "PYTHONDONTWRITEBYTECODE=1", "CARGO_BUILD_JOBS=8", "RUSTC_WRAPPER=", "RUSTUP_TOOLCHAIN=1.99.0",
           "BUTLER_SECRET_STORE=file", "BUTLER_PLATFORM_SYSTEM_SECRETS=0", "BUTLER_APP_DISABLE_SHELL_REGISTRATION=1",
           "BUN_INSTALL_CACHE_DIR=$cache/bun",
           "HOME=$root/home", "BUTLER_DATA=$root/data", "LOCALAPPDATA=$root/local",
           "APPDATA=$root/roaming", "TEMP=$root/tmp", "TMP=$root/tmp",
           "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") >> $env:GITHUB_ENV
         exit 0
+    - name: Verify existing pinned Rust toolchain
+      shell: pwsh
+      run: |
+        rustup run 1.99.0 rustc --version
+        if ($LASTEXITCODE -ne 0) { throw 'Rust 1.99.0 must already be installed on the owner runner.' }
+        rustup run 1.99.0 cargo clippy --version
+        if ($LASTEXITCODE -ne 0) { throw 'The existing Rust 1.99.0 toolchain requires Clippy.' }
+        rustup run 1.99.0 rustfmt --version
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Verify or prepare pinned static ORT
       shell: pwsh
       working-directory: packages/butler-agent/rust

@@ -213,12 +213,9 @@ fn supported_image_models_carry_sourced_known_capability_limits() {
         if model.image_carrier_protocol.as_deref() == Some("zai_mcp_vision") {
             continue;
         }
-        assert!(
-            !model
-                .image_accepted_mime_types
-                .clone()
-                .unwrap_or_default()
-                .is_empty()
+        assert_ne!(
+            model.image_accepted_mime_types.clone().unwrap_or_default(),
+            [] as [std::string::String; 0]
         );
         let sources = model.image_limit_sources.clone().unwrap_or_default();
         for (field, value) in [

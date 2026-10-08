@@ -91,7 +91,10 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
                 .to_string()
                 .contains("protected-canary")
         );
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     } else if protected == Some("data") {
         assert_eq!(output["exit_code"], 0, "{output}");
         assert_eq!(
@@ -123,7 +126,10 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
                 .any(|m| m["role"] == "assistant" && m["text"] == super::stub::ANSWER)
         );
         if access == Access::FullAccess {
-            assert!(s.gw.approval_requests("general").await?.is_empty());
+            assert_eq!(
+                s.gw.approval_requests("general").await?,
+                [] as [serde_json::Value; 0]
+            );
         }
     }
     eprintln!(

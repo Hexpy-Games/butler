@@ -350,7 +350,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         }
     }
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     s.finish().await?;
     server.abort();

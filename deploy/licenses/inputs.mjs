@@ -86,6 +86,7 @@ function collectFiles(base, directory, accept) {
 
 export function inputFiles(base = root) {
   const files = ["bun.lock", "packages/butler-agent/rust/Cargo.lock",
+    "packages/butler-agent/rust/rust-toolchain.toml",
     "packages/butler-agent/rust/scripts/static-ort.lock.json",
     "deploy/licenses/generate.mjs", "deploy/licenses/inputs.mjs",
     "deploy/licenses/refresh.py", "deploy/licenses/disclosure.py",

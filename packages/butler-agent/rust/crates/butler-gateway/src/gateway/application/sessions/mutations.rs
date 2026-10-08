@@ -212,7 +212,7 @@ fn mutate_session(
         ));
     }
     let title = title.unwrap_or(current.title);
-    let archived = archived.map_or(current.archived, |value| value);
+    let archived = archived.unwrap_or(current.archived);
     let now = clock.now_iso();
     tx.execute(
         "UPDATE chats SET title=?1,archived=?2,updated_at=?3 WHERE id=?4",

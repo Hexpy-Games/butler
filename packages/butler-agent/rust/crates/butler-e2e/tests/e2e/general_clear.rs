@@ -137,7 +137,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         eprintln!("{line}");
     }
     let archived = cleared.data()["archived_session"]["id"].as_str().unwrap();
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(ordered_message_ids(&db, archived)?, ordered_before);
     let moved_file: String = db.query_row(
         "SELECT owner_session_id FROM message_files WHERE id=?1",
@@ -161,7 +164,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     assert_eq!(std::fs::read(&transferred.0)?, transcript_bytes);
     support::verify_archive_cursors(&s, archived).await?;
     let archived_messages = s.gw.messages(archived).await?;
-    assert!(!archived_messages.is_empty());
+    assert_ne!(archived_messages, [] as [serde_json::Value; 0]);
     let count: i64 = db.query_row(
         "SELECT COUNT(*) FROM app_owned_messages WHERE chat_id=?1",
         [archived],
@@ -285,7 +288,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         )
         .await?;
     assert_eq!(again.status, 200, "{}", again.text);
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert_ne!(again.data()["archived_session"]["id"], archived);
     butler_e2e::assert_wall_clock_budget!(
         write_lock,

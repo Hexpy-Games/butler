@@ -298,7 +298,7 @@ async fn mem_judge_non_gated_recall_makes_no_call() -> Result<(), HarnessError> 
     let s = setup().await?;
     let baseline = recall_question(&s, "faster", EXACT).await?;
     let accurate = recall_question(&s, "accurate", EXACT).await?;
-    assert!(!baseline.is_empty());
+    assert_ne!(baseline, [] as [serde_json::Value; 0]);
     assert_eq!(episode_ids(&accurate), episode_ids(&baseline));
     assert_eq!(judge_count(&s), 0);
     s.finish().await

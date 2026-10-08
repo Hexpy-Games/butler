@@ -438,7 +438,10 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         verify(&s, index, &output)?;
     }
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests(&chat).await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests(&chat).await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     eprintln!(
         "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",

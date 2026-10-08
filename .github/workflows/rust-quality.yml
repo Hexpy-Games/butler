@@ -43,7 +43,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.99.0
           components: rustfmt
       - name: Check formatting
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check

@@ -157,8 +157,7 @@ fn read_windowed_session_tools(path: &Path, since_ts: Option<f64>) -> Value {
     let mut line = Vec::new();
     while reader
         .read_until(b'\n', &mut line)
-        .ok()
-        .is_some_and(|length| length > 0)
+        .is_ok_and(|length| length > 0)
     {
         if let Ok(event) = serde_json::from_slice::<Value>(&line) {
             let in_window = since_ts.is_none_or(|since| {

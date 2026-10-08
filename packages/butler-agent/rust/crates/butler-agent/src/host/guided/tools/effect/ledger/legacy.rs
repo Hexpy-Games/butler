@@ -75,16 +75,13 @@ pub(in crate::host::guided::tools::effect) async fn classify(
     if missing_kind && inferred.is_none() {
         return BlockerRelation::Ambiguous;
     }
-    let latest = matches
-        .into_iter()
-        .filter(|update| {
-            update
-                .get("kind")
-                .and_then(Value::as_str)
-                .or(inferred.as_deref())
-                == Some(kind)
-        })
-        .next_back();
+    let latest = matches.into_iter().rfind(|update| {
+        update
+            .get("kind")
+            .and_then(Value::as_str)
+            .or(inferred.as_deref())
+            == Some(kind)
+    });
     let Some(Value::Object(mut comparable)) = latest else {
         return BlockerRelation::Overlapping;
     };

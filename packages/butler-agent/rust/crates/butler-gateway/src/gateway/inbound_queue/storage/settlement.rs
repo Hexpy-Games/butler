@@ -184,7 +184,7 @@ pub(in crate::gateway::inbound_queue) fn recover_runtime_interruptions(
 
 /// One startup pass over legacy tombstones and aged completed records.
 fn prune_terminal_files(root: &Path) -> QueueResult<()> {
-    const PROCESSED_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+    const PROCESSED_AGE: Duration = Duration::from_hours(720);
     let now = SystemTime::now();
     for state in ["processing", "processed"] {
         let dir = root.join(state);

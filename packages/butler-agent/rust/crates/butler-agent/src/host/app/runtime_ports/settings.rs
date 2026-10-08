@@ -239,9 +239,7 @@ fn web_search_credentials(
     let mut values = serde_json::Map::new();
     for (provider, primary, accepted) in keys {
         let configured = accepted.iter().any(|name| {
-            std::env::var(name)
-                .ok()
-                .is_some_and(|value| !value.trim().is_empty())
+            std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
                 || private_environment
                     .get(*name)
                     .is_some_and(|value| !value.trim().is_empty())

@@ -27,7 +27,7 @@ def identity(platform, mode, profile, version):
     prefix = 'CARGO_PROFILE_DEV' if profile == 'dev' else 'CARGO_PROFILE_RELEASE'
     checked = 'true' if profile == 'dev' else 'false'
     return dict(schema=1, sha=output('git', 'rev-parse', 'HEAD'), platform=platform,
-                native_mode=mode, profile=profile, version=version, toolchain='1.91.0',
+                native_mode=mode, profile=profile, version=version, toolchain='1.99.0',
                 debug_assertions=os.environ.get(f'{prefix}_DEBUG_ASSERTIONS', checked),
                 overflow_checks=os.environ.get(f'{prefix}_OVERFLOW_CHECKS', checked),
                 rustflags=os.environ.get('RUSTFLAGS', ''),

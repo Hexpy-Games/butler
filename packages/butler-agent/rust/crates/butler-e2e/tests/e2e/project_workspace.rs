@@ -108,8 +108,7 @@ async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, Harness
         .iter()
         .filter_map(|request| request["input"].as_array())
         .flatten()
-        .filter(|item| item["type"] == "function_call_output")
-        .next_back()
+        .rfind(|item| item["type"] == "function_call_output")
         .expect("model receives tool feedback")["output"]
         .as_str()
         .expect("tool result JSON");
