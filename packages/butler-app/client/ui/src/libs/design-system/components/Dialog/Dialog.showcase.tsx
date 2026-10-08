@@ -96,7 +96,6 @@ function ReaderDialog({ context }: { context: ShowcaseRenderContext }) {
 }
 
 export const stories: ShowcaseStory[] = [
-  { name: "Anchored in a page card (container)", states: ["open"], render: (context) => <ContainedDialogDemo {...context} /> },
   { name: "Rename conversation", states: ["open"], render: (context) => <RenameDialog context={context} /> },
   {
     name: "Edit project description",
@@ -144,4 +143,5 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   { name: "Wide reader (size xl, scroll-body, maxHeight 3/5)", render: (context) => <ReaderDialog context={context} /> },
+  { name: "Anchored in a page card (container)", states: ["open"], render: (context) => <ContainedDialogDemo {...context} /> },
 ];
