@@ -111,7 +111,7 @@ jobs:
     with:
       runner: ubuntu-24.04
       platform: linux-x64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-archive:
     permissions:
@@ -170,7 +170,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-arm64-archive:
     permissions:

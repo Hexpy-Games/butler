@@ -2,11 +2,17 @@ name: Publish owner Windows target
 description: Publish the existing preview or debug tree with its exact build flags
 inputs:
   profile:
-    description: Existing owner build profile, ci-fast or debug
+    description: Existing owner build profile, ci-fast, release or debug
     default: ci-fast
 runs:
   using: composite
   steps:
+    - name: Match release snapshot optimization flags
+      if: inputs.profile == 'release'
+      shell: pwsh
+      run: |
+        'CARGO_PROFILE_RELEASE_LTO=thin' >> $env:GITHUB_ENV
+        'CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1' >> $env:GITHUB_ENV
     - uses: ./.github/actions/publish-cargo-target
       env:
         TARGET_SNAPSHOT_PROFILE: ${{ inputs.profile }}

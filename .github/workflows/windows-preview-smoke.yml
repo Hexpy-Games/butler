@@ -67,6 +67,28 @@ jobs:
           if-no-files-found: error
       - uses: ./.github/actions/publish-windows-target
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+      - name: Prepare static-ORT release target for tag builds
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SNAPSHOT_PROFILE: release
+          TARGET_SNAPSHOT_FEATURES: butler-agent/static-ort
+          CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+          CARGO_PROFILE_RELEASE_LTO: thin
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
+          RUSTFLAGS: -C target-feature=+crt-static
+          BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+        run: |
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/product-features.py"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort native
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: ./.github/actions/publish-windows-target
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+        with:
+          profile: release
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
