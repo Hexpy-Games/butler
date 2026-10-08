@@ -34,7 +34,7 @@ function Bar({ context, count, compact, dimmed }: { context: ShowcaseRenderConte
 function OnPage({ context, width, count }: { context: ShowcaseRenderContext; width: number; count: number }) {
   const copy = BROWSER_DEMO_COPY[context.locale];
   return (
-    <div style={{ width, maxWidth: "100%" }}>
+    <div style={{ width: "100%", maxWidth: width }}>
       <PageCardDemo locale={context.locale} band="pick" height={300} overlay={(
         <SelectionBar count={count} label={copy.picked(count)} actions={actions(context)} onClear={() => undefined} clearLabel={copy.clear} />
       )} />
@@ -64,8 +64,17 @@ export const stories: ShowcaseStory[] = [
   },
 ];
 
+/** One action keeps the matrix cell narrow; the forced states land on its buttons. */
+function MatrixBar({ locale, compact }: { locale: ShowcaseRenderContext["locale"]; compact: boolean }) {
+  const copy = BROWSER_DEMO_COPY[locale];
+  return (
+    <SelectionBar placement="inline" count={2} label={copy.picked(2)} actions={actions({ locale }).slice(0, 1)} compact={compact}
+      onClear={() => undefined} clearLabel={copy.clear} />
+  );
+}
+
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active"],
-  variants: ["Full", "Pill"],
-  render: ({ locale, variant }) => <Stack cross="start"><Bar context={{ locale }} count={2} compact={variant === "Pill"} /></Stack>,
+  variants: ["Full (one action)", "Pill"],
+  render: ({ locale, variant }) => <MatrixBar locale={locale} compact={variant === "Pill"} />,
 };

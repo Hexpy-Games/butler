@@ -41,7 +41,7 @@ function SignInPage({ locale }: ShowcaseRenderContext) {
 function PopupWindow({ context, platform, secure = true }: { context: ShowcaseRenderContext; platform: "darwin" | "win32"; secure?: boolean }) {
   const copy = COPY[context.locale];
   return (
-    <div className={fixtures.window} style={{ width: 400, maxWidth: "100%", height: 540 }}>
+    <div className={fixtures.window} style={{ width: "100%", maxWidth: 400, height: 540 }}>
       {platform === "darwin" ? <span className={fixtures.lights} aria-hidden="true"><span /><span /><span /></span> : null}
       <PopupWindowChrome host="id.example.com" secure={secure} securityLabel={secure ? copy.secure : copy.insecure} platform={platform}
         windowControls={(

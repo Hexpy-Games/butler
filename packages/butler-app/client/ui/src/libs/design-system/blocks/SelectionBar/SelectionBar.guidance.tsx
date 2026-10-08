@@ -22,7 +22,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Actions on one row of a list", use: "OverflowActionMenu" },
     { when: "Page-wide state such as pick mode itself", use: "PageBand" },
   ],
-  recipes: [{ name: "Two picks", description: "Floating at the page card's bottom centre by default; `inline` in flow.", render: () => <TwoPicks /> }],
+  recipes: [{ name: "Two picks", description: "Floating at the page card's bottom centre by default; `inline` in flow. It never overflows its room: icon actions below 620px.", render: () => <TwoPicks /> }],
   doDont: [
     {
       do: { caption: "Pass actions as data: narrow cards turn them into icon buttons with tooltips.", render: () => <TwoPicks /> },

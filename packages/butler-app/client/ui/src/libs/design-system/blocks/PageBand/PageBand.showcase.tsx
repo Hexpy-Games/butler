@@ -16,7 +16,7 @@ export const meta: ShowcaseMeta = {
 /** The band on the top edge of a card, as on a PageCard. */
 function OnCard({ children, width }: { children: ReactNode; width?: number }) {
   return (
-    <div className={fixtures.cardTop} style={{ width: width ?? "100%" }}>{children}</div>
+    <div className={fixtures.cardTop} style={{ width: "100%", maxWidth: width }}>{children}</div>
   );
 }
 

@@ -1,8 +1,33 @@
-/* A solid pill (never glass: it sits over live pages), one line always. */
+/* The host spans the room the bar may use and is the container its width
+   queries read, so the bar collapses before it would overflow (a page card,
+   a narrow cell). The bar is a solid pill (never glass: it sits over live
+   pages), one line always. */
+.host {
+  container-name: selection-bar;
+  container-type: inline-size;
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.host[data-placement="inline"] {
+  justify-content: flex-start;
+}
+
+.host[data-placement="floating"] {
+  position: absolute;
+  z-index: 3;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  left: var(--space-lg);
+  width: auto;
+  pointer-events: none;
+}
+
 .bar {
   display: flex;
   width: max-content;
-  max-width: calc(100% - var(--space-lg) * 2);
+  max-width: 100%;
   height: var(--browser-band-height);
   align-items: center;
   gap: var(--space-sm);
@@ -14,15 +39,8 @@
   color: var(--text-primary);
   font-size: var(--font-size-2);
   white-space: nowrap;
+  pointer-events: auto;
   transition: opacity var(--motion-fast) var(--motion-ease-standard);
-}
-
-.bar[data-placement="floating"] {
-  position: absolute;
-  z-index: 3;
-  bottom: var(--space-lg);
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 .bar[data-compact] {
@@ -74,8 +92,9 @@
   display: none;
 }
 
-/* Narrow page cards: icon-only actions (tooltips keep the words). */
-@container page-card (width < 560px) {
+/* Less room than the worded bar needs: icon-only actions (tooltips keep the
+   words). */
+@container selection-bar (width < 620px) {
   .wide {
     display: none;
   }
@@ -85,7 +104,9 @@
   }
 }
 
-@container page-card (width < 320px) {
+/* Very narrow: the count bubble carries the number (the toolbar keeps the
+   words as its name). */
+@container selection-bar (width < 340px) {
   .label {
     display: none;
   }

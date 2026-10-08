@@ -2,14 +2,10 @@ import {
   GEOMETRY_TRANSITIONS, hasGeometryAnimation, rectsOverlap, sameNativeViewBounds, toNativeViewBounds,
   type NativeViewBounds, type NativeViewViewport,
 } from "./nativeViewGeometry";
+import { NATIVE_VIEW_OCCLUDERS } from "./nativeViewOccluders";
 import { observeMove } from "./observeMove";
 
-/** DS overlay surfaces that paint above page content (and so under a native view). */
-export const NATIVE_VIEW_OCCLUDERS = [
-  '[data-slot="dialog-overlay"]', '[data-slot="dialog-content"]', '[data-slot="popover-content"]',
-  '[data-slot="dropdown-menu-content"]', '[data-slot="dropdown-menu-sub-content"]', '[data-slot="context-menu-content"]',
-  '[data-slot="select-content"]', '[data-slot="tooltip-content"]', "[data-sonner-toast]",
-].join(", ");
+export { NATIVE_VIEW_OCCLUDERS };
 
 export interface NativeViewTrackerSettings {
   hidden: boolean;
@@ -46,23 +42,25 @@ function overlayCovers(root: HTMLElement, rect: DOMRect, selector: string): bool
 }
 
 function observeNativeChanges(root: HTMLElement, target: HTMLElement, selector: () => string,
-  schedule: () => void, onMotionStart: (event: Event) => void) {
+  schedule: () => void, flush: () => void, onMotionStart: (event: Event) => void) {
   const doc = root.ownerDocument;
   const onMutation = (records: MutationRecord[]) => {
     const css = selector();
     const touches = (node: Node) => node instanceof Element && (node.matches(css) || node.querySelector(css) !== null);
     const relevant = records.some((record) => record.type === "attributes"
-      ? (record.target as Element).closest?.(css) !== null
+      ? record.attributeName === "data-left-peek" || (record.target as Element).closest?.(css) !== null
       : [...record.addedNodes, ...record.removedNodes].some(touches));
     if (relevant) schedule();
   };
 
-  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+  // A resize is measured in the same frame (ResizeObserver runs after layout, before paint), so a
+  // layout change that starts a panel motion is covered before that frame paints.
+  const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(flush);
   resize?.observe(root);
   resize?.observe(target);
   const move = observeMove(target, schedule);
   const mutations = typeof MutationObserver === "undefined" ? null : new MutationObserver(onMutation);
-  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open"] });
+  mutations?.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "hidden", "open", "data-left-peek"] });
   const listeners: Array<[EventTarget, string, EventListener, AddEventListenerOptions]> = [
     [doc.defaultView ?? window, "resize", schedule, { passive: true }],
     [doc, "scroll", schedule, { capture: true, passive: true }],
@@ -83,10 +81,14 @@ function observeNativeChanges(root: HTMLElement, target: HTMLElement, selector: 
  * Change-driven bounds and occlusion tracking for a native view slot. Work is batched into one
  * animation frame; frames keep coming only while something moves, and stop once the rect settles.
  */
+/** A rect change this soon after panel motion is still part of it (a track committed when a slide ends). */
+const MOTION_SETTLE_MS = 120;
+
 export function createNativeViewTracker(options: NativeViewTrackerOptions) {
   let settings: NativeViewTrackerSettings = options;
   let frame = 0;
   let last: NativeViewBounds | null = null;
+  let lastMotion = Number.NEGATIVE_INFINITY;
   // Every new presenter reports its initial state, including clear coverage.
   let occluded: boolean | undefined;
   const movers = new Set<Element>();
@@ -94,6 +96,11 @@ export function createNativeViewTracker(options: NativeViewTrackerOptions) {
   const selector = () => [NATIVE_VIEW_OCCLUDERS, settings.occluders].filter(Boolean).join(", ");
   const schedule = () => {
     if (!frame) frame = requestAnimationFrame(tick);
+  };
+  /** Measures now (layout is clean in a ResizeObserver callback) instead of on the next frame. */
+  const flush = () => {
+    if (frame) cancelAnimationFrame(frame);
+    tick();
   };
 
   function tick() {
@@ -107,7 +114,12 @@ export function createNativeViewTracker(options: NativeViewTrackerOptions) {
       options.onBounds(bounds);
     }
     const animating = bounds.visible && panelAnimating(root, rect, movers);
-    const covered = bounds.visible && (settings.covered || animating || overlayCovers(root, rect, selector()));
+    const now = typeof performance === "undefined" ? Date.now() : performance.now();
+    if (animating) lastMotion = now;
+    // While a panel moves the slot, and for a rect change that lands as the motion ends, the native
+    // view is covered (the still stands in) so it never shows at stale bounds.
+    const settling = changed && now - lastMotion < MOTION_SETTLE_MS;
+    const covered = bounds.visible && (settings.covered || animating || settling || overlayCovers(root, rect, selector()));
     if (covered !== occluded) {
       occluded = covered;
       options.onOcclusion(covered);
@@ -123,7 +135,7 @@ export function createNativeViewTracker(options: NativeViewTrackerOptions) {
     movers.add(element);
     schedule();
   };
-  const observers = observeNativeChanges(root, target, selector, schedule, onMotionStart);
+  const observers = observeNativeChanges(root, target, selector, schedule, flush, onMotionStart);
   schedule();
 
   return {
