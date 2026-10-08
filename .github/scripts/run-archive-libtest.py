@@ -8,6 +8,8 @@ import sys
 
 
 def prepare(archive, directory):
+    # nextest canonicalizes --extract-to before unpacking the archive.
+    directory.mkdir(parents=True, exist_ok=True)
     listing = subprocess.check_output([
         'cargo-nextest', 'nextest', 'list', '--archive-file', archive,
         '--extract-to', str(directory), '--workspace-remap', str(Path.cwd()),
