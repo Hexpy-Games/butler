@@ -268,6 +268,7 @@ pub(super) fn carrier_config(
 
 #[test]
 fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
+    super::super::anthropic_cache::history_chunks_preserve_bytes_and_previous_breakpoint_within_lookback();
     let (_, snapshot) = catalog();
     let tools = [ModelRoundTool {
         name: "search_web".into(),
