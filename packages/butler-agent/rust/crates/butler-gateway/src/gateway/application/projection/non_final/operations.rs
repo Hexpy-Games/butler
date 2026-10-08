@@ -130,9 +130,9 @@ pub(super) fn project_suspended(
     metadata: &Map<String, Value>,
     now: &str,
 ) -> Result<(bool, bool), AppStorageError> {
-    let authority_pending =
-        metadata.get("suspension").and_then(Value::as_str) == Some("authority_pending");
-    let (state, label, cancellable) = if authority_pending {
+    let suspension = metadata.get("suspension").and_then(Value::as_str);
+    let decision_pending = matches!(suspension, Some("authority_pending" | "question_pending"));
+    let (state, label, cancellable) = if decision_pending {
         ("waiting_for_form", "Waiting for your response", 1)
     } else {
         ("delivered", "", 0)
@@ -148,12 +148,19 @@ pub(super) fn project_suspended(
         Some(turn),
         service::map(&json!({
             "session_id":chat,"turn_id":turn,"state":state,"safe_status_label":label,
-            "retryable":false,"cancellable":authority_pending
+            "retryable":false,"cancellable":decision_pending
         }))?,
         now,
     )?;
-    super::stream_message::settle_suspended(db, subscribers, chat, turn, now)?;
-    if authority_pending {
+    super::stream_message::settle_suspended(
+        db,
+        subscribers,
+        chat,
+        turn,
+        now,
+        suspension != Some("authority_pending"),
+    )?;
+    if decision_pending {
         return Ok((false, false));
     }
     if queue::claim_status(db, chat, turn, claim)? == QueuedTurnClaimStatus::Unlinked {
