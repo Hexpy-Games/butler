@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -18,6 +19,36 @@ cache = snapshots.cache
 
 
 class TargetSnapshot(unittest.TestCase):
+    # test-category: security
+    def test_https_api_without_gh_preserves_pages_and_delete(self):
+        def response(value, link=''):
+            stream = io.BytesIO(json.dumps(value).encode())
+            stream.headers = {'Link': link}
+            return stream
+        next_url = 'https://api.github.com/repos/owner/repo/actions/runs/42/jobs?page=2'
+        cases = [('repos/owner/repo/actions/runs/42/jobs?per_page=100',
+                  [{'jobs': [{'id': 1}]}, {'jobs': [{'id': 2}]}], {'jobs': [{'id': 1}, {'id': 2}]}),
+                 ('orgs/owner/packages/container/cache/versions?per_page=100',
+                  [[{'id': 1}], [{'id': 2}]], [{'id': 1}, {'id': 2}])]
+        with patch.dict(os.environ, GITHUB_TOKEN='fixture-token'), \
+                patch.object(cache, 'output', side_effect=AssertionError('gh is unavailable')):
+            for endpoint, pages, expected in cases:
+                with patch.object(snapshots.urllib.request, 'urlopen', side_effect=[
+                        response(pages[0], f'<{next_url}>; rel="next"'), response(pages[1])]) as lookup:
+                    self.assertEqual(snapshots.api(endpoint), expected)
+                    self.assertEqual(lookup.call_count, 2)
+                    self.assertEqual(lookup.call_args.args[0].full_url, next_url)
+                    self.assertEqual(lookup.call_args.args[0].get_header('Authorization'), 'Bearer fixture-token')
+                    self.assertEqual(lookup.call_args.kwargs, {'timeout': 60})
+            with patch.object(snapshots.urllib.request, 'urlopen', return_value=response(None)) as lookup:
+                self.assertIsNone(snapshots.api('orgs/owner/packages/container/cache/versions/1', method='DELETE'))
+                self.assertEqual(lookup.call_args.args[0].method, 'DELETE')
+            with patch.object(snapshots.urllib.request, 'urlopen', return_value=response(
+                    [], '<https://untrusted.invalid/page>; rel="next"')) as lookup:
+                with self.assertRaisesRegex(ValueError, 'Untrusted'):
+                    snapshots.api(cases[1][0])
+                self.assertEqual(lookup.call_count, 1)
+
     # test-category: security
     def test_trust_rejects_pr_fork_failed_commit_and_lane(self):
         metadata = dict(run_id=42, run_attempt=2, sha='a' * 40,
@@ -93,13 +124,14 @@ class TargetSnapshot(unittest.TestCase):
             versions[0]['metadata']['container']['tags'].append('fixture')  # An older producer finished last.
             versions += [dict(id=1, metadata={'container': {'tags': ['other-key--1-1']}})]
             with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo'), \
-                    patch.object(cache, 'output', return_value=json.dumps([versions])), \
+                    patch.object(snapshots, 'api', side_effect=[versions, None]) as lookup, \
                     patch.object(snapshots.ci_oci, 'checked') as promote, \
-                    patch.object(snapshots.subprocess, 'run') as delete:
+                    patch.object(cache, 'output', side_effect=AssertionError('gh is unavailable')):
                 snapshots.prune('fixture', '41-1')
                 self.assertEqual(promote.call_args.args, ('tag', snapshots.ci_oci.REGISTRY + '/cargo-target:fixture--43-1', 'fixture'))
-                self.assertEqual(delete.call_count, 1)
-                self.assertTrue(delete.call_args.args[0][-1].endswith('/41'))
+                self.assertEqual(lookup.call_count, 2)
+                self.assertTrue(lookup.call_args.args[0].endswith('/41'))
+                self.assertEqual(lookup.call_args.kwargs, {'method': 'DELETE'})
 
     # test-category: security
     def test_local_oras_push_pull_verify_tamper_missing_and_write_once(self):

@@ -125,6 +125,7 @@ jobs:
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         env:
+          BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/windows-installer-evidence
           BUTLER_WINDOWS_SMOKE_FROM: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
         run: |
@@ -140,13 +141,14 @@ jobs:
             ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
       - name: Update the published baseline through Settings to this candidate
         if: inputs.baseline-tag
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_TAG: ${{ inputs.baseline-tag }}
+          BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/windows-installer-baseline-evidence
           BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate || inputs.candidate-version }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -162,7 +164,18 @@ jobs:
             if ($LASTEXITCODE) { throw 'Published baseline download failed' }
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
+      - name: Preserve Squirrel setup and update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-diagnostics
+          path: |
+            ${{ runner.temp }}/windows-installer-evidence/
+            ${{ runner.temp }}/windows-installer-baseline-evidence/
+            dist/startup-installer-evidence/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Prove legacy-data refusal and desktop recovery
         shell: pwsh
         run: |
@@ -179,7 +192,7 @@ jobs:
             $app = Join-Path $profile 'portable/Butler-win32-x64/Butler.exe'
             bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
             if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
 
   gate:
     name: windows-installer gate

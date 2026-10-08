@@ -11,6 +11,12 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Trust only this job workspace
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $workspace = $env:GITHUB_WORKSPACE.Replace('\', '/')
+        @('GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', "GIT_CONFIG_VALUE_0=$workspace") |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
     - uses: ./.github/actions/windows-owner-discovery
     - name: Require existing owner tools
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
@@ -46,6 +52,14 @@ runs:
           "npm_config_cache=$cache/npm", "NUGET_PACKAGES=$cache/nuget") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         exit 0
     - uses: ./.github/actions/setup-oras
+    - name: Prepare job-scoped snapshot compressor
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $compressor = python "$env:GITHUB_WORKSPACE/.github/scripts/prepare-windows-zstd.py"
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { throw 'Portable snapshot compressor preparation failed' }
+        $compressor | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
     - name: Verify or prepare pinned static ORT
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       working-directory: packages/butler-agent/rust

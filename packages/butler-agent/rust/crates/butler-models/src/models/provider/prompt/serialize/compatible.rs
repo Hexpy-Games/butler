@@ -19,7 +19,9 @@ pub(super) fn anthropic(
         request
             .usage_attribution
             .and_then(|value| value.requested_output_tokens)
-            .unwrap_or(4096.0)
+            .and_then(|value| value.to_string().parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(4096)
             .into(),
     );
     if let Some(instructions) = request

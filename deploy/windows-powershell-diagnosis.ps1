@@ -1,3 +1,4 @@
+. "$PSScriptRoot/windows-job-tree.ps1"
 # Read-only process probes for #470; no installer or shell registrations.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:TEMP ('powershell-diagnosis-' + [guid]::NewGuid().ToString('N'))
@@ -91,4 +92,4 @@ try {
             $process.Dispose()
         }
     }
-} finally { Remove-Item $root -Recurse -Force }
+} finally { Remove-JobTree $root }

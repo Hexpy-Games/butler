@@ -18,6 +18,7 @@ runs:
   steps:
     - uses: ./.github/actions/setup-oras
     - name: Commit complete snapshot and retain two generations
+      if: runner.os != 'Windows'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
@@ -28,3 +29,21 @@ runs:
         TARGET_SNAPSHOT_PRODUCER: ${{ inputs.producer }}
       run: |
         python "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$GITHUB_WORKSPACE/.github/scripts/ci-store-publish.py" cargo-target "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"
+    - name: Commit complete Windows snapshot and retain two generations
+      if: runner.os == 'Windows'
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      working-directory: packages/butler-agent/rust
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CACHE_PLATFORM: ${{ inputs.platform }}
+        CACHE_MODE: ${{ inputs.mode }}
+        CACHE_KIND: ${{ inputs.kind }}
+        TARGET_SNAPSHOT_PRODUCER: ${{ inputs.producer }}
+      run: |
+        $ErrorActionPreference = 'Continue'
+        python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python "$env:GITHUB_WORKSPACE/.github/scripts/ci-store-publish.py" cargo-target $env:CACHE_PLATFORM $env:CACHE_MODE $env:CACHE_KIND
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) {
+          Write-Output '::warning::Cargo snapshot publish failed; the completed build and tests are unaffected.'
+          exit $LASTEXITCODE
+        }

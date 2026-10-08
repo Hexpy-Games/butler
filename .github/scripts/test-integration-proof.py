@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -16,7 +17,33 @@ branch = importlib.util.module_from_spec(branch_spec)
 branch_spec.loader.exec_module(branch)
 
 
+def assert_active_gates(states):
+    for workflow, gate in proof.GATES.items():
+        source = ROOT.parent / 'workflows' / workflow
+        if not source.is_file():
+            raise ValueError(f'Gate workflow missing: {workflow}')
+        if gate not in source.read_text():
+            raise ValueError(f'Gate job missing: {workflow}/{gate}')
+        state = states.get(f'.github/workflows/{workflow}')
+        if state != 'active':
+            raise ValueError(f'Gate workflow is not active: {workflow} ({state})')
+
+
 class IntegrationProof(unittest.TestCase):
+    # test-category: pure-logic
+    def test_gate_workflows_are_active(self):
+        fixture = json.loads((ROOT / 'fixtures' / 'integration-workflow-states.json').read_text())
+        assert_active_gates(fixture)
+        for workflow in proof.GATES:
+            for state in ('disabled_manually', 'disabled_inactivity', 'deleted', None):
+                with self.subTest(workflow=workflow, state=state):
+                    states = dict(fixture, **{f'.github/workflows/{workflow}': state})
+                    with self.assertRaisesRegex(ValueError, 'Gate workflow is not active'):
+                        assert_active_gates(states)
+        with patch.dict(proof.GATES, {'windows.yml': 'windows gate'}):
+            with self.assertRaisesRegex(ValueError, 'windows.yml'):
+                assert_active_gates(fixture)
+
     # test-category: security
     def test_green_receipt_reused_missing_and_failed_cases(self):
         runs = [dict(head_sha='new', conclusion='success')]
@@ -146,4 +173,9 @@ class IntegrationProof(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == '--active-workflows':
+        responses = json.loads(Path(sys.argv[2]).read_text())
+        assert_active_gates({workflow['path']: workflow['state']
+                            for page in responses for workflow in page['workflows']})
+        del sys.argv[1:]
     unittest.main()

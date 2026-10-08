@@ -14,7 +14,8 @@ import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
-for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup', 'setup-oras.py')]:
+for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup', 'setup-oras.py'),
+                       ('zstd_setup', 'prepare-windows-zstd.py')]:
     spec = importlib.util.spec_from_file_location(name, ROOT / filename)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -23,22 +24,68 @@ for name, filename in [('windows_safety', 'windows-ci-safety.py'), ('oras_setup'
 
 class WindowsSafety(unittest.TestCase):
     # test-category: security
+    def test_owner_jobs_reject_github_cli_requirement(self):
+        for source in ['gh api repos/owner/repo', "cache.output('gh', 'api', endpoint)",
+                       "subprocess.run(['gh', 'api', endpoint])"]:
+            self.assertTrue(any('GitHub CLI' in hazard for _, hazard in windows_safety.hazards(source)))
+        workflow = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
+        self.assertEqual(workflow.count('uses: ./.github/actions/publish-windows-target\n        continue-on-error: true'), 2)
+        setup = (ROOT.parent / 'actions/windows-owner-setup/action.yml').read_text()
+        for entry in ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=$workspace']:
+            self.assertIn(entry, setup)
+        self.assertIn("$env:GITHUB_WORKSPACE.Replace('\\', '/')", setup)
+        publisher = (ROOT.parent / 'actions/publish-cargo-target/action.yml').read_text()
+        self.assertIn('::warning::Cargo snapshot publish failed', publisher)
+
+    # test-category: security
+    def test_recursive_provider_operations_are_rejected(self):
+        for command in ['Copy-Item $failures $destination -Recurse',
+                        'Remove-Item -Recurse -Force $env:OWNER_JOB_ROOT',
+                        'Remove-Item $profile -Force -Recurse',
+                        'Copy-Item $failures `\n -Recurse']:
+            self.assertTrue(windows_safety.hazards(command), command)
+        for command in ['Copy-JobTree $failures $destination', 'Remove-JobTree $profile',
+                        'Remove-Item Env:BUTLER_E2E_PERF', 'Copy-Item $executable $destination']:
+            self.assertEqual(windows_safety.hazards(command), [])
+
+    # test-category: security
     def test_native_stderr_guard_requires_continue_per_step(self):
         native = windows_safety.native_safety
         for command in ['cargo test 2>&1 | Out-Host', 'python check.py',
-                        '$result = & "job/tool.exe" --list', '& reg query key']:
+                        '$result = & "job/tool.exe" --list', '& reg query key', 'reg.exe query key 2>$null',
+                        '$protocolBefore = (& reg.exe query key /s 2>$null) -join \"`n\"',
+                        '$result = (& python check.py)', '& $python check.py']:
             self.assertTrue(native.script_hazards(command), command)
             safe = "$ErrorActionPreference = 'Continue'\n" + command + "\n$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }"
             self.assertEqual(native.script_hazards(safe), [])
+        self.assertTrue(native.script_hazards("$ErrorActionPreference = 'Continue'\npython check.py"))
         self.assertTrue(native.script_hazards(
             "if ($condition) { $ErrorActionPreference = 'Continue' }\ncargo test"))
         self.assertTrue(native.script_hazards(
             "if ($condition) {\n  $ErrorActionPreference = 'Continue'\n}\ncargo test"))
         source = ("steps:\n  - run: |\n      $ErrorActionPreference = 'Continue'\n"
-                  "      cargo test\n  - run: cargo test\n")
+                  "      cargo test\n      if ($LASTEXITCODE) { exit $LASTEXITCODE }\n  - run: cargo test\n")
         self.assertEqual(len(native.hazards(source, True)), 1)
         self.assertEqual(native.hazards('steps:\n  - shell: bash\n    run: python script.py\n', True), [])
         self.assertEqual(native.script_hazards('& "job/script.ps1"\n"BIN=job/test.exe" | Out-File $env:GITHUB_ENV'), [])
+
+    # test-category: security
+    def test_hosted_installed_preview_follows_registry_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflow = root / '.github/workflows/windows-preview-smoke.yml'
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text('jobs:\n  release:\n    runs-on: windows-latest\n'
+                                '    steps:\n      - run: ./deploy/probe.ps1\n')
+            probe = root / 'deploy/probe.ps1'
+            probe.parent.mkdir()
+            probe.write_text("$ErrorActionPreference = 'Stop'\n"
+                             "$before = (& reg.exe query HKCU\\Software /s 2>$null)\n"
+                             "if ($LASTEXITCODE -notin @(0,1)) { throw 'probe failed' }\n")
+            findings = windows_safety.audit(root)[1]
+            self.assertTrue(any('probe.ps1:2: PS 5.1' in item for item in findings), findings)
+            probe.write_text(probe.read_text().replace("'Stop'", "'Continue'"))
+            self.assertEqual(windows_safety.audit(root)[1], [])
 
     # test-category: security
     def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
@@ -133,6 +180,20 @@ class WindowsSafety(unittest.TestCase):
                              'subprocess.run(["reg", "add", "HKCU/Environment"])']:
                 script.write_text((ROOT / 'setup-oras.py').read_text() + '\n' + mutation + '\n')
                 self.assertTrue(windows_safety.audit(root)[1], mutation)
+        self.assertLess(consumer.index('prepare-windows-zstd.py'), consumer.index(
+            'name: Verify or prepare pinned static ORT'))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / zstd_setup.ASSET
+            with zipfile.ZipFile(archive, 'w') as package:
+                package.writestr(f'zstd-v{zstd_setup.VERSION}-win64/zstd.exe', b'verified executable')
+                package.writestr('../unwanted.txt', b'must not extract')
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                zstd_setup.unpack(archive, root)
+            self.assertFalse((root / 'zstd.exe').exists())
+            with patch.object(zstd_setup, 'SHA256', hashlib.sha256(archive.read_bytes()).hexdigest()):
+                self.assertEqual(zstd_setup.unpack(archive, root).read_bytes(), b'verified executable')
+            self.assertEqual([path.name for path in root.iterdir()], ['zstd.exe'])
 
     # test-category: security
     def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
@@ -267,13 +328,19 @@ class WindowsSafety(unittest.TestCase):
             workflow = root / '.github/workflows/fixture.yml'
             job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
                    '    steps:\n      - uses: ./.github/actions/setup\n')
-            for unsafe in ['shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
+            for unsafe in ['shell: bash', 'shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
                 action.write_text('runs:\n  using: composite\n  steps:\n    - ' + unsafe + '\n')
                 workflow.write_text(job)
                 self.assertTrue(windows_safety.audit(root)[1], unsafe)
                 action.write_text('runs:\n  using: composite\n  steps: []\n')
                 workflow.write_text(job + '      - ' + unsafe + '\n')
                 self.assertTrue(windows_safety.audit(root)[1], unsafe)
+            action.write_text("runs:\n  using: composite\n  steps:\n    - shell: bash\n      if: runner.os != 'Windows'\n")
+            workflow.write_text(job)
+            self.assertEqual(windows_safety.audit(root)[1], [])
+            action.write_text(action.read_text().replace("runner.os != 'Windows'", 'unknown.condition'))
+            self.assertTrue(windows_safety.audit(root)[1])
+            action.write_text('runs:\n  using: composite\n  steps: []\n')
             for prefix in ['', 'defaults:\n  run:\n    shell: pwsh\n']:
                 workflow.write_text(prefix + job.replace('    steps:',
                     '    defaults:\n      run:\n        shell: pwsh\n    steps:'))

@@ -62,6 +62,11 @@ export function UpdateProgressHarness() {
     setAppCopyLanguage(locale);
     useButlerStore.setState({ settings: { ...EMPTY_SETTINGS, appearance_theme: theme, language: locale } });
     const snapshot = fixture(stage, unknown, error, noBytes);
+    const checkError = new URLSearchParams(window.location.search).get("check-error");
+    if (checkError && stage === "completed") Object.assign(snapshot.components[0]!, {
+      current_version: "0.1.0-preview.11", available_version: "0.1.0-preview.11",
+      update_available: false, channel: "stable", check_state: "unavailable", check_error: checkError,
+    });
     const previous = window.butlerApp;
     window.butlerApp = {
       setUpdateProgress: async (value) => { nativeCalls.push(value); },

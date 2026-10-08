@@ -2,7 +2,9 @@
 use super::{measurement::files, safety};
 use crate::{
     cognition::CognitionPathEnvironment,
-    coordination::{CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::{
+        CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path, sync::Arc};
@@ -110,15 +112,16 @@ pub(super) fn run(
         save(&memory, &mut result, publish)?;
         return Err(error);
     }
-    let lease = coordinator
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            paths.consolidation_lock(root),
-            "memory_cleanup",
-        ))
-        .map_err(io::Error::other)?;
+    let lease = acquire_cleanup_lease(coordinator, paths.consolidation_lock(root), token)?;
     let Some(lease) = lease else {
-        result.phase = "failed".into();
+        result.phase = if token.is_cancelled() {
+            "cancelled"
+        } else {
+            "failed"
+        }
+        .into();
         save(&memory, &mut result, publish)?;
+        safety::cancelled(token)?;
         return Err(io::Error::other("Memory is in use"));
     };
     result.phase = "preparing".into();
@@ -134,6 +137,28 @@ pub(super) fn run(
     }
     lease.release(false).map_err(io::Error::other)?;
     outcome.map(|()| result)
+}
+
+fn acquire_cleanup_lease(
+    coordinator: &CognitionWriteCoordinator,
+    lock_path: std::path::PathBuf,
+    token: &CancellationToken,
+) -> io::Result<Option<CognitionWriteLease>> {
+    // Acceptance releases its lease before this blocking worker runs. A
+    // startup/source writer may take that gate in between; preserve the
+    // accepted request and use the existing bounded, cancellable handoff.
+    let request = CognitionWriteAcquire {
+        lock_path,
+        purpose: Some("memory_cleanup".into()),
+        deadline_at_epoch_ms: None,
+        cancellation: Some(token.clone()),
+    };
+    match tokio::runtime::Handle::current()
+        .block_on(coordinator.acquire(request, CognitionWaitClass::Interactive))
+    {
+        Err(_) if token.is_cancelled() => Ok(None),
+        outcome => outcome.map_err(io::Error::other),
+    }
 }
 
 fn execute(

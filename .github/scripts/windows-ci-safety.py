@@ -20,6 +20,9 @@ ALLOWED_ACTIONS = re.compile(
     r'\./\.github/actions/[\w/-]+)\Z')
 
 RULES = {
+    'GitHub CLI required on owner runner': r"(?:\bgh(?:\.exe)?\s+(?:api|auth|run|release)\b|['\"]gh['\"]\s*,)",
+    'MAX_PATH-unsafe recursive job tree operation': r'\b(?:Copy-Item|Remove-Item)\b[^\n]*-(?:Recurse|r|rec)\b',
+    'owner Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
     'PowerShell CI script blocked by execution policy': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?powershell[\x22\x27]?\s*$',
     'unsafe Windows ORAS setup action': r'\buses:\s*[\x22\x27]?oras-project/setup-oras@',
@@ -120,6 +123,9 @@ def python_sources(path, seen):
 
 def hazards(source):
     findings = []
+    for match in re.finditer(r'\b(?:Copy-Item|Remove-Item)\b[^\n]*`[ \t]*\n[^\n]*-(?:Recurse|r|rec)\b', source, re.I):
+        findings.append((source[:match.start()].count('\n') + 1,
+                         'MAX_PATH-unsafe recursive job tree operation'))
     for number, line in enumerate(source.splitlines(), 1):
         if line.lstrip().startswith(('#', '//')):
             continue
@@ -145,12 +151,11 @@ def owner_steps(source, owner_input):
     Blank excluded lines to retain diagnostic line numbers. Unknown expressions
     remain reachable and must pass the owner safety checks.
     """
-    if not owner_input:
-        return source
     blocks = re.split(r'(?=^\s*- (?:uses:|name:|run:))', source, flags=re.M)
     guard = r"^\s*if:\s*(?:\$\{\{\s*)?inputs\.owner-runner != 'true'(?:\s*\}\})?\s*$"
-    return ''.join('\n' * block.count('\n') if re.search(guard, block, re.M) else block
-                   for block in blocks)
+    unix_guard = r"^\s*if:\s*(?:\$\{\{\s*)?runner\.os != 'Windows'(?:\s*\}\})?\s*$"
+    return ''.join('\n' * block.count('\n') if (re.search(unix_guard, block, re.M)
+                   or owner_input and re.search(guard, block, re.M)) else block for block in blocks)
 
 
 def local_sources(root, path, source, seen, owner_input=False):
@@ -163,7 +168,7 @@ def local_sources(root, path, source, seen, owner_input=False):
         if line.lstrip().startswith(('#', '//', 'import ', 'from ')):
             continue
         if path.suffix not in ('.yml', '.yaml') and not re.search(
-                r'\b(?:subprocess|spawn|run|command|Start-Process)\b|^\s*&|\$PSScriptRoot', line):
+                r'\b(?:subprocess|spawn|run|command|Start-Process)\b|^\s*[&.]|\$PSScriptRoot', line):
             continue
         references += SCRIPT.findall(line)
     for name in references:
@@ -210,7 +215,7 @@ def audit(root):
             # Workflow defaults also apply to owner jobs with no step shell.
             prefix = source.split('\njobs:', 1)[0]
             for line, hazard in hazards(prefix):
-                if hazard in ('unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
+                if hazard in ('owner Windows Bash shell', 'unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
                     findings.append(f'{workflow.relative_to(root)}:{line}: {hazard}')
             imported = set()
             for path, text in local_sources(root, workflow, block, {workflow.resolve()}):
@@ -223,4 +228,25 @@ def audit(root):
                     if path == workflow:
                         line += source[:offset].count('\n')
                     findings.append(f'{path.relative_to(root)}:{line}: {hazard}')
+    findings += installed_preview_hazards(root)
     return jobs, sorted(set(findings))
+
+
+def installed_preview_hazards(root):
+    """PS 5.1 stderr safety also applies to the hosted installed-preview job."""
+    workflow = root / '.github/workflows/windows-preview-smoke.yml'
+    if not workflow.is_file():
+        return []
+    source = workflow.read_text()
+    match = re.search(r'^  release:\s*\n(?:(?!^  [\w-]+:).)*', source, re.M | re.S)
+    if not match:
+        return []
+    findings = []
+    for path, text in local_sources(root, workflow, match[0], {workflow.resolve()}):
+        if path.suffix not in ('.yml', '.yaml', '.ps1'):
+            continue
+        for line, hazard in native_safety.hazards(text, True):
+            if path == workflow:
+                line += source[:match.start()].count('\n')
+            findings.append(f'{path.relative_to(root)}:{line}: {hazard}')
+    return findings

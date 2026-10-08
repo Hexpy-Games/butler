@@ -23,6 +23,7 @@ pub(crate) struct AppSettingsFactsAdapter {
     data_root: PathBuf,
     server_url: String,
     bridge_mode: String,
+    app_version: Option<String>,
     current: Arc<RwLock<Arc<AppSettingsFacts>>>,
 }
 
@@ -33,6 +34,7 @@ impl AppSettingsFactsAdapter {
         data_root: PathBuf,
         server_url: String,
         bridge_mode: String,
+        app_version: Option<String>,
     ) -> Result<Self, GatewayApplicationError> {
         let current = load(
             &configuration,
@@ -40,6 +42,7 @@ impl AppSettingsFactsAdapter {
             &data_root,
             &server_url,
             &bridge_mode,
+            app_version.as_deref(),
         )
         .await?;
         Ok(Self {
@@ -48,6 +51,7 @@ impl AppSettingsFactsAdapter {
             data_root,
             server_url,
             bridge_mode,
+            app_version,
             current: Arc::new(RwLock::new(current)),
         })
     }
@@ -61,6 +65,7 @@ impl AppSettingsFactsAdapter {
             &self.data_root,
             &self.server_url,
             &self.bridge_mode,
+            self.app_version.as_deref(),
         )
         .await?;
         *self.current.write() = next;
@@ -87,6 +92,7 @@ impl AppSettingsFactsAdapter {
             data_root: self.data_root.clone(),
             server_url: self.server_url.clone(),
             bridge_mode: self.bridge_mode.clone(),
+            app_version: self.app_version.clone(),
             current: self.current.clone(),
         }
     }
@@ -98,6 +104,7 @@ async fn load(
     data_root: &std::path::Path,
     server_url: &str,
     bridge_mode: &str,
+    app_version: Option<&str>,
 ) -> Result<Arc<AppSettingsFacts>, GatewayApplicationError> {
     let read = configuration
         .read()
@@ -124,21 +131,13 @@ async fn load(
             .map_err(GatewayApplicationError::internal_from)?;
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
-    let model_display_names: serde_json::Map<String, Value> = catalog
-        .models
-        .iter()
-        .chain(&catalog.registered_models)
-        .flat_map(|model| {
-            let display = serde_json::json!(model.display_name);
-            std::iter::once(model.model_ref.clone())
-                .chain(model.aliases.iter().flatten().cloned())
-                .map(move |id| (id, display.clone()))
-        })
-        .collect();
+    let model_display_names =
+        display_names(catalog.models.iter().chain(&catalog.registered_models));
     let native_settings = serde_json::json!({
         "model_display_names": model_display_names,
         "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},
-        "update_previews": read.config.pointer("/update/previews").and_then(Value::as_bool).unwrap_or(false),
+        "update_previews": butler_runtime::operations::effective_update_previews(
+            read.config.pointer("/update/previews").and_then(Value::as_bool), app_version),
         "bridge_mode": bridge_mode,
         "server_url": server_url,
         "config_user": {
@@ -170,6 +169,19 @@ async fn load(
         native_settings,
         routine_presets: routine_presets(&read.catalog),
     }))
+}
+
+fn display_names<'a>(
+    source: impl Iterator<Item = &'a ModelProviderMetadata>,
+) -> serde_json::Map<String, Value> {
+    source
+        .flat_map(|model| {
+            let display = serde_json::json!(model.display_name);
+            std::iter::once(model.model_ref.clone())
+                .chain(model.aliases.iter().flatten().cloned())
+                .map(move |id| (id, display.clone()))
+        })
+        .collect()
 }
 
 fn models(source: &[ModelProviderMetadata]) -> Arc<[AppModelMetadata]> {

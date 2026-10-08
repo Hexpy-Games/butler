@@ -66,6 +66,7 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
       - uses: ./.github/actions/publish-windows-target
+        continue-on-error: true
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
       - name: Check owner registration and remove job profile
         if: always()
@@ -292,7 +293,7 @@ jobs:
         run: |
           $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
           if (Test-Path $failures) {
-            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+            . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Copy-JobTree $failures "$env:PREVIEW_ROOT/logs/failures"
           }
       - name: Preserve native regression evidence before isolated cleanup
         if: always()
@@ -303,6 +304,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - uses: ./.github/actions/publish-windows-target
+        continue-on-error: true
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         with:
           profile: debug

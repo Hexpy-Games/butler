@@ -91,9 +91,7 @@ impl ModelProvider {
         let (carrier, mode, api) =
             self.local_streaming
                 .carrier(&config, carrier(&config), local_stream);
-        let (mut body, continuation) =
-            serialize::body_with_continuation(&request, &config, carrier)?;
-        super::visual::apply(&mut body, &request, carrier).await?;
+        let (body, continuation) = serialize::body_with_visual(&request, &config, carrier).await?;
         let prefix = self.prefix_history.prepare(&body, &config)?.attribute(
             request.usage_attribution,
             request
