@@ -23,7 +23,9 @@ export async function quietHost(label: string, _app?: P0App) {
     return row;
   }
   let quietSince: number | undefined;
-  const deadline = Date.now() + 6 * 60 * 60_000;
+  // A runner may preserve the same deadline across contaminated attempts.
+  const deadline = Math.min(Date.now() + 6 * 60 * 60_000,
+    Number(process.env.BUTLER_P0_QUIET_DEADLINE_MS) || Infinity);
   for (;;) {
     const row = observe(label, "admission");
     if (row.load1 < 4) quietSince ??= Date.now();
