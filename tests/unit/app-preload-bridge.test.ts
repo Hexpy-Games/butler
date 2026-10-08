@@ -333,6 +333,8 @@ function actualPreload() {
       ipcRenderer: { invoke: async () => null, on() {}, removeListener() {} },
     }),
     fetch: async (url: string, options: RequestInit = {}) => {
+      // Match the native fetch contract instead of accepting impossible GETs.
+      new Request(url, options);
       calls.push({ method: options.method ?? "GET", path: new URL(url).pathname,
         ...(options.body ? { body: JSON.parse(String(options.body)) } : {}) });
       return { ok: true, json: async () => ({ protocol_version: "butler.app.v1", data: { accepted: true } }) };
@@ -351,6 +353,8 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["POST", "/memory/reset/profile", { operation_id: id, inventory_revision: 7 }],
     ["POST", "/memory/reset/projects/project_1", { operation_id: id, inventory_revision: 7 }],
     ["GET", `/memory/reset/${id}`],
+    ["GET", "/memory/instructions"], ["GET", "/memory/projects/project_1"],
+    ["GET", "/memory/inventory"],
     ["POST", "/projects", { source: "existing_folder", display_name: "Project", folder_selection_token: "selection" }],
     ["PATCH", "/settings", { access_mode: "read_only" }],
     ["GET", "/archives"], ["PATCH", "/sessions/s1", { archived: false }],
@@ -373,6 +377,7 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
   });
   expect(calls.map(call => [call.method, call.path])).toEqual(routes.map(([method, path]) => [method, new URL(path, "http://localhost").pathname]));
   for (const [index, [, , body]] of routes.entries()) if (body) expect(calls[index]!.body).toEqual(body);
+  expect(calls.filter(call => call.method === "GET").every(call => call.body === undefined)).toBe(true);
 });
 
 test("preload refuses unlisted reset paths and methods without sending a request", async () => {

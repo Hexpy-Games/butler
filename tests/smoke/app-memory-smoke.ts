@@ -1,17 +1,18 @@
 // Real App screenshots with deterministic Memory route fixtures. No model calls.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
 import { auditMemoryDesign } from "../support/memory-page-audit.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import { checkProfileInstructionSeparation, checkMemoryRefreshDuringRead } from "../support/memory-profile-acceptance.ts";
+import { installMemoryDesktopBridge, assertPopulatedMemorySections } from "../support/memory-desktop-bridge.ts";
 
 const output = process.env.BUTLER_MEMORY_SHOTS ?? resolve(".tmp/memory-shots");
 mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 const report: Array<{ file: string; result: string; audit: unknown }> = [];
 const operationId = "00000000-0000-4000-8000-000000000777";
 const now = new Date().toISOString();
@@ -114,7 +115,7 @@ try {
         if (path === "/memory/cleanup") return send({ operation_id: operationId, phase: "removing", sequence: 1, bytes_reclaimed: 312 * 1024 ** 2 }, 202);
         return send({ cancellation_requested: true });
       });
-      await page.route(/\/projects(?:\?.*)?$/, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: { projects: state === "no-projects" ? [] : [{ id: "shot-project", display_name: "butler-site" }] } }) }));
+      await page.route(/\/projects(?:\?.*)?$/, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ protocol_version: "butler.app.v1", data: { projects: state === "no-projects" ? [] : [{ id: "shot-project", display_name: "butler-site" }] } }) }));
       await page.route("**/system-events?*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: { events: [{ id: "shot-profile", kind: "profile_consolidation", title: "", status: "completed", occurred_at: now, metrics: [{ label: "profiling_enabled", value: true }] }], pagination: { has_more: false } } }) }));
       await page.goto(server.url, { waitUntil: "load" });
       await page.locator('[data-test-class~="composer-card"]').waitFor({ state: "visible" });
@@ -122,8 +123,10 @@ try {
       const settingsButton = page.getByRole("button", { name: settingsName, exact: true });
       if (!await settingsButton.isVisible()) await page.getByRole("button", { name: locale === "ko" ? "사이드바 보기" : "Show sidebar", exact: true }).click();
       await settingsButton.click();
+      if (state === "populated") await installMemoryDesktopBridge(page, server);
       const target = state === "personalization" ? (locale === "ko" ? "개인화" : "Personalization") : state === "system-events" ? (locale === "ko" ? "시스템 이벤트" : "System events") : locale === "ko" ? "기억" : "Memory";
       await page.getByRole("button", { name: target, exact: true }).click();
+      if (state === "populated") await assertPopulatedMemorySections(page);
       const deleteName = locale === "ko" ? "삭제" : "Delete";
       if (["confirm", "confirm-long", "deleting", "deleted", "delete-failed"].includes(state)) {
         await page.locator('[data-test-class="instruction-row"]').first().getByRole("button", { name: deleteName }).click();
