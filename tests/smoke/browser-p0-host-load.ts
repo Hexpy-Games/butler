@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { P0App } from "./browser-p0-measure.ts";
 
 export class HostLoadExceeded extends Error {}
+export class HostQuietTimeout extends Error {}
 let active: { label: string; samples: ReturnType<typeof observe>[] } | undefined;
 
 function observe(label: string, phase: string) {
@@ -22,11 +23,13 @@ export async function quietHost(label: string, _app?: P0App) {
     return row;
   }
   let quietSince: number | undefined;
+  const deadline = Date.now() + 6 * 60 * 60_000;
   for (;;) {
     const row = observe(label, "admission");
     if (row.load1 < 4) quietSince ??= Date.now();
     else quietSince = undefined;
     if (quietSince !== undefined && Date.now() - quietSince >= 300_000) return row;
+    if (Date.now() >= deadline) throw new HostQuietTimeout(`No valid window for ${label} within 6 hours`);
     await Bun.sleep(60_000);
   }
 }
