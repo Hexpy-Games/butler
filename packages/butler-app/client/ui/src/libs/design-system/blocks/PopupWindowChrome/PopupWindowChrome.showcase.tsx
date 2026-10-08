@@ -30,7 +30,7 @@ function SignInPage({ locale }: ShowcaseRenderContext) {
     <Box padding="xl">
       <Stack gap="lg">
         <Typo.PanelTitle>{copy.signIn}</Typo.PanelTitle>
-        <Field><FieldLabel htmlFor={`popup-email-${locale}`}>{copy.email}</FieldLabel><Input id={`popup-email-${locale}`} defaultValue="yeonwoo@example.com" /></Field>
+        <Field><FieldLabel htmlFor={`popup-email-${locale}`}>{copy.email}</FieldLabel><Input id={`popup-email-${locale}`} defaultValue="name@example.com" /></Field>
         <ButtonContainer size="sm" justify="end"><Button size="sm" text={copy.next} /></ButtonContainer>
       </Stack>
     </Box>
