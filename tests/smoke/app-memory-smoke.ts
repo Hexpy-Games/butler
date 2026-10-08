@@ -56,8 +56,7 @@ async function audit(page: Page) {
   return await page.evaluate(() => {
     const root = document.documentElement;
     const rows = [...document.querySelectorAll<HTMLElement>('[data-test-class="instruction-row"]')];
-    const text = rows.map((row) => {
-      const node = row.querySelector<HTMLElement>('[id^="instruction-text-"]')!;
+    const text = rows.flatMap((row) => [...row.querySelectorAll<HTMLElement>('[id^="instruction-text-"]')]).map((node) => {
       const css = getComputedStyle(node);
       return { fullText: css.textOverflow !== "ellipsis" && css.webkitLineClamp === "none", wraps: node.scrollWidth <= node.clientWidth + 1 };
     });
@@ -127,9 +126,12 @@ try {
       const target = state === "personalization" ? (locale === "ko" ? "개인화" : "Personalization") : state === "system-events" ? (locale === "ko" ? "시스템 이벤트" : "System events") : locale === "ko" ? "기억" : "Memory";
       await page.getByRole("button", { name: target, exact: true }).click();
       if (state === "populated") await assertPopulatedMemorySections(page);
+      if (state === "long") await page.locator('[data-test-class="instruction-row"]').first().locator("[aria-expanded]").click();
       const deleteName = locale === "ko" ? "삭제" : "Delete";
       if (["confirm", "confirm-long", "deleting", "deleted", "delete-failed"].includes(state)) {
-        await page.locator('[data-test-class="instruction-row"]').first().getByRole("button", { name: deleteName }).click();
+        const first = page.locator('[data-test-class="instruction-row"]').first();
+        await first.locator("[aria-expanded]").click();
+        await first.getByRole("button", { name: deleteName }).click();
         const dialog = page.getByRole("alertdialog");
         await dialog.waitFor();
         assert(await dialog.getByRole("button", { name: locale === "ko" ? "취소" : "Cancel" }).evaluate((node) => node === document.activeElement), "Cancel must receive focus");
@@ -186,7 +188,7 @@ try {
       const viewportWidth = await page.evaluate(() => window.innerWidth);
       assert(viewportWidth === width, `viewport ${viewportWidth} expected ${width}`);
       if (state === "populated") {
-        const captions = (await page.locator('[data-test-class="instruction-row"] [data-tone="secondary"]').allTextContents()).map((value) => value.trim());
+        const captions = (await page.locator('[data-test-class="instruction-row"] [data-slot="disclosure-row-meta"]').allTextContents()).map((value) => value.trim());
         const expected = locale === "ko"
           ? ["모든 채팅", "butler-site · 7일 후 만료", "이 채팅에서만"]
           : ["All chats", "butler-site · Expires in 7 days", "This chat only"];
