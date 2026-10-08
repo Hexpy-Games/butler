@@ -228,8 +228,9 @@ fn anthropic(
     }
     let max = request
         .max_output_tokens
-        .filter(|value| js_truthy_number(*value))
-        .unwrap_or(4096.0);
+        .and_then(|value| value.to_string().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(4096);
     body.insert("max_tokens".into(), max.into());
     body.insert(
         "messages".into(),
