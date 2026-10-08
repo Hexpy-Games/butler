@@ -175,3 +175,24 @@ Recent runs are an in-memory ring of 200 entries, cleared on restart, with up to
 4 KiB of each output stream for diagnostics. Test runs use a synthetic payload
 and do not touch sessions. Configuration and tests require the local app's admin
 credential. Saves reject stale revisions with 409.
+
+### Anthropic prompt cache
+
+Anthropic Messages requests cache tools + system at BP1, stable documents +
+conversation history at BP2 (before `## Current turn context`), and the last
+cacheable message block at BP3. BP1/BP2 default to a 1-hour TTL; BP3 uses the
+provider's default 5 minutes. Empty blocks are not marked. OpenAI/Codex wire
+bodies are unchanged.
+
+- `BUTLER_ANTHROPIC_PROMPT_CACHE=off` disables all three breakpoints.
+- `BUTLER_ANTHROPIC_CACHE_TTL=1h|5m|off` sets BP1/BP2 (default `1h`);
+  `off` leaves BP3 enabled. Invalid values disable BP1/BP2.
+- Cache fields are enabled only for HTTPS `api.anthropic.com` on port 443.
+  For another Anthropic-format endpoint, first verify explicit cache-control
+  support, then set `BUTLER_ANTHROPIC_CACHE_VERIFIED_ENDPOINT` to its exact
+  Messages URL (including path). A base URL override alone does not enable it.
+
+Prompt-cache metrics retain total/read/write input tokens and the 1-hour write
+subset; prefix diagnostics also report the provider's 5-minute/1-hour split.
+Published catalog prices distinguish base input, reads, 5-minute writes and
+1-hour writes. Missing usage fields remain unknown rather than inferred hits.
