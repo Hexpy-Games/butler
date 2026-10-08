@@ -1,8 +1,16 @@
 // test-category: security
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { api, apiErrorCode } from "../../packages/butler-app/client/ui/src/app/api.ts";
+
+function withBridge<T>(bridge: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
+  const previous = globalThis.window;
+  Object.assign(globalThis, { window: { location: { origin: "http://localhost" }, butlerApp: bridge } });
+  return run().finally(() => Object.assign(globalThis, { window: previous }));
+}
 
 describe("app-reference-electron-bridge.test.ts", () => {
 const content = { version: 1, parts: [{ type: "text", text: "비교 " },
@@ -52,11 +60,6 @@ test("actual Electron preload serializes references on all three message ingress
 });
 
 describe("app-schedule-access-bridge.test.ts", () => {
-function withBridge<T>(bridge: Record<string, unknown>, run: () => Promise<T>): Promise<T> {
-  const previous = globalThis.window;
-  Object.assign(globalThis, { window: { location: { origin: "http://localhost" }, butlerApp: bridge } });
-  return run().finally(() => Object.assign(globalThis, { window: previous }));
-}
 
 test("renderer bridge forwards a schedule's access mode on create and update", async () => {
   const inputs: Array<{ method: string; input: Record<string, unknown> }> = [];
@@ -315,5 +318,75 @@ test("actual Electron preload sends the saved-key routes and returns bounded env
   expect(calls[1].body).toEqual({ api_key: "sk-new", verify: true });
   expect(results[0]).toEqual({ ok: true, data: { ok: true } });
   expect(results[3]).toEqual({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: "credential_in_use", status: 409 } });
+});
+});
+
+describe("preview.11 desktop route audit", () => {
+function actualPreload() {
+  let bridge: Record<string, unknown> = {};
+  const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
+  runInNewContext(readFileSync(resolve(import.meta.dir, "../../packages/butler-app/client/electron/preload.cjs"), "utf8"), {
+    process: { env: { BUTLER_APP_SERVER_URL: "http://127.0.0.1:12345" }, argv: [], platform: "darwin" },
+    URL, URLSearchParams, TextEncoder, TextDecoder, setTimeout, clearTimeout,
+    require: () => ({
+      contextBridge: { exposeInMainWorld: (name: string, value: Record<string, unknown>) => { if (name === "butlerApp") bridge = value; } },
+      ipcRenderer: { invoke: async () => null, on() {}, removeListener() {} },
+    }),
+    fetch: async (url: string, options: RequestInit = {}) => {
+      calls.push({ method: options.method ?? "GET", path: new URL(url).pathname,
+        ...(options.body ? { body: JSON.parse(String(options.body)) } : {}) });
+      return { ok: true, json: async () => ({ protocol_version: "butler.app.v1", data: { accepted: true } }) };
+    },
+  });
+  return { bridge, calls };
+}
+
+test("renderer and actual preload carry clear, reset and audited UI routes", async () => {
+  const { bridge, calls } = actualPreload();
+  const id = "01234567-89ab-cdef-0123-456789abcdef";
+  const output = "a".repeat(64);
+  const routes: [string, string, Record<string, unknown>?][] = [
+    ["POST", "/sessions/general/clear", { title: "일반" }],
+    ["POST", "/memory/reset/chat-memory", { operation_id: id, inventory_revision: 7 }],
+    ["POST", "/memory/reset/profile", { operation_id: id, inventory_revision: 7 }],
+    ["POST", "/memory/reset/projects/project_1", { operation_id: id, inventory_revision: 7 }],
+    ["GET", `/memory/reset/${id}`],
+    ["POST", "/projects", { source: "existing_folder", display_name: "Project", folder_selection_token: "selection" }],
+    ["PATCH", "/settings", { access_mode: "read_only" }],
+    ["GET", "/archives"], ["PATCH", "/sessions/s1", { archived: false }],
+    ["PATCH", "/projects/p1", { archived: false }],
+    ["DELETE", "/sessions/s1?permanent=true"], ["DELETE", "/projects/p1?permanent=true"],
+    ["GET", `/outputs/${output}/view?revision=2`],
+    ["GET", "/turns/t1/operations/r1/output?result_id=result&offset=10"],
+    ["GET", "/automations"], ["POST", "/automations", { title: "T", prompt_body: "P", schedule_type: "once", run_at: "2026-10-09T00:00:00Z" }],
+    ["GET", "/automations/a1"], ["PATCH", "/automations/a1", { state: "paused" }],
+    ["GET", "/automations/a1/runs"], ["POST", "/automations/a1/run"],
+    ["POST", "/automations/a1/pause"], ["POST", "/automations/a1/resume"], ["DELETE", "/automations/a1"],
+    ["GET", "/authority-permissions"], ["POST", "/authority-permissions/revoke", { grants: [] }],
+    ["GET", "/sessions/s1/task-graphs"], ["GET", "/plans/p1/task-graph"], ["GET", "/tasks/t1/document"],
+    ["GET", "/updates"], ["POST", "/updates/check"], ["POST", "/updates/apply", { component: "agent" }], ["POST", "/updates/cancel"],
+  ];
+  await withBridge(bridge, async () => {
+    for (const [method, path, body] of routes) {
+      expect(await api<{ accepted: boolean }>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) })).toEqual({ accepted: true });
+    }
+  });
+  expect(calls.map(call => [call.method, call.path])).toEqual(routes.map(([method, path]) => [method, new URL(path, "http://localhost").pathname]));
+  for (const [index, [, , body]] of routes.entries()) if (body) expect(calls[index]!.body).toEqual(body);
+});
+
+test("preload refuses unlisted reset paths and methods without sending a request", async () => {
+  const { bridge, calls } = actualPreload();
+  await withBridge(bridge, async () => {
+    for (const [method, path] of [
+      ["DELETE", "/memory/reset/01234567-89ab-cdef-0123-456789abcdef"],
+      ["GET", "/memory/reset/profile"], ["POST", "/memory/reset/unknown"],
+      ["POST", "/memory/reset/projects/p1/extra"], ["POST", "/memory/reset/projects"],
+      ["PATCH", "/memory/reset/profile"], ["GET", "/memory/reset/not-a-uuid"],
+    ]) await expect(api(path!, { method })).rejects.toThrow("Invalid memory path");
+    await expect(api("/sessions/general/clear", { method: "GET" })).rejects.toThrow("Unsupported Butler app API route");
+    await expect(api("/unlisted", { method: "POST" })).rejects.toThrow("Unsupported Butler app API route");
+  });
+  expect(calls).toHaveLength(0);
 });
 });
