@@ -2,8 +2,7 @@
 import { strict as assert } from "node:assert";
 import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-import { chromium } from "playwright";
-import { smokeBrowserArgs } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
 const ui = resolve("packages/butler-app/client/ui/dist");
 const screenshots = resolve(".tmp/update-choice-smoke");
@@ -13,7 +12,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
   const asset = Bun.file(join(ui, path));
   return new Response(await asset.exists() ? asset : Bun.file(join(ui, "index.html")));
 } });
-const browser = await chromium.launch({ headless: true, channel: "chromium", args: smokeBrowserArgs() });
+const browser = await launchSmokeBrowser();
 try {
   for (const language of ["en", "ko"]) {
     for (const theme of ["light", "dark"]) {

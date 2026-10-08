@@ -4,6 +4,8 @@ use butler_e2e::e2e::{HarnessError, events::LiveEvents, gateway::Gateway, scenar
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
+#[path = "update_progress/checks.rs"]
+mod checks;
 #[path = "update_progress/scale.rs"]
 mod scale;
 
@@ -51,6 +53,8 @@ async fn update_progress_bytes_unknown_length_failure_cancel_and_retry() -> Resu
         write(name, hash)?;
         download(&s.gw, name, terminal, seed_cursor).await?;
     }
+    write("failed", &digest)?;
+    checks::failed_download(&s.gw, seed_cursor).await?;
     write("slow", &digest)?;
     cancel(&s.gw, seed_cursor).await?;
     write("known", &digest)?;
@@ -92,6 +96,10 @@ fn feed(bytes: Vec<u8>) -> axum::Router {
                 let bytes = known.clone();
                 async move { bytes }
             }),
+        )
+        .route(
+            &format!("/failed.{}", butler_platform::app_update::package_format()),
+            axum::routing::get(|| async { axum::http::StatusCode::SERVICE_UNAVAILABLE }),
         )
         .route(
             "/{name}",

@@ -60,6 +60,9 @@ impl AppUpdateService {
     /// (`check_state: "unavailable"`), not a failure.
     pub async fn refresh(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
+        if self.version.is_none() {
+            return Err(UpdateCode::AppVersionUnavailable.into());
+        }
         let prior = self.progress.snapshot().await;
         if matches!(
             prior["stage"].as_str(),
@@ -69,24 +72,9 @@ impl AppUpdateService {
         }
         self.progress.report("checking", None, None, None).await?;
         let result = self.refresh_now(self.resolved_request(request).await).await;
-        let code = match &result {
-            Err(error) => Some(error.code().to_owned()),
-            Ok(view) => view["components"][0]["check_error"]
-                .as_str()
-                .map(str::to_owned),
-        };
-        self.progress
-            .report(
-                if code.is_some() {
-                    "failed"
-                } else {
-                    "completed"
-                },
-                None,
-                None,
-                code.as_deref(),
-            )
-            .await?;
+        // Checking a feed is not a download/install attempt. Keep diagnostics
+        // in check_state/check_error and let unavailable statuses retry quietly.
+        self.progress.report("completed", None, None, None).await?;
         match result {
             Ok(mut view) => {
                 view["progress"] = self.progress.snapshot().await;
