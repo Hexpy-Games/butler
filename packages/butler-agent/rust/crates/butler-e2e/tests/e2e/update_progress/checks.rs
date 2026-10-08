@@ -16,8 +16,21 @@ async fn fresh_preview_missing_platform_and_unreachable_feed_stay_calm() -> Resu
         }]})
         .to_string(),
     )?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let source = format!("http://{}/manifest", listener.local_addr()?);
+    let served = manifest.clone();
+    let feed = axum::Router::new().route(
+        "/manifest",
+        axum::routing::get(move || {
+            let path = served.clone();
+            async move { tokio::fs::read(path).await.unwrap_or_default() }
+        }),
+    );
+    let task = tokio::spawn(async move {
+        let _ = axum::serve(listener, feed).await;
+    });
     let s = setup
-        .env("BUTLER_APP_UPDATE_MANIFEST", manifest.to_string_lossy())
+        .env("BUTLER_APP_UPDATE_MANIFEST", source)
         .start()
         .await?;
     let request = json!({"component":"app", "channel":"stable"});
@@ -58,19 +71,13 @@ async fn fresh_preview_missing_platform_and_unreachable_feed_stay_calm() -> Resu
     assert_eq!(recovered.data()["components"][0]["check_state"], "ok");
     assert_eq!(recovered.data()["components"][0]["update_available"], false);
     assert_eq!(recovered.data()["progress"]["stage"], "completed");
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let unavailable = format!("http://{}/manifest", listener.local_addr()?);
-    drop(listener);
-    let check =
-        s.gw.post(
-            "/updates/check",
-            json!({"channel":"stable", "manifest":unavailable}),
-        )
-        .await?;
+    task.abort();
+    let _ = task.await;
+    let check = s.gw.post("/updates/check", request).await?;
     assert_eq!(check.status, 200, "{}", check.text);
     assert_eq!(
         check.data()["components"][0]["check_error"],
-        "update_http_unavailable"
+        "update_manifest_unavailable"
     );
     assert_eq!(check.data()["progress"]["stage"], "completed");
     let events = s.gw.events_since(0).await?;
