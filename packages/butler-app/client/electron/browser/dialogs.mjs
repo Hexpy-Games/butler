@@ -13,12 +13,13 @@ export function beginDialog(browser, tab, value, callback) {
   if (tab.dialog) return;
   const dialog = { id: randomUUID(), epoch: tab.epoch, type: value.type, message: String(value.message ?? ""),
     defaultPrompt: String(value.defaultPrompt ?? ""), origin: value.url ?? value.origin ?? tab.url, deadline: Date.now() + DIALOG_TIMEOUT_MS,
-    sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, navigation: value.navigation, callback };
+    sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, pageBeforeUnload: value.pageBeforeUnload, navigation: value.navigation, callback };
   tab.dialog = dialog; tab.waiting = true;
   dialog.timer = setTimeout(() => { void resolveDialog(browser, tab, { accept: false }, "timeout"); }, DIALOG_TIMEOUT_MS);
   browserEvent(browser, tab, "dialog_opened", { dialog: publicDialog(tab) });
   // The last completed still is available while the page's synchronous dialog is waiting.
   browser.publish(); browser.sync(tab);
+  tab.closeDialog?.();
 }
 export async function resolveDialog(browser, tab, answer, reason = "answered") {
   const dialog = tab.dialog;
@@ -72,7 +73,7 @@ export function requestClose(browser, tab) {
     let settled = false;
     const finish = result => {
       if (settled) return;
-      settled = true; tab.closeRequested = false; clearTimeout(timer);
+      settled = true; tab.closeRequested = false; tab.closeDialog = null; clearTimeout(timer);
       contents.removeListener("will-prevent-unload", prevented); contents.removeListener("destroyed", closed); resolve(result);
     };
     const prevented = () => {
@@ -85,6 +86,12 @@ export function requestClose(browser, tab) {
     contents.once("will-prevent-unload", prevented); contents.once("destroyed", closed);
     browser.detach(tab);
     tab.closeRequested = true;
-    contents.close({ waitForBeforeUnload: true });
+    tab.closeDialog = () => finish(pendingDialog(tab));
+    if (!tab.agent && !tab.driven) {
+      void contents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(accept => {
+        if (accept && browser.tabs.get(tab.id) === tab) browser.close(tab.id);
+        else finish({ status: "not_dispatched", reason: "owner_cancelled" });
+      }).catch(() => finish({ status: "unknown", reason: "close_interrupted" }));
+    } else contents.close({ waitForBeforeUnload: true });
   });
 }

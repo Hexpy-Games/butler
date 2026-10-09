@@ -17,8 +17,11 @@ if (await runSmokeCases(cases, "BUTLER_BROWSER_S4_CASE", import.meta.path)) proc
 const selected = process.env.BUTLER_BROWSER_S4_CASE;
 const started = Date.now();
 const stub = browserStub();
+const posts: Array<{ path: string; body: string }> = [];
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
+  if (request.method === "POST") posts.push({ path, body: await request.text() });
+  if (path === "/post-navigation") return new Response("<title>POST accepted</title><h1>Original POST accepted</h1>", { headers: { "content-type": "text/html" } });
   if (path === "/auth" && request.headers.get("authorization") !== `Basic ${btoa("fixture:fixture")}`) return new Response("Sign in", { status: 401, headers: { "www-authenticate": 'Basic realm="Fixture"' } });
   const file = path === "/auth" ? "basic-auth.html" : path.endsWith("popup.html") ? "popup.html" : "index.html";
   return new Response(Bun.file(resolve("tests/fixtures/browser/S4", file)), { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -71,6 +74,7 @@ try {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });
   await app.page.reload(); await app.click("Browser");
   const mine = await app.call<string>("create", { url: server.url.href });
+  await app.main(`(()=>{globalThis.s4CloseTrace=[];const b=globalThis.browserAgentSubject,w=${contents(mine)},close=b.close;b.close=function(id){s4CloseTrace.push({op:'close',id,stack:new Error().stack});return close.call(this,id)};w.on('will-prevent-unload',e=>s4CloseTrace.push({op:'prevent',prevented:e.defaultPrevented}));w.on('destroyed',()=>s4CloseTrace.push({op:'destroyed'}))})()`);
   await waitBrowser(() => app.main(`${contents(mine)}.executeJavaScript("Boolean(document.querySelector('#confirm'))")`), "fixture loaded");
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 1100]) {
     if (selected && selected !== `${locale}-${theme}-${width}`) continue;
@@ -83,6 +87,11 @@ try {
       await app.main(`${contents(mine)}.executeJavaScript("document.querySelector('#result').textContent='Ready'")`);
       await nativeClick(mine, `#${flow}`); await popupShot(`${name}-${flow}-popup`, mine);
     }
+    if (name === "ko-light-1440") {
+      await app.main(`${contents(mine)}.executeJavaScript("document.querySelector('#result').textContent='Ready'")`);
+      await nativeClick(mine, "#payment-post"); await popupShot(`${name}-payment-post-popup`, mine);
+      assert.deepEqual(posts.at(-1), { path: "/popup.html", body: "challenge=fixture-3ds" }, "payment POST preserved in original popup");
+    }
     await app.main(`${contents(mine)}.executeJavaScript("setTimeout(()=>open('popup.html?flow=ad'),0)")`);
     await waitBrowser(async () => Boolean((await state()).tabs.find(t => t.id === mine)?.blockedPopup), "non-gesture popup blocked");
     await app.shot(`${name}-blocked`); await app.click(locale === "ko" ? "허용" : "Allow");
@@ -93,12 +102,31 @@ try {
     }
     await nativeClick(mine, "#beforeunload"); await app.call("close", { id: mine });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "beforeunload anchored");
-    await app.shot(`${name}-beforeunload`); await answer(mine, false);
+    await app.shot(`${name}-beforeunload`);
+    if (name === "ko-light-1100") {
+      await new Promise(done => setTimeout(done, 10_000));
+      assert.equal((await state()).tabs.find(t => t.id === mine)?.dialog?.type, "beforeunload", "owner wait outlives Chromium's unload watchdog");
+    }
+    await answer(mine, false);
+    assert.ok((await state()).tabs.some(t => t.id === mine), "cancel retains the tab after the native close attempt");
     await app.call("navigate", { id: mine, value: `${server.url.href}?leave=1` });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "navigation beforeunload");
     await answer(mine, true);
     await waitBrowser(() => app.main(`${contents(mine)}.getURL().endsWith('?leave=1') && !${contents(mine)}.isLoading()`), "approved navigation loaded");
     assert.equal(await app.main(`${contents(mine)}.executeJavaScript("location.search==='?leave=1'")`), true, "approved navigation reaches its destination");
+    if (name === "ko-light-1440") {
+      await app.main(`${contents(mine)}.executeJavaScript("window.onbeforeunload=null;window.leaveListener=e=>e.preventDefault();addEventListener('beforeunload',leaveListener);void 0")`);
+      const count = posts.length;
+      for (const accept of [false, true]) {
+        await nativeClick(mine, "#leave-post");
+        await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "POST beforeunload");
+        await answer(mine, accept);
+        if (!accept) assert.equal(posts.length, count, "cancel prevents the original POST");
+      }
+      await waitBrowser(() => app.main(`${contents(mine)}.getURL().endsWith('/post-navigation') && !${contents(mine)}.isLoading()`), "original POST navigation completes");
+      assert.deepEqual(posts.at(-1), { path: "/post-navigation", body: "intent=fixture-navigation" });
+      assert.equal(posts.length, count + 1, "approval never replays the POST");
+    }
     await app.call("navigate", { id: mine, value: `${server.url.href}auth` });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "auth", "HTTP basic auth DS sign-in");
     await app.shot(`${name}-auth`); await answer(mine, true, { username: "fixture", password: "fixture" });
@@ -110,7 +138,9 @@ try {
     await nativeClick(mine, "#upload");
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "file", "file DS sheet");
     await app.shot(`${name}-file`);
-    await answer(mine, true, { files: [{ name: "fixture.txt", type: "text/plain", data: btoa("fixture bytes") }] });
+    await app.page.expression(`(()=>{const input=document.querySelector('[data-test-class="browser-page-dialog"] input[type=file]'),transfer=new DataTransfer();transfer.items.add(new File(['fixture bytes'],'fixture.txt',{type:'text/plain'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    await app.click(locale === "ko" ? "확인" : "OK");
+    await waitBrowser(async () => !(await state()).tabs.find(t => t.id === mine)?.dialog, "file owner answer delivered");
     assert.equal(await app.main(`${contents(mine)}.executeJavaScript("document.querySelector('#upload').files[0].text()")`), "fixture bytes");
     facts.push({ locale, theme, width, user: "passed" });
   }
@@ -133,6 +163,8 @@ try {
     await waitBrowser(async () => (await state()).tabs.some(t => t.owner === agent.owner && t.id !== agent.id && t.agent), "agent popup grouped");
     const child = (await state()).tabs.find(t => t.owner === agent.owner && t.id !== agent.id && t.agent)!;
     assert.equal(await app.main(`${contents(child.id)}.executeJavaScript("Boolean(opener)")`), true);
+    await assert.rejects(app.call("move", { tabId: child.id, toGroupId: "mine", index: 0 }), /invalid_popup_owner/u);
+    assert.equal((await state()).tabs.find(t => t.id === child.id)?.owner, agent.owner, "popup remains bound to its opener owner");
     await app.call("close", { id: child.id });
   }
   await app.main(`${contents(agent.id)}.executeJavaScript("document.querySelector('#unknown').click()")`);
@@ -152,6 +184,10 @@ try {
   act("Confirm"); await send("Ask owner to confirm");
   await waitBrowser(async () => (await app.gateway.api<any>("/authority-requests?session_id=general")).requests.length === 1, "durable dialog approval");
   const request = (await app.gateway.api<any>("/authority-requests?session_id=general")).requests[0];
+  const epoch = await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agent.id)}).epoch`);
+  await app.call("activate", { id: agent.id });
+  assert.equal(await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agent.id)}).epoch`), epoch, "viewing a pending dialog does not take over its authority");
+  assert.equal((await state()).tabs.find(t => t.id === agent.id)?.holder, "agent");
   assert.equal(request.approval.operation.allow_conversation, false);
   assert.ok(request.approval.operation.targets.some((target: string) => target.includes("Continue?")));
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 1100]) {
@@ -215,6 +251,6 @@ try {
   }
   writeFileSync(join(evidence, `acceptance-${selected ?? "all"}.json`), JSON.stringify({ status: "passed", elapsedMs: Date.now() - started, facts, toolResults: stub.results }, null, 2));
 } catch (error) {
-  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), lastMain: app.lastMain(), state: await state().catch(() => null), mainError: await app.main("globalThis.browserAgentError").catch(() => null), native: await app.main(`(async()=>{const t=[...globalThis.browserAgentSubject.tabs.values()].find(t=>t.agent);return t&&{bounds:t.bounds,view:t.view?.getBounds(),focused:t.view?.webContents.isFocused(),dialog:t.dialog?.type,body:!t.dialog?await t.view?.webContents.executeJavaScript("({errors:window.s4Errors,result:document.querySelector('#result')?.textContent,prompt:String(prompt),scroll:[scrollX,scrollY],size:[innerWidth,innerHeight]})"):null}})()`).catch(()=>null), toolResults: stub.results, dom: await app.page.diagnostics().catch(() => null) }, null, 2));
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), lastMain: app.lastMain(), closeTrace: await app.main("globalThis.s4CloseTrace").catch(()=>null), state: await state().catch(() => null), mainError: await app.main("globalThis.browserAgentError").catch(() => null), native: await app.main(`(async()=>{const t=[...globalThis.browserAgentSubject.tabs.values()].find(t=>t.agent);return t&&{bounds:t.bounds,view:t.view?.getBounds(),focused:t.view?.webContents.isFocused(),dialog:t.dialog?.type,body:!t.dialog?await t.view?.webContents.executeJavaScript("({errors:window.s4Errors,result:document.querySelector('#result')?.textContent,prompt:String(prompt),scroll:[scrollX,scrollY],size:[innerWidth,innerHeight]})"):null}})()`).catch(()=>null), toolResults: stub.results, dom: await app.page.diagnostics().catch(() => null) }, null, 2));
   throw error;
 } finally { server.stop(true); await app.stop(); }

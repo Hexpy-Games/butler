@@ -17,7 +17,8 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
   if (element.disabled || element.getAttribute("aria-disabled") === "true") return { reason: "disabled" };
   const point = visiblePoint(element);
   if (point.blocker) return { reason: "blocked_by", hit: semantic(point.blocker) };
-  return { x: point.x, y: point.y, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
+  const bounds = rectangle(element);
+  return { x: point.x, y: point.y, rect: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
     payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
     addons: currentAddons(),
     upload: element.localName === "input" && element.type === "file",

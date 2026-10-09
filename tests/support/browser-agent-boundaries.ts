@@ -49,7 +49,7 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   const receipt=await app.main<any>(`(async()=>{const browser=${subject},tab=browser.tabs.get(${id});const o=await browser.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const ref=o.nodes.find(n=>n.name==='Confirm').ref;const args={observation:o.obs,steps:[{action:'click',ref},{action:'click',ref}]};const prepared=await browser.execute({op:'tab.prepare',session:'general',tab:${id},args});const contents=tab.view.webContents,send=contents.sendInputEvent;contents.sendInputEvent=function(input){send.call(this,input);if(input.type==='mouseUp'){this.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'mine',index:0})}};try{return await browser.execute({op:'tab.act',session:'general',tab:${id},args:{...args,prepared_steps:prepared.steps}})}finally{contents.sendInputEvent=send;browser.move({tabId:tab.id,toGroupId:'conversation:general',index:0})}})()`);
   assert.equal(receipt.steps[0].status,"completed");
   assert.equal(receipt.steps[1].status,"not_dispatched");
-  assert.equal(receipt.steps[1].reason,"control_changed");
+  assert.equal(receipt.steps[1].reason,"owner_changed");
   writeFileSync(join(evidence,"mid-batch-handover.json"),JSON.stringify(receipt,null,2));
 }
 

@@ -1,0 +1,84 @@
+/** S2 public UI and dual ownership fence, real isolated Electron 44 App. */
+import { strict as assert } from "node:assert";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { redesignApp } from "../support/browser-redesign-app";
+import { waitBrowser } from "../support/browser-agent-app";
+import { nativeAligned, togglePane } from "../support/browser-shell-acceptance";
+
+const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
+const app = await redesignApp(evidence);
+const started = Date.now();
+type Tab = { id: string; owner: string; epoch: number };
+const state = () => app.call<{ tabs: Tab[]; activeId: string }>("state");
+const center = (selector: string) => app.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+try {
+  const other = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Destination" }) });
+  await app.call("open");
+  const first = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
+  const second = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: app.url });
+  const mine = await app.call<string>("create", { url: app.url, profile: "signed_in" });
+  for (const language of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 1100]) {
+    await app.settings(language, theme, width);
+    await app.call("activate", { id: first });
+    await app.click(language === "ko" ? "브라우저" : "Browser");
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "browser pane mounted");
+    await nativeAligned(app);
+    await app.shot(`${language}-${theme}-${width}-hub-groups`);
+    await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "browser pane mounted");
+    await nativeAligned(app);
+    assert.equal(await app.page.expression("document.querySelectorAll('[data-slot=tab-strip] [role=tab]').length"), 2);
+    assert.equal(await app.page.expression("document.querySelectorAll('[data-slot=tab-strip-chip]').length"), 0);
+    await app.shot(`${language}-${theme}-${width}-b1`);
+    await app.click(language === "ko" ? "내 탭 가져오기" : "Bring in a tab");
+    await app.shot(`${language}-${theme}-${width}-bring-menu`);
+    await app.page.press("Escape");
+    await togglePane(app, false);
+    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open') === 'false'")) await app.click(language === "ko" ? "사이드바 보기" : "Show sidebar");
+    await app.click(language === "ko" ? "브라우저" : "Browser");
+    await app.call("activate", { id: mine });
+    await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+    await app.shot(`${language}-${theme}-${width}-conversation-menu`);
+    await app.page.press("Escape");
+  }
+  await app.settings("en", "light", 1440);
+  await app.call("activate", { id: first }); await app.click("Browser");
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+  await app.click("Bring in a tab");
+  await app.page.clickText("Browser fixture", '[role="menuitem"]');
+  await waitBrowser(async () => (await state()).tabs.find((tab) => tab.id === mine)?.owner === "conversation:general", "bring changes ownership");
+  await app.internal("tabs.list");
+  assert.equal((await app.internal("tab.observe", mine)).reason, "signed_in_unavailable");
+  await nativeAligned(app);
+  const before = (await state()).tabs.filter((tab) => tab.owner === "conversation:general").map((tab) => tab.id);
+  const from = await center('[data-slot=tab-strip] [role="tab"]'); const to = await center('[data-test-class="tab-strip-tab"]:last-child [role="tab"]');
+  await app.page.drag(from, to);
+  await waitBrowser(async () => (await state()).tabs.filter((tab) => tab.owner === "conversation:general").map((tab) => tab.id).join() !== before.join(), "pointer reorder");
+  const after = (await state()).tabs.filter((tab) => tab.owner === "conversation:general").map((tab) => tab.id);
+  assert.equal(new Set(after).size, before.length); assert.ok(before.every((id) => after.includes(id)));
+  const index = after.indexOf(second);
+  const source = await center(`[data-test-class="tab-strip-tab"]:nth-child(${index + 1}) [role="tab"]`);
+  const destination = await center(`[data-tree-item="s:${other.session.id}"] [data-test-class~="tree-row"]`);
+  const rowsBefore = await app.page.expression("[...document.querySelectorAll('[data-tree-item]')].map(n=>[n.dataset.treeItem,n.offsetTop])");
+  await app.main(`${app.win}.webContents.sendInputEvent({type:'mouseDown',x:${source.x},y:${source.y},button:'left',clickCount:1})`);
+  await app.page.movePointer(source.x + 10, source.y);
+  await app.page.movePointer(destination.x, destination.y);
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-drop=outside]'))"), "conversation outside drop feedback");
+  assert.deepEqual(await app.page.expression("[...document.querySelectorAll('[data-tree-item]')].map(n=>[n.dataset.treeItem,n.offsetTop])"), rowsBefore);
+  await app.shot("en-light-1440-sidebar-drop", true);
+  await app.main(`${app.win}.webContents.sendInputEvent({type:'mouseUp',x:${destination.x},y:${destination.y},button:'left',clickCount:1})`);
+  await waitBrowser(async () => (await state()).tabs.find((tab) => tab.id === second)?.owner === `conversation:${other.session.id}`, "sidebar move changes owner");
+  await app.internal("tabs.list", undefined, {}, other.session.id);
+  assert.equal((await app.internal("tab.observe", second)).reason, "not_your_tab");
+  assert.equal((await app.internal("tab.observe", second, {}, other.session.id)).status, "ok");
+  await app.call("move", { tabId: mine, toGroupId: "mine", index: 0 });
+  await togglePane(app, false); await app.click("Browser"); await app.call("activate", { id: mine });
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button'); await app.page.clickText("New conversation", '[role="menuitem"]');
+  await waitBrowser(async () => (await state()).tabs.find((tab) => tab.id === mine)?.owner !== "mine", "new conversation handover");
+  assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split-chat]'))"), true);
+  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, before, after, state: await state() }, null, 2));
+} catch (error) {
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), state: await state().catch(() => null), dom: await app.page.expression("document.body.innerText").catch(() => null) }));
+  await app.shot("failure").catch(() => {}); throw error;
+} finally { await app.stop(); }

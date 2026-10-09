@@ -1,3 +1,4 @@
+import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
@@ -7,7 +8,7 @@ import { attachNativeWorlds } from "./native-worlds.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
-import { wireUserDialogs, publicDialog } from "./user-dialogs.mjs";
+import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
 import { popupHandler, allowPopup, syncPopup, closePopups } from "./popups.mjs";
 import { resolveDialog } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
@@ -30,6 +31,7 @@ class UserBrowser {
 
   constructor(app, getWindow) {
     this.getWindow = getWindow;
+    this.pointer = new BrowserPointer(this, controlTab);
     this.breaker = createLossBreaker(() => this.trip());
     this.restore = createTabRestore(join(app.getPath("userData"), "browser"), () =>
       [...this.tabs.values()].filter((tab) => tab.owner === "mine" && !tab.popup).map((tab) => tab.url));
@@ -42,9 +44,10 @@ class UserBrowser {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
+      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
   }
   publish() {
+    this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
     if (win && this.boundWindow !== win) {
@@ -66,6 +69,7 @@ class UserBrowser {
     this.publish();
   }
   detach(tab) {
+    if (tab?.id === this.activeId) this.pointer.hide();
     if (tab?.attached && tab.view) {
       void this.capture(tab);
       if (!tab.attached.isDestroyed()) tab.attached.contentView.removeChildView(tab.view);
@@ -83,7 +87,7 @@ class UserBrowser {
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
-    emulation(tab);
+    emulation(tab); this.pointer.sync(tab);
   }
   async capture(tab) {
     if (tab.dialog) return tab.still;
@@ -176,6 +180,7 @@ class UserBrowser {
       if (previous?.holder === "user" && !previous.sticky) controlTab(this, previous, "agent");
       this.detach(previous); backgroundTab(this, previous ?? {});
     }
+    if (tab.waiting && !tab.dialog) controlTab(this, tab, "user");
     tab.viewed = true; clearTimeout(tab.expiry);
     this.activeId = id;
     this.materialize(tab);
@@ -223,7 +228,7 @@ class UserBrowser {
     } else return false;
     return true;
   }
-  commandTab(op, id, value) {
+  commandTab(op, id, value, approved = false) {
     const tab = this.tabs.get(id);
     if (!tab) {
       // Slot teardown reports hidden or uncovered after the tab has been closed.
@@ -237,7 +242,10 @@ class UserBrowser {
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }
     if (op === "still") return this.capture(tab);
     if (!this.enabled()) throw new Error("browsing_disabled");
+    if (tab.holder === "agent" && (tab.busy || tabInUse(this, tab))) throw new Error("agent_control");
     this.materialize(tab);
+    if (op === "navigate") { value = addressUrl(value); if (!value) return; }
+    if (!approved && !tab.agent && !tab.driven && ["navigate", "reload", "back", "forward"].includes(op)) { prepareUserNavigation(this, tab, op, value); return; }
     const contents = tab.view.webContents;
     if (["navigate", "reload", "back", "forward"].includes(op)) tab.navigationIntent = { op, value };
     if (op === "navigate") {
@@ -270,19 +278,21 @@ class UserBrowser {
   move({ tabId, toGroupId, index }) {
     const tab = this.tabs.get(tabId);
     if (!tab || (toGroupId !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(toGroupId)) || !Number.isInteger(index)) throw new Error("invalid_move");
+    if (tab.opener && this.tabs.get(tab.opener)?.owner !== toGroupId) throw new Error("invalid_popup_owner");
     if(toGroupId!==tab.owner) {
       const peers=[...this.tabs.values()].filter(item=>item.owner===toGroupId);
       if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, tab);
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
     if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
+    return tabId;
   }
   focusArea(value, owner) {
     this.keyboardFocused = value;
@@ -327,6 +337,7 @@ class UserBrowser {
         contents.close({ waitForBeforeUnload: false });
       });
     }));
+    this.pointer.dispose();
     this.agentWindow?.destroy(); this.agentWindow = null;
   }
 }

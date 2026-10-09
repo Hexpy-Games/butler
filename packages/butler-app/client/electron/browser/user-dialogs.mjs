@@ -8,6 +8,22 @@ let installed = false;
 export function wireUserDialogs(browser, tab) {
   const contents = tab.view.webContents;
   registries.set(contents.id, { browser, tab });
+  if (!tab.agent) {
+    // Electron's pinned dialog adapter keeps Chromium's beforeunload watchdog
+    // paused while the owner answers. No native modal or user-tab debugger.
+    contents.removeAllListeners("-run-dialog");
+    contents.on("-run-dialog", (info, callback) => {
+      const unload = tab.pageUnloadPrepared;
+      tab.pageUnloadPrepared = false;
+      if (tab.dialog) { callback(false, ""); return; }
+      beginDialog(browser, tab, { type: unload ? "beforeunload" : info.dialogType, message: info.messageText,
+        origin: info.frame?.url ?? contents.getURL(), defaultPrompt: info.defaultPromptText, pageBeforeUnload: unload }, answer => {
+        if (unload) tab.pageUnloadHandled = true;
+        callback(answer.accept === true, answer.value ?? "");
+      });
+    });
+    contents.on("-cancel-dialogs", () => { if (tab.dialog?.pageBeforeUnload) void resolveDialog(browser, tab, { accept: false }, "page_closed"); });
+  }
   contents.on("input-event", (_event, input) => {
     if (["mouseDown", "keyDown"].includes(input.type)) { tab.popupGesture = true; tab.popupGestureAt = Date.now(); }
   });
@@ -21,7 +37,8 @@ export function wireUserDialogs(browser, tab) {
       if (input?.type === "popup" || input?.type === "gesture") {
         source.popupGesture = input.gesture === true; source.popupGestureAt = Date.now(); event.returnValue = true; return;
       }
-      if (!["alert", "confirm", "prompt", "print", "file"].includes(input?.type)) { event.returnValue = null; return; }
+      if (!["alert", "confirm", "prompt", "beforeunload", "print", "file"].includes(input?.type)) { event.returnValue = null; return; }
+      if (input.type === "beforeunload") { source.pageUnloadPrepared = true; event.returnValue = true; return; }
       if (source.dialog) { event.returnValue = null; return; }
       if ((source.agent || source.driven) && source.holder !== "user" && ["print", "file"].includes(input.type)) {
         event.returnValue = null;
@@ -51,8 +68,9 @@ export function wireUserDialogs(browser, tab) {
   contents.on("did-start-navigation", (_event, url, inPlace, mainFrame) => {
     if (mainFrame && !inPlace && webUrl(url) && !tab.navigationIntent) tab.navigationIntent = { op: "navigate", value: url };
   });
-  contents.on("did-navigate", () => { tab.navigationIntent = null; tab.unloadApproved = false; });
+  contents.on("did-navigate", () => { tab.navigationIntent = null; tab.unloadApproved = false; tab.pageUnloadHandled = false; });
   contents.on("will-prevent-unload", event => {
+    if (tab.pageUnloadHandled) { tab.pageUnloadHandled = false; return; }
     if (tab.unloadApproved) { tab.unloadApproved = false; event.preventDefault(); return; }
     if (tab.dialog) return;
     beginDialog(browser, tab, { type: "beforeunload", message: tab.title, origin: contents.getURL(), navigation: tab.navigationIntent }, () => {});
@@ -64,6 +82,7 @@ export function answerUserDialog(browser, input) {
   if (!tab?.dialog || tab.dialog.id !== input.dialog || tab.dialog.epoch !== tab.epoch) throw new Error("stale_dialog");
   if ((tab.agent || tab.driven) && tab.holder !== "user") throw new Error("owner_approval_required");
   if (input.accept && tab.dialog.type === "print" && !tab.dialog.printers?.some(printer => printer.name === input.printer)) throw new Error("invalid_printer");
+  if (tab.dialog.pageBeforeUnload) return resolveDialog(browser, tab, input);
   if (input.accept && tab.dialog.type === "beforeunload") {
     const close = tab.dialog.beforeUnloadClose, navigation = tab.dialog.navigation;
     tab.unloadApproved = true;
@@ -72,5 +91,11 @@ export function answerUserDialog(browser, input) {
     return;
   }
   return resolveDialog(browser, tab, input);
+}
+export function prepareUserNavigation(browser, tab, op, value) {
+  const epoch = tab.epoch;
+  void tab.view.webContents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(accept => {
+    if (accept && browser.tabs.get(tab.id) === tab && tab.epoch === epoch) browser.commandTab(op, tab.id, value, true);
+  }).catch(() => {});
 }
 export { publicDialog };

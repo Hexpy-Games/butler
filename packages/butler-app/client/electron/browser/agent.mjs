@@ -1,8 +1,8 @@
 import { browserEvent, drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
-import { startUse, endUse, finishUse } from "./usage.mjs";
+import { startUse, endUse, finishUse, tabInUse } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
-import { wireDialogs, pendingDialog, answerDialog, requestClose } from "./dialogs.mjs";
+import { wireDialogs, pendingDialog, answerDialog, requestClose, resolveDialog } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
 import { guardUrl, installNavigationGuard } from "./guard.mjs";
 import { observeTab } from "./observe.mjs";
@@ -10,6 +10,7 @@ import { prepareBatch, actBatch } from "./act.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
+  if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   browser.publish();
 }
@@ -24,7 +25,10 @@ export function wireAgentTab(browser, tab) {
     if (!tab.expectedInputs?.some(expected => expected.type === input.type && (expected.x === undefined || expected.x === input.x && expected.y === input.y)) && tab.holder === "agent" && ["mouseDown", "keyDown"].includes(input.type)) controlTab(browser, tab, "user");
   };
   contents.on("input-event", (_event, input) => takeover(input));
-  contents.on("before-input-event", (_event, input) => takeover(input));
+  contents.on("before-input-event", (event, input) => {
+    if (tab.holder === "agent" && (tab.busy || tabInUse(browser, tab)) && !tab.expectedInputs?.some(expected => expected.type === input.type)) event.preventDefault();
+    else takeover(input);
+  });
   installNavigationGuard(tab, popupUrl => {
     if (popupUrl) browserEvent(browser, tab, "popup_blocked", { url: popupUrl, reason: "popup_policy" });
     tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop(); browser.close(tab.id);
@@ -129,13 +133,14 @@ async function executeFrame(browser, frame) {
   if (op === "tab.dialog") return answerDialog(browser,tab,args);
   if (tab.dialog) return pendingDialog(tab);
   touch(browser, tab);
+  browser.pointer.action(tab, frame.pointer);
   if (!tab.view || tab.status === "crashed") return { status: "unknown", reason: "tab_crashed" };
   if (!tab.agent && !tab.driven) {
     tab.policy=args.policy ?? {};
     if (!await guardUrl(tab.url,tab.view.webContents.session,tab.policy)) return {status:"not_dispatched",reason:"navigation_denied"};
     const agents=[...browser.tabs.values()].filter(item=>item.agent || item.driven);
     if (agents.length>=6 || agents.filter(item=>item.owner===owner).length>=3) return {status:"not_dispatched",reason:"tab_budget_exhausted"};
-    tab.driven=true;tab.loaded=!tab.view.webContents.isLoading();
+    tab.driven=true;tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);tab.loaded=!tab.view.webContents.isLoading();
     wireAgentTab(browser,tab);backgroundTab(browser,tab);
     await new Promise(resolve=>setTimeout(resolve,0));
     connectDebugger(browser,tab);emulation(tab);browser.publish();
@@ -160,6 +165,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   if (driving.size >= 2 && !driving.has(`conversation:${session}`)) return { status: "not_dispatched", reason: "browser_busy" };
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile }, false);
   const tab = browser.tabs.get(id);
+  tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);
   if (use) { use.tab = id; browser.publish(); }
   browser.materialize(tab); backgroundTab(browser, tab);

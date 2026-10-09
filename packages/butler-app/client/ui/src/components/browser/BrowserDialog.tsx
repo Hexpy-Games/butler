@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Typo } from "@/butler-ds";
 import { browserCall, type BrowserTab } from "./browserBridge";
@@ -16,6 +16,7 @@ export function BrowserDialog({ tab, container, answer }: {
   const [value, setValue] = useState(dialog?.defaultPrompt ?? "");
   const [username, setUsername] = useState("");
   const [files, setFiles] = useState<Array<{ name: string; type: string; data: string }>>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [printer, setPrinter] = useState("");
   const [password, setPassword] = useState("");
   if (!dialog || !container) return null;
@@ -36,11 +37,13 @@ export function BrowserDialog({ tab, container, answer }: {
         {dialog.type === "prompt" && !agent && <Input aria-label={copy.pageSays} value={value} onChange={(event) => setValue(event.target.value)} />}
         {auth && <><Input autoComplete="username" aria-label={copy.username} value={username} onChange={(event) => setUsername(event.target.value)} />
           <Input type="password" autoComplete="current-password" aria-label={copy.password} value={password} onChange={(event) => setPassword(event.target.value)} /></>}
-        {dialog.type === "file" && !agent && <Input type="file" aria-label={copy.attach} accept={dialog.message} multiple={dialog.defaultPrompt === "multiple"}
+        {dialog.type === "file" && !agent && <><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}>{copy.attach}</Button>
+          {files.length > 0 && <Typo.Caption>{files.map(file => file.name).join(", ")}</Typo.Caption>}
+          <input hidden ref={fileInput} type="file" aria-label={copy.attach} accept={dialog.message} multiple={dialog.defaultPrompt === "multiple"}
           onChange={(event) => { void Promise.all([...event.target.files ?? []].map(async (file) => {
             const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1] ?? ""); reader.onerror = reject; reader.readAsDataURL(file); });
             return { name: file.name, type: file.type, data };
-          })).then(setFiles); }} />}
+          })).then(setFiles); }} /></>}
         {dialog.type === "print" && !agent && <Select value={printer} onValueChange={setPrinter} disabled={!dialog.printers?.length}>
           <SelectTrigger aria-label={copy.printer}><SelectValue placeholder={dialog.printers?.length ? copy.printer : copy.noPrinters} /></SelectTrigger>
           <SelectContent>{dialog.printers?.map(item => <SelectItem key={item.name} value={item.name}>{item.label}</SelectItem>)}</SelectContent>
@@ -49,7 +52,7 @@ export function BrowserDialog({ tab, container, answer }: {
       </Stack>
       {!agent && <DialogFooter><ButtonContainer size="sm">
         {dialog.type !== "alert" && <Button size="sm" variant="outline" onClick={() => submit(false)}>{leave ? copy.stay : copy.cancel}</Button>}
-        <Button size="sm" disabled={dialog.type === "print" && !printer} title={dialog.type === "print" && !printer ? copy.printer : undefined} onClick={() => submit(true)}>{leave ? copy.leave : auth ? copy.signIn : copy.ok}</Button>
+        <Button size="sm" disabled={dialog.type === "print" && !printer || dialog.type === "file" && !files.length} title={dialog.type === "print" && !printer ? copy.printer : dialog.type === "file" && !files.length ? copy.attach : undefined} onClick={() => submit(true)}>{leave ? copy.leave : auth ? copy.signIn : copy.ok}</Button>
       </ButtonContainer></DialogFooter>}
     </DialogContent>
   </Dialog>;

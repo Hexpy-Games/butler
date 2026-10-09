@@ -61,6 +61,7 @@ function popupView(browser, source, details, options, agent) {
   tab.popupParentUrl = source.url; tab.opener = source.id; tab.popup = true;
   const preferences = browser.pagePreferences(tab);
   if (agent) {
+    tab.onPointer = (step, target) => browser.pointer.step(tab, step, target);
     tab.view = new WebContentsView({ ...options, webPreferences: { ...options.webPreferences, ...preferences } });
     browser.materialize(tab); backgroundTab(browser, tab); connectDebugger(browser, tab);
     tab.url = webUrl(details.url) ?? ""; tab.popup = false;

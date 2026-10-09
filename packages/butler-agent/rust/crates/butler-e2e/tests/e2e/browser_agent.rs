@@ -99,6 +99,146 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
     s.finish().await
 }
 
+#[tokio::test]
+async fn moved_browser_tab_fences_previous_owner() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-MOVE")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    for owner in ["general", "destination"] {
+        let snapshot = json!({"tabs":[{"id":"moved", "owner":format!("conversation:{owner}"),
+            "profile":"signed_out", "epoch":2, "holder":"agent", "url":"https://example.com/"}]});
+        assert_eq!(
+            admin
+                .send(
+                    Method::POST,
+                    "/internal/browser-host/events",
+                    Some(snapshot),
+                    &[]
+                )
+                .await?
+                .status,
+            200
+        );
+    }
+    for op in [
+        "tab.observe",
+        "tab.prepare",
+        "tab.act",
+        "tab.wait",
+        "tab.waiting",
+        "tab.close",
+    ] {
+        let result = admin
+            .send(
+                Method::POST,
+                "/internal/browser/calls",
+                Some(json!({
+                    "op":op, "session":"general", "tab":"moved",
+                    "args":{"steps":[{"action":"click","ref":"e1"}]}
+                })),
+                &[],
+            )
+            .await?;
+        assert_eq!(result.status, 200);
+        assert!(
+            result.text.contains("not_your_tab"),
+            "{op}: {}",
+            result.text
+        );
+    }
+    let result = admin
+        .send(
+            Method::POST,
+            "/internal/browser/calls",
+            Some(json!({
+                "op":"tab.observe", "session":"destination", "tab":"moved", "args":{}
+            })),
+            &[],
+        )
+        .await?;
+    assert!(
+        result.text.contains("no_browser"),
+        "new owner passed ownership fence: {}",
+        result.text
+    );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn browser_move_reports_owner_changed_for_pending_observation() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-MOVE-INFLIGHT")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    assert_eq!(stream.status(), 200);
+    for owner in ["general", "destination"] {
+        let snapshot = json!({"tabs":[{"id":"moved", "owner":format!("conversation:{owner}"),
+            "profile":"signed_out", "epoch":2, "holder":"agent", "url":"https://example.com/"}]});
+        assert_eq!(
+            admin
+                .send(
+                    Method::POST,
+                    "/internal/browser-host/events",
+                    Some(snapshot),
+                    &[]
+                )
+                .await?
+                .status,
+            200
+        );
+        if owner == "general" {
+            let caller = AdminClient::new(s.gw.clone(), admin.admin.clone());
+            let pending = tokio::spawn(async move {
+                caller
+                    .send(
+                        Method::POST,
+                        "/internal/browser/calls",
+                        Some(json!({
+                            "op":"tab.observe","session":"general","tab":"moved","args":{}
+                        })),
+                        &[],
+                    )
+                    .await
+            });
+            let mut buffer = String::new();
+            let _ = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+            let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+            assert_eq!(frame["pointer"]["mode"], "observe");
+            let moved = json!({"tabs":[{"id":"moved","owner":"conversation:destination",
+                "profile":"signed_out","epoch":3,"holder":"agent","url":"https://example.com/"}]});
+            admin
+                .send(
+                    Method::POST,
+                    "/internal/browser-host/events",
+                    Some(moved),
+                    &[],
+                )
+                .await?;
+            admin
+                .send(
+                    Method::POST,
+                    &format!(
+                        "/internal/browser-host/results/{}",
+                        frame["id"].as_str().unwrap()
+                    ),
+                    Some(json!({"status":"ok","tab":"moved","text":"new owner's private page"})),
+                    &[],
+                )
+                .await?;
+            let result = pending.await.unwrap()?;
+            assert!(result.text.contains("owner_changed"), "{}", result.text);
+            assert!(!result.text.contains("private page"));
+        }
+    }
+    drop(stream);
+    s.finish().await
+}
+
 /// Popup policy comes from Rust, including an exact auth/utility list, never the page.
 #[tokio::test]
 async fn browser_popup_policy_is_runtime_owned() -> Result<(), HarnessError> {

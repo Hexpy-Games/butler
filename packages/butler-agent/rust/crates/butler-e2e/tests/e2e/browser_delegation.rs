@@ -133,7 +133,10 @@ async fn next_call(
     Ok(frame)
 }
 
-async fn next_frame(stream: &mut Response, buffer: &mut String) -> Result<Value, HarnessError> {
+pub(super) async fn next_frame(
+    stream: &mut Response,
+    buffer: &mut String,
+) -> Result<Value, HarnessError> {
     loop {
         if let Some(end) = buffer.find("\n\n") {
             let event = buffer[..end].to_owned();
