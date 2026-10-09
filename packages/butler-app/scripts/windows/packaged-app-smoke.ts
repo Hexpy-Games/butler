@@ -45,6 +45,21 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
   BUTLER_PROVIDER_QUOTA_POLLING: "0", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 }) });
+process.once("exit", killOwnedProcesses);
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  process.once(signal, () => { killOwnedProcesses(); process.exit(code); });
+}
+function killOwnedProcesses(): void {
+  if (existsSync(pidFile)) {
+    const appPid = Number(readFileSync(pidFile, "utf8").trim());
+    if (Number.isInteger(appPid) && appPid > 0 && alive(appPid)) owned.add(appPid);
+  }
+  if (launcher.pid && alive(launcher.pid)) {
+    owned.add(launcher.pid);
+    for (const pid of processTree(launcher.pid)) owned.add(pid);
+  }
+  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+}
 let cdp: ElectronPage | null = null;
 try {
   await waitFor(() => existsSync(pidFile), "Electron launch PID");
@@ -140,7 +155,7 @@ try {
     owned.add(launcher.pid);
     if (alive(launcher.pid)) for (const pid of processTree(launcher.pid)) owned.add(pid);
   }
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  killOwnedProcesses();
   stub.stop(true);
   await waitFor(() => [...owned].every((pid) => !alive(pid)), "forced smoke process cleanup");
   // The PowerShell owner removes the isolated profile after Bun exits, releasing

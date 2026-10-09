@@ -1,3 +1,4 @@
+import "./stdio-errors.mjs";
 // Only Electron/Node and the small startup surface load before the first window.
 import { createRequire } from "node:module";
 import { APP_RENDERER_SCHEME_PRIVILEGES } from "./app-renderer-protocol.mjs";

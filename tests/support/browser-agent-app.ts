@@ -1,5 +1,5 @@
+import { spawnElectron, stopElectronChild } from "./electron-child";
 /** Isolated real App driver; main inspector is the existing smoke seam. */
-import { spawn } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,14 +25,13 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   assert.ok(executable, "explicit Electron 44 executable required");
-  const child = spawn(executable, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron")], {
-    stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: home, BUTLER_HOME: home, BUTLER_DATA: gateway.butlerData,
+  const logs: string[] = [];
+  const electronRoot = resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron");
+  const child = spawnElectron(executable, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), electronRoot], {
+    onOutput: bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")), env: { ...process.env, HOME: home, BUTLER_HOME: home, BUTLER_DATA: gateway.butlerData,
       BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "", BUTLER_APP_RENDERER_DIST: rendererDist ?? process.env.BUTLER_SMOKE_RENDERER_DIST ?? resolve("packages/butler-app/client/ui/dist"),
       BUTLER_APP_SERVER_URL: gateway.url, BUTLER_APP_SERVER_PORT: String(gateway.port), BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub" },
   });
-  const logs: string[] = [];
-  for (const stream of [child.stdout!, child.stderr!]) stream.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
-  const electronRoot = resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron");
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(electronRoot, "package.json"))})`;
   const win = `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`;
   let inspectorClient: ReturnType<typeof connectElectronMain> | undefined;
@@ -44,12 +43,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   const stop = async () => {
     page?.close();
     (await inspectorClient?.catch(()=>undefined))?.close();
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
-      const until=Date.now()+5000;
-      while(Date.now()<until && child.exitCode===null && child.signalCode===null) await new Promise(done=>setTimeout(done,100));
-      if(child.exitCode===null && child.signalCode===null) child.kill("SIGKILL");
-    }
+    await stopElectronChild(child);
     writeFileSync(join(evidence,"agent.log"),gateway.diagnostics());
     await gateway.stop(); writeFileSync(join(evidence, "electron.log"), logs.join("")); rmSync(dir, { recursive: true, force: true });
   };

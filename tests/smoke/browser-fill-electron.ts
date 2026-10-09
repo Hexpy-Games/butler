@@ -6,6 +6,7 @@ import { redesignApp } from "../support/browser-redesign-app";
 import { describeBrowser, bridgeBrowser } from "../support/browser-agent-stub";
 import { pointerAction, holdObservation } from "../support/browser-control-actions";
 import { nativeAligned } from "../support/browser-shell-acceptance";
+import { waitBrowser } from "../support/browser-agent-app";
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
 const app = await redesignApp(evidence);
 try {
@@ -32,6 +33,9 @@ try {
     p.ready=true;p.sync(t);return result;
   })()`);
   assert.equal(guard.attached, true, "input is guarded before presenter readiness"); assert.equal(guard.holder, "agent"); assert.equal(guard.text, "Ready"); await release();
+  const foregroundBefore = await app.main<boolean>(`${app.win}.isFocused()`);
+  await app.main(`process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), 'packages/butler-app/client/electron/package.json'))})('electron').app.focus({steal:true});${app.win}.show();${app.win}.focus()`);
+  await waitBrowser(() => app.main<boolean>(`${app.win}.isFocused()`), "App foreground before native input");
   const userInput = await app.main<{ holder: string; text: string; focus: boolean }>(`(async()=>{
     const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)}),contents=t.view.webContents;
     const rect=await contents.executeJavaScript("(()=>{document.getElementById('result').textContent='Ready';return document.getElementById('confirm').getBoundingClientRect().toJSON()})()");
@@ -42,7 +46,7 @@ try {
     return {holder:t.holder,text:await contents.executeJavaScript("document.getElementById('result').textContent"),focus:contents.isFocused()};
   })()`);
   assert.equal(userInput.holder, "user"); assert.equal(userInput.text, "Confirmed"); assert.equal(userInput.focus, true, "native page retains keyboard and IME input");
-  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, values, guard, userInput }));
+  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, values, guard, foregroundBefore, userInput }));
 } finally {
   await app.stop();
 }
