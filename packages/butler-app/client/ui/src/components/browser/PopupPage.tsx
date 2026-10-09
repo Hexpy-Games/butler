@@ -4,7 +4,7 @@ import { IconButton, PageCard, PopupWindowChrome, XIcon } from "@/butler-ds";
 import { BrowserDialog, type PageDialog } from "./BrowserDialog";
 
 interface PopupState {
-  id: string; url: string; parentTitle?: string; locale?: string; theme?: string;
+  id: string; url: string; title?: string; locale?: string; theme?: string;
   platform?: "darwin" | "win32" | "linux" | "browser"; dialog?: PageDialog; still?: string;
 }
 declare global { interface Window { butlerPopup?: {
@@ -24,7 +24,7 @@ export function PopupPage() {
   const copy = appCopy.browser;
   let host = "";
   try { host = new URL(state?.url ?? "").host; } catch { /* about:blank is untitled. */ }
-  return <PopupWindowChrome host={`${host}${state?.parentTitle ? ` · ${state.parentTitle}` : ""}`} secure={state?.url.startsWith("https:")}
+  return <PopupWindowChrome host={[host, state?.title].filter(Boolean).join(" · ")} secure={state?.url.startsWith("https:")}
     securityLabel={state?.url.startsWith("https:") ? copy.secure : copy.notSecure} platform={state?.platform ?? "browser"}
     windowControls={<IconButton label={copy.closeTab} onClick={() => void window.butlerPopup?.call("close")}><XIcon /></IconButton>}>
     <PageCard contentRef={setContainer} holder="none" stillSrc={state?.still} covered={Boolean(state?.dialog)}

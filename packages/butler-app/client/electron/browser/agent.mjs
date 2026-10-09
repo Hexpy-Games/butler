@@ -127,8 +127,8 @@ async function executeFrame(browser, frame) {
   if (op === "tab.selection") return browser.selection.result(tab, session);
   if (tab.profile === "signed_in") return { status: "refused", reason: "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
-  if (op === "tab.wait") { tab.waitingTurn = frame.turn_id; tab.waiting = tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
-  if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = args.value === true; browser.publish(); return { status: "ok" }; }
+  if (op === "tab.wait") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
+  if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
   if (op === "tab.close") return requestClose(browser,tab);
   if (op === "tab.dialog") return answerDialog(browser,tab,args);

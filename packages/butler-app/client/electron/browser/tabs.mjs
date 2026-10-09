@@ -10,7 +10,7 @@ import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
 import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
-import { popupHandler, allowPopup, syncPopup, closePopups } from "./popups.mjs";
+import { popupHandler, allowPopup, syncPopup, closePopups, publishPopup } from "./popups.mjs";
 import { resolveDialog, requestClose } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 
@@ -107,6 +107,7 @@ class UserBrowser {
     const url = webUrl(contents.getURL());
     if (url && url !== tab.url) { tab.url = url; if (tab.owner === "mine") this.restore.changed(); }
     tab.title = contents.getTitle();
+    publishPopup(tab);
     tab.status = contents.isLoading() ? "loading" : "idle";
     tab.canBack = contents.navigationHistory.canGoBack();
     tab.canForward = contents.navigationHistory.canGoForward();
