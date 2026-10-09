@@ -91,7 +91,7 @@ export async function cardGeometry(app: ShellApp) {
     const r=document.querySelector('${root}'),title=document.querySelector('[data-test-class=custom-titlebar]');
     const slots=['adaptive-shell-card','adaptive-shell-split-chat','browser-pane','inspector-shell','settings-detail'];
     return {frame:r.getAttribute('data-frame'),layout:r.getAttribute('data-panel-layout'),title:title?.getBoundingClientRect().toJSON()??null,
-      cards:[...document.querySelectorAll(slots.map(s=>'[data-slot="'+s+'"]').join(',')+',.settings-detail')].filter(n=>n.getBoundingClientRect().width>0).map(n=>({slot:n.getAttribute('data-slot') || 'settings-detail',radius:getComputedStyle(n).borderRadius,shadow:getComputedStyle(n).boxShadow,rect:n.getBoundingClientRect().toJSON()})),
+      cards:[...document.querySelectorAll(slots.map(s=>'[data-slot="'+s+'"]').join(',')+',.settings-detail,[data-test-class~="right-inspector-open"]')].filter(n=>n.getBoundingClientRect().width>0).map(n=>({slot:n.getAttribute('data-slot') || (n.matches('[data-test-class~="right-inspector-open"]') ? 'inspector-shell' : 'settings-detail'),radius:getComputedStyle(n).borderRadius,shadow:getComputedStyle(n).boxShadow,rect:n.getBoundingClientRect().toJSON()})),
       wallpapersContained:[...document.querySelectorAll('[data-test-class~="wallpaper"]')].filter(n=>getComputedStyle(n).visibility!=='hidden').every(n=>Boolean(n.closest('[data-slot=adaptive-shell-card],[data-slot=adaptive-shell-split-chat]')))};
   })()`);
 }
@@ -101,6 +101,7 @@ export function assertCardsCell(cell: Awaited<ReturnType<typeof captureCardsCell
   assert.deepEqual(inspector.closedAgain, inspector.closed);
   for (const frame of inspector.frames) assert.deepEqual(frame, inspector.closed, "title icons stay fixed during motion");
   assert.deepEqual(inspector.active, { pressed: "true", tone: "butler", icon: inspector.icon });
+  assert.ok(inspector.geometry.cards.some(card => card.slot === "inspector-shell"));
   assert.equal(cell.peek, "1");
   for (const screen of [cell.conversation, cell.inspector.geometry, cell.split, cell.hub, cell.wallpaper, cell.settings]) {
     assert.equal(screen.frame, "cards"); assert.equal(screen.layout, "docked");
