@@ -82,6 +82,10 @@ impl OutputStore {
         outputs.sort_by(|a, b| a.output_id.cmp(&b.output_id));
         Ok(outputs)
     }
+    /// Bounded metadata page for one-time App Library recovery. No manifests or blobs.
+    pub fn library_page(&self, after: &str) -> std::io::Result<Vec<super::OutputSummary>> {
+        super::index::library_page(&self.root.join("index.sqlite"), after)
+    }
     pub fn summaries(&self, session: &str) -> std::io::Result<Vec<super::OutputSummary>> {
         super::index::summaries(&self.root.join("index.sqlite"), session)
     }

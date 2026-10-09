@@ -41,7 +41,7 @@ export class BrowserPointer {
     contents.on("before-input-event", (event, input) => {
       event.preventDefault();
       const tab = this.tab();
-      if (!this.acceptInput(tab, input.type === "keyDown")) return;
+      if (this.browser.shortcut(input, true) || tab?.picking || !this.acceptInput(tab, input.type === "keyDown")) return;
       const modifiers = ["shift", "control", "alt", "meta"].filter((key) => input[key]);
       tab.view.webContents.sendInputEvent({ type: input.type, keyCode: input.key, modifiers });
     });
@@ -60,6 +60,13 @@ export class BrowserPointer {
   }
   mouse(input) {
     const tab = this.tab();
+    if (this.browser.selection.dragTab) {
+      this.browser.selection.drag(tab, input, input.type === "mouseUp" ? "end" : "move"); return;
+    }
+    // SelectionBar owns the bottom chrome. Its buttons use the trusted overlay IPC.
+    const chrome = this.browser.selection.chrome;
+    if (chrome && input.x >= chrome.x && input.x <= chrome.x + chrome.width && input.y >= chrome.y && input.y <= chrome.y + chrome.height) return;
+    if (this.browser.selection.mouse(tab, input)) return;
     if (MOUSE.has(input.type) && this.acceptInput(tab, input.type === "mouseDown")) {
       if (input.type === "mouseDown") tab.view.webContents.focus();
       tab.view.webContents.sendInputEvent(input);
@@ -67,7 +74,7 @@ export class BrowserPointer {
   }
   sync(tab) {
     const win = this.browser.getWindow();
-    const visible = tab?.pointer && tab.owner !== "mine" && tab.attached === win && this.browser.areaVisible &&
+    const visible = (tab?.picking || tab?.selections?.length || tab?.pointer && tab.owner !== "mine") && tab.attached === win && this.browser.areaVisible &&
       tab.bounds?.visible && !tab.covered && !this.browser.nativeCovers && tab.status !== "crashed";
     if (!visible) { this.hide(); return; }
     this.create();
@@ -77,11 +84,12 @@ export class BrowserPointer {
     if (!this.ready) return;
     const scale = tab.bounds.scale ?? 1, point = (p) => ({ x: p.x * scale, y: p.y * scale });
     const parked = tab.holder === "user" || tab.waiting;
-    const frame = { ...tab.pointer, mode: parked ? "parked" : tab.pointer.mode, tone: tab.waiting ? "waiting" : "default",
-      at: tab.holder === "user" && !tab.waiting ? { x: 20, y: bounds.height - 44 } : point(tab.pointer.at),
-      from: !parked && tab.pointer.from ? point(tab.pointer.from) : undefined,
-      steps: !parked ? tab.pointer.steps.map(point) : [],
-      target: tab.pointer.target ? { ...point(tab.pointer.target), width: tab.pointer.target.width * scale, height: tab.pointer.target.height * scale } : undefined,
+    const pointer = tab.pointer ?? { mode: "parked", at: {x:20,y:20}, steps: [] };
+    const frame = { ...pointer, pointerVisible: Boolean(tab.pointer && !tab.picking), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, tab: tab.id, mode: parked ? "parked" : pointer.mode, tone: tab.waiting ? "waiting" : "default",
+      at: tab.holder === "user" && !tab.waiting ? { x: 20, y: bounds.height - 44 } : point(pointer.at),
+      from: !parked && pointer.mode !== "type" && pointer.from ? point(pointer.from) : undefined,
+      steps: !parked ? pointer.steps.map(point) : [],
+      target: pointer.target ? { ...point(pointer.target), width: pointer.target.width * scale, height: pointer.target.height * scale } : undefined,
       width: bounds.width, height: bounds.height, ...this.presentation };
     const serialized = JSON.stringify(frame);
     if (serialized !== this.lastFrame) { this.lastFrame = serialized; this.view.webContents.send("butler-browser:overlay", frame); }

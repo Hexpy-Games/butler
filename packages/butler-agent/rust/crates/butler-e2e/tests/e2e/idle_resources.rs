@@ -23,7 +23,7 @@ mod seed;
 #[path = "idle_resources/transcripts.rs"]
 mod transcripts;
 #[path = "idle_resources/writes.rs"]
-mod writes;
+pub(super) mod writes;
 
 const WINDOW: Duration = Duration::from_secs(60);
 const MEMORY_BUDGET: u64 = 100_000_000;

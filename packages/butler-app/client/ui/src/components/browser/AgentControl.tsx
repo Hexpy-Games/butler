@@ -1,6 +1,6 @@
 import { appCopy } from "@/app/copy";
 import { stopBrowserTurn } from "./stopBrowserTurn";
-import { ButlerThinkingMark, Button, ButtonContainer, PageBand, Square, type PageCardHolder } from "@/butler-ds";
+import { ButlerThinkingMark, Button, ButtonContainer, PageBand, Pick, Square, type PageCardHolder } from "@/butler-ds";
 import { browserCall, type BrowserTab } from "./browserBridge";
 
 export function browserHolder(tab?: BrowserTab): PageCardHolder {
@@ -11,6 +11,8 @@ export function browserHolder(tab?: BrowserTab): PageCardHolder {
 }
 
 export function AgentControl({ tab }: { tab?: BrowserTab }) {
+  if (tab?.picking) return <PageBand tone="pick" icon={<Pick size="sm" />} label={appCopy.browser.pickMode}
+    detail={appCopy.browser.dragToChat} actions={<Button size="xs" variant="outline" onClick={() => void browserCall("pick", { id: tab.id, value: false })}>{appCopy.browser.finish}</Button>} />;
   const holder = browserHolder(tab);
   if (!tab || holder === "none") return null;
   const copy = appCopy.browser;

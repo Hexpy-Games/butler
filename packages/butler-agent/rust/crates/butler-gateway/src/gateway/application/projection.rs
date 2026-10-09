@@ -191,31 +191,8 @@ async fn project_final(
         .artifact_materializer
         .materialize(candidate.materialization.clone())
         .await?;
-    let active_plan = candidate.plan.as_ref().filter(|_| candidate.activates_plan);
-    let continuation = if let Some(plan) = active_plan {
-        // Admission validated the active plan's id and title.
-        let (Some(plan_id), Some(plan_title)) = (
-            plan.get("id").and_then(Value::as_str),
-            plan.get("title").and_then(Value::as_str),
-        ) else {
-            return Err(GatewayApplicationError::internal());
-        };
-        let source_client_id = format!("client-plan-activated-{}", candidate.turn_id);
-        let client_message_id = super::admission_identity::stable_client_id(
-            Some(&Value::String(source_client_id)),
-            &*context.dependencies.identity_clock,
-        )?;
-        Some(super::settings::PlanContinuation {
-            queued_id: format!("queued-{}", context.dependencies.identity_clock.new_uuid()),
-            client_message_id,
-            chat_id: candidate.chat_id.clone(),
-            plan_id: plan_id.to_owned(),
-            plan_title: plan_title.to_owned(),
-            facts: context.dependencies.settings_facts.snapshot()?,
-        })
-    } else {
-        None
-    };
+    let library_outputs = library_outputs(context, &candidate.chat_id, &candidate.turn_id).await?;
+    let continuation = plan_continuation(context, &candidate)?;
     let reply_id = format!("message-{}", context.dependencies.identity_clock.new_uuid());
     let turn_event_ids = final_event_ids(context);
     let now = context.dependencies.identity_clock.now_iso();
@@ -225,7 +202,7 @@ async fn project_final(
     let projected = context
         .storage
         .execute(move |db| {
-            final_result::apply(
+            final_result::apply_library(
                 db,
                 &candidate,
                 final_result::FinalApply {
@@ -237,6 +214,7 @@ async fn project_final(
                     continuation,
                     turn_event_ids,
                 },
+                library_outputs,
             )
         })
         .await
@@ -370,4 +348,56 @@ fn final_event_ids(context: &ProjectionContext) -> final_turn_events::FinalTurnE
             context.dependencies.identity_clock.new_uuid()
         ),
     }
+}
+
+async fn library_outputs(
+    context: &ProjectionContext,
+    session: &str,
+    turn: &str,
+) -> Result<Vec<Value>, GatewayApplicationError> {
+    let store = butler_runtime::outputs::OutputStore::new(&context.butler_data);
+    let session = session.to_owned();
+    let turns = vec![turn.to_owned()];
+    tokio::task::spawn_blocking(move || {
+        store.message_summaries(&session, &turns).map(|page| {
+            page.into_iter()
+                .map(|o| super::library::output(&o))
+                .collect()
+        })
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(GatewayApplicationError::internal_from)
+}
+
+fn plan_continuation(
+    context: &ProjectionContext,
+    candidate: &final_candidate::FinalCandidate,
+) -> Result<Option<super::settings::PlanContinuation>, GatewayApplicationError> {
+    let active_plan = candidate.plan.as_ref().filter(|_| candidate.activates_plan);
+    let continuation = if let Some(plan) = active_plan {
+        // Admission validated the active plan's id and title.
+        let (Some(plan_id), Some(plan_title)) = (
+            plan.get("id").and_then(Value::as_str),
+            plan.get("title").and_then(Value::as_str),
+        ) else {
+            return Err(GatewayApplicationError::internal());
+        };
+        let source_client_id = format!("client-plan-activated-{}", candidate.turn_id);
+        let client_message_id = super::admission_identity::stable_client_id(
+            Some(&Value::String(source_client_id)),
+            &*context.dependencies.identity_clock,
+        )?;
+        Some(super::settings::PlanContinuation {
+            queued_id: format!("queued-{}", context.dependencies.identity_clock.new_uuid()),
+            client_message_id,
+            chat_id: candidate.chat_id.clone(),
+            plan_id: plan_id.to_owned(),
+            plan_title: plan_title.to_owned(),
+            facts: context.dependencies.settings_facts.snapshot()?,
+        })
+    } else {
+        None
+    };
+    Ok(continuation)
 }

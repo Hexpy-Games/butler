@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 #[path = "update_progress/checks.rs"]
 mod checks;
 #[path = "update_progress/scale.rs"]
-mod scale;
+pub(crate) mod scale;
 
 const BYTES: usize = 131_072;
 const WAIT: Duration = Duration::from_secs(10);

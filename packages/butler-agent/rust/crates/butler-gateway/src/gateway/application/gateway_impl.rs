@@ -1,6 +1,9 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
+    fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
+        self.library_owned(command)
+    }
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
     }

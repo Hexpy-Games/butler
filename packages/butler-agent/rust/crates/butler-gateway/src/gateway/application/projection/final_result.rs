@@ -23,12 +23,33 @@ pub(super) struct FinalApply<'a> {
     pub turn_event_ids: super::final_turn_events::FinalTurnEventIds,
 }
 
-pub(super) fn apply(
+/// Library output rows share the fenced final-message transaction.
+pub(super) fn apply_library(
     db: &mut Connection,
     input: &FinalCandidate,
     apply: FinalApply<'_>,
+    outputs: Vec<Value>,
 ) -> Result<bool, AppStorageError> {
-    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    let mut tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    if !self::apply(
+        tx.savepoint().map_err(AppStorageError::sqlite)?,
+        input,
+        apply,
+    )? {
+        return Ok(false);
+    }
+    for item in outputs {
+        super::super::library::save(&tx, &item)?;
+    }
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(true)
+}
+
+fn apply(
+    tx: rusqlite::Savepoint<'_>,
+    input: &FinalCandidate,
+    apply: FinalApply<'_>,
+) -> Result<bool, AppStorageError> {
     if staging::projected(&tx, &input.action_id)? {
         return Ok(false);
     }
@@ -324,6 +345,7 @@ fn attach_files(
             params![message, file.id, position],
         )
         .map_err(AppStorageError::sqlite)?;
+        super::super::library::document(db, &file.id)?;
     }
     Ok(())
 }

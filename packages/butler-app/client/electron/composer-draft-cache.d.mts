@@ -3,6 +3,7 @@ export interface ComposerDraftFileSnapshot {
   session_id: string;
   text: string;
   content_parts?: import("../shared/app-contracts.ts").MessageContent;
+  element_attachments?: import("../shared/browser-element").ElementAttachment[];
   updated_at: string;
 }
 

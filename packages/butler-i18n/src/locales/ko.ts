@@ -269,6 +269,7 @@ export const koKrCopy: AppCopy = {
     dragToChat: "끌어서 대화에 놓기", finish: "끝내기", picked: (count) => `${count}개 선택됨`, attachToChat: "대화에 첨부", saveImage: "이미지로 저장", copyText: "텍스트 복사",
     clearSelection: "선택 해제", dropToAttach: "놓아서 첨부", dropAttachTo: (title) => `‘${title}’에 첨부`, dropSaveToLibrary: "서랍에 스크랩으로 저장",
     dropMoveTabTo: (title) => `‘${title}’로 탭 옮기기`, dropInvalid: "여기에는 놓을 수 없어요", attachedTo: (title) => `‘${title}’에 첨부함`,
+    scraps: "스크랩", documents: "문서", outputs: "결과물", loadMore: "더 보기", emptyLibrary: "항목 없음", bookmarkFolder: "폴더",
     movedTo: (title) => `탭을 ‘${title}’로 옮김`, library: "서랍", librarySearch: "서랍 검색", recentScraps: "최근 스크랩", viewAll: "모두 보기", scrapped: "스크랩함",
     scrapsSaved: (count) => `스크랩 ${count}개 저장함`, view: "보기", all: "전체", elements: "요소", views: "화면", element: "요소", viewKind: "화면", document: "문서",
     attach: "대화에 첨부", openSource: "원본 열기", remove: "삭제", archivedClosed: (count) => `대화 탭 ${count}개 닫음`, pageSays: "페이지 메시지", authNeeded: "로그인 필요",

@@ -1,3 +1,4 @@
+import { ComposerElements } from "../browser/ComposerElements";
 import { useAppLocale } from "@/app/copy.ts";
 import {
   AttachmentList,
@@ -19,10 +20,10 @@ export function ComposerAttachments() {
   const removeAttachment = useComposerStore((store) => store.removeAttachment);
   const blockedAttachments = useComposerStore((store) => store.blockedAttachments);
 
-  if (attachments.length === 0) return null;
+  if (attachments.length === 0) return <ComposerElements />;
 
   return (
-    <AttachmentList
+    <><ComposerElements /><AttachmentList
       windowDrag="no-drag"
       items={attachments.map((attachment) => ({
         id: attachment.id,
@@ -42,7 +43,7 @@ export function ComposerAttachments() {
       emptyLabel={appCopy.composer.attachedFiles}
       onRemove={removeAttachment}
       variant="chips"
-    />
+    /></>
   );
 }
 

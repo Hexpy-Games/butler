@@ -273,6 +273,7 @@ export const enUsCopy: AppCopy = {
     picked: (count) => `${count} selected`, attachToChat: "Add to chat", saveImage: "Save image", copyText: "Copy text", clearSelection: "Clear",
     dropToAttach: "Drop to add", dropAttachTo: (title) => `Add to ‘${title}’`, dropSaveToLibrary: "Save to Library as scraps",
     dropMoveTabTo: (title) => `Move tab to ‘${title}’`, dropInvalid: "Can't drop here", attachedTo: (title) => `Added to ‘${title}’`,
+    scraps: "Scraps", documents: "Documents", outputs: "Outputs", loadMore: "More", emptyLibrary: "No items", bookmarkFolder: "Folder",
     movedTo: (title) => `Moved the tab to ‘${title}’`, library: "Library", librarySearch: "Search the library", recentScraps: "Recent scraps",
     viewAll: "View all", scrapped: "Scrapped", scrapsSaved: (count) => `Saved ${count} scraps`, view: "View", all: "All", elements: "Elements",
     views: "Views", element: "Element", viewKind: "View", document: "Document", attach: "Attach to chat", openSource: "Open source", remove: "Delete",

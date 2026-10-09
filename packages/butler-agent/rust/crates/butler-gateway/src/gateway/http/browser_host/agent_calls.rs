@@ -188,6 +188,7 @@ fn validate(
         op,
         "tab.open"
             | "tab.observe"
+            | "tab.selection"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"

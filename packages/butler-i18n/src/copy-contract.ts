@@ -246,6 +246,7 @@ export interface BrowserCopy {
   enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
   ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
   usedTimes: (count: number) => string; filled: string; askedApproved: string;
+  scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */

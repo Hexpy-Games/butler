@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod core;
+mod library;
 mod message_ownership;
 mod migration;
 mod monitoring;
@@ -27,6 +28,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
+    library::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the
     // index get it here.
@@ -77,6 +79,7 @@ pub(super) fn migrate(
     wallpapers::create(connection)?;
     message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
+    library::recover(connection, butler_data)?;
     Ok(())
 }
 

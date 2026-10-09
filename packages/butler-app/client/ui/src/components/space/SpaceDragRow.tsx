@@ -4,6 +4,7 @@ import { useId, type ReactNode } from "react";
 import { useSpaceDrag, SESSION_REFERENCE_MIME } from "@/app/space/drag";
 import type { SpaceRowData } from "@/app/space/projection";
 import { useBrowserTabDrag } from "../browser/browserTabDrag";
+import { useElementDrag } from "../browser/elementDrag";
 import { NavDropTarget } from "@/butler-ds";
 
 /**
@@ -23,17 +24,19 @@ export function SpaceDragRow({
   const instance = useId();
   const target = useSpaceDrag((s) => (s.target?.instance === instance ? s.target : null));
   const tabTarget = useBrowserTabDrag((s) => s.target?.instance === instance ? s.target : undefined);
+  const elementTarget = useElementDrag(s => s.target?.kind === "conversation" && s.target.instance === instance ? s.target : undefined);
+  const elementDragging = useElementDrag(s => Boolean(s.tab));
   const tabDragging = useBrowserTabDrag((s) => Boolean(s.tabId));
   const dragging = useSpaceDrag((s) => s.sourceInstance === instance);
   return (
     <NavDropTarget
       data-tree-item={row.node.key}
       data-drag-instance={instance}
-      drop={tabTarget ? "outside" : enabled ? target?.position : undefined}
+      drop={elementTarget ? "outside" : tabTarget ? "outside" : enabled ? target?.position : undefined}
       dragging={dragging}
       indicator={target?.indicator}
-      hint={tabTarget ? appCopy.browser.dropMoveTabTo(tabTarget.title) : appCopy.space.groupTogether}
-      draggable={!tabDragging && (enabled || row.node.kind === "session")}
+      hint={elementTarget ? appCopy.browser.dropAttachTo(elementTarget.title) : tabTarget ? appCopy.browser.dropMoveTabTo(tabTarget.title) : appCopy.space.groupTogether}
+      draggable={!elementDragging && !tabDragging && (enabled || row.node.kind === "session")}
       onDragStart={(e) => {
         e.stopPropagation();
         e.dataTransfer.effectAllowed = "copyMove";

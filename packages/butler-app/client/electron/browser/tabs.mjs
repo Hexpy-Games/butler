@@ -1,3 +1,4 @@
+import { BrowserSelection } from "./selection.mjs";
 import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
@@ -32,6 +33,7 @@ class UserBrowser {
   constructor(app, getWindow) {
     this.getWindow = getWindow;
     this.pointer = new BrowserPointer(this, controlTab);
+    this.selection = new BrowserSelection(this);
     this.breaker = createLossBreaker(() => this.trip());
     this.restore = createTabRestore(join(app.getPath("userData"), "browser"), () =>
       [...this.tabs.values()].filter((tab) => tab.owner === "mine" && !tab.popup).map((tab) => tab.url));
@@ -44,7 +46,7 @@ class UserBrowser {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
+      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false })) };
   }
   publish() {
     this.pointer.sync(this.tabs.get(this.activeId));
@@ -218,7 +220,10 @@ class UserBrowser {
     this.publish();
   }
   shortcut(input, nativePage = false) {
-    if (!this.areaVisible || (!nativePage && !this.keyboardFocused) || input.type !== "keyDown") return false;
+    if (!this.areaVisible || input.type !== "keyDown") return false;
+    if (this.selection.shortcut(input)) return true;
+    if (!nativePage && !this.keyboardFocused) return false;
+    if (input.key === "Escape" && this.tabs.get(this.activeId)?.picking) { this.selection.mode(this.activeId, false); return true; }
     const command = input.meta || input.control;
     const key = input.key.toLowerCase();
     if (command && key === "l") {

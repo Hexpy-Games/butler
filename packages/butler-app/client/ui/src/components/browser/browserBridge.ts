@@ -3,12 +3,15 @@ import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
 import { appCopy } from "@/app/copy";
+import type { PickedElement } from "./browserElements";
+import { connectElementDrag, type ElementDragEvent } from "./elementDrag";
 import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
   popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
   id: string; owner: string; url: string; title: string; favicon: string;
+  picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
 }
@@ -19,6 +22,8 @@ interface BrowserBridge {
   call: (op: string, input?: unknown) => Promise<unknown>;
   subscribe: (handler: (state: BrowserSnapshot) => void) => () => void;
   onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;
+  onElementDrag: (handler: (event: ElementDragEvent) => void) => () => void;
+  onSelectionAction: (handler: (event: { op: string; elements: PickedElement[] }) => void) => () => void;
   onAddress: (handler: () => void) => () => void;
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
@@ -27,6 +32,7 @@ export const useBrowserState = create<BrowserSnapshot>(() => ({
 }));
 let unsubscribe: (() => void) | undefined;
 export function connectBrowser() {
+  connectElementDrag();
   if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => {
     const previous = useBrowserState.getState();
     useBrowserState.setState(state);

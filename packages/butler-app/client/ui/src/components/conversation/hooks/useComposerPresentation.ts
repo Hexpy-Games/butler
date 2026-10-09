@@ -5,6 +5,7 @@ import type {
   RefObject,
 } from "react";
 import { useButlerStore } from "@/app/store";
+import { useElementDraft } from "../../browser/browserElements";
 import { useComposerStore } from "../composerStore";
 
 export function useComposerPresentation({
@@ -16,6 +17,7 @@ export function useComposerPresentation({
   containerRef: RefObject<HTMLDivElement | null>;
   protectedExpanded: boolean;
 }) {
+  const hasElements = useElementDraft(s => s.session === activeChatId && s.items.length > 0);
   const collapse = useButlerStore((store) => store.settings.collapse_message_box);
   const engaged = useComposerStore((store) => store.engaged);
   const setEngaged = useComposerStore((store) => store.setEngaged);
@@ -81,7 +83,7 @@ export function useComposerPresentation({
   );
 
   return {
-    expanded: !collapse || engaged || protectedExpanded,
+    expanded: !collapse || engaged || protectedExpanded || hasElements,
     onBlurCapture,
     onFocusCapture,
     onPointerDownCapture,

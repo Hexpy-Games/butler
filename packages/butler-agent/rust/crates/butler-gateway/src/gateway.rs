@@ -28,7 +28,7 @@ mod transcript;
 mod ui_language;
 
 pub(crate) use mutations::GatewayMutationCommands;
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use butler_runtime::operations::ProviderQuotaView;
 use tokio_util::sync::CancellationToken;
@@ -48,14 +48,14 @@ pub use application::{
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
     AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
-    AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
-    AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
-    AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
-    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
-    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
-    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
-    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
-    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppLedgerSourceRequest, AppLibraryCommand, AppMemoryCommand, AppMemoryPort,
+    AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort,
+    AppModelFallbackFacts, AppModelMetadata, AppMonitorPage, AppMonitoringPort,
+    AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand, AppPersonalizationEvent,
+    AppPersonalizationPort, AppPersonalizationResult, AppPlanDecisionAction,
+    AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
+    AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus,
+    AppProjectActionResult, AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
     AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
     AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
     AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
@@ -123,7 +123,7 @@ pub use security_settings::{
 };
 pub use server::{GatewayConfig, GatewayServer, serve_gateway};
 mod error;
-pub use error::GatewayApplicationError;
+pub use error::{ApplicationFuture, GatewayApplicationError};
 pub use session_references::resolve_session_references;
 pub use transcript::{TranscriptAppendListener, TranscriptCode, TranscriptWriter};
 pub use wallpapers::{
@@ -131,9 +131,6 @@ pub use wallpapers::{
     AppWallpaperModuleStatusReport, AppWallpaperRejection, AppWallpaperScope,
     AppWallpaperSetRequest, AppWallpaperVariant, GatewayWallpapers,
 };
-
-pub type ApplicationFuture<T> =
-    Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
 
 /// Project dashboard HTTP operations, backed by the App and Project Ledger owners.
 pub trait GatewayProjectDashboard: Send + Sync {
@@ -204,6 +201,11 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    /// Read a bounded page of saved browser items.
+    fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<serde_json::Value> {
+        let _ = command;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
         Box::pin(async move { Ok(app_session_hint(&chat)) })
     }
