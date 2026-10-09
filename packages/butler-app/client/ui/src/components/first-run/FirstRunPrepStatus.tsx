@@ -29,7 +29,7 @@ export function FirstRunPrepStatus({ flow, align = "start" }: { flow: FirstRunFl
   </Stack>;
 }
 
-function PreparationLine({ flow, align = "start" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
+export function PreparationLine({ flow, align = "start" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
   const { copy, readiness } = flow;
   if (readiness.status === "failed") return <FirstRunPrepFailure flow={flow} />;
   if (readiness.status === "ready") {

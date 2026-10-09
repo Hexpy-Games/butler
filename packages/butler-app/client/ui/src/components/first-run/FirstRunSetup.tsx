@@ -7,6 +7,7 @@ import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
 import { FirstRunWelcome } from "./FirstRunWelcome";
+import { FirstRunReady } from "./FirstRunReady";
 import { useFirstRunFlow, type FirstRunMode, type FirstRunResult } from "./useFirstRunFlow";
 
 export type { FirstRunMode, FirstRunResult };
@@ -29,14 +30,19 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
   const tone = resolveAppearanceTheme(appearance, useSystemThemePreference());
   return (
     <SetupWizardShell
-      data-first-run-screen={flow.screen}
+      data-first-run-screen={flow.step}
       data-test-class="first-run-setup"
       title={flow.copy.product}
       tone={tone}
       variant="focus"
+      anchor="top"
+      stepKey={flow.step === "welcome" ? "welcome" : "steps"}
+      onScroll={(event) => { event.currentTarget.scrollLeft = 0; }}
       windowControls={<WindowControls />}
     >
-      {flow.screen === "welcome" ? <FirstRunWelcome flow={flow} /> : flow.screen === "consent" ? <FirstRunConsent flow={flow} /> : <FirstRunConnect flow={flow} />}
+      {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
+        : flow.step === "consent" ? <FirstRunConsent flow={flow} />
+          : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );
 }

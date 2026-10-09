@@ -1,10 +1,15 @@
-import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+
+const matrix = [320, 375, 768, 1280, 1440].flatMap(width =>
+  ["ko", "en"].flatMap(language => ["light", "dark"].flatMap(theme =>
+    ["fresh", "renewal"].map(mode => `${width}-${language}-${theme}-${mode}`))));
+if (await runSmokeCases(matrix, "BUTLER_CONSENT_CASE", import.meta.path)) process.exit(0);
 
 const screenshots = resolve(".tmp/firstrun-ds");
 let textNodes = 0;
@@ -42,6 +47,11 @@ async function verifyConsent(page: Page, language: "ko" | "en", label: string) {
   assert(await page.getByRole("link", { name: copy.consentProviderLink }).evaluate((node) => node === document.activeElement), "provider link follows heading");
   assert(await page.getByRole("link", { name: copy.consentProviderLink }).evaluate((node) => node.scrollWidth <= node.clientWidth), "provider link text is not clipped");
   await page.keyboard.press("Tab");
+  const retry = page.getByRole("button", { name: copy.memoryModel.retry, exact: true });
+  if (await retry.count()) {
+    assert(await retry.evaluate((node) => node === document.activeElement), "memory retry follows link");
+    await page.keyboard.press("Tab");
+  }
   assert(await page.getByRole("button", { name: copy.decline, exact: true }).evaluate((node) => node === document.activeElement), "Decline follows link");
   await page.keyboard.press("Tab");
   assert(await page.getByRole("button", { name: copy.agree, exact: true }).evaluate((node) => node === document.activeElement), "Agree follows Decline");
@@ -92,7 +102,7 @@ async function verifyIcons(page: Page) {
     return Math.abs(slot.top - text.getBoundingClientRect().top) < 1 && Math.abs(slot.height - parseFloat(style.lineHeight)) < 1;
   }));
   assert(valid, "consent icons align to first body line");
-  const firstLine = await page.locator('[data-first-run-screen="consent"] [data-slot="icon-slot"]').last().evaluate((slot) => {
+  const firstLine = await page.locator('[data-first-run-screen="consent"] [role="list"] + * [data-slot="icon-slot"]').evaluate((slot) => {
     const text = slot.nextElementSibling!.querySelector("p")!;
     const glyph = slot.querySelector("svg")!.getBoundingClientRect();
     const lineCenter = text.getBoundingClientRect().top + parseFloat(getComputedStyle(text).lineHeight) / 2;
@@ -144,6 +154,7 @@ try {
     for (const language of ["ko", "en"] as const) {
       for (const theme of ["light", "dark"] as const) {
         for (const renewal of [false, true]) {
+          if (process.env.BUTLER_CONSENT_CASE && process.env.BUTLER_CONSENT_CASE !== `${width}-${language}-${theme}-${renewal ? "renewal" : "fresh"}`) continue;
           await runCase(width, language, theme, renewal);
           cases += 1;
         }
