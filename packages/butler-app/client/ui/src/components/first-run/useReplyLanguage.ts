@@ -51,10 +51,9 @@ export function useReplyLanguage({ connected, language, onComplete }: {
       if (cancelled) return;
       if (view.response_language !== "ko" && view.response_language !== "en") throw new Error("reply_language_missing");
       setValue(view.response_language);
-      if (view.response_language_explicit) void finish();
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [attempt, connected, finish]);
+  }, [attempt, connected]);
 
   return { value, setValue, saving, failed, retry: () => setAttempt((n) => n + 1), complete: () => value && void finish(value) };
 }
