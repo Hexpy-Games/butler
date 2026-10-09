@@ -68,7 +68,7 @@ export function requestClose(browser, tab) {
   if (!tab) return Promise.resolve({ status: "ok" });
   if (tab.dialog) return Promise.resolve(pendingDialog(tab));
   const contents = tab.view?.webContents;
-  if (!contents || contents.isDestroyed() || !contents.getURL()) { browser.close(tab.id); return Promise.resolve({ status: "ok" }); }
+  if (!contents || contents.isDestroyed() || tab.status === "crashed" || !contents.getURL()) { browser.close(tab.id); return Promise.resolve({ status: "ok" }); }
   return new Promise(resolve => {
     let settled = false;
     const finish = result => {

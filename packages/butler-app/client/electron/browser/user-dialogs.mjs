@@ -93,8 +93,8 @@ export function answerUserDialog(browser, input) {
   return resolveDialog(browser, tab, input);
 }
 export function prepareUserNavigation(browser, tab, op, value) {
-  // A fresh native view has no document in which to run an unload preflight.
-  if (!tab.view.webContents.getURL()) { browser.commandTab(op, tab.id, value, true); return; }
+  // Empty or crashed views have no live document to run an unload preflight.
+  if (tab.status === "crashed" || !tab.view.webContents.getURL()) { browser.commandTab(op, tab.id, value, true); return; }
   const epoch = tab.epoch;
   void tab.view.webContents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(accept => {
     if (accept && browser.tabs.get(tab.id) === tab && tab.epoch === epoch) browser.commandTab(op, tab.id, value, true);
