@@ -588,6 +588,9 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
+  saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
+  deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   get serverUrl() {
@@ -1374,6 +1377,16 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
 contextBridge.exposeInMainWorld("butlerBrowser", {
+  onElementDrag(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:element-drag", listener);
+    return () => ipcRenderer.removeListener("butler-browser:element-drag", listener);
+  },
+  onSelectionAction(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:selection-action", listener);
+    return () => ipcRenderer.removeListener("butler-browser:selection-action", listener);
+  },
   call: browserCall,
   subscribe: (handler) => {
     const listener = (_event, state) => handler(state);

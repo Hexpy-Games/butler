@@ -16,6 +16,7 @@ mod automation;
 mod browser_agent;
 mod browser_delegation;
 mod browser_outputs;
+mod browser_selection;
 mod browser_usage;
 mod cassette_lint;
 mod cli_launcher;

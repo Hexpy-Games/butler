@@ -18,6 +18,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_observe"
             | "browser_act"
             | "browser_tabs"
+            | "browser_selection"
             | "browser_close"
             | "browser_wait_for_user"
     )
@@ -55,6 +56,7 @@ pub(super) async fn execute(
     let op = match call.name.as_str() {
         "browser_open" => "tab.open",
         "browser_observe" => "tab.observe",
+        "browser_selection" => "tab.selection",
         "browser_close" => "tab.close",
         _ => "tabs.list",
     };

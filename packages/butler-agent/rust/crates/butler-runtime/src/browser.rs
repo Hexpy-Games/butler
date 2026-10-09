@@ -30,7 +30,10 @@ impl TabRegistry {
         if tab["owner"] != format!("conversation:{session}") {
             return Err("not_your_tab");
         }
-        if !matches!(op, "tab.wait" | "tab.waiting" | "tab.cancel") {
+        if !matches!(
+            op,
+            "tab.wait" | "tab.waiting" | "tab.cancel" | "tab.selection"
+        ) {
             if tab["profile"] == "signed_in" {
                 return Err("signed_in_unavailable");
             }

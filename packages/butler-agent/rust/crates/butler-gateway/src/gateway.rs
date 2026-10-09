@@ -204,6 +204,21 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    /// Read a bounded page of saved browser items.
+    fn list_library(&self, kind: String, cursor: String) -> ApplicationFuture<serde_json::Value> {
+        let _ = (kind, cursor);
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Save explicitly selected untrusted browser data.
+    fn save_library(&self, item: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
+        let _ = item;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Remove one saved item.
+    fn delete_library(&self, id: String) -> ApplicationFuture<serde_json::Value> {
+        let _ = id;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
         Box::pin(async move { Ok(app_session_hint(&chat)) })
     }
