@@ -106,12 +106,8 @@ impl RankContext<'_> {
             input.support_count.unwrap_or(0.0).ln_1p() / 17.0f64.ln(),
         );
         let metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
-        let score = match input.query_relevance {
-            None => 0.8 * fused + 0.2 * metadata,
-            Some(relevance) => {
-                0.55 * js_min(1.0, js_max(0.0, relevance)) + 0.35 * fused + 0.1 * metadata
-            }
-        };
+        let score =
+            0.55 * js_min(1.0, js_max(0.0, input.query_relevance)) + 0.35 * fused + 0.1 * metadata;
         RankedEpisode {
             input,
             score,

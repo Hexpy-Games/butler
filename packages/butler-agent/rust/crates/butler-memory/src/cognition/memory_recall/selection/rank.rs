@@ -353,17 +353,15 @@ fn rank_input(
         lexical_rank: rank(admitted.lexical, &ranks.lexical),
         context_rank: rank(admitted.context, &ranks.context),
         vector_rank: rank(admitted.vector, &ranks.vector),
-        query_relevance: Some(
-            seeds
-                .vector_episodes
-                .iter()
-                .filter(|hit| admitted.vector && hit.owner_id == row.episode_id)
-                .map(|hit| crate::cognition::recall::cosine_relevance(hit.distance))
-                .fold(
-                    *raw.relevance.get(&row.episode_id).unwrap_or(&0.0),
-                    f64::max,
-                ),
-        ),
+        query_relevance: seeds
+            .vector_episodes
+            .iter()
+            .filter(|hit| admitted.vector && hit.owner_id == row.episode_id)
+            .map(|hit| crate::cognition::recall::cosine_relevance(hit.distance))
+            .fold(
+                *raw.relevance.get(&row.episode_id).unwrap_or(&0.0),
+                f64::max,
+            ),
         explicit_priority: Some(admitted.explicit && row.explicit_priority),
         salience: Some(Salience::from_stored(&row.salience)),
         support_count: Some(row.support_count),

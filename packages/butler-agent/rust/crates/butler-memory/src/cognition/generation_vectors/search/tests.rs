@@ -95,7 +95,7 @@ fn episode(
         vector_rank,
         lexical_rank,
         context_rank: None,
-        query_relevance: Some(relevance),
+        query_relevance: relevance,
         explicit_priority: None,
         salience: None,
         support_count: None,
