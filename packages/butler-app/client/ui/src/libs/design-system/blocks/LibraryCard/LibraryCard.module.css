@@ -31,11 +31,51 @@
   background: var(--muted);
 }
 
+/* A typical picture (a product card, a square, a page view) spans the slot
+   and is contained in it, letterboxed on the matte. An extreme one (a heading
+   strip, a tall column) would become a full-width band of its own page
+   colour, flush with the slot's edges and split by matte bars, which reads as
+   a spill: it sits whole, inset on the neutral matte with a hairline frame.
+   The frame is one definite track, so the matted picture's max-height
+   resolves against it. Until its shape is known the picture stays hidden. */
+.frame {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+}
+
+.frame[data-fit="matte"] {
+  inset: var(--space-md);
+}
+
+/* The kind tag keeps the matted picture's top clear. */
+.media[data-tagged] .frame[data-fit="matte"] {
+  top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
 .image {
   display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.frame[data-fit="pending"] .image {
+  visibility: hidden;
+}
+
+.frame[data-fit="fill"] .image {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+}
+
+.frame[data-fit="matte"] .image {
+  border-radius: calc(var(--radius-control) / 2);
+  box-shadow:
+    0 0 0 var(--border-hairline) var(--line),
+    var(--browser-card-shadow);
 }
 
 /* A text scrap previews its words, not a picture of them. */

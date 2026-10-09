@@ -28,7 +28,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A bare image chip loses the title and the site.", render: () => <AttachmentList variant="chips" items={[{ id: "i", name: "pick-1.png", thumbnail: { src: CROP } }]} /> },
     },
   ],
-  content: ["Title: the element's own words (a product name), a few words; the site is the host only."],
+  content: [
+    "Title: the element's own words (a product name), a few words; the site is the host only.",
+    "The crop is shown whole on a neutral matte (contain). Capture it tight to the element's content: a block's empty width becomes a thin strip at 28px.",
+  ],
   accessibility: ["Remove reads “Remove: <title>”; the full title and site are in the tooltip when truncated.", "Without onRemove the chip has no controls (sent messages)."],
-  tokens: ["--control-height-sm", "--radius-control", "--composer-glass-control-bg", "--text-tertiary"],
+  tokens: ["--control-height-sm", "--radius-control", "--composer-glass-control-bg", "--muted", "--text-tertiary"],
 };

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Card } from "../../components/Card";
 import { Clickable } from "../../components/Clickable";
 import { Tag } from "../../components/Tag";
@@ -26,8 +26,40 @@ export interface LibraryCardProps extends DsPrivateStyleProps {
   onOpen?: () => void;
 }
 
+/**
+ * Width/height band that spans the 16:10 slot (contained, letterboxed on the matte): typical crops (a
+ * product card, a square, a page view). Outside it (a heading strip, a tall column) a spanning picture is a
+ * full-width band of page colour flush with the slot's edges, which reads as a spill, so it sits inset.
+ */
+const FILL_MIN_RATIO = 0.75;
+const FILL_MAX_RATIO = 2.4;
+
+/** `fill` (spans the slot) for typical shapes; `matte` (whole, inset on the matte) for extreme ones. */
+export function libraryImageFit(width: number, height: number): "fill" | "matte" {
+  if (!(width > 0 && height > 0)) return "matte";
+  const ratio = width / height;
+  return ratio >= FILL_MIN_RATIO && ratio <= FILL_MAX_RATIO ? "fill" : "matte";
+}
+
+/**
+ * Every picture is whole (contain). A typical one spans the slot; an extreme one (a wide strip, a tall
+ * column) sits inset on a neutral matte with a hairline frame. Hidden until its shape is known, so it
+ * never shows the wrong fit for a frame.
+ */
+function ImageMedia({ src, alt }: { src: string; alt?: string }) {
+  const [fit, setFit] = useState<{ src: string; fit: "fill" | "matte" } | null>(null);
+  const measure = useCallback((image: HTMLImageElement | null) => {
+    if (image?.complete && image.naturalWidth) setFit({ src, fit: libraryImageFit(image.naturalWidth, image.naturalHeight) });
+  }, [src]);
+  return (
+    <span className={styles.frame} data-fit={fit?.src === src ? fit.fit : "pending"}>
+      <img ref={measure} className={styles.image} src={src} alt={alt ?? ""} draggable={false} onLoad={(event) => measure(event.currentTarget)} />
+    </span>
+  );
+}
+
 function Media({ media }: { media: LibraryCardMedia }) {
-  if (media.kind === "image") return <img className={styles.image} src={media.src} alt={media.alt ?? ""} draggable={false} />;
+  if (media.kind === "image") return <ImageMedia src={media.src} alt={media.alt} />;
   if (media.kind === "quote") return <span className={styles.quote}>{media.text}</span>;
   return (
     <span className={styles.document} aria-hidden="true">
@@ -43,7 +75,7 @@ function Media({ media }: { media: LibraryCardMedia }) {
 export function LibraryCard({ media, title, meta, tag, menu, selected = false, onOpen, className }: LibraryCardProps) {
   const body = (
     <span className={styles.body}>
-      <span className={styles.media} data-kind={media.kind}>
+      <span className={styles.media} data-kind={media.kind} data-tagged={tag ? "true" : undefined}>
         <Media media={media} />
         {tag ? <span className={styles.tag}><Tag size="sm">{tag}</Tag></span> : null}
       </span>
