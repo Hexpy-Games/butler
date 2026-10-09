@@ -110,6 +110,7 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
                 continue;
             }
             message.content = json!({"ok":true,"output":{"schema":"butler.browser-observation.v1","obs":cycle.obs_id,"status":"superseded","acted":cycle.acted.join("; ")}}).to_string().into();
+            message.image_attachments.clear();
         }
     }
     for (index, call, value) in acts {

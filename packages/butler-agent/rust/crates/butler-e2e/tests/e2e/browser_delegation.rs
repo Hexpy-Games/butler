@@ -107,6 +107,15 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
             assert_eq!(ended["args"]["abort"], false);
         }
     }
+    let finished = next_frame(&mut stream, &mut buffer).await?;
+    assert_eq!(finished["op"], "use.finished");
+    assert_eq!(finished["session"], "general");
+    assert!(
+        finished["turn_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("steward-turn-")
+    );
     Ok(())
 }
 

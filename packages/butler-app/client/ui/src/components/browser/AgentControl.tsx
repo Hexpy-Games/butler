@@ -7,7 +7,7 @@ export function browserHolder(tab?: BrowserTab): PageCardHolder {
   if (!tab || tab.owner === "mine" || !tab.url || tab.profile === "signed_in") return "none";
   if (tab.waiting) return "waiting";
   if (tab.holder === "user") return "user";
-  return tab.agent || tab.driven || tab.inUse || tab.busy ? "butler" : "none";
+  return tab.inUse || tab.busy ? "butler" : "none";
 }
 
 export function AgentControl({ tab }: { tab?: BrowserTab }) {

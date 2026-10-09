@@ -4,7 +4,12 @@ use butler_turn::btcc::ToolResult;
 use serde_json::Value;
 
 pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> bool {
-    if !result.ok || !matches!(result.name.as_str(), "output_check" | "tool_call") {
+    if !result.ok
+        || !matches!(
+            result.name.as_str(),
+            "output_check" | "browser_observe" | "tool_call"
+        )
+    {
         return false;
     }
     let Some(raw) = result
@@ -17,7 +22,11 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
     let Ok(value) = serde_json::from_str::<Value>(raw.as_str()) else {
         return false;
     };
-    if value["schema"] != "butler.output-check.v1" || value["image"]["mime_type"] != "image/jpeg" {
+    if !matches!(
+        value["schema"].as_str(),
+        Some("butler.output-check.v1" | "butler.browser-observation.v1")
+    ) || value["image"]["mime_type"] != "image/jpeg"
+    {
         return false;
     }
     value["image"]["data"].as_str().is_some_and(|data| {

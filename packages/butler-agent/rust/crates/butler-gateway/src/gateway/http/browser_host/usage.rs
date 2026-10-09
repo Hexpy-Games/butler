@@ -13,7 +13,13 @@ pub(super) struct Use {
 fn executes(op: &str) -> bool {
     matches!(
         op,
-        "tab.open" | "tab.observe" | "tab.prepare" | "tab.act" | "tab.dialog" | "tab.close"
+        "tab.open"
+            | "tab.observe"
+            | "tab.screenshot"
+            | "tab.prepare"
+            | "tab.act"
+            | "tab.dialog"
+            | "tab.close"
     )
 }
 pub(super) fn dispatch(
@@ -114,6 +120,47 @@ pub(super) fn finish_turn(state: &HttpState, payload: &Map<String, Value>) {
     let (Some(session), Some(turn_id)) = (session, id) else {
         return;
     };
+    finish_owner_turn(state, session, turn_id);
+}
+pub(super) fn finish_child(
+    state: std::sync::Weak<HttpState>,
+    runtime: &tokio::runtime::Handle,
+    payload: &Map<String, Value>,
+) {
+    let Some(child) = payload.get("child_session_id").and_then(Value::as_str) else {
+        return;
+    };
+    let child = child.to_owned();
+    runtime.spawn(async move {
+        let Some(state) = state.upgrade() else { return };
+        let Ok(projection) = state.application.subsession_projection(child).await else {
+            return;
+        };
+        let turn = &projection["latest_turn"];
+        if projection["terminal"] != true
+            && !matches!(
+                turn["state"].as_str(),
+                Some("delivered" | "cancelled" | "failed" | "runtime_fault")
+            )
+        {
+            return;
+        }
+        let Some(id) = turn["id"].as_str() else {
+            return;
+        };
+        // The dispatch stored the trusted public owner, including nested children.
+        let session = state.browser.0.lock().ok().and_then(|hub| {
+            hub.turns
+                .iter()
+                .find(|(_, turn)| turn == id)
+                .map(|(owner, _)| owner.clone())
+        });
+        if let Some(session) = session {
+            finish_owner_turn(&state, &session, id);
+        }
+    });
+}
+fn finish_owner_turn(state: &HttpState, session: &str, turn_id: &str) {
     if let Ok(mut hub) = state.browser.0.lock() {
         if !hub.turns.remove(&(session.into(), turn_id.into())) {
             return;

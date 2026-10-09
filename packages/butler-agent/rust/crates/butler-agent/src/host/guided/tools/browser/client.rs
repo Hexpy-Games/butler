@@ -12,6 +12,9 @@ pub(super) struct Client {
     turn: String,
 }
 impl Client {
+    pub(super) async fn vision(&self, model: &str) -> bool {
+        super::super::outputs::vision(&self.client, &self.base, &self.bearer, model).await
+    }
     pub(super) async fn new(owner: &GuidedTools) -> Option<Self> {
         let endpoint = owner.app_endpoint.snapshot()?;
         let data = owner.binding.butler_data.clone();

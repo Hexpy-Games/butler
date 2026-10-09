@@ -1,4 +1,4 @@
-export function resolveRef({ ref, obs, epoch, scroll = false }) {
+export function resolveRef({ ref, obs, epoch, scroll = false, offset }) {
   globalThis.__butlerPerceptionCache={styles:new WeakMap(),paint:new WeakMap(),clips:new WeakMap(),boxes:new WeakMap(),rectangles:new WeakMap(),luminances:new Map()};
   const state = globalThis.__butlerObservation;
   if (!state || state.obs !== obs || state.epoch !== epoch) return { reason: "stale_ref" };
@@ -18,6 +18,12 @@ export function resolveRef({ ref, obs, epoch, scroll = false }) {
   const point = visiblePoint(element);
   if (point.blocker) return { reason: "blocked_by", hit: semantic(point.blocker) };
   const bounds = rectangle(element);
+  if (offset) {
+    point.x += offset[0]; point.y += offset[1];
+    if (point.x < bounds.x || point.x >= bounds.x + bounds.width || point.y < bounds.y || point.y >= bounds.y + bounds.height) return { reason: "invalid_drag" };
+    const hit = hitAt(element.getRootNode(), point.x, point.y);
+    if (hit !== element && !element.contains(hit)) return { reason: "blocked_by" };
+  }
   return { x: point.x, y: point.y, rect: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
     payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
     addons: currentAddons(),

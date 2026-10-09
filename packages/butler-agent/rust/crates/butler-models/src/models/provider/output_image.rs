@@ -4,12 +4,18 @@ use butler_turn::btcc::ModelRoundMessage;
 use serde_json::{Value, json};
 
 pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
-    if !matches!(message.name.as_deref(), Some("output_check" | "tool_call")) {
+    if !matches!(
+        message.name.as_deref(),
+        Some("output_check" | "browser_observe" | "tool_call")
+    ) {
         return None;
     }
     let mut value: Value = serde_json::from_str(&message.content).ok()?;
     let output = value.get_mut("output")?;
-    if output["schema"] != "butler.output-check.v1" {
+    if !matches!(
+        output["schema"].as_str(),
+        Some("butler.output-check.v1" | "butler.browser-observation.v1")
+    ) {
         return None;
     }
     let image = output.as_object_mut()?.remove("image")?;
@@ -41,7 +47,7 @@ pub(super) fn validate(
     {
         return Err(butler_turn::btcc::ModelRoundError::ImageAdmission {
             code: "image_model_unsupported".into(),
-            reason: "Output-check images require a vision-capable model.".into(),
+            reason: "Browser images require a vision-capable model.".into(),
         });
     }
     Ok(())
