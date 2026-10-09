@@ -266,7 +266,7 @@ export const enUsCopy: AppCopy = {
     agentUsing: "Butler is browsing", takeOver: "Take over", userControl: "You're in control", butlerWaits: "Butler is waiting",
     giveBack: "Give back to Butler", autoGiveBack: "Returns to Butler when you leave", stopTask: "Stop task", stopped: "Task stopped",
     waiting: "Waiting for approval", review: "Review", needYou: "Your input needed", keypad: "Security keypad", mfa: "Two-step verification",
-    passkey: "Passkey", typeYourself: "Type it yourself", printer: "Printer", noPrinters: "No printers", popupBlocked: "Pop-up blocked", allow: "Allow", popupOpened: "Pop-up open",
+    passkey: "Passkey", typeYourself: "Type it yourself", chooseFile: "Choose file", printer: "Printer", noPrinters: "No printers", popupBlocked: "Pop-up blocked", allow: "Allow", popupOpened: "Pop-up open",
     showPopup: "Show pop-up", newTabOpened: "New tab opened", downloaded: "Downloaded", pointerButler: "Butler", pointerLooking: "Looking",
     pointerTyping: "Typing", pointerWaiting: "Waiting", pointerAwaitingApproval: "Awaiting approval", pointerNeedInput: "Waiting for your input",
     pickMode: "Picking", pickMulti: "More", pickRegion: "Area", dragToChat: "Drag into the chat", finish: "Done",
