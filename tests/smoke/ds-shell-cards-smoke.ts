@@ -6,7 +6,10 @@ import type { Locator, Page } from "playwright";
 // AdaptiveShell frame="cards" geometry on the static DS site (run after build:ds-site):
 // - opening the inspector never moves the title row's trailing icons (⋯ · browser · inspector);
 // - the cards frame draws its cards (radius, inset) and the inspector card sits under the title row;
-// - the sidebar peek is visible under reduced motion (it was laid out but transparent).
+// - the sidebar peek is visible under reduced motion (it was laid out but transparent);
+// - the window bounds every card: with a long conversation and a tall inspector both cards keep the 8px
+//   bottom inset and their rounded bottom corners, and an empty new chat (its stage sized to the window) keeps the
+//   title row's icons on screen after its composer takes focus (nothing scrolls the shell).
 // Screenshots of every cards story, light and dark, land in .tmp/ds-shell-cards for review.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
@@ -36,7 +39,9 @@ const STORY = {
   flatPeek: "Sidebar peek",
   browser: "Cards frame: conversation + browser (1440, and 1100 with the sidebar stepped aside)",
   hub: "Cards frame: standalone browser",
+  tall: "Cards frame: tall content stays inside the window",
 } as const;
+const bottomInsets: string[] = [];
 const tabInsets: string[] = [];
 
 async function openShellPage(page: Page, theme: "light" | "dark"): Promise<void> {
@@ -50,8 +55,8 @@ async function windowFacts(frame: Locator) {
     const host = node as HTMLElement;
     // The scaled window is the host's child (the host draws a 1px viewer border around it).
     const box = (host.firstElementChild as HTMLElement).getBoundingClientRect();
-    const logical = Number(host.dataset.dsScaledFrame?.split("x")[0] ?? box.width);
-    const scale = box.width / logical;
+    const [logical, logicalHeight] = (host.dataset.dsScaledFrame ?? "").split("x").map(Number);
+    const scale = box.width / (logical || box.width);
     const local = (rect: DOMRect | undefined) => rect && ({
       left: (rect.left - box.left) / scale, right: (rect.right - box.left) / scale,
       top: (rect.top - box.top) / scale, bottom: (rect.bottom - box.top) / scale,
@@ -60,17 +65,40 @@ async function windowFacts(frame: Locator) {
     const card = host.querySelector("[data-slot=adaptive-shell-card]");
     const inspector = host.querySelector("[data-slot=adaptive-shell-inspector]");
     const title = host.querySelector("[data-slot=adaptive-shell-title]")?.getBoundingClientRect();
+    const shell = host.querySelector("[data-slot=adaptive-shell-workspace]")?.parentElement;
+    const radii = (node: Element) => {
+      const style = getComputedStyle(node);
+      return { radius: style.borderTopLeftRadius, bottomRadius: [style.borderBottomLeftRadius, style.borderBottomRightRadius] };
+    };
     return {
+      width: logical, height: logicalHeight,
       icons: local(icons), title: local(title),
-      card: card ? { ...local(card.getBoundingClientRect()), radius: getComputedStyle(card).borderTopLeftRadius } : null,
+      // Anything that scrolls the shell (or the frame around it) moves the whole window off its title row;
+      // overflow is how far the shell could scroll (focus or scrollIntoView would take it).
+      scroll: { frame: host.scrollTop, shell: shell?.scrollTop ?? -1, overflow: shell ? shell.scrollHeight - shell.clientHeight : -1 },
+      card: card ? { ...local(card.getBoundingClientRect()), ...radii(card) } : null,
       inspector: inspector && getComputedStyle(inspector).visibility === "visible"
-        ? { ...local(inspector.getBoundingClientRect()), radius: getComputedStyle(inspector).borderTopLeftRadius } : null,
+        ? { ...local(inspector.getBoundingClientRect()), ...radii(inspector) } : null,
     };
   });
 }
 
 const near = (a: number | undefined, b: number | undefined, tolerance = 0.75) =>
   a !== undefined && b !== undefined && Math.abs(a - b) <= tolerance;
+
+type WindowFacts = Awaited<ReturnType<typeof windowFacts>>;
+type CardFacts = NonNullable<WindowFacts["card"]>;
+
+/** A card bounded by the window: 8px off its bottom edge, with both rounded bottom corners. */
+function assertBottomInset(facts: WindowFacts, card: CardFacts | null, label: string): void {
+  assert(card, `${label}: card missing ${JSON.stringify(facts)}`);
+  const inset = facts.height - (card.bottom ?? 0);
+  bottomInsets.push(`${label} ${inset.toFixed(2)}`);
+  assert(near(inset, 8) && card.bottomRadius.every((radius) => radius === "12px"),
+    `${label}: the card should end 8px above the window's bottom edge with 12px bottom corners: ${JSON.stringify(card)} in ${facts.width}x${facts.height}`);
+  assert(facts.scroll.frame === 0 && facts.scroll.shell === 0 && facts.scroll.overflow === 0,
+    `${label}: the shell must not scroll: ${JSON.stringify(facts.scroll)}`);
+}
 
 const browser = await launchSmokeBrowser();
 try {
@@ -96,6 +124,34 @@ try {
       `${theme}: the inspector should be a card under the title row: ${JSON.stringify(open.inspector)}`);
     assert(open.card && near((open.inspector.left ?? 0) - (open.card.right ?? 0), 8),
       `${theme}: one 8px gap between the content card and the inspector card: ${JSON.stringify({ card: open.card, inspector: open.inspector })}`);
+    assertBottomInset(closed, closed.card, `${theme} 1440 card`);
+    assertBottomInset(open, open.inspector, `${theme} 1440 inspector`);
+    const narrow = await windowFacts(frames.nth(2));
+    assertBottomInset(narrow, narrow.card, `${theme} 1100 card`);
+    assertBottomInset(narrow, narrow.inspector, `${theme} 1100 inspector`);
+
+    // Tall content: a long conversation, a tall inspector, an empty new chat sized to the window.
+    const tall = page.locator(`[data-ds-story="${STORY.tall}"] [data-ds-theme="${theme}"]`).first();
+    const tallFrames = tall.locator("[data-ds-scaled-frame]");
+    assert((await tallFrames.count()) === 3, `${theme}: the tall-content story renders 3 windows`);
+    const long = await windowFacts(tallFrames.nth(0));
+    assert(near(long.card?.top, 49) && near(long.card?.right, 1440 - 8), `${theme}: long conversation card frame: ${JSON.stringify(long.card)}`);
+    assertBottomInset(long, long.card, `${theme} 1440 long conversation`);
+    const tallInspector = await windowFacts(tallFrames.nth(1));
+    assertBottomInset(tallInspector, tallInspector.card, `${theme} 1100 long conversation`);
+    assertBottomInset(tallInspector, tallInspector.inspector, `${theme} 1100 tall inspector`);
+    assert(near(tallInspector.inspector?.top, 49), `${theme}: tall inspector starts under the title row: ${JSON.stringify(tallInspector.inspector)}`);
+    for (const [index, name] of ["long-conversation-1440", "tall-inspector-1100", "empty-conversation-1100"].entries()) {
+      await tallFrames.nth(index).screenshot({ path: join(shots, `tall-${name}-${theme}.png`) });
+    }
+    // The composer takes focus and is scrolled into view as on a new chat; neither may move the window off
+    // its title row.
+    await tallFrames.nth(2).locator("[data-slot=adaptive-shell-card] textarea").first()
+      .evaluate((node) => { (node as HTMLElement).focus(); node.scrollIntoView({ block: "end" }); });
+    const empty = await windowFacts(tallFrames.nth(2));
+    assert(empty.icons && (empty.icons.top ?? -1) >= 0 && (empty.icons.bottom ?? Infinity) <= 48,
+      `${theme}: empty conversation title icons must stay in the title row: ${JSON.stringify(empty.icons)}`);
+    assertBottomInset(empty, empty.card, `${theme} 1100 empty conversation`);
     await story.screenshot({ path: join(shots, `inspector-${theme}.png`) });
 
     for (const name of [STORY.peek, STORY.flatPeek]) {
@@ -138,6 +194,7 @@ try {
     await context.close();
   }
   console.log(`first tab insets (px): ${tabInsets.join(" · ")}`);
+  console.log(`card bottom insets (px): ${bottomInsets.join(" · ")}`);
   console.log(`ds-shell-cards smoke: ok (screenshots in ${shots})`);
 } finally {
   await browser.close();
