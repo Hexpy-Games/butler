@@ -1,5 +1,8 @@
-/* A sheet whose two top corners use the page card radius (12px), standing
-   --space-xs off the chat column and the window edge. */
+/* A sheet whose two top corners use the page card radius (12px). One edge,
+   one hairline: the sheet's leading hairline is the chat | pane divider (the
+   chat column draws none); its trailing and bottom edges meet the window,
+   whose frame (the workspace border) draws them, so the sheet tucks its own
+   trailing border under that frame instead of doubling it. */
 .pane {
   display: flex;
   min-width: 0;
@@ -7,7 +10,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  margin-inline: var(--space-xs);
+  margin-inline: 0 calc(var(--border-hairline) * -1);
   padding-top: var(--space-xs);
   overflow: hidden;
   border: var(--border-hairline) solid var(--line);
@@ -16,8 +19,10 @@
   background: var(--browser-pane-bg);
 }
 
+/* Standalone, the sheet's leading edge is the window frame's (the workspace
+   border beside the sidebar) too. */
 .pane[data-placement="standalone"] {
-  margin-inline: 0 var(--space-xs);
+  margin-inline-start: calc(var(--border-hairline) * -1);
 }
 
 .tabRow {

@@ -1,0 +1,106 @@
+/* Resize handles (sidebar, inspector, chat | browser pane): the divider's
+   hairline belongs to the surfaces; the handle adds a 4×64px pill grabber
+   (a little longer than a native split grabber) centred on it while hovered,
+   focused or dragged, and a hint beside the grabber after about the Tooltip
+   delay (2 × --motion-deliberate), in the Tooltip glass. */
+.grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 64px;
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scaleY(0.6);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.handle:not([data-locked]):hover > .grip,
+.handle:focus-visible > .grip,
+.handle:not([data-locked])[data-dragging] > .grip,
+.handle:not([data-locked]):active > .grip {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+
+.handle:not([data-locked])[data-dragging] > .grip,
+.handle:not([data-locked]):active > .grip {
+  background: var(--text-secondary);
+}
+
+.hint {
+  position: absolute;
+  top: 50%;
+  z-index: var(--z-tooltip);
+  display: grid;
+  width: max-content;
+  max-width: 240px;
+  gap: 2px;
+  padding: var(--space-xs) var(--space-sm);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%);
+  visibility: hidden;
+  transition:
+    opacity var(--motion-exit-fast) var(--motion-ease-accelerate),
+    visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
+}
+
+/* The hint sits on the DOM side of the divider, clear of the grabber. */
+.hint[data-side="end"] {
+  left: calc(50% + 2px + var(--space-sm));
+}
+
+.hint[data-side="start"] {
+  right: calc(50% + 2px + var(--space-sm));
+}
+
+.handle:not([data-locked]):hover > .hint {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--motion-enter-menu) var(--motion-ease-enter)
+      calc(var(--motion-deliberate) * 2),
+    visibility 0s var(--motion-ease-linear) calc(var(--motion-deliberate) * 2);
+}
+
+.handle:focus-visible > .hint {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--motion-enter-menu) var(--motion-ease-enter);
+}
+
+/* Dragging: the grabber says enough; the hint steps aside at once. */
+.handle[data-dragging] > .hint,
+.handle:active > .hint {
+  opacity: 0;
+  visibility: hidden;
+  transition: none;
+}
+
+.title,
+.detail {
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-snug);
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.detail {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grip {
+    transform: translate(-50%, -50%);
+  }
+}
