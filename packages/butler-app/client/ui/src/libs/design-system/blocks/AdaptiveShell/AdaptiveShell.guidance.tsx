@@ -30,7 +30,7 @@ function ConversationFrame() {
       <AdaptiveShellSidebar open={false}><Box padding="md"><Typo.PanelTitle>Navigation</Typo.PanelTitle></Box></AdaptiveShellSidebar>
       <AdaptiveShellPeekEdge onPeek={peek.show} />
       <AdaptiveShellWorkspace>
-        <AdaptiveShellSplit paneOpen chatWidth={400} onChatWidthChange={() => undefined} resizeLabel="Resize conversation"
+        <AdaptiveShellSplit paneOpen chatWidth={400} onChatWidthChange={() => undefined} resizeLabel="Resize conversation" resizeHint="Drag to resize"
           chat={<Box padding="md"><Typo.Body>Conversation</Typo.Body></Box>} pane={<Box padding="md"><Typo.Body>Browser pane</Typo.Body></Box>} />
       </AdaptiveShellWorkspace>
     </AdaptiveShell>
