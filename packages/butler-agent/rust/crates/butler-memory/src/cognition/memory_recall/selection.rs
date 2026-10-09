@@ -49,7 +49,6 @@ pub(super) struct RecallSelectionInput<'a> {
     pub(super) vector_matches: Option<&'a RecallVectorMatches>,
     pub(super) candidate_deadline: i64,
     pub(super) graph_deadline: i64,
-    pub(super) overall_deadline: i64,
     pub(super) now_iso: &'a str,
     pub(super) now_millis: &'a dyn Fn() -> i64,
     pub(super) parse_date: &'a dyn Fn(&str) -> f64,
@@ -68,7 +67,6 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         vector_matches,
         candidate_deadline,
         graph_deadline,
-        overall_deadline,
         now_iso,
         now_millis,
         parse_date,
@@ -123,9 +121,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         fallback::merge(&request, seeds, fts)?,
         raw,
         coverage,
-        overall_deadline,
         now_iso,
-        now_millis,
         parse_date,
     )?;
     selected.vector_current = vector_current;

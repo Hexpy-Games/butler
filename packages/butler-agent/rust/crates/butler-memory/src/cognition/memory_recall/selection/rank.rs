@@ -66,9 +66,7 @@ pub(super) fn rank(
     mut seeds: SeedGraph,
     raw: RawSourceSelection,
     coverage: ProjectionCoverage,
-    _overall_deadline: i64,
     now_iso: &str,
-    _now_millis: &dyn Fn() -> i64,
     parse_date: &dyn Fn(&str) -> f64,
 ) -> CognitionResult<Selection> {
     let admitted = input.admitted_channels.clone().unwrap_or_default();
