@@ -15,10 +15,11 @@
 .root[data-frame="cards"][data-panel-layout="docked"] {
   --titlebar-bg: transparent;
   /* The browser sheet reads as a card on the shell, a faint ink tint of the
-     card surface so the page card inside still lifts off it. */
+     card surface (--shell-sheet-tint) so the page card inside still lifts
+     off it (the sheet sets the page card's shadow, --shell-page-shadow). */
   --browser-pane-bg: color-mix(
     in srgb,
-    var(--text-primary) 2.5%,
+    var(--text-primary) var(--shell-sheet-tint),
     var(--shell-card-bg)
   );
 

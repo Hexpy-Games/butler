@@ -1356,7 +1356,7 @@ The app frame: sidebar, workspace and inspector that become drawers over a scrim
 - Use for: The root layout of the app window (AppShell)
 - Not for: A page inside the workspace → `PageContainer`
 - Not for: A static preview of the chrome → `ChromeFrame`
-- Tokens: `--adaptive-drawer-width`, `--adaptive-inspector-width`, `--adaptive-panel-duration`, `--adaptive-scrim-bg`, `--sidebar-width`, `--browser-chat-width`, `--browser-chat-width-min`, `--browser-chat-width-max`, `--shell-bg`, `--shell-card-bg`, `--shell-card-inset`, `--shell-card-gap`, `--shell-card-radius`, `--shell-card-edge`, `--shell-card-shadow`
+- Tokens: `--adaptive-drawer-width`, `--adaptive-inspector-width`, `--adaptive-panel-duration`, `--adaptive-scrim-bg`, `--sidebar-width`, `--browser-chat-width`, `--browser-chat-width-min`, `--browser-chat-width-max`, `--shell-bg`, `--shell-card-bg`, `--shell-card-inset`, `--shell-card-gap`, `--shell-card-radius`, `--shell-card-edge`, `--shell-card-shadow`, `--shell-sheet-tint`, `--shell-page-shadow`
 
 ### ChromeFrame
 
