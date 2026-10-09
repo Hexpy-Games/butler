@@ -2,10 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use butler_e2e::e2e::{
     HarnessError,
-    cassette::{Cassette, Exchange},
+    cassette::{Cassette, Exchange, ResponseRecord},
     events::LiveEvents,
     faults::{Fault, Transform},
-    provider::is_title_request,
+    provider::{is_title_request, title_response},
     scenario::{Fixture, Scenario, Setup},
 };
 use serde_json::{Value, json};
@@ -13,6 +13,14 @@ use std::time::{Duration, Instant};
 const TITLE: &str = "Planning a Simple Reply";
 
 async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
+    start_with_title(name, TITLE, None).await
+}
+
+async fn start_with_title(
+    name: &str,
+    generated_title: &str,
+    title_request: Option<String>,
+) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("Q-02")?;
     cassette.meta.model = "openai/gpt-6.1-sol".into();
     cassette.meta.effort = Some("medium".into());
@@ -22,10 +30,11 @@ async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
     }
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
     let mut title: Exchange = cassette.exchanges.last().unwrap().clone();
-    title.request.key.user_request = format!("User message: {prompt}");
+    title.request.key.user_request =
+        title_request.unwrap_or_else(|| format!("User message: {prompt}"));
     title.request.key.round.clear();
     title.request.key.effort = Some("low".into());
-    title.response = butler_e2e::e2e::provider::title_response("\"# Planning a Simple Reply.\"");
+    title.response = title_response(&format!("\"# {generated_title}.\""));
     cassette.exchanges.push(title);
     let setup = Setup::new(name)?
         .fixture(Fixture::Empty)
@@ -39,6 +48,10 @@ async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
     s.gw.patch("/settings", json!({"access_mode":"full_access"}))
         .await?;
     Ok((s, prompt))
+}
+
+fn non_title_turn_reply(request: &Value) -> Option<ResponseRecord> {
+    (!is_title_request(request)).then(|| title_response("Attachment received."))
 }
 
 async fn chat(s: &Scenario, title: &str, prompt: &str) -> Result<String, HarnessError> {
@@ -80,6 +93,17 @@ async fn wait_requests(s: &Scenario, count: usize) {
     })
     .await
     .expect("title request missing");
+}
+
+async fn wait_title(s: &Scenario, chat: &str, expected: &str) -> Result<(), HarnessError> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while title(s, chat).await? != expected {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        Ok::<_, HarnessError>(())
+    })
+    .await
+    .expect("generated title missing")
 }
 
 #[tokio::test]
@@ -307,5 +331,77 @@ async fn title_07_queued_followup_does_not_generate_again() -> Result<(), Harnes
             .count(),
         1
     );
+    s.finish().await
+}
+
+#[tokio::test]
+async fn title_08_airline_steward_title_is_accepted() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, prompt) = start_with_title("TITLE-08", "Airline steward duties", None).await?;
+    let chat = chat(&s, &provisional(&prompt), &prompt).await?;
+    let (_, turn) = s.turn(&chat, &prompt).await?;
+    assert_eq!(turn["state"], "delivered");
+    wait_title(&s, &chat, "Airline steward duties").await?;
+    assert!(!s.agent.logs().contains("reason=invalid_output"));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn title_09_attachment_only_first_message_is_titled() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let file_name = "boarding-notes.txt";
+    let title_prompt = format!("User message: Attached files: {file_name}");
+    let (s, _) = start_with_title("TITLE-09", "Boarding notes review", Some(title_prompt)).await?;
+    let chat = chat(&s, file_name, "").await?;
+    let file =
+        s.gw.upload(
+            file_name,
+            "text/plain",
+            b"Gate and boarding information.",
+            Some(&chat),
+        )
+        .await?;
+    assert_eq!(file.status, 201, "{}", file.text);
+    s.provider()?.set_chat_responder(non_title_turn_reply);
+    let accepted =
+        s.gw.send_message(json!({
+            "chat_id": chat,
+            "text": "",
+            "attachments": [{"file_id": file.data()["file"]["file_id"]}],
+            "client_message_id": uuid::Uuid::new_v4().to_string(),
+        }))
+        .await?;
+    let turn_id = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    let turn =
+        s.gw.wait_terminal(&chat, &turn_id, Duration::from_secs(10))
+            .await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    wait_title(&s, &chat, "Boarding notes review").await?;
+    let title_request = s
+        .provider()?
+        .requests()
+        .into_iter()
+        .find(is_title_request)
+        .expect("title request missing");
+    assert!(title_request["input"].to_string().contains(file_name));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn title_10_emoji_cap_keeps_the_code_point_intact() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let prompt = format!("{}😀 continues past the provisional cap", "p".repeat(44));
+    let provisional_title = provisional(&prompt);
+    let generated = format!("{}😀and more words", "x".repeat(59));
+    let expected = format!("{}😀...", "x".repeat(59));
+    assert_eq!(expected.encode_utf16().count(), 64);
+    assert!(provisional_title.contains('�'));
+    let title_request = format!("User message: {prompt}");
+    let (s, _) = start_with_title("TITLE-10", &generated, Some(title_request)).await?;
+    let chat = chat(&s, &provisional_title, &prompt).await?;
+    s.provider()?.set_chat_responder(non_title_turn_reply);
+    let (_, turn) = s.turn(&chat, &prompt).await?;
+    assert_eq!(turn["state"], "delivered");
+    wait_title(&s, &chat, &expected).await?;
     s.finish().await
 }

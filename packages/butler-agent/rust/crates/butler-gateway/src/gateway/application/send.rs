@@ -151,17 +151,26 @@ impl AppApplication {
             text: prepared.text,
             controls: resolved,
         };
+        let title_attachments = inspected
+            .files
+            .iter()
+            .map(|file| file.safe_name.clone())
+            .collect::<Vec<_>>();
         if inserted {
             self.complete_visual_admission(&chat_id, &queued_id, &prepared, inspected.files)
                 .await?;
         }
-        let title_input = (prepared.text.clone(), prepared.controls.model.clone());
+        let title_input = (
+            prepared.text.clone(),
+            title_attachments,
+            prepared.controls.model.clone(),
+        );
         let result = self.dispatch(&chat_id, &client_id, prepared).await;
         if inserted
             && result.as_ref().is_ok_and(|sent| sent.accepted.is_some())
             && request.subsession_result.is_none()
         {
-            self.generate_session_title(chat_id, title_input.0, title_input.1);
+            self.generate_session_title(chat_id, title_input.0, title_input.1, title_input.2);
         }
         result
     }
