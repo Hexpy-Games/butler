@@ -1,10 +1,9 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import { startupTiming } from "./startup-timing.mjs";
+export { startupTiming, startupTimings } from "./startup-timing.mjs";
 import { createLifecycleWindow, parkLifecycleWindow } from "./lifecycle-window.mjs";
 import { openLifecycleLog } from "./lifecycle-diagnostics.mjs";
 
-const createdAt = process.getCreationTime();
-const startedAt = createdAt === null ? null : performance.now() - (Date.now() - createdAt);
-const events = [];
 let firstPaintResolve;
 const firstPaint = new Promise((resolve) => { firstPaintResolve = resolve; });
 let surface = null;
@@ -18,13 +17,6 @@ let readyResolve;
 const rendererReady = new Promise((resolve) => { readyResolve = resolve; });
 let rendererId;
 
-startupTiming("process_start");
-export function startupTimings() { return events.map((event) => ({ ...event })); }
-export function startupTiming(stage) {
-  const elapsed = startedAt === null ? null : performance.now() - startedAt;
-  events.push({ stage, elapsed_ms: elapsed === null ? null : Number(elapsed.toFixed(3)), timestamp_ms: Date.now() });
-  console.info(JSON.stringify({ startup: events.at(-1) }));
-}
 function publish() { surface?.update(state); displayedAt = performance.now(); }
 function clearStageTimers() { clearTimeout(timeout); clearTimeout(slow); clearTimeout(dwell); }
 export function startupStage(stage) {
