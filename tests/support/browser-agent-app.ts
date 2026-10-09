@@ -21,8 +21,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   mkdirSync(evidence,{recursive:true});
   const dir = mkdtempSync(join(tmpdir(), "browser-agent-app-"));
   const home = join(dir, "home"); mkdirSync(home); mkdirSync(join(dir, "profile"));
-  const gateway = await createNativeAppServer({ stubToolCall, uiRoot: rendererDist,
-    env: process.env.BUTLER_BROWSER_DISABLED ? {BUTLER_BROWSER_DISABLED:process.env.BUTLER_BROWSER_DISABLED} : {} });
+  const gateway = await createNativeAppServer({ stubToolCall, uiRoot: rendererDist });
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   assert.ok(executable, "explicit Electron 44 executable required");

@@ -29,12 +29,11 @@ pub(super) async fn execute(
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let args = Value::Object(call.arguments.clone());
-    if std::env::var_os("BUTLER_BROWSER_DISABLED").is_some()
-        || owner
-            .binding
-            .allowed_tools_and_effects
-            .as_ref()
-            .is_some_and(|names| !names.iter().any(|name| name == &call.name))
+    if owner
+        .binding
+        .allowed_tools_and_effects
+        .as_ref()
+        .is_some_and(|names| !names.iter().any(|name| name == &call.name))
     {
         return finish_batch(
             &args,

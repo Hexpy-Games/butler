@@ -1,5 +1,6 @@
 // test-category: pure-logic
 // No model calls. Provider injection is the P2a seam; A0 deliberately has no visibility filtering.
+import { scrollVirtualizedFixture } from "../support/browser-virtualized-fixture";
 import { loadavg } from "node:os";
 import { HitTestedProvider } from "../browser-eval/hit-tested-provider";
 import { strict as assert } from "node:assert";
@@ -31,6 +32,7 @@ export async function runPerception(provider: SnapshotProvider, output: string) 
       await page.goto(fixture.url(id));
       await Promise.all(page.frames().map((frame) => frame.evaluate("document.fonts.ready")));
       if (truth.settleMs) await page.waitForTimeout(truth.settleMs);
+      if (id === "F10") await scrollVirtualizedFixture(page);
       const loadAverage1m = loadavg()[0];
       const snapshot = await provider.snapshot(page);
       rows.push({ ...scoreSnapshot(truth, provider.arm, snapshot), loadAverage1m } as L1Metrics);

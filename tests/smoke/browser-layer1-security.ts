@@ -2,14 +2,11 @@
 // Product refs drive scrolling; hidden text must never enter an observation.
 import { strict as assert } from "node:assert";
 import { writeFile } from "node:fs/promises";
-import { perceptionSource, resolveSource } from "../../packages/butler-app/client/electron/browser/page/snapshot.mjs";
+import { perceptionSource } from "../../packages/butler-app/client/electron/browser/page/snapshot.mjs";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { startFixtureServer, readTruth } from "../fixtures/browser/server";
 import { scoreSnapshot } from "../browser-eval/scoring";
-import type { PerceptionSnapshot } from "../browser-eval/contracts";
-type ProductSnapshot = Omit<PerceptionSnapshot, "nodes"> & {
-  nodes: Array<PerceptionSnapshot["nodes"][number] & { name: string; role: string }>;
-};
+import { scrollVirtualizedFixture, type ProductSnapshot } from "../support/browser-virtualized-fixture";
 
 const output = process.env.BUTLER_BROWSER_SECURITY_OUTPUT;
 assert.ok(output);
@@ -27,30 +24,7 @@ try {
   assert.ok(!hidden.text.includes("INJECTED_SECRET"));
   await page.goto(server.url("F10"));
   await page.evaluate("document.fonts.ready");
-  const observations: Array<{ items: number; bytes: number }> = [];
-  let current!: ProductSnapshot;
-  for (let n = 0; n < 50; n++) {
-    const obs = `virtual-${n}`;
-    current = await page.evaluate(perceptionSource({ obs, epoch: 1, prefix: "f0-" })) as ProductSnapshot;
-    observations.push({ items: current.nodes.filter(node => node.targetId?.startsWith("item-")).length, bytes: Buffer.byteLength(current.text) });
-    assert.equal(await page.locator("#rows button").count(),20,"virtualized DOM retains its complete row window");
-    const visible = await page.evaluate(() => {
-      const list = document.querySelector("#list")!.getBoundingClientRect();
-      return [...document.querySelectorAll("#rows button")].filter(element => {
-        const box = element.getBoundingClientRect();
-        return Math.min(box.bottom,list.bottom,innerHeight)-Math.max(box.top,list.top,0) >= 4;
-      }).map(element => element.id);
-    });
-    assert.deepEqual(current.nodes.filter(node => node.targetId?.startsWith("item-")).map(node => node.targetId),visible,"every currently visible row survives, in DOM order");
-    if (current.nodes.some(node => node.name === "Item #737" && node.actionable)) break;
-    const scroll = current.nodes.find(node => node.role === "scroll_region");
-    assert.ok(scroll?.actionable, "the virtualized container has an actionable scroll ref");
-    const point = await page.evaluate(resolveSource({ ref: scroll.ref, obs, epoch: 1 })) as { x: number; y: number; reason?: string };
-    assert.equal(point.reason, undefined);
-    await page.mouse.move(point.x, point.y);
-    await page.mouse.wheel(0, 600);
-    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-  }
+  const { current, observations } = await scrollVirtualizedFixture(page);
   const score = scoreSnapshot(await readTruth("F10"), "A1-scroll-reobserve", current);
   assert.equal(score.realTargetRecall, 1);
   assert.equal(score.decoysLeaked, 0);

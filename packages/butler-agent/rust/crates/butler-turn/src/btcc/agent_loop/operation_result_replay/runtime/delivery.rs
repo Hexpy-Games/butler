@@ -138,17 +138,15 @@ impl OperationResultReplayRuntime {
         }
         // Browser history owns its latest full cycle and its smaller semantic
         // stubs. Replay still advances delivery/acknowledgement above.
-        let browser = serde_json::from_str::<Value>(&message.content)
-            .ok()
-            .is_some_and(|value| {
-                matches!(
-                    value
-                        .get("output")
-                        .and_then(|output| output.get("schema"))
-                        .and_then(Value::as_str),
-                    Some("butler.browser-observation.v1" | "butler.browser-action.v1")
-                )
-            });
+        let browser = serde_json::from_str::<Value>(&message.content).is_ok_and(|value| {
+            matches!(
+                value
+                    .get("output")
+                    .and_then(|output| output.get("schema"))
+                    .and_then(Value::as_str),
+                Some("butler.browser-observation.v1" | "butler.browser-action.v1")
+            )
+        });
         Ok(browser
             && (!super::super::super::browser_context::is_superseded(&message.content)
                 || !self.replacement_saves(

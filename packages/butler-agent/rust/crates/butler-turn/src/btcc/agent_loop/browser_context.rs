@@ -151,12 +151,10 @@ fn attach_act(
 }
 
 pub(super) fn is_superseded(content: &str) -> bool {
-    serde_json::from_str::<Value>(content)
-        .ok()
-        .is_some_and(|v| {
-            field(field(&v, "output"), "status") == "superseded"
-                || field(field(&v, "output"), "superseded") == true
-        })
+    serde_json::from_str::<Value>(content).is_ok_and(|v| {
+        field(field(&v, "output"), "status") == "superseded"
+            || field(field(&v, "output"), "superseded") == true
+    })
 }
 
 fn strip_desktop_stills(output: &mut Value) -> bool {

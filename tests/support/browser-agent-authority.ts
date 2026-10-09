@@ -20,6 +20,7 @@ export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof b
   };
   const allow = (reference: string, scope: string) => app.gateway.api(`/authority-requests/${reference}/allow?session_id=general`, {method:"POST",body:JSON.stringify({scope})});
   const contents = `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents`;
+  await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({access_mode:"ask_except_reads"})});
   await act("Refuse a changed target after approval.");
   const changed=await pending();
   await app.main(`${contents}.executeJavaScript("window.changedApprovalClicks=0;window.originalApprovalClick=document.getElementById('confirm').onclick;document.getElementById('confirm').onclick=function(e){window.changedApprovalClicks++;return originalApprovalClick?.call(this,e)};document.getElementById('confirm').textContent='Changed target';void 0")`);

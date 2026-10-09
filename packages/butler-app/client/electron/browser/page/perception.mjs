@@ -17,21 +17,31 @@ export function boxOf(element) {
 export function parentElementOf(element) {
   return element.parentElement ?? element.getRootNode()?.host ?? null;
 }
+export function clippingBounds(element) {
+  const state=globalThis.__butlerPerceptionCache, cache=state?.clipping;
+  if (!element) return {left:0,top:0,right:state?.viewport?.width ?? innerWidth,bottom:state?.viewport?.height ?? innerHeight};
+  if (cache?.has(element)) return cache.get(element);
+  const inherited=clippingBounds(parentElementOf(element));
+  const clipsX=/(hidden|clip|scroll|auto)/u.test(styleValue(element,"overflowX"));
+  const clipsY=/(hidden|clip|scroll|auto)/u.test(styleValue(element,"overflowY"));
+  let result=inherited;
+  if (clipsX || clipsY) {
+    const box=boxOf(element);
+    result={left:clipsX?Math.max(inherited.left,box.left):inherited.left,
+      right:clipsX?Math.min(inherited.right,box.right):inherited.right,
+      top:clipsY?Math.max(inherited.top,box.top):inherited.top,
+      bottom:clipsY?Math.min(inherited.bottom,box.bottom):inherited.bottom};
+  }
+  cache?.set(element,result);
+  return result;
+}
 export function rectangle(element) {
   const cache=globalThis.__butlerPerceptionCache?.rectangles;
   if (cache?.has(element)) return cache.get(element);
-  const box = boxOf(element);
-  let left = Math.max(0, box.left), top = Math.max(0, box.top);
-  let right = Math.min(innerWidth, box.right), bottom = Math.min(innerHeight, box.bottom);
-  for (let parent = parentElementOf(element); parent; parent = parentElementOf(parent)) {
-    const clipsX = /(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowX"));
-    const clipsY = /(hidden|clip|scroll|auto)/u.test(styleValue(parent, "overflowY"));
-    if (!clipsX && !clipsY) continue;
-    const bounds = boxOf(parent);
-    if (clipsX) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
-    if (clipsY) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
-  }
-  const rect={ x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+  const box=boxOf(element), clip=clippingBounds(parentElementOf(element));
+  const left=Math.max(clip.left,box.left), top=Math.max(clip.top,box.top);
+  const right=Math.min(clip.right,box.right), bottom=Math.min(clip.bottom,box.bottom);
+  const rect={x:left,y:top,width:Math.max(0,right-left),height:Math.max(0,bottom-top)};
   cache?.set(element,rect);
   return rect;
 }
@@ -65,7 +75,13 @@ export function renderingState(element) {
   return null;
 }
 export function contrast(element) {
-  const rgb = value => value.match(/[\d.]+/gu)?.map(Number) ?? [];
+  const rgb = value => {
+    const cache = globalThis.__butlerPerceptionCache?.colors;
+    if (cache?.has(value)) return cache.get(value);
+    const channels = value.match(/[\d.]+/gu)?.map(Number) ?? [];
+    cache?.set(value, channels);
+    return channels;
+  };
   const fg = rgb(styleValue(element, "color"));
   let bg = [];
   for (let parent = element; parent; parent = parentElementOf(parent)) {
@@ -74,27 +90,28 @@ export function contrast(element) {
   }
   if (bg.length < 3 || (bg[3] ?? 1) < 0.9) bg = [255, 255, 255];
   const luminance = values => {
-    const key=values.slice(0,3).join(","), cache=globalThis.__butlerPerceptionCache?.luminances;
-    if(cache?.has(key)) return cache.get(key);
+    const cache=globalThis.__butlerPerceptionCache?.luminances;
+    if(cache?.has(values)) return cache.get(values);
     const value=values.slice(0,3).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4)
       .reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);
-    cache?.set(key,value);return value;
+    cache?.set(values,value);return value;
   };
   const a = luminance(fg), b = luminance(bg);
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
+  const page=globalThis.__butlerPerceptionCache?.page;
   const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: "canvas", summary: "button" }[tag])
     ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
   const clickable = Boolean(role || element.hasAttribute("onclick") || discoverPointer && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
   if (!clickable && !/^h[1-6]$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
-  const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
+  const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
   const parent = parentElementOf(element);
-  const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
+  const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
   return { role: role || "button", name: name.replace(/\s+/gu, " "), secure, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
 }
 export function hitAt(root, x, y) {

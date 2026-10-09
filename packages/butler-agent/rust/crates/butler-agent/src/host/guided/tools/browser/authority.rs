@@ -88,7 +88,7 @@ pub(super) async fn act_gate(
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
     if input["always_confirm"] == true
-        || owner.binding.access_mode == butler_turn::btcc::AccessMode::AskFirst
+        || owner.binding.access_mode.reviews_effects()
         || owner.binding.authority_request_ref.is_some()
     {
         gate(owner, call, occurrence, input, target).await

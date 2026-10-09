@@ -6,6 +6,8 @@ import { HitTestedProvider } from "../browser-eval/hit-tested-provider";
 import { startFixtureServer, readTruth } from "../fixtures/browser/server";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 
+import { dynamicPerceptionCheck } from "../support/browser-perception-dynamic";
+
 const output = process.env.BUTLER_BROWSER_PARITY_OUTPUT; assert.ok(output);
 const fixture = startFixtureServer(), browser = await launchSmokeBrowser(fixture.resolverArgs);
 const full = new HitTestedProvider(true), optimized = new HitTestedProvider(), rows = [];
@@ -22,7 +24,8 @@ try {
     rows.push({id,nodes:after.nodes.length,bytes:Buffer.byteLength(after.text),fullMs:before.scriptMs,optimizedMs:after.scriptMs,loadAverage1m});
     await page.close();
   }
+  await dynamicPerceptionCheck(context);
   assert.equal(rows.length,20);
-  await writeFile(output,JSON.stringify({status:"passed",rows},null,2));
+  await writeFile(output,JSON.stringify({status:"passed",dynamic:"passed",rows},null,2));
   console.log("20 fixture snapshots preserve the full walk/grid content.");
 } finally {await browser.close();fixture.stop();}
