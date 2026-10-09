@@ -372,7 +372,7 @@ fn rank_input(
                 .vector_episodes
                 .iter()
                 .filter(|hit| admitted.vector && hit.owner_id == row.episode_id)
-                .map(|hit| 1.0 - hit.distance)
+                .map(|hit| crate::cognition::recall::cosine_relevance(hit.distance))
                 .fold(
                     *raw.relevance.get(&row.episode_id).unwrap_or(&0.0),
                     f64::max,

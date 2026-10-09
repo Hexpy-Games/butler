@@ -8,3 +8,6 @@ mod search;
 
 pub use adapter::GenerationVectorAdapter;
 pub(crate) use rows::{GenerationVectorRow, GenerationVectorStore, persisted_receipt};
+
+#[cfg(test)]
+pub(crate) use search::tests::cosine_distance_preserves_semantic_relevance;

@@ -243,3 +243,9 @@ fn compare_nullable_time(a: Option<&str>, b: Option<&str>) -> std::cmp::Ordering
         (Some(a), Some(b)) => a.as_bytes().cmp(b.as_bytes()),
     }
 }
+
+/// Positive cosine similarity on a 0..1 relevance scale. Orthogonal and
+/// opposite vectors provide no positive relevance; roundoff cannot exceed one.
+pub(in crate::cognition) fn cosine_relevance(distance: f64) -> f64 {
+    (1.0 - distance).clamp(0.0, 1.0)
+}

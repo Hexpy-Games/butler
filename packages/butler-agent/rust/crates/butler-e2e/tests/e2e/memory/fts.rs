@@ -42,6 +42,7 @@ async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
         .await?;
     let id = chat.data()["session"]["id"].as_str().unwrap();
     let start = s.provider()?.requests().len();
+    let started = std::time::Instant::now();
     let (_, turn) = s.turn(id, ASK).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
@@ -53,7 +54,12 @@ async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
         .unwrap()["output"]
         .as_str()
         .unwrap();
-    Ok(serde_json::from_str(output)?)
+    let payload = serde_json::from_str(output)?;
+    eprintln!(
+        "MEM-FTS recall_turn_ms={:.3}",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    Ok(payload)
 }
 
 async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError> {
