@@ -100,7 +100,9 @@ try {
       await dialog(mine, type); await app.shot(`${name}-${type}`);
       await answer(mine, type !== "print", { value: "Owner answer" });
     }
-    await nativeClick(mine, "#beforeunload"); await app.call("close", { id: mine });
+    await nativeClick(mine, "#beforeunload");
+    if (name === "ko-light-1440") await app.main(`${contents(mine)}.sendInputEvent({type:'keyDown',keyCode:'W',modifiers:['control']})`);
+    else await app.call("close", { id: mine });
     await waitBrowser(async () => (await state()).tabs.find(t => t.id === mine)?.dialog?.type === "beforeunload", "beforeunload anchored");
     await app.shot(`${name}-beforeunload`);
     if (name === "ko-light-1100") {

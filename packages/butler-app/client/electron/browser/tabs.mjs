@@ -10,7 +10,7 @@ import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
 import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
 import { popupHandler, allowPopup, syncPopup, closePopups } from "./popups.mjs";
-import { resolveDialog } from "./dialogs.mjs";
+import { resolveDialog, requestClose } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 
 /** One registry per App; no web view before Browser activation. */
@@ -141,14 +141,17 @@ class UserBrowser {
     if (tab.profile === "signed_out") attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
-      window: this.getWindow, shortcut: (input) => this.shortcut(input, true),
+      window: this.getWindow, shortcut: (input) => {
+        if (tab.popupWindow && input.type === "keyDown" && (input.meta || input.control) && input.key.toLowerCase() === "w") { tab.popupWindow.close(); return true; }
+        return this.shortcut(input, true);
+      },
       popup: (source, details) => popupHandler(this, source, details) });
     wireUserDialogs(this, tab);
     if (tab.agent) wireAgentTab(this, tab);
     if (tab.url && !tab.agent && !supplied) void tab.view.webContents.loadURL(tab.url).catch(() => {});
   }
   allowPopup(id) { return allowPopup(this, id); }
-  create(input = {}, activateTab = true) {
+  create(input = {}, activateTab = true, popupSource) {
     if (!this.enabled()) throw new Error("browsing_disabled");
     const owner = input.owner ?? "mine";
     if (owner !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner)) throw new Error("invalid_owner");
@@ -163,7 +166,7 @@ class UserBrowser {
       if(agents.length>=6 || agents.filter(tab=>tab.owner===owner).length>=3) throw new Error("tab_budget_exhausted");
     }
     if (profile === "signed_out" && !this.conversationPartitions.has(owner)) this.conversationPartitions.set(owner, `butler-conv-${randomUUID()}`);
-    const tab = { id: randomUUID(), owner, profile, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
+    const tab = { id: randomUUID(), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
       agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, bounds: null, covered: false, capture: null };
     this.tabs.set(tab.id, tab);
@@ -222,7 +225,7 @@ class UserBrowser {
     } else if (command && key === "t") {
       if (this.enabled()) this.create({ owner: this.areaOwner });
     }
-    else if (command && key === "w") { if (this.activeId) this.close(this.activeId); }
+    else if (command && key === "w") { if (this.activeId) void requestClose(this, this.tabs.get(this.activeId)); }
     else if ((input.alt && ["arrowleft", "arrowright"].includes(key)) || (command && ["[", "]"].includes(key))) {
       if (this.enabled() && this.activeId) this.commandTab(key === "arrowleft" || key === "[" ? "back" : "forward", this.activeId);
     } else return false;

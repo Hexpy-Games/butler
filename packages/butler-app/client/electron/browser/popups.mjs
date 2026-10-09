@@ -56,9 +56,8 @@ function wireChrome(browser, tab, win) {
   chrome.once("did-finish-load", () => { publishPopup(browser, tab); win.show(); tab.view?.webContents.focus(); });
 }
 function popupView(browser, source, details, options, agent) {
-  const id = browser.create({ owner: source.owner, agent, policy: source.policy, partition: source.partition, profile: source.profile }, false);
+  const id = browser.create({ owner: source.owner, agent, policy: source.policy, partition: source.partition, profile: source.profile }, false, source);
   const tab = browser.tabs.get(id);
-  tab.popupParentUrl = source.url; tab.opener = source.id; tab.popup = true;
   const preferences = browser.pagePreferences(tab);
   if (agent) {
     tab.onPointer = (step, target) => browser.pointer.step(tab, step, target);
