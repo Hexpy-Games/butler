@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
@@ -14,6 +14,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const creating = useRef(false);
   const visibleTabs = state.tabs.filter((item) => item.owner === "mine" || publicBrowserOwner(item.owner, navigation));
   const tabs = sessionId ? visibleTabs.filter((item) => item.owner === `conversation:${sessionId}`) : visibleTabs;
   const lastTab = useBrowserShellState((shell) => sessionId ? shell.conversations[sessionId]?.lastTab : undefined);
@@ -26,6 +27,11 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   useEffect(() => {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
+  useEffect(() => {
+    if (sessionId || !state.enabled || tabs.length || creating.current) return;
+    creating.current = true;
+    void browserCall("create").finally(() => { creating.current = false; });
+  }, [sessionId, state.enabled, tabs.length]);
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
     let group = groups.find((entry) => entry.id === item.owner);
@@ -41,7 +47,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const crashed = tab?.status === "crashed";
   const disabled = !state.enabled;
   return <BrowserPane placement={sessionId ? "conversation" : "standalone"} label={copy.title}
-    id="butler-browser-area" tabIndex={-1} data-test-class="browser-area"
+    id="butler-browser-area" data-test-class="browser-area"
     onFocusCapture={() => void browserCall("scope", { value: true })}
     onBlurCapture={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
@@ -60,11 +66,9 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       stillSrc={stillSrc} covered={state.nativeCovered}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>
-      {(empty || crashed || disabled) && <EmptyLine
-        message={disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : crashed ? copy.crashed : copy.empty}
-        action={!disabled ? <Button size="sm" variant="outline" onClick={() => {
-          if (crashed) void call("reload"); else if (tab) window.dispatchEvent(new CustomEvent("browser-focus-address")); else create();
-        }}>{crashed ? copy.reload : copy.newTab}</Button> : undefined}
+      {(crashed || disabled) && <EmptyLine
+        message={disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : copy.crashed}
+        action={!disabled ? <Button size="sm" variant="outline" onClick={() => void call("reload")}>{copy.reload}</Button> : undefined}
       />}
     </PageCard>
   </BrowserPane>;

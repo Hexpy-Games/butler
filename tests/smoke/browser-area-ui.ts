@@ -79,9 +79,22 @@ try {
         await page.keyboard.press("Escape");
       }
       if (state === "disabled") assert.equal(await page.locator('[data-test-class="browser-entry"]').getAttribute("aria-disabled"), "true");
+      if (state === "empty") {
+        const address = page.getByRole("textbox", { name: locale === "ko" ? "주소" : "Address", exact: true });
+        await address.waitFor();
+        assert.equal(await address.evaluate((node) => node === document.activeElement), true);
+        assert.equal(await page.getByRole("tab").count(), 1);
+        assert.equal(await page.locator('[data-slot="page-card-content"]').innerText(), "");
+        assert.equal(await page.locator('[data-slot="browser-pane"]').evaluate((node) => getComputedStyle(node).outlineStyle), "none");
+        assert.equal(await page.locator('[data-slot="page-card"]').getAttribute("data-holder"), "none");
+        await page.getByRole("button", { name: locale === "ko" ? "탭 닫기" : "Close tab", exact: true }).click();
+        await page.getByRole("tab").waitFor();
+        assert.equal(await page.getByRole("tab").count(), 1);
+        assert.equal(await address.evaluate((node) => node === document.activeElement), true);
+        await page.screenshot({ path: join(evidence, `harness-${locale}-${theme}-last-tab-closed.png`) });
+      }
     }
     await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}`);
-    await page.getByRole("button", { name: locale === "ko" ? "새 탭" : "New tab", exact: true }).last().click();
     const address = page.getByRole("textbox", { name: locale === "ko" ? "주소" : "Address", exact: true });
     await address.fill("https://example.com/fixture"); await address.press("Enter");
     assert.equal(await page.evaluate(async () => {

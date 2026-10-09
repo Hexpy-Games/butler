@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, nativePeekDismiss, pane, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
+import { newTabHub } from "../support/browser-newtab-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
@@ -16,6 +17,7 @@ const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Res
 const app = await browserAgentApp(evidence, () => null);
 const facts: unknown[] = [];
 try {
+  await newTabHub(app);
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light" }) });
   const created = await app.gateway.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Second conversation" }) });
   await app.page.reload(); await shellReady(app, "en");
