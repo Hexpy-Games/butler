@@ -291,11 +291,13 @@
   display: none;
 }
 
+/* Narrow composers (a 340–520px conversation column beside the browser
+   pane, a phone) keep the wide row's inset: the + icon starts at the text
+   inset and send stays clear of the card's curve. Only the gaps tighten. */
 @container composer (width <= 520px) {
   .toolbar {
     min-height: var(--control-hit-target);
     gap: 2px;
-    padding: var(--space-xs);
   }
 
   .planToggle {
@@ -321,6 +323,16 @@
   .busyIcon {
     width: 20px;
     height: 20px;
+  }
+}
+
+/* Touch: 44px targets carry their own inset (the + icon lands on the text
+   inset with 4px of padding) and the card's radius follows them. */
+@media (width <= 640px), (pointer: coarse) {
+  @container composer (width <= 520px) {
+    .toolbar:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+      padding: var(--space-xs);
+    }
   }
 }
 
