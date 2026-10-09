@@ -1,3 +1,4 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { launchSmokeBrowser, smokeElectronArgs } from "../support/smoke-browser.ts";
 // Bundled fonts render in the served UI (DS spec Typeface Contract).
 //
@@ -10,7 +11,6 @@ import { launchSmokeBrowser, smokeElectronArgs } from "../support/smoke-browser.
 // report lists the font bytes an initial app load fetches per locale. No
 // model calls; skip Electron with BUTLER_FONT_SMOKE_ELECTRON=0.
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -146,7 +146,7 @@ async function electronMode(): Promise<void> {
   });
   const electronPath = createRequire(resolve(root, "packages/butler-app/client/electron/package.json"))("electron") as unknown as string;
   const debugPort = await freePort();
-  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
+  const electron = spawnElectron(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
     cwd: dir,
     stdio: "ignore",
     env: {
@@ -202,9 +202,7 @@ async function electronMode(): Promise<void> {
     report.electron = { initialFontFiles: load.files, initialFontBytes: load.bytes, rendered };
   } finally {
     socket?.close();
-    electron.kill("SIGTERM");
-    await Promise.race([new Promise((done) => electron.once("exit", done)), wait(5000)]);
-    if (electron.exitCode === null && electron.signalCode === null) electron.kill("SIGKILL");
+    await stopElectronChild(electron);
     proxy.stop(true);
   }
 }

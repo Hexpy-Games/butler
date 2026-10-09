@@ -1,10 +1,10 @@
+import { fileElectronApp, type FileElectronApp } from "../support/file-electron-app";
 // Electron smoke: full queue recovery, immediate native feedback, real exit.
 // Host: build UI/Agent, set BUTLER_NATIVE_AGENT_EXECUTABLE, then bun run this file.
 // --baseline measures the unmodified shell with identical durability assertions.
 import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { _electron, type ElectronApplication } from "playwright";
 import { quitFixture } from "./app-quit-fixture.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser-args.ts";
 import { quitPhaseReport } from "./quit-phase-report.ts";
@@ -20,8 +20,8 @@ const fixture = await quitFixture();
 const executablePath = createRequire(resolve("packages/butler-app/client/electron/package.json"))("electron") as string;
 const extraArgs = smokeBrowserArgs();
 const entry = resolve(process.env.BUTLER_QUIT_ELECTRON_ROOT ?? "packages/butler-app/client/electron");
-let application: ElectronApplication | undefined;
-let applicationProcess: ReturnType<ElectronApplication["process"]> | undefined;
+let application: FileElectronApp | undefined;
+let applicationProcess: ReturnType<FileElectronApp["process"]> | undefined;
 let phaseLog = "";
 const latencyMeasurements: Array<{ hidden_ms: number; feedback_ms: number; status: string }> = [];
 
@@ -33,17 +33,20 @@ async function waitFor(check: () => Promise<boolean>, label: string, timeout = 1
   }
 }
 
+let quitOutput: ((chunk: Buffer) => void) | undefined;
+
 async function launch() {
-  const app = await _electron.launch({ executablePath, args: [...extraArgs, entry], env: fixture.env, timeout: 30_000 });
+  quitOutput = undefined;
   // Buffer only structured timing lines. Never print auth, prompts or general logs.
   let pending = "";
-  app.process().stderr?.on("data", (chunk) => {
+  const onOutput = (chunk: Buffer) => {
     const lines = (pending + String(chunk)).split("\n");
     pending = lines.pop() ?? "";
     for (const line of lines) {
       if (/\[(native-shutdown|desktop-quit)\]/u.test(line)) phaseLog += `${line}\n`;
     }
-  });
+  };
+  const app = await fileElectronApp({ executablePath, args: [...extraArgs, entry], env: fixture.env, onOutput: chunk => { onOutput(chunk); quitOutput?.(chunk); } });
   application = app;
   applicationProcess = app.process();
   await waitFor(async () => {
@@ -53,7 +56,7 @@ async function launch() {
   return app;
 }
 
-async function quit(app: ElectronApplication, holdStorage = blocked) {
+async function quit(app: FileElectronApp, holdStorage = blocked) {
   const process = app.process();
   const exited = new Promise<void>((done) => process.once("exit", () => done()));
   const started = performance.now();
@@ -72,10 +75,10 @@ async function quit(app: ElectronApplication, holdStorage = blocked) {
   }, 15_500)) : Promise.resolve();
   let measured: { hidden_ms: number; feedback_ms: number; status: string } | undefined;
   let pending = "";
-  process.stderr?.on("data", (chunk) => {
+  quitOutput = (chunk: Buffer) => {
     const lines = (pending + String(chunk)).split("\n"); pending = lines.pop() ?? "";
     for (const line of lines) { try { const value = JSON.parse(line); measured = value.quitSmoke ?? measured; } catch { /* structured evidence only */ } }
-  });
+  };
   await app.evaluate(({ BrowserWindow, ipcMain }) => {
     const start = performance.now();
     const main = BrowserWindow.getAllWindows().find((win) => win.isVisible() && !win.webContents.getURL().includes("/lifecycle/lifecycle.html"))!;

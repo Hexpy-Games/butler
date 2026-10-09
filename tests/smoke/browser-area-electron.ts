@@ -1,5 +1,6 @@
+import { spawnElectron } from "../support/electron-child";
 /** Public Browser area on an isolated, real Electron App and stub gateway. */
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { cpus, loadavg, tmpdir } from "node:os";
@@ -67,17 +68,15 @@ async function launch(): Promise<Page> {
   assert.ok(executable, "BUTLER_SMOKE_ELECTRON_EXECUTABLE must explicitly name Electron 44");
   const debugPort = await freePort();
   mkdirSync(join(dir, "home"), { recursive: true });
-  child = spawn(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
+  child = spawnElectron(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
     ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
-    stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
+    onOutput: bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")), env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
       BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "",
       BUTLER_APP_RENDERER_DIST: resolve(root, "packages/butler-app/client/ui/dist"),
       BUTLER_APP_SERVER_URL: gateway!.url, BUTLER_APP_SERVER_PORT: String(new URL(gateway!.url).port),
       BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_E2E_TIER: "stub" } });
   child.on("exit", (code, signal)=>logs.push(JSON.stringify({ event:"child-exit", code, signal })));
   child.on("close", (code, signal)=>logs.push(JSON.stringify({ event:"child-close", code, signal })));
-  child.stdout!.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
-  child.stderr!.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
   const page = await electronPage(debugPort, origin);
   connected = page;
   await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);

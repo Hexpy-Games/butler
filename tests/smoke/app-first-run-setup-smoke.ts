@@ -1,6 +1,7 @@
+import { spawnElectron } from "../support/electron-child";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
 import { freeGatewayPort } from "../support/native-app-server.ts";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer } from "node:net";
@@ -480,7 +481,7 @@ async function main(): Promise<void> {
   delete env.BUTLER_APP_BUTLER_HOME;
   delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
 
-  electronProcess = spawn(
+  electronProcess = spawnElectron(
     electronBin,
     [
       `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(),
@@ -491,11 +492,9 @@ async function main(): Promise<void> {
     {
       cwd: root,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      onOutput: bytes => output.push(String(bytes)),
     },
   );
-  electronProcess.stdout?.on("data", (chunk) => output.push(String(chunk)));
-  electronProcess.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
   cdp = await connectToElectronPage(debugPort, `http://127.0.0.1:${serverPort}/`);
   ownedListenerPids = new Set(listenerPids(serverPort));
