@@ -62,11 +62,12 @@ async fn library_search_and_bookmark_commands_are_durable_and_idle_is_read_only(
     assert_eq!(found["items"].as_array().unwrap().len(), 1);
     let id = found["items"][0]["id"].as_str().unwrap();
     assert_eq!(s.gw.delete(&format!("/library/{id}")).await?.status, 200);
-    assert!(
+    assert_eq!(
         page(&s, "/library?kind=bookmark&q=Work").await?["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[Value]
     );
     tokio::time::sleep(Duration::from_secs(2)).await;
     let mut watch = idle_disk::Watch::open(&s.sandbox.data)?;

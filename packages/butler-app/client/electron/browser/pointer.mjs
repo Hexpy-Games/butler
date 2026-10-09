@@ -61,11 +61,17 @@ export class BrowserPointer {
   mouse(input) {
     const tab = this.tab();
     if (this.browser.selection.dragTab) {
-      this.browser.selection.drag(tab, input, input.type === "mouseUp" ? "end" : "move"); return;
+      if (["mouseMove", "mouseUp"].includes(input.type)) this.browser.selection.drag(tab, input, input.type === "mouseUp" ? "end" : "move");
+      return;
+    }
+    if (input.type === "mouseLeave" && tab) {
+      this.browser.selection.clearHover(tab); this.sync(tab);
     }
     // SelectionBar owns the bottom chrome. Its buttons use the trusted overlay IPC.
     const chrome = this.browser.selection.chrome;
-    if (chrome && input.x >= chrome.x && input.x <= chrome.x + chrome.width && input.y >= chrome.y && input.y <= chrome.y + chrome.height) return;
+    if (chrome && input.x >= chrome.x && input.x <= chrome.x + chrome.width && input.y >= chrome.y && input.y <= chrome.y + chrome.height) {
+      this.browser.selection.clearHover(tab); this.sync(tab); return;
+    }
     if (this.browser.selection.mouse(tab, input)) return;
     if (MOUSE.has(input.type) && this.acceptInput(tab, input.type === "mouseDown")) {
       if (input.type === "mouseDown") tab.view.webContents.focus();
@@ -90,7 +96,10 @@ export class BrowserPointer {
       from: !parked && pointer.mode !== "type" && pointer.from ? point(pointer.from) : undefined,
       steps: !parked ? pointer.steps.map(point) : [],
       target: pointer.target ? { ...point(pointer.target), width: pointer.target.width * scale, height: pointer.target.height * scale } : undefined,
-      width: bounds.width, height: bounds.height, ...this.presentation };
+      width: bounds.width, height: bounds.height,
+      hover: tab.picking && tab.pickHover ? { ...point(tab.pickHover.rect), width: tab.pickHover.rect.width * scale, height: tab.pickHover.rect.height * scale } : undefined,
+      hoverLabel: tab.pickHover ? `${tab.pickHover.tag} · ${Math.round(tab.pickHover.rect.width)} × ${Math.round(tab.pickHover.rect.height)}` : undefined,
+      picks: (tab.selections ?? []).map(item => ({ id: item.id, rect: { ...point(item.rect), width: item.rect.width * scale, height: item.rect.height * scale } })), ...this.presentation };
     const serialized = JSON.stringify(frame);
     if (serialized !== this.lastFrame) { this.lastFrame = serialized; this.view.webContents.send("butler-browser:overlay", frame); }
   }

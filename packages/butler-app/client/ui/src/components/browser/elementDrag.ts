@@ -39,11 +39,17 @@ export function connectElementDrag() {
   connected = true;
   window.butlerBrowser.onElementDrag(event => {
     if (event.phase === "start") useElementDrag.setState({ tab: event.tab, elements: event.elements ?? [] });
+    if (event.phase === "cancel") {
+      useElementDrag.setState({ tab: undefined, elements: [], target: undefined }); return;
+    }
     move(event.x, event.y);
     if (event.phase === "end") void drop();
   });
   document.addEventListener("pointermove", event => { if (useElementDrag.getState().tab) move(event.clientX, event.clientY); }, true);
-  document.addEventListener("pointerup", () => { if (useElementDrag.getState().tab) void drop(); }, true);
+  document.addEventListener("pointerup", event => {
+    if (!useElementDrag.getState().tab) return;
+    move(event.clientX, event.clientY); void drop();
+  }, true);
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape" || !useElementDrag.getState().tab) return;
     const tab = useElementDrag.getState().tab;

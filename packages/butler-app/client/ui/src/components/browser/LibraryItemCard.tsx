@@ -16,7 +16,7 @@ export async function openLibraryItem(item: LibraryItem) {
     await openBrowser(); const id = await browserCall("create", { url }); if (id) await browserCall("activate", { id });
   } catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); }
 }
-export function LibraryItemCard({ item, onAttach }: { item: LibraryItem; onAttach: () => void }) {
+export function LibraryItemCard({ item, onAttach, onFolder }: { item: LibraryItem; onAttach: () => void; onFolder?: () => void }) {
   const copy = appCopy.browser;
   const remove = () => void deleteLibrary(item.id).catch(() => notifyStatus(copy.failed, { tone: "error" }));
   return <LibraryCard title={item.title} tag={labels()[item.kind]}
@@ -24,6 +24,7 @@ export function LibraryItemCard({ item, onAttach }: { item: LibraryItem; onAttac
     media={item.crop ? { kind: "image", src: item.crop } : item.kind === "bookmark" ? { kind: "quote", text: new URL(item.url).host } : { kind: "document" }}
     onOpen={() => void openLibraryItem(item)} menu={<OverflowActionMenu label={copy.more} items={[
       { label: copy.attach, onSelect: onAttach }, { label: copy.openSource, onSelect: () => void openLibraryItem(item) },
+      ...(onFolder ? [{ label: copy.bookmarkFolder, onSelect: onFolder }] : []),
       { label: copy.remove, variant: "destructive", onSelect: remove },
     ]} />} />;
 }

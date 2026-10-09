@@ -28,6 +28,7 @@ import { ConversationBrowserFrame } from "@/components/browser/ConversationBrows
 import { LibraryPage } from "@/components/browser/LibraryPage";
 import { useBrowserShell } from "@/components/browser/useBrowserShell";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
+import { ElementDragPreview } from "@/components/browser/ElementDragPreview";
 import { BrowserArea } from "@/components/browser/BrowserArea";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
@@ -289,6 +290,7 @@ function AppWorkspaceDialogs() {
     {renameProject && <ProjectRenameDialog />}
     {renameSession && <SessionRenameDialog />}
     <SessionObserverDialog />
+    <ElementDragPreview />
     <AppToaster />
   </>;
 }
