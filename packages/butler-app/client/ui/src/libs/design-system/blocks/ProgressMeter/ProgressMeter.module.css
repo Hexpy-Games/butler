@@ -43,6 +43,13 @@
   height: var(--space-xs);
 }
 
+/* Thin: the load line on a page card's top edge. No rail, square ends. */
+.root[data-thin="true"] .track {
+  height: var(--border-width-strong);
+  border-radius: 0;
+  background: transparent;
+}
+
 /* Caption metrics on the row, so the spinner slot (min-height: 1lh) centers
    on the caption's first line when the text wraps. The Spinner owns its own
    reduced-motion treatment (a slow breathe); nothing here overrides it. */

@@ -526,7 +526,7 @@ async function main(): Promise<void> {
     "document.querySelector('#first-run-language')?.value ?? ''",
   );
   assert(selectedLanguage === "ko", "system language did not preselect Korean");
-  for (const retired of ["언어 선택", "안전고지", "Butler Agent를 준비합니다", "모델 설정"]) {
+  for (const retired of ["언어 선택", "안전고지", "버틀러 Agent를 준비합니다", "모델 설정"]) {
     assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(retired)})`)), `retired first-run screen visible: ${retired}`);
   }
 

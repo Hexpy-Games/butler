@@ -241,7 +241,10 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             result.text.as_deref(),
             Some("Visible\n\n```text\nanalysis: preserved\n```")
         );
-        assert!(result.tool_calls.is_empty());
+        assert_eq!(
+            result.tool_calls,
+            [] as [butler_turn::btcc::ModelRoundToolCall; 0]
+        );
     }
 }
 
@@ -328,7 +331,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     );
     let anthropic_body =
         serialize::body(&input, &anthropic, serialize::Carrier::Anthropic).unwrap();
-    assert_eq!(anthropic_body["max_tokens"], 4096.0);
+    assert_eq!(anthropic_body["max_tokens"].as_u64(), Some(4096));
     assert_eq!(anthropic_body["thinking"]["type"], "adaptive");
     assert_eq!(anthropic_body["tool_choice"]["type"], "any");
 

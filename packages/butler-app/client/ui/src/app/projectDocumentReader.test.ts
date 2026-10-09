@@ -1,3 +1,4 @@
+// test-category: security
 import { afterEach, expect, test } from "bun:test";
 import { getAppLocale, setAppCopyLanguage } from "./copy.ts";
 import { projectDocumentReaderView } from "./projectDocumentReader.ts";

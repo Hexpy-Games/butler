@@ -1,6 +1,8 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { RISO_INKS } from "./components/ButlerThinkingMark/butlerMarkTheme";
 
 // WCAG 2.x AA: body text needs 4.5:1 against what it sits on; non-text UI
 // boundaries (focus ring, interactive borders) need 3:1. Every text role is
@@ -181,6 +183,25 @@ describe("non-text boundaries meet 3:1 in both themes", () => {
         expect(failures).toEqual([]);
       });
     }
+  }
+});
+
+// The Butler inks draw "Butler is acting" lines (riso edge, title-bar toggle,
+// pointer trail) on the workspace: non-text 3:1, and the exact mark inks.
+describe("Butler inks", () => {
+  const inks = ["--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink"] as const;
+  for (const theme of themes) {
+    test(`${theme} inks reach 3:1 on the workspace`, () => {
+      const failures = inks
+        .map((ink) => ({ ink, ratio: Number(contrast(ink, ["--color-surface-base", "--workspace-bg"], theme).toFixed(2)) }))
+        .filter(({ ratio }) => ratio < 3);
+      expect(failures).toEqual([]);
+    });
+    test(`${theme} inks are the thinking mark's riso inks`, () => {
+      const hex = (ink: string) => `#${parseColor(resolve(ink, theme)).slice(0, 3).map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+      const { blue, purple, pink } = RISO_INKS[theme];
+      expect(inks.map(hex)).toEqual([blue.color, purple.color, pink.color].map((color) => color.toLowerCase()));
+    });
   }
 });
 

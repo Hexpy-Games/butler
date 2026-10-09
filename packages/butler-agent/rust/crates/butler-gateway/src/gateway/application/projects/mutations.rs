@@ -106,7 +106,7 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         for session_id in sessions {
-            let runtime_session_id = crate::gateway::app_session_hint(&session_id);
+            let runtime_session_id = self.runtime_hint(&session_id).await?;
             self.dependencies
                 .authority_handoff
                 .close_self_session(
@@ -176,8 +176,8 @@ fn update_project(
         .map(trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(&row.display_name);
-    let pinned = input.pinned.map_or(row.pinned, |value| value);
-    let archived = input.archived.map_or(row.archived, |value| value);
+    let pinned = input.pinned.unwrap_or(row.pinned);
+    let archived = input.archived.unwrap_or(row.archived);
     let status = match input.archived {
         Some(true) => "archived",
         Some(false) => "active",

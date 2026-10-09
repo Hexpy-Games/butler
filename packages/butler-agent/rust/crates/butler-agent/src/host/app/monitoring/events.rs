@@ -80,7 +80,7 @@ fn consolidation_events(root: &Path) -> Vec<Value> {
             Some((path, modified))
         })
         .collect::<Vec<_>>();
-    paths.sort_by(|left, right| right.1.cmp(&left.1));
+    paths.sort_by_key(|item| std::cmp::Reverse(item.1));
     paths
         .into_iter()
         .take(8)

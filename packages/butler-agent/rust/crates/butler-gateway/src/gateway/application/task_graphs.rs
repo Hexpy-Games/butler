@@ -184,9 +184,18 @@ pub(super) fn read(
     app: &super::AppApplication,
     query: super::AppTaskGraphQuery,
 ) -> crate::gateway::ApplicationFuture<Value> {
+    let owner = app.clone_handle();
     let storage = app.storage.clone();
     let port = app.dependencies.subsessions.clone();
     Box::pin(async move {
+        let mut query = query;
+        if let butler_turn::btcc::TaskGraphScope::Session(chat) = &mut query.scope
+            && !chat.starts_with("butler/")
+            && !chat.starts_with("worker-")
+            && !chat.starts_with("steward-")
+        {
+            *chat = owner.runtime_hint(chat).await?;
+        }
         let seq: u64 = storage
             .execute(|db| {
                 db.query_row("SELECT COALESCE(MAX(id),0) FROM events", [], |r| r.get(0))

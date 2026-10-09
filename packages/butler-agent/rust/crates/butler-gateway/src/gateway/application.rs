@@ -308,6 +308,7 @@ impl AppApplication {
     }
 
     async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        self.recover_output_transfers().await?;
         self.connect_update_progress().await;
         if let Err(error) = self.recover_session_relocation_owned().await {
             let _ = self.close().await;
@@ -336,8 +337,8 @@ impl AppApplication {
         // Failed authority retries remain durable for the next startup.
         if let Ok(followups) = self.dependencies.authority_handoff.retry_decided().await {
             for (owner, request_ref, input) in followups {
-                let session = owner.strip_prefix("butler/app-").unwrap_or(&owner);
-                let _ = question_followup::send(self, session, &request_ref, &input).await;
+                let session = self.owner_chat(owner).await?;
+                let _ = question_followup::send(self, &session, &request_ref, &input).await;
             }
         }
         self.setup_readiness.start(

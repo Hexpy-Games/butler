@@ -40,7 +40,7 @@ fn selection(s: &Scenario, path: &Path) -> Result<String, HarnessError> {
     ))
 }
 
-async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, HarnessError> {
+pub(super) async fn bind_project(s: &mut Scenario, folder: &Path) -> Result<String, HarnessError> {
     let token = selection(s, folder)?;
     s.patch_settings(
         json!({"default_project_folder_selection_token":token}),
@@ -108,8 +108,7 @@ async fn result(s: &Scenario, chat: &str, prompt: &str) -> Result<Value, Harness
         .iter()
         .filter_map(|request| request["input"].as_array())
         .flatten()
-        .filter(|item| item["type"] == "function_call_output")
-        .next_back()
+        .rfind(|item| item["type"] == "function_call_output")
         .expect("model receives tool feedback")["output"]
         .as_str()
         .expect("tool result JSON");
@@ -195,7 +194,7 @@ async fn workspace_case(long: bool) -> Result<(), HarnessError> {
     } else {
         "PROJECT-WORKSPACE"
     })?
-    .access(Access::AskFirst);
+    .access(Access::AskAlways);
     let mut folder = setup.sandbox.workspace.join("선택 Project");
     if long {
         for _ in 0..5 {
@@ -267,4 +266,85 @@ async fn settings_project_workspace_tools_and_approval() -> Result<(), HarnessEr
 async fn settings_long_project_workspace_tools_and_approval() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     workspace_case(true).await
+}
+
+#[tokio::test]
+async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, server) = stub::default_folder_model().await?;
+    let setup = Setup::new("DEFAULT-PROJECT-FOLDER")?
+        .access(Access::AskAlways)
+        .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?)
+        .env("BUTLER_CODEX_BASE_URL", url);
+    let folders = [
+        setup.sandbox.workspace.join("first"),
+        setup.sandbox.workspace.join("second"),
+    ];
+    for folder in &folders {
+        fs::create_dir_all(folder)?;
+        fs::write(folder.join("a.txt"), "project marker")?;
+    }
+    let s = setup.start().await?;
+    let (_, unset) = s.turn("general", "Check the unset default folder.").await?;
+    assert_eq!(turn_state(&unset), "delivered", "{unset}");
+    let started = Instant::now();
+    for (index, folder) in folders.iter().enumerate() {
+        s.patch_settings(
+            json!({"default_project_folder_selection_token":selection(&s, folder)?}),
+            "default folder",
+        )
+        .await?;
+        let id = accepted_turn_id(
+            &s.gw
+                .say(
+                    "general",
+                    &format!("List my default project folder {index}."),
+                )
+                .await?,
+        )?;
+        let turn =
+            s.gw.wait_turn(
+                "general",
+                &id,
+                &["waiting_for_form", "delivered", "failed"],
+                Duration::from_secs(60),
+            )
+            .await?;
+        assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+        let requests = s.gw.approval_requests("general").await?;
+        let request = requests.iter().find(|r| r["source_turn_id"] == id).unwrap();
+        let expected = serde_json::to_string(&butler_platform::secure_fs::canonicalize(folder)?)?;
+        assert!(
+            request
+                .to_string()
+                .contains(&expected[1..expected.len() - 1]),
+            "{request}"
+        );
+        assert_eq!(request["approval"]["operation"]["access"], "read_only");
+        let reference = request["request_ref"].as_str().unwrap();
+        let allowed =
+            s.gw.post(
+                &format!("/authority-requests/{reference}/allow?session_id=general"),
+                json!({"scope":"once"}),
+            )
+            .await?;
+        assert_eq!(allowed.status, 202, "{allowed:?}");
+        let turn =
+            s.gw.wait_terminal("general", &id, Duration::from_secs(60))
+                .await?;
+        assert_eq!(turn_state(&turn), "delivered", "{turn}");
+        let rows = butler_e2e::e2e::gateway::tool_rows(&s.gw.messages("general").await?, &id);
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        let output: Value = serde_json::from_str(&s.gw.operation_output(&id, &rows[0]).await?)?;
+        assert_eq!(output["ok"], true, "{output}");
+        assert_eq!(output["files"].as_array().unwrap().len(), 1, "{output}");
+        assert!(output["files"][0].to_string().contains("a.txt"), "{output}");
+    }
+    eprintln!(
+        "default project folder: two approved turns in {} ms",
+        started.elapsed().as_millis()
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
 }

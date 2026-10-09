@@ -1,3 +1,6 @@
+import ts from "typescript";
+import { lifecycleCopy } from "../../../butler-i18n/src/lifecycle.ts";
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -84,6 +87,88 @@ for (const file of localizedComponentFiles) {
       });
     }
   });
+}
+
+
+type Copy = ReturnType<typeof getAppCopy>;
+
+const locales = ["en-US", "ko-KR"] as const;
+
+/** Agent internals that the default UI must not name. */
+const INTERNAL_TERMS = [/Steward/u, /Ledger/u, /원장/u, /Gateway/u, /Worker/iu, /automation/iu, /자동화/u];
+
+function strings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(strings);
+  if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+  return [];
+}
+
+function offending(texts: string[], terms: RegExp[]): string[] {
+  return texts.filter((text) => terms.some((term) => term.test(text)));
+}
+
+/** Copy on screens every user sees before turning on developer mode. */
+function defaultSurfaceCopy(copy: Copy): string[] {
+  return strings([
+    copy.inspector.tabs.summary,
+    copy.inspector.tabs.artifacts,
+    copy.inspector.tabs.automations,
+    copy.automations.inspector.empty,
+    copy.interfacePanels.progress,
+    copy.interfacePanels.noProgress,
+    copy.interfacePanels.noPlans,
+    copy.interfacePanels.noSpecs,
+    copy.composer.gitMissingTitle,
+    copy.composer.gitMissingMessage,
+    copy.interfaceFeedback.stewardStopFailed,
+    copy.interfaceFeedback.stewardResumeFailed,
+    copy.projectSignpost,
+    copy.projectStatistics,
+  ]);
+}
+
+
+for (const locale of locales) {
+  for (const text of offending(defaultSurfaceCopy(getAppCopy(locale)), INTERNAL_TERMS)) {
+    localizedFindings.push({ path: "packages/butler-i18n/src/locales/" + locale, line: 1, text, reason: "default surfaces must avoid agent internal names" });
+  }
+}
+// Only this key renders the product wordmark in the setup logo lockup.
+const KOREAN_WORDMARK_KEYS = new Set(["firstRun.product"]);
+
+type CopyString = { key: string; text: string };
+
+/** Inspect generated copy without invoking formatters with invented arguments. */
+function functionStrings(value: (...args: never[]) => unknown, key: string): CopyString[] {
+  const source = ts.createSourceFile("copy.ts", `(${value.toString()})`, ts.ScriptTarget.Latest, true);
+  const result: CopyString[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      result.push({ key, text: node.text });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return result;
+}
+
+function collectStrings(value: unknown, key = ""): CopyString[] {
+  if (typeof value === "string") return [{ key, text: value }];
+  if (typeof value === "function") return functionStrings(value as (...args: never[]) => unknown, key);
+  return value && typeof value === "object"
+    ? Object.entries(value).flatMap(([name, child]) => collectStrings(child, key ? `${key}.${name}` : name)) : [];
+}
+for (const { key, text } of [...collectStrings(getAppCopy("ko-KR")), ...collectStrings(lifecycleCopy.ko, "lifecycle")]) {
+  const badGlossary = /워커|작업자|타임존|보관함|Butler App|자동화/u.test(text);
+  const badProductName = /Butler/u.test(text) && !(KOREAN_WORDMARK_KEYS.has(key) && text === "Butler");
+  if (!badGlossary && !badProductName) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text,
+    reason: `${key}: use the approved Korean glossary (버틀러, Worker, 시간대, 아카이브, 예약 작업); Butler is reserved for wordmarks` });
+}
+for (const { text } of collectStrings(getAppCopy("en-US"))) {
+  if (!/\bautomations?\b|\bscheduled tasks?\b/iu.test(text)) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/en.ts", line: 1, text, reason: "use schedule for the scheduled-run feature" });
 }
 
 if (findings.length > 0 || localizedFindings.length > 0) {

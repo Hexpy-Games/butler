@@ -1,7 +1,8 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { IconButton } from "../../components/IconButton";
-import { GitBranch, Minus, MoreHorizontal, PanelLeft, PanelRight, Square, X } from "../../components/Icons";
+import { GitBranch, Globe2, MessageSquare, Minus, MoreHorizontal, PanelLeft, PanelRight, Square, X } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { TitlebarShell } from "./TitlebarShell";
@@ -19,10 +20,12 @@ const labels = {
   "en-US": {
     title: "Token page review", project: "butler", branch: "ui/ds-viewer-complete", showLeft: "Show left panel",
     showRight: "Show right panel", menu: "Session actions", minimize: "Minimize window", maximize: "Maximize window", close: "Close window",
+    browser: "Browser", conversation: "Office chair order", openConversation: "Open conversation", browserActive: "Butler is browsing",
   },
   "ko-KR": {
     title: "토큰 페이지 검토", project: "butler", branch: "ui/ds-viewer-complete", showLeft: "왼쪽 패널 보기",
     showRight: "오른쪽 패널 보기", menu: "세션 작업", minimize: "창 최소화", maximize: "창 최대화", close: "창 닫기",
+    browser: "브라우저", conversation: "사무용 의자 주문", openConversation: "대화 열기", browserActive: "버틀러가 브라우저 사용 중",
   },
 } as const;
 
@@ -66,7 +69,32 @@ function Titlebar({ context, windows }: { context: ShowcaseRenderContext; window
   );
 }
 
+/** Standalone browser: the conversation that owns the tab, as an auto-sized leading button. */
+function ConversationLeading({ context, collapsed }: { context: ShowcaseRenderContext; collapsed: boolean }) {
+  const copy = text(context);
+  return (
+    <div className={styles.fixture}>
+      <TitlebarShell
+        className={dsClass(collapsed ? styles.fixtureCollapsed : styles.fixtureTitlebar)}
+        collapsed={collapsed}
+        dragRegion
+        leadingSize="auto"
+        leading={<Button size="xs" variant="ghost" iconStart={<MessageSquare size="sm" />} text={copy.conversation}
+          aria-label={`${copy.openConversation}: ${copy.conversation}`} />}
+        title={copy.browser}
+        trailing={(
+          <ButtonContainer size="icon-sm">
+            <IconButton label={copy.browserActive} tone="riso" indicator pressed={false}><Globe2 size="md" /></IconButton>
+          </ButtonContainer>
+        )}
+      />
+    </div>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  { name: "Auto-sized leading control (sidebar open)", widths: ["375", "app", "wide"], render: (context) => <ConversationLeading context={context} collapsed={false} /> },
+  { name: "Auto-sized leading control (sidebar collapsed)", widths: ["app", "wide"], render: (context) => <ConversationLeading context={context} collapsed /> },
   { name: "Collapsed sidebar (macOS)", widths: ["375", "app", "wide"], render: (context) => <Titlebar context={context} /> },
   { name: "Windows controls", widths: ["app", "wide"], render: (context) => <Titlebar context={context} windows /> },
 ];

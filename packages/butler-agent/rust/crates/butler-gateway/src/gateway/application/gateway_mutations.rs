@@ -46,6 +46,10 @@ impl GatewayMutationCommands for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.archive_session_owned(id, title).await })
     }
+    fn clear_general(&self, title: String) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.clear_general_owned(title).await })
+    }
     fn delete_session(
         &self,
         id: String,

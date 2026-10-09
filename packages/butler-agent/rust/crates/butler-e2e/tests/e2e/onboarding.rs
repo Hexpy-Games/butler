@@ -31,8 +31,8 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
         settings["language"].is_string() && settings["timezone"].is_string(),
         "{settings}"
     );
-    // Owner decision #236: a fresh install asks first.
-    assert_eq!(settings["access_mode"], "ask_first", "{settings}");
+    // Permission tiers: a fresh install asks except for safe project reads.
+    assert_eq!(settings["access_mode"], "ask_except_reads", "{settings}");
     let model = settings["model"].as_str().unwrap_or_default().to_owned();
     let catalog = s.gw.get("/model-catalog").await?;
     let listed = catalog.data()["providers"]
@@ -222,7 +222,10 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
         before,
         "rejected call changed state"
     );
-    assert!(s.gw.messages("general").await?.is_empty());
+    assert_eq!(
+        s.gw.messages("general").await?,
+        [] as [serde_json::Value; 0]
+    );
 
     let preflight =
         s.gw.raw(

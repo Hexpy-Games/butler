@@ -17,7 +17,7 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access) = self
+        let (snapshot, conversation_access, default_project_folder) = self
             .storage
             .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
@@ -82,7 +82,12 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        Ok(rebuilt_turn(snapshot, assets, &conversation_access))
+        Ok(rebuilt_turn(
+            snapshot,
+            assets,
+            &conversation_access,
+            default_project_folder,
+        ))
     }
 }
 
@@ -91,10 +96,11 @@ fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, Option<String>), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
-    Ok((snapshot, access))
+    let folder = projects::configured_root(db)?.map(|path| path.to_string_lossy().into_owned());
+    Ok((snapshot, access, folder))
 }
 
 fn claimed_snapshot(
@@ -107,8 +113,8 @@ fn claimed_snapshot(
             "SELECT q.chat_id,q.turn_id,q.dispatched_message_id,t.attempt,q.text,m.created_at,\
          t.execution_controls_json,q.project_source_refs_json,m.content_parts_json,\
          q.control_resolution_json,c.kind,c.project_id,p.workspace_path,p.ledger_project_id,\
-         b.seed_json,q.attachments_json FROM session_queued_messages q \
-         JOIN turns t ON t.id=q.turn_id JOIN messages m ON m.id=q.dispatched_message_id \
+         b.seed_json,q.attachments_json,c.runtime_session_hint FROM session_queued_messages q \
+         JOIN turns t ON t.id=q.turn_id JOIN app_owned_messages m ON m.id=q.dispatched_message_id \
          JOIN chats c ON c.id=q.chat_id LEFT JOIN projects p ON p.id=c.project_id \
          LEFT JOIN app_session_branches b ON b.target_session_id=c.id AND b.state='ready' \
          WHERE q.id=?1 AND q.state='dispatching' AND q.claim_id=?2",
@@ -125,7 +131,9 @@ fn claimed_snapshot(
                 let ledger_project_id: Option<String> = row.get(13)?;
                 let resolution = parse_value(resolution_json.as_deref().unwrap_or("{}"), 9)?;
                 Ok(ClaimedNativeSnapshot {
-                    session_id: session_hint(&chat_id),
+                    session_id: row
+                        .get::<_, Option<String>>(16)?
+                        .unwrap_or_else(|| session_hint(&chat_id)),
                     chat_id,
                     turn_id: required(row.get(1)?, 1)?,
                     message_id: required(row.get(2)?, 2)?,
@@ -164,57 +172,7 @@ fn claimed_snapshot(
                 "Queued message claim was lost.",
             )
         })?;
-    let mut attached = db
-        .prepare(
-            "SELECT f.id,f.owner_session_id,f.message_id,f.kind,f.mime_type,f.safe_name,\
-         f.size_bytes,f.sha256,f.storage_name,f.created_at FROM message_attachments a \
-         JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position",
-        )
-        .map_err(AppStorageError::sqlite)?;
-    snapshot.attached_files = attached
-        .query_map([&snapshot.message_id], |row| {
-            Ok(AppMessageFileSnapshot {
-                id: row.get(0)?,
-                owner_session_id: row.get(1)?,
-                message_id: row.get(2)?,
-                kind: row.get(3)?,
-                mime_type: row.get(4)?,
-                safe_name: row.get(5)?,
-                size_bytes: row.get(6)?,
-                sha256: row.get(7)?,
-                storage_name: row.get(8)?,
-                created_at: row.get(9)?,
-            })
-        })
-        .map_err(AppStorageError::sqlite)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AppStorageError::sqlite)?;
-    let mut seen = HashSet::new();
-    if let Some(content) = &snapshot.content_parts {
-        for part in &content.parts {
-            if let MessageContentPart::SessionRef { session_id, .. } = part {
-                if !seen.insert(session_id) {
-                    continue;
-                }
-                let chat = db
-                    .query_row(
-                        "SELECT id,title FROM chats WHERE id=?1",
-                        [session_id],
-                        |row| {
-                            Ok(AppReferencedChatSnapshot {
-                                id: row.get(0)?,
-                                title: row.get(1)?,
-                            })
-                        },
-                    )
-                    .optional()
-                    .map_err(AppStorageError::sqlite)?;
-                if let Some(chat) = chat {
-                    snapshot.reference_chats.push(chat);
-                }
-            }
-        }
-    }
+    populate_snapshot_assets(db, &mut snapshot)?;
     Ok(snapshot)
 }
 
@@ -226,9 +184,13 @@ fn rebuilt_turn(
     snapshot: ClaimedNativeSnapshot,
     assets: ResolvedNativeAssets,
     conversation_access: &AccessMode,
+    default_project_folder: Option<String>,
 ) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
+    if let Some(folder) = default_project_folder {
+        context.insert("defaultProjectFolder".into(), folder.into());
+    }
     if let Some(seed) = snapshot.branch_seed.clone() {
         context.insert("branchSeed".into(), seed);
     }
@@ -337,4 +299,65 @@ fn parse_json<T: serde::de::DeserializeOwned>(value: &str, column: usize) -> rus
             Box::new(error),
         )
     })
+}
+
+fn populate_snapshot_assets(
+    db: &Connection,
+    snapshot: &mut ClaimedNativeSnapshot,
+) -> Result<(), AppStorageError> {
+    let mut attached = db
+        .prepare(
+            "SELECT f.id,f.owner_session_id,f.message_id,f.kind,f.mime_type,f.safe_name,\
+         f.size_bytes,f.sha256,f.storage_name,f.created_at FROM message_attachments a \
+         JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position",
+        )
+        .map_err(AppStorageError::sqlite)?;
+    snapshot.attached_files = attached
+        .query_map([&snapshot.message_id], |row| {
+            Ok(AppMessageFileSnapshot {
+                id: row.get(0)?,
+                owner_session_id: row.get(1)?,
+                message_id: row.get(2)?,
+                kind: row.get(3)?,
+                mime_type: row.get(4)?,
+                safe_name: row.get(5)?,
+                size_bytes: row.get(6)?,
+                sha256: row.get(7)?,
+                storage_name: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppStorageError::sqlite)?;
+    let mut seen = HashSet::new();
+    if let Some(content) = &snapshot.content_parts {
+        for part in &content.parts {
+            if let MessageContentPart::SessionRef { session_id, .. } = part {
+                if !seen.insert(session_id) {
+                    continue;
+                }
+                let chat = db
+                    .query_row(
+                        "SELECT id,title,runtime_session_hint FROM chats WHERE id=?1",
+                        [session_id],
+                        |row| {
+                            Ok(AppReferencedChatSnapshot {
+                                runtime_session_hint: row
+                                    .get::<_, Option<String>>(2)?
+                                    .unwrap_or_else(|| session_hint(session_id)),
+                                id: row.get(0)?,
+                                title: row.get(1)?,
+                            })
+                        },
+                    )
+                    .optional()
+                    .map_err(AppStorageError::sqlite)?;
+                if let Some(chat) = chat {
+                    snapshot.reference_chats.push(chat);
+                }
+            }
+        }
+    }
+    Ok(())
 }

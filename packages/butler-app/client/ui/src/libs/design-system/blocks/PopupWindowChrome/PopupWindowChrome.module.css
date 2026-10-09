@@ -1,0 +1,66 @@
+.window {
+  /* The native lights' reserve in a pop-up (hiddenInset): lights at x 20,
+     three 12px buttons, 8px gaps. Own value: the main window's
+     --traffic-controls-width is 0 inside a browser-hosted shell. */
+  --popup-lights-reserve: 72px;
+
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--popover);
+  color: var(--text-primary);
+}
+
+/* 40px: the native lights (macOS) sit centered in it at the start. */
+.bar {
+  display: flex;
+  height: var(--browser-band-height);
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-md) var(--space-sm);
+  font-size: var(--font-size-2);
+  user-select: none;
+}
+
+.window[data-platform="darwin"] .bar {
+  padding-inline-start: var(--popup-lights-reserve);
+}
+
+.lock {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.lock:not([data-secure]) {
+  color: var(--color-warning-text);
+}
+
+.host {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  margin-inline-start: auto;
+}
+
+/* The page sits in the window like a card, inset from its edges. */
+.page {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 0 var(--space-xs) var(--space-xs);
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}

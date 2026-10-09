@@ -216,11 +216,37 @@ interface ConversationCopy {
   };
 }
 
+export interface BrowserCopy {
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
+  title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
+  openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
+  newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
+  bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
+  zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
+  signedIn: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
+  stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string;
+  typeYourself: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
+  pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
+  pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
+  picked: (count: number) => string; attachToChat: string; saveImage: string; copyText: string; clearSelection: string; dropToAttach: string;
+  dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
+  attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
+  viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
+  element: string; viewKind: string; document: string; attach: string; openSource: string; remove: string; archivedClosed: (count: number) => string;
+  pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
+  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
+  enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
+  ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
+  usedTimes: (count: number) => string; filled: string; askedApproved: string;
+}
+
+/** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
-  browser: { tabCount: string; tabMoved: string; agentControl: string; userControl: string; takeOver: string; handBack: string; signedIn: string; stills: string; waiting: string; still: string; title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
+  browser: BrowserCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -514,6 +540,7 @@ export interface AppCopy {
     success: string;
     failures: string;
   };
+  clearChat: { archiveCount: (count: number) => string; title: string; description: string; memory: string; manageMemory: string; clear: string; busy: string; failed: string; archivedTitle: (date: string) => string };
   space: {
     general: string;
     space: string;
@@ -740,13 +767,9 @@ export interface AppCopy {
     projects: string;
     chats: string;
     settings: string;
-    expandProjects: string;
-    collapseProjects: string;
     expandChats: string;
     collapseChats: string;
     newProject: string;
-    startFromScratch: string;
-    useExistingFolder: string;
     availableInDesktop: string;
     projectDashboard: string;
     newProjectChat: string;
@@ -754,6 +777,11 @@ export interface AppCopy {
     projectCreateTitle: string;
     projectRenameTitle: string;
     projectName: string;
+    projectFolder: string;
+    projectFolderAuto: string;
+    chooseProjectFolder: string;
+    changeProjectFolder: string;
+    resetProjectFolder: string;
     pin: string;
     unpin: string;
     delete: string;
@@ -847,13 +875,20 @@ export interface AppCopy {
       modifyInvalid: string;
     };
   };
+  /** Access modes. `askAlways` labels wire `ask_first`; `askFirst` labels wire `ask_except_reads`. */
   permissions: {
     fullAccess: string;
     fullAccessDesc: string;
+    askAlways: string;
+    askAlwaysDesc: string;
     askFirst: string;
     askFirstDesc: string;
+    auto: string;
+    autoDesc: string;
     readOnly: string;
     readOnlyDesc: string;
+    /** Tag on the recommended mode in access menus. */
+    recommended: string;
   };
   automations: {
     saved: string;
@@ -1070,7 +1105,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1210,7 +1245,8 @@ export interface AppCopy {
       consolidationModel: string;
       localReasoningBudget: string;
       contextLimit: string;
-      access: string;
+      /** Settings → General → Default permission: the new-chat field. */
+      chatAccess: string;
       planModeDefault: string;
       name: string;
       job: string;
@@ -1308,6 +1344,7 @@ export interface AppCopy {
     };
     descriptions: {
       runtimeSupportedModelsOnly: string;
+      chatAccess: string;
       language: string;
       timezone: string;
       consolidationModel: string;

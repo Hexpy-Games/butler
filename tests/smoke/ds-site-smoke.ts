@@ -151,11 +151,11 @@ try {
 
   // Bundled typefaces load from the site itself (Typeface Contract).
   const fonts = await page.evaluate(async () => {
-    await document.fonts.load('14px "Pretendard Variable"', "Butler 설정");
+    await document.fonts.load('14px "Pretendard Variable"', "버틀러 설정");
     await document.fonts.load('13px "IBM Plex Mono"', "const");
     const woff2 = performance.getEntriesByType("resource").map((entry) => entry.name).filter((name) => name.endsWith(".woff2"));
     return {
-      pretendard: document.fonts.check('14px "Pretendard Variable"', "Butler 설정"),
+      pretendard: document.fonts.check('14px "Pretendard Variable"', "버틀러 설정"),
       plex: document.fonts.check('13px "IBM Plex Mono"', "const"),
       sameOrigin: woff2.length > 0 && woff2.every((name) => name.startsWith(location.origin)),
     };

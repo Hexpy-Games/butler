@@ -283,7 +283,7 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     if let Some(workers) =
         butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
     {
-        assert!(workers.is_empty());
+        assert_eq!(workers, [] as [u32; 0]);
     }
     let pending: u64 = graph_db
         .query_row(

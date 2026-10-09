@@ -19,7 +19,7 @@ This guide covers the repository layout, running Butler from source, the checks 
 
 ### Rust crates
 
-The workspace in `packages/butler-agent/rust` uses Rust 1.91.0, pinned in `rust-toolchain.toml`.
+The workspace in `packages/butler-agent/rust` uses Rust 1.99.0, pinned in `rust-toolchain.toml`.
 
 | Crate | Role |
 | --- | --- |
@@ -175,6 +175,8 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
 7. The tag builds all release platforms and publishes only after the assets and checksums exist. Stable npm publication runs through `.github/workflows/npm-publish.yml`; previews can be published by dispatching that workflow after desktop verification. After the first successful OIDC publish, the owner may delete the `NPM_ACCESS_TOKEN` repository secret. Dispatch `post-release-verify.yml` with the previous tag as baseline, then merge the release branch back to main as a merge commit.
 
+Windows tag evidence comes from `windows-preview-smoke.yml` ("Complete Windows preview verification"), `windows-installer.yml` ("windows-installer gate"), and `e2e.yml` ("E2E live tier"). `windows.yml` is disabled manually and is not a release gate.
+
 Known-flaky failures can be waived by the coordinator for previews; stable waivers need the owner. On the linked **open issue**, post a comment containing exactly this JSON (fill in the values):
 
 ```json
@@ -186,6 +188,18 @@ The proof reads issue comments, checks the open linked issue, the comment author
 The app release gate fails when the bundled agent version changes and the app version doesn't. The gates are also available locally as the `release:*` scripts in `package.json`.
 
 Windows preview releases include the unsigned Agent and Squirrel App installer.
+
+### Live E2E OAuth setup (Windows owner runner)
+
+On the owner's `butler-win` runner, sign in once in PowerShell:
+
+```powershell
+$env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login
+```
+
+Integration live E2E uses this dedicated profile's `auth.json` in place and
+atomically saves rotated tokens there. Live jobs share one concurrency group.
+Repeat the login only if it is revoked. The profile is never uploaded as an artifact.
 
 ### Recovering a failed release
 

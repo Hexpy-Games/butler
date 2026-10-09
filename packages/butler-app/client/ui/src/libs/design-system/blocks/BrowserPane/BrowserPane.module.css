@@ -1,0 +1,84 @@
+/* A sheet whose two top corners use the page card radius (12px), standing
+   --space-xs off the chat column and the window edge. */
+.pane {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-inline: var(--space-xs);
+  padding-top: var(--space-xs);
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--browser-pane-radius) var(--browser-pane-radius) 0 0;
+  background: var(--browser-pane-bg);
+}
+
+.pane[data-placement="standalone"] {
+  margin-inline: 0 var(--space-xs);
+}
+
+.tabRow {
+  display: flex;
+  min-width: 0;
+  height: calc(var(--menu-item-height) + var(--space-xs));
+  flex: none;
+  align-items: center;
+  padding: 0 var(--browser-card-inset) var(--space-xs);
+}
+
+.tabRow > * {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.toolbar {
+  container-name: browser-toolbar;
+  container-type: inline-size;
+  display: flex;
+  min-width: 0;
+  height: var(--browser-band-height);
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--browser-card-inset) var(--space-xs);
+}
+
+.group {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.group [data-slot="button-container"] {
+  flex-wrap: nowrap;
+}
+
+.address {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Narrow panes keep the address readable: only the last page action (More,
+   which carries the others) stays. */
+@container browser-toolbar (width < 520px) {
+  .address {
+    min-width: calc(var(--space-4xl) * 3);
+  }
+
+  .group:last-child [data-slot="button-container"] > :not(:last-child) {
+    display: none;
+  }
+}
+
+.stage {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 0 var(--browser-card-inset) var(--browser-card-inset);
+}

@@ -10,11 +10,20 @@ use std::{
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-type Preferences = HashMap<PathBuf, (Option<(SystemTime, u64)>, bool)>;
+type Preferences = HashMap<PathBuf, (Option<(SystemTime, u64)>, Option<bool>)>;
 static PREFERENCES: OnceLock<Mutex<Preferences>> = OnceLock::new();
 const RELEASE_PREFIX: &str = "https://github.com/Hexpy-Games/butler/releases/latest/download/";
 
-pub(super) async fn previews(data: &Path, channel: Option<&str>) -> bool {
+/// Saved choices take precedence; only preview builds opt in by default.
+pub fn effective_update_previews(saved: Option<bool>, version: Option<&str>) -> bool {
+    saved.unwrap_or_else(|| {
+        version
+            .and_then(|value| semver::Version::parse(value).ok())
+            .is_some_and(|version| version.pre.as_str().split('.').next() == Some("preview"))
+    })
+}
+
+pub(super) async fn previews(data: &Path, channel: Option<&str>, version: Option<&str>) -> bool {
     if let Some(channel) = channel {
         return channel == "preview";
     }
@@ -28,16 +37,15 @@ pub(super) async fn previews(data: &Path, channel: Option<&str>) -> bool {
         .lock()
         .await;
     if let Some((_, enabled)) = cache.get(&path).filter(|(prior, _)| *prior == stamp) {
-        return *enabled;
+        return effective_update_previews(*enabled, version);
     }
     let enabled = tokio::fs::read(&path)
         .await
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-        .and_then(|config| config.pointer("/update/previews").and_then(Value::as_bool))
-        .unwrap_or(false);
+        .and_then(|config| config.pointer("/update/previews").and_then(Value::as_bool));
     cache.insert(path, (stamp, enabled));
-    enabled
+    effective_update_previews(enabled, version)
 }
 
 pub(super) fn eligible(value: &Value, previews: bool) -> bool {

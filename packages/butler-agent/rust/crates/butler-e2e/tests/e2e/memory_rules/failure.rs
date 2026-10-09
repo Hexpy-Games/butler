@@ -77,6 +77,15 @@ async fn rules_stale_snapshot_refuses_mutation_and_io_failure_recovers() -> Resu
         output["error"]["message"], "rule_revision_stale",
         "{output}"
     );
+    assert_eq!(output["error"], output["output"]["error"], "{output}");
+    assert!(
+        output["recovery_feedback"]
+            .as_str()
+            .is_some_and(|feedback| feedback
+                .contains("Do not repeat an unchanged failing operation")
+                && feedback.contains("rule_revision_stale")),
+        "{output}"
+    );
     assert_eq!(std::fs::read(root.join("manifest.json"))?, manifest);
     assert_eq!(std::fs::read_dir(root.join("operations"))?.count(), 2);
     // Fail a real index read after durable intent/source/archive/exclusion, then recover it.

@@ -81,7 +81,7 @@ async fn hooks_allow_cannot_bypass_permission_and_resume_preserves_id() -> Resul
     butler_e2e::gate!();
     let setup = Setup::new("HOOK-AUTHORITY")?
         .stub_cassette(Cassette::load("ACC-07")?)
-        .access(Access::AskFirst);
+        .access(Access::AskAlways);
     let allow = if command_sandbox::POSIX_SHELL {
         "printf '{\"decision\":\"allow\"}'"
     } else {
@@ -199,7 +199,10 @@ async fn hooks_allow_cannot_enable_read_only_write() -> Result<(), HarnessError>
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert_eq!(s.gw.settings().await?["wallpaper"], before);
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     assert!(
         s.provider()?
             .requests()

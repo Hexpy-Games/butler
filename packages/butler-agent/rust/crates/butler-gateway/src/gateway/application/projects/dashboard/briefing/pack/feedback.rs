@@ -36,8 +36,9 @@ pub(super) fn read_reports(
 ) -> Result<Vec<ReportRow>, AppStorageError> {
     let mut statement = db
         .prepare(
-            "SELECT m.id,m.chat_id,c.title,substr(m.text,1,1200),length(m.text),m.updated_at \
-             FROM chats c JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 \
+            "SELECT m.id,c.id,c.title,substr(m.text,1,1200),length(m.text),m.updated_at \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 \
              AND m.role='assistant' AND m.status='delivered' AND NOT \
              (m.safe_error_code IS NOT NULL AND m.safe_error_code IN \
              ('app_turn_queue_failed','goal_completion_incomplete')) \
@@ -78,7 +79,8 @@ pub(super) fn read_followups(
     let mut statement = db
         .prepare(
             "SELECT m.id,substr(m.text,1,1200),length(m.text),m.content_parts_json,m.created_at \
-             FROM chats c JOIN messages m ON m.chat_id=c.id WHERE c.project_id=?1 \
+             FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
+             CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid WHERE c.project_id=?1 \
              AND m.role='user' AND m.status='sent' AND EXISTS ( \
                SELECT 1 FROM json_each(CASE WHEN json_valid(m.content_parts_json) \
                  THEN m.content_parts_json ELSE '{\"parts\":[]}' END,'$.parts') ref \
@@ -104,58 +106,65 @@ pub(super) fn read_followups(
     rows.reverse();
     Ok(rows
         .into_iter()
-        .filter_map(|(message_id, excerpt, chars, raw, reported_at)| {
-            let content: MessageContent = serde_json::from_str(raw.as_deref()?).ok()?;
-            if content.version != 1 {
-                return None;
-            }
-            let matching = content
-                .parts
-                .iter()
-                .filter_map(|part| match part {
-                    MessageContentPart::ProjectSourceRef {
-                        project_id: ref_project,
-                        source,
-                        topic,
-                        ..
-                    } if ref_project == project_id
-                        && format!("{}:{}", source.kind, source.id) == source_id =>
-                    {
-                        Some(FollowupReference {
-                            revision: source.revision.clone(),
-                            topic: topic.as_deref().map(|text| sanitize_public_text(text, "")),
-                        })
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            if matching.is_empty() {
-                return None;
-            }
-            let text_parts = content
-                .parts
-                .iter()
-                .filter_map(|part| match part {
-                    MessageContentPart::Text { text, .. } => Some(text.as_str()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            let text = text_parts.concat();
-            let (observation, truncated) = if text_parts.is_empty() {
-                (excerpt, chars > 1_200)
-            } else {
-                (
-                    prefix_utf16(&text, 1_200).to_owned(),
-                    text.encode_utf16().count() > 1_200,
-                )
-            };
-            Some(Followup {
-                message_id,
-                reported_at,
-                observation: sanitize_public_text(&observation, ""),
-                excerpt_truncated: truncated,
-                references: matching,
-            })
-        })
+        .filter_map(|row| followup(row, project_id, source_id))
         .collect())
+}
+
+fn followup(
+    row: (String, String, i64, Option<String>, String),
+    project_id: &str,
+    source_id: &str,
+) -> Option<Followup> {
+    let (message_id, excerpt, chars, raw, reported_at) = row;
+    let content: MessageContent = serde_json::from_str(raw.as_deref()?).ok()?;
+    if content.version != 1 {
+        return None;
+    }
+    let matching = content
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            MessageContentPart::ProjectSourceRef {
+                project_id: ref_project,
+                source,
+                topic,
+                ..
+            } if ref_project == project_id
+                && format!("{}:{}", source.kind, source.id) == source_id =>
+            {
+                Some(FollowupReference {
+                    revision: source.revision.clone(),
+                    topic: topic.as_deref().map(|text| sanitize_public_text(text, "")),
+                })
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        return None;
+    }
+    let text_parts = content
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            MessageContentPart::Text { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let text = text_parts.concat();
+    let (observation, truncated) = if text_parts.is_empty() {
+        (excerpt, chars > 1_200)
+    } else {
+        (
+            prefix_utf16(&text, 1_200).to_owned(),
+            text.encode_utf16().count() > 1_200,
+        )
+    };
+    Some(Followup {
+        message_id,
+        reported_at,
+        observation: sanitize_public_text(&observation, ""),
+        excerpt_truncated: truncated,
+        references: matching,
+    })
 }

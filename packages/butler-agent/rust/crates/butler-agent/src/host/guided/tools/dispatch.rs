@@ -300,7 +300,7 @@ pub(super) async fn execute(
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "list_skills" | "load_skill" | "read_skill_file" => {
-            file_capability(owner, call, &args).await
+            file_capability(owner, call, &args, false).await
         }
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
@@ -316,12 +316,14 @@ async fn file_capability(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
+    contained: bool,
 ) -> Result<Value, BtccError> {
     owner
         .capabilities
         .invoke(
             &call.name,
             CapabilityInvocation {
+                contained,
                 call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
                 workspace_reference: owner.binding.workspace_reference.as_ref(),
                 workspace_path: Some(&owner.binding.workspace_path),
@@ -338,12 +340,7 @@ async fn file_capability(
 
 /// The Turn's access mode as delegation requests name it.
 fn access_mode(owner: &GuidedTools) -> String {
-    match owner.binding.access_mode {
-        butler_turn::btcc::AccessMode::FullAccess => "full_access",
-        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-    }
-    .into()
+    owner.binding.access_mode.as_str().into()
 }
 
 async fn list_automations(

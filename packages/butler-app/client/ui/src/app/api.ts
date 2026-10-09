@@ -544,7 +544,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (url.pathname.startsWith("/memory/")) {
     return await callBridge<T>(bridge, "memoryRequest", {
-      path: url.pathname, method, body: parseBody(options.body),
+      path: url.pathname, method,
+      ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
@@ -605,6 +606,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionHint: body.session_hint,
       idempotencyKey: body.idempotency_key,
     });
+  }
+  if (method === "POST" && url.pathname === "/sessions/general/clear") {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "clearGeneral", { title: body.title });
   }
   const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/u);
   if (method === "PATCH" && sessionMatch) {
@@ -897,7 +902,14 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   throw new Error(`Unsupported Butler app API route: ${method} ${url.pathname}`);
 }
 
-export async function selectProjectFolder(): Promise<{ cancelled?: boolean; display_name?: string; folder_selection_token?: string }> {
+export interface ProjectFolderSelection {
+  cancelled?: boolean;
+  display_name?: string;
+  folder_path?: string;
+  folder_selection_token?: string;
+}
+
+export async function selectProjectFolder(): Promise<ProjectFolderSelection> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (!bridge?.selectProjectFolder) {
     const error = new Error(appCopy.interfaceFeedback.desktopFolderOnly);

@@ -109,30 +109,40 @@ fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
     }
 }
 
-/// Every boundary case reads the same full skill fact through the public view.
+/// The public detail and summary views must agree on the complete latest fact.
+pub(super) async fn verify_skill_views(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    expected: &serde_json::Value,
+) -> Result<butler_e2e::e2e::gateway::Reply, butler_e2e::e2e::HarnessError> {
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.status, 200);
+    assert_eq!(&view.data()["skills_used"], expected);
+    let summary = s.gw.get("/session-summary?session_id=general").await?;
+    assert_eq!(summary.status, 200);
+    assert_eq!(&summary.data()["skills_used"], expected);
+    Ok(view)
+}
+
+/// Every boundary case reads the same full skill fact through both public views.
 pub(super) async fn verify_skill_record_boundaries(
     s: &butler_e2e::e2e::scenario::Scenario,
     path: &std::path::Path,
     event: &serde_json::Value,
 ) -> Result<(), butler_e2e::e2e::HarnessError> {
     let expected =
-        serde_json::Value::Array(vec![event["payload"]["details"]["skillNames"][0].clone()]);
+        serde_json::Value::Array(vec![event["payload"]["details"]["skillNames"][1].clone()]);
     let mut padded = event.clone();
     padded["padding"] = serde_json::Value::String("x".repeat(70_000));
     let record = padded.to_string();
     // Cross multiple 32KiB reads, with and without a final newline.
     for suffix in ["", "\n"] {
         std::fs::write(path, format!("{record}{suffix}"))?;
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        assert_eq!(view.status, 200);
-        assert_eq!(view.data()["skills_used"], expected);
+        verify_skill_views(s, &expected).await?;
     }
     // An oversized newer record must not hide the earlier complete fact.
     padded["padding"] = serde_json::Value::String("x".repeat(1024 * 1024));
     std::fs::write(path, format!("{event}\n{padded}\n"))?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.status, 200);
-    assert_eq!(view.data()["skills_used"], expected);
+    verify_skill_views(s, &expected).await?;
     Ok(())
 }
 
@@ -189,4 +199,60 @@ pub(super) fn report_slow_views(metrics: &Value) {
             eprintln!("STORAGE SLOW VIEW phase_start_us_elapsed={phase}");
         }
     }
+}
+
+/// The instrumented agent uses only the test-support SQLite trace probe.
+pub(super) fn report_history_load(logs: &Path) -> Result<(), butler_e2e::e2e::HarnessError> {
+    if std::env::var("BUTLER_E2E_DB_LOAD").as_deref() != Ok("1") {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(logs.join("agent-2.log"))?;
+    let loads: Vec<_> = text
+        .lines()
+        .filter(|line| line.contains("DB_LOAD phase=history "))
+        .collect();
+    eprintln!("STORAGE history_windows={}", loads.len());
+    let bindings: Vec<_> = text
+        .lines()
+        .filter(|line| line.contains("DB_LOAD phase=history-binding"))
+        .collect();
+    assert_eq!(
+        bindings.len(),
+        16,
+        "context and canonical admission each look up the fresh binding"
+    );
+    for line in bindings {
+        eprintln!("STORAGE {line}");
+        assert!(
+            line.contains("queries=1 result_rows=0 fullscan_steps=0"),
+            "{line}"
+        );
+        assert!(line.contains("connections=1 autocommit=true max_read_depth=1"));
+    }
+    for line in loads {
+        eprintln!("STORAGE {line}");
+        assert!(line.contains("connections=1 autocommit=true"));
+        if std::env::var("BUTLER_E2E_EXPECT_EMPTY_HISTORY_LOAD").as_deref() == Ok("1") {
+            assert!(line.contains("max_read_depth=1"));
+            assert!(
+                line.contains("queries=2 result_rows=0 fullscan_steps=0"),
+                "{line}"
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn instrument(
+    setup: butler_e2e::e2e::scenario::Setup,
+) -> butler_e2e::e2e::scenario::Setup {
+    setup.env("BUTLER_E2E_STORAGE_METRICS", "1").env(
+        "BUTLER_E2E_DB_LOAD",
+        std::env::var("BUTLER_E2E_DB_LOAD").unwrap_or_default(),
+    )
+}
+
+pub(super) fn p95(samples: &mut [u64]) -> u64 {
+    samples.sort_unstable();
+    samples[(samples.len() * 95).div_ceil(100) - 1]
 }

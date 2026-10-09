@@ -342,23 +342,27 @@ impl McpServer {
 
 #[tool_handler]
 impl ServerHandler for McpServer {
-    async fn list_tools(
+    fn list_tools(
         &self,
         _request: Option<rmcp::model::PaginatedRequestParams>,
         _context: rmcp::service::RequestContext<rmcp::RoleServer>,
-    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+    ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
+    {
         let mut tools = Self::tool_router().list_all();
-        let catalog = butler_models::models::ModelCatalog::new()
-            .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None))?;
-        for tool in &mut tools {
-            if tool.name == "model_set" {
-                tool.description = Some(format!("Set or get the worker/butler model. Valid: {}, auto:codex-latest. Use action=list for connected custom models.", catalog.model_refs().join(", ")).into());
-            }
-        }
-        Ok(rmcp::model::ListToolsResult {
-            tools,
-            ..Default::default()
-        })
+        let result = butler_models::models::ModelCatalog::new()
+            .map(|catalog| {
+                for tool in &mut tools {
+                    if tool.name == "model_set" {
+                        tool.description = Some(format!("Set or get the worker/butler model. Valid: {}, auto:codex-latest. Use action=list for connected custom models.", catalog.model_refs().join(", ")).into());
+                    }
+                }
+                rmcp::model::ListToolsResult {
+                    tools,
+                    ..Default::default()
+                }
+            })
+            .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None));
+        std::future::ready(result)
     }
 
     fn get_info(&self) -> ServerConfig {

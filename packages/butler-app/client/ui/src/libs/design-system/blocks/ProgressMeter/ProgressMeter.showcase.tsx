@@ -14,8 +14,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { replay: "Replay", context: "Context window", full: "42% full", downloading: "Downloading", received: "44 MB downloaded", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed" },
-  "ko-KR": { replay: "다시 재생", context: "컨텍스트 창", full: "42% 사용", downloading: "다운로드 중", received: "44MB 받음", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패" },
+  "en-US": { replay: "Replay", context: "Context window", full: "42% full", downloading: "Downloading", received: "44 MB downloaded", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed", loading: "Loading page" },
+  "ko-KR": { replay: "다시 재생", context: "컨텍스트 창", full: "42% 사용", downloading: "다운로드 중", received: "44MB 받음", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패", loading: "페이지 로딩 중" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -68,6 +68,20 @@ export const stories: ShowcaseStory[] = [
           <Stack key={value} gap="xs">
             <Typo.Caption numeric="tabular">{`${text(context).changes} ${value}`}</Typo.Caption>
             <ProgressMeter bare ariaLabel={`${text(context).changes} ${value}`} value={value} />
+          </Stack>
+        ))}
+      </Stack>
+    ),
+  },
+  {
+    // PageCard: the page's load line on the card's top edge.
+    name: "Thin (page load line)",
+    render: (context) => (
+      <Stack gap="sm">
+        {[72, 30].map((value) => (
+          <Stack key={value} gap="xs">
+            <Typo.Caption numeric="tabular">{`${text(context).loading} ${value}%`}</Typo.Caption>
+            <ProgressMeter thin ariaLabel={text(context).loading} value={value} />
           </Stack>
         ))}
       </Stack>

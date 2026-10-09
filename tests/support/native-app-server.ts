@@ -67,7 +67,7 @@ export type NativeAppServerHandle = {
   stop(): Promise<void>;
 };
 
-const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+const repositoryRoot = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? fileURLToPath(new URL("../../", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
@@ -98,7 +98,11 @@ function signalGroup(entry: TrackedEntry, signal: NodeJS.Signals): void {
   try {
     process.kill(-entry.pid, signal);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH" && hasExited(entry.child)) throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH" && code !== "EPERM") throw error;
+    // Once the leader exits, its PID can be reused before final group cleanup.
+    // Never turn that stale process-group signal into a teardown failure.
+    if (code === "EPERM" && hasExited(entry.child)) return;
   }
   // Also signal the exact ChildProcess we own: restricted macOS runners can
   // refuse group delivery. StopSignal coalesces duplicate graceful requests.

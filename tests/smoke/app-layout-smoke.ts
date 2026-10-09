@@ -1036,8 +1036,9 @@ try {
   // the Space "Create group" dialog instead of a ledger document modal.
   await page
     .locator(testClass("app-sidebar"))
-    .getByRole("button", { name: appCopy.space.createGroup, exact: true })
+    .getByRole("button", { name: appCopy.space.menu, exact: true })
     .click();
+  await page.getByRole("menuitem", { name: appCopy.space.newGroup, exact: true }).click();
   await page.locator("[role='dialog']").waitFor({ state: "visible" });
   const dialogTopState = await page
     .locator("[role='dialog']")

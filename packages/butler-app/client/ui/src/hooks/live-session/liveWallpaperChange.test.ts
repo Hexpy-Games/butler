@@ -1,3 +1,4 @@
+// test-category: race
 /// <reference types="bun" />
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { toast } from "sonner";

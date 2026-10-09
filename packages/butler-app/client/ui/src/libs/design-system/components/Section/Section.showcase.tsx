@@ -23,7 +23,7 @@ const labels = {
   },
   "ko-KR": {
     artifacts: "산출물", automations: "예약 작업", plans: "계획", specs: "명세", add: "새 예약 작업",
-    description: "이 대화에서 Butler가 만들거나 바꾼 파일입니다.", viewAll: "모두 보기",
+    description: "이 대화에서 버틀러가 만들거나 바꾼 파일입니다.", viewAll: "모두 보기",
     items: ["release-notes.md", "design-review.png"], nightly: "야간 릴리스 노트", every: "매일 07:00",
     empty: "아직 명세가 없습니다.",
   },

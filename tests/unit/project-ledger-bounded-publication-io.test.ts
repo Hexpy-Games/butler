@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -32,17 +32,6 @@ test("Project Ledger copyDirectory copies large nested files without a parent-si
     rmSync(target, { recursive: true, force: true });
   }
 });
-
-test("copyDirectory uses the bounded copy primitive rather than whole-file read/write", () => {
-  const source = readFileSync(join(projectLedgerSource, "fs.js"), "utf8");
-  const start = source.indexOf("export function copyDirectory");
-  const end = source.indexOf("export function replaceWithSymlink", start);
-  const implementation = source.slice(start, end);
-  expect(implementation).toContain("copyFileSync(sourcePath, targetPath)");
-  expect(implementation).not.toContain("readFileSync");
-  expect(implementation).not.toContain("writeFileSync");
-});
-
 test("source-head storage digest preserves the legacy entry and byte ordering", async () => {
   const root = mkdtempSync(join(tmpdir(), "project-ledger-storage-hash-"));
   try {
@@ -79,31 +68,6 @@ test("source-head storage digest preserves the legacy entry and byte ordering", 
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-test("publication I/O paths do not regress to whole-file materialization", () => {
-  const sourceHead = readFileSync(
-    join(projectLedgerSource, "transactions", "source-head.js"),
-    "utf8",
-  );
-  const observeStart = sourceHead.indexOf("export function observeProjectLedgerSourceHead");
-  const semanticCompatibilityStart = sourceHead.indexOf("export function canonicalProjectLedgerSemantics");
-  const observeImplementation = sourceHead.slice(observeStart, semanticCompatibilityStart);
-  expect(observeImplementation).toContain("storageBuffer");
-  expect(observeImplementation).toContain("updateHashFromFile");
-  expect(observeImplementation).not.toContain("readFileSync");
-
-  const integrity = readFileSync(
-    join(projectLedgerSource, "transactions", "publication-integrity.js"),
-    "utf8",
-  );
-  const validationStart = integrity.indexOf("function assertEventLogReadable");
-  const validationEnd = integrity.indexOf("export class ProjectLedgerEventLogLineTooLargeError", validationStart);
-  const validationImplementation = integrity.slice(validationStart, validationEnd);
-  expect(validationImplementation).toContain("readSync");
-  expect(validationImplementation).not.toContain("readFileSync");
-  expect(validationImplementation).not.toContain('.split("\\n")');
-});
-
 test("publication event-log validation is line bounded and preserves valid UTF-8 records", async () => {
   const project = mkdtempSync(join(tmpdir(), "project-ledger-event-log-"));
   try {

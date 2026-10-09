@@ -227,15 +227,15 @@ pub(super) fn stop(
     Ok(())
 }
 
-/// Freezes text already shown before suspension, including questions and
-/// approvals. A resumed turn starts a new provisional message; it cannot
-/// overwrite the segment the principal read before making their decision.
+/// Questions and delegation freeze a segment; permission approvals keep the
+/// provisional message open, so resume and final delivery reuse its identity.
 pub(super) fn settle_suspended(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
     turn: &str,
     now: &str,
+    end_segment: bool,
 ) -> Result<(), AppStorageError> {
     let target = StreamTarget {
         db,
@@ -260,6 +260,9 @@ pub(super) fn settle_suspended(
     };
     if status != "streaming" {
         return Ok(());
+    }
+    if !end_segment {
+        return updated(&target, &id, false);
     }
     db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
@@ -335,7 +338,7 @@ fn latest(
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
     db.query_row_cached(
-        "SELECT id,status FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
+        "SELECT id,status FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
         |row| Ok((row.get(0)?, row.get(1)?)),

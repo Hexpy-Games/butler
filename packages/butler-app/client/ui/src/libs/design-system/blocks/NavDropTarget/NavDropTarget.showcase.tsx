@@ -7,6 +7,7 @@ import { Briefcase, MessageSquare } from "../../components/Icons";
 import { NavRow } from "../NavRow";
 import { NavDropScope, NavDropTarget, NavRootDropZone, type NavDropPosition } from "./NavDropTarget";
 import { InteractiveDropDemo } from "./NavDropTarget.demo";
+import { AutoScrollRows, OutsideRows, OutsideSequence } from "./NavDropTarget.outside";
 
 export const meta: ShowcaseMeta = {
   title: "NavDropTarget",
@@ -77,6 +78,11 @@ export const stories: ShowcaseStory[] = [
   { name: "Insert after", render: (context) => <Rows {...context} drop="after" dragging={3} /> },
   { name: "Drop inside a folder", render: (context) => <Rows {...context} target={0} drop="inside" dragging={3} /> },
   { name: "Group two conversations", render: (context) => <Rows {...context} drop="group" dragging={3} /> },
+  { name: "Outside payload: sequence (rows never move)", states: ["drag"], render: (context) => <OutsideSequence {...context} /> },
+  { name: "Outside payload: attach to a conversation", render: (context) => <OutsideRows {...context} state="conversation" /> },
+  { name: "Outside payload: save to the library", render: (context) => <OutsideRows {...context} state="library" /> },
+  { name: "Outside payload: invalid target", states: ["invalid"], render: (context) => <OutsideRows {...context} state="invalid" /> },
+  { name: "Outside payload: auto-scroll at the edge", render: (context) => <AutoScrollRows {...context} /> },
   {
     name: "Root drop zone",
     states: ["active"],

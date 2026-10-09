@@ -81,8 +81,11 @@ pub(in crate::context) fn build_summary(
         diagnostics.push("no_messages_to_summarize".into());
         return Ok(String::new());
     }
-    if estimate_tokens(budget, &joined_message_text(messages))? <= chunk_budget {
-        return summarize_messages(messages, budget, summary_budget);
+    let lines = messages.iter().map(message_text).collect::<Vec<_>>();
+    let text = lines.join("\n");
+    // Each text token consumes at least one UTF-8 byte. The bound preserves the exact result.
+    if text.len() as f64 <= chunk_budget || estimate_tokens(budget, &text)? <= chunk_budget {
+        return summarize_lines(&lines, budget, summary_budget);
     }
     diagnostics.push("hierarchical_chunk_compaction".into());
     let mut summaries = Vec::new();
@@ -103,6 +106,14 @@ fn summarize_messages(
     max_tokens: f64,
 ) -> ContextResult<String> {
     let lines = messages.iter().map(message_text).collect::<Vec<_>>();
+    summarize_lines(&lines, budget, max_tokens)
+}
+
+fn summarize_lines(
+    lines: &[String],
+    budget: &ContextBudgetSnapshot<'_>,
+    max_tokens: f64,
+) -> ContextResult<String> {
     let mut seen = HashSet::new();
     let mut candidates = lines
         .iter()
@@ -113,7 +124,7 @@ fn summarize_messages(
         .collect::<Vec<_>>();
     candidates.insert(
         0,
-        format!("Canonical messages summarized: {}.", messages.len()),
+        format!("Canonical messages summarized: {}.", lines.len()),
     );
     trim_text_to_token_budget(budget, &candidates.join("\n"), max_tokens, true, None)
 }

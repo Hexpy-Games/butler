@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
+import { GeneralChannelMenu } from "./GeneralChannelMenu";
 import { SpaceActivity } from "./SpaceActivity";
 import {
   Archive,
@@ -135,12 +136,12 @@ export function SpaceRowMenu({
   // The activity status rests in the trailing slot; the row menu replaces it on hover or focus.
   return (
     <NavRowSwap rest={<SpaceActivity session={row.session} />} open={open}>
-      <OverflowActionMenu
+      {row.node.entityId === "general" ? <GeneralChannelMenu row={row} open={open} onOpenChange={onOpenChange} /> : <OverflowActionMenu
         label={appCopy.space.rowMenu(row.title)}
-        items={row.node.entityId === "general" ? items.slice(0, 1) : items}
+        items={items}
         open={open}
         onOpenChange={onOpenChange}
-      />
+      />}
     </NavRowSwap>
   );
 }

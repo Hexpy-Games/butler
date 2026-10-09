@@ -91,10 +91,14 @@ impl ModelProvider {
         let (carrier, mode, api) =
             self.local_streaming
                 .carrier(&config, carrier(&config), local_stream);
-        let (mut body, continuation) =
-            serialize::body_with_continuation(&request, &config, carrier)?;
-        super::visual::apply(&mut body, &request, carrier).await?;
-        let prefix = self.prefix_history.prepare(&body, &config)?;
+        let (body, continuation) = serialize::body_with_visual(&request, &config, carrier).await?;
+        let prefix = self.prefix_history.prepare(&body, &config)?.attribute(
+            request.usage_attribution,
+            request
+                .messages
+                .first()
+                .map(|message| message.content.as_ref()),
+        );
         let serialized = prefix.body_json(&body).map_err(|error| {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 &config.metadata.provider_id,
@@ -110,22 +114,7 @@ impl ModelProvider {
         let serialized_bytes = serialized.len();
         let http = self.round_request(&config, mode, carrier, serialized);
         let http = super::route::cache_affinity(http, &config.auth, body);
-        let trace = super::request_trace::RequestTrace::new(
-            self,
-            prefix,
-            request.cache_scope,
-            request.usage_attribution.map(|a| a.phase.as_str()),
-            request
-                .usage_attribution
-                .and_then(|a| a.round_index)
-                .map(f64::from),
-            request
-                .usage_attribution
-                .and_then(|a| a.session_kind.as_deref())
-                .unwrap_or("parent"),
-            request.butler_data,
-        )
-        .await?;
+        let trace = super::request_trace::RequestTrace::round(self, prefix, &request).await?;
         let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
             self.observations.request(ProviderObservation {

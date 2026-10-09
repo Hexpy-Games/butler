@@ -41,15 +41,15 @@ impl AccessMode {
     /// Whether a turn with this access may perform `action` without asking:
     /// full access and ask-first may, read-only never does.
     pub fn allows_without_approval(&self, action: ApprovalExemptAction) -> bool {
-        match (self, action) {
-            (
-                Self::FullAccess | Self::AskFirst,
-                ApprovalExemptAction::FirstConversationOnboarding
-                | ApprovalExemptAction::MemorySave
-                | ApprovalExemptAction::AttachedImageAnalysis,
-            ) => true,
-            (Self::ReadOnly, _) => false,
-        }
+        decide(
+            self,
+            AccessRequest {
+                kind: CapabilityKind::Exempt(action),
+                risk: super::ApprovalRisk::Medium,
+                scope: TargetScope::NoTarget,
+                taint: TurnTaint::Clean,
+            },
+        ) == AccessDecision::Allow
     }
 
     /// Whether a turn with this access may run the built-in tool `name`
@@ -75,39 +75,8 @@ pub fn stored_binding_access_mode(binding: &StoredSessionBinding) -> AccessMode 
         .unwrap_or(AccessMode::ReadOnly)
 }
 
+mod decision;
+mod mode;
+pub use decision::*;
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Security boundary: the complete list of tools ask-first runs without
-    /// an approval because of an exemption. Adding one needs an owner decision.
-    #[test]
-    fn ask_first_exempts_exactly_the_three_owner_granted_actions() {
-        let exempt: Vec<&str> = ToolName::ALL
-            .iter()
-            .map(|tool| tool.as_str())
-            .filter(|name| AccessMode::AskFirst.exempts_tool(name))
-            .collect();
-        assert_eq!(
-            exempt,
-            [
-                "analyze_attached_image",
-                "ingest_task_memory",
-                "summarize_user_profile",
-                "update_explicit_memory",
-                "update_onboarding_profile",
-            ]
-        );
-        for tool in ToolName::ALL {
-            assert!(!AccessMode::ReadOnly.exempts_tool(tool.as_str()), "{tool}");
-        }
-        for name in [
-            "call_mcp_tool",
-            "run_command",
-            "write_file",
-            "create_automation",
-        ] {
-            assert!(!AccessMode::AskFirst.exempts_tool(name), "{name}");
-        }
-    }
-}
+mod tests;

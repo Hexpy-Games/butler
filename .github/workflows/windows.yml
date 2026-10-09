@@ -1,3 +1,5 @@
+# Disabled manually in Actions settings; not a release gate.
+# Windows release evidence: windows-preview-smoke.yml, windows-installer.yml, e2e.yml.
 name: Butler Windows Desktop Source
 
 on:

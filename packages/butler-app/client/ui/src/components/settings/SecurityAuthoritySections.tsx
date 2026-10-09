@@ -3,7 +3,7 @@ import { notifyStatus } from "@/app/notifications.ts";
 import { Button } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
-import { SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
+import { SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
 import { useButlerModels } from "./hooks/useButlerModels";
 import { useSavedKeys } from "./hooks/useSavedKeys";
 import { SavedKeysRows } from "./SavedKeysRows";
@@ -12,26 +12,13 @@ import { useGrants } from "./useGrants";
 
 /** Direct section elements for SettingsPage; data and effects stay with the page. */
 export function securityAuthoritySections({ models, savedKeys, grants }: {
-  models: Pick<ReturnType<typeof useButlerModels>, "update" | "setSettings"> & { draft: Pick<SettingsData, "access_mode" | "diagnostics_enabled"> | null }; savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
+  models: Pick<ReturnType<typeof useButlerModels>, "update" | "setSettings"> & { draft: Pick<SettingsData, "diagnostics_enabled"> | null }; savedKeys: ReturnType<typeof useSavedKeys>; grants: ReturnType<typeof useGrants>;
 }) {
   const { draft, update, setSettings } = models;
   const settingsCopy = appCopy.settings;
   const fields = settingsCopy.fields;
   const sections = settingsCopy.pageSections;
   return <>
-    <SettingsSection id="permissions" kind="form" title={sections.permissions}>
-      {draft && <SettingsSelect
-        settingId="access-mode"
-        label={fields.access}
-        value={draft.access_mode}
-        onChange={(value) => update({ access_mode: value as SettingsData["access_mode"] }, setSettings)}
-        options={[
-          { value: "full_access", label: appCopy.permissions.fullAccess },
-          { value: "ask_first", label: appCopy.permissions.askFirst },
-          { value: "read_only", label: appCopy.permissions.readOnly },
-        ]}
-      />}
-    </SettingsSection>
     <SettingsSection id="grants" kind="list" title={sections.grants}
       description={settingsCopy.pageSectionDescriptions.grants}
       state={grants.state === "ready" && grants.rows.length === 0 ? "empty" : grants.state}

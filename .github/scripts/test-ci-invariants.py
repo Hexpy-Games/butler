@@ -6,6 +6,7 @@ Optional argument: directory containing e2e-list.json, perf-list.json, shards/.
 import contextlib
 import importlib.util
 import io
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
@@ -28,47 +30,38 @@ WINDOWS_ONLY = '--windows-safety' in sys.argv
 if WINDOWS_ONLY:
     sys.argv.remove('--windows-safety')
 INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
-safety_spec = importlib.util.spec_from_file_location('windows_safety', ROOT / 'windows-ci-safety.py')
-windows_safety = importlib.util.module_from_spec(safety_spec)
-safety_spec.loader.exec_module(windows_safety)
+spec = importlib.util.spec_from_file_location('windows_tests', ROOT / 'test-windows-ci-safety.py')
+windows_tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(windows_tests)
+WindowsSafety = windows_tests.WindowsSafety
 
 
-class WindowsSafety(unittest.TestCase):
-    # test-category: security
-    def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
-        jobs, findings = windows_safety.audit(ROOT.parents[1])
-        self.assertGreaterEqual(len(jobs), 6, jobs)
-        self.assertEqual(findings, [], '\n'.join(findings))
-        print(f'Windows concurrency audit: {len(jobs)} owner jobs, no hazards')
-
-    # test-category: security
-    def test_checker_follows_actions_and_scripts_and_rejects_mutations(self):
+class ArchivedLibtest(unittest.TestCase):
+    # test-category: pure-logic
+    def test_prepare_creates_destination_and_preserves_original_libtest_invocation(self):
+        spec = importlib.util.spec_from_file_location('archived_libtest', ROOT / 'run-archive-libtest.py')
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / '.github/workflows').mkdir(parents=True)
-            (root / '.github/actions/setup').mkdir(parents=True)
-            workflow = root / '.github/workflows/fixture.yml'
-            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
-                                '    steps:\n      - uses: ./.github/actions/setup\n')
-            action = root / '.github/actions/setup/action.yml'
-            action.write_text('runs:\n  using: composite\n  steps:\n    - run: ../../../deploy/probe.ps1\n')
-            (root / 'deploy').mkdir()
-            probe = root / 'deploy/probe.ps1'
-            for unsafe in [r"$root = 'C:\butler-ci'", "$root = '/tmp/shared-ci'", '$env:BUTLER_APP_SERVER_PORT = 18765',
-                           'python -m http.server 8080', 'Stop-Process -Name butler-agent',
-                           'Stop-Process butler-agent', 'taskkill /F /IM node.exe',
-                           'bun run installer-smoke.ts', 'winget install Rust',
-                           r'$root = "$env:USERPROFILE/work/target"']:
-                probe.write_text(unsafe)
-                _, findings = windows_safety.audit(root)
-                self.assertTrue(findings, unsafe)
-                self.assertTrue(any('probe.ps1:1:' in item for item in findings), findings)
-            probe.write_text('$root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())\n'
-                             '$env:BUTLER_APP_SERVER_PORT = $port\nStop-Process -Id $child.Id')
-            self.assertEqual(windows_safety.audit(root)[1], [])
-            workflow.write_text(workflow.read_text().replace('[self-hosted, butler-win]', 'windows-latest'))
-            probe.write_text('Stop-Process -Name node')
-            self.assertEqual(windows_safety.audit(root)[0], [])
+            directory = Path(temporary) / 'missing' / 'extract'
+            suite = {'binary-name': 'e2e', 'binary-path': str(directory / 'e2e'), 'cwd': temporary,
+                     'testcases': {'browser_outputs::idle': {'ignored': False},
+                                   'other::test': {'ignored': False}}}
+            def listing(command, **kwargs):
+                self.assertTrue(directory.is_dir())
+                self.assertEqual(command[command.index('--extract-to') + 1], str(directory))
+                return json.dumps({'rust-suites': {'e2e': suite}})
+            with patch.object(runner.subprocess, 'check_output', side_effect=listing):
+                runner.prepare('complete.tar.zst', directory)
+            with patch.object(runner.subprocess, 'call', return_value=0) as execute, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.run(directory, 'browser_outputs::'), 0)
+                self.assertEqual(execute.call_args.args[0], [suite['binary-path'], 'browser_outputs::', '--nocapture'])
+                self.assertEqual(execute.call_args.kwargs['cwd'], temporary)
+                self.assertNotIn('timeout', execute.call_args.kwargs)
+                with self.assertRaisesRegex(ValueError, 'empty'):
+                    runner.run(directory, 'not_present')
+                self.assertEqual(execute.call_count, 1)
 
 
 class ArtifactTrust(unittest.TestCase):
@@ -107,7 +100,7 @@ class ArtifactTrust(unittest.TestCase):
     # test-category: security
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
-                        native_mode='static-ort', profile='release', toolchain='1.91.0',
+                        native_mode='static-ort', profile='release', toolchain='1.99.0',
                         debug_assertions='true', overflow_checks='true', rustflags='mold',
                         lto='', codegen_units='')
         with tempfile.TemporaryDirectory() as temporary:

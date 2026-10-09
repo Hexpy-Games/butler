@@ -1,6 +1,7 @@
 //! Per-Turn native tool binding. Durable results live in ToolJournalRepository,
 //! while this owner keeps only occurrence counters and provider-call mapping.
 
+mod access;
 mod discovery;
 mod dispatch;
 mod effect;
@@ -56,6 +57,7 @@ pub(crate) struct GuidedToolBinding {
     pub current_user_message: String,
     pub memory: CanonicalMemoryReadBinding,
     pub project_id: Option<String>,
+    pub project_folder: Option<PathBuf>,
     pub project_sources: Vec<Value>,
     pub surface: Vec<ModelRoundTool>,
     pub authorized_names: HashSet<String>,

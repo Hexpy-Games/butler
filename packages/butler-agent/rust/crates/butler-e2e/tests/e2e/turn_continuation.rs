@@ -29,6 +29,7 @@ pub(super) async fn setup(
         .access(access)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url);
+    *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
     Ok((setup.start().await?, script, server))
 }
 
@@ -119,7 +120,7 @@ async fn reasoning_only_response_and_todo_updates_continue() -> Result<(), Harne
 #[tokio::test]
 async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskFirst).await?;
+    let (mut s, script, server) = setup(stub::Mode::Approval, Access::AskAlways).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let turn =
         s.gw.wait_turn(
@@ -133,7 +134,7 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
     assert_eq!(script.requests.lock().unwrap().len(), 1);
     let cards = s.gw.approval_requests("general").await?;
     assert_eq!(cards.len(), 1);
-    paused_transcript::assert_segments(&s, false).await?;
+    paused_transcript::assert_authority_message(&s, false).await?;
     let reference = cards[0]["request_ref"].as_str().unwrap();
     let reply =
         s.gw.post(
@@ -146,10 +147,27 @@ async fn pending_approval_pauses_without_automatic_continuation() -> Result<(), 
         s.gw.wait_terminal("general", &id, Duration::from_secs(20))
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    assert_eq!(script.requests.lock().unwrap().len(), 2);
-    paused_transcript::assert_segments(&s, true).await?;
+    let requests = script.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2);
+    super::prompt_history::approval_parity(&s, &id, &requests)?;
+    if std::env::var("BUTLER_PROMPT_MAIN_RECORD").as_deref() == Ok("1") {
+        s.finish().await?;
+        server.abort();
+        return Ok(());
+    }
+    let metrics = super::token_metrics::report(&s, &requests, "Approval resume layout")?;
+    assert_eq!(
+        metrics[1]["prefixDiagnostics"]["trigger"],
+        "authority-resume"
+    );
+    assert_eq!(
+        metrics[0]["prefixDiagnostics"]["instructionComponents"],
+        metrics[1]["prefixDiagnostics"]["instructionComponents"]
+    );
+    assert_eq!(metrics[1]["prefixDiagnostics"]["appendOnly"], true);
+    paused_transcript::assert_authority_message(&s, true).await?;
     s.restart().await?;
-    paused_transcript::assert_segments(&s, true).await?;
+    paused_transcript::assert_authority_message(&s, true).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -222,7 +240,7 @@ async fn empty_and_text_calls_receive_feedback_until_the_model_recovers() -> Res
 #[tokio::test]
 async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskFirst).await?;
+    let (s, script, server) = setup(stub::Mode::ApprovalRecovery, Access::AskAlways).await?;
     let id = accepted_turn_id(&s.gw.say("general", stub::REQUEST).await?)?;
     let paused =
         s.gw.wait_turn(
@@ -282,9 +300,11 @@ mod stub {
         FinalTools,
         FinalEmptyTools,
         Batched,
+        ParallelFiles,
     }
     pub(crate) struct Script {
         pub requests: Mutex<Vec<Value>>,
+        pub file_root: Mutex<String>,
         pub mode: Mode,
     }
 
@@ -295,6 +315,7 @@ mod stub {
         let url = format!("http://{}/codex", listener.local_addr()?);
         let script = Arc::new(Script {
             requests: Mutex::new(vec![]),
+            file_root: Mutex::new(String::new()),
             mode,
         });
         let app = Router::new()
@@ -329,6 +350,15 @@ mod stub {
                     &json!({"path":"final-mutation.txt","content":"forbidden"}),
                 ),
                 Mode::Progress | Mode::FinalTools | Mode::FinalEmptyTools => progress(step, &body),
+                Mode::ParallelFiles if step == 0 => json!(
+                    (0..3)
+                        .map(|i| call(
+                            &format!("lookup-{i}"),
+                            "list_files",
+                            &json!({"root":format!("{}/lookup-{i}", script.file_root.lock().unwrap())})
+                        ))
+                        .collect::<Vec<_>>()
+                ),
                 Mode::Batched => {
                     super::super::token_cache::batched_reply(step, &body, progress, command, call)
                 }
@@ -337,7 +367,6 @@ mod stub {
                 }
                 Mode::ApprovalRecovery if step == 1 => command(true),
                 Mode::Empty | Mode::ApprovalRecovery if step < 5 => message(""),
-                Mode::Empty | Mode::ApprovalRecovery | Mode::Prose => message("The total is 42."),
                 Mode::Reasoning if step == 0 => {
                     json!({"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need to calculate the result."}]})
                 }
@@ -352,9 +381,14 @@ mod stub {
                     &json!({"questions":[{"id":"format","eyebrow":"Output","title":"Which format?","kind":"single","allow_custom":true,"options":[{"id":"brief","label":"Brief","recommended":true},{"id":"full","label":"Full"}]}]}),
                 ),
                 Mode::Approval if step == 0 => command(matches!(script.mode, Mode::Approval)),
-                Mode::Approval | Mode::Question | Mode::Reasoning | Mode::Commentary => {
-                    message("The total is 42.")
-                }
+                Mode::ParallelFiles
+                | Mode::Empty
+                | Mode::ApprovalRecovery
+                | Mode::Prose
+                | Mode::Approval
+                | Mode::Question
+                | Mode::Reasoning
+                | Mode::Commentary => message("The total is 42."),
                 Mode::Todo => match step {
                     0 => call(
                         "todo",

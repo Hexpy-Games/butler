@@ -9,3 +9,14 @@ slow-timeout = { period = "6m", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(/^memory_idle::mem_idle_/) or test(/^schedule_store::sched_06_/) or test(/^startup_readiness::stalled_startup_exits_at_agent_deadline$/)'
 priority = 10
+
+# Three full 60-second windows, plus startup, retention settlement and shutdown.
+# Run only in the serial perf selection; the observations themselves stay 180s.
+[[profile.default.overrides]]
+filter = 'test(/^hooks::idle::perf_hooks_no_config_idle_has_zero_writes_for_three_windows$/)'
+slow-timeout = { period = "6m", terminate-after = 1 }
+
+# Browser-on only: full 600-second attached-host observation plus lifecycle work.
+[[profile.default.overrides]]
+filter = 'test(/^browser_outputs::perf_published_outputs_idle_ten_minutes_without_writes$/)'
+slow-timeout = { period = "12m", terminate-after = 1 }

@@ -45,7 +45,7 @@ try {
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class~="legacy-data-recovery"]')));
   assert.equal(await page.expression("window.butlerApp.startupIssue"), "legacy-data");
   for (const [locale, title, body, buttons] of [
-    ["ko", "이전 데이터 폴더예요", "Butler 0.0.20을 삭제한 뒤 .butler 폴더 이름을 바꾸고", ["폴더 열기", "다시 시작"]],
+    ["ko", "이전 데이터 폴더예요", "버틀러 0.0.20을 삭제한 뒤 .butler 폴더 이름을 바꾸고", ["폴더 열기", "다시 시작"]],
     ["en", "An older data folder", "Uninstall Butler 0.0.20, rename the .butler folder", ["Open folder", "Restart"]],
   ] as const) {
     await page.expression(`(() => { const select = document.getElementById('legacy-data-language'); select.value = ${JSON.stringify(locale)}; select.dispatchEvent(new Event('change', {bubbles:true})); })()`);

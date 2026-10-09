@@ -1,7 +1,4 @@
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::{Arc, Mutex};
 
 use rusqlite::OptionalExtension;
 use serde_json::json;
@@ -14,10 +11,11 @@ fn projection_root(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
         "butler-h1b-{label}-{}-{}",
         std::process::id(),
-        AtomicU64::new(1).fetch_add(1, Ordering::Relaxed)
+        uuid::Uuid::new_v4()
     ))
 }
 
+// test-category: race
 #[tokio::test]
 async fn delivered_progress_is_receipted_and_returned_by_message_get() {
     let native = Arc::new(Native(Mutex::new(Vec::new())));
@@ -35,13 +33,9 @@ async fn delivered_progress_is_receipted_and_returned_by_message_get() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
-    // Finish startup recovery before asserting a foreground-dispatched turn.
-    app.queue_wake.drain_chat("general".into()).await.unwrap();
-    let accepted = app
-        .send_message(command("progress-client", "question"))
+    let turn = dispatched_turn(&app, &native, command("progress-client", "question"))
         .await
-        .unwrap();
-    let turn = accepted.turn.unwrap().id;
+        .id;
     let claim = native.0.lock().unwrap()[0].app_queue_claim_id.clone();
     let outbound = json!({
         "eventId":"outbound-progress","sessionId":"butler/app-general","kind":"outbound",
@@ -129,19 +123,13 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
             project_workspace_root: root.clone(),
             folder_selection_secret: None,
         },
-        dependencies(native, 700),
+        dependencies(native.clone(), 700),
     )
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
-    // Finish startup recovery before asserting a foreground-dispatched turn.
-    app.queue_wake.drain_chat("general".into()).await.unwrap();
-    let turn = app
-        .send_message(command("retention-client", "question"))
+    let turn = dispatched_turn(&app, &native, command("retention-client", "question"))
         .await
-        .unwrap()
-        .turn
-        .unwrap()
         .id;
     let retained_turn = turn.clone();
     app.storage.execute(move|db|{
@@ -233,31 +221,48 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
-    // Finish startup recovery before asserting a foreground-dispatched turn.
-    app.queue_wake.drain_chat("general".into()).await.unwrap();
-    let turn = app
-        .send_message(command("resend-client", "question"))
+    let turn = dispatched_turn(&app, &native, command("resend-client", "question"))
         .await
-        .unwrap()
-        .turn
-        .unwrap()
         .id;
     let claim = native.0.lock().unwrap()[0].app_queue_claim_id.clone();
     assert!(claim.is_some(), "the dispatched turn carries a claim");
     let transcript = root.join("transcripts/butler_app-general.jsonl");
 
-    append_send(&transcript, "outbound-claimless", &turn, None);
+    append_send(&transcript, "outbound-claimless", &turn, None, false);
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
-    assert_eq!(staged_and_receipt(&app).await, (0, None));
+    assert_eq!(staged_and_receipt(&app, "action-resent").await, (0, None));
 
-    append_send(&transcript, "outbound-resent", &turn, claim.as_deref());
+    // A cancellation marker cannot authorize a stale event without the owner's
+    // durable cancellation record for this turn.
+    append_send(
+        &transcript,
+        "outbound-unrequested-cancel",
+        &turn,
+        None,
+        true,
+    );
     app.refresh_message_projection("general".into())
         .await
         .unwrap();
     assert_eq!(
-        staged_and_receipt(&app).await,
+        staged_and_receipt(&app, "outbound-unrequested-cancel").await,
+        (0, None)
+    );
+
+    append_send(
+        &transcript,
+        "outbound-resent",
+        &turn,
+        claim.as_deref(),
+        false,
+    );
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        staged_and_receipt(&app, "action-resent").await,
         (0, Some("outbound-resent".to_owned()))
     );
     let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
@@ -268,31 +273,121 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
         "Reading source"
     );
     super::projection_burst::assert_burst_projects_other_chat(&app, &native, &root).await;
+    // Cancellation progress may precede the control acknowledgment that changes
+    // the turn state. The durable owner request already authorizes settlement.
+    let cancelled_turn = turn.clone();
+    app.storage.execute(move |db| {
+        db.execute("INSERT INTO app_turn_cancel_outbox(turn_id,queue_id,state,created_at) VALUES(?1,'owner-cancel','pending','now')", [&cancelled_turn])
+            .map_err(AppStorageError::sqlite)?;
+        Ok(())
+    }).await.unwrap();
+    append_send(&transcript, "outbound-requested-cancel", &turn, None, true);
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        staged_and_receipt(&app, "outbound-requested-cancel").await,
+        (0, Some("outbound-requested-cancel".into()))
+    );
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }
 
+// Either the inline sender or the background FIFO dispatcher can claim the
+// message. Submit once and wait for the matching committed dispatch before
+// injecting projection events; a queued receipt need not contain a turn.
+pub(super) async fn dispatched_turn(
+    app: &AppApplication,
+    native: &Native,
+    request: crate::gateway::SendMessageCommand,
+) -> crate::gateway::TurnRecord {
+    let chat = request.chat_id.clone();
+    let sent = app.send_message(request).await.unwrap();
+    if let Some(turn) = sent.turn {
+        assert_eq!(
+            native
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|sent| sent.turn_id == turn.id)
+                .count(),
+            1
+        );
+        return turn;
+    }
+    let queued = sent
+        .queued
+        .expect("a deferred send has a queued receipt")
+        .id;
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let (chat, queued) = (chat.clone(), queued.clone());
+            let turn = app.storage.read(move |db| {
+                let id: Option<String> = db.query_row(
+                    "SELECT q.turn_id FROM session_queued_messages q WHERE q.chat_id=?1 AND q.id=?2 \
+                     AND EXISTS(SELECT 1 FROM events WHERE type='turn.queued' AND turn_id=q.turn_id)",
+                    [chat, queued], |row| row.get(0),
+                ).optional().map_err(AppStorageError::sqlite)?;
+                id.map(|id| read_model::exact_turn(db, &id)).transpose().map(Option::flatten)
+            }).await.unwrap();
+            if let Some(turn) = turn
+                && matches!(turn.state, crate::gateway::TurnState::Thinking)
+                && native.0.lock().unwrap().iter().any(|sent| sent.turn_id == turn.id)
+            {
+                assert_eq!(native.0.lock().unwrap().iter().filter(|sent| sent.turn_id == turn.id).count(), 1);
+                return turn;
+            }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("the submitted message must be dispatched once")
+}
+
 /// Appends one send of the progress action `action-resent`: its outbound
 /// record and its delivery, written together as the runtime writes them.
-fn append_send(transcript: &std::path::Path, event_id: &str, turn: &str, claim: Option<&str>) {
+fn append_send(
+    transcript: &std::path::Path,
+    event_id: &str,
+    turn: &str,
+    claim: Option<&str>,
+    authority_cancel: bool,
+) {
     use std::io::Write;
     let mut metadata = json!({
         "kind":"tool_progress","turnId":turn,"activityKind":"used_tool","state":"running",
         "safeLabel":"Reading source","toolName":"read_file","toolCallId":"call-1"
     });
+    if authority_cancel {
+        metadata = json!({"kind":"turn_event","turnId":turn,"event":{
+            "kind":"tool.cancelled","payload":{"authorityCancellation":true,
+                "toolName":"read_file","toolCallId":"call-1","bridgePhase":"btcc_operation"}}});
+        let payload = super::super::projection::normalize_committed_turn_event(
+            "tool.cancelled",
+            "public",
+            metadata["event"]["payload"].as_object(),
+        )
+        .unwrap();
+        assert_eq!(payload["authorityCancellation"], true);
+        metadata["event"]["payload"] = json!(payload);
+    }
     if let Some(claim) = claim {
         metadata["appQueueClaimId"] = json!(claim);
     }
+    let action = if authority_cancel {
+        event_id
+    } else {
+        "action-resent"
+    };
     let outbound = json!({
         "eventId":event_id,"sessionId":"butler/app-general","kind":"outbound",
         "timestamp":"2026-09-14T00:00:01.000Z","transport":"app",
-        "payload":{"actionId":"action-resent","message":{},"metadata":metadata},
+        "payload":{"actionId":action,"message":{},"metadata":metadata},
         "metadata":{"source":"transport/delivery-guard.ts","attempts":1}
     });
     let delivery = json!({
         "eventId":format!("{event_id}-delivery"),"sessionId":"butler/app-general",
         "kind":"delivery","timestamp":"2026-09-14T00:00:02.000Z","transport":"app",
-        "payload":{"actionId":"action-resent","ok":true}
+        "payload":{"actionId":action,"ok":true}
     });
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -304,22 +399,23 @@ fn append_send(transcript: &std::path::Path, event_id: &str, turn: &str, claim: 
 
 /// How many staged rows `action-resent` has, and the event its projection
 /// receipt names.
-async fn staged_and_receipt(app: &AppApplication) -> (i64, Option<String>) {
+async fn staged_and_receipt(app: &AppApplication, action: &str) -> (i64, Option<String>) {
+    let action = action.to_owned();
     app.storage
-        .execute(|db| {
+        .execute(move |db| {
             let staged = db
                 .query_row(
                     "SELECT COUNT(*) FROM app_transport_projection_staged_outbounds \
-                     WHERE action_id='action-resent'",
-                    [],
+                     WHERE action_id=?1",
+                    [&action],
                     |row| row.get(0),
                 )
                 .map_err(AppStorageError::sqlite)?;
             let receipt = db
                 .query_row(
                     "SELECT event_id FROM app_transport_projection_receipts \
-                     WHERE action_id='action-resent'",
-                    [],
+                     WHERE action_id=?1",
+                    [&action],
                     |row| row.get(0),
                 )
                 .optional()

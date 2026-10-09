@@ -239,19 +239,21 @@ pub(super) fn get_turn(
         .query_row(
             "SELECT * FROM conversation_turns WHERE id=?1",
             [id],
-            |row| {
-                Ok(ConversationTurn {
-                    id: row.get("id")?,
-                    session_id: row.get("session_id")?,
-                    seq: row.get("seq")?,
-                    actor: row.get("actor")?,
-                    status: row.get("status")?,
-                    request_id: row.get("request_id")?,
-                    started_at: row.get("started_at")?,
-                    completed_at: row.get("completed_at")?,
-                })
-            },
+            turn_row,
         )
         .optional()
         .map_err(ConversationError::sqlite)
+}
+
+pub(super) fn turn_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationTurn> {
+    Ok(ConversationTurn {
+        id: row.get("id")?,
+        session_id: row.get("session_id")?,
+        seq: row.get("seq")?,
+        actor: row.get("actor")?,
+        status: row.get("status")?,
+        request_id: row.get("request_id")?,
+        started_at: row.get("started_at")?,
+        completed_at: row.get("completed_at")?,
+    })
 }

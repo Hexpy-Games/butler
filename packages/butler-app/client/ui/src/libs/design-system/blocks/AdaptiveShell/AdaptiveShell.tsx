@@ -5,6 +5,7 @@ import { useComposedRefs } from "../../lib/composeRefs";
 import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
+import frame from "./AdaptiveShellFrame.module.css";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
@@ -21,6 +22,13 @@ export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivEl
   chromeEnvironment?: "browser" | "electron";
   platform?: "browser" | "darwin" | "linux" | "win32";
   compactSidebarFullWidth?: boolean;
+  /**
+   * The conversation frame shows the browser pane (AdaptiveShellSplit). The inspector and the pane
+   * never show together: while this is true the inspector stays closed whatever `rightOpen` says.
+   */
+  splitOpen?: boolean;
+  /** The collapsed sidebar floats over the workspace as a card (docked layout only; AdaptiveShellPeekEdge). */
+  leftPeek?: boolean;
 }
 export function AdaptiveShell({
   leftOpen,
@@ -31,6 +39,8 @@ export function AdaptiveShell({
   chromeEnvironment = "browser",
   platform = "browser",
   compactSidebarFullWidth = false,
+  splitOpen = false,
+  leftPeek = false,
   theme,
   className,
   style,
@@ -40,6 +50,7 @@ export function AdaptiveShell({
   ...props
 }: AdaptiveShellProps) {
   const drawer = useAdaptiveDrawer(chromeEnvironment);
+  const inspectorOpen = rightOpen && !splitOpen;
   const rootRef = useRef<HTMLDivElement>(null);
   const composedRef = useComposedRefs(rootRef, ref);
   const { leftTrack, switching } = useSidebarTrackMotion({
@@ -50,7 +61,7 @@ export function AdaptiveShell({
   });
   const { rightTrack, switching: rightSwitching } = useInspectorTrackMotion({
     rootRef,
-    rightOpen,
+    rightOpen: inspectorOpen,
     animate: !drawer && !resizing && !settingsActive,
   });
   return (
@@ -61,7 +72,9 @@ export function AdaptiveShell({
       data-left-open={leftOpen}
       data-left-track={leftTrack}
       data-track-switching={switching || rightSwitching || undefined}
-      data-right-open={rightOpen}
+      data-right-open={inspectorOpen}
+      data-split-open={splitOpen || undefined}
+      data-left-peek={leftPeek && !leftOpen ? "true" : undefined}
       data-right-track={rightTrack}
       data-settings-active={settingsActive}
       data-resizing={resizing}
@@ -86,7 +99,7 @@ export function AdaptiveShellSidebar({
 }: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
   return (
     <div
-      className={cn(styles.sidebar, className)}
+      className={cn(styles.sidebar, frame.peekable, className)}
       data-open={open}
       data-slot="adaptive-shell-sidebar"
       {...props}

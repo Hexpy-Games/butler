@@ -90,7 +90,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         script.select(case.clone());
         let accepted = s.gw.say("general", "다운로드 폴더 정리해줘").await?;
         let id = accepted_turn_id(&accepted)?;
-        if access == Access::AskFirst {
+        if access == Access::AskAlways {
             super::file_paths::approve(&s, &id, &case, &script).await?;
         }
         let turn =
@@ -149,7 +149,10 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         "owner files and metadata unchanged"
     );
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     eprintln!(
         "OWNER-DOWNLOADS list_files {access:?}: files={}, directories={}, max={maximum_ms:.1}ms; unchanged",
@@ -167,7 +170,7 @@ async fn owner_downloads_file_tool_replay_in_both_access_modes() -> Result<(), H
     let Some(path) = std::env::var_os("BUTLER_E2E_DOWNLOADS_REAL_PATH") else {
         return Ok(());
     };
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(Path::new(&path), access).await?;
     }
     Ok(())

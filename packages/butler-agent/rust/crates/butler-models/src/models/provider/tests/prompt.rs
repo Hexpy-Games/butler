@@ -87,8 +87,11 @@ fn prompt_request<'a>(
     }
 }
 
+// test-category: format-pin
 #[tokio::test]
 async fn anthropic_prompt_serializes_registered_default_output() {
+    super::super::anthropic_cache::assert_history_bytes_and_breakpoints();
+    super::anthropic_schema::all_registered_tools_through_stub().await;
     let body = br#"{"content":[{"type":"text","text":"done"}],"usage":{"input_tokens":3,"output_tokens":2}}"#;
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -137,7 +140,13 @@ async fn anthropic_prompt_serializes_registered_default_output() {
         .unwrap();
     let request = server.await.unwrap();
     assert_eq!(result.text, "done");
-    assert!(String::from_utf8_lossy(&request).contains(r#""max_tokens":4096"#));
+    let offset = request
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .unwrap()
+        + 4;
+    let wire: serde_json::Value = serde_json::from_slice(&request[offset..]).unwrap();
+    assert_eq!(wire["max_tokens"].as_u64(), Some(4096));
 }
 
 #[tokio::test]

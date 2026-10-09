@@ -28,7 +28,7 @@ export const TASK_GRAPH_COPY: Record<"ko-KR" | "en-US", TaskGraphCopy> = {
       pending: "대기", running: "진행 중", review: "검토 중", done: "완료",
       failed: "실패", cancelled: "취소됨", blocked: "보류", paused: "일시정지",
     },
-    assignee: (ordinal) => `작업자 ${ordinal}`,
+    assignee: (ordinal) => `Worker ${ordinal}`,
     unassigned: "배정 전",
     elapsed: elapsedKo,
     cardLabel: (parts) => parts.join(", "),

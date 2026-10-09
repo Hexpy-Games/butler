@@ -199,6 +199,46 @@
   }
 }
 
+/* Container anchoring (a page card): the scrim and the dialog stay inside the
+   container; the dialog sits near its top, the way a page's own dialog does. */
+.overlay[data-contained] {
+  position: absolute;
+}
+
+.content[data-contained] {
+  position: absolute;
+  top: var(--space-2xl);
+  width: min(var(--dialog-width), calc(100% - var(--space-3xl)));
+  max-width: calc(100% - var(--space-3xl));
+  max-height: calc(100% - var(--space-2xl) * 2);
+  transform: translateX(-50%);
+}
+
+.content[data-contained][data-state="open"] {
+  animation: dialog-contained-enter var(--motion-base)
+    var(--motion-ease-standard);
+}
+
+.content[data-contained][data-state="closed"] {
+  animation: dialog-contained-exit var(--motion-exit-fast)
+    var(--motion-ease-accelerate) forwards;
+}
+
+@keyframes dialog-contained-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, var(--motion-distance-sm))
+      scale(var(--motion-scale-dialog));
+  }
+}
+
+@keyframes dialog-contained-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) scale(var(--motion-scale-dialog));
+  }
+}
+
 @keyframes dialog-overlay-enter {
   from {
     opacity: 0;

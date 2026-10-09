@@ -1,7 +1,9 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Box } from "../../components/Box";
 import { Typo } from "../../components/Typo";
-import { AdaptiveShell, AdaptiveShellInspector, AdaptiveShellScrim, AdaptiveShellSidebar, AdaptiveShellWorkspace } from "./index";
+import {
+  AdaptiveShell, AdaptiveShellInspector, AdaptiveShellPeekEdge, AdaptiveShellScrim, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellWorkspace,
+} from "./index";
 
 // #region recipe: App frame
 function AppFrame() {
@@ -12,6 +14,21 @@ function AppFrame() {
         <AdaptiveShellInspector open={false}><Box padding="md"><Typo.PanelTitle>Inspector</Typo.PanelTitle></Box></AdaptiveShellInspector>
         <AdaptiveShellScrim label="Close panel" open={false} onDismiss={() => undefined} />
       </AdaptiveShell>
+  );
+}
+// #endregion
+
+// #region recipe: Conversation frame with the browser pane
+function ConversationFrame() {
+  return (
+    <AdaptiveShell leftOpen={false} leftPeek={false} rightOpen={false} splitOpen>
+      <AdaptiveShellSidebar open={false}><Box padding="md"><Typo.PanelTitle>Navigation</Typo.PanelTitle></Box></AdaptiveShellSidebar>
+      <AdaptiveShellPeekEdge onPeek={() => undefined} />
+      <AdaptiveShellWorkspace>
+        <AdaptiveShellSplit paneOpen chatWidth={400} onChatWidthChange={() => undefined} resizeLabel="Resize conversation"
+          chat={<Box padding="md"><Typo.Body>Conversation</Typo.Body></Box>} pane={<Box padding="md"><Typo.Body>Browser pane</Typo.Body></Box>} />
+      </AdaptiveShellWorkspace>
+    </AdaptiveShell>
   );
 }
 // #endregion
@@ -28,17 +45,29 @@ export const guidance: ShowcaseGuidance = {
     { when: "A page inside the workspace", use: "PageContainer" },
     { when: "A static preview of the chrome", use: "ChromeFrame" },
   ],
-  recipes: [{ name: "App frame", description: "The frame is bounded here for the preview; in the app it fills the window.", render: () => <Framed /> }],
+  recipes: [
+    { name: "App frame", description: "The frame is bounded here for the preview; in the app it fills the window.", render: () => <Framed /> },
+    {
+      name: "Conversation frame with the browser pane",
+      description: "splitOpen keeps the inspector closed; the split sits under the titlebar; the peek edge brings the collapsed sidebar back as a card.",
+      render: () => <div style={{ height: 240, contain: "layout paint" }}><ConversationFrame /></div>,
+    },
+  ],
   doDont: [
     {
       do: { caption: "Panels open and close through leftOpen/rightOpen; the shell animates them.", render: () => <Framed /> },
       dont: { caption: "Media queries in product CSS fork the breakpoints the shell already owns.", render: () => <Typo.Code>@media (width &lt;= 768px) {"{ .sidebar { … } }"}</Typo.Code> },
     },
   ],
-  content: ["Resizable panel widths go through UNSAFE_style={adaptivePanelStyle(...)}; theme applies the app theme classes.", 
+  content: ["Resizable panel widths go through UNSAFE_style={adaptivePanelStyle(...)}; theme applies the app theme classes.",
+    "The browser pane and the inspector are mutually exclusive (toggleConversationSidePanel); useSidebarAutoCollapse steps the sidebar aside below a 720px page.",
     "The scrim label is a verb: Close panel.",
     "Pass the app theme through the theme prop (appearance, sidebar, mainScreen); surfaces outside the shell (portals, first run) use adaptiveShellThemeClasses.",
   ],
-  accessibility: ["The scrim is a button only while open; drawers keep focus order sidebar → workspace → inspector."],
-  tokens: ["--adaptive-drawer-width", "--adaptive-inspector-width", "--adaptive-panel-duration", "--adaptive-scrim-bg", "--sidebar-width"],
+  accessibility: [
+    "The scrim is a button only while open; drawers keep focus order sidebar → workspace → inspector.",
+    "The split handle is a vertical separator with its value (340–560): arrows move 16px, Shift 48px, Home/End jump.",
+  ],
+  tokens: ["--adaptive-drawer-width", "--adaptive-inspector-width", "--adaptive-panel-duration", "--adaptive-scrim-bg", "--sidebar-width",
+    "--browser-chat-width", "--browser-chat-width-min", "--browser-chat-width-max"],
 };

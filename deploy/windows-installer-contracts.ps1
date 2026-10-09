@@ -1,4 +1,5 @@
 param([ValidateSet('Build','Verify')][string]$Mode)
+. "$PSScriptRoot/windows-job-tree.ps1"
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
 $repo = (Get-Location).Path
@@ -13,9 +14,13 @@ try {
         New-Item -ItemType Directory -Force $out | Out-Null
         Push-Location packages/butler-agent/rust
         try {
+            $ErrorActionPreference = 'Continue'
             cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -- -D warnings
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE) { throw 'Windows platform clippy failed' }
+            $ErrorActionPreference = 'Continue'
             cargo test --locked --profile ci-fast --target x86_64-pc-windows-msvc -p butler-e2e --test e2e --no-run --message-format=json > "$root/compile.jsonl"
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE) { throw 'Update harness build failed' }
         } finally { Pop-Location }
         foreach ($line in Get-Content "$root/compile.jsonl") {
@@ -37,10 +42,14 @@ try {
             $env:HOME = Join-Path $root ([guid]::NewGuid())
             $env:BUTLER_DATA = Join-Path $root ([guid]::NewGuid())
             New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $ErrorActionPreference = 'Continue'
             $listed = & "$out/e2e.exe" "$test`::" --list
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty update E2E selection: $test" }
+            $ErrorActionPreference = 'Continue'
             & "$out/e2e.exe" "$test`::" --nocapture --test-threads=8
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
         }
     }
-} finally { Remove-Item -Recurse -Force $root }
+} finally { Remove-JobTree $root }

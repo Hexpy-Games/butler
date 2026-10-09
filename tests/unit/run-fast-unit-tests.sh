@@ -7,7 +7,6 @@ cd "$ROOT_DIR"
 tests=()
 while IFS= read -r test_file; do
   case "$test_file" in
-    tests/unit/app-first-run-smoke-script.test.ts|\
     tests/unit/native-mac-release.test.ts)
       ;;
     *)

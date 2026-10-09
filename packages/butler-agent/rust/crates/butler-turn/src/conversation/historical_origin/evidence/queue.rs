@@ -171,10 +171,9 @@ pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
             butler_core::json::at(value, "/reasoning_effort").as_str(),
             Some("none" | "low" | "medium" | "high" | "xhigh" | "max")
         )
-        || !matches!(
-            butler_core::json::at(value, "/access_mode").as_str(),
-            Some("full_access" | "ask_first" | "read_only")
-        )
+        || !butler_core::json::at(value, "/access_mode")
+            .as_str()
+            .is_some_and(|v| butler_core::tool_protocol::ACCESS_MODE_WIRE_NAMES.contains(&v))
         || !butler_core::json::at(value, "/plan_mode").is_boolean()
         || !matches!(
             butler_core::json::at(value, "/source").as_str(),

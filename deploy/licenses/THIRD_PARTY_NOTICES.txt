@@ -19,10 +19,10 @@ License: https://gitlab.com/libeigen/eigen/-/raw/1d8b82b0740839c0de7f1242a3585e3
 
 
 ===== COMPONENT =====
-Rust standard library 1.91.0
+Rust standard library 1.99.0
 MIT OR Apache-2.0
-License: https://raw.githubusercontent.com/rust-lang/rust/1.91.0/LICENSE-MIT
-License: https://raw.githubusercontent.com/rust-lang/rust/1.91.0/LICENSE-APACHE
+License: https://raw.githubusercontent.com/rust-lang/rust/1.99.0/LICENSE-MIT
+License: https://raw.githubusercontent.com/rust-lang/rust/1.99.0/LICENSE-APACHE
 It is Copyright (c) The Rust Project Contributors.
 Copyright (c) The Rust Project Contributors
 

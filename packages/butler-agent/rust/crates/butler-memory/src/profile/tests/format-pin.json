@@ -525,7 +525,7 @@
       {
         "id": "pc_744be57a37205e97",
         "category": "identity",
-        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"roles\",\"summary\":\"Leads a small studio\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1}",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"roles\",\"summary\":\"Leads a small studio\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":\"2023-11-14T22:13:20.000Z\"},\"evidence_count\":1}",
         "source_type": "inference",
         "confidence": "low",
         "sensitive_domain": 0,
@@ -609,7 +609,7 @@
       {
         "id": "pc_f5ce1d65e23d601d",
         "category": "aesthetics",
-        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1}",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":\"2023-11-14T22:13:20.000Z\"},\"evidence_count\":1}",
         "source_type": "explicit",
         "confidence": "medium",
         "sensitive_domain": 0,
@@ -702,7 +702,7 @@
       {
         "id": "sp_f5ce1d65e23d601d",
         "category": "aesthetics",
-        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":\"2023-11-14T22:13:20.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
         "confidence": "medium",
         "source_type": "explicit",
         "created_at": "2023-11-14T22:13:20.000Z",

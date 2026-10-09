@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -76,4 +76,37 @@ export function removeProfile(root: string, env: NodeJS.ProcessEnv) {
   { env, encoding: "utf8", windowsHide: true });
   assert.equal(result.status, 0, `Temporary profile cleanup failed: ${result.stderr}`);
   assert.equal(existsSync(root), false, "Temporary profile remains after cleanup");
+}
+
+/** Preserve only this disposable install's diagnostics before profile removal. */
+export function preserveInstallerLogs(root: string, installed: string, env: NodeJS.ProcessEnv, phase: string, snapshot = "failure") {
+  const evidence = process.env.BUTLER_WINDOWS_INSTALLER_EVIDENCE;
+  if (!evidence) return;
+  const output = join(evidence, snapshot);
+  mkdirSync(output, { recursive: true });
+  const sources: [string, string][] = [
+    ["setup.log", join(env.LOCALAPPDATA!, "SquirrelTemp/SquirrelSetup.log")],
+    ["update.log", join(installed, "SquirrelSetup.log")],
+    ["uninstall.log", join(env.LOCALAPPDATA!, "SquirrelSetup.log")],
+    ["electron.log", join(root, "electron.log")],
+    ["app-install.log", join(env.BUTLER_DATA!, "updates/app-install.log")],
+  ];
+  // Current Squirrel uses action-specific and rotated logs, including TEMP on uninstall.
+  for (const [label, directory] of [
+    ["setup", join(env.SQUIRREL_TEMP!, "SquirrelTemp")], ["installed", installed],
+    ["local", env.LOCALAPPDATA!], ["temp", env.TEMP!],
+  ]) {
+    if (!existsSync(directory)) continue;
+    for (const file of readdirSync(directory, { withFileTypes: true })) {
+      if (file.isFile() && /^Squirrel.*\.log$/iu.test(file.name)) sources.push([`${label}-${file.name}`, join(directory, file.name)]);
+    }
+  }
+  const captured: string[] = [];
+  for (const [name, path] of sources) {
+    if (!existsSync(path)) continue;
+    copyFileSync(path, join(output, name));
+    captured.push(name);
+  }
+  writeFileSync(join(output, "diagnostics.json"), JSON.stringify({ phase, captured,
+    installed, localAppData: env.LOCALAPPDATA, squirrelTemp: env.SQUIRREL_TEMP }));
 }

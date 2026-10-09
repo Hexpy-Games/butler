@@ -86,7 +86,7 @@ pub(super) async fn resolve(
     owner: &ModelConfiguration,
     root: &std::path::Path,
     read: &ModelConfigurationRead,
-) -> Result<String, ProviderRequestError> {
+) -> Result<String, Box<ProviderRequestError>> {
     let auth = owner
         .resolve_auth(root, read, "openai", "", None)
         .await
@@ -231,7 +231,7 @@ fn utf16_len(value: &str) -> usize {
     value.encode_utf16().count()
 }
 
-fn failure(reason: impl std::fmt::Display) -> ProviderRequestError {
+fn failure(reason: impl std::fmt::Display) -> Box<ProviderRequestError> {
     let reason = reason.to_string();
     let mut error = provider_error(
         "provider_unknown_error",

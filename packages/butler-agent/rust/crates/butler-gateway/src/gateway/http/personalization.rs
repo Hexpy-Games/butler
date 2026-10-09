@@ -43,13 +43,7 @@ pub(super) async fn route(
         }
         (&Method::POST, "/personalization/profile-import") => {
             let input = body_json(request).await?;
-            if !profile_import(&input) {
-                return Err(HttpError::public(
-                    400,
-                    "invalid_personalization_profile_import",
-                    "Profile import requires text and optional source/model.",
-                ));
-            }
+            validate_profile_import(&input)?;
             (
                 AppPersonalizationCommand::Import { input, locale },
                 StatusCode::OK,
@@ -70,8 +64,36 @@ pub(super) async fn route(
     )
 }
 
+fn validate_profile_import(input: &Value) -> Result<(), HttpError> {
+    if !profile_import(input) {
+        return Err(HttpError::public(
+            400,
+            "invalid_personalization_profile_import",
+            "Profile import requires text and optional source/model.",
+        ));
+    }
+    if input["text"]
+        .as_str()
+        .is_some_and(|text| text.encode_utf16().nth(60_000).is_some())
+    {
+        return Err(HttpError::public(
+            413,
+            "profile_import_too_large",
+            "Profile import text exceeds 60,000 UTF-16 units.",
+        ));
+    }
+    Ok(())
+}
+
 async fn body_json(request: axum::http::Request<Body>) -> Result<Value, HttpError> {
-    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024)
+        .await
+        .map_err(|error| match error {
+            HttpError::PayloadTooLarge => {
+                HttpError::public(413, "payload_too_large", "Request body is too large.")
+            }
+            error => error,
+        })?;
     serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())
 }
 

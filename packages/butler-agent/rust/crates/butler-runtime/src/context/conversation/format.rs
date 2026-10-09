@@ -230,7 +230,7 @@ fn render_turn_fields(
     Ok(lines)
 }
 
-fn render_outcome(outcome: &TurnOutcomeCapsule) -> ContextResult<String> {
+pub(crate) fn render_outcome(outcome: &TurnOutcomeCapsule) -> ContextResult<String> {
     let mut body = Map::new();
     body.insert("source_hash".into(), outcome.source_hash.clone().into());
     body.insert(

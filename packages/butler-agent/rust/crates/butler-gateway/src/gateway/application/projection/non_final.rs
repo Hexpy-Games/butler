@@ -280,6 +280,15 @@ fn current_claim_status(
     outbound: &TranscriptEvent,
 ) -> Result<QueuedTurnClaimStatus, AppStorageError> {
     let status = queue::claim_status(db, chat_id, turn_id, claim)?;
+    if matches!(
+        status,
+        QueuedTurnClaimStatus::Stale | QueuedTurnClaimStatus::Terminal
+    ) && cancellation_settlement(db, chat_id, turn_id, outbound)?
+    {
+        // The owner's durable cancellation authorizes only these terminal
+        // authority projections after the suspended queue claim was settled.
+        return Ok(QueuedTurnClaimStatus::Unlinked);
+    }
     let metadata = object(outbound.payload.get("metadata"));
     let reply_to = token(object(outbound.payload.get("message")).get("replyToMessageId"));
     if status == QueuedTurnClaimStatus::Stale
@@ -292,6 +301,34 @@ fn current_claim_status(
         return Ok(QueuedTurnClaimStatus::Current);
     }
     Ok(status)
+}
+
+fn cancellation_settlement(
+    db: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    outbound: &TranscriptEvent,
+) -> Result<bool, AppStorageError> {
+    let metadata = object(outbound.payload.get("metadata"));
+    let event = object(metadata.get("event"));
+    let payload = object(event.get("payload"));
+    if text(metadata.get("kind")).as_deref() != Some("turn_event")
+        || !matches!(
+            text(event.get("kind")).as_deref(),
+            Some("tool.cancelled" | "operation.output.chunk")
+        )
+        || payload
+            .get("authorityCancellation")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        return Ok(false);
+    }
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM turns t JOIN app_turn_cancel_outbox c ON c.turn_id=t.id \
+         WHERE t.id=?1 AND t.chat_id=?2 AND c.state IN ('pending','accepted','completed') AND c.queue_id IS NOT NULL)",
+        params![turn_id, chat_id], |row| row.get(0),
+    ).map_err(AppStorageError::sqlite)
 }
 
 fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>, AppStorageError> {

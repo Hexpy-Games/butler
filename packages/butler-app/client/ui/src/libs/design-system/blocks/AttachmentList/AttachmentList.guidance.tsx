@@ -30,6 +30,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "windowDrag=\"no-drag\" keeps chips removable inside a drag region.",
+    "Items with element (picked page elements) render as ElementChip: crop, title and site, leading the list in one wrapping row; removeLabel names their remove button.",
     "Show the file name as uploaded and a human size (4 KB).",
     "blockedReason keeps a chip the current model cannot take, dims it, and puts a few-word reason in its tooltip; the chip stays removable.",
     "An unknown capability is treated as unavailable (the gateway refuses it), with its own few-word reason (Image support unknown for this model).",

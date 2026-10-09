@@ -1,6 +1,9 @@
 //! Completed memory jobs and native conversation rows, with owner-sized metrics.
 use butler_e2e::e2e::{HarnessError, harness_error};
 use butler_platform::sqlite;
+
+#[path = "history.rs"]
+mod history;
 use rusqlite::{Connection, params};
 use std::{
     fs,
@@ -22,6 +25,7 @@ pub(super) fn owner_scale(data: &Path) -> Result<Expected, HarnessError> {
         .join(descriptor["generation_id"].as_str().unwrap())
         .join("graph.sqlite");
     seed_graph(&graph).map_err(|error| harness_error(error.to_string()))?;
+    seed_btcc(data)?;
     seed_native_messages(data).map_err(|error| harness_error(error.to_string()))?;
     let line = serde_json::json!({"schema":"butler.operational-event.v1", "ts":chrono::Utc::now().timestamp_millis(), "category":"maintenance", "name":"synthetic", "status":"ok", "rawTextStored":false, "padding":"x".repeat(240)}).to_string() + "\n";
     fs::create_dir_all(data.join("metrics"))?;
@@ -36,6 +40,17 @@ pub(super) fn owner_scale(data: &Path) -> Result<Expected, HarnessError> {
         graph,
         metric_bytes: line.len() as u64 * 888_000,
     })
+}
+
+fn seed_btcc(data: &Path) -> Result<(), HarnessError> {
+    let path = data.join("agent-runtime/btcc.sqlite");
+    let mut db = sqlite::open(&path)?;
+    let tx = db.transaction()?;
+    history::history(&tx, 700_000);
+    tx.commit()?;
+    drop(db);
+    assert!(fs::metadata(path)?.len() >= 7_000_000_000);
+    Ok(())
 }
 
 fn seed_graph(path: &Path) -> rusqlite::Result<()> {
@@ -98,6 +113,40 @@ pub(super) fn assert_complete(data: &Path, expected: &Expected) -> Result<(), Ha
             "SELECT COUNT(*) FROM app_terminal_turn_projections WHERE turn_id LIKE 'perf-t%'"
         ),
         5_000
+    );
+    assert_eq!(
+        count(&app, "SELECT COUNT(*) FROM chats WHERE id LIKE 'scale-c%'"),
+        600
+    );
+    assert_eq!(
+        count(&app, "SELECT COUNT(*) FROM events WHERE type='seed'"),
+        300_000
+    );
+    let latest: String = app.query_row(
+        "SELECT payload_json FROM events WHERE type='seed' ORDER BY id DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&latest)?["text"],
+        "0".repeat(4096)
+    );
+    let btcc = sqlite::open(data.join("agent-runtime/btcc.sqlite"))?;
+    assert_eq!(
+        count(
+            &btcc,
+            "SELECT COUNT(*) FROM btcc_authority_requests WHERE request_id LIKE 'history-%'"
+        ),
+        10_000
+    );
+    let last: String = btcc.query_row(
+        "SELECT normalized_input_json FROM btcc_authority_requests WHERE request_id='history-9999'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&last)?["padding"],
+        "0".repeat(699_996) + "9999"
     );
     let canonical = sqlite::open(data.join("runtime/conversation-store.sqlite")).unwrap();
     assert_eq!(

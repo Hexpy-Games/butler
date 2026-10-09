@@ -1,6 +1,6 @@
 // Capture the same product screens using immutable shipped and candidate code.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,10 +16,15 @@ try {
   rmSync(archive);
   // Add only the candidate's fixture entry point; all baseline product
   // renderers, styles, copy and behavior remain at the shipped revision.
-  for (const file of ["main.tsx", "pages/ComponentHarness.tsx", "pages/QuickFixesHarness.tsx"]) {
+  for (const file of ["main.tsx", "pages/QuickFixesHarness.tsx"]) {
     const path = join("packages/butler-app/client/ui/src", file);
     copyFileSync(path, join(temporary, path));
   }
+  // The candidate router also imports newer, unrelated harnesses that do not
+  // exist in preview.8. Route only this comparison's fixture in the archive.
+  writeFileSync(join(temporary, "packages/butler-app/client/ui/src/pages/ComponentHarness.tsx"),
+    'import { QuickFixesHarness } from "./QuickFixesHarness";\n'
+    + 'export function ComponentHarness() { return <QuickFixesHarness />; }\n');
   execFileSync(process.execPath, ["install", "--frozen-lockfile", "--ignore-scripts"], { cwd: temporary, stdio: "inherit" });
   execFileSync("npm", ["--prefix", "packages/butler-app/client/ui", "run", "build"], { cwd: temporary, stdio: "inherit" });
   execFileSync(process.execPath, [capture, join(temporary, "packages/butler-app/client/ui/dist"), join(output, "before"), revision], { stdio: "inherit" });

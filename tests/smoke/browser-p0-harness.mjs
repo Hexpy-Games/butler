@@ -1,4 +1,5 @@
 // Test-only main-process harness. Not copied into Electron release packages.
+import { delayTimeline } from "./browser-p0-delay.mjs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
@@ -30,13 +31,14 @@ export function installBrowserP0Harness(window, userBrowser) {
   const routed = { frames: 0, subresources: 0 };
   const delay = monitorEventLoopDelay({ resolution: 1 });
   delay.enable();
+  const timeline = delayTimeline();
   const childGone = (_event, details) => gone.push({ ...details, at: performance.now() });
   app.on("child-process-gone", childGone);
   const baseline = resourceInventory;
   const initial = baseline();
   const get = id => { const view = productTabs.has(id) ? userBrowser.tabs.get(productTabs.get(id))?.view : views.get(id); if (!view) throw new Error("Unknown tab"); return view.webContents; };
   globalThis.browserP0 = {
-    async open(id, url, { webgl = true, user = false } = {}) {
+    async open(id, url, { user = false, webgl = user } = {}) {
       const parsed = new URL(url);
       if (!((parsed.hostname === "127.0.0.1" && parsed.protocol === "http:") ||
         (parsed.protocol === "https:" && parsed.hostname === "www.iana.org" && ["/help/example-domains", "/domains/reserved"].includes(parsed.pathname)))) throw new Error("P0 fixtures only");
@@ -114,12 +116,14 @@ export function installBrowserP0Harness(window, userBrowser) {
         loop: { p99Ms: delay.percentile(99) / 1e6, maxMs: delay.max / 1e6 } };
     },
     gpuPolicy: id => get(id).executeJavaScript("(async()=>({webgl:!!document.createElement('canvas').getContext('webgl'),webgl2:!!document.createElement('canvas').getContext('webgl2'),gpuPresent:!!navigator.gpu,webgpu:Boolean(await navigator.gpu?.requestAdapter())}))()"),
-    resetDelay: () => delay.reset(),
+    delayOutliers: () => timeline.outliers,
+    resetDelay: () => { delay.reset(); timeline.reset(); return new Date().toISOString(); },
+    finishDelay: () => { delay.disable(); timeline.stop(); return new Date().toISOString(); },
     traceStart: () => contentTracing.startRecording({ included_categories: ["devtools", "devtools.timeline", "blink", "gpu", "toplevel", "disabled-by-default-memory-infra", "blink.user_timing"], memory_dump_config: { triggers: [{ mode: "light", periodic_interval_ms: 1000 }] } }),
     traceStop: path => contentTracing.stopRecording(path),
     async dispose() {
       await Promise.all([...views.keys(), ...productTabs.keys()].map(id => this.close(id)));
-      delay.disable(); app.removeListener("session-created", sessionCreated); app.removeListener("child-process-gone", childGone); delete globalThis.browserP0;
+      timeline.stop(); delay.disable(); app.removeListener("session-created", sessionCreated); app.removeListener("child-process-gone", childGone); delete globalThis.browserP0;
     },
   };
 }

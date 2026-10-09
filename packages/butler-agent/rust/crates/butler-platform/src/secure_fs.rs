@@ -10,6 +10,8 @@
 //! another process briefly holds it ([`rename`]).
 
 mod contained_read;
+mod exact_name;
+pub use exact_name::exact_entry_exists;
 mod fault;
 pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
 
@@ -473,7 +475,7 @@ pub fn path_is_within(target: &Path, root: &Path) -> bool {
 }
 
 mod path_compare;
-pub use path_compare::relative_path;
+pub use path_compare::{ambiguous_path, relative_path, windows_ambiguous_spelling};
 
 /// An equivalent native path spelling for public-path regression scenarios.
 #[cfg(feature = "test-support")]

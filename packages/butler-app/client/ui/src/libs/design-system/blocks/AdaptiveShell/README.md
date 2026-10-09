@@ -50,6 +50,22 @@ exclusive open-panel state.
 Do not fetch domain data, import app stores, or add product selectors to this
 block. Do not use it as a generic card or nested panel.
 
+## Conversation frame, peek and auto-collapse
+- `AdaptiveShellSplit` (inside `AdaptiveShellWorkspace`, under the titlebar):
+  chat | browser pane. The chat column is its own `workspace` container,
+  340–560px (`--browser-chat-width*`, default 400) and resizable by pointer
+  or keyboard (`onChatWidthChange`, clamped). Pass `splitOpen` to
+  `AdaptiveShell` while the pane is open: the inspector then stays closed;
+  `toggleConversationSidePanel` keeps the two mutually exclusive.
+- `leftPeek` with `AdaptiveShellPeekEdge`: the collapsed sidebar floats over
+  the workspace as a card; the track stays collapsed, nothing reflows.
+- `useSidebarAutoCollapse(rootRef, { enabled, sidebarWidth, chatWidth })`:
+  true while the page would be narrower than 720px with the sidebar open
+  (`sidebarAutoCollapses`, with a 32px return margin). Pass
+  `leftOpen={open && !collapsed}`.
+- The pane enters with a transform; NativeViewSlot's tracker follows
+  ancestors that move, so the native view tracks the page card.
+
 ## Tags
 
 shell, drawer, inspector, responsive, adaptive, motion

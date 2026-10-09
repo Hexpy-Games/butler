@@ -43,7 +43,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.99.0
           components: rustfmt
       - name: Check formatting
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
@@ -53,28 +53,7 @@ jobs:
   linux-clippy:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['linux-clippy']
-    name: Clippy (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: archive-linux-x64
-          artifact-cache-platform: linux-x64
-          artifact-cache-kind: dev
-          save-cargo-cache: 'false'
-      # These four libraries allow panic/unwrap/expect and dead-code lints
-      # under test-support. --all-targets enables it through dev dependencies;
-      # retain their feature-free production check. Other ordinary libraries
-      # and binaries are covered by the workspace all-targets invocation.
-      - name: Clippy production libraries with stricter cfg lints
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-turn -p butler-models -p butler-runtime -p butler-ledger --lib --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+    uses: ./.github/workflows/rust-clippy.yml
 
   linux-native:
     permissions:
@@ -87,7 +66,7 @@ jobs:
     with:
       runner: ubuntu-24.04
       platform: linux-x64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-archive:
     permissions:
@@ -145,7 +124,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: prebuilt-ort
+      ort-mode: ${{ github.event_name == 'push' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-arm64-archive:
     permissions:
@@ -378,9 +357,20 @@ jobs:
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
+      - uses: ./.github/actions/setup-oras
+      - name: Verify Cargo snapshot and native dependency contracts
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-target.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          states=$(mktemp "$RUNNER_TEMP/workflow-states.XXXXXX")
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" > "$states"
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-integration-proof.py --active-workflows "$states"
       - name: Lint GitHub workflows
         working-directory: ${{ github.workspace }}
         run: |

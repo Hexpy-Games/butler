@@ -1,3 +1,4 @@
+import { workerProfileTextPatch } from "./workerProfileTextPatch";
 import { useAppLocale } from "@/app/copy.ts";
 import { useId, useState } from "react";
 import { Input, SettingsField } from "@/butler-ds";
@@ -7,7 +8,6 @@ import { SettingsSelect } from "./SettingsFormComponents";
 import {
   WORKER_PROFILE_BUILTIN_JOBS,
   WORKER_PROFILE_CUSTOM_JOB_MAX_LENGTH,
-  commitWorkerProfileCustomJob,
   selectWorkerProfileJob,
 } from "./workerProfileUpdates";
 import type { WorkerProfile } from "@/app/types.ts";
@@ -93,13 +93,18 @@ export function WorkerProfileTaskFields({
     setCustomSelection(true);
   }
 
+  function commitText(field: "domain" | "prompt", value: string) {
+    const patch = workerProfileTextPatch(profile, field, value);
+    if (patch) onCommit(patch);
+  }
+
   function commitCustomJob(trimmed: string) {
-    const committed = commitWorkerProfileCustomJob(trimmed);
+    const committed = workerProfileTextPatch(profile, "job", trimmed);
     if (!committed) {
       setCustomSelection(false);
       return;
     }
-    onCommit({ job: committed });
+    onCommit(committed);
   }
 
   return (
@@ -135,7 +140,7 @@ export function WorkerProfileTaskFields({
         value={profile.domain ?? ""}
         disabled={saving}
         onCommit={(trimmed) =>
-          onCommit(trimmed ? { domain: trimmed } : { domain: undefined })
+          commitText("domain", trimmed)
         }
       />
       <DeferredTextField
@@ -144,7 +149,7 @@ export function WorkerProfileTaskFields({
         value={profile.prompt ?? ""}
         disabled={saving}
         onCommit={(trimmed) =>
-          onCommit(trimmed ? { prompt: trimmed } : { prompt: undefined })
+          commitText("prompt", trimmed)
         }
       />
     </>

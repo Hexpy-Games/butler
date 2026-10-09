@@ -1,0 +1,61 @@
+/* 36px: a 28px crop with a two-line label (title, site). */
+.chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(220px, 100%);
+  height: calc(
+    var(--control-height-md) + var(--space-sm) - var(--border-width-strong)
+  );
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 3px var(--space-sm) 3px 3px;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--composer-glass-control-bg, var(--surface-raised));
+}
+
+.chip[data-removable] {
+  padding-inline-end: 0;
+}
+
+.crop {
+  width: calc(var(--control-height-sm));
+  height: calc(var(--control-height-sm));
+  flex: none;
+  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  background: var(--muted);
+  object-fit: cover;
+}
+
+.text {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  line-height: var(--line-height-tight);
+}
+
+.title,
+.site {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-size-1);
+}
+
+.site {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+}
+
+.remove {
+  --icon-button-size: var(--control-height-xs);
+
+  flex: none;
+  margin-inline-end: var(--space-xs);
+}

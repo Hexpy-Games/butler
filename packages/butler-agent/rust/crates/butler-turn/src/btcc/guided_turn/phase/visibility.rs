@@ -272,7 +272,7 @@ fn apply_access_mode(
         names.insert("call_mcp_tool".into());
         return;
     }
-    let ask_first = policy.access_mode == AccessMode::AskFirst;
+    let ask_first = policy.access_mode.reviews_effects();
     if ask_first {
         names.extend(
             [
@@ -363,7 +363,7 @@ pub(super) fn legacy_visible<'a>(
     }
     match policy.access_mode {
         AccessMode::ReadOnly => {}
-        AccessMode::AskFirst => {
+        AccessMode::AskAlways | AccessMode::AskExceptReads => {
             names.extend([
                 "run_command",
                 "read_tool_output_artifact",

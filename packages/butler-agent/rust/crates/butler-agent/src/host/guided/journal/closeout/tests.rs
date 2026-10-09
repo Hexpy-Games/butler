@@ -58,6 +58,9 @@ async fn completed_command_artifact_projects_from_reopened_real_journal() {
         closeout.artifacts[0].safe_path_label,
         "artifacts/report.csv"
     );
-    assert!(closeout.changed_files.is_empty());
+    assert_eq!(
+        closeout.changed_files,
+        [] as [butler_turn::btcc::ChangedFileSummary; 0]
+    );
     reopened.close().await.unwrap();
 }

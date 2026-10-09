@@ -92,12 +92,11 @@ fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
     {
         let usage = usage();
         let anthropic = request(&ReasoningEffort::High, &usage);
+        let mut anthropic_config = config("anthropic/claude-haiku-4-5");
+        anthropic_config.endpoint = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        assert!(!wire(&anthropic, &anthropic_config, Carrier::Anthropic).contains("cache_control"));
         assert_eq!(
-            wire(
-                &anthropic,
-                &config("anthropic/claude-haiku-4-5"),
-                Carrier::Anthropic,
-            ),
+            wire(&anthropic, &anthropic_config, Carrier::Anthropic,),
             r#"{"model":"claude-haiku-4-5","max_tokens":321,"system":"System","thinking":{"type":"enabled","budget_tokens":8192},"messages":[{"role":"user","content":"Hello"}]}"#
         );
 

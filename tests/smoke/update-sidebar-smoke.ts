@@ -107,6 +107,10 @@ try {
     const before = await settings.boundingBox();
     await settings.screenshot({ path: join(output, `before-settings-${name}.png`) });
     await page.locator('[data-test-class="app-sidebar"]').screenshot({ path: join(output, `before-${name}.png`) });
+    await page.goto(`${url.replace("stage=idle", "stage=completed")}&check-error=update_manifest_app_platform_missing`);
+    await settings.waitFor();
+    assert.equal(await page.locator('[data-test-class="sidebar-update-row"]').count(), 0, "fresh preview with missing stable platform has no failure label");
+    await page.locator('[data-test-class="app-sidebar"]').screenshot({ path: join(output, `check-unavailable-${name}.png`) });
     await page.goto(url);
     await settings.waitFor();
     await page.locator('[data-test-class="sidebar-load-more"]').filter({ hasText: "(570)" }).waitFor();

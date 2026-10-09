@@ -30,7 +30,7 @@ const labels = {
       { title: "의존성 점검", target: "butler-app", meta: "일시 중지 / 매주 월요일" },
     ],
     artifact: "디자인 검토 메모.md",
-    decision: "백업이 끝나면 스테이징 데이터베이스에 마이그레이션 스크립트를 실행하도록 Butler에게 허용하기",
+    decision: "백업이 끝나면 스테이징 데이터베이스에 마이그레이션 스크립트를 실행하도록 버틀러에게 허용하기",
     every: "매시간",
   },
 } as const;

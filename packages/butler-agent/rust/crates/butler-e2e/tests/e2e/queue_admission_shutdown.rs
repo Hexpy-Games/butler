@@ -95,11 +95,12 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
     }
     let view = s.gw.get("/session-queue?chat_id=general").await?;
     assert_eq!(view.data()["paused"], false);
-    assert!(
+    assert_eq!(
         view.data()["queued_messages"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        [] as [serde_json::Value; 0]
     );
     let messages = s.gw.messages("general").await?;
     assert_eq!(messages.iter().filter(|m| m["role"] == "user").count(), 2);

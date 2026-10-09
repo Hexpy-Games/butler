@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import { NO_WALLPAPER_CONTENT_RECT, wallpaperContentRectUniform } from "./contentRect";

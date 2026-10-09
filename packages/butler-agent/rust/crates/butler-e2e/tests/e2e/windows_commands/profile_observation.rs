@@ -106,12 +106,16 @@ async fn replay(
     let s = setup.start().await?;
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
-    if access == Access::AskFirst {
+    if access == Access::AskAlways {
         super::observation::approve_exact(&s, &id, &command).await?;
     }
-    let turn =
+    let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(turn_timeout()))
-            .await?;
+            .await;
+    if terminal.is_err() {
+        super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+    }
+    let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered", "chat must finish");
     let requests = script.requests.lock().unwrap().clone();
     let received = requests
@@ -171,7 +175,10 @@ async fn replay(
         elapsed.as_secs_f64() * 1000.
     );
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     assert!(
         s.gw.messages("general")
@@ -206,7 +213,7 @@ fn verify(
     let listing: Value = serde_json::from_str(stdout)?;
     assert_eq!(listing["DownloadsPath"].as_str(), downloads.to_str());
     assert!(listing["Source"].as_str().unwrap().starts_with("HKCU:"));
-    assert!(!listing["RawPath"].as_str().unwrap().is_empty());
+    assert_ne!(listing["RawPath"].as_str().unwrap(), "");
     let items = listing["Items"].as_array().expect("all top-level entries");
     assert_eq!(items.len(), before.len(), "complete listing");
     let mut seen = BTreeMap::new();
@@ -262,7 +269,7 @@ async fn profile_downloads_with_external_data_in_both_access_modes() -> Result<(
     // Opt-in only: keep CODEX_HOME, all data and caches in the sandbox even
     // when HOME/USERPROFILE describe the real read-only Downloads proof.
     let real = std::env::var("BUTLER_E2E_DOWNLOADS_REAL_PROFILE").ok();
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(access, false, real.as_deref()).await?;
     }
     Ok(())
@@ -276,7 +283,7 @@ async fn profile_downloads_with_default_dot_butler_layout_in_both_access_modes()
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows profile replay"
     );
-    for access in [Access::AskFirst, Access::FullAccess] {
+    for access in [Access::AskAlways, Access::FullAccess] {
         replay(access, true, None).await?;
     }
     Ok(())
@@ -290,12 +297,15 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows path syntax"
     );
-    let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
-    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskFirst);
+    let command = r#"powershell.exe -NoProfile -NonInteractive -Command "$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'""#;
+    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskAlways);
     let (url, script, server) = provider::start(command).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)
         .env("BUTLER_CODEX_BASE_URL", url)
+        // Match replay() and the installed App's module environment.
+        .env("PSModulePath", "")
+        .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1")
@@ -304,9 +314,13 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
     let accepted = s.gw.say("general", super::stub::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
     super::observation::approve_exact(&s, &id, command).await?;
-    let turn =
+    let terminal =
         s.gw.wait_terminal("general", &id, Duration::from_secs(15))
-            .await?;
+            .await;
+    if terminal.is_err() {
+        super::log_approval_timeout_diagnostics(&s, "general", &id).await?;
+    }
+    let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered");
     let requests = script.requests.lock().unwrap().clone();
     let output = requests

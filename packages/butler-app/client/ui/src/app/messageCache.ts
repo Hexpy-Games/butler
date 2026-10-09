@@ -118,6 +118,18 @@ export function readCachedMessageListSync(
   return normalizeSnapshot(readLocalSnapshot(chatId), chatId);
 }
 
+export async function clearCachedMessageList(chatId: string): Promise<void> {
+  localMessageCache.delete(chatId);
+  try { globalThis.localStorage?.removeItem(cacheKey(chatId)); } catch { /* optional cache */ }
+  const bridge = bridgeCache();
+  if (bridge?.writeCachedMessages) {
+    try { await bridge.writeCachedMessages({ chatId, snapshot: {
+      schema: MESSAGE_CACHE_SCHEMA, chat_id: chatId, messages: [], turn_progress: {},
+      next_cursor: 0, cached_at: new Date().toISOString(),
+    } }); } catch { /* optional cache */ }
+  }
+}
+
 export async function writeCachedMessageList(
   chatId: string,
   view: MessageListView,

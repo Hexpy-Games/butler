@@ -2,6 +2,36 @@
 
 use std::io;
 
+/// Host load averages (one, five and fifteen minutes), for perf evidence.
+pub fn load_average() -> io::Result<Option<[f64; 3]>> {
+    #[cfg(target_os = "linux")]
+    {
+        let text = std::fs::read_to_string("/proc/loadavg")?;
+        let values = text
+            .split_whitespace()
+            .take(3)
+            .map(str::parse::<f64>)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(io::Error::other)?;
+        let [one, five, fifteen] = values.as_slice() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "missing load averages",
+            ));
+        };
+        Ok(Some([*one, *five, *fifteen]))
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let load = sysinfo::System::load_average();
+        Ok(Some([load.one, load.five, load.fifteen]))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        Ok(None)
+    }
+}
+
 /// Resident memory and cumulative I/O counters for one process.
 #[derive(Debug, Clone, Copy)]
 pub struct ProcessUsage {

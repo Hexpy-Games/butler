@@ -29,7 +29,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A panel header in the window chrome has no drag region or window controls.", render: () => <PanelHeader title="Token page review" /> },
     },
   ],
-  content: ["The title is the conversation title; the subtitle is project · branch."],
+  content: [
+    "The title is the conversation title; the subtitle is project · branch.",
+    "leadingSize=\"auto\" lets the leading slot hold a control at its own size (the standalone Browser's conversation button); the collapsed-sidebar inset is unchanged.",
+  ],
   accessibility: ["dragRegion makes the bar a window drag region; controls inside it stay clickable (no-drag); window controls have labels."],
   tokens: ["--titlebar-height", "--titlebar-bg", "--chrome-floating-toggle-size"],
 };

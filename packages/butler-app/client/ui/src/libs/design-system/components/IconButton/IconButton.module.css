@@ -72,6 +72,67 @@
   }
 }
 
+/* Tones colour the icon only: no fill, so a toggled-on tone never reads as a
+   pressed button (aria-pressed carries the state). Hover keeps the tone. */
+.moduleScope[data-tone="butler"],
+.moduleScope[data-tone="butler"]:hover:not(:disabled) {
+  color: var(--butler-ink-blue);
+}
+
+.moduleScope[data-tone="riso"]
+  :is(path, circle, ellipse, line, polyline, polygon, rect) {
+  stroke: var(--icon-button-riso-paint, var(--butler-ink-purple));
+}
+
+.paint {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Indicator and badge sit on the top-end corner, outside the icon. */
+.moduleScope:has(.indicator),
+.moduleScope[data-badge] {
+  position: relative;
+  overflow: visible;
+}
+
+.indicator {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border: 1.5px solid var(--workspace-bg);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    135deg,
+    var(--butler-ink-blue),
+    var(--butler-ink-pink)
+  );
+  pointer-events: none;
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  min-width: var(--space-lg);
+  height: var(--space-lg);
+  padding: 0 var(--space-xs);
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--neutral-white);
+  font-size: var(--typo-caption-size);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--space-lg);
+  pointer-events: none;
+}
+
 /* Optical alignment: the icon, not the hit area, meets the top-end corner. */
 .moduleScope[data-optical-align="top-end"] {
   --icon-button-optical-hit: var(--icon-button-size, var(--control-height-md));

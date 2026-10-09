@@ -179,7 +179,7 @@ impl AppApplication {
         session_id: &str,
         reason: &str,
     ) -> Result<(), GatewayApplicationError> {
-        let runtime_session_id = crate::gateway::app_session_hint(session_id);
+        let runtime_session_id = self.runtime_hint(session_id).await?;
         self.dependencies
             .authority_handoff
             .close_self_session(runtime_session_id.clone(), reason.to_owned())
@@ -212,7 +212,7 @@ fn mutate_session(
         ));
     }
     let title = title.unwrap_or(current.title);
-    let archived = archived.map_or(current.archived, |value| value);
+    let archived = archived.unwrap_or(current.archived);
     let now = clock.now_iso();
     tx.execute(
         "UPDATE chats SET title=?1,archived=?2,updated_at=?3 WHERE id=?4",

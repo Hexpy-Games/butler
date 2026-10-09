@@ -4,6 +4,7 @@ import subprocess
 import os
 import pathlib
 import platform
+import re
 import shutil
 import sys
 
@@ -23,7 +24,7 @@ def sha256(path):
 
 
 def command(args, *, cwd=None):
-    result = subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
+    result = subprocess.run(args, cwd=cwd, encoding="utf-8", errors="replace", capture_output=True, check=False)
     if result.returncode:
         fail(f"{' '.join(map(str, args))} failed: {(result.stderr or result.stdout).strip()}")
     return result.stdout.strip()
@@ -32,8 +33,8 @@ def command(args, *, cwd=None):
 def rust_identity(rust_target):
     rustc = command(["rustc", "--version", "--verbose"], cwd=RUST_ROOT)
     rustc_fields = dict(line.split(": ", 1) for line in rustc.splitlines() if ": " in line)
-    if rustc_fields.get("release") != "1.91.0" or rustc_fields.get("host") != rust_target:
-        fail("Static ORT preparation requires the pinned Rust 1.91.0 toolchain.")
+    if rustc_fields.get("release") != "1.99.0" or rustc_fields.get("host") != rust_target:
+        fail("Static ORT preparation requires the pinned Rust 1.99.0 toolchain.")
     return rustc
 
 
@@ -59,20 +60,63 @@ def os_release():
     return fields
 
 
+def toolset_version(tools):
+    """Use locale-independent developer environment metadata, then STL macros."""
+    selected = os.environ.get("VCToolsVersion", "").strip()
+    directory = tools.name
+    if selected:
+        if re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", directory) and directory != selected:
+            fail("VCToolsVersion does not match VCToolsInstallDir")
+        return selected
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", directory):
+        return directory
+    header = tools / "include/yvals_core.h"
+    try:
+        contents = header.read_bytes()
+    except OSError as error:
+        fail(f"Missing MSVC toolset identity: cannot read yvals_core.h: {error}")
+    for macro in (b"_MSVC_STL_UPDATE", b"_MSVC_STL_VERSION"):
+        match = re.search(rb"(?m)^\s*#\s*define\s+" + macro + rb"\s+([0-9]+)[uUlL]*\b", contents)
+        if match:
+            return macro.decode("ascii") + "=" + match[1].decode("ascii")
+    fail("Missing MSVC toolset identity: VCToolsVersion, versioned VCToolsInstallDir "
+         "or _MSVC_STL_UPDATE/_MSVC_STL_VERSION in yvals_core.h is required")
+
+
 def visual_studio_identity():
-    """The installed MSVC toolset, read without a developer environment."""
-    root = pathlib.Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))
-    vswhere = root / "Microsoft Visual Studio/Installer/vswhere.exe"
-    if not vswhere.is_file():
-        fail("Visual Studio (vswhere.exe) is required on a Windows host")
-    query = [str(vswhere), "-latest", "-products", "*", "-requires",
-             "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"]
-    installation = pathlib.Path(command([*query, "-property", "installationPath"]))
-    tools = installation / "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
-    return {
-        "installation_version": command([*query, "-property", "installationVersion"]),
-        "vc_tools_version": tools.read_text().strip() if tools.is_file() else "unknown",
+    """Fingerprint the selected developer environment, never a newer installation."""
+    required = ("VCToolsInstallDir", "UCRTVersion", "UniversalCRTSdkDir")
+    if any(not os.environ.get(name) for name in required):
+        missing = ", ".join(name for name in required if not os.environ.get(name))
+        fail(f"Static Windows SDK selection requires an initialized MSVC developer environment: {missing}")
+    tools = pathlib.Path(os.environ["VCToolsInstallDir"])
+    compiler = shutil.which("cl")
+    if not compiler or not pathlib.Path(compiler).resolve().is_relative_to(tools.resolve()):
+        fail("Selected cl.exe does not belong to VCToolsInstallDir")
+    vc_version = toolset_version(tools)
+    ucrt = pathlib.Path(os.environ["UniversalCRTSdkDir"])
+    version = os.environ["UCRTVersion"]
+    files = {
+        "stl_header": tools / "include/yvals_core.h",
+        "crt_header": tools / "include/vcruntime.h",
+        "stl_static": tools / "lib/x64/libcpmt.lib",
+        "stl_import": tools / "lib/x64/msvcprt.lib",
+        "crt_static": tools / "lib/x64/libcmt.lib",
+        "vcruntime_static": tools / "lib/x64/libvcruntime.lib",
+        "crt_import": tools / "lib/x64/vcruntime.lib",
+        "ucrt_header": ucrt / f"Include/{version}/ucrt/corecrt.h",
+        "ucrt_static": ucrt / f"Lib/{version}/ucrt/x64/libucrt.lib",
+        "ucrt_import": ucrt / f"Lib/{version}/ucrt/x64/ucrt.lib",
     }
+    identity = {
+        "vc_tools_version": vc_version,
+        "ucrt_version": version,
+        "compiler_sha256": sha256(pathlib.Path(compiler)),
+        "stl_crt_sha256": {name: sha256(path) for name, path in files.items()},
+    }
+    print(f"Windows SDK toolset: VCToolsVersion={identity['vc_tools_version']} "
+          f"UCRTVersion={version}; STL/CRT digests={identity['stl_crt_sha256']}", file=sys.stderr)
+    return identity
 
 
 def host_identity(target, rust_target):

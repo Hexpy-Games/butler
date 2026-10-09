@@ -1,3 +1,5 @@
+import { useButlerStore } from "@/app/store";
+import { subscribeGeneralChatCleared } from "@/app/generalChatEvents";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useState } from "react";
 import { notifyError } from "@/app/notifications";
@@ -49,6 +51,7 @@ export function ArchivesSettings() {
 
   useEffect(() => {
     void refresh();
+    return subscribeGeneralChatCleared(() => { void refresh(); });
   }, [refresh]);
 
   const restore = async (item: ArchiveItem) => {
@@ -106,6 +109,7 @@ export function ArchivesSettings() {
           <ArchiveItemRow
             key={`${item.kind}:${item.id}`}
             item={item}
+            onOpen={item.kind === "session" ? () => useButlerStore.getState().openSession(item.id, item.title) : undefined}
             busy={busyId === item.id}
             onRestore={() => void restore(item)}
             onRemove={() => void remove(item)}

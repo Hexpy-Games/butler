@@ -213,12 +213,9 @@ fn supported_image_models_carry_sourced_known_capability_limits() {
         if model.image_carrier_protocol.as_deref() == Some("zai_mcp_vision") {
             continue;
         }
-        assert!(
-            !model
-                .image_accepted_mime_types
-                .clone()
-                .unwrap_or_default()
-                .is_empty()
+        assert_ne!(
+            model.image_accepted_mime_types.clone().unwrap_or_default(),
+            [] as [std::string::String; 0]
         );
         let sources = model.image_limit_sources.clone().unwrap_or_default();
         for (field, value) in [
@@ -284,6 +281,16 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
     };
     let usd = sonnet.estimate_usd(&hour).unwrap();
     assert!((usd - (0.5 * 2.0 + 0.4 * 0.2 + 0.1 * 4.0 + 0.1 * 10.0)).abs() < 1e-9);
+    // Mixed-TTL Anthropic stub usage: 100 base, 200 read, 50 short writes,
+    // 250 hour writes and 20 output tokens; input includes all cache tokens.
+    let mixed = RequestTokens {
+        input: 600,
+        cached: 200,
+        cache_write: 300,
+        cache_write_1h: 250,
+        output: 20,
+    };
+    assert!((sonnet.estimate_usd(&mixed).unwrap() - 0.001_565).abs() < 1e-12);
     // Cache writes on a model with no published cache-write price.
     let mini = catalog.pricing("openai/gpt-5.4-mini").unwrap();
     assert!(

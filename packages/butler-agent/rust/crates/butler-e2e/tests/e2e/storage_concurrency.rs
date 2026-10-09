@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
 use super::storage_concurrency_support;
-use storage_concurrency_support::{seed, verify_rows};
+use storage_concurrency_support::{p95, seed, verify_rows};
 const REQUEST: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 const SESSIONS: usize = 8;
 const DELTAS: usize = 200;
@@ -101,10 +101,6 @@ fn rewrite_text(value: &mut Value) {
         _ => {}
     }
 }
-fn p95(samples: &mut [u64]) -> u64 {
-    samples.sort_unstable();
-    samples[(samples.len() * 95).div_ceil(100) - 1]
-}
 
 async fn views(
     gw: Gateway,
@@ -130,7 +126,7 @@ async fn views(
                 let db = Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
                 let chat: String = db.query_row("SELECT chat_id FROM turns WHERE id=?1", [&db_turn], |row| row.get(0)).unwrap();
                 let transcript = data.join(format!("transcripts/butler_app-{chat}.jsonl"));
-                if transcript.exists() { assert!(!std::fs::read(transcript).unwrap().is_empty()); }
+                if transcript.exists() { assert_ne!(std::fs::read(transcript).unwrap(), [] as [u8; 0]); }
             }
             let db = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
             db.query_row("SELECT text FROM messages WHERE turn_id=?1 AND role='assistant' ORDER BY rowid DESC LIMIT 1", [&db_turn], |row| row.get::<_, String>(0)).optional().unwrap()
@@ -240,9 +236,9 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
         "STORAGE-AFTER"
     })?
     .stub_cassette(cassette()?)
-    .env("BUTLER_E2E_STORAGE_METRICS", "1")
     .env("BUTLER_E2E_INGRESS_CAPACITY", "8")
     .env("BUTLER_E2E_STREAM_UNCOALESCED", "1");
+    setup = storage_concurrency_support::instrument(setup);
     if baseline {
         setup = setup.env("BUTLER_E2E_STORAGE_BASELINE", "1");
     }
@@ -296,6 +292,7 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     }
     s.agent.terminate().await?;
     verify_rows(&path, &sessions, &turns, DELTAS, REQUEST, &answer());
+    storage_concurrency_support::report_history_load(&s.sandbox.logs)?;
     let result = storage_metrics(&path, measure_latency, view_samples)?;
     s.finish().await?;
     Ok(result)
@@ -468,31 +465,26 @@ async fn skill_read_index_keeps_latest_appends_and_replaced_content() -> Result<
         .await?;
     let path = s.sandbox.data.join("transcripts/butler_app-general.jsonl");
     let original = std::fs::read_to_string(&path)?;
-    let event = |name: &str| json!({"eventId":format!("skills-{name}"),"sessionId":"butler/app-general","kind":"system","timestamp":"2026-09-30T00:00:00Z","payload":{"category":"context.skills.loaded","details":{"turnId":turn,"skillNames":[name,name,"not a token"]}}});
+    let event = |name: &str| json!({"eventId":format!("skills-{name}"),"sessionId":"butler/app-general","kind":"system","timestamp":"2026-09-30T00:00:00Z","payload":{"category":"context.skills.loaded","details":{"turnId":turn,"skillNames":[format!(" {name} "),name,"not a token"]}}});
     for name in ["first", "later"] {
         use std::io::Write as _;
         let mut file = std::fs::OpenOptions::new().append(true).open(&path)?;
         writeln!(file, "{}", event(name))?;
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        assert_eq!(view.status, 200);
-        assert_eq!(view.data()["skills_used"], json!([name]));
+        let view = storage_concurrency_support::verify_skill_views(&s, &json!([name])).await?;
         assert_eq!(view.data()["messages"].as_array().unwrap().len(), 2);
     }
     // Same-length rewrite must invalidate the index, even with the same inode.
     let rewritten = format!("{original}{}\n{}\n", event("first"), event("other"));
     assert_eq!(std::fs::metadata(&path)?.len(), rewritten.len() as u64);
     std::fs::write(&path, rewritten)?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.data()["skills_used"], json!(["other"]));
+    storage_concurrency_support::verify_skill_views(&s, &json!(["other"])).await?;
     std::fs::write(&path, format!("{}\n", event("short")))?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.data()["skills_used"], json!(["short"]));
+    storage_concurrency_support::verify_skill_views(&s, &json!(["short"])).await?;
     let escaped = event("escaped")
         .to_string()
         .replace("context.skills.loaded", r"context.ski\u006cls.loaded");
     std::fs::write(&path, format!("{escaped}\n"))?;
-    let view = s.gw.get("/session-view?session_id=general").await?;
-    assert_eq!(view.data()["skills_used"], json!(["escaped"]));
+    storage_concurrency_support::verify_skill_views(&s, &json!(["escaped"])).await?;
     storage_concurrency_support::verify_skill_record_boundaries(&s, &path, &event("boundary"))
         .await?;
     s.finish().await

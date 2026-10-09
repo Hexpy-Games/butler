@@ -1,4 +1,6 @@
 /** Browser UI acceptance uses real product containers, no native-view claims. */
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,7 +9,18 @@ import { launchSmokeBrowser } from "../support/smoke-browser";
 import { createNativeAppServer } from "../support/native-app-server";
 
 const root = process.cwd();
+// The sandbox preload always exposes Browser IPC.
+const exposed = new Set<string>();
+runInNewContext(readFileSync("packages/butler-app/client/electron/preload.cjs", "utf8"), {
+  URL, URLSearchParams,
+  process: { env: { BUTLER_APP_SERVER_PORT: "12345" }, argv: [] },
+  require: () => ({ contextBridge: { exposeInMainWorld: (name: string) => exposed.add(name) }, ipcRenderer: { on() {}, invoke() {} } }),
+});
+assert(exposed.has("butlerApp"));
+assert(exposed.has("butlerBrowser"));
+
 const scratch = mkdtempSync(join(tmpdir(), "browser-ui-"));
+
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 if (!evidence) throw new Error("BUTLER_BROWSER_EVIDENCE is required");
 mkdirSync(evidence, { recursive: true });
@@ -15,11 +28,17 @@ const uiRoot = resolve(root, "packages/butler-app/client/ui");
 const { build } = await import(resolve(uiRoot, "node_modules/vite/dist/node/index.js"));
 const entry = join(scratch, "index.html");
 writeFileSync(entry, `<style>html,body,#root{height:100%;margin:0}</style><div id="root"></div><script type="module" src="${resolve(root, "tests/support/browser-area-harness.tsx")}"></script>`);
+async function buildHarness() {
 await build({ configFile: false, root: scratch, logLevel: "error",
   resolve: { alias: { "@/butler-ds": resolve(uiRoot, "src/libs/design-system/index.ts"), "@": resolve(uiRoot, "src"), "react-dom": resolve(uiRoot, "node_modules/react-dom"), "react": resolve(uiRoot, "node_modules/react") } },
   build: { outDir: join(scratch, "dist"), rollupOptions: { input: entry } } });
+}
+await buildHarness();
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
+  if (path === "/security") return Response.json({ protocol_version: "butler.app.v1", data: {
+    remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: [], content_hosts: [],
+  } });
   if (path === "/authority-requests") return Response.json({ protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], items: [], permissions: [] } });
   if (path.startsWith("/outputs/")) return Response.json({ protocol_version: "butler.app.v1", data: { url: "https://example.org/output.html", revision: 1, revisions: [1] } });
   const file = Bun.file(join(scratch, "dist", path === "/" ? "index.html" : path));
@@ -27,6 +46,19 @@ const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) 
 } });
 const browser = await launchSmokeBrowser();
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
+async function captureSecurity() {
+  for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    try {
+      await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}&state=security`);
+      await page.locator('[data-test-class="settings-security-advanced"]').click();
+      await page.getByPlaceholder("content.example.com").waitFor();
+      assert.equal(await page.getByPlaceholder("content.example.com").count(), 1);
+      await page.screenshot({ path: join(evidence!, `gate-on-${locale}-${theme}-${width}-security.png`) });
+    } finally { await page.close(); }
+  }
+}
+
 try {
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -79,6 +111,9 @@ try {
   assert.equal(outputOwner?.url, "https://example.org/output.html");
   await output.screenshot({ path: join(evidence, "harness-ko-light-output-open.png") });
   await output.close();
+  await captureSecurity();
+  console.log("Browser UI: entry, area, output and security checks passed");
+  if (process.env.BUTLER_BROWSER_UI_HARNESS_ONLY !== "1") {
   gateway = await createNativeAppServer({ uiRoot: resolve(uiRoot, "dist") });
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await gateway.signIn(mobile);
@@ -88,7 +123,8 @@ try {
   assert.equal(await mobile.locator('[data-test-class="browser-area"]').count(), 0);
   await mobile.screenshot({ path: join(evidence, "web-390-no-browser.png") });
   await mobile.close();
-  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 22, native: false, viewport: 1440, webWidth: 390 }));
+  }
+  writeFileSync(join(evidence, "ui-result.json"), JSON.stringify({ ok: true, screenshotCount: 30, native: false, viewport: 1440, webWidth: 390 }));
 } finally {
   await browser.close(); server.stop(true); await gateway?.stop(); rmSync(scratch, { recursive: true, force: true });
 }

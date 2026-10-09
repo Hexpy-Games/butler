@@ -20,7 +20,7 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
     butler_e2e::gate!();
     let s = Setup::new("ONBOARDING-FORM")?
         .fixture(Fixture::FirstConversation)
-        .access(Access::AskFirst)
+        .access(Access::AskAlways)
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;
@@ -148,7 +148,7 @@ async fn onboarding_entry_precedes_generated_cards_until_profile_completion()
         assert_eq!(
             briefing.data()["suggestions"][0]["title"],
             if locale == "ko" {
-                "Butler와 알아가기"
+                "버틀러와 알아가기"
             } else {
                 "Get acquainted with Butler"
             }

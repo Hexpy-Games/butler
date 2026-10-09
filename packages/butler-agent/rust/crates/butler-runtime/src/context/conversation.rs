@@ -3,7 +3,7 @@ mod parts;
 mod read;
 mod types;
 
-pub(crate) use format::compile_prompt_material_context_plan;
+pub(crate) use format::{compile_prompt_material_context_plan, render_outcome};
 pub(in crate::context) use parts::{to_context_message, to_context_summary};
 pub(in crate::context) use read::apply_char_budget;
 pub(crate) use read::{canonical_conversation_session_id, read_conversation_context};

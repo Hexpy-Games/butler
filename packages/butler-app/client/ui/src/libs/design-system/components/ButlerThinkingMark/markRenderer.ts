@@ -16,7 +16,8 @@ export function createMarkRenderer(canvas: HTMLCanvasElement, inputs: MarkLoopIn
   if (!ctx) return null;
   const sim = (inputs.sim.current ??= new MorphSim());
   const theme = inputs.theme ?? resolveMarkTheme(canvas);
-  let surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), RISO_INKS[theme]);
+  const riso = (next: ButlerMarkTheme) => inputs.inks?.(next) ?? RISO_INKS[next];
+  let surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), riso(theme));
   const draw = () => drawFrame(surface, sim, inputs.isReduced());
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
@@ -30,7 +31,7 @@ export function createMarkRenderer(canvas: HTMLCanvasElement, inputs: MarkLoopIn
     sim, draw, resize,
     theme() {
       const next = resolveMarkTheme(canvas);
-      surface = createSurface(ctx, inkForButlerMarkTheme(next, inputs.themeColors), RISO_INKS[next]);
+      surface = createSurface(ctx, inkForButlerMarkTheme(next, inputs.themeColors), riso(next));
       resize();
     },
     render(time: number) {

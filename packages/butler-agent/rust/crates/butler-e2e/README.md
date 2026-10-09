@@ -51,7 +51,8 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
 | `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; both default to `openai/gpt-6-luna@max` (owner decision: automated real calls never use gpt-6-sol or -astra) |
 | `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile, the default live credential (default `~/.butler-e2e-auth/auth/openai-codex.json`); refreshable, so LIVE-10 runs against it |
-| `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Fallback when no test profile exists: Codex CLI auth file (default `~/.codex/auth.json`), passed by path, read-only; never read by the harness |
+| `BUTLER_E2E_CODEX_AUTH_JSON` | Dedicated Codex-format `auth.json`, passed by path and refreshed atomically in place; never copied by the harness |
+| `CODEX_AUTH_JSON` | Read-only Codex CLI fallback (default `~/.codex/auth.json`); never read by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |
 | `BUTLER_E2E_BASE_URL` | upstream override |
 | `BUTLER_E2E_RECORD=1` | record mode |
@@ -63,11 +64,13 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 The live tier passes the test profile to the agent as an absolute
 `BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
 never reads the token values) and runs without `OPENAI_API_KEY`, so the
-subscription is used. The profile comes from a separate test-only login
-(`butler auth login --data ~/.butler-e2e-auth`, owner's browser); without
-it the harness falls back to the read-only Codex CLI file and LIVE-10 is
-SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
-one profile cannot race.
+subscription is used. CI uses the dedicated Codex login described in
+[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-windows-owner-runner),
+selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
+(`butler auth login --data ~/.butler-e2e-auth`) also works. Without either,
+the harness falls back to the read-only Codex CLI file and LIVE-10 is
+SKIPPED. Run the live tier with `--test-threads=1`; CI also serializes live
+jobs across release branches so refreshes of the one profile cannot race.
 
 ## Quota polling
 
@@ -198,13 +201,26 @@ job on the host's real date.
 
 ## Idle resources at owner scale (PERF-IDLE)
 
-`idle_resources` uses the PERF-01 App seed with larger event bodies, 30,000
-native canonical messages, 30,000 completed memory windows and 888,000 metric
-records. It runs only in the opt-in `perf` tier, on Linux with a release agent.
-After two minutes of settling it takes three 60-second procfs samples, asserting
-RSS below 100 MB and both `rchar` and `read_bytes` below 1 MB per minute. Checking
-`rchar` catches scans even when the kernel serves every read from its page cache.
-Each window also checks that all seeded content and projections remain present.
+`idle_resources` combines the PERF-01 and storage-concurrency App seeds
+(over 1,100 chats, 500,000 events and 3 GB), 30,000
+native canonical messages, 30,000 completed memory windows, 888,000 metric
+records, 10,000 settled BTCC requests exceeding 7 GB, and 2,440 synthetic
+transcripts totaling 1.5 GB (largest 290 MB).
+Two transcripts have EOF checkpoints and unfinished streaming turns: durable
+unfinished state must not arm a transcript poll. The App live stream remains
+connected, quota polling is enabled against the local replay, and an explicit
+refresh proves the provider path before idle.
+
+It runs in the opt-in `perf` tier with a release agent. After the existing
+two-minute startup grace and committed memory readiness, ten 60-second samples
+retain the original 100 MB memory and 1 MB/minute read budgets and content
+checks. Every buffered/physical write counter must remain unchanged, as must
+App/BTCC data versions, all DATA file metadata and native write notifications.
+An opt-in stub-only in-memory counter at projection source opens catches
+cached transcript reads even where the OS exposes only physical reads. Host
+load averages accompany each sample. After idle, an external append must
+advance the exact checkpoint through filesystem notification without a
+foreground refresh.
 
 From `packages/butler-agent/rust`, with the build caches set before isolating HOME:
 
@@ -213,7 +229,7 @@ export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
 export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
 cargo build --release -p butler-agent -j 8
 BUTLER_E2E_TIER=perf BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
-  cargo test --release -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
+  cargo test --release -p butler-e2e --test e2e idle_resources -- --nocapture --test-threads=1
 ```
 
 Use `cargo test` for this several-minute measurement, independently of the
@@ -242,11 +258,11 @@ raw-delta/eight-stream controls; its storage implementation stays unchanged.
 Both runs disable automatic checkpoints while counting WAL bytes, so the WAL
 measurement includes all retained frames rather than only the last checkpoint
 cycle. `idle_resources` additionally observes App and BTCC `data_version` over
-all three idle windows and requires zero commits. Its fixture contains 5,000
-turns, 200,000 App events, 30,000 native messages, 30,000 completed memory jobs
-and more than 300 MB of metrics. These fixtures do not model the full 7 GB BTCC
-DB or the 2,440-transcript corpus listed in [AGENTS.md](../../../../../AGENTS.md); report the measured
-fixture scope with the results.
+the entire ten-minute idle interval and requires zero commits. Its fixture contains 5,000
+turns, 500,000 App events, 30,000 native messages, 30,000 completed memory jobs,
+more than 300 MB of metrics and 10,000 settled BTCC requests exceeding 7 GB.
+The transcript corpus has the owner-scale count, total bytes and largest-file
+size. These are synthetic fixtures; the owner's private data is never copied.
 
 ## Wall-clock budgets in CI
 
@@ -262,7 +278,16 @@ containing the helper (including helper modules), and prints every budget's
 source location before execution. The contention binary is also retained for its
 minimum lock-hold assertion. PERF-IDLE uses its documented separate release
 `cargo test` runner, because its five-minute sampling exceeds nextest's existing
-watchdog. No budget or timeout is increased.
+watchdog. Performance budgets remain unchanged.
+
+The hooks idle observation runs in the serial perf tier with all three 60-second
+windows. Its six-minute nextest deadline accommodates the 180-second observation,
+startup, terminal retention settlement and shutdown. The Browser attached-host
+idle observation retains its full 600 seconds with a twelve-minute deadline and
+runs only against Browser-on builds. Both overrides name exactly one test.
+Release archives and E2E selection use the same product feature metadata as the
+native Agent. Browser-off builds run the public absence contract, excluding the
+enabled Browser scenarios; the hidden feature is not a release prerequisite.
 
 Budgets before PR #441's revision and after this correction (strict `<` bounds):
 

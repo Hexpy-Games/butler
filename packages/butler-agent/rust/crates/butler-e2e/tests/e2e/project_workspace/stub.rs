@@ -112,3 +112,69 @@ fn response(item: &Value) -> ResponseRecord {
             .collect(),
     }
 }
+
+pub(super) async fn default_folder_model()
+-> Result<(String, tokio::task::JoinHandle<()>), HarnessError> {
+    use axum::{Router, routing::post};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let url = format!("http://{}/codex", listener.local_addr()?);
+    let app = Router::new().route("/codex/responses", post(default_folder_reply));
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    Ok((url, server))
+}
+
+async fn default_folder_reply(axum::Json(body): axum::Json<Value>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use butler_e2e::e2e::{matching, sanitize::Placeholders};
+    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let item = if key
+        .user_request
+        .starts_with("List my default project folder")
+    {
+        let input = body["input"].as_array().unwrap();
+        let text = input
+            .iter()
+            .filter_map(|item| item["content"].as_array())
+            .flatten()
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let folder = text
+            .lines()
+            .filter_map(|line| line.strip_prefix("User's default project folder: "))
+            .next_back()
+            .expect("default folder must be in the dynamic prompt")
+            .split(". Projects live there;")
+            .next()
+            .unwrap();
+        assert!(
+            !body["instructions"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(folder),
+            "folder leaked into cached prefix"
+        );
+        if key.round.is_empty() {
+            json!({"type":"function_call","id":"fc_default","call_id":"call_default","name":"list_files","arguments":json!({"root":folder,"max_results":100}).to_string(),"status":"completed"})
+        } else {
+            json!({"type":"message","id":"msg_default","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Folder checked.","annotations":[]}]})
+        }
+    } else {
+        assert!(
+            !body.to_string().contains("User's default project folder:"),
+            "unset setting must emit nothing"
+        );
+        json!({"type":"message","id":"msg_unset","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Ready.","annotations":[]}]})
+    };
+    (
+        [("content-type", "text/event-stream")],
+        response(&item)
+            .chunks
+            .into_iter()
+            .map(|c| c.text)
+            .collect::<String>(),
+    )
+        .into_response()
+}

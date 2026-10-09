@@ -69,7 +69,9 @@ function Install-Butler {
         } else { Move-Item $stage $target; $stage = $null }
         # Never execute a staging image that must then be moved or deleted.
         # Full resource integrity must pass at the final path before activation.
+        $ErrorActionPreference = 'Continue'
         & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw 'Agent installation is damaged; nothing activated' }
         Enable-ButlerInstallation $agentHome $name $target $bin $start
         Write-Host 'Butler installed. Run: butler open'
@@ -96,7 +98,9 @@ function Assert-ButlerInstallationPaths {
 function Enable-ButlerInstallation {
     param([string]$AgentHome, [string]$Name, [string]$Target, [string]$Bin, [bool]$Start)
     $launcher = Join-Path $bin 'butler.exe'
+    $ErrorActionPreference = 'Continue'
     & "$target/butler-agent.exe" --prepare-process-links
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -notin @(0,2)) { throw 'Could not prepare process role links' }
     Set-ButlerCommand $bin $target
     $current = Join-Path $agentHome 'current'
@@ -113,7 +117,9 @@ function Enable-ButlerInstallation {
     }
     if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }
     if ($start) {
+        $ErrorActionPreference = 'Continue'
         & $launcher start
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw 'Installed; start failed. Run: butler start' }
     }
 }
@@ -140,7 +146,9 @@ function Set-ButlerCommand {
     $temporary = "$command.$([guid]::NewGuid()).tmp"
     $old = if (Test-Path $marker) { [IO.File]::ReadAllText($marker) } else { $null }
     if ($old -eq "$Target\butler-agent.exe" -and (Test-Path $command)) {
+        $ErrorActionPreference = 'Continue'
         & $command doctor --check installation --json | Out-Null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { throw 'Existing command binding is damaged' }
         return
     }

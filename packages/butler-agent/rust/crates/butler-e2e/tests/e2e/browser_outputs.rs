@@ -5,10 +5,11 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod availability;
 mod images;
 mod security;
 mod self_check;
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     scenario::{Scenario, Setup},
@@ -274,7 +275,7 @@ fn output_files(root: &std::path::Path) -> Vec<(String, u64, std::time::SystemTi
     files
 }
 #[tokio::test]
-async fn published_outputs_idle_ten_minutes_without_writes() -> Result<(), HarnessError> {
+async fn perf_published_outputs_idle_ten_minutes_without_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("OUTPUT-IDLE")?
         .stub_cassette(stub::cassette()?)

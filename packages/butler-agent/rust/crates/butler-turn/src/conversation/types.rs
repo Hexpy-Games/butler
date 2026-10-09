@@ -441,3 +441,11 @@ pub(crate) enum RecordOriginClassificationResult {
     SourceChanged,
     ClassificationConflict,
 }
+
+/// Internal admitted history document and the main-layout group budget projection.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryDocument {
+    pub history: String,
+    pub main_budget_projection: String,
+}

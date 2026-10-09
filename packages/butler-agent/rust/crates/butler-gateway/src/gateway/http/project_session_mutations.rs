@@ -20,6 +20,44 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Option<Response>, HttpError> {
+    if uri.path() == "/sessions/general/clear" && request.method() == Method::POST {
+        return clear_general(state, request).await.map(Some);
+    }
+    if uri.path().starts_with("/projects/") {
+        return project_route(state, request, uri).await;
+    }
+    if uri.path().starts_with("/sessions/") {
+        return session_route(state, request, uri).await;
+    }
+    Ok(None)
+}
+
+async fn clear_general(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let value = parse_body(request).await?;
+    let title = value
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|title| !title.trim().is_empty() && title.len() <= 256)
+        .ok_or_else(|| {
+            HttpError::public(400, "session_title_required", "Session title is required.")
+        })?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: state.application.clear_general(title.to_owned()).await?,
+        },
+    )
+}
+
+async fn project_route(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
     let method = request.method().clone();
     let path = uri.path();
     if method == Method::PATCH
@@ -90,6 +128,16 @@ pub(super) async fn route(
         )
         .map(Some);
     }
+    Ok(None)
+}
+
+async fn session_route(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
+    let method = request.method().clone();
+    let path = uri.path();
     if method == Method::PATCH
         && let Some(encoded) = resource_id(path, "/sessions/")
     {

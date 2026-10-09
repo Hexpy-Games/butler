@@ -203,35 +203,8 @@ impl GuidedExecutionPolicy {
     }
 }
 
-impl AccessMode {
-    pub(super) fn as_str(&self) -> &'static str {
-        match self {
-            Self::FullAccess => "full_access",
-            Self::AskFirst => "ask_first",
-            Self::ReadOnly => "read_only",
-        }
-    }
-    fn narrower(self, admitted: Self) -> Self {
-        if rank(&self) <= rank(&admitted) {
-            self
-        } else {
-            admitted
-        }
-    }
-}
-fn rank(mode: &AccessMode) -> u8 {
-    match mode {
-        AccessMode::ReadOnly => 0,
-        AccessMode::AskFirst => 1,
-        AccessMode::FullAccess => 2,
-    }
-}
 fn access(value: &str) -> AccessMode {
-    match value {
-        "full_access" => AccessMode::FullAccess,
-        "ask_first" => AccessMode::AskFirst,
-        _ => AccessMode::ReadOnly,
-    }
+    AccessMode::parse(value).unwrap_or(AccessMode::ReadOnly)
 }
 fn string(map: &Map<String, Value>, key: &str) -> Result<String, GuidedPreparationError> {
     map.get(key)

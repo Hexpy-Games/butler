@@ -4,7 +4,6 @@ mod projection_burst;
 mod projection_tests;
 mod retry;
 mod session_views;
-mod skills;
 mod support;
 
 use std::sync::{Arc, Mutex, atomic::AtomicU64};
