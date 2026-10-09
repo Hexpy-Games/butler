@@ -41,6 +41,9 @@ export async function nativeAligned(app: ShellApp) {
 }
 
 export async function shellGeometry(app: ShellApp, width: number, evidence: string) {
+  // Localized fonts can change toolbar widths after navigation is ready.
+  await app.page.expression("document.fonts.ready.then(() => true)");
+  await app.page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   const facts = await app.page.expression<{
     toolbarUncovered: boolean; chatContainsPaint: string; chat: number; sidebar: boolean; corners: string[]; title: { width: number; height: number }; dragWidth: number; draggable: number;
   }>(`(() => {

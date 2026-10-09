@@ -19,7 +19,12 @@ const theme = params.get("theme") === "dark" ? "dark" : "light";
 setAppCopyLanguage(locale);
 document.body.classList.add(`theme-${theme}`, "sidebar-translucent");
 const mode = params.get("state") ?? "empty";
-useButlerStore.setState({ view: { kind: mode === "output" ? "session" : "browser" }, activeChatId: "general" });
+useButlerStore.setState({
+  view: { kind: mode === "output" ? "session" : "browser" }, activeChatId: "general",
+  navigation: { ...useButlerStore.getState().navigation, chats: [{
+    id: "general", kind: "chat", title: "General", last_activity_at: "2026-10-09T00:00:00Z", pinned: false, archived: false,
+  }] },
+});
 const canvas = document.createElement("canvas");
 canvas.width = 1440; canvas.height = 720;
 const context = canvas.getContext("2d")!;

@@ -270,6 +270,7 @@ function AppWorkspaceShell() {
       {!isSettingsView && effectiveLeftOpen && (
         <AdaptivePanelResizeHandle
           aria-label={appCopy.titlebar.resizeLeftPanel}
+          hint={appCopy.titlebar.dragToResize}
           aria-orientation="vertical"
           aria-controls="butler-left-sidebar"
           aria-valuemax={LEFT_PANEL_MAX_WIDTH}
@@ -294,6 +295,7 @@ function AppWorkspaceShell() {
       {!isSettingsView && effectiveRightOpen && (
         <AdaptivePanelResizeHandle
           aria-label={appCopy.titlebar.resizeRightPanel}
+          hint={appCopy.titlebar.dragToResize}
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
           aria-valuemax={rightMax}
