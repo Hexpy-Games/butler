@@ -6,6 +6,7 @@ import { activeChatFromNavigation } from "@/app/utils";
 import { AddressRow } from "./AddressRow";
 import { browserCall, useBrowserState } from "./browserBridge";
 import { useBrowserPage } from "./useBrowserPage";
+import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export function BrowserArea({ sessionId }: { sessionId?: string }) {
@@ -13,7 +14,8 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const tabs = sessionId ? state.tabs.filter((item) => item.owner === `conversation:${sessionId}`) : state.tabs;
+  const visibleTabs = state.tabs.filter((item) => item.owner === "mine" || publicBrowserOwner(item.owner, navigation));
+  const tabs = sessionId ? visibleTabs.filter((item) => item.owner === `conversation:${sessionId}`) : visibleTabs;
   const lastTab = useBrowserShellState((shell) => sessionId ? shell.conversations[sessionId]?.lastTab : undefined);
   const tab = tabs.find((item) => item.id === state.activeId) ?? tabs.find((item) => item.id === lastTab) ?? tabs[0];
   const copy = appCopy.browser;

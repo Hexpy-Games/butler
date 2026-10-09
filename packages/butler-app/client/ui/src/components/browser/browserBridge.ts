@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
 import { appCopy } from "@/app/copy";
+import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
@@ -28,14 +29,23 @@ export function connectBrowser() {
     const previous = useBrowserState.getState();
     useBrowserState.setState(state);
     const active = state.tabs.find((tab) => tab.id === state.activeId);
-    if (active?.owner.startsWith("conversation:")) {
-      const session = active.owner.slice(13);
+    const navigation = useButlerStore.getState().navigation;
+    const activeOwner = active && publicBrowserOwner(active.owner, navigation);
+    if (active && activeOwner) {
+      const session = activeOwner;
       const shell = useBrowserShellState.getState();
       if (shell.conversations[session]?.lastTab !== active.id) shell.rememberTab(session, active.id);
     }
-    if (state.focusRequest && state.focusRequest !== previous.focusRequest && active) {
-      if (active.owner.startsWith("conversation:")) void openConversationBrowser(active.owner.slice(13), active.id);
-      else void openBrowser();
+    if (state.focusRequest && state.focusRequest !== previous.focusRequest) {
+      const requested = state.tabs.find((tab) => tab.id === state.focusRequest);
+      const session = requested && publicBrowserOwner(requested.owner, navigation);
+      const current = useButlerStore.getState();
+      if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
+        useBrowserShellState.getState().setOpen(session, true);
+        useBrowserShellState.getState().rememberTab(session, requested.id);
+        current.setRightOpen(false);
+        void browserCall("activate", { id: requested.id });
+      }
     }
   });
 }
@@ -47,6 +57,7 @@ export async function openBrowser(output?: { url: string; sessionId: string }) {
   if (!window.butlerBrowser) return;
   connectBrowser();
   if (output) {
+    if (!publicBrowserOwner(`conversation:${output.sessionId}`, useButlerStore.getState().navigation)) return;
     const id = await browserCall("create", { owner: `conversation:${output.sessionId}`, url: output.url });
     if (typeof id === "string") await openConversationBrowser(output.sessionId, id);
     return;
@@ -56,7 +67,7 @@ export async function openBrowser(output?: { url: string; sessionId: string }) {
 }
 
 export async function openConversationBrowser(session: string, requestedTab?: string) {
-  if (!window.butlerBrowser) return;
+  if (!window.butlerBrowser || !publicBrowserOwner(`conversation:${session}`, useButlerStore.getState().navigation)) return;
   connectBrowser();
   const store = useButlerStore.getState();
   store.setRightOpen(false);

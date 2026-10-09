@@ -11,11 +11,12 @@ use std::{
 };
 use tokio::sync::Notify;
 
-pub(super) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
+pub(crate) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
 pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
+    pub(crate) browser: AtomicBool,
     pub open_disposition: AtomicBool,
     pub blocked_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
@@ -26,7 +27,7 @@ pub(super) struct Script {
     pub release: Notify,
 }
 
-pub(super) async fn start()
+pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = format!("http://{}/codex", listener.local_addr()?);
@@ -62,7 +63,7 @@ async fn reply(
         *step += 1;
         current
     };
-    if child && step == 4 {
+    if child && step == 4 && !script.browser.load(Ordering::SeqCst) {
         script.held.notify_one();
         script.release.notified().await;
     }
@@ -105,6 +106,31 @@ fn parent_item(step: usize) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    if script.browser.load(Ordering::SeqCst) {
+        return match step {
+            0 => call(
+                "describe-browser",
+                "tool_describe",
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe"]}),
+            ),
+            1 => call(
+                "open-browser",
+                "tool_call",
+                &json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
+            ),
+            2 => call(
+                "list-browser",
+                "tool_call",
+                &json!({"id":"native:browser_tabs","arguments":{}}),
+            ),
+            3 => call(
+                "observe-browser",
+                "tool_call",
+                &json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
+            ),
+            _ => message("Browser verified."),
+        };
+    }
     let path = |name: &str| format!("{}/{}", script.workspace.lock().unwrap(), name);
     match step {
         0 => call("child-plan", "replace_work_plan", &plan(false, "direct")),

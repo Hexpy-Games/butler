@@ -29,10 +29,10 @@ impl Client {
             bearer: endpoint.local_auth.token()?.to_string(),
             admin: admin["secret"].as_str()?.into(),
             session: owner
-                .binding
-                .app_session_id
-                .clone()
-                .unwrap_or_else(|| owner.binding.source_session_id.clone()),
+                .subsessions
+                .browser_owner(&owner.binding.source_session_id)
+                .await
+                .ok()??,
         })
     }
     pub(super) async fn waiting(&self, tab: &Value, value: bool, signal: &CancellationToken) {

@@ -2,17 +2,19 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, MessageSquare, MessageSquarePlus } from "@/butler-ds";
+import { publicBrowserOwner } from "./browserOwnership";
 import { browserCall, openConversationBrowser, useBrowserState } from "./browserBridge";
 
 export function HubConversationButton() {
   useAppLocale();
   const navigation = useButlerStore((state) => state.navigation);
   const tab = useBrowserState((state) => state.tabs.find((item) => item.id === state.activeId));
-  const owner = tab?.owner.startsWith("conversation:") ? tab.owner.slice(13) : undefined;
+  const owner = tab && publicBrowserOwner(tab.owner, navigation);
   if (owner) return <Button size="xs" variant="ghost" iconStart={<MessageSquare size="sm" />}
     onClick={() => void openConversationBrowser(owner, tab?.id)}>
     {activeChatFromNavigation(navigation, owner).shortTitle}
   </Button>;
+  if (tab && tab.owner !== "mine" && !owner) return null;
   const sessions = [...navigation.chats, ...navigation.projects.flatMap((project) => project.sessions ?? [])];
   const move = async (session: string) => {
     if (!tab) return;
