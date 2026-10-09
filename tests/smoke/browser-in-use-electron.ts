@@ -21,6 +21,7 @@ const rendererState = () => app.page.expression<{ tabs: Tab[] }>(`(() => {
 })()`);
 const trace: unknown[] = [];
 let tab!: Tab;
+let selectedTitle = "";
 async function send(label: string) {
   const prior = await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general");
   await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: label, client_message_id: crypto.randomUUID() }) });
@@ -52,12 +53,14 @@ async function observe(label: string) {
 try {
   await app.call("open");
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: "light", access_mode: "full_access" }) });
-  await app.main(`(()=>{const b=globalThis.browserAgentSubject,e=b.execute;globalThis.browserUseFrames=[];b.execute=async function(frame){globalThis.browserUseFrames.push({op:frame.op,id:frame.id,turn:frame.turn_id});if(frame.op===globalThis.browserUseGate){globalThis.browserUseGate=null;await new Promise(done=>globalThis.browserUsePending.push(done));if(globalThis.browserUseFail)throw new Error('injected browser executor failure')}return e.call(this,frame)}})()`);
+  await app.main("(()=>{const b=globalThis.browserAgentSubject,e=b.execute;globalThis.browserUseFrames=[];b.execute=async function(frame){globalThis.browserUseFrames.push({op:frame.op,id:frame.id,turn:frame.turn_id});if(frame.op===globalThis.browserUseGate){globalThis.browserUseGate=null;await new Promise(done=>globalThis.browserUsePending.push(done));if(globalThis.browserUseFail)throw new Error('injected browser executor failure')}return e.call(this,frame)}})()");
   stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: "https://example.com" })]);
   await send("Open browser fixture"); await terminal();
   tab = (await state()).tabs.find(item => item.owner === "conversation:general")!; assert.ok(tab);
   await app.page.reload();
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
+  selectedTitle = await app.page.expression<string>("document.querySelector('[data-test-class=titlebar-title]').textContent");
+  assert.equal(selectedTitle, "새 대화", "hub entry retains the draft conversation as its selection");
   await app.call("activate", { id: tab.id }); await app.click("브라우저");
   await cleared("normal open completion");
   for (const theme of ["light", "dark"]) {
@@ -79,8 +82,11 @@ try {
   await gate("tab.act");
   stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab: tab.id }), actConfirm]);
   await send("Cancel browser action"); await active();
+  const stopStarted = Date.now();
   await app.page.clickText("중지", '[data-test-class="browser-agent-control"] button');
   await terminal("cancelled"); await cleared("user stop");
+  writeFileSync(join(evidence, "stop.json"), JSON.stringify({ owner: tab.owner, selectedTitle,
+    elapsedMs: Date.now()-stopStarted, state: "cancelled", inUse: (await state()).tabs.find(item=>item.id===tab.id)?.inUse ?? false }));
   await unblock(); await cleared("late cancelled result cannot revive use");
 
   // Two real gateway requests to one tab: completing one must retain the other.

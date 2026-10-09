@@ -5,7 +5,6 @@ import {
   ButtonContainer,
   MoreHorizontal,
   PanelRight,
-  PanelRightClose,
   PencilLine,
 } from "@/butler-ds";
 import { IconButton } from "@/butler-ds";
@@ -25,7 +24,7 @@ import {
   activeTitleForView,
   sessionFromNavigation,
 } from "@/app/utils.ts";
-import type { ActiveChatView } from "@/app/types.ts";
+import type { ActiveChatView, SessionSummary } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
 import { SessionFolderMenu } from "./SessionFolderMenu";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
@@ -44,7 +43,6 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
-  const runSessionAction = useButlerStore((state) => state.runSessionAction);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const { title, subtitle } = useMemo(
     () =>
@@ -92,43 +90,8 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
       windowControls={<WindowControls />}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
-          {activeSession ? (
-            <DropdownMenu
-              open={sessionMenuOpen}
-              onOpenChange={setSessionMenuOpen}
-            >
-              <DropdownMenuTrigger asChild>
-                <IconButton
-                  label={appCopy.sessionActions.menuLabel}
-                  selected={sessionMenuOpen}
-                >
-                  <MoreHorizontal size="md" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                onInteractOutside={() => setSessionMenuOpen(false)}
-                sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}
-              >
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    onSelect={() => runSessionAction(activeSession, "rename")}
-                  >
-                    <PencilLine size="sm" /> {appCopy.sessionActions.rename}
-                  </DropdownMenuItem>
-                  <SessionFolderMenu
-                    disabled={!canOpenSessionFolder}
-                    sessionId={activeSession.id}
-                  />
-                  <DropdownMenuItem
-                    onSelect={() => runSessionAction(activeSession, "archive")}
-                  >
-                    <Archive size="sm" /> {appCopy.sessionActions.archive}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
+          {activeSession && <TitlebarSessionMenu activeSession={activeSession} canOpenSessionFolder={canOpenSessionFolder}
+            sessionMenuOpen={sessionMenuOpen} setSessionMenuOpen={setSessionMenuOpen} />}
           {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
           {rightAvailable && (
             <IconButton
@@ -138,17 +101,59 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
                   ? appCopy.titlebar.hideRightPanel
                   : appCopy.titlebar.showRightPanel
               }
+              pressed={rightOpen}
+              tone={rightOpen ? "butler" : "default"}
               onClick={() => setRightOpen((value) => !value)}
             >
-              {rightOpen ? (
-                <PanelRightClose size="md" />
-              ) : (
-                <PanelRight size="md" />
-              )}
+              <PanelRight size="md" />
             </IconButton>
           )}
         </ButtonContainer>
       }
     />
+  );
+}
+
+function TitlebarSessionMenu({ activeSession, canOpenSessionFolder, sessionMenuOpen, setSessionMenuOpen }: {
+  activeSession: SessionSummary; canOpenSessionFolder: boolean;
+  sessionMenuOpen: boolean; setSessionMenuOpen: (open: boolean) => void;
+}) {
+  const runSessionAction = useButlerStore((state) => state.runSessionAction);
+  return (
+  <DropdownMenu
+    open={sessionMenuOpen}
+    onOpenChange={setSessionMenuOpen}
+  >
+    <DropdownMenuTrigger asChild>
+      <IconButton
+        label={appCopy.sessionActions.menuLabel}
+        selected={sessionMenuOpen}
+      >
+        <MoreHorizontal size="md" />
+      </IconButton>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent
+      align="end"
+      onInteractOutside={() => setSessionMenuOpen(false)}
+      sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}
+    >
+      <DropdownMenuGroup>
+        <DropdownMenuItem
+          onSelect={() => runSessionAction(activeSession, "rename")}
+        >
+          <PencilLine size="sm" /> {appCopy.sessionActions.rename}
+        </DropdownMenuItem>
+        <SessionFolderMenu
+          disabled={!canOpenSessionFolder}
+          sessionId={activeSession.id}
+        />
+        <DropdownMenuItem
+          onSelect={() => runSessionAction(activeSession, "archive")}
+        >
+          <Archive size="sm" /> {appCopy.sessionActions.archive}
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </DropdownMenuContent>
+  </DropdownMenu>
   );
 }
