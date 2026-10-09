@@ -60,6 +60,13 @@ async function popupShot(name: string, parent: string) {
   const child = await app.main<string>(`[...globalThis.browserAgentSubject.tabs.values()].find(t=>t.opener===${JSON.stringify(parent)})?.id`);
   assert.ok(child);
   await waitBrowser(() => app.main(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)});return Boolean(t?.popupWindow?.isVisible() && t.attached===t.popupWindow)})()`), "popup chrome and native page shown");
+  await waitBrowser(() => app.main(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)});return Boolean(t.title && !t.view.webContents.isLoading())})()`), "popup own metadata loaded");
+  const expected = await app.main<string>(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)});let host='';try{host=new URL(t.url).host}catch{}return [host,t.title].filter(Boolean).join(' · ')})()`);
+  await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)}).popupChrome.webContents.executeJavaScript(${JSON.stringify(`document.querySelector('[data-slot=popup-window-chrome] header').textContent === ${JSON.stringify(expected)}`)})`), "popup own host and title in chrome");
+  if (name === "ko-light-1440-oauth-popup") {
+    await app.main(`${contents(child)}.executeJavaScript("document.title='Updated popup title'")`);
+    await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)}).popupChrome.webContents.executeJavaScript("document.querySelector('header').textContent.endsWith(' · Updated popup title')")`), "live popup title updates");
+  }
   const capture = process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE; assert.ok(capture);
   const source = await app.main<string>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(child)}).popupWindow.getMediaSourceId()`);
   assert.equal(Bun.spawnSync([capture, source.split(":")[1]!, join(evidence!, `${name}.png`)]).exitCode, 0);

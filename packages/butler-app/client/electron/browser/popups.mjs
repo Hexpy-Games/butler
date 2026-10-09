@@ -10,11 +10,14 @@ import { answerUserDialog } from "./user-dialogs.mjs";
 
 const windows = new Map();
 let installed = false;
-function publishPopup(browser, tab) {
+function popupState(tab) {
+  return { id: tab.id, url: tab.url, title: tab.title,
+    locale: tab.popupAppearance?.locale ?? "ko", theme: tab.popupAppearance?.theme ?? "light", platform: popupPlatform(), dialog: publicDialog(tab), still: tab.still };
+}
+export function publishPopup(tab) {
   const win = tab.popupWindow;
   if (!win || win.isDestroyed()) return;
-  tab.popupChrome.webContents.send("butler-browser:popup-state", { id: tab.id, url: tab.url, parentTitle: browser.tabs.get(tab.opener)?.title,
-    locale: tab.popupAppearance?.locale ?? "ko", theme: tab.popupAppearance?.theme ?? "light", platform: popupPlatform(), dialog: publicDialog(tab), still: tab.still });
+  tab.popupChrome.webContents.send("butler-browser:popup-state", popupState(tab));
 }
 export function syncPopup(browser, tab) {
   const win = tab.popupWindow;
@@ -27,7 +30,7 @@ export function syncPopup(browser, tab) {
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
   }
-  publishPopup(browser, tab);
+  publishPopup(tab);
 }
 function wireChrome(browser, tab, win) {
   const chrome = tab.popupChrome.webContents;
@@ -37,7 +40,7 @@ function wireChrome(browser, tab, win) {
     ipcMain.handle("butler-browser:popup", (event, op, input = {}) => {
       const entry = windows.get(event.sender.id);
       if (!entry || event.senderFrame !== event.sender.mainFrame) throw new Error("popup_forbidden");
-      if (op === "state") { publishPopup(entry.browser, entry.tab); return { id: entry.tab.id, url: entry.tab.url, platform: popupPlatform(), ...entry.tab.popupAppearance }; }
+      if (op === "state") return popupState(entry.tab);
       if (op === "close") return entry.win.close();
       if (op === "dialog") return answerUserDialog(entry.browser, { ...input, id: entry.tab.id });
       if (op === "bounds" || op === "covered") return entry.browser.commandTab(op, entry.tab.id, input);
@@ -53,7 +56,7 @@ function wireChrome(browser, tab, win) {
     void import("./dialogs.mjs").then(({ requestClose }) => requestClose(browser, tab)).then(result => { if (result.status === "dialog_pending") tab.allowClose = false; });
   });
   win.once("closed", () => { windows.delete(chrome.id); if (browser.tabs.has(tab.id)) browser.close(tab.id); });
-  chrome.once("did-finish-load", () => { publishPopup(browser, tab); win.show(); tab.view?.webContents.focus(); });
+  chrome.once("did-finish-load", () => { publishPopup(tab); win.show(); tab.view?.webContents.focus(); });
 }
 function popupView(browser, source, details, options, agent) {
   const id = browser.create({ owner: source.owner, agent, policy: source.policy, partition: source.partition, profile: source.profile }, false, source);
@@ -75,7 +78,7 @@ function popupView(browser, source, details, options, agent) {
     browser.materialize(tab); wireChrome(browser, tab, win);
     win.on("resize", () => syncPopup(browser, tab));
     void browser.getWindow()?.webContents.executeJavaScript("({locale:document.documentElement.lang,theme:document.querySelector('.theme-dark')?'dark':'light'})")
-      .then(value => { tab.popupAppearance = value; publishPopup(browser, tab); });
+      .then(value => { tab.popupAppearance = value; publishPopup(tab); });
     const shell = new URL(browser.getWindow().webContents.getURL()); shell.search = "popup=1"; shell.hash = "";
     void win.loadURL(shell.href);
   }
