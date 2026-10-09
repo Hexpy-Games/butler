@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isPickShortcut } from "../butler-platform/browser-shortcuts.mjs";
 
 /** DOM content is read in an isolated world, never inserted into the page. */
-function elementAt(x, y) {
+function elementAt(x, y, documentToken) {
   const element = document.elementFromPoint(x, y);
   if (!element || element === document.documentElement || element === document.body) return null;
   // A crop must not retain a secret field. Reject ancestors containing one too.
@@ -12,7 +12,11 @@ function elementAt(x, y) {
   if (rect.width <= 0 || rect.height <= 0) return null;
   const text = element.innerText || element.textContent || element.getAttribute("alt") || "";
   const title = (element.getAttribute("aria-label") || element.getAttribute("alt") || text || element.tagName).trim().split("\n")[0];
-  return { title, text, tag: element.tagName.toLowerCase(), rect };
+  // This isolated-world map lives only for this document. Geometry changes
+  // cannot turn a drag of an already picked DOM node into another selection.
+  const state = globalThis.__butlerPickNodes ??= { nodes: new Map(), documentToken };
+  if (!state.nodes.has(element)) state.nodes.set(element, state.nodes.size + 1);
+  return { title, text, tag: element.tagName.toLowerCase(), rect, identity: `${state.documentToken}:${state.nodes.get(element)}` };
 }
 export class BrowserSelection {
   constructor(browser) { this.browser = browser; }
@@ -45,7 +49,7 @@ export class BrowserSelection {
   async hit(tab, input) {
     const epoch = tab.epoch, url = tab.url;
     const scale = tab.bounds?.scale ?? 1;
-    const code = `(${elementAt.toString()})(${JSON.stringify(input.x / scale)},${JSON.stringify(input.y / scale)})`;
+    const code = `(${elementAt.toString()})(${JSON.stringify(input.x / scale)},${JSON.stringify(input.y / scale)},${JSON.stringify(randomUUID())})`;
     const result = await tab.view.webContents.executeJavaScriptInIsolatedWorld(1004, [{ code }]);
     if (!result) return null;
     const rect = Object.fromEntries(Object.entries(result.rect).map(([key, value]) => [key, Math.round(value * scale)]));
@@ -79,7 +83,7 @@ export class BrowserSelection {
     }
     return true;
   }
-  same(a, b) { return a.url === b.url && JSON.stringify(a.rect) === JSON.stringify(b.rect) && a.text === b.text; }
+  same(a, b) { return a.url === b.url && a.identity === b.identity; }
   drag(tab, input, phase) {
     if (!tab?.selections?.length) return;
     const bounds = tab.view.getBounds();

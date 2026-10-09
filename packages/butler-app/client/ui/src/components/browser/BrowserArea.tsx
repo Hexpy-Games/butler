@@ -73,6 +73,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       onMove={(move) => { if (!useBrowserTabDrag.getState().outside) void browserCall("move", move); }} />}
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
     <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} hidden={empty || crashed || disabled}
+      occluderSelector='[data-slot="nav-drop-label"]'
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={stillSrc} covered={state.nativeCovered || Boolean(tab?.dialog)} contentRef={setDialogContainer}
       band={<><AgentControl tab={tab} />{tab && <BrowserPopupBand tab={tab} />}</>}
