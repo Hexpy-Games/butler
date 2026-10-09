@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api, uploadMessageFile } from "@/app/api";
+import { libraryChanged } from "@/app/libraryEvents";
 import { normalizeComposerDraft, readCachedComposerDraft, writeLocalComposerDraft } from "@/app/composerDraftCache";
 import { useComposerStore } from "../conversation/composerStore";
 import type { ElementAttachment } from "../../../../shared/browser-element";
@@ -67,4 +68,12 @@ export function clearElementDraft(session: string, submitted: ElementAttachment[
 }
 export async function scrapElements(elements: PickedElement[]) {
   for (const element of elements) await api("/library", { method: "POST", body: JSON.stringify({ ...element, kind: "scrap" }) });
+  libraryChanged();
+}
+
+export function attachLibraryReference(session: string, item: ElementAttachment) {
+  return mutate(session, async () => {
+    const draft=await readCachedComposerDraft(session);
+    await persist(session,[...(draft?.element_attachments ?? []).filter(old=>old.id!==item.id),item]);
+  });
 }

@@ -1,16 +1,9 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
-    fn list_library(&self, kind: String, cursor: String) -> ApplicationFuture<Value> {
-        self.library_query(kind, &cursor)
+    fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
+        self.library_owned(command)
     }
-    fn save_library(&self, item: Value) -> ApplicationFuture<Value> {
-        self.library_save(item)
-    }
-    fn delete_library(&self, id: String) -> ApplicationFuture<Value> {
-        self.library_delete(id)
-    }
-
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
     }

@@ -4,5 +4,5 @@ export interface ElementFileRef {
   size_bytes: number; sha256: string; url: string; signed_url?: string; created_at: string;
 }
 export interface ElementAttachment {
-  id: string; title: string; site: string; file: ElementFileRef; crop: ElementFileRef;
+  kind?: "library"; id: string; title: string; site: string; file: ElementFileRef; crop?: ElementFileRef;
 }

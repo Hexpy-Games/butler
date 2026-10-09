@@ -1,5 +1,6 @@
 //! Explicit saved-item commands over the existing authenticated App routes.
 use super::*;
+use crate::gateway::AppLibraryCommand;
 use serde_json::{Value, json};
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -11,10 +12,16 @@ pub(super) async fn route(
         Method::GET => {
             let args = query(request.uri());
             let kind = args.get("kind").cloned().unwrap_or_else(|| "scrap".into());
-            state
-                .application
-                .list_library(kind, args.get("cursor").cloned().unwrap_or_default())
-                .await?
+            let command = if let Some(url) = args.get("url") {
+                AppLibraryCommand::Bookmark { url: url.clone() }
+            } else {
+                AppLibraryCommand::Page {
+                    kind,
+                    cursor: args.get("cursor").cloned().unwrap_or_default(),
+                    search: args.get("q").cloned().unwrap_or_default(),
+                }
+            };
+            state.application.library(command).await?
         }
         Method::POST => {
             let bytes = read_body_with_limit(request.into_body(), 10 * 1024 * 1024).await?;
@@ -27,12 +34,17 @@ pub(super) async fn route(
                     "Invalid saved item.",
                 ));
             }
-            state.application.save_library(value).await?
+            state
+                .application
+                .library(AppLibraryCommand::Save(value))
+                .await?
         }
         Method::DELETE => {
             state
                 .application
-                .delete_library(path.trim_start_matches("/library/").to_owned())
+                .library(AppLibraryCommand::Delete {
+                    id: path.trim_start_matches("/library/").to_owned(),
+                })
                 .await?
         }
         _ => {
@@ -49,26 +61,33 @@ pub(super) async fn route(
     )
 }
 fn valid(value: &Value) -> bool {
-    value["capturedAt"]
+    let base = value["capturedAt"]
         .as_str()
         .is_some_and(|s| chrono::DateTime::parse_from_rfc3339(s).is_ok())
-        && value["kind"] == "scrap"
-        && ["id", "title", "url", "capturedAt", "text", "crop"]
+        && ["id", "title", "url", "capturedAt"]
             .iter()
             .all(|key| value[*key].is_string())
         && value["id"]
             .as_str()
             .is_some_and(|s| !s.is_empty() && s.len() <= 128)
         && value["title"].as_str().is_some_and(|s| s.len() <= 2000)
-        && value.to_string().len() <= 10 * 1024 * 1024
         && value["url"].as_str().is_some_and(|s| {
             url::Url::parse(s).is_ok_and(|u| {
                 matches!(u.scheme(), "http" | "https")
                     && u.username().is_empty()
                     && u.password().is_none()
             })
-        })
-        && value["crop"]
-            .as_str()
-            .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
+        });
+    base && match value["kind"].as_str() {
+        Some("scrap") => {
+            value["text"].is_string()
+                && value["crop"]
+                    .as_str()
+                    .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
+        }
+        Some("bookmark") => {
+            value["folder"].is_null() || value["folder"].as_str().is_some_and(|s| s.len() <= 200)
+        }
+        _ => false,
+    }
 }

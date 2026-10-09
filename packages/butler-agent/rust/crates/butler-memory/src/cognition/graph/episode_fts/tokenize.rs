@@ -112,11 +112,11 @@ fn grams(kind: Script) -> bool {
     )
 }
 
-pub(super) fn field(text: &str) -> String {
+pub(in crate::cognition) fn field(text: &str) -> String {
     tokens(text, false).join(" ")
 }
 
-pub(super) fn query(text: &str) -> String {
+pub(in crate::cognition) fn query(text: &str) -> String {
     tokens(text, true)
         .into_iter()
         .collect::<BTreeSet<_>>()

@@ -79,6 +79,7 @@ pub(super) fn migrate(
     wallpapers::create(connection)?;
     message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
+    library::recover(connection, butler_data)?;
     Ok(())
 }
 

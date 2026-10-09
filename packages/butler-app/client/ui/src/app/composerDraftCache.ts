@@ -48,7 +48,7 @@ export function normalizeComposerDraft(
     (draft.content_parts !== undefined && !isMessageContent(draft.content_parts)) ||
     typeof draft.updated_at !== "string" ||
     !Number.isFinite(Date.parse(draft.updated_at)) ||
-    (draft.element_attachments !== undefined && (!Array.isArray(draft.element_attachments) || !draft.element_attachments.every(item => item && typeof item.id === "string" && typeof item.title === "string" && typeof item.site === "string" && item.file?.file_id && item.crop?.file_id))) ||
+    (draft.element_attachments !== undefined && (!Array.isArray(draft.element_attachments) || !draft.element_attachments.every(item => item && typeof item.id === "string" && typeof item.title === "string" && typeof item.site === "string" && item.file?.file_id && (item.crop === undefined || item.crop?.file_id)))) ||
     !draftTextWithinBudget(JSON.stringify(draft))
   ) return null;
   return draft as ComposerDraftSnapshot;

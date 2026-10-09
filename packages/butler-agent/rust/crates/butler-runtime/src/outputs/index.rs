@@ -146,3 +146,31 @@ pub(super) fn transfer(path: &Path, source: &str, target: &str) -> std::io::Resu
     }
     tx.commit().map_err(std::io::Error::other)
 }
+
+/// Primary-key pages used only by Library migration, off Tokio workers.
+pub(super) fn library_page(path: &Path, after: &str) -> std::io::Result<Vec<OutputSummary>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(std::io::Error::other)?;
+    if !ready(&db)? {
+        return Ok(Vec::new());
+    }
+    let mut statement = db.prepare("SELECT id,session,message,turn,title,bytes,created FROM outputs WHERE id>?1 ORDER BY id LIMIT 500").map_err(std::io::Error::other)?;
+    statement
+        .query_map([after], |row| {
+            Ok(OutputSummary {
+                output_id: row.get(0)?,
+                session_id: row.get(1)?,
+                message_id: row.get(2)?,
+                turn_id: row.get(3)?,
+                title: row.get(4)?,
+                size_bytes: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(std::io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(std::io::Error::other)
+}
