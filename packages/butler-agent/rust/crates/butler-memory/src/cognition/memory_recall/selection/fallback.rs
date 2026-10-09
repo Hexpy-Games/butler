@@ -106,25 +106,3 @@ pub(super) fn merge(
     seeds.fts_episodes = fts;
     Ok(seeds)
 }
-
-pub(super) fn provenance(ranked: &mut [crate::cognition::recall::RankedEpisode], ids: &[String]) {
-    use crate::cognition::recall::RecallResultChannel;
-    for episode in ranked {
-        if !ids.contains(&episode.input.episode_id) {
-            continue;
-        }
-        for channel in &mut episode.channels {
-            if *channel == RecallResultChannel::Vector {
-                *channel = RecallResultChannel::Lexical;
-            }
-        }
-        let mut seen = Vec::new();
-        episode.channels.retain(|channel| {
-            if seen.contains(channel) {
-                return false;
-            }
-            seen.push(*channel);
-            true
-        });
-    }
-}

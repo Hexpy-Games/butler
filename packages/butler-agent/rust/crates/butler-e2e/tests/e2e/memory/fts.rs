@@ -94,6 +94,7 @@ async fn start(word: &str, cue: &str) -> Result<(Scenario, String), HarnessError
     let setup = Setup::new("MEM-FTS")?
         .fixture(Fixture::Empty)
         .stub_cassette(cassette)
+        .env("BUTLER_METRICS_ENABLED", "1")
         .placeholder("NONCE", word)
         .env("BUTLER_E2E_APP_NOW", "2026-10-02T04:01:00.000Z")
         .env(
@@ -152,6 +153,7 @@ async fn scenario(word: &str, cue: &str) -> Result<(), HarnessError> {
     // Emulate the prior analyzer's installed projection, then upgrade on the
     // existing consumer path. Startup remains independent of this optional work.
     s.agent.terminate().await?;
+    assert_lexical_metrics(&s.sandbox.data)?;
     let db = butler_platform::sqlite::open(&graph).unwrap();
     db.execute("UPDATE memory_episode_fts_v1 SET summary='legacyneutral',entities='legacyneutral',claims='legacyneutral',source='legacyneutral'", []).unwrap();
     db.execute(
@@ -270,4 +272,31 @@ async fn mem_fts_chinese() -> Result<(), HarnessError> {
 async fn mem_fts_french_diacritics() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     scenario("vélo forêt ÉLÉPHANT", "velo foret elephant").await
+}
+
+/// Inspect actual ranking credit, since public provenance alone used to hide vector weight.
+fn assert_lexical_metrics(data: &Path) -> Result<(), HarnessError> {
+    let events = std::fs::read_to_string(data.join("metrics/operational-events.jsonl"))?;
+    let candidates = events
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|event| {
+            event["name"] == "recall_v2_ranking"
+                && event["dimensions"]["ranking_stage"] == "candidate"
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(candidates, [] as [serde_json::Value; 0]);
+    assert!(
+        candidates
+            .iter()
+            .any(|event| event["dimensions"]["l_rank"].as_f64().unwrap() > 0.0)
+    );
+    for event in candidates {
+        let dimensions = &event["dimensions"];
+        assert_eq!(dimensions["v_rank"], 0.0);
+        assert_eq!(dimensions["vector_executed"], false);
+        assert_eq!(dimensions["lexical_executed"], true);
+        assert!((0.0..=1.0).contains(&dimensions["l_score"].as_f64().unwrap()));
+    }
+    Ok(())
 }
