@@ -1,7 +1,7 @@
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
-export function createBrowserHost({ fetch, adminCredential, executeBrowser, snapshot, enabled = () => true }) {
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true }) {
   let controller = null;
   let reconnect = null;
   let running = false;
@@ -31,6 +31,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, snap
     });
   }
   async function connect() {
+    resetBrowser?.();
     controller = new AbortController();published=-1;
     try {
       const response = await request("/internal/browser-host");
@@ -45,11 +46,15 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, snap
           const event = pending.slice(0, boundary);
           pending = pending.slice(boundary + 2);
           const data = event.split("\n").find(line => line.startsWith("data:"));
-          if (data) void execute(JSON.parse(data.slice(5))).catch(() => {});
+          if (data) {
+            const frame = JSON.parse(data.slice(5));
+            if (frame.op?.startsWith("use.")) { await executeBrowser?.(frame); await flushState(); }
+            else void execute(frame).catch(() => {});
+          }
         }
       }
     } catch { /* Disconnect is an unknown result, never replay a call. */ }
-    finally { controller.abort(); closeOutputChecks(); }
+    finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); }
     if (running) reconnect = setTimeout(connect, 1000);
   }
   return {
@@ -58,6 +63,6 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, snap
       revision++;
       if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
     },
-    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); closeOutputChecks(); },
+    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); },
   };
 }
