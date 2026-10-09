@@ -91,6 +91,18 @@ impl AppApplication {
                 )
                 .await;
         }
+        self.send_new(chat_id, client_id, request, inspected, settings_facts)
+            .await
+    }
+
+    async fn send_new(
+        &self,
+        chat_id: String,
+        client_id: String,
+        request: crate::gateway::MessageSendRequest,
+        inspected: admission::Inspected,
+        settings_facts: Arc<AppSettingsFacts>,
+    ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.prompt_hook(&chat_id, &client_id, &request, &inspected)
             .await?;
         let mut prepared = inspected.prepared;
@@ -127,12 +139,44 @@ impl AppApplication {
             project_source_refs_json: stringify(&prepared.project_sources)?,
             created_at: created_at.clone(),
         };
-        let sources = prepared.project_sources.clone();
+        let (inserted, resolved) = self
+            .reserve_send(
+                reservation_base,
+                prepared.project_sources.clone(),
+                request.clone(),
+                settings_facts,
+            )
+            .await?;
+        let prepared = ResolvedAppAdmission {
+            text: prepared.text,
+            controls: resolved,
+        };
+        if inserted {
+            self.complete_visual_admission(&chat_id, &queued_id, &prepared, inspected.files)
+                .await?;
+        }
+        let title_input = (prepared.text.clone(), prepared.controls.model.clone());
+        let result = self.dispatch(&chat_id, &client_id, prepared).await;
+        if inserted
+            && result.as_ref().is_ok_and(|sent| sent.accepted.is_some())
+            && request.subsession_result.is_none()
+        {
+            self.generate_session_title(chat_id, title_input.0, title_input.1);
+        }
+        result
+    }
+
+    async fn reserve_send(
+        &self,
+        reservation_base: QueueReservation,
+        sources: Value,
+        request: crate::gateway::MessageSendRequest,
+        settings_facts: Arc<AppSettingsFacts>,
+    ) -> Result<(bool, ControlResolution), GatewayApplicationError> {
         let expected = request.expected_project_id.clone();
         let request_for_resolution = request.clone();
         let subscribers = self.subscribers.clone();
-        let (inserted, resolved) = self
-            .storage
+        self.storage
             .execute(move |connection| {
                 let transaction = connection.savepoint().map_err(AppStorageError::sqlite)?;
                 assert_scope(
@@ -181,16 +225,7 @@ impl AppApplication {
                 Ok((inserted, resolved.resolution))
             })
             .await
-            .map_err(app_error)?;
-        let prepared = ResolvedAppAdmission {
-            text: prepared.text,
-            controls: resolved,
-        };
-        if inserted {
-            self.complete_visual_admission(&chat_id, &queued_id, &prepared, inspected.files)
-                .await?;
-        }
-        self.dispatch(&chat_id, &client_id, prepared).await
+            .map_err(app_error)
     }
 
     async fn complete_visual_admission(

@@ -297,7 +297,7 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
     }
 }
 
-fn reasoning_effort(source: ModelReasoningEffort) -> BtccReasoningEffort {
+pub(super) fn reasoning_effort(source: ModelReasoningEffort) -> BtccReasoningEffort {
     match source {
         ModelReasoningEffort::None => BtccReasoningEffort::None,
         ModelReasoningEffort::Low => BtccReasoningEffort::Low,
