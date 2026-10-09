@@ -15,8 +15,8 @@ import { SettingsNav } from "../../SettingsNav";
 import { SettingsShell } from "../../SettingsShell";
 import { TitlebarShell } from "../../TitlebarShell";
 import {
-  AdaptiveShell, AdaptiveShellCard, AdaptiveShellInspector, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellTitle,
-  AdaptiveShellWorkspace, adaptivePanelStyle, type ShellFrame,
+  AdaptivePanelResizeHandle, AdaptiveShell, AdaptiveShellCard, AdaptiveShellInspector, AdaptiveShellSidebar, AdaptiveShellSplit,
+  AdaptiveShellTitle, AdaptiveShellWorkspace, adaptivePanelStyle, type ShellFrame,
 } from "../index";
 import { DemoConversation, DemoInspector, type ShellContent } from "./ShellContentDemo";
 
@@ -28,11 +28,13 @@ const COPY = {
     actions: "Conversation actions", showBrowser: "Show browser", hideBrowser: "Hide browser", showInspector: "Show inspector",
     hideInspector: "Hide inspector", showSidebar: "Show sidebar", appearance: "Appearance", general: "General",
     appearanceDescription: "Theme and how the app looks.", translucent: "Translucent sidebar", smartGroups: "Smart groups",
+    resizeInspector: "Resize inspector", dragToResize: "Drag to resize",
   },
   "ko-KR": {
     actions: "대화 작업", showBrowser: "브라우저 열기", hideBrowser: "브라우저 닫기", showInspector: "인스펙터 보기",
     hideInspector: "인스펙터 숨기기", showSidebar: "사이드바 보기", appearance: "모양", general: "일반",
     appearanceDescription: "앱의 테마와 화면 표시 방식을 설정합니다.", translucent: "투명 사이드바", smartGroups: "스마트 그룹",
+    resizeInspector: "인스펙터 너비 조절", dragToResize: "드래그하여 크기 조절",
   },
 } as const;
 
@@ -134,6 +136,10 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
           )}
         </AdaptiveShellWorkspace>
         <AdaptiveShellInspector open={view === "inspector"}><DemoInspector locale={locale} tall={content === "long"} /></AdaptiveShellInspector>
+        {view === "inspector" ? (
+          <AdaptivePanelResizeHandle side="right" aria-label={COPY[locale].resizeInspector} hint={COPY[locale].dragToResize}
+            aria-orientation="vertical" onKeyDown={() => undefined} onPointerDown={() => undefined} />
+        ) : null}
       </AdaptiveShell>
     </ScaledFrame>
   );
