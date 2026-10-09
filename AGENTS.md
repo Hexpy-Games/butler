@@ -65,6 +65,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-09: Spawned test Apps must not outlive the harness: stdio to a file, kill the child PID on every exit path.**
+  - What happened: an orphaned smoke Electron (ppid 1) logged to a closed pipe and raised an EPIPE error dialog on the owner's screen.
+
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**
   - What happened: `actions/setup-python` tried to rewrite Python registry registrations on the owner PC, logged a permission error and hung until the 90-minute job timeout (run 37560002889).
 

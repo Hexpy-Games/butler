@@ -1,4 +1,5 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawnElectron } from "../../../tests/support/electron-child";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import {
   copyFileSync,
   cpSync,
@@ -633,10 +634,10 @@ const electronArgs = [`--user-data-dir=${electronProfileDir}`];
 if (options.remoteDebuggingPort !== undefined) {
   electronArgs.push(`--remote-debugging-port=${options.remoteDebuggingPort}`);
 }
-const appProcess = spawn(executable, electronArgs, {
+const appProcess = spawnElectron(executable, electronArgs, {
   cwd: dirname(executable),
   env,
-  stdio: "inherit",
+  onOutput: bytes => process.stdout.write(bytes),
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

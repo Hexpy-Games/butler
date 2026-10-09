@@ -18,6 +18,8 @@ try {
     -FilePath $Electron `
     -ArgumentList $arguments `
     -WorkingDirectory $AppRoot `
+    -RedirectStandardOutput "$PidFile.stdout.log" `
+    -RedirectStandardError "$PidFile.stderr.log" `
     -PassThru
   [IO.File]::WriteAllText($PidFile, ([string]$appProcess.Id + "`r`n"))
   $appProcess.WaitForExit()

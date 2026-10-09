@@ -1,5 +1,5 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,13 +37,6 @@ export async function launchP0App({ harness = true } = {}) {
   const args = smokeElectronArgs();
   if (harness && process.env.BUTLER_P0_CRASH_LIMIT === "off") args.push("--disable-gpu-process-crash-limit");
   assert(!args.includes("--single-process"), "P0 needs independent GPU and renderer processes");
-  const child = spawn(executable, [resolve("packages/butler-app/client/electron"), `--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...args], { env: {
-    ...process.env, HOME: home, USERPROFILE: home, BUTLER_DATA: data, CODEX_HOME: join(home, ".codex"), TMPDIR: dir, TEMP: dir, TMP: dir,
-    BUTLER_NATIVE_AGENT_EXECUTABLE: installed, BUTLER_TEST_BROWSER_P0: harness ? "1" : "0", BUTLER_E2E_TIER: "stub",
-    BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_SERVER_PORT: String(await freePort()),
-    BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
-    BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
-  }, stdio: ["ignore", "pipe", "pipe"] });
   let logBytes = 0, logTail = "", watchdogTimeout = false, machRendezvous = false;
   const observeLog = (value: Buffer) => {
     logBytes += value.length;
@@ -52,7 +45,13 @@ export async function launchP0App({ harness = true } = {}) {
     machRendezvous ||= /Mach|rendezvous/iu.test(text);
     logTail = text.slice(-4096);
   };
-  child.stdout!.on("data", observeLog); child.stderr!.on("data", observeLog);
+  const child = spawnElectron(executable, [resolve("packages/butler-app/client/electron"), `--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...args], { env: {
+    ...process.env, HOME: home, USERPROFILE: home, BUTLER_DATA: data, CODEX_HOME: join(home, ".codex"), TMPDIR: dir, TEMP: dir, TMP: dir,
+    BUTLER_NATIVE_AGENT_EXECUTABLE: installed, BUTLER_TEST_BROWSER_P0: harness ? "1" : "0", BUTLER_E2E_TIER: "stub",
+    BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_SERVER_PORT: String(await freePort()),
+    BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
+    BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
+  }, onOutput: observeLog });
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   let main: Awaited<ReturnType<typeof mainInspector>> | undefined;
   async function stop() {
@@ -61,9 +60,7 @@ export async function launchP0App({ harness = true } = {}) {
     try { agentPid = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8")).agent_host_pid; } catch {}
     if (page) await page.expression("window.butlerApp.quitApp({confirmed:true})").catch(() => {});
     page?.close(); main?.close();
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-    await Bun.sleep(1500);
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await stopElectronChild(child);
     if (Number.isInteger(agentPid) && agentPid > 0) { try { process.kill(agentPid, "SIGTERM"); } catch {} }
     if (agentPid > 0) {
       await Bun.sleep(1000);
