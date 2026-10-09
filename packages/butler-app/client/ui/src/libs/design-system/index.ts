@@ -153,6 +153,7 @@ export * from "./blocks/PageCard";
 export * from "./blocks/PageBand";
 export * from "./blocks/AddressField";
 export * from "./blocks/AgentPointer";
+export * from "./blocks/PickOutline";
 export * from "./blocks/SelectionBar";
 export * from "./blocks/DragPreview";
 export * from "./blocks/ElementChip";

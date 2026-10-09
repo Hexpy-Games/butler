@@ -19,13 +19,30 @@
   padding-inline-end: 0;
 }
 
+/* The crop is whole on a neutral matte (contain, never cover): cover showed
+   only the middle of a wide block crop, which is often the empty page after
+   its words. */
 .crop {
-  width: calc(var(--control-height-sm));
-  height: calc(var(--control-height-sm));
+  display: grid;
+  overflow: hidden;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
   flex: none;
+  padding: var(--border-width-strong);
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
   border-radius: calc(var(--radius-control) - var(--border-width-strong));
   background: var(--muted);
-  object-fit: cover;
+  color: var(--text-tertiary);
+}
+
+.cropImage {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--border-width-strong);
+  box-shadow: 0 0 0 var(--border-hairline) var(--line);
+  object-fit: contain;
 }
 
 .text {

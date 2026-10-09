@@ -51,11 +51,29 @@ export function testPage(kind: "white" | "black" | "photo"): string {
 /** A picked element's crop (a chair card), `variant` 0 or 1. */
 export function cropImage(variant: 0 | 1): string {
   const back = variant === 0 ? "#dfe4ea" : "#ece8e1";
-  return enc(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect width='120' height='120' fill='${back}'/><rect x='42' y='22' width='36' height='52' rx='8' fill='#353a42'/><rect x='57' y='74' width='6' height='26' fill='#6b7078'/><rect x='0' y='92' width='120' height='28' fill='#ffffff'/><rect x='8' y='100' width='60' height='6' rx='3' fill='#3a3d42'/><rect x='8' y='110' width='36' height='6' rx='3' fill='#17191c'/></svg>`);
+  return enc(`<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><rect width='120' height='120' fill='${back}'/><rect x='42' y='22' width='36' height='52' rx='8' fill='#353a42'/><rect x='57' y='74' width='6' height='26' fill='#6b7078'/><rect x='0' y='92' width='120' height='28' fill='#ffffff'/><rect x='8' y='100' width='60' height='6' rx='3' fill='#3a3d42'/><rect x='8' y='110' width='36' height='6' rx='3' fill='#17191c'/></svg>`);
+}
+
+/**
+ * A picked block element's crop as the App captures it: the element's whole box, so a heading or a line
+ * of text is a wide strip with its words at the start and empty page after them; a filter column is tall.
+ */
+export function stripCrop(kind: "heading" | "line" | "column" | "title", locale: Locale = "en-US"): string {
+  const c = SHOP[locale];
+  if (kind === "title") {
+    // The library smoke's crop: a 300×80 rect at 2× over a page whose h1 starts at the rect's left edge.
+    return enc(`<svg xmlns='http://www.w3.org/2000/svg' width='600' height='160' viewBox='0 0 600 160' ${FONT}><rect width='600' height='160' fill='#ffffff'/><text x='0' y='116' font-size='72' font-weight='800' fill='#172033'>Browser fixture</text></svg>`);
+  }
+  if (kind === "column") {
+    const rows = c.filters.slice(0, 8).map((label, index) => `<text x='12' y='${30 + index * 30}' font-size='14' fill='#3a3d42'>${label}</text>`).join("");
+    return enc(`<svg xmlns='http://www.w3.org/2000/svg' width='180' height='260' viewBox='0 0 180 260' ${FONT}><rect width='180' height='260' fill='#ffffff'/>${rows}</svg>`);
+  }
+  const [height, size, weight, text] = kind === "heading" ? [56, 40, 800, c.title] : [24, 18, 400, c.sub];
+  return enc(`<svg xmlns='http://www.w3.org/2000/svg' width='640' height='${height}' viewBox='0 0 640 ${height}' ${FONT}><rect width='640' height='${height}' fill='#ffffff'/><text x='0' y='${Math.round(height * 0.78)}' font-size='${size}' font-weight='${weight}' fill='#172033'>${text}</text></svg>`);
 }
 
 /** A page view still for library cards (an article, a console, docs). */
 export function viewImage(kind: "article" | "docs" | "console"): string {
   const accent = kind === "article" ? "#e76f51" : kind === "docs" ? "#3b6fd8" : "#1f8f5f";
-  return enc(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200'><rect width='320' height='200' fill='#ffffff'/><rect width='320' height='24' fill='#f5f6f8'/><rect x='12' y='8' width='48' height='8' rx='4' fill='${accent}'/><rect x='24' y='44' width='180' height='14' rx='4' fill='#2b2f35'/><rect x='24' y='70' width='272' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='86' width='252' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='102' width='262' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='124' width='120' height='60' rx='6' fill='${accent}' opacity='0.18'/><rect x='156' y='124' width='140' height='60' rx='6' fill='#eef0f3'/></svg>`);
+  return enc(`<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200' viewBox='0 0 320 200'><rect width='320' height='200' fill='#ffffff'/><rect width='320' height='24' fill='#f5f6f8'/><rect x='12' y='8' width='48' height='8' rx='4' fill='${accent}'/><rect x='24' y='44' width='180' height='14' rx='4' fill='#2b2f35'/><rect x='24' y='70' width='272' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='86' width='252' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='102' width='262' height='8' rx='4' fill='#d7dbe0'/><rect x='24' y='124' width='120' height='60' rx='6' fill='${accent}' opacity='0.18'/><rect x='156' y='124' width='140' height='60' rx='6' fill='#eef0f3'/></svg>`);
 }

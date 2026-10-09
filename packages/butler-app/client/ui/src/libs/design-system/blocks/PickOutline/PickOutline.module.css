@@ -1,0 +1,122 @@
+/* The user's pick marks (overlay renderer). Each mark is an ink stroke
+   between white keylines: the ink reads on light pages, the keylines on
+   black and photo pages (3:1 tested). Marks are placed with translate and
+   snap to their element (sizes never animate); the hover outline fades in
+   and a new badge pops in once, both dropped under reduced motion. */
+.layer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.layer > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.hover,
+.picked {
+  box-sizing: border-box;
+  border: var(--border-width-strong) solid var(--browser-pick-ink);
+  border-radius: calc(var(--radius-control) / 2);
+  box-shadow:
+    0 0 0 var(--border-hairline) var(--browser-pick-keyline),
+    inset 0 0 0 var(--border-hairline) var(--browser-pick-keyline);
+}
+
+.hover {
+  border-style: dashed;
+  animation: pick-fade var(--motion-fast) var(--motion-ease-standard) both;
+}
+
+.picked {
+  background: var(--browser-pick-tint);
+}
+
+/* The hover tag: element and size, above the outline's end. */
+.tag {
+  position: absolute;
+  right: calc(var(--border-width-strong) * -1);
+  bottom: calc(100% + var(--space-xs));
+  padding: 1px var(--space-sm);
+  border: var(--border-hairline) solid var(--browser-pick-keyline);
+  border-radius: var(--radius-pill);
+  background: var(--browser-pick-ink);
+  box-shadow: var(--browser-overlay-shadow);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
+}
+
+.hover[data-tag-start] .tag {
+  right: auto;
+  left: calc(var(--border-width-strong) * -1);
+}
+
+/* No room above (the page's top edge): the tag sits inside the outline. */
+.hover[data-tag-below] .tag {
+  right: var(--space-xs);
+  bottom: auto;
+  top: var(--space-xs);
+}
+
+.hover[data-tag-below][data-tag-start] .tag {
+  right: auto;
+  left: var(--space-xs);
+}
+
+/* The pick order, centred on the outline's top-start corner. */
+.badge {
+  --pick-badge-size: calc(var(--space-xl) + var(--border-width-strong));
+
+  display: grid;
+  min-width: var(--pick-badge-size);
+  height: var(--pick-badge-size);
+  margin: calc(var(--pick-badge-size) / -2) 0 0
+    calc(var(--pick-badge-size) / -2);
+  padding: 0 var(--space-xs);
+  place-items: center;
+  border: var(--border-width-strong) solid var(--browser-pick-keyline);
+  border-radius: var(--radius-pill);
+  background: var(--browser-pick-ink);
+  box-shadow: var(--browser-overlay-shadow);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: 1;
+  animation: pick-pop var(--motion-base) var(--motion-ease-emphasized) both;
+}
+
+@keyframes pick-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pick-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+
+/* Reduced motion: marks appear at rest. `data-reduced` forces it for a
+   renderer with its own setting. */
+.layer[data-reduced] .hover,
+.layer[data-reduced] .badge {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hover,
+  .badge {
+    animation: none;
+  }
+}

@@ -75,6 +75,23 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* Picking, nothing picked yet: a quiet pick glyph in place of the number and
+   the hint in place of the count label. The hint yields room first (it
+   ellipsizes) so the bar stays on one line. */
+.bar[data-empty] .count {
+  background: var(--muted);
+  color: var(--text-secondary);
+}
+
+.bar[data-empty] .label {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+}
+
 .separator {
   width: var(--border-hairline);
   height: var(--icon-size-sm);

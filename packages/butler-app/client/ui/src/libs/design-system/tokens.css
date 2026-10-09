@@ -177,6 +177,12 @@
   /* Marks Butler draws over web pages (pointer, pick badges): one shadow
      that separates them from any page, light or dark. */
   --browser-overlay-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
+  /* The user's pick marks over web pages (PickOutline): the ink stroke and
+     index badge, a white keyline around the stroke (it carries the outline
+     on black and photo pages) and a faint tint over picked elements. */
+  --browser-pick-ink: var(--blue-07);
+  --browser-pick-keyline: var(--neutral-white);
+  --browser-pick-tint: color-mix(in srgb, var(--blue-06) 12%, transparent);
   /* StatusCapsule part caps (composer work capsules). */
   --status-capsule-title-max: min(34vw, 240px);
   --status-capsule-detail-max: min(30vw, 220px);

@@ -64,7 +64,7 @@ export function AttachmentList({
       {items.some((item) => item.element) ? (
         <div className={styles.elements} data-slot="attachment-elements">
           {items.filter((item) => item.element).map((item) => (
-            <ElementChip key={item.id} src={item.thumbnail?.src ?? ""} title={item.name} site={item.element!.site}
+            <ElementChip key={item.id} src={item.thumbnail?.src} title={item.name} site={item.element!.site}
               removeLabel={removeLabel} onRemove={onRemove ? () => onRemove(item.id) : undefined} />
           ))}
         </div>

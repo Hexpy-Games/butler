@@ -5,27 +5,73 @@
   height: 64px;
 }
 
+/* Each crop sits whole on a neutral matte (contain, never cropped mid-glyph):
+   a wide heading is a strip across the card, a tall column a strip down it. */
 .crop {
   position: absolute;
   top: 0;
   left: 0;
+  display: grid;
+  overflow: hidden;
   width: 60px;
   height: 60px;
-  border: var(--border-width-strong) solid var(--surface-raised);
+  padding: var(--border-width-strong);
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
   border-radius: var(--radius-control);
   background: var(--surface-raised);
   box-shadow: var(--shadow-drag-lift);
-  object-fit: cover;
   rotate: -4deg;
 }
 
-.crop:first-child:not(:last-of-type) {
+.cropImage {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  box-shadow: 0 0 0 var(--border-hairline) var(--line);
+  object-fit: contain;
+}
+
+.crop[data-layer="back"] {
   left: var(--space-md);
   rotate: 6deg;
 }
 
-.crop:first-child:only-of-type {
+.crop[data-layer="single"] {
   rotate: -3deg;
+}
+
+/* Floating mode: follows the pointer (translate per move), lifted just
+   below and right of the tip; it never takes the pointer. */
+.floating {
+  position: fixed;
+  z-index: var(--z-drag);
+  top: 0;
+  left: 0;
+  padding: var(--space-md) 0 0 var(--space-md);
+  pointer-events: none;
+}
+
+.floating[data-strategy="absolute"] {
+  position: absolute;
+}
+
+.floating > * {
+  animation: drag-lift var(--motion-fast) var(--motion-ease-emphasized) both;
+}
+
+@keyframes drag-lift {
+  from {
+    opacity: 0;
+    scale: var(--motion-scale-lift);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating > * {
+    animation: none;
+  }
 }
 
 .badge {
