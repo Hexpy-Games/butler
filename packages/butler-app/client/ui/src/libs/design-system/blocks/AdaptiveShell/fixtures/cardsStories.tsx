@@ -51,6 +51,20 @@ export const cardsStories: ShowcaseStory[] = [
     ),
   },
   {
+    // The window bounds every card: a long conversation and a tall inspector scroll inside their cards (8px
+    // bottom inset kept), and an empty new chat (its stage sized to the window) keeps the title row on screen.
+    name: "Cards frame: tall content stays inside the window",
+    states: ["open"],
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Stack gap="md">
+        <ShellFrameDemo locale={locale} frame="cards" view="chat" content="long" width={1440} height={900} />
+        <ShellFrameDemo locale={locale} frame="cards" view="inspector" content="long" width={1100} height={800} />
+        <ShellFrameDemo locale={locale} frame="cards" view="chat" content="empty" width={1100} height={800} />
+      </Stack>
+    ),
+  },
+  {
     name: "Cards frame: sidebar collapsed and peek",
     states: ["collapsed", "open"],
     widths: ["app", "wide"],

@@ -120,6 +120,10 @@ rectangular shell.
 - A wallpaper inside a card resolves against it and is clipped to its corners;
   no title bar overlaps a card, so the message list's top reserve drops to a
   plain inset (`--conversation-top-reserve`).
+- The window bounds every card: the workspace never grows past the window
+  (it keeps a zero minimum height) and the inspector card's height comes from
+  its top and bottom insets alone. Long content scrolls inside its card; the
+  8px bottom inset and the bottom corners always show.
 - Docked layout only: drawer layouts (phones, tablets) stay full-bleed.
 - The sidebar peek is visible under reduced motion (the peek resets the
   opacity the reduced-motion rule gives a closed sidebar).
