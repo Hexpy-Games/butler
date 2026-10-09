@@ -6,7 +6,7 @@ use butler_e2e::e2e::{
     events::LiveEvents,
     faults::{Fault, Transform},
     provider::{is_title_request, title_response},
-    scenario::{Fixture, Scenario, Setup},
+    scenario::{Fixture, Scenario, Setup, turn_timeout},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -77,33 +77,22 @@ async fn title(s: &Scenario, chat: &str) -> Result<Value, HarnessError> {
         .clone())
 }
 
-async fn wait_requests(s: &Scenario, count: usize) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while s
-            .provider()
-            .unwrap()
-            .requests()
-            .iter()
-            .filter(|r| is_title_request(r))
-            .count()
-            < count
-        {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("title request missing");
+async fn wait_title_request(s: &Scenario) -> Result<(), HarnessError> {
+    s.provider()?
+        .wait_for_request(is_title_request, Duration::from_secs(turn_timeout()))
+        .await?;
+    Ok(())
 }
 
 async fn wait_title(s: &Scenario, chat: &str, expected: &str) -> Result<(), HarnessError> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while title(s, chat).await? != expected {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        Ok::<_, HarnessError>(())
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
+    live.wait_for(Duration::from_secs(turn_timeout()), |event| {
+        event["type"] == "session.updated"
+            && event["payload"]["session"]["id"] == chat
+            && event["payload"]["session"]["title"] == expected
     })
-    .await
-    .expect("generated title missing")
+    .await?;
+    Ok(())
 }
 
 #[tokio::test]
@@ -114,7 +103,7 @@ async fn title_01_first_exchange_replaces_provisional_title() -> Result<(), Harn
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let started = Instant::now();
     let (turn, latency) = tokio::join!(s.turn(&chat, &prompt), async {
-        live.wait_for(Duration::from_secs(5), |e| {
+        live.wait_for(Duration::from_secs(turn_timeout()), |e| {
             e["type"] == "session.updated"
                 && e["payload"]["session"]["id"] == chat
                 && e["payload"]["session"]["title"] == TITLE
@@ -132,6 +121,8 @@ async fn title_01_first_exchange_replaces_provisional_title() -> Result<(), Harn
     assert_eq!(titles[0]["reasoning"]["effort"], "low");
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
+    // Graceful restart joins the tracked title task before this negative check.
+    s.restart().await?;
     assert_eq!(
         s.provider()?
             .requests()
@@ -140,7 +131,6 @@ async fn title_01_first_exchange_replaces_provisional_title() -> Result<(), Harn
             .count(),
         1
     );
-    s.restart().await?;
     assert_eq!(title(&s, &chat).await?, TITLE);
     s.finish().await
 }
@@ -153,7 +143,7 @@ async fn title_02_user_rename_wins() -> Result<(), HarnessError> {
     let held = s.provider()?.hold_next_reply("User message:");
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
-    wait_requests(&s, 1).await;
+    wait_title_request(&s).await?;
     s.gw.patch(
         &format!("/sessions/{chat}"),
         json!({"title":"My chosen title"}),
@@ -200,12 +190,14 @@ async fn title_03_failure_logged_keeps_provisional() -> Result<(), HarnessError>
 #[tokio::test]
 async fn title_04_general_and_custom_titles_untouched() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, prompt) = start("TITLE-04").await?;
+    let (mut s, prompt) = start("TITLE-04").await?;
     let chat = chat(&s, "My chosen title", &prompt).await?;
     for id in ["general", &chat] {
         let (_, turn) = s.turn(id, &prompt).await?;
         assert_eq!(turn["state"], "delivered");
     }
+    // Graceful restart joins the tracked task before asserting no request.
+    s.restart().await?;
     assert_eq!(title(&s, &chat).await?, "My chosen title");
     assert!(!s.provider()?.requests().iter().any(is_title_request));
     s.finish().await
@@ -268,7 +260,7 @@ async fn title_06_shutdown_cancels_held_generation() -> Result<(), HarnessError>
     let held = s.provider()?.hold_next_reply("User message:");
     let (_, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
-    wait_requests(&s, 1).await;
+    wait_title_request(&s).await?;
     s.restart().await?;
     held.release();
     assert_eq!(title(&s, &chat).await?, provisional(&prompt));
@@ -291,19 +283,12 @@ async fn title_07_queued_followup_does_not_generate_again() -> Result<(), Harnes
     let title_reply = s.provider()?.hold_next_reply("User message:");
     let turn_reply = s.provider()?.hold_next_reply(&prompt);
     let first = s.gw.say(&chat, &prompt).await?;
-    wait_requests(&s, 1).await;
+    wait_title_request(&s).await?;
     let second = s.gw.say(&chat, &prompt).await?;
     assert!(second["accepted"].is_null(), "{second}");
     assert!(!second["queued"].is_null(), "{second}");
     title_reply.release();
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while title(&s, &chat).await? != TITLE {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        Ok::<_, HarnessError>(())
-    })
-    .await
-    .expect("first title missing")?;
+    wait_title(&s, &chat, TITLE).await?;
     turn_reply.release();
     let id = butler_e2e::e2e::scenario::accepted_turn_id(&first)?;
     assert_eq!(

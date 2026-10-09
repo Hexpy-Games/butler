@@ -89,10 +89,19 @@ struct State {
     inflight: std::sync::atomic::AtomicUsize,
     library: Mutex<Vec<(String, ResponseRecord)>>,
     requests: Mutex<Vec<Value>>,
+    request_updates: tokio::sync::watch::Sender<usize>,
     memory_requests: Mutex<Vec<Value>>,
     memory_responder: Mutex<Option<MemoryResponder>>,
     chat_responder: Mutex<Option<ChatResponder>>,
     holds: Mutex<hold::Holds>,
+}
+
+impl State {
+    fn record_request(&self, request: Value) {
+        let mut requests = lock(&self.requests);
+        requests.push(request);
+        self.request_updates.send_replace(requests.len());
+    }
 }
 
 pub struct Provider {
@@ -171,6 +180,7 @@ impl Provider {
     ) -> Result<Self, HarnessError> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
+        let (request_updates, _) = tokio::sync::watch::channel(0usize);
         let state = Arc::new(State {
             mode,
             placeholders: Mutex::new(placeholders),
@@ -183,6 +193,7 @@ impl Provider {
             inflight: std::sync::atomic::AtomicUsize::new(0),
             library: Mutex::new(Vec::new()),
             requests: Mutex::new(Vec::new()),
+            request_updates,
             memory_requests: Mutex::new(Vec::new()),
             memory_responder: Mutex::new(None),
             chat_responder: Mutex::new(None),
@@ -295,6 +306,42 @@ impl Provider {
     /// Background extraction is available through `memory_requests`.
     pub fn requests(&self) -> Vec<Value> {
         lock(&self.state.requests).clone()
+    }
+
+    /// Waits for a recorded provider request matching `predicate`.
+    pub async fn wait_for_request(
+        &self,
+        predicate: impl Fn(&Value) -> bool,
+        timeout: Duration,
+    ) -> Result<Value, HarnessError> {
+        let mut updates = self.state.request_updates.subscribe();
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(request) = self
+                .requests()
+                .into_iter()
+                .find(|request| predicate(request))
+            {
+                return Ok(request);
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(harness_error(format!(
+                    "provider request not observed within {timeout:?}"
+                )));
+            }
+            match tokio::time::timeout(remaining, updates.changed()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => {
+                    return Err(harness_error("provider request notifications closed"));
+                }
+                Err(_) => {
+                    return Err(harness_error(format!(
+                        "provider request not observed within {timeout:?}"
+                    )));
+                }
+            }
+        }
     }
 
     /// Background meaning calls have their own strict stub contract and trace.

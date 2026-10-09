@@ -16,7 +16,7 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
             return replay(&state, &memory::response(), None);
         }
         let response = synthetic.respond(&json, bytes.len(), arrived);
-        lock(&state.requests).push(json);
+        state.record_request(json);
         return response;
     }
     if memory && matches!(&state.mode, Mode::Replay(_)) {
@@ -25,7 +25,7 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
         *lock(&state.served) += 1;
     }
     if !memory && matches!(&state.mode, Mode::Replay(_)) {
-        lock(&state.requests).push(json.clone());
+        state.record_request(json.clone());
     }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
@@ -36,7 +36,7 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
     match &state.mode {
         Mode::Synthetic(synthetic) => {
             if is_title_request(&json) {
-                lock(&state.requests).push(json);
+                state.record_request(json);
                 let fault = take_fault(&state, None, &key);
                 replay(&state, &title_response("A Concise Chat Title"), fault)
             } else {
