@@ -108,8 +108,6 @@ wire_codes! {
         LegacyDiagnosticFailed = "legacy_diagnostic_failed",
         LegacyEmbeddingIncomplete = "legacy_embedding_incomplete",
         LegacyMemoryWriterDisabledForV2 = "legacy_memory_writer_disabled_for_v2",
-        LegacyRecallInvalidCue = "legacy_recall_invalid_cue",
-        LegacyRecallReadFailed = "legacy_recall_read_failed",
         LegacySessionClockUnavailable = "legacy_session_clock_unavailable",
         LegacySessionGraphFailed = "legacy_session_graph_failed",
         LegacySessionIdInvalid = "legacy_session_id_invalid",

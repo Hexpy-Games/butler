@@ -47,7 +47,6 @@ pub use crate::cognition::legacy::memory_import::{
     LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
 };
 pub use crate::cognition::legacy::metadata::{LegacyMetadataIntegrityService, MissingFeedbackRef};
-pub use crate::cognition::legacy::recall::{LegacyRecallRequest, recall_legacy};
 pub use crate::cognition::legacy::session_sync::{
     LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
     legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
