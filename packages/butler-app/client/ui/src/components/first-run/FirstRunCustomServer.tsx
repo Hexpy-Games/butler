@@ -1,19 +1,15 @@
 import { useState } from "react";
 import {
-  Button,
+  SetupWizardStepAction,
   Field,
   FieldError,
   FieldLabel,
-  IconTile,
-  Inline,
   Input,
-  SetupWizardContent,
-  Typo,
 } from "@/butler-ds";
 import { customModelOptions } from "@/app/setupProviders.ts";
 import { discoverLocalModels } from "@/components/settings/localModelApi";
 import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Other (OpenAI-compatible): a server address and an optional key, then its models. */
@@ -38,14 +34,12 @@ export function FirstRunCustomServer({ flow }: { flow: FirstRunFlow }) {
   }
 
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      <Inline gap="md">
-        <IconTile size="md"><CardGlyph cardId="other" /></IconTile>
-        <Typo.H4 as="h1">{copy.customTitle}</Typo.H4>
-      </Inline>
+    <FirstRunStepCard flow={flow} contentKey="custom" icon={<CardGlyph cardId="other" />} title={copy.customTitle}
+      description={copy.customBody} onBack={flow.backToList}
+      actions={<SetupWizardStepAction forward disabled={!serverUrl.trim() || busy} onClick={() => void connect()}>
+        {busy ? copy.checking : copy.customConnect}
+      </SetupWizardStepAction>}
+    >
       <Field>
         <FieldLabel htmlFor="first-run-server-url">{copy.customUrl}</FieldLabel>
         <Input
@@ -64,9 +58,6 @@ export function FirstRunCustomServer({ flow }: { flow: FirstRunFlow }) {
         <FieldLabel htmlFor="first-run-server-key">{copy.customKey}</FieldLabel>
         <Input autoComplete="off" id="first-run-server-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
       </Field>
-      <Button disabled={!serverUrl.trim() || busy} size="lg" stretch type="button" onClick={() => void connect()}>
-        {busy ? copy.checking : copy.customConnect}
-      </Button>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }

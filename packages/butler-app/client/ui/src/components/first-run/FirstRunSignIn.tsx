@@ -1,55 +1,45 @@
 import {
-  AlertCircle,
-  Button,
-  ButtonContainer,
-  Globe2,
-  IconTile,
-  Inline,
-  SetupWizardContent,
-  Spinner,
-  Stack,
-  Typo,
+  AlertCircle, Button, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Typo,
 } from "@/butler-ds";
-import { FirstRunBack } from "./FirstRunBack";
+import { CardGlyph } from "./CardGlyph";
+import { FirstRunStepCard } from "./FirstRunStepCard";
+import { signInScreenState, type SignInScreenState } from "./signInScreenState";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
-/** ChatGPT sign-in: waiting for the browser, or cancelled/failed with a way back. */
+/** One state mapping owns the sign-in title, description and actions. */
 export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
   const { copy, signIn } = flow;
-  const stopped = signIn.phase === "cancelled" || signIn.phase === "failed";
+  const state = signInScreenState(signIn.phase, flow.commit);
+  const stopped = state === "cancelled" || state === "timedout" || state === "failed";
+  const title = state === "cancelled" ? copy.signInCancelled : state === "timedout" ? copy.signInTimedOut
+    : state === "failed" ? copy.signInFailed : copy.signInTitle(copy.providerNames.chatgpt);
+  const description = stopped ? state === "timedout" ? copy.signInTimedOutBody : copy.signInCancelledBody : copy.signInBody;
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      {stopped ? (
-        <Stack cross="center" gap="md" role="alert">
-          <IconTile size="lg" tone="danger"><AlertCircle size="xl" /></IconTile>
-          <Typo.H4 align="center" as="h1">{signIn.phase === "failed" ? copy.signInFailed : copy.signInCancelled}</Typo.H4>
-          <Typo.Body align="center" tone="secondary">{copy.signInCancelledBody}</Typo.Body>
-          <ButtonContainer size="default">
-            <Button type="button" onClick={() => void signIn.start()}>{copy.retry}</Button>
-            <Button type="button" variant="ghost" onClick={flow.backToList}>{copy.chooseOther}</Button>
+    <FirstRunStepCard flow={flow} contentKey={`signin:${state}`} icon={<CardGlyph cardId="chatgpt" />}
+      title={title} description={description} onBack={flow.backToList}
+      actions={stopped
+        ? <SetupWizardStepAction variant="default" onClick={() => void signIn.start()}>{copy.retry}</SetupWizardStepAction>
+        : <SetupWizardStepAction disabled={state !== "waiting"} onClick={() => void signIn.cancel()}>{copy.cancel}</SetupWizardStepAction>}
+    >
+      {stopped ? null : <SignInStatus flow={flow} state={state} />}
+    </FirstRunStepCard>
+  );
+}
+
+function SignInStatus({ flow, state }: { flow: FirstRunFlow; state: SignInScreenState }) {
+  const { copy, signIn } = flow;
+  const failed = state === "commitFailed";
+  return (
+    <Notice tone={failed ? "error" : "neutral"} icon={failed ? <AlertCircle size="md" /> : <Spinner size={14} />}
+      message={<Stack as="span" gap="xs" role={failed ? "alert" : "status"}>
+        <Typo.Body as="span" tone="secondary">{failed ? copy.finishFailed : state === "connecting" ? copy.connecting : copy.signInWaiting}</Typo.Body>
+        {failed ? <Button size="sm" variant="inline" onClick={flow.commit.retry}>{copy.retry}</Button> : state === "waiting" && signIn.canCopyLink ? (
+          <ButtonContainer as="span" size="sm">
+            <Button iconStart={<Globe2 size="sm" />} size="sm" variant="inline" onClick={signIn.reopen}>{copy.signInReopen}</Button>
+            <Button iconStart={<Copy size="sm" />} size="sm" variant="inline" onClick={() => void signIn.copyLink()}>{signIn.copied ? copy.linkCopied : copy.signInCopyLink}</Button>
           </ButtonContainer>
-        </Stack>
-      ) : (
-        <Stack cross="center" gap="md">
-          <IconTile size="lg"><Globe2 size="xl" /></IconTile>
-          <Typo.H4 align="center" as="h1">{copy.signInTitle}</Typo.H4>
-          <Inline justify="center" role="status">
-            {!flow.commit.connected ? <Spinner size={14} /> : null}
-            <Typo.Body tone="secondary">{flow.commit.connected ? copy.keyValid : flow.commit.pending ? copy.connecting : copy.signInBody}</Typo.Body>
-          </Inline>
-          {!flow.commit.connected ? <ButtonContainer size="default">
-            <Button type="button" variant="outline" onClick={() => void signIn.cancel()}>{copy.cancel}</Button>
-          </ButtonContainer> : null}
-          {!flow.commit.connected && signIn.canCopyLink ? (
-            <Button size="sm" type="button" variant="link" onClick={() => void signIn.copyLink()}>
-              {signIn.copied ? copy.linkCopied : copy.signInCopyLink}
-            </Button>
-          ) : null}
-        </Stack>
-      )}
-    </SetupWizardContent>
+        ) : null}
+      </Stack>}
+    />
   );
 }

@@ -5,10 +5,8 @@ import {
   Field,
   FieldError,
   FieldLabel,
-  IconTile,
   Inline,
   Input,
-  SetupWizardContent,
   Spinner,
   Stack,
   InlineReference,
@@ -16,7 +14,7 @@ import {
 } from "@/butler-ds";
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
 import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { KeyCheckFailure } from "@/app/setupConnection.ts";
 import { RETRYABLE_KEY_FAILURES, useKeyVerification, type KeyStatus } from "./useKeyVerification";
 import type { FirstRunFlow } from "./useFirstRunFlow";
@@ -32,14 +30,13 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
   });
   const bad = isKeyFailure(key.status);
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      <Inline gap="md">
-        <IconTile size="md"><CardGlyph cardId={cardId} /></IconTile>
-        <Typo.H4 as="h1">{copy.keyTitle(name)}</Typo.H4>
-      </Inline>
+    <FirstRunStepCard flow={flow} contentKey={`key:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={copy.keyTitle(name)}
+      description={copy.keyHint} onBack={flow.backToList}
+      footerStart={<Inline gap="md">
+        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
+        <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
+      </Inline>}
+    >
       <Field data-test-class="first-run-key-field">
         <FieldLabel htmlFor="first-run-api-key">{copy.keyLabel}</FieldLabel>
         <Input
@@ -56,13 +53,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         />
         <KeyStatusLine copy={copy} status={key.status} onRetry={key.retry} />
       </Field>
-      <Inline gap="md">
-        {spec.keyUrl ? (
-          <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body>
-        ) : null}
-        <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
-      </Inline>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }
 
