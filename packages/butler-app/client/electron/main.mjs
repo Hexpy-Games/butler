@@ -2093,6 +2093,7 @@ const browserHost = createBrowserHost({
   fetch: (path, init) => appServerFetch(path, init),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
   executeBrowser: frame => userBrowser?.execute(frame),
+  resetBrowser: () => userBrowser?.resetUse(),
   snapshot: () => userBrowser?.snapshot(),
   enabled: () => userBrowser?.enabled() ?? false,
 });

@@ -9,7 +9,7 @@ import { BrowserEntry } from "../../packages/butler-app/client/ui/src/components
 import { Titlebar } from "../../packages/butler-app/client/ui/src/components/layout/Titlebar";
 import { setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store";
-import type { BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { connectBrowser, type BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
 import "../../packages/butler-app/client/ui/src/libs/design-system/tokens.css";
 
 const params = new URLSearchParams(location.search);
@@ -64,6 +64,7 @@ function FixtureWorkspace() {
   if (mode === "security") return <SecuritySettings />;
   return mode === "output" && view.kind !== "browser" ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
 }
+connectBrowser();
 createRoot(document.getElementById("root")!).render(
   <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">
     <AdaptiveShellSidebar open={mode !== "security"}><BrowserEntry /></AdaptiveShellSidebar>
