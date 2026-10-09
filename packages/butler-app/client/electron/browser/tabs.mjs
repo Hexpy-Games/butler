@@ -1,3 +1,4 @@
+import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
@@ -27,6 +28,7 @@ class UserBrowser {
 
   constructor(app, getWindow) {
     this.getWindow = getWindow;
+    this.pointer = new BrowserPointer(this, controlTab);
     this.breaker = createLossBreaker(() => this.trip());
     this.restore = createTabRestore(join(app.getPath("userData"), "browser"), () =>
       [...this.tabs.values()].filter((tab) => tab.owner === "mine").map((tab) => tab.url));
@@ -37,9 +39,10 @@ class UserBrowser {
   enabled() { return browsingEnabled() && !this.breaker.tripped; }
   snapshot() {
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].map(tab => ({ id: tab.id, owner: tab.owner, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
+      tabs: [...this.tabs.values()].map(tab => ({ id: tab.id, owner: tab.owner, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
   }
   publish() {
+    this.pointer.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
     if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("butler-browser:state", this.snapshot());
@@ -56,6 +59,7 @@ class UserBrowser {
     this.publish();
   }
   detach(tab) {
+    if (tab?.id === this.activeId) this.pointer.hide();
     if (tab?.attached && tab.view) {
       void this.capture(tab);
       if (!tab.attached.isDestroyed()) tab.attached.contentView.removeChildView(tab.view);
@@ -72,7 +76,7 @@ class UserBrowser {
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
-    emulation(tab);
+    emulation(tab); this.pointer.sync(tab);
   }
   async capture(tab) {
     if (!tab.view || tab.view.webContents.isDestroyed() || tab.status === "crashed") return tab.still;
@@ -166,6 +170,7 @@ class UserBrowser {
       if (previous?.holder === "user" && !previous.sticky) controlTab(this, previous, "agent");
       this.detach(previous); backgroundTab(this, previous ?? {});
     }
+    if (tab.waiting) controlTab(this, tab, "user");
     tab.viewed = true; clearTimeout(tab.expiry);
     this.activeId = id;
     this.materialize(tab);
@@ -224,6 +229,7 @@ class UserBrowser {
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }
     if (op === "still") return this.capture(tab);
     if (!this.enabled()) throw new Error("browsing_disabled");
+    if (tab.holder === "agent" && (tab.busy || tabInUse(this, tab))) throw new Error("agent_control");
     this.materialize(tab);
     const contents = tab.view.webContents;
     if (op === "navigate") {
@@ -261,7 +267,7 @@ class UserBrowser {
       if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
@@ -311,6 +317,7 @@ class UserBrowser {
         contents.close({ waitForBeforeUnload: false });
       });
     }));
+    this.pointer.dispose();
     this.agentWindow?.destroy(); this.agentWindow = null;
   }
 }

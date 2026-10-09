@@ -109,6 +109,9 @@ async fn browser_usage_stub_turn_releases_each_completed_call() -> Result<(), Ha
     for op in ["tab.open", "tab.observe", "tab.observe"] {
         let frame = host.dispatch().await?;
         assert_eq!(frame["op"], op);
+        if op == "tab.observe" {
+            assert_eq!(frame["pointer"]["mode"], "observe");
+        }
         host.snapshot(true).await?;
         host.result(&frame,json!({"status":"ok","tab":"fixture","url":"https://example.com","text":"Fixture","epoch":1})).await?;
         host.released(&frame).await?;
@@ -353,6 +356,7 @@ async fn browser_usage_user_cancel_mid_action_releases() -> Result<(), HarnessEr
     host.result(&waiting, json!({"status":"ok"})).await?;
     let action = host.dispatch().await?;
     assert_eq!(action["op"], "tab.act");
+    assert_eq!(action["pointer"]["mode"], "batch");
     assert_eq!(action["args"]["steps"].as_array().unwrap().len(), 2);
     let cancelled =
         s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))

@@ -3,6 +3,7 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
+import { AgentControl, browserHolder } from "./AgentControl";
 import { AddressRow } from "./AddressRow";
 import { BringTabButton } from "./BringTabButton";
 import { useBrowserTabDragHandler } from "./useBrowserTabDrag";
@@ -13,7 +14,9 @@ import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export function BrowserArea({ sessionId }: { sessionId?: string }) {
-  useAppLocale();
+  const locale = useAppLocale();
+  const reducedMotion = useButlerStore((store) => store.settings.reduce_motion);
+  useEffect(() => { void browserCall("presentation", { locale, reducedMotion }); }, [locale, reducedMotion]);
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -66,7 +69,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       onNewTab={state.enabled ? create : undefined}
       onMove={(move) => { if (!useBrowserTabDrag.getState().outside) void browserCall("move", move); }} />}
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
-    <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder="none" hidden={empty || crashed || disabled}
+    <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} band={<AgentControl tab={tab} />} hidden={empty || crashed || disabled}
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={stillSrc} covered={state.nativeCovered}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}

@@ -4,6 +4,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
 import { join, resolve } from "node:path";
+import { nativeAligned } from "../support/browser-shell-acceptance";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser, actConfirm } from "../support/browser-agent-stub";
 import { launchSmokeBrowser } from "../support/smoke-browser";
@@ -37,10 +38,13 @@ async function settings(language: string, theme: string) {
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme }) });
   await app.page.reload();
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="app-sidebar"]')));
-  await app.call("activate", { id: agentTab.id });
   await app.click(language === "ko" ? "브라우저" : "Browser");
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
+  await nativeAligned(app);
+  await app.call("activate", { id: agentTab.id });
+  await waitBrowser(()=>app.page.expression(`document.querySelector('[data-slot="titlebar-leading"] button')?.textContent.trim() === ${JSON.stringify(language === "ko" ? "일반" : "General")}`), "owned hub conversation button");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+  await nativeAligned(app);
   try { await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]'))); }
   catch(error) {writeFileSync(join(evidence!,`${language}-${theme}-ui-failure.json`),JSON.stringify(await app.page.expression("({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})")));await app.shot(`${language}-${theme}-ui-failure`);throw error;}
 }

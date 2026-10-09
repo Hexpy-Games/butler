@@ -8,7 +8,9 @@ export async function redesignApp(evidence: string) {
   const stub = browserStub();
   const app = await browserAgentApp(evidence, stub.handler);
   const send = async (text: string) => {
+    const prior = await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general");
     await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text, client_message_id: crypto.randomUUID() }) });
+    await waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general")).latest_turn?.id !== prior.latest_turn?.id, "new scripted turn admitted");
   };
   const delivered = () => waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { state: string } }>("/session-view?session_id=general")).latest_turn?.state === "delivered", "scripted turn delivered");
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light", access_mode: "full_access" }) });

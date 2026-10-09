@@ -208,6 +208,7 @@ async fn browser_move_reports_owner_changed_for_pending_observation() -> Result<
             let mut buffer = String::new();
             let _ = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
             let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+            assert_eq!(frame["pointer"]["mode"], "observe");
             let moved = json!({"tabs":[{"id":"moved","owner":"conversation:destination",
                 "profile":"signed_out","epoch":3,"holder":"agent","url":"https://example.com/"}]});
             admin

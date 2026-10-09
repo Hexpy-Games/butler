@@ -113,6 +113,10 @@ fn dispatch(
         if hub.pending.len() >= 8 {
             return Err(error(429, "browser_busy"));
         }
+        // Ephemeral presenter events share the authenticated tool frame; never model output.
+        if let Some(pointer) = pointer_event(&op, &frame["args"]) {
+            frame["pointer"] = pointer;
+        }
         frame["id"] = json!(id);
         frame["deadline_ms"] = json!(deadline);
         super::usage::dispatch(&mut hub, frame, sender)?;
@@ -359,4 +363,25 @@ async fn upload_still(
         .await?;
     result["still_file"] = serde_json::to_value(file).map_err(|_| HttpError::Internal)?;
     Ok(())
+}
+
+fn pointer_event(op: &str, args: &Value) -> Option<Value> {
+    let mode = match op {
+        "tab.observe" => "observe",
+        "tab.prepare" | "tab.act" => {
+            let steps = args["steps"].as_array()?;
+            if steps.len() > 1 {
+                "batch"
+            } else {
+                match steps.first()?["action"].as_str()? {
+                    "fill" => "type",
+                    "scroll" => "scroll",
+                    "click" | "select" => "click",
+                    _ => "observe",
+                }
+            }
+        }
+        _ => return None,
+    };
+    Some(json!({"mode":mode}))
 }

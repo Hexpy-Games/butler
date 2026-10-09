@@ -19,6 +19,7 @@ async function dispatch(tab, args, step, target) {
   const contents = tab.view.webContents;
   tab.dispatching = true;
   try {
+    tab.onPointer?.(step, target);
     const scale = tab.bounds?.scale ?? 1;
     const point = { x: Math.round(target.x * scale), y: Math.round(target.y * scale) };
     tab.expectedInputs = ["mouseMove", "mouseDown", "mouseUp", "mouseWheel"].map(type => ({ type, ...point }));

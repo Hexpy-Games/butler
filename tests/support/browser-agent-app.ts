@@ -25,14 +25,15 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   const inspector = await freePort(), debug = await freePort();
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   assert.ok(executable, "explicit Electron 44 executable required");
-  const child = spawn(executable, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), resolve("packages/butler-app/client/electron")], {
+  const child = spawn(executable, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron")], {
     stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: home, BUTLER_HOME: home, BUTLER_DATA: gateway.butlerData,
-      BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "", BUTLER_APP_RENDERER_DIST: rendererDist ?? resolve("packages/butler-app/client/ui/dist"),
+      BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "", BUTLER_APP_RENDERER_DIST: rendererDist ?? process.env.BUTLER_SMOKE_RENDERER_DIST ?? resolve("packages/butler-app/client/ui/dist"),
       BUTLER_APP_SERVER_URL: gateway.url, BUTLER_APP_SERVER_PORT: String(gateway.port), BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub" },
   });
   const logs: string[] = [];
   for (const stream of [child.stdout!, child.stderr!]) stream.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
-  const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
+  const electronRoot = resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron");
+  const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(electronRoot, "package.json"))})`;
   const win = `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`;
   let inspectorClient: ReturnType<typeof connectElectronMain> | undefined;
   const main = async <T>(expression: string): Promise<T> => {
@@ -59,7 +60,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     const versions = await main<Record<string, string>>("process.versions");
     assert.equal(versions.electron, "44.5.1");
     writeFileSync(join(evidence, "electron-versions.json"), JSON.stringify(versions, null, 2));
-    await main(`(() => { const make=${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/tabs.mjs"))}).createUserBrowser;
+    await main(`(() => { const make=${module}(${JSON.stringify(join(electronRoot, "browser/tabs.mjs"))}).createUserBrowser;
       const dummy=make({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null); const proto=Object.getPrototypeOf(dummy); const publish=proto.publish; const execute=proto.execute;
       const snapshot=proto.snapshot;proto.snapshot=function(){globalThis.browserAgentSubject=this;return snapshot.call(this)};
       proto.execute=async function(frame){try{return await execute.call(this,frame)}catch(error){globalThis.browserAgentError=String(error.stack);throw error}};
@@ -72,7 +73,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
       await main(`(async()=>{const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && !tab.view.webContents.isDestroyed() && tab.attached===${win})await tab.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")})()`);
       await page!.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>img.decode()))");
-      const facts=await main(`(async()=>{${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);let nativePixels;if(tab?.view && tab.attached===${win}) {const image=await tab.view.webContents.capturePage(undefined,{stayHidden:true});const pixels=image.getBitmap();let blue=0;for(let n=0;n<pixels.length;n+=4)if(pixels[n]>180 && pixels[n+1]<150 && pixels[n+2]<120)blue++;nativePixels={size:image.getSize(),blue};process.getBuiltinModule('fs').writeFileSync(${JSON.stringify(join(evidence,`${name}-native.png`))},image.toPNG());}await ${win}.webContents.capturePage();return {nativePixels,focused:${win}.isFocused(),native:tab?.view?await tab.view.webContents.executeJavaScript("({text:document.body.innerText,scroll:[scrollX,scrollY],width:innerWidth,height:innerHeight})"):null,attached:tab?.attached===${win},covered:tab?.covered,nativeCovers:browser?.nativeCovers,bounds:tab?.bounds}})()`);
+      const facts=await main(`(async()=>{${preservePointer ? '' : `${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();`}const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);let nativePixels;if(tab?.view && tab.attached===${win}) {const image=await tab.view.webContents.capturePage(undefined,{stayHidden:true});const pixels=image.getBitmap();let blue=0;for(let n=0;n<pixels.length;n+=4)if(pixels[n]>180 && pixels[n+1]<150 && pixels[n+2]<120)blue++;nativePixels={size:image.getSize(),blue};process.getBuiltinModule('fs').writeFileSync(${JSON.stringify(join(evidence,`${name}-native.png`))},image.toPNG());}await ${win}.webContents.capturePage();return {nativePixels,focused:${win}.isFocused(),native:tab?.view?await tab.view.webContents.executeJavaScript("({text:document.body.innerText,scroll:[scrollX,scrollY],width:innerWidth,height:innerHeight})"):null,attached:tab?.attached===${win},covered:tab?.covered,nativeCovers:browser?.nativeCovers,bounds:tab?.bounds}})()`);
       writeFileSync(join(evidence,`${name}-capture.json`),JSON.stringify(facts));
       const capture = process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE; assert.ok(capture);
       const source = await main<string>(`${win}.getMediaSourceId()`);
@@ -88,7 +89,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       await waitBrowser(()=>page!.expression(`(() => {
         const node=[...document.querySelectorAll('button,[role="button"]')].find(e=>(e.getAttribute('aria-label')||e.textContent)?.trim()===${JSON.stringify(name)});
         if(!node || node.disabled || node.getAttribute('aria-disabled')==='true') return false;
-        for(let parent=node;parent;parent=parent.parentElement) if(parent.getAnimations().some(a=>a.playState==='running')) return false;
+        for(let parent=node;parent;parent=parent.parentElement) if(parent.getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
         return node.getBoundingClientRect().width>0;
       })()`), `button ${name}`);
       await page!.clickText(name,'button,[role="button"]');

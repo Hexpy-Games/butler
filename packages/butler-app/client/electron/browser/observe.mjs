@@ -36,6 +36,7 @@ export async function resolveStep(tab, obs, step, scroll = false) {
   if (frame.parent && !resolved.reason) {
     const point=await hitFrame(frame,resolved);
     if(!point) return {reason:"blocked_by"};
+    if (resolved.rect) { resolved.rect.x += point.x - resolved.x; resolved.rect.y += point.y - resolved.y; }
     resolved.x=point.x;resolved.y=point.y;
   }
   return { ...resolved, frame_payment: Boolean(frame.parent) && tab.observation.paymentFrames.has(frame), payment: resolved.payment || tab.observation.payment, addons: resolved.addons ?? [] };
@@ -45,6 +46,6 @@ export function selectStep(tab, obs, step) {
 }
 
 export function selectTextStep(tab, obs, step) {
-  const code = `(()=>{const e=globalThis.__butlerObservation.refs.get(${JSON.stringify(step.ref)}).deref();if(e.isContentEditable){const range=document.createRange();range.selectNodeContents(e);const selection=getSelection();selection.removeAllRanges();selection.addRange(range)}else e.select()})()`;
+  const code = `(async()=>{await new Promise(done=>requestAnimationFrame(done));const e=globalThis.__butlerObservation.refs.get(${JSON.stringify(step.ref)}).deref();if(e.isContentEditable){const range=document.createRange();range.selectNodeContents(e);const selection=getSelection();selection.removeAllRanges();selection.addRange(range)}else e.select()})()`;
   return evaluateWorld(tab.observation.bindings.get(step.ref), code);
 }

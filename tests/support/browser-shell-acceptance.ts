@@ -15,7 +15,7 @@ export async function shellReady(app: ShellApp, locale: string) {
 export async function togglePane(app: ShellApp, open: boolean) {
   await waitBrowser(() => app.page.expression(`(() => {
     const button=document.querySelector('${toggle}'), workspace=document.querySelector('[data-slot=adaptive-shell-workspace]');
-    if (!button || workspace?.getAnimations().some(a=>a.playState==='running')) return false;
+    if (!button || workspace?.getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
     const r=button.getBoundingClientRect();
     return button.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
   })()`), "browser toggle is hit-testable after shell motion");
@@ -31,7 +31,7 @@ export async function toggleState(app: ShellApp, tone: string | null, dot: boole
 }
 
 export async function nativeAligned(app: ShellApp) {
-  await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=mac-window]').hasAttribute('data-track-switching') && !document.querySelector('[data-slot=adaptive-shell-workspace]').getAnimations().some(a=>a.playState==='running') && !document.querySelector('[data-slot=browser-pane]').getAnimations({subtree:true}).some(a=>a.playState==='running') && !document.querySelector('[data-test-class=mac-window]').getAnimations().some(a=>a.playState==='running')"), "browser sheet motion settles");
+  await waitBrowser(() => app.page.expression("!document.querySelector('[data-test-class=mac-window]').hasAttribute('data-track-switching') && !document.querySelector('[data-slot=adaptive-shell-workspace]').getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity) && !document.querySelector('[data-slot=browser-pane]').getAnimations({subtree:true}).some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity) && !document.querySelector('[data-test-class=mac-window]').getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)"), "browser sheet motion settles");
   await waitBrowser(() => app.main<boolean>(`(async () => {
     const w=${app.win}, b=globalThis.browserAgentSubject, t=b?.tabs.get(b.activeId);
     if(!t?.attached || t.covered) return false;

@@ -10,6 +10,7 @@ export function installUserBrowser(app, getWindow) {
       case "state": return browser.snapshot();
       case "open": return browser.open();
       case "hide": return browser.hide();
+      case "presentation": return browser.pointer.present(input);
       case "scope": return browser.focusArea(input.value === true, input.owner);
       case "create": return browser.create(input);
       case "close": return browser.close(input.id);

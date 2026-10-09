@@ -10,6 +10,9 @@ export interface ElectronPage {
   clickText(text: string, scope: string): Promise<void>;
   clickSelector(selector: string): Promise<void>;
   movePointer(x: number, y: number): Promise<void>;
+  pointerDown(x: number, y: number): Promise<void>;
+  dragPointer(x: number, y: number): Promise<void>;
+  pointerUp(x: number, y: number): Promise<void>;
   drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
@@ -99,6 +102,9 @@ async function connect(url: string): Promise<ElectronPage> {
   return {
     expression, waitForFunction, diagnostics,
     movePointer: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y,buttons:0}); },
+    pointerDown: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",buttons:1,clickCount:1}); },
+    dragPointer: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y,button:"left",buttons:1}); },
+    pointerUp: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseReleased",x,y,button:"left",buttons:0,clickCount:1}); },
     drag: async (from,to) => {
       await send("Input.dispatchMouseEvent",{type:"mousePressed",...from,button:"left",buttons:1,clickCount:1});
       for(let step=1;step<=12;step++) {
