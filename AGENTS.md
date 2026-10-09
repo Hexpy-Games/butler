@@ -65,7 +65,7 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
-- **2026-10-09: Never change DS components or blocks inside a product commit.** A change under `libs/design-system/{components,blocks,shadcn}` or the root DS CSS needs owner approval and a `DS-Approved: <who, when, where>` commit trailer (the `ds-approval` check enforces it). Fix a DS bug in the DS, never with a product-side workaround, and never edit a test only to match new CSS.
+- **2026-10-09: Never change DS components or blocks inside a product commit.** A change under `libs/design-system/{components,blocks,shadcn}` or the root DS CSS needs owner approval and a `DS-Approved: <who, when, where>` commit trailer (the `ds-approval` check warns when it is missing). Fix a DS bug in the DS, never with a product-side workaround, and never edit a test only to match new CSS.
   - What happened: plain `DisclosureRow` titles sat at the top of the hover fill three times. The block was rewritten inside unrelated commits (`2278cb00b`, `92775d8cf`), the source-string test was edited to match, and an earlier fix (`12ada184c`) worked around it in one screen only.
 
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**

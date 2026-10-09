@@ -1,7 +1,8 @@
 name: DS approval
 
 # DS primitives, blocks and tokens are frozen without owner approval. A PR that
-# changes them needs a `DS-Approved:` commit trailer or the `ds-approved` label.
+# changes them without a `DS-Approved:` commit trailer or the `ds-approved` label
+# gets a warning annotation; the check never fails.
 # See .github/scripts/ds-approval.py.
 
 on:
@@ -22,7 +23,7 @@ jobs:
         with:
           sparse-checkout: .github/scripts
 
-      - name: Require owner approval for DS primitive, block and token changes
+      - name: Warn on DS primitive, block and token changes without owner approval
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

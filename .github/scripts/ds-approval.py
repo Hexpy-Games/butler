@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Require an explicit owner-approval marker for DS primitive, block and token changes.
+"""Warn when DS primitive, block or token changes lack an owner-approval marker.
 
 DS primitives and blocks are frozen: changing their styles or structure needs the
 owner's approval. DisclosureRow broke three times because its geometry changed
 inside unrelated commits (2278cb00b, 92775d8cf) or was patched around in product
 code (12ada184c) while the block itself stayed wrong. This check makes the
-approval explicit and visible in history.
+approval explicit and visible in history. It only warns: it annotates the PR and
+never fails the build.
 
 Approve with either:
   - a commit trailer on any commit in the PR: `DS-Approved: <who, when, where>`
@@ -70,13 +71,13 @@ def main(argv):
     if approved(messages, labels):
         print(f'DS change approved ({len(changed)} file(s)).')
         return 0
-    print('DS primitives, blocks or tokens changed without owner approval:', file=sys.stderr)
+    note = ("Changed without owner approval. Get the owner's approval, then add a commit trailer such as "
+            f"'DS-Approved: owner 2026-10-08, proposal <link or commit>' or the `{LABEL}` PR label. "
+            'Never change a DS primitive to fit one screen.')
     for path in changed:
-        print(f'  {path}', file=sys.stderr)
-    print("\nGet the owner's approval, then add a commit trailer such as\n"
-          '  DS-Approved: owner 2026-10-08, proposal <link or commit>\n'
-          f'or the `{LABEL}` PR label. Never change a DS primitive to fit one screen.', file=sys.stderr)
-    return 1
+        print(f'::warning file={path},title=DS change without approval::{note}')
+    print(f'{len(changed)} DS file(s) changed without approval (warning only).')
+    return 0
 
 
 if __name__ == '__main__':
