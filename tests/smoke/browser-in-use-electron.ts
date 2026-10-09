@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
-import { browserStub, describeBrowser, bridgeBrowser } from "../support/browser-agent-stub";
+import { browserStub, describeBrowser, bridgeBrowser, actConfirm } from "../support/browser-agent-stub";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
@@ -66,7 +66,10 @@ try {
   await gate("tab.observe"); await observe("Timeout browser executor");
   await terminal(); await cleared("real observe timeout");
   await unblock(); await cleared("late timeout result cannot revive use");
-  await gate("tab.observe"); await observe("Cancel browser executor");
+  await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript("document.body.innerHTML='<button>Confirm</button>'")`);
+  await gate("tab.act");
+  stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab: tab.id }), actConfirm]);
+  await send("Cancel browser action"); await active();
   await app.page.clickText("중지", '[data-test-class="browser-agent-control"] button');
   await terminal("cancelled"); await cleared("user stop");
   await unblock(); await cleared("late cancelled result cannot revive use");
@@ -78,6 +81,22 @@ try {
   await request();
   assert.equal((await state()).tabs.find(item => item.id === tab.id)?.inUse, true, "second completion cannot release the first call");
   await unblock(); await first; await cleared("last overlapping call");
+
+  await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript("document.body.innerHTML='<button>Receipt fixture</button>'")`);
+  const internal = (op: string, args: unknown = {}, call_id?: string) => app.gateway.api<any>("/internal/browser/calls", { method: "POST", headers: { "x-butler-admin": admin }, body: JSON.stringify({ op, session: "general", tab: tab.id, args, call_id }) });
+  const observation = await internal("tab.observe");
+  const batch = { observation: observation.obs, steps: Array.from({ length: 10 }, () => ({ action: "click", ref: observation.nodes.find((node: { name: string }) => node.name === "Receipt fixture").ref })) };
+  const prepared = await internal("tab.prepare", batch); assert.equal(prepared.status, "ok");
+  const callId = crypto.randomUUID();
+  const acting = internal("tab.act", { ...batch, prepared_steps: prepared.steps }, callId);
+  await waitBrowser(() => app.main<boolean>(`Boolean(globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).busy)`), "native batch active");
+  await internal("tab.cancel", { call_id: callId });
+  const stopped = await acting; assert.equal(stopped.steps.length, 10);
+  const firstUndispatched = stopped.steps.findIndex((step: { status: string }) => step.status === "not_dispatched");
+  assert.ok(firstUndispatched >= 0, "cancel fences remaining input");
+  assert.ok(stopped.steps.slice(firstUndispatched).every((step: { status: string }) => step.status === "not_dispatched"));
+  assert.ok(stopped.steps.slice(0, firstUndispatched).every((step: { status: string; still_file?: string }) => step.status === "completed" && step.still_file));
+  await cleared("cancel retains completed batch receipts");
 
   await gate("tab.observe"); const paneCall = request(); await active();
   await app.call("hide");

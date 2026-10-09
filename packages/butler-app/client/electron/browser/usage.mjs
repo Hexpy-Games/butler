@@ -9,7 +9,8 @@ export function endUse(browser, id, abort = false) {
   browser.uses.delete(id);
   const tab = browser.tabs.get(use.tab);
   if (abort && tab) {
-    tab.cancelled = true; tab.epoch++; tab.observation = null;
+    // Fence the next step without invalidating receipts for dispatched input.
+    tab.cancelled = true;
     if (tab.view && !tab.view.webContents.isDestroyed()) tab.view.webContents.stop();
   }
   browser.publish();
