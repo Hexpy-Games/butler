@@ -26,4 +26,9 @@ pub(super) fn project_delivery(result: &mut Value, payload: &Value) {
     if let Some(work) = payload.get("workStatus") {
         result["work_status"] = work.clone();
     }
+    if status == "success"
+        && let Some(artifacts) = payload.get("artifacts").filter(|value| value.is_array())
+    {
+        result["artifacts"] = artifacts.clone();
+    }
 }

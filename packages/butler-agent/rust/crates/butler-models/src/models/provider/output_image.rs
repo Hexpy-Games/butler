@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
     if !matches!(
         message.name.as_deref(),
-        Some("output_check" | "browser_observe" | "tool_call")
+        Some("output_check" | "browser_observe" | "browser_screenshot" | "tool_call")
     ) {
         return None;
     }
@@ -14,7 +14,11 @@ pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
     let output = value.get_mut("output")?;
     if !matches!(
         output["schema"].as_str(),
-        Some("butler.output-check.v1" | "butler.browser-observation.v1")
+        Some(
+            "butler.output-check.v1"
+                | "butler.browser-observation.v1"
+                | "butler.browser-capture.v1"
+        )
     ) {
         return None;
     }

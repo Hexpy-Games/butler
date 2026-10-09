@@ -7,7 +7,7 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
     if !result.ok
         || !matches!(
             result.name.as_str(),
-            "output_check" | "browser_observe" | "tool_call"
+            "output_check" | "browser_observe" | "browser_screenshot" | "tool_call"
         )
     {
         return false;
@@ -24,7 +24,11 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
     };
     if !matches!(
         value["schema"].as_str(),
-        Some("butler.output-check.v1" | "butler.browser-observation.v1")
+        Some(
+            "butler.output-check.v1"
+                | "butler.browser-observation.v1"
+                | "butler.browser-capture.v1"
+        )
     ) || value["image"]["mime_type"] != "image/jpeg"
     {
         return false;

@@ -137,8 +137,8 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
             _ => json!({"status":"unknown","reason":"browser_host_lost"}),
         }
     };
-    // Output self-check pixels share the browser's per-Turn visual byte budget.
-    let _ = super::browser::images::finish(owner, "browser_observe", &mut result).await;
+    // Output checks share the bounded retained browser context budget.
+    let _ = super::browser::images::finish(owner, "output_check", &mut result).await;
     result
 }
 pub(super) async fn vision(
@@ -183,6 +183,7 @@ pub(super) async fn restore_budget(
     records: &[butler_turn::btcc::ToolJournalSignature],
 ) -> Result<(), butler_turn::btcc::BtccError> {
     let mut bytes = 0;
+    let mut browser_bytes = std::collections::HashMap::new();
     for record in records {
         let name = if record.tool_name == "tool_call" {
             record.arguments["id"]
@@ -193,11 +194,13 @@ pub(super) async fn restore_budget(
         } else {
             &record.tool_name
         };
-        if matches!(name, "browser_observe" | "output_check" | "output_publish")
-            && let Some(saved) = owner
-                .journal
-                .find_for_turn(owner.binding.turn_id.clone(), record.call_id.clone())
-                .await?
+        if matches!(
+            name,
+            "browser_observe" | "browser_screenshot" | "output_check" | "output_publish"
+        ) && let Some(saved) = owner
+            .journal
+            .find_for_turn(owner.binding.turn_id.clone(), record.call_id.clone())
+            .await?
             && let Some(result) = saved.result
         {
             let value: Value = serde_json::from_str(result.as_str()).unwrap_or(Value::Null);
@@ -209,8 +212,15 @@ pub(super) async fn restore_budget(
             .flatten()
             .filter_map(Value::as_str)
             {
-                bytes += (data.len() / 4 * 3)
+                let size = (data.len() / 4 * 3)
                     .saturating_sub(data.bytes().rev().take_while(|b| *b == b'=').count());
+                if name == "browser_observe" {
+                    if let Some(tab) = value["tab"].as_str() {
+                        browser_bytes.insert(tab.to_owned(), size);
+                    }
+                } else {
+                    bytes += size;
+                }
             }
         }
         if name == "output_check" || name == "output_publish" {
@@ -223,6 +233,8 @@ pub(super) async fn restore_budget(
             }
         }
     }
-    owner.state.lock().visual_image_bytes = bytes;
+    let mut state = owner.state.lock();
+    state.visual_image_bytes = bytes;
+    state.browser_image_bytes = browser_bytes;
     Ok(())
 }

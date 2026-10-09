@@ -55,13 +55,16 @@ pub(super) async fn execute(
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
     }
-    if call.name == "browser_observe" {
-        args["include_image"] = json!(
-            args["look"] != "never"
-                && client
-                    .vision(&invocation.model_execution.active_model_ref())
-                    .await
-        );
+    if matches!(call.name.as_str(), "browser_observe" | "browser_screenshot") {
+        if !client
+            .vision(&invocation.model_execution.active_model_ref())
+            .await
+        {
+            return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
+        }
+        if call.name == "browser_observe" {
+            args["include_image"] = json!(true);
+        }
     }
     let op = match call.name.as_str() {
         "browser_open" => "tab.open",
@@ -79,29 +82,61 @@ pub(super) async fn execute(
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }
     if call.name == "browser_observe" && result["status"] == "ok" {
-        result["schema"] = json!("butler.browser-observation.v1");
-        result["untrusted_content"] = json!({"kind":"web_page_data","text":result["text"],"url":result["url"],"frames":result["frames"],"payment":result["payment"],"addons":result["addons"]});
-        if let Some(object) = result.as_object_mut() {
-            object.remove("text");
-            object.remove("nodes");
-            object.remove("frames");
-            object.remove("payment");
-            object.remove("addons");
-            for field in [
-                "scriptMs",
-                "gridSampleMs",
-                "walkerMs",
-                "proseMs",
-                "collectMs",
-                "emitMs",
-                "cursor",
-                "epoch",
-            ] {
-                object.remove(field);
-            }
-        }
+        project_observation(&mut result);
     }
     encode_page_data(result)
+}
+fn project_observation(result: &mut Value) {
+    result["schema"] = json!("butler.browser-observation.v1");
+    result["untrusted_content"] = json!({"kind":"web_page_data","fields":result["fields"],"layout_regions":result["layout_regions"],"capture_regions":result["capture_regions"],"text":result["text"],"url":result["url"],"frames":result["frames"],"payment":result["payment"],"addons":result["addons"]});
+    if let Some(object) = result.as_object_mut() {
+        object.remove("text");
+        object.remove("nodes");
+        object.remove("frames");
+        object.remove("fields");
+        object.remove("layout_regions");
+        object.remove("capture_regions");
+        object.remove("payment");
+        object.remove("addons");
+        for field in [
+            "scriptMs",
+            "gridSampleMs",
+            "walkerMs",
+            "proseMs",
+            "collectMs",
+            "emitMs",
+            "cursor",
+            "epoch",
+        ] {
+            object.remove(field);
+        }
+    }
+}
+
+fn has_point_steps(args: &Value) -> bool {
+    args["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|step| step.get("point").is_some() || step.get("target_point").is_some())
+}
+async fn act_refusal(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    client: &client::Client,
+    args: &Value,
+) -> Option<&'static str> {
+    if owner.binding.access_mode == AccessMode::ReadOnly {
+        return Some("read_only");
+    }
+    if has_point_steps(args)
+        && !client
+            .vision(&invocation.model_execution.active_model_ref())
+            .await
+    {
+        return Some("vision_required");
+    }
+    None
 }
 async fn act(
     owner: &GuidedTools,
@@ -111,11 +146,8 @@ async fn act(
     client: client::Client,
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode == AccessMode::ReadOnly {
-        return finish_batch(
-            &args,
-            json!({"status":"not_dispatched","reason":"read_only"}),
-        );
+    if let Some(reason) = act_refusal(owner, invocation, &client, &args).await {
+        return finish_batch(&args, json!({"status":"not_dispatched","reason":reason}));
     }
     let mut prepared = client
         .call("tab.prepare", &args["tab"], &args, invocation.cancellation)

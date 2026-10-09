@@ -80,6 +80,16 @@ pub(in crate::btcc::agent_loop) fn assert_per_tab_cycles() {
     let once = messages.clone();
     supersede(&mut messages);
     assert_eq!(messages, once);
+    observe(&mut messages, "a", "a3");
+    supersede(&mut messages);
+    let updated: Value = serde_json::from_str(&messages[0].content).unwrap();
+    assert_eq!(updated["output"]["superseded_by"], "a3");
+    assert_eq!(updated["output"]["tab"], "a");
+    assert_eq!(updated["output"]["acted"], old["output"]["acted"]);
+    assert!(
+        !is_superseded(&messages[3].content),
+        "another tab's latest stays intact"
+    );
 }
 
 pub(in crate::btcc::agent_loop) fn assert_multiple_acts() {
