@@ -30,12 +30,12 @@ export const meta: ShowcaseMeta = {
 const labels = {
   "en-US": {
     navigation: "Navigation", workspace: "Conversation", inspector: "Inspector", close: "Close",
-    openNav: "Open navigation", openInspector: "Open inspector", scrim: "Close panel", resize: "Resize left sidebar",
+    openNav: "Open navigation", openInspector: "Open inspector", scrim: "Close panel", resize: "Resize left sidebar", drag: "Drag to resize",
     hint: "Below 768px the side panels become drawers over a scrim; at app width they sit beside the workspace.",
   },
   "ko-KR": {
     navigation: "내비게이션", workspace: "대화", inspector: "인스펙터", close: "닫기",
-    openNav: "내비게이션 열기", openInspector: "인스펙터 열기", scrim: "패널 닫기", resize: "왼쪽 사이드바 크기 조절",
+    openNav: "내비게이션 열기", openInspector: "인스펙터 열기", scrim: "패널 닫기", resize: "왼쪽 사이드바 크기 조절", drag: "드래그하여 크기 조절",
     hint: "768px 미만에서는 양쪽 패널이 스크림 위 드로어가 되고, 앱 너비에서는 작업 영역 옆에 놓입니다.",
   },
 } as const;
@@ -79,7 +79,7 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
           </Box>
         </AdaptiveShellWorkspace>
         {panel === "left" ? (
-          <AdaptivePanelResizeHandle aria-label={copy.resize} aria-orientation="vertical" side="left"
+          <AdaptivePanelResizeHandle aria-label={copy.resize} hint={copy.drag} aria-orientation="vertical" side="left"
             onKeyDown={() => undefined} onPointerDown={() => undefined} />
         ) : null}
         <AdaptiveShellInspector open={panel === "right"}>

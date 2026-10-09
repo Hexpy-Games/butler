@@ -1716,6 +1716,8 @@ export interface AppCopy {
     showLeftPanel: string;
     resizeLeftPanel: string;
     resizeRightPanel: string;
+    /** Second line of a resize handle's hover hint, under its label. */
+    dragToResize: string;
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;

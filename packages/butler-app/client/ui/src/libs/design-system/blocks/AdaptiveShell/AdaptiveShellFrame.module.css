@@ -39,13 +39,17 @@
   flex: none;
 }
 
-/* A 9px grab zone over the boundary; it takes no width of its own. */
+/* A 9px grab zone over the boundary, centred on the pane's leading hairline
+   (4px each side of it); it takes no width of its own, so no strip of the
+   workspace shows between the chat and the pane. The boundary's hairline is
+   the pane's; the handle draws the grabber and hint (ResizeGrip). */
 .splitHandle {
   position: relative;
   z-index: 2;
   width: 9px;
   flex: none;
-  margin-inline: calc(var(--space-xs) * -1);
+  margin-inline: calc(var(--space-xs) * -1)
+    calc((var(--space-xs) + var(--border-hairline)) * -1);
   cursor: col-resize;
   outline: none;
   touch-action: none;
@@ -54,23 +58,6 @@
 
 .splitHandle[data-locked] {
   cursor: default;
-}
-
-.splitHandle::after {
-  position: absolute;
-  inset: var(--space-md) 4px;
-  width: var(--border-hairline);
-  border-radius: var(--radius-control);
-  background: var(--line-strong);
-  content: "";
-  opacity: 0;
-  transition: opacity var(--motion-fast) var(--motion-ease-standard);
-}
-
-.splitHandle:not([data-locked]):hover::after,
-.splitHandle:active::after,
-.splitHandle:focus-visible::after {
-  opacity: 1;
 }
 
 .splitHandle:focus-visible {
