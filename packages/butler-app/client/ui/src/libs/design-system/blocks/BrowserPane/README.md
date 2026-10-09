@@ -44,9 +44,11 @@ Inside `AdaptiveShell frame="cards"` (docked) the sheet is a card of its own:
 four 12px corners, one quiet `--shell-card-edge`, no edge tucked under a
 window frame. Beside a conversation it is the second card after the chat
 card; in the standalone Browser it is the card (do not wrap it in
-`AdaptiveShellCard`). The shell sets `--browser-pane-bg` to a 2.5% ink tint of
-the card surface, so the sheet reads as a card on the shell and the page card
-still lifts off it.
+`AdaptiveShellCard`). The shell sets `--browser-pane-bg` to a
+`--shell-sheet-tint` ink tint of the card surface (1% light, 2.5% dark) and
+the page card's shadow to `--shell-page-shadow` (tight in light), so the
+sheet's strip beside the 8px gap is as light as the chat card, the gap reads
+as 8px, and the page card still lifts off the sheet by its edge.
 
 ## Wrong use cases
 - Do not lay glass over the page top: the page is a native view that glass

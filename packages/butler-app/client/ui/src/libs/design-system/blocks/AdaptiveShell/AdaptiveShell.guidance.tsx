@@ -99,5 +99,6 @@ export const guidance: ShowcaseGuidance = {
   ],
   tokens: ["--adaptive-drawer-width", "--adaptive-inspector-width", "--adaptive-panel-duration", "--adaptive-scrim-bg", "--sidebar-width",
     "--browser-chat-width", "--browser-chat-width-min", "--browser-chat-width-max",
-    "--shell-bg", "--shell-card-bg", "--shell-card-inset", "--shell-card-gap", "--shell-card-radius", "--shell-card-edge", "--shell-card-shadow"],
+    "--shell-bg", "--shell-card-bg", "--shell-card-inset", "--shell-card-gap", "--shell-card-radius", "--shell-card-edge", "--shell-card-shadow",
+    "--shell-sheet-tint", "--shell-page-shadow"],
 };

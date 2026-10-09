@@ -113,6 +113,11 @@ rectangular shell.
   management pages). Flat: layout only. Do not wrap `AdaptiveShellSplit` (its
   chat column is a card and the BrowserPane beside it is the second card) or
   a standalone `BrowserPane` (the sheet is the card).
+- The browser sheet's fill is a `--shell-sheet-tint` ink tint of the card
+  surface and the page card's shadow on it is `--shell-page-shadow`. Light
+  keeps both faint (1%, a tight shadow), so the sheet lifts off the shell like
+  the chat card and the 8px gap reads as 8px; dark keeps 2.5% and the page
+  card's usual shadow.
 - The inspector is the side card under the title row; `InspectorShell` reads
   the frame and draws the card. `SettingsShell` puts its navigation on the
   shell and its detail pane in a card. Blocks read the frame through

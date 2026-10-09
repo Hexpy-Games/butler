@@ -28,8 +28,12 @@
 /* AdaptiveShell frame="cards": the sheet is a card of its own (beside the
    chat card, or the standalone Browser's card): all four corners, its own
    quiet edge, nothing tucked under a window frame. Its surface comes from
-   the shell (--browser-pane-bg is a faint tint of the card surface there). */
+   the shell (--browser-pane-bg is a faint tint of the card surface there),
+   and the page card's shadow on it is --shell-page-shadow: tight in light,
+   so the strip beside the gap between cards keeps the sheet's surface. */
 [data-panel-layout="docked"] .pane[data-frame="cards"] {
+  --browser-card-shadow: var(--shell-page-shadow);
+
   margin: 0;
   padding-top: 0;
   border: var(--border-hairline) solid var(--shell-card-edge);
