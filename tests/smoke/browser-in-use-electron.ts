@@ -1,3 +1,4 @@
+// test-category: race
 /** Real stub turns, native host lifetimes and renderer browser:state snapshots. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -83,7 +84,7 @@ try {
   stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab: tab.id }), actConfirm]);
   await send("Cancel browser action"); await active();
   const stopStarted = Date.now();
-  await app.page.clickText("중지", '[data-test-class="browser-agent-control"] button');
+  await app.page.clickText("작업 중지", '[data-test-class="browser-agent-control"] button');
   await terminal("cancelled"); await cleared("user stop");
   writeFileSync(join(evidence, "stop.json"), JSON.stringify({ owner: tab.owner, selectedTitle,
     elapsedMs: Date.now()-stopStarted, state: "cancelled", inUse: (await state()).tabs.find(item=>item.id===tab.id)?.inUse ?? false }));

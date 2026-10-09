@@ -18,13 +18,13 @@ export function endUse(browser, id, abort = false) {
 export function finishUse(browser, session, turn) {
   for (const use of [...browser.uses.values()]) if (use.session === session && use.turn === turn) endUse(browser, use.id, true);
   for (const tab of browser.tabs.values()) if (tab.owner === `conversation:${session}` && tab.waitingTurn === turn) {
-    tab.waiting = false; tab.waitingTurn = null;
+    tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null;
   }
   browser.publish();
 }
 export function resetUse(browser) {
   for (const use of [...browser.uses.values()]) endUse(browser, use.id, true);
-  for (const tab of browser.tabs.values()) { tab.waiting = false; tab.waitingTurn = null; }
+  for (const tab of browser.tabs.values()) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; }
   browser.publish();
 }
 export function closeUse(browser, tab) {
