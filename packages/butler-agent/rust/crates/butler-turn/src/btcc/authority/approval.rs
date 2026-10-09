@@ -145,6 +145,16 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             &workspace_label(facts.workspace),
             ApprovalRisk::Low,
         ),
+        "browser_act" | "browser_close" => single(
+            ApprovalActionKind::Other,
+            ApprovalTargetKind::Other,
+            facts.target,
+            if facts.input["always_confirm"] == true {
+                ApprovalRisk::High
+            } else {
+                ApprovalRisk::Medium
+            },
+        ),
         capability => by_tool(facts, ToolName::parse(capability)),
     }
 }

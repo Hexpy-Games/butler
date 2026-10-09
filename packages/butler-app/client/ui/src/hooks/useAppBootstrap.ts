@@ -1,5 +1,6 @@
 import { startupResourceReady } from "@/app/startupReady";
 import { useEffect, useRef } from "react";
+import { connectBrowser } from "@/components/browser/browserBridge";
 import { api } from "@/app/api.ts";
 import { useOrganization } from "@/app/space/organization";
 import { EMPTY_NAVIGATION } from "@/app/constants.ts";
@@ -37,7 +38,7 @@ import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 export function useAppBootstrap() {
   useLiveSessionEvents();
   const activeChatId = useButlerStore((state) => state.activeChatId);
-  const activeSessionView = useButlerStore(selectActiveSessionView);
+  const activeSessionView = useButlerStore(state => selectActiveSessionView(state) || state.view.kind === "browser" && state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
@@ -88,6 +89,7 @@ export function useAppBootstrap() {
       } finally {
         if (!cancelled) {
           uiStateHydratedRef.current = true;
+          connectBrowser();
           const section = new URLSearchParams(window.location.search).get("settings");
           if (section) useButlerStore.getState().openSettings(section);
           if (isDraftChatId(useButlerStore.getState().activeChatId)) startupResourceReady("messages");

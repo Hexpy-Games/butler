@@ -24,6 +24,7 @@ impl PrincipalAuthority {
         uuid: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
+            permission_targets: Arc::new(std::sync::Mutex::new(Default::default())),
             storage,
             collation,
             clock,

@@ -38,7 +38,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   return {
     title: view.title, details: view.details, risk: view.risk, actionKind: view.actionKind,
-    conversationScope: view.conversationScope, scope: request.scope, pending: pending.has(key),
+    conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
     onAllow: () => void decide("allow"),

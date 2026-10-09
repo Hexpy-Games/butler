@@ -7,6 +7,9 @@ use super::contracts::{
 use super::identity::{canonical, digest};
 use butler_core::tool_protocol::ToolName;
 
+type KeyComparisons =
+    std::cell::RefCell<std::collections::HashMap<(String, String), std::cmp::Ordering>>;
+
 pub(super) fn for_admission(
     input: &AuthorityAdmissionInput,
     collation: &butler_core::locale::LocaleCollation,
@@ -114,6 +117,7 @@ fn permission_scope_key(
     facts: PermissionFacts<'_>,
     file_edit: bool,
     command: bool,
+    comparisons: Option<&KeyComparisons>,
 ) -> AuthorityResult<String> {
     let PermissionFacts {
         capability,
@@ -122,7 +126,9 @@ fn permission_scope_key(
         collation,
         ..
     } = facts;
-    let scope = if file_edit {
+    let scope = if capability == "browser_act" && input["always_confirm"] != true {
+        json!({"kind":"browser_site","capability":capability,"target":target})
+    } else if file_edit {
         json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
     } else if command {
         let mut scope = serde_json::Map::new();
@@ -140,7 +146,18 @@ fn permission_scope_key(
     } else {
         json!({"kind":"effect","capability":capability,"target":target,"input":input})
     };
-    Ok(digest(&canonical(&scope, collation)?))
+    let encoded = if let Some(comparisons) = comparisons {
+        butler_core::json::stringify_sorted(&scope, &|a, b| {
+            let mut cache = comparisons.borrow_mut();
+            *cache
+                .entry((a.into(), b.into()))
+                .or_insert_with(|| collation.compare(a, b))
+        })
+        .map_err(|error| AuthorityError::policy(format!("authority_json: {error}")))?
+    } else {
+        canonical(&scope, collation)?
+    };
+    Ok(digest(&encoded))
 }
 
 fn permission_identity(
@@ -154,7 +171,7 @@ fn permission_identity(
         collation,
         ..
     } = facts;
-    let scope_key = permission_scope_key(facts, file_edit, command)?;
+    let scope_key = permission_scope_key(facts, file_edit, command, None)?;
     let grant_ref = format!(
         "permission-{}",
         &digest(&canonical(
@@ -168,8 +185,9 @@ fn permission_identity(
 pub(super) fn for_source(
     source: &PermissionSource<'_>,
     collation: &butler_core::locale::LocaleCollation,
-    prefixes: &mut std::collections::HashMap<String, std::collections::HashMap<String, String>>,
-) -> AuthorityResult<PermissionTarget> {
+    identities: &std::collections::HashMap<(&str, &str, &str), &str>,
+    comparisons: &KeyComparisons,
+) -> AuthorityResult<Option<PermissionTarget>> {
     let input: Value = serde_json::from_str(source.input_json)
         .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
     let facts = PermissionFacts {
@@ -190,27 +208,11 @@ pub(super) fn for_source(
         source.capability,
         "run_command" | "run_command_remote_observation"
     );
-    let scope_key = permission_scope_key(facts, file_edit, command)?;
-    // Request-local immutable owner/workspace JSON; target/scope and current rows are always read anew.
-    if !prefixes
-        .get(source.owner)
-        .is_some_and(|workspaces| workspaces.contains_key(source.workspace))
-    {
-        let mut prefix = canonical(&json!([source.owner, source.workspace]), collation)?;
-        let _ = prefix.pop(); // Preserve the shared codec's exact array escaping.
-        prefixes
-            .entry(source.owner.to_owned())
-            .or_default()
-            .insert(source.workspace.to_owned(), prefix);
-    }
-    let prefix = prefixes
-        .get(source.owner)
-        .and_then(|workspaces| workspaces.get(source.workspace))
-        .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
-    let grant_ref = format!(
-        "permission-{}",
-        &digest(&format!("{prefix},\"{scope_key}\"]"))[..32]
-    );
+    let scope_key = permission_scope_key(facts, file_edit, command, Some(comparisons))?;
+    let Some(grant_ref) = identities.get(&(source.owner, source.workspace, scope_key.as_str()))
+    else {
+        return Ok(None);
+    };
     let target =
         butler_core::public_text::sanitize_public_delta(&permission_target(facts, command));
     let cwd = command.then(|| {
@@ -220,12 +222,12 @@ pub(super) fn for_source(
             .unwrap_or(source.workspace)
             .to_owned()
     });
-    Ok(PermissionTarget {
-        grant_ref,
+    Ok(Some(PermissionTarget {
+        grant_ref: (*grant_ref).to_owned(),
         capability: source.capability.to_owned(),
         target,
         cwd,
-    })
+    }))
 }
 
 fn permission_description(file_edit: bool, command: bool, executable: Option<&str>) -> String {

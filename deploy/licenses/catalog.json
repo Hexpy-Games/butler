@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
     "deploy/licenses/inputs.mjs": "8b8f71b92ff873d77dade2f90fbea05395cfdc3151c900607774de31796a7657",
     "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
-    "packages/butler-agent/rust/Cargo.lock": "13dfff9556a714f0bbdb59992fbe179f3a2c9a315085034e074d756c7566ef9c",
+    "packages/butler-agent/rust/Cargo.lock": "a23d36ee14fa3254d1f75158da3310ed95d10e11fd9c77cc01def6c99ddf16d2",
     "packages/butler-agent/rust/Cargo.toml": "84e021c080b775ab00c9967a4ec8c75c8c46fced4a9eab1b8d30d4fab2d4ef61",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "0772ca74b263aae9c2b9ee358a23fb6dabf06b88f9f525f6276324598043977a",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "d1f8457ba9b5247fd2c2185e4a18801d39706d589a8bf4a775c079cebe4f25c0",
@@ -20,7 +20,7 @@
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "c86ff9d9a73b2927b78e4578917e612fb569abddbe87fd94efd1114dd4276a49",
-    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "8ce03d25baeae427f703c7940e5093a82de896e6ed08065fd5d644cf9a92708c",
+    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8c6e2fcdfeb56455e94657334935de627fea2b8e141090f684616b06cf1e773",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
@@ -220,7 +220,7 @@
         "Copyright (c) 1987, 1993, 1994",
         "The Regents of the University of California.  All rights reserved.",
         "Copyright 2008, Google Inc.",
-        "Copyright (c) 2007–2018 The scikit-learn developers.",
+        "Copyright (c) 2007\u20132018 The scikit-learn developers.",
         "Copyright (c) 2009 The RE2 Authors. All rights reserved.",
         "Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.",
         "Copyright (c) 2018 Open Neural Network Exchange",
@@ -289,7 +289,7 @@
         "Copyright (c) 2013 Matthew Stevens",
         "Copyright (c) 2018 Emscripten authors (see AUTHORS in Emscripten)",
         "Copyright (c) 2020, Apple Inc. All rights reserved.",
-        "© 2021 GitHub, Inc.",
+        "\u00a9 2021 GitHub, Inc.",
         "Copyright (c) Facebook, Inc. and its affiliates.",
         "Copyright (c) 2019 Google LLC",
         "Copyright (c) 2017-2018 Facebook Inc.",
@@ -297,9 +297,9 @@
         "Copyright (C) 2010-2012 Marat Dukhan",
         "Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.",
         "Copyright 2019 Google LLC",
-        "Copyright © 1997-2011 by Secret Labs AB",
-        "Copyright © 1995-2011 by Fredrik Lundh",
-        "Copyright © 2010-2023 by Alex Clark and contributors",
+        "Copyright \u00a9 1997-2011 by Secret Labs AB",
+        "Copyright \u00a9 1995-2011 by Fredrik Lundh",
+        "Copyright \u00a9 2010-2023 by Alex Clark and contributors",
         "Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.  All rights reserved.",
         "Copyright (c) 2006-2013 Alexander Chemeris",
         "Copyright (c) 2002 JSON.org",
@@ -340,7 +340,7 @@
         "https://www.npmjs.com/package/@dnd-kit/accessibility/v/3.1.1"
       ],
       "copyright": [
-        "Copyright (c) 2021, Claudéric Demers"
+        "Copyright (c) 2021, Claud\u00e9ric Demers"
       ]
     },
     {
@@ -363,7 +363,7 @@
         "https://www.npmjs.com/package/@dnd-kit/core/v/6.3.1"
       ],
       "copyright": [
-        "Copyright (c) 2021, Claudéric Demers"
+        "Copyright (c) 2021, Claud\u00e9ric Demers"
       ]
     },
     {
@@ -386,7 +386,7 @@
         "https://www.npmjs.com/package/@dnd-kit/sortable/v/10.0.0"
       ],
       "copyright": [
-        "Copyright (c) 2021, Claudéric Demers"
+        "Copyright (c) 2021, Claud\u00e9ric Demers"
       ]
     },
     {
@@ -409,7 +409,7 @@
         "https://www.npmjs.com/package/@dnd-kit/utilities/v/3.2.2"
       ],
       "copyright": [
-        "Copyright (c) 2021, Claudéric Demers"
+        "Copyright (c) 2021, Claud\u00e9ric Demers"
       ]
     },
     {
@@ -10491,10 +10491,10 @@
         "These files are Copyright 2003-2010 VisualOn, but released under",
         "These files are Copyright (C) 2004-2010 NXP Software and",
         "Copyright (C) 2010 The Android Open Source Project, but released under",
-        "Copyright © 1991-2008 Unicode, Inc. All rights reserved. Distributed",
+        "Copyright \u00a9 1991-2008 Unicode, Inc. All rights reserved. Distributed",
         "Copyright (c) 2005-2008, The Android Open Source Project",
         "Copyright (c) 2018, The Android Open Source Project",
-        "Copyright © 1991-2018 Unicode, Inc. All rights reserved.",
+        "Copyright \u00a9 1991-2018 Unicode, Inc. All rights reserved.",
         "Copyright (c) 1995-2016 International Business Machines Corporation and others",
         "#  Copyright (C) 2006-2008, Google Inc.",
         "#   * Copyright (c) 1999 TaBE Project.",
@@ -10593,7 +10593,7 @@
         "Copyright (C) 2010-2012 Marat Dukhan",
         "Copyright 2017, The CRC32C Authors.",
         "Copyright 2010-2023 Mike Bostock",
-        "Copyright © 2018, VideoLAN and dav1d authors",
+        "Copyright \u00a9 2018, VideoLAN and dav1d authors",
         "// Copyright 2017-2026 The Dawn & Tint Authors",
         "// Copyright 2014 The Chromium Authors",
         "Copyright (c) Microsoft Corporation.",
@@ -10606,7 +10606,7 @@
         "Copyright (c) 2001 Alexander Peslyak and it is hereby released to the",
         "Copyright (c) 2006 Kirill Simonov",
         "Copyright 2014 The Chromium Authors",
-        "Copyright (c) 2009-2011 Christian Kohlschütter",
+        "Copyright (c) 2009-2011 Christian Kohlsch\u00fctter",
         "Copyright 2007 Timepedia.org",
         "Copyright 2008 Google",
         "WIPO Copyright Treaty of 1996, the WIPO Performances and Phonograms",
@@ -10614,53 +10614,53 @@
         "Copyright 2007-2020 The Khronos Group Inc.",
         "Copyright (c) 2013-2018 The Khronos Group Inc.",
         "Copyright (c) 2008-2018 The Khronos Group Inc.",
-        "Copyright © 1991-2021 Unicode, Inc. All rights reserved.",
+        "Copyright \u00a9 1991-2021 Unicode, Inc. All rights reserved.",
         "* Copyright (C) 2009 The Android Open Source Project",
         "Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper",
         "Copyright (c) 2001-2025 Expat maintainers",
         "// Copyright (c) 2014 Google, Inc.",
         "Copyright (c) 2021 The fast_float authors",
         "Copyright (c) 2020-2025",
-        "Copyright © 2025 Tristan Matthews",
+        "Copyright \u00a9 2025 Tristan Matthews",
         "Partly based on h264_pred.c Copyright (c) 2023 SiFive, Inc.",
-        "Copyright © 2024 Rémi Denis-Courmont.",
-        "Copyright © 2025 Rémi Denis-Courmont.",
+        "Copyright \u00a9 2024 R\u00e9mi Denis-Courmont.",
+        "Copyright \u00a9 2025 R\u00e9mi Denis-Courmont.",
         "Copyright (c) 2024 J. Dekker <jdek@itanimul.li>",
         "Copyright (c) 2024 Niklas Haas",
         "Copyright (C) 2005  Matthieu CASTET, Alex Beregszaszi",
         "Copyright (C) 2005-2024 x264 project",
         "Copyright (c) 2012",
         "MIPS Technologies, Inc., California.",
-        "Copyright (C) 2005  Michael Ahlberg, MÃ¥ns RullgÃ¥rd",
+        "Copyright (C) 2005  Michael Ahlberg, M\u00c3\u00a5ns Rullg\u00c3\u00a5rd",
         "* Copyright(c)1995,97 Mark Olesen <olesen@me.QueensU.CA>",
         "Copyright 2015-2020 the fiat-crypto authors (see the AUTHORS file)",
         "Copyright (c) 2020 Advanced Micro Devices, Inc. All rights reserved.",
         "Copyright 2014 Google Inc.",
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.",
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others.",
         "Copyright (C) 2000-2009  Josh Coalson",
         "Copyright (C) 2011-2022  Xiph.Org Foundation",
         "Copyright (c) 2007-2014 IOLA and Ole Laursen",
         "Copyright (c) 2024 Orson Peters",
         "Copyright 2019 Fontations Developers",
-        "Copyright © 2000,2001,2002,2003,2004,2006,2007 Keith Packard",
-        "Copyright © 2005 Patrick Lam",
-        "Copyright © 2007 Dwayne Bailey and Translate.org.za",
-        "Copyright © 2009 Roozbeh Pournader",
-        "Copyright © 2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020 Red Hat, Inc.",
-        "Copyright © 2008 Danilo Šegan",
-        "Copyright © 2012 Google, Inc.",
-        "© 2019 Unicode®, Inc.",
-        "* Copyright © 2007  Chris Wilson",
-        "* Copyright © 2009,2010  Red Hat, Inc.",
-        "* Copyright © 2011,2012,2013  Google, Inc.",
-        "Copyright © 2002-2003 by Juliusz Chroboczek",
+        "Copyright \u00a9 2000,2001,2002,2003,2004,2006,2007 Keith Packard",
+        "Copyright \u00a9 2005 Patrick Lam",
+        "Copyright \u00a9 2007 Dwayne Bailey and Translate.org.za",
+        "Copyright \u00a9 2009 Roozbeh Pournader",
+        "Copyright \u00a9 2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020 Red Hat, Inc.",
+        "Copyright \u00a9 2008 Danilo \u0160egan",
+        "Copyright \u00a9 2012 Google, Inc.",
+        "\u00a9 2019 Unicode\u00ae, Inc.",
+        "* Copyright \u00a9 2007  Chris Wilson",
+        "* Copyright \u00a9 2009,2010  Red Hat, Inc.",
+        "* Copyright \u00a9 2011,2012,2013  Google, Inc.",
+        "Copyright \u00a9 2002-2003 by Juliusz Chroboczek",
         "Copyright (c) 2017 Facebook Inc.",
         "Copyright (c) 2017 Georgia Institute of Technology",
         "Copyright 2019 Google LLC",
         "Copyright 1996-2002, 2006 by",
         "David Turner, Robert Wilhelm, and Werner Lemberg",
-        "Portions of this software are copyright © <year> The FreeType",
+        "Portions of this software are copyright \u00a9 <year> The FreeType",
         "The FreeType  Project is copyright (C) 1996-2000  by David Turner,",
         "Robert Wilhelm, and Werner Lemberg.  All rights reserved except as",
         "Copyright 2019 The Fuchsia Authors.",
@@ -10673,23 +10673,23 @@
         "// Copyright (c) 2006, Google Inc.",
         "* Copyright (c) 2020-2022 Hans-Kristian Arntzen",
         "Copyright (C) 1991 Free Software Foundation, Inc.",
-        "Copyright © 2010-2022  Google, Inc.",
-        "Copyright © 2015-2020  Ebrahim Byagowi",
-        "Copyright © 2019,2020  Facebook, Inc.",
-        "Copyright © 2012,2015  Mozilla Foundation",
-        "Copyright © 2011  Codethink Limited",
-        "Copyright © 2008,2010  Nokia Corporation and/or its subsidiary(-ies)",
-        "Copyright © 2009  Keith Stribley",
-        "Copyright © 2011  Martin Hosken and SIL International",
-        "Copyright © 2007  Chris Wilson",
-        "Copyright © 2005,2006,2020,2021,2022,2023  Behdad Esfahbod",
-        "Copyright © 2004,2007,2008,2009,2010,2013,2021,2022,2023  Red Hat, Inc.",
-        "Copyright © 1998-2005  David Turner and Werner Lemberg",
-        "Copyright © 2016  Igalia S.L.",
-        "Copyright © 2022  Matthias Clasen",
-        "Copyright © 2018,2021  Khaled Hosny",
-        "Copyright © 2018,2019,2020  Adobe, Inc",
-        "Copyright © 2013-2015  Alexei Podtelezhnikov",
+        "Copyright \u00a9 2010-2022  Google, Inc.",
+        "Copyright \u00a9 2015-2020  Ebrahim Byagowi",
+        "Copyright \u00a9 2019,2020  Facebook, Inc.",
+        "Copyright \u00a9 2012,2015  Mozilla Foundation",
+        "Copyright \u00a9 2011  Codethink Limited",
+        "Copyright \u00a9 2008,2010  Nokia Corporation and/or its subsidiary(-ies)",
+        "Copyright \u00a9 2009  Keith Stribley",
+        "Copyright \u00a9 2011  Martin Hosken and SIL International",
+        "Copyright \u00a9 2007  Chris Wilson",
+        "Copyright \u00a9 2005,2006,2020,2021,2022,2023  Behdad Esfahbod",
+        "Copyright \u00a9 2004,2007,2008,2009,2010,2013,2021,2022,2023  Red Hat, Inc.",
+        "Copyright \u00a9 1998-2005  David Turner and Werner Lemberg",
+        "Copyright \u00a9 2016  Igalia S.L.",
+        "Copyright \u00a9 2022  Matthias Clasen",
+        "Copyright \u00a9 2018,2021  Khaled Hosny",
+        "Copyright \u00a9 2018,2019,2020  Adobe, Inc",
+        "Copyright \u00a9 2013-2015  Alexei Podtelezhnikov",
         "Copyright (c) HarfBuzz developers",
         "Copyright (c) 2020 Yevhenii Reizner",
         "Copyright (c) 2019-2026, Frank Denis.",
@@ -10721,14 +10721,14 @@
         "% Copyright (c) TeX Users Group, 2011.",
         "Copyright (C) 1994-2002 Daniel Flipo, Bernard Gaulle.",
         "Copyright (c) 2004-2015 Kevin P. Scannell <kscanne at gmail dot com>",
-        "Copyright (C) 2006, 2007, 2008, 2010 Javier A. Múgica",
-        "Copyright © 1991-2015 Unicode, Inc and 1994-2015 Igor Marinović <marinowski at gm",
+        "Copyright (C) 2006, 2007, 2008, 2010 Javier A. M\u00fagica",
+        "Copyright \u00a9 1991-2015 Unicode, Inc and 1994-2015 Igor Marinovi\u0107 <marinowski at gm",
         "% Portions created by the Initial Developer are Copyright (C) 2003",
         "% the Initial Developer. All Rights Reserved.",
         "copyright: Copyright (C) 2008-2011 Claudio Beccari",
         "Copyright (C) 2013 Levan Shoshiashvili",
         "Copyright (c) 1999-2016 Claudio Beccari",
-        "Copyright (C) 1992 Sigitas Tolušis, Yannis Haralambous",
+        "Copyright (C) 1992 Sigitas Tolu\u0161is, Yannis Haralambous",
         "% copyright: Copyright (C) 2004-2005 Janis Vilims",
         "Copyright (c) 2007-2015 Batmunkh Dorjgotov (bataak@gmail.com)",
         "% Copyright (C) 2007 Karl Ove Hufthammer.",
@@ -10736,9 +10736,9 @@
         "and the Universal Copyright Convention (as revised on July 24, 1971).",
         "% Copyright (c) 1987, Pedro J. de Rezende (rezende@ic.unicamp.br) and J.Joao Dias Almeida (jj@di.uminho.pt)",
         "Copyright (C) {year} {fullname}",
-        "Copyright (C) 1990 Matjaž Vrečko, TeXCeX (SLO)",
+        "Copyright (C) 1990 Matja\u017e Vre\u010dko, TeXCeX (SLO)",
         "Copyright (C) 2020 Claudio Beccari, Sabina Koliqi",
-        "Copyright © 2013 Niklas Johansson <sleeping.pillow@gmail.com>",
+        "Copyright \u00a9 2013 Niklas Johansson <sleeping.pillow@gmail.com>",
         "Copyright (c) 2010-2015 Nazar Annagurban <nazartm at gmail.com>",
         "Copyright (C) 1998-2001 Maksym Polyakov",
         "*  Copyright (c) 2007, 2010 Linux Foundation",
@@ -10746,12 +10746,12 @@
         "*  Copyright (c) 2000, 2006 Sun Microsystems, Inc.",
         "Copyright (c) 2022, Alliance for Open Media. All rights reserved.",
         "Copyright 2020 Andrew Straw",
-        "Copyright © 2016-2025 Unicode, Inc.",
+        "Copyright \u00a9 2016-2025 Unicode, Inc.",
         "# Copyright (C) 2016 and later: Unicode, Inc. and others.",
         "# Copyright (c) 2015 International Business Machines Corporation",
         "Copyright (c) 2013-2022 Niels Lohmann",
-        "Copyright © 2004 Scott James Remnant <scott@netsplit.com>.",
-        "Copyright © 2012-2015 Dan Nicholson <dbn.lists@gmail.com>",
+        "Copyright \u00a9 2004 Scott James Remnant <scott@netsplit.com>.",
+        "Copyright \u00a9 2012-2015 Dan Nicholson <dbn.lists@gmail.com>",
         "Copyright 1991 by the Massachusetts Institute of Technology",
         "Copyright (c) 1997-date Stuart Langridge",
         "Copyright (c) 2013-2018, Kim Davies. All rights reserved.",
@@ -10773,37 +10773,37 @@
         "Copyright (c) 2012-2018 Aseem Kishore, and [others].",
         "2010), this software is Copyright (c) 2007-2010 by Baptiste Lepilleur, and is",
         "Copyright (c) 2007-2010 Baptiste Lepilleur",
-        "Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso",
+        "Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, Ant\u00f3nio Afonso",
         "Copyright (c) the JPEG XL Project Authors.",
         "Copyright (C) 1992 Silicon Graphics, Inc. All Rights Reserved.",
         "// Copyright 2024 The Chromium Authors",
         "Copyright (c) 2011 The LevelDB Authors. All rights reserved.",
-        "Copyright © 2020 Red Hat, Inc.",
+        "Copyright \u00a9 2020 Red Hat, Inc.",
         "// Copyright 2019 The Chromium OS Authors. All rights reserved.",
         "Copyright (c) 2011, The WebRTC project authors. All rights reserved.",
         "Copyright (C)2009-2024 D. R. Commander.  All Rights Reserved.<br>",
-        "Copyright (C)2015 Viktor Szathmáry.  All Rights Reserved.",
+        "Copyright (C)2015 Viktor Szathm\u00e1ry.  All Rights Reserved.",
         "Copyright (c) 2018 Jorge Aparicio",
-        "Copyright © 2005-2020 Rich Felker, et al.",
-        "Copyright © 1993,2004 Sun Microsystems or",
-        "Copyright © 2003-2011 David Schultz or",
-        "Copyright © 2003-2009 Steven G. Kargl or",
-        "Copyright © 2003-2009 Bruce D. Evans or",
-        "Copyright © 2008 Stephen L. Moshier or",
-        "Copyright © 2017-2018 Arm Limited",
+        "Copyright \u00a9 2005-2020 Rich Felker, et al.",
+        "Copyright \u00a9 1993,2004 Sun Microsystems or",
+        "Copyright \u00a9 2003-2011 David Schultz or",
+        "Copyright \u00a9 2003-2009 Steven G. Kargl or",
+        "Copyright \u00a9 2003-2009 Bruce D. Evans or",
+        "Copyright \u00a9 2008 Stephen L. Moshier or",
+        "Copyright \u00a9 2017-2018 Arm Limited",
         "* Copyright (c) 2001-2017 Cisco Systems, Inc.",
         "** Copyright (C) [dates of first publication] Silicon Graphics, Inc.",
-        "Copyright © 1988-1997 Sam Leffler\\",
-        "Copyright © 1991-1997 Silicon Graphics, Inc.",
-        "© 2012-2016 Connor Lane Smith <cls@lubutu.com>",
-        "© 2015 Laslo Hunhold <dev@frign.de>",
-        "Copyright © 1991-2016 Unicode, Inc. All rights reserved.",
+        "Copyright \u00a9 1988-1997 Sam Leffler\\",
+        "Copyright \u00a9 1991-1997 Silicon Graphics, Inc.",
+        "\u00a9 2012-2016 Connor Lane Smith <cls@lubutu.com>",
+        "\u00a9 2015 Laslo Hunhold <dev@frign.de>",
+        "Copyright \u00a9 1991-2016 Unicode, Inc. All rights reserved.",
         "Copyright (c) 2010, The WebM Project authors. All rights reserved.",
         "Copyright 1985, 1987, 1998  The Open Group",
-        "Copyright © 2008 Ian Osgood <iano@quirkster.com>",
-        "Copyright © 2008 Jamey Sharp <jamey@minilop.net>",
-        "Copyright © 2008 Josh Triplett <josh@freedesktop.org>",
-        "Copyright © 2008 Ulrich Eckhardt <doomster@knuut.de>",
+        "Copyright \u00a9 2008 Ian Osgood <iano@quirkster.com>",
+        "Copyright \u00a9 2008 Jamey Sharp <jamey@minilop.net>",
+        "Copyright \u00a9 2008 Josh Triplett <josh@freedesktop.org>",
+        "Copyright \u00a9 2008 Ulrich Eckhardt <doomster@knuut.de>",
         "Copyright (C) 1998-2012 Daniel Veillard.  All Rights Reserved.",
         "Copyright (C) The Libxml2 Contributors.",
         "Copyright (C) 2001-2002 Daniel Veillard.  All Rights Reserved.",
@@ -10818,7 +10818,7 @@
         "Copyright 2014 David Bau.",
         "Copyright 2018 Airbnb, Inc.",
         "Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)",
-        "Copyright © 2004, John Gruber",
+        "Copyright \u00a9 2004, John Gruber",
         "*              Copyright (c) 2002 by Lucent Technologies.",
         "Copyright (c) Microsoft Corporation. All rights reserved.",
         "Copyright (C) Microsoft Corporation. All rights reserved.",
@@ -10835,13 +10835,13 @@
         "Copyright (c) 2019 Intel Corporation. All rights reserved.",
         "Copyright (c) Marco Ippolito and Amaro contributors",
         "Copyright 2024 SWC contributors.",
-        "Copyright © 2004 Scott James Remnant .",
-        "Copyright © 2012-2015 Dan Nicholson",
+        "Copyright \u00a9 2004 Scott James Remnant .",
+        "Copyright \u00a9 2012-2015 Dan Nicholson",
         "Copyright (c) 2015-present libuv project contributors.",
         "Copyright 2017 - 2025 R. Thomas",
         "Copyright 2017 - 2025 Quarkslab",
         "Copyright Fedor Indutny, 2018.",
-        "**Copyright © Corepack contributors**",
+        "**Copyright \u00a9 Corepack contributors**",
         "Copyright (c) Matteo Collina and Undici contributors",
         "Copyright (c) 2022 Postman, Inc",
         "Copyright 2017 - 2022 R. Thomas",
@@ -10915,7 +10915,7 @@
         "Copyright (c) 2004 the University Corporation for Atmospheric",
         "Copyright (c) 2018 The Go Authors. All rights reserved.",
         "// Copyright 2015 The Chromium Authors. All rights reserved.",
-        "Copyright © 1991-2017 Unicode, Inc. All rights reserved.",
+        "Copyright \u00a9 1991-2017 Unicode, Inc. All rights reserved.",
         "Copyright (c) 1997-2017 University of Cambridge",
         "Copyright(c) 2010-2017 Zoltan Herczeg",
         "Copyright(c) 2009-2017 Zoltan Herczeg",
@@ -10931,7 +10931,7 @@
         "Copyright 2020 Google Inc.  All rights reserved.",
         "Copyright 2020, Google Inc.",
         "Copyright (c) 2015-2017 Georgia Institute of Technology",
-        "Copyright 2021-2026 The Khronos® Group Inc.",
+        "Copyright 2021-2026 The Khronos\u00ae Group Inc.",
         "// Copyright 2017 The Chromium OS Authors. All rights reserved.",
         "Copyright (c) 2005-2019, Ilya Etingof <etingof@gmail.com>",
         "Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.",
@@ -10944,7 +10944,7 @@
         "Copyright (c) 2003-2004, Mark Borgerding",
         "Copyright (c) 2015-present Dan Abramov",
         "Copyright (c) 2015-2018 Google, Inc., Netflix, Inc., Microsoft Corp. and contributors",
-        "Copyright © 1991-2015 Unicode, Inc. All rights reserved. Distributed under the Terms of Use in http://www.unicode.org/copyright.html.",
+        "Copyright \u00a9 1991-2015 Unicode, Inc. All rights reserved. Distributed under the Terms of Use in http://www.unicode.org/copyright.html.",
         "Copyright  The Khronos Group Inc.",
         "Copyright (C) [dates of first publication] Silicon Graphics, Inc.",
         "Copyright (c) The Highway Project Authors. All rights reserved.",
@@ -10963,7 +10963,7 @@
         "Copyright (C) 1995-2013 Jean-loup Gailly and Mark Adler",
         "Copyright (c) 2000, Frank Warmerdam",
         "Copyright 2007 Alexandre Courpron",
-        "Copyright © 2004-2017 by René Nyffenegger",
+        "Copyright \u00a9 2004-2017 by Ren\u00e9 Nyffenegger",
         "Copyright (C) 2001-2003",
         "William E. Kempf",
         "Copyright (c) 2001, Daniel C. Nuffer",
@@ -10997,23 +10997,23 @@
         "Version 2.0 (the \"License\"); you may not use this file except in compliance",
         "apps/support/cmdline.h is Copyright (c) 2009, Hideyuki Tanaka and is licensed",
         "dependencies/spirv is Copyright (c) 2014-2018 The Khronos Group Inc.",
-        "Copyright © 2004-2006 The Trustees of Indiana University and Indiana University Research and Technology Corporation.  All rights reserved.",
-        "Copyright © 2004-2005 The University of Tennessee and The University of Tennessee Research Foundation.  All rights reserved.",
-        "Copyright © 2004-2005 High Performance Computing Center Stuttgart, University of Stuttgart.  All rights reserved.",
-        "Copyright © 2004-2005 The Regents of the University of California. All rights reserved.",
-        "Copyright © 2009      CNRS",
-        "Copyright © 2009-2016 Inria.  All rights reserved.",
-        "Copyright © 2009-2015 Université Bordeaux",
-        "Copyright © 2009-2015 Cisco Systems, Inc.  All rights reserved.",
-        "Copyright © 2009-2012 Oracle and/or its affiliates.  All rights reserved.",
-        "Copyright © 2010      IBM",
-        "Copyright © 2010      Jirka Hladky",
-        "Copyright © 2012      Aleksej Saushev, The NetBSD Foundation",
-        "Copyright © 2012      Blue Brain Project, EPFL. All rights reserved.",
-        "Copyright © 2013-2014 University of Wisconsin-La Crosse. All rights reserved.",
-        "Copyright © 2015      Research Organization for Information Science and Technology (RIST). All rights reserved.",
-        "Copyright © 2015-2016 Intel, Inc.  All rights reserved.",
-        "1. Unicode Copyright: Copyright © 1991-Present Unicode, Inc.",
+        "Copyright \u00a9 2004-2006 The Trustees of Indiana University and Indiana University Research and Technology Corporation.  All rights reserved.",
+        "Copyright \u00a9 2004-2005 The University of Tennessee and The University of Tennessee Research Foundation.  All rights reserved.",
+        "Copyright \u00a9 2004-2005 High Performance Computing Center Stuttgart, University of Stuttgart.  All rights reserved.",
+        "Copyright \u00a9 2004-2005 The Regents of the University of California. All rights reserved.",
+        "Copyright \u00a9 2009      CNRS",
+        "Copyright \u00a9 2009-2016 Inria.  All rights reserved.",
+        "Copyright \u00a9 2009-2015 Universit\u00e9 Bordeaux",
+        "Copyright \u00a9 2009-2015 Cisco Systems, Inc.  All rights reserved.",
+        "Copyright \u00a9 2009-2012 Oracle and/or its affiliates.  All rights reserved.",
+        "Copyright \u00a9 2010      IBM",
+        "Copyright \u00a9 2010      Jirka Hladky",
+        "Copyright \u00a9 2012      Aleksej Saushev, The NetBSD Foundation",
+        "Copyright \u00a9 2012      Blue Brain Project, EPFL. All rights reserved.",
+        "Copyright \u00a9 2013-2014 University of Wisconsin-La Crosse. All rights reserved.",
+        "Copyright \u00a9 2015      Research Organization for Information Science and Technology (RIST). All rights reserved.",
+        "Copyright \u00a9 2015-2016 Intel, Inc.  All rights reserved.",
+        "1. Unicode Copyright: Copyright \u00a9 1991-Present Unicode, Inc.",
         "-  Copyright (C) 2001 Leptonica.  All rights reserved.",
         "Copyright (C) 1996-2021 Julian R Seward.",
         "Copyright (C) 2019-2020 Federico Mena Quintero",
@@ -11027,7 +11027,7 @@
         "Copyright 2010 Google LLC",
         "Copyright (c) 2008 Steven G. Johnson <stevenj@alum.mit.edu>",
         "Copyright (c) 2011 Daniel Richard G. <skunk@iSKUNK.ORG>",
-        "Copyright © 2009 Free Software Foundation, Inc. <http://fsf.org/>",
+        "Copyright \u00a9 2009 Free Software Foundation, Inc. <http://fsf.org/>",
         "Copyright (c) 1999-2000 Pawel W. Olszta. All Rights Reserved.",
         "Copyright (C) 2009 Mozilla Foundation",
         "Copyright (C) 1998-2007 Marti Maria",
@@ -11089,7 +11089,7 @@
         "Copyright (c) 2017 Intel Corporation",
         "Copyright 2022 The transpose developers",
         "Copyright (c) 2018 The typed-arena developers",
-        "Copyright © 1991-2023 Unicode, Inc.",
+        "Copyright \u00a9 1991-2023 Unicode, Inc.",
         "Copyright 2020 The Chromium Authors",
         "Copyright (c) 2014 Blake Embrey (hello@blakeembrey.com)",
         "Copyright 2007, Google Inc.",
@@ -11098,18 +11098,18 @@
         "Copyright (C) 1993-2004 by Sun Microsystems, Inc. All rights reserved.",
         "Copyright (c) 2018-2019 Arseny Kapoulkine",
         "Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All rights reserved.",
-        "Copyright © 2008-2012 Kristian Høgsberg",
-        "Copyright © 2010-2012 Intel Corporation",
-        "Copyright © 2011 Benjamin Franzke",
-        "Copyright © 2012 Collabora, Ltd.",
-        "Copyright © 2008-2013 Kristian Høgsberg",
-        "Copyright © 2010-2013 Intel Corporation",
-        "Copyright © 2013      Rafael Antognolli",
-        "Copyright © 2013      Jasper St. Pierre",
-        "Copyright © 2014      Jonas Ådahl",
-        "Copyright © 2014      Jason Ekstrand",
-        "Copyright © 2014-2015 Collabora, Ltd.",
-        "Copyright © 2015      Red Hat Inc.",
+        "Copyright \u00a9 2008-2012 Kristian H\u00f8gsberg",
+        "Copyright \u00a9 2010-2012 Intel Corporation",
+        "Copyright \u00a9 2011 Benjamin Franzke",
+        "Copyright \u00a9 2012 Collabora, Ltd.",
+        "Copyright \u00a9 2008-2013 Kristian H\u00f8gsberg",
+        "Copyright \u00a9 2010-2013 Intel Corporation",
+        "Copyright \u00a9 2013      Rafael Antognolli",
+        "Copyright \u00a9 2013      Jasper St. Pierre",
+        "Copyright \u00a9 2014      Jonas \u00c5dahl",
+        "Copyright \u00a9 2014      Jason Ekstrand",
+        "Copyright \u00a9 2014-2015 Collabora, Ltd.",
+        "Copyright \u00a9 2015      Red Hat Inc.",
         "Copyright 2020 Google LLC",
         "Copyright 2010 Rodrigo Moraes.",
         "Copyright 2008 Google Inc.",
@@ -12450,7 +12450,7 @@
         "https://github.com/tokio-rs/axum/blob/e710a97a5a8e1e2f629f78e0377d7ab17e597eaf/axum-core/LICENSE"
       ],
       "copyright": [
-        "Copyright (c) 2019–2025 axum Contributors"
+        "Copyright (c) 2019\u20132025 axum Contributors"
       ]
     },
     {
@@ -15879,7 +15879,7 @@
       ],
       "copyright": [
         "Copyright Mozilla Foundation",
-        "Copyright © WHATWG (Apple, Google, Mozilla, Microsoft)."
+        "Copyright \u00a9 WHATWG (Apple, Google, Mozilla, Microsoft)."
       ]
     },
     {
@@ -15926,8 +15926,8 @@
         "https://github.com/meithecatte/enumflags2/blob/332c37f47577e5f6b7104419da7e761963032086/LICENSE-MIT"
       ],
       "copyright": [
-        "Copyright 2017-2023 Maik Klein, Maja Kądziołka",
-        "Copyright (c) 2017-2023 Maik Klein, Maja Kądziołka"
+        "Copyright 2017-2023 Maik Klein, Maja K\u0105dzio\u0142ka",
+        "Copyright (c) 2017-2023 Maik Klein, Maja K\u0105dzio\u0142ka"
       ]
     },
     {
@@ -16996,7 +16996,7 @@
         "https://github.com/fizyk20/generic-array/blob/1397d2bb40c406901b7827161b73b34b056cbe3a/LICENSE"
       ],
       "copyright": [
-        "Copyright (c) 2015 Bartłomiej Kamiński"
+        "Copyright (c) 2015 Bart\u0142omiej Kami\u0144ski"
       ]
     },
     {
@@ -17737,7 +17737,7 @@
       "copyright": [
         "Copyright (c) 2016 The humantime Developers",
         "Copyright (c) 2016 Pyfisch",
-        "Copyright © 2005-2013 Rich Felker"
+        "Copyright \u00a9 2005-2013 Rich Felker"
       ]
     },
     {
@@ -17926,8 +17926,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collator/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -17952,8 +17952,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/provider/baked/collator/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -17987,8 +17987,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/codepointtrie/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18013,8 +18013,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/components/collections/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18039,8 +18039,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/components/locale_core/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18065,8 +18065,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/locid/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18091,8 +18091,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/locid_transform/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18117,8 +18117,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/provider/baked/locid_transform/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18143,8 +18143,8 @@
         "https://github.com/unicode-org/icu4x/blob/0f65ba2705c8787ee8c2cb3025006f8fe698f8fb/components/normalizer/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18169,8 +18169,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/components/normalizer/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18195,8 +18195,8 @@
         "https://github.com/unicode-org/icu4x/blob/a34f3fc1d2a66f4e074be491d50c27f1fba848b5/provider/baked/normalizer/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18221,8 +18221,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/provider/data/normalizer/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18247,8 +18247,8 @@
         "https://github.com/unicode-org/icu4x/blob/694553aab1007a23e43cbe8bc8bf002abed4bc9f/components/properties/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18273,8 +18273,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/components/properties/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18299,8 +18299,8 @@
         "https://github.com/unicode-org/icu4x/blob/a34f3fc1d2a66f4e074be491d50c27f1fba848b5/provider/baked/properties/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18325,8 +18325,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/provider/data/properties/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18351,8 +18351,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/provider/core/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18377,8 +18377,8 @@
         "https://github.com/unicode-org/icu4x/blob/898d79c69f37da7b45a15a5714663c9b59b3d928/provider/core/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -18403,8 +18403,8 @@
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/provider/macros/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2023 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2023 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -19623,13 +19623,13 @@
       ],
       "copyright": [
         "Copyright (c) 2018 Jorge Aparicio",
-        "Copyright © 2005-2020 Rich Felker, et al.",
-        "Copyright © 1993,2004 Sun Microsystems or",
-        "Copyright © 2003-2011 David Schultz or",
-        "Copyright © 2003-2009 Steven G. Kargl or",
-        "Copyright © 2003-2009 Bruce D. Evans or",
-        "Copyright © 2008 Stephen L. Moshier or",
-        "Copyright © 2017-2018 Arm Limited"
+        "Copyright \u00a9 2005-2020 Rich Felker, et al.",
+        "Copyright \u00a9 1993,2004 Sun Microsystems or",
+        "Copyright \u00a9 2003-2011 David Schultz or",
+        "Copyright \u00a9 2003-2009 Steven G. Kargl or",
+        "Copyright \u00a9 2003-2009 Bruce D. Evans or",
+        "Copyright \u00a9 2008 Stephen L. Moshier or",
+        "Copyright \u00a9 2017-2018 Arm Limited"
       ]
     },
     {
@@ -19790,8 +19790,8 @@
         "https://github.com/unicode-org/icu4x/blob/f4290a877dfcb0f87cad6de4abdd65f0cbb33c9c/utils/litemap/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -19816,8 +19816,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/utils/litemap/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -22242,8 +22242,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/utils/potential_utf/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -22326,7 +22326,7 @@
         "https://crates.io/crates/precomputed-hash/0.1.1"
       ],
       "copyright": [
-        "Copyright (c) 2017 Emilio Cobos Álvarez"
+        "Copyright (c) 2017 Emilio Cobos \u00c1lvarez"
       ]
     },
     {
@@ -22473,6 +22473,59 @@
         "https://github.com/tokio-rs/prost/blob/13646cde7eab75c81b3047767aa0a86e7dbecf12/prost/LICENSE"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:psl-types@2.0.11",
+      "name": "psl-types",
+      "version": "2.0.11",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/addr-rs/psl-types/tree/c0b9c35c4cc306c4f8a888814a68e652571e2730",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "7b25e06666d3797292dbb4b1c3f5ba509ebe02fce102e1dca7ca81dd3cbfbeb7",
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
+      ],
+      "files": [
+        "LICENSE",
+        "LICENSE-APACHE"
+      ],
+      "links": [
+        "https://github.com/addr-rs/psl-types/blob/c0b9c35c4cc306c4f8a888814a68e652571e2730/LICENSE",
+        "https://github.com/addr-rs/psl-types/blob/c0b9c35c4cc306c4f8a888814a68e652571e2730/LICENSE-APACHE"
+      ],
+      "copyright": [
+        "Copyright (c) 2021 Rushmore Mushambi"
+      ]
+    },
+    {
+      "id": "rust:psl@2.1.239",
+      "name": "psl",
+      "version": "2.1.239",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/addr-rs/psl/tree/23897ed897cf406bbf9b746fbdd1161d6d6fde75",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "f09adf500d35265ee63ef552f8e61487e09ee549da66eaf0ec7924e3ad7cf14b"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/addr-rs/psl/blob/23897ed897cf406bbf9b746fbdd1161d6d6fde75/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2016 Rushmore Mushambi"
+      ]
     },
     {
       "id": "rust:pxfm@0.1.30",
@@ -23208,7 +23261,7 @@
       ],
       "copyright": [
         "Copyright (c) 2014 The Rust Project Developers",
-        "Copyright © 1991-2018 Unicode, Inc. All rights reserved."
+        "Copyright \u00a9 1991-2018 Unicode, Inc. All rights reserved."
       ]
     },
     {
@@ -25996,8 +26049,8 @@
         "https://github.com/unicode-org/icu4x/blob/55cd12ebb25c6261492e1e3dfa2e6453c54dde31/utils/tinystr/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -26022,8 +26075,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/utils/tinystr/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -26666,7 +26719,7 @@
         "https://github.com/dtolnay/unicode-ident/blob/5b54a632702b5744a1c40ea01c127c0ac0498172/LICENSE-UNICODE"
       ],
       "copyright": [
-        "Copyright © 1991-2023 Unicode, Inc."
+        "Copyright \u00a9 1991-2023 Unicode, Inc."
       ]
     },
     {
@@ -27990,8 +28043,8 @@
         "https://github.com/unicode-org/icu4x/blob/55cd12ebb25c6261492e1e3dfa2e6453c54dde31/utils/writeable/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28016,8 +28069,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/utils/writeable/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28090,8 +28143,8 @@
         "https://github.com/unicode-org/icu4x/blob/6bd4893cc44c2ca2718de47a119a31cc40045fe5/utils/yoke/derive/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28116,8 +28169,8 @@
         "https://github.com/unicode-org/icu4x/blob/c9fac4e625ccb2c6a7aa35079fff9709db4385ac/utils/yoke/derive/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28142,8 +28195,8 @@
         "https://github.com/unicode-org/icu4x/blob/6bd4893cc44c2ca2718de47a119a31cc40045fe5/utils/yoke/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28168,8 +28221,8 @@
         "https://github.com/unicode-org/icu4x/blob/a954ec29392c0225453404cb1f6a77f0ded27089/utils/yoke/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28377,8 +28430,8 @@
         "https://github.com/unicode-org/icu4x/blob/c9fac4e625ccb2c6a7aa35079fff9709db4385ac/utils/zerofrom/derive/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28403,8 +28456,8 @@
         "https://github.com/unicode-org/icu4x/blob/e9575f7e4b5aeddfeeb87ada5d3e715950e8233e/utils/zerofrom/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28457,8 +28510,8 @@
         "https://github.com/unicode-org/icu4x/blob/a14f2dad852be26bad277ae704abf27a15cbfed1/utils/zerotrie/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28483,8 +28536,8 @@
         "https://github.com/unicode-org/icu4x/blob/f7d4a25df2d35ee114c1ff3293289830d2c9d8fe/utils/zerovec/derive/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28509,8 +28562,8 @@
         "https://github.com/unicode-org/icu4x/blob/898d79c69f37da7b45a15a5714663c9b59b3d928/utils/zerovec/derive/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28535,8 +28588,8 @@
         "https://github.com/unicode-org/icu4x/blob/3c47d82f8ba9f36699b71566844ed28b3f742b21/utils/zerovec/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28561,8 +28614,8 @@
         "https://github.com/unicode-org/icu4x/blob/c56bbb5a7b47409759113903764c456f13b418e5/utils/zerovec/LICENSE"
       ],
       "copyright": [
-        "Copyright © 2020-2024 Unicode, Inc.",
-        "ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others."
+        "Copyright \u00a9 2020-2024 Unicode, Inc.",
+        "ICU 1.8.1 to ICU 57.1 \u00a9 1995-2016 International Business Machines Corporation and others."
       ]
     },
     {
@@ -28901,7 +28954,7 @@
         "https://github.com/IBM/plex/blob/2f9ba1b25957d958db71a849e85d72e3ecfb845a/LICENSE.txt"
       ],
       "copyright": [
-        "Copyright © 2017 IBM Corp. with Reserved Font Name \"Plex\""
+        "Copyright \u00a9 2017 IBM Corp. with Reserved Font Name \"Plex\""
       ]
     },
     {
@@ -28977,7 +29030,7 @@
         "https://github.com/unicode-org/icu/blob/release-78.1/LICENSE"
       ],
       "copyright": [
-        "Copyright © 1991-2026 Unicode, Inc."
+        "Copyright \u00a9 1991-2026 Unicode, Inc."
       ]
     }
   ]

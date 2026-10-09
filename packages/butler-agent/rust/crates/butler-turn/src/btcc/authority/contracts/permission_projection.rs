@@ -6,6 +6,7 @@ pub(crate) struct PermissionSource<'a> {
     pub target: &'a str,
     pub input_json: &'a str,
 }
+#[derive(Clone)]
 pub(crate) struct PermissionTarget {
     pub grant_ref: String,
     pub capability: String,

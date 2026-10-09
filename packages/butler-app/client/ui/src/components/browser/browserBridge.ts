@@ -5,10 +5,11 @@ import { appCopy } from "@/app/copy";
 
 export interface BrowserTab {
   id: string; owner: string; url: string; title: string; favicon: string;
+  stills?: boolean; agent?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
 }
 export interface BrowserSnapshot {
-  enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; tabs: BrowserTab[];
+  enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
 interface BrowserBridge {
   call: (op: string, input?: unknown) => Promise<unknown>;
@@ -21,7 +22,18 @@ export const useBrowserState = create<BrowserSnapshot>(() => ({
 }));
 let unsubscribe: (() => void) | undefined;
 export function connectBrowser() {
-  if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => useBrowserState.setState(state));
+  if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => {
+    const previous = useBrowserState.getState();
+    useBrowserState.setState(state);
+    const store = useButlerStore.getState();
+    if (state.focusRequest && state.focusRequest !== previous.focusRequest) {
+      store.setView({ kind: "browser" }); void browserCall("open");
+    }
+    if (store.view.kind === "browser" || state.focusRequest !== previous.focusRequest) {
+      const owner = state.tabs.find((tab) => tab.id === state.activeId)?.owner;
+      if (owner?.startsWith("conversation:")) { if (store.activeChatId !== owner.slice(13)) store.setActiveChatId(owner.slice(13)); store.setRightOpen(true); }
+    }
+  });
 }
 export async function browserCall(op: string, input?: unknown) {
   try { return await window.butlerBrowser?.call(op, input); }
@@ -29,11 +41,26 @@ export async function browserCall(op: string, input?: unknown) {
 }
 export async function openBrowser(output?: { url: string; sessionId: string }) {
   if (!window.butlerBrowser) return;
+  const session=output?.sessionId;
   connectBrowser();
-  await browserCall("open");
-  if (output) {
-    await browserCall("create", { owner: `conversation:${output.sessionId}`, url: output.url });
+  const snapshot=await browserCall("open") as BrowserSnapshot | undefined;
+  if (session) {
+    const group=snapshot?.tabs.filter(tab=>tab.owner===`conversation:${session}`) ?? [];
+    const target=output ? await browserCall("create",{owner:`conversation:${session}`,url:output.url})
+      : group.find(tab=>tab.id===snapshot?.activeId)?.id ?? group[0]?.id ?? await browserCall("create",{owner:`conversation:${session}`,profile:"signed_out"});
+    if(typeof target==="string") await browserCall("activate",{id:target});
+    useButlerStore.getState().setActiveChatId(session);
     useButlerStore.getState().setRightOpen(true);
   }
   useButlerStore.getState().setView({ kind: "browser" });
+}
+
+export async function focusBrowserTab(id: string, sessionId: string, fallback: string) {
+  const state = await browserCall("state") as BrowserSnapshot | undefined;
+  if (state?.tabs.some(tab => tab.id === id)) {
+    useButlerStore.getState().setActiveChatId(sessionId);
+    useButlerStore.getState().setView({ kind: "browser" });
+    useButlerStore.getState().setRightOpen(true);
+    await browserCall("open"); await browserCall("activate", { id });
+  } else { window.open(fallback, "_blank", "noopener"); }
 }

@@ -15,6 +15,9 @@ impl AppApplication {
         &self,
         input: AppFileUpload,
     ) -> Result<MessageFileRef, GatewayApplicationError> {
+        if let Some(tab) = input.browser_tab.clone() {
+            return self.upload_browser_still(input, tab).await;
+        }
         let owner = input
             .owner_session_id
             .as_deref()
@@ -83,7 +86,7 @@ fn ensure_chat(db: &Connection, id: &str) -> Result<(), AppStorageError> {
     Ok(())
 }
 
-fn insert_uploaded(
+pub(super) fn insert_uploaded(
     db: &Connection,
     owner: Option<&String>,
     file: &super::MaterializedResponderFile,

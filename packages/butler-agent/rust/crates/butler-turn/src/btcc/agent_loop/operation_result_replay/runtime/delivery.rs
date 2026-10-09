@@ -56,17 +56,7 @@ impl OperationResultReplayRuntime {
         if !durable(&record) {
             return Ok(None);
         }
-        let result_reference = self.reference_for(&record).await?;
-        let value = serde_json::to_value(&result_reference).map_err(|source| {
-            OperationResultError::Contract(
-                contract(BtccCode::OperationResultSerializationFailed).with_source(source),
-            )
-        })?;
-        let content =
-            crate::btcc::identity::stable_json(&value).map_err(OperationResultError::Contract)?;
-        let mut candidate = message.clone();
-        candidate.content = content.into();
-        candidate.request_segment_kind = Some("older_tool_result_projection".into());
+        let candidate = self.reference_candidate(message, &record).await?;
         if record.delivery_state.is_none() {
             if !self.replacement_saves(message, &candidate, replay.model, replay.butler_data)? {
                 return Ok(None);
@@ -111,8 +101,60 @@ impl OperationResultReplayRuntime {
             Some(DeliveryState::ReferenceOnly) => {}
             Some(DeliveryState::Unknown) | None => return Ok(None),
         }
-        candidate.operation_result_reference = Some(result_reference);
+        if self.keep_browser_projection(message, &candidate, &record.tool_name, replay)? {
+            return Ok(None);
+        }
         Ok(Some(candidate))
+    }
+    async fn reference_candidate(
+        &self,
+        message: &ModelRoundMessage,
+        record: &ToolJournalRecord,
+    ) -> Result<ModelRoundMessage, OperationResultError> {
+        let result_reference = self.reference_for(record).await?;
+        let value = serde_json::to_value(&result_reference).map_err(|source| {
+            OperationResultError::Contract(
+                contract(BtccCode::OperationResultSerializationFailed).with_source(source),
+            )
+        })?;
+        let content =
+            crate::btcc::identity::stable_json(&value).map_err(OperationResultError::Contract)?;
+        let mut candidate = message.clone();
+        candidate.content = content.into();
+        candidate.request_segment_kind = Some("older_tool_result_projection".into());
+        candidate.operation_result_reference = Some(result_reference);
+        Ok(candidate)
+    }
+
+    fn keep_browser_projection(
+        &self,
+        message: &ModelRoundMessage,
+        candidate: &ModelRoundMessage,
+        tool_name: &str,
+        replay: &Replay<'_>,
+    ) -> Result<bool, OperationResultError> {
+        if !matches!(tool_name, "browser_observe" | "browser_act") {
+            return Ok(false);
+        }
+        // Browser history owns its latest full cycle and its smaller semantic
+        // stubs. Replay still advances delivery/acknowledgement above.
+        let browser = serde_json::from_str::<Value>(&message.content).is_ok_and(|value| {
+            matches!(
+                value
+                    .get("output")
+                    .and_then(|output| output.get("schema"))
+                    .and_then(Value::as_str),
+                Some("butler.browser-observation.v1" | "butler.browser-action.v1")
+            )
+        });
+        Ok(browser
+            && (!super::super::super::browser_context::is_superseded(&message.content)
+                || !self.replacement_saves(
+                    message,
+                    candidate,
+                    replay.model,
+                    replay.butler_data,
+                )?))
     }
 }
 

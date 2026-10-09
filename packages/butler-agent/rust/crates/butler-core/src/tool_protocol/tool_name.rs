@@ -126,6 +126,12 @@ tool_names! {
     WebRead = "web_read",
     WebSearch = "web_search",
     WriteFile = "write_file",
+    BrowserOpen = "browser_open",
+    BrowserObserve = "browser_observe",
+    BrowserAct = "browser_act",
+    BrowserTabs = "browser_tabs",
+    BrowserClose = "browser_close",
+    BrowserWaitForUser = "browser_wait_for_user",
     OutputCheck = "output_check",
     OutputPublish = "output_publish",
 }

@@ -246,6 +246,7 @@ export const koKrCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
+    tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계",
     title: "브라우저", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", address: "주소", addressPlaceholder: "검색 또는 URL 입력", back: "뒤로", forward: "앞으로",
     reload: "새로고침", stop: "중지", loading: "로딩 중", crashed: "탭이 중단됨", empty: "새 탭을 열어보세요", updateRequired: "버틀러 업데이트 필요", restartRequired: "버틀러 재시작 필요",
     failed: "페이지를 열지 못함", openOutput: "브라우저에서 열기", output: "출력물", show: "브라우저 열기", hide: "브라우저 닫기", active: "버틀러가 브라우저 사용 중",
@@ -344,7 +345,7 @@ export const koKrCopy: AppCopy = {
       interrupted: "작업이 중단되었습니다. 이어서 진행할 수 있습니다.", waitingForChildren: "Worker 결과를 기다리는 중입니다.",
     },
     argumentLabels: { command: "명령", cmd: "명령", command_intent: "명령", output_count: "출력", path: "경로", file_path: "경로", target: "대상", objective: "목표", query: "검색어", pattern: "패턴" },
-    tools: { ...additionalToolLabels, read_project_source: "프로젝트 원문 읽기", web_search: "웹 검색", web_read: "웹 문서 읽기", read_file: "파일 읽기", list_files: "작업공간 파일 찾기", grep_files: "작업공간 검색", write_file: "작성", edit_file: "수정", tool_search: "사용 가능한 도구 찾기", tool_describe: "도구 사용법 확인", tool_call: "도구 실행", run_command: "명령 실행", project_ledger_change: "프로젝트 기록 변경", project_ledger_read: "프로젝트 기록 확인", start_work: "요청 내용 확인", continue_work: "진행 내용 확인", replace_work_plan: "실행 계획 수립", record_work_checkpoint: "작업 진행 확인", record_work_review: "결과 검토", plan_review: "계획 검토", completion_review: "완료 검토", record_work_disposition: "완료 상태 기록", work_tool: "작업 상태 변경", tool_work: "도구 작업", fallback: "작업 중" },
+    tools: { ...additionalToolLabels, browser_open: "탭 열기", browser_observe: "페이지 읽기", browser_act: "브라우저 조작", browser_tabs: "탭 확인", browser_close: "탭 닫기", browser_wait_for_user: "직접 조작 대기", read_project_source: "프로젝트 원문 읽기", web_search: "웹 검색", web_read: "웹 문서 읽기", read_file: "파일 읽기", list_files: "작업공간 파일 찾기", grep_files: "작업공간 검색", write_file: "작성", edit_file: "수정", tool_search: "사용 가능한 도구 찾기", tool_describe: "도구 사용법 확인", tool_call: "도구 실행", run_command: "명령 실행", project_ledger_change: "프로젝트 기록 변경", project_ledger_read: "프로젝트 기록 확인", start_work: "요청 내용 확인", continue_work: "진행 내용 확인", replace_work_plan: "실행 계획 수립", record_work_checkpoint: "작업 진행 확인", record_work_review: "결과 검토", plan_review: "계획 검토", completion_review: "완료 검토", record_work_disposition: "완료 상태 기록", work_tool: "작업 상태 변경", tool_work: "도구 작업", fallback: "작업 중" },
     checkingPrevious: "이전에 진행하던 내용과 현재 상태를 확인하고 있습니다.", checkingRequest: "요청하신 내용과 필요한 결과를 정리하고 있습니다.", toolWorking: "도구 작업을 진행하고 있습니다", checkingInformation: "작업에 필요한 정보를 확인하고 있습니다.", commandExecuting: "작업 공간에서 필요한 명령을 실행하고 있습니다.", conceptionTitle: "요청 의도 확인", planningNext: "요청에 맞는 작업 순서와 검증 기준을 정합니다.", reportTitle: "결과 보고",
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `요청의 목표와 범위를 확인했습니다: ${text}` : "요청의 목표와 범위를 확인했습니다.", workInProgress: text => `${text} 작업을 진행하고 있습니다.`, toolsSummary: text => text ? `${text} 도구로 필요한 정보를 확인하고 있습니다.` : "필요한 도구로 작업을 진행하고 있습니다.",
   },
@@ -483,6 +484,12 @@ export const koKrCopy: AppCopy = {
     grantedItems: count => `허용한 항목 ${count}개`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
+      browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
+      browserStep: (action, role, name, frame) => {
+        const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤" };
+        const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란" };
+        return `‘${name}’ ${roles[role] ?? role} ${actions[action] ?? action} · ${frame}`;
+      },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,

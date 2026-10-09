@@ -246,6 +246,7 @@ export const enUsCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
+    tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
     back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab",
     updateRequired: "Update Butler", restartRequired: "Restart Butler", failed: "Could not open page", openOutput: "Open in Browser",
@@ -350,7 +351,7 @@ export const enUsCopy: AppCopy = {
       interrupted: "Work was interrupted. You can resume it.", waitingForChildren: "Waiting for worker results.",
     },
     argumentLabels: { command: "Command", cmd: "Command", command_intent: "Command", output_count: "Outputs", path: "Path", file_path: "Path", target: "Target", objective: "Objective", query: "Query", pattern: "Pattern" },
-    tools: { ...additionalToolLabels, read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Working" },
+    tools: { ...additionalToolLabels, browser_open: "Open tab", browser_observe: "Read page", browser_act: "Browser action", browser_tabs: "Check tabs", browser_close: "Close tab", browser_wait_for_user: "Wait for you", read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Working" },
     checkingPrevious: "Checking previous work and its current state.", checkingRequest: "Clarifying the request and required outcome.", toolWorking: "Working with tools.", checkingInformation: "Checking information needed for the work.", commandExecuting: "Running the required workspace commands.", conceptionTitle: "Confirm request intent", planningNext: "Define the work order and validation criteria for the request.", reportTitle: "Report results",
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
@@ -489,6 +490,11 @@ export const enUsCopy: AppCopy = {
     grantedItems: count => `${count} allowed items`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
+      browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
+      browserStep: (action, role, name, frame) => {
+        const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll" };
+        return `${actions[action] ?? action} the ‘${name}’ ${role} · ${frame}`;
+      },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "Read only" : "Change"}?`,
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,

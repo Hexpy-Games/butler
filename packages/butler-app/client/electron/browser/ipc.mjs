@@ -14,6 +14,8 @@ export function installUserBrowser(app, getWindow) {
       case "create": return browser.create(input);
       case "close": return browser.close(input.id);
       case "activate": return browser.activate(input.id);
+      case "control": return browser.control(input.id, input.holder, input.sticky === true);
+      case "stills": return browser.setStills(input.id, input.value);
       case "move": return browser.move(input);
       default:
         if (!["navigate", "back", "forward", "reload", "stop", "bounds", "covered", "still", "focus"].includes(op)) throw new Error("invalid_browser_call");

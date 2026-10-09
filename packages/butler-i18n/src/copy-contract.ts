@@ -122,6 +122,8 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  browserMode: { signed_out: string; signed_in: string };
+  browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
@@ -215,6 +217,7 @@ interface ConversationCopy {
 }
 
 export interface BrowserCopy {
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;

@@ -24,6 +24,11 @@ impl PublishedEvent {
         }
     }
 
+    /// Immutable committed envelope for change-driven host observers.
+    pub fn envelope(&self) -> &AppEventEnvelope {
+        &self.event
+    }
+
     pub fn id(&self) -> u64 {
         self.event.id
     }

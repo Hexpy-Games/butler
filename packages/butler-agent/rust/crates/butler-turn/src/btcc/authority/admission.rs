@@ -70,7 +70,10 @@ fn free_slot(
             return projection::admission(&existing, collation)
                 .map(|result| Slot::Settled(Box::new(result)));
         }
-        if repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)? {
+        if input.normalized_input.get("always_confirm") != Some(&serde_json::Value::Bool(true))
+            && input.capability != "browser_wait_for_user"
+            && repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)?
+        {
             return Ok(Slot::Settled(Box::new(AuthorityAdmissionResult::Granted)));
         }
         match repository.find_slot(input, generation)? {

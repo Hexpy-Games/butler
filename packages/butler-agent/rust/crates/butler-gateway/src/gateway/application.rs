@@ -13,6 +13,7 @@ mod events;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
 use errors::app_error;
+mod browser_stills;
 mod devices;
 mod event_reads;
 #[cfg(debug_assertions)]

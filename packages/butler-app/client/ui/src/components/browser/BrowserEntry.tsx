@@ -1,12 +1,10 @@
-import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Globe2, NavRow, Stack, Tooltip } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
-import { connectBrowser, openBrowser, useBrowserState } from "./browserBridge";
+import { openBrowser, useBrowserState } from "./browserBridge";
 
 export function BrowserEntry() {
   useAppLocale();
-  useEffect(connectBrowser, []);
   const enabled = useBrowserState((state) => state.enabled);
   const active = useButlerStore((state) => state.view.kind === "browser");
   if (!window.butlerBrowser) return null;

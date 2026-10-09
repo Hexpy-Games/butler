@@ -11,6 +11,7 @@ mod hooks;
 mod image;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
+mod browser;
 mod message;
 mod monitoring;
 mod occurrence;
@@ -330,7 +331,8 @@ impl GuidedTools {
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
             )
-        ) || GuidedWorkTools::is_work_tool(name)
+        ) || browser::supports(name)
+            || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }
 

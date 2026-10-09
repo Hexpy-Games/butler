@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 semver.workspace = true
+psl = "2.1"
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }

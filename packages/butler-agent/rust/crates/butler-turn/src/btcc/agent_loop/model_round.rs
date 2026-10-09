@@ -105,6 +105,7 @@ async fn attempt_round(
     state: &mut State,
     surface: &mut ToolSurface,
 ) -> Result<ModelRoundResult, AttemptError> {
+    super::browser_context::supersede(&mut state.messages);
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);
     let replay = replay_transcript(round, state).await?;

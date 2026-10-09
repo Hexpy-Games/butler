@@ -334,10 +334,8 @@ fn append_turn_state_changed(
     turn: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let turn_view = read_model::list_turns(db, chat_id, 0.0)?
-        .turns
-        .into_iter()
-        .find(|row| row.id == turn)
+    let turn_view = read_model::exact_turn(db, turn)?
+        .filter(|row| row.chat_id == chat_id)
         .ok_or_else(|| {
             AppStorageError::new(
                 AppStorageCode::ProjectedTurnMissing,

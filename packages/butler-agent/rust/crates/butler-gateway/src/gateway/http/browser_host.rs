@@ -1,4 +1,5 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
+pub(super) mod agent_calls;
 mod report;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -19,21 +20,24 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Default)]
-pub(super) struct Hub(Mutex<Inner>);
+pub(super) struct Hub(Mutex<Inner>, tokio::sync::Mutex<()>);
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
     pending: HashMap<String, oneshot::Sender<Value>>,
+    tabs: butler_runtime::browser::TabRegistry,
 }
 struct HostStream {
     state: Arc<HttpState>,
     receiver: mpsc::Receiver<Value>,
+    _subscription: Box<dyn crate::gateway::EventSubscription>,
 }
 impl Drop for HostStream {
     fn drop(&mut self) {
         if let Ok(mut hub) = self.state.browser.0.lock() {
             hub.host = None;
             hub.pending.clear();
+            hub.tabs.clear();
         }
     }
 }
@@ -61,6 +65,12 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => attach(state, client.keys.live_streams()),
         (&Method::POST, "/internal/browser/calls") => call(state, request).await,
+        (&Method::POST, "/internal/browser-host/stills") => {
+            agent_calls::still(state, read_json(request).await?).await
+        }
+        (&Method::POST, "/internal/browser-host/events") => {
+            agent_calls::events(state, read_json(request).await?).await
+        }
         (&Method::POST, p) if p.starts_with("/internal/browser-host/results/") => {
             let id = p.trim_start_matches("/internal/browser-host/results/");
             let body = read_json(request).await?;
@@ -92,18 +102,48 @@ fn attach(
         }
         hub.host = Some(sender);
     }
-    let shutdown = state.shutdown.clone();
-    let stream = stream::unfold(HostStream { state, receiver }, move |mut host| {
-        let shutdown = shutdown.clone();
-        let rotated = rotated.clone();
-        async move {
-            tokio::select! {
-                () = shutdown.cancelled() => None,
-                () = rotated.cancelled() => None,
-                frame = host.receiver.recv() => frame.map(|v| (Ok::<_, std::convert::Infallible>(Event::default().event("call").data(v.to_string())), host)),
-            }
+    let weak = Arc::downgrade(&state);
+    // Committed events are published on the SQLite owner thread, not Tokio.
+    let runtime = tokio::runtime::Handle::current();
+    let subscription = state.application.subscribe_events(Arc::new(move |event| {
+        let envelope = event.envelope();
+        if envelope.event_type != "turn.state_changed"
+            || envelope.payload.get("state").and_then(Value::as_str) != Some("waiting_for_form")
+        {
+            return;
         }
-    });
+        let Some(state) = weak.upgrade() else {
+            return;
+        };
+        runtime.spawn(async move {
+            let tabs = state
+                .browser
+                .0
+                .lock()
+                .map(|hub| hub.tabs.ready_waits())
+                .unwrap_or_default();
+            let _ = agent_calls::resume_waits(&state, &tabs).await;
+        });
+    }))?;
+    let shutdown = state.shutdown.clone();
+    let stream = stream::unfold(
+        HostStream {
+            state,
+            receiver,
+            _subscription: subscription,
+        },
+        move |mut host| {
+            let shutdown = shutdown.clone();
+            let rotated = rotated.clone();
+            async move {
+                tokio::select! {
+                    () = shutdown.cancelled() => None,
+                    () = rotated.cancelled() => None,
+                    frame = host.receiver.recv() => frame.map(|v| (Ok::<_, std::convert::Infallible>(Event::default().event("call").data(v.to_string())), host)),
+                }
+            }
+        },
+    );
     use axum::response::IntoResponse;
     Ok(Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(60)))
@@ -111,6 +151,9 @@ fn attach(
 }
 async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let mut args = read_json(request).await?;
+    if args.get("op").is_some() {
+        return agent_calls::call(state, args).await;
+    }
     let view = super::content::check_view(&state, &args).await?;
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
@@ -159,7 +202,16 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
 }
 
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
-    let bytes = super::read_body_with_limit(request.into_body(), 220 * 1024).await?;
+    let limit = if request
+        .uri()
+        .path()
+        .starts_with("/internal/browser-host/results/")
+    {
+        256 * 1024
+    } else {
+        64 * 1024
+    };
+    let bytes = super::read_body_with_limit(request.into_body(), limit).await?;
     serde_json::from_slice(&bytes).map_err(|_| error(400, "invalid_request"))
 }
 

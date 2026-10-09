@@ -54,7 +54,7 @@ pub(super) async fn operation(
     operation_call_id: Option<&str>,
 ) {
     let call_id = &call.id;
-    let tool_name = &call.name;
+    let tool_name = operation_tool_name(call);
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
     let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
@@ -182,6 +182,29 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
                 .filter(|value| !value.is_empty())
         })
         .or_else(|| (call.name == "list_files").then(|| ".".into()))
+}
+
+fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
+    if call.name == "tool_call"
+        && let Some(name) = call
+            .arguments
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| id.strip_prefix("native:"))
+        && matches!(
+            name,
+            "browser_open"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_tabs"
+                | "browser_close"
+                | "browser_wait_for_user"
+        )
+    {
+        name
+    } else {
+        &call.name
+    }
 }
 
 /// Publish pending rows only after persistence, or fail them when parking fails.
