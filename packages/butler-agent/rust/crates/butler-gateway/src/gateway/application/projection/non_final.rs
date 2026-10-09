@@ -13,6 +13,7 @@ mod values;
 
 use crate::gateway::application::storage::CachedSql;
 use operations::*;
+pub(in crate::gateway::application) use operations::{FailedProjection, project_failed};
 use progress::*;
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
 use runtime_values::*;
@@ -55,7 +56,7 @@ fn terminal_update_is_stale(
     ) && terminal_turn(db, turn)?)
 }
 
-pub(super) struct ProjectionIds {
+pub(in crate::gateway::application) struct ProjectionIds {
     pub event_id: String,
     pub message_id: String,
 }

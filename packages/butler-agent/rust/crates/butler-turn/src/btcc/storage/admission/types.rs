@@ -85,6 +85,16 @@ impl<'a> Fresh<'a> {
     /// The admitted message or trigger content.
     pub(super) fn content(&self) -> StorageResult<&'a str> {
         match self.source {
+            Source::Message(message)
+                if self
+                    .context
+                    .get("attachments")
+                    .and_then(Value::as_array)
+                    .is_some_and(|attachments| !attachments.is_empty()) =>
+            {
+                // Attachments are durable input; preserve the original empty text.
+                Ok(&message.content)
+            }
             Source::Message(message) => text(&message.content, "content"),
             Source::Trigger(trigger) => text(&trigger.content, "content"),
         }
