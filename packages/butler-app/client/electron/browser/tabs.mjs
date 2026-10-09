@@ -32,7 +32,7 @@ class UserBrowser {
     this.getWindow = getWindow;
     this.breaker = createLossBreaker(() => this.trip());
     this.restore = createTabRestore(join(app.getPath("userData"), "browser"), () =>
-      [...this.tabs.values()].filter((tab) => tab.owner === "mine").map((tab) => tab.url));
+      [...this.tabs.values()].filter((tab) => tab.owner === "mine" && !tab.popup).map((tab) => tab.url));
     app.on("child-process-gone", (_event, detail) => {
       if (detail.type === "GPU" && detail.reason !== "clean-exit") this.breaker.loss(this.tabs.size > 0);
     });

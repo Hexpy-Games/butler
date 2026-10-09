@@ -1,4 +1,4 @@
-import { drainEvents } from "./events.mjs";
+import { browserEvent, drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
 import { startUse, endUse, finishUse } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
@@ -25,7 +25,10 @@ export function wireAgentTab(browser, tab) {
   };
   contents.on("input-event", (_event, input) => takeover(input));
   contents.on("before-input-event", (_event, input) => takeover(input));
-  installNavigationGuard(tab, () => { tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop(); browser.close(tab.id); });
+  installNavigationGuard(tab, popupUrl => {
+    if (popupUrl) browserEvent(browser, tab, "popup_blocked", { url: popupUrl, reason: "popup_policy" });
+    tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop(); browser.close(tab.id);
+  });
 }
 export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
@@ -110,7 +113,10 @@ async function executeFrame(browser, frame) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
   if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner) };
-  if (op === "owner.closed") { for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id); return { status: "ok" }; }
+  if (op === "owner.closed") {
+    for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id);
+    browser.events?.delete(owner); return { status: "ok" };
+  }
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };

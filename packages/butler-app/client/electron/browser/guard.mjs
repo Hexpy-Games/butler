@@ -33,7 +33,7 @@ export function installNavigationGuard(tab, onViolation) {
       const entry = router.get(detail.webContentsId);
       if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
       if (detail.resourceType === "mainFrame" && entry.tab.opener && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
-        done({ cancel: true }); entry.onViolation(); return;
+        done({ cancel: true }); entry.onViolation(detail.url); return;
       }
       void guardUrl(detail.url, profile, entry.tab.policy).then(allowed => {
         done({ cancel: !allowed }); if (!allowed) entry.onViolation();
@@ -43,7 +43,7 @@ export function installNavigationGuard(tab, onViolation) {
   router.set(contents.id, { tab, onViolation });
   contents.once("destroyed", () => router.delete(contents.id));
   contents.on("will-frame-navigate", event => {
-    if (!event.isMainFrame && /^about:(blank|srcdoc)$/u.test(event.url)) return;
+    if ((!event.isMainFrame || tab.opener && event.url === "about:blank") && /^about:(blank|srcdoc)$/u.test(event.url)) return;
     if (!webUrl(event.url)) { event.preventDefault(); onViolation(); }
   });
 }

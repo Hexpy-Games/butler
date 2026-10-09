@@ -127,7 +127,8 @@ try {
   stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: view.url })]);
   await send("Open S4 fixture"); await delivered();
   const agent = (await state()).tabs.find(t => t.agent)!; assert.ok(agent);
-  for (const kind of ["oauth", "payment", "postcode"]) {
+  await app.main(`${contents(agent.id)}.executeJavaScript("window.s4Errors=[];addEventListener('error',e=>s4Errors.push(e.message));void 0")`);
+  for (const kind of ["oauth", "payment", "postcode", "blank"]) {
     await app.main(`${contents(agent.id)}.executeJavaScript(${JSON.stringify(`document.querySelector('#${kind}').click()`)})`);
     await waitBrowser(async () => (await state()).tabs.some(t => t.owner === agent.owner && t.id !== agent.id && t.agent), "agent popup grouped");
     const child = (await state()).tabs.find(t => t.owner === agent.owner && t.id !== agent.id && t.agent)!;
@@ -180,7 +181,12 @@ try {
   } finally { await browser.close(); }
   for (const type of ["Prompt", "Beforeunload"]) {
     // Page-originated dialogs also need authority while the tab is hidden.
-    await app.main(`(()=>{void ${contents(agent.id)}.executeJavaScript(${JSON.stringify(`document.querySelector('#${type.toLowerCase()}').click()`)})})()`);
+    const click = `document.querySelector('#${type.toLowerCase()}').click()`;
+    if (type === "Beforeunload") await app.main(`${contents(agent.id)}.executeJavaScript(${JSON.stringify(click)})`);
+    else {
+      await app.main(`(()=>{void ${contents(agent.id)}.executeJavaScript(${JSON.stringify(click)})})()`);
+      await waitBrowser(async () => (await state()).tabs.find(t => t.id === agent.id)?.dialog?.type === "prompt", "page-originated prompt intercepted");
+    }
     stub.set([describeBrowser, () => bridgeBrowser(type === "Beforeunload" ? "browser_close" : "browser_observe", { tab: agent.id })]);
     await send(`Ask owner for ${type}`);
     await waitBrowser(async () => (await app.gateway.api<any>("/authority-requests?session_id=general")).requests.length === 1, `durable ${type} approval`);
@@ -209,6 +215,6 @@ try {
   }
   writeFileSync(join(evidence, `acceptance-${selected ?? "all"}.json`), JSON.stringify({ status: "passed", elapsedMs: Date.now() - started, facts, toolResults: stub.results }, null, 2));
 } catch (error) {
-  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), lastMain: app.lastMain(), state: await state().catch(() => null), mainError: await app.main("globalThis.browserAgentError").catch(() => null), native: await app.main(`(async()=>{const t=[...globalThis.browserAgentSubject.tabs.values()].find(t=>t.agent);return t&&{bounds:t.bounds,view:t.view?.getBounds(),focused:t.view?.webContents.isFocused(),dialog:t.dialog?.type,body:!t.dialog?await t.view?.webContents.executeJavaScript("({result:document.querySelector('#result')?.textContent,prompt:String(prompt),scroll:[scrollX,scrollY],size:[innerWidth,innerHeight]})"):null}})()`).catch(()=>null), toolResults: stub.results, dom: await app.page.diagnostics().catch(() => null) }, null, 2));
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), lastMain: app.lastMain(), state: await state().catch(() => null), mainError: await app.main("globalThis.browserAgentError").catch(() => null), native: await app.main(`(async()=>{const t=[...globalThis.browserAgentSubject.tabs.values()].find(t=>t.agent);return t&&{bounds:t.bounds,view:t.view?.getBounds(),focused:t.view?.webContents.isFocused(),dialog:t.dialog?.type,body:!t.dialog?await t.view?.webContents.executeJavaScript("({errors:window.s4Errors,result:document.querySelector('#result')?.textContent,prompt:String(prompt),scroll:[scrollX,scrollY],size:[innerWidth,innerHeight]})"):null}})()`).catch(()=>null), toolResults: stub.results, dom: await app.page.diagnostics().catch(() => null) }, null, 2));
   throw error;
 } finally { server.stop(true); await app.stop(); }

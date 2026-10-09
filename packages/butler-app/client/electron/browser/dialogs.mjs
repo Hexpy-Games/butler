@@ -40,8 +40,9 @@ export function wireDialogs(browser, tab) {
   const contents = tab.view.webContents;
   void contents.debugger.sendCommand("Page.enable").catch(() => {});
   contents.debugger.on("message", (_event, method, value, sessionId) => {
-    if (method === "Page.javascriptDialogOpening") beginDialog(browser, tab, { ...value, sessionId: sessionId || undefined });
-    if (method === "Page.javascriptDialogClosed" && tab.dialog && !tab.dialog.answering) {
+    if (method === "Page.javascriptDialogOpening") beginDialog(browser, tab, { ...value, beforeUnloadClose: value.type === "beforeunload" && tab.closeRequested, sessionId: sessionId || undefined });
+    if (method === "Page.javascriptDialogClosed" && tab.dialog && !tab.dialog.answering && !tab.dialog.callback && !tab.dialog.beforeUnloadClose) {
+      browserEvent(browser, tab, "dialog_cancelled", { dialog: tab.dialog.id, dialog_type: tab.dialog.type, reason: "page_closed" });
       clearTimeout(tab.dialog.timer); tab.dialog = null; tab.waiting = false; browser.publish(); browser.sync(tab);
     }
     if (method === "Page.fileChooserOpened") browserEvent(browser, tab, "file_chooser", { reason: "owner_required" });
@@ -71,7 +72,7 @@ export function requestClose(browser, tab) {
     let settled = false;
     const finish = result => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
+      settled = true; tab.closeRequested = false; clearTimeout(timer);
       contents.removeListener("will-prevent-unload", prevented); contents.removeListener("destroyed", closed); resolve(result);
     };
     const prevented = () => {
@@ -83,6 +84,7 @@ export function requestClose(browser, tab) {
     const timer = setTimeout(() => finish({ status: "unknown", reason: "close_interrupted" }), 4500);
     contents.once("will-prevent-unload", prevented); contents.once("destroyed", closed);
     browser.detach(tab);
+    tab.closeRequested = true;
     contents.close({ waitForBeforeUnload: true });
   });
 }

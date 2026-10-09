@@ -25,6 +25,7 @@ export function syncPopup(browser, tab) {
     if (tab.attached !== win) { win.contentView.addChildView(tab.view); tab.attached = win; }
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+    tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
   }
   publishPopup(browser, tab);
 }
@@ -68,7 +69,8 @@ function popupView(browser, source, details, options, agent) {
     const win = new BrowserWindow({ width: 520, height: 620, minWidth: 320, minHeight: 240, show: false,
       parent: browser.getWindow(), ...popupWindowOptions(), webPreferences: { sandbox: true, nodeIntegration: false,
         contextIsolation: true, preload: fileURLToPath(new URL("./popup-preload.cjs", import.meta.url)) } });
-    win.center();
+    const parent = browser.getWindow().getBounds();
+    win.setPosition(Math.round(parent.x + (parent.width - 520) / 2), Math.round(parent.y + (parent.height - 620) / 2));
     tab.popupWindow = win; tab.popupChrome = { webContents: win.webContents };
     browser.materialize(tab); wireChrome(browser, tab, win);
     win.on("resize", () => syncPopup(browser, tab));

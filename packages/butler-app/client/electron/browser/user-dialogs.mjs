@@ -27,7 +27,7 @@ export function wireUserDialogs(browser, tab) {
         event.returnValue = null;
         browserEvent(host, source, input.type === "file" ? "file_chooser" : "print_requested", { reason: "owner_required" }); return;
       }
-      beginDialog(host, source, { type: input.type, message: input.message, defaultPrompt: input.value }, answer => {
+      beginDialog(host, source, { type: input.type, message: input.message, defaultPrompt: input.value, origin: event.senderFrame.url }, answer => {
         event.returnValue = input.type === "file" ? answer.accept ? answer.files : null : input.type === "prompt" ? answer.accept ? answer.value ?? "" : null : answer.accept;
         if (input.type === "print" && answer.accept && source.dialog?.printers?.some(printer => printer.name === answer.printer)) {
           page.print({ silent: true, deviceName: answer.printer }, success => browserEvent(host, source, "print_finished", { success }));
@@ -55,7 +55,7 @@ export function wireUserDialogs(browser, tab) {
   contents.on("will-prevent-unload", event => {
     if (tab.unloadApproved) { tab.unloadApproved = false; event.preventDefault(); return; }
     if (tab.dialog) return;
-    beginDialog(browser, tab, { type: "beforeunload", message: tab.title, navigation: tab.navigationIntent }, () => {});
+    beginDialog(browser, tab, { type: "beforeunload", message: tab.title, origin: contents.getURL(), navigation: tab.navigationIntent }, () => {});
   });
   contents.once("destroyed", () => { browser.detach(tab); tab.view = null; resolveDialog(browser, tab, { accept: false }, "tab_closed"); registries.delete(contents.id); if (!tab.closing) setImmediate(() => browser.close(tab.id)); });
 }

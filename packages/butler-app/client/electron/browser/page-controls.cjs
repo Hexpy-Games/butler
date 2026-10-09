@@ -9,7 +9,9 @@ contextBridge.exposeInMainWorld("__butlerPageControl", (type, message, value) =>
 contextBridge.executeInMainWorld({ func: (isAgent) => {
   const open = window.open;
   window.open = function (...args) { window.__butlerPageControl("popup"); return open.apply(this, args); };
-  if (!isAgent) for (const type of ["alert", "confirm", "prompt"]) {
+  // Electron throws before CDP can report native prompt(); use the same narrow
+  // bridge for that one dialog. Agent alert/confirm/beforeunload remain CDP-owned.
+  for (const type of isAgent ? ["prompt"] : ["alert", "confirm", "prompt"]) {
     Object.defineProperty(window, type, { configurable: false, value: (message, value) => window.__butlerPageControl(type, message, value) });
   }
   const choose = input => {
