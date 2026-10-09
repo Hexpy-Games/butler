@@ -377,6 +377,13 @@ async fn title_09_attachment_only_first_message_is_titled() -> Result<(), Harnes
             .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     wait_title(&s, &chat, "Boarding notes review").await?;
+    let messages = s.gw.messages(&chat).await?;
+    let user = messages
+        .iter()
+        .find(|m| m["role"] == "user")
+        .expect("persisted user");
+    assert_eq!(user["text"], "");
+    assert_eq!(user["attachments"][0]["safe_name"], file_name);
     let title_request = s
         .provider()?
         .requests()
