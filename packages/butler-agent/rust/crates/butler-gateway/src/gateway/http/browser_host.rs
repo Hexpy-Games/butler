@@ -1,6 +1,7 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
 mod report;
+mod usage;
 use super::{Client, HttpError, HttpState};
 use axum::{
     body::Body,
@@ -13,7 +14,7 @@ use axum::{
 use futures_util::stream;
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -26,6 +27,8 @@ struct Inner {
     host: Option<mpsc::Sender<Value>>,
     pending: HashMap<String, oneshot::Sender<Value>>,
     tabs: butler_runtime::browser::TabRegistry,
+    uses: HashMap<String, usage::Use>,
+    turns: HashSet<(String, String)>,
 }
 struct HostStream {
     state: Arc<HttpState>,
@@ -38,6 +41,8 @@ impl Drop for HostStream {
             hub.host = None;
             hub.pending.clear();
             hub.tabs.clear();
+            hub.uses.clear();
+            hub.turns.clear();
         }
     }
 }
@@ -107,14 +112,21 @@ fn attach(
     let runtime = tokio::runtime::Handle::current();
     let subscription = state.application.subscribe_events(Arc::new(move |event| {
         let envelope = event.envelope();
-        if envelope.event_type != "turn.state_changed"
-            || envelope.payload.get("state").and_then(Value::as_str) != Some("waiting_for_form")
-        {
+        if envelope.event_type != "turn.state_changed" {
             return;
         }
         let Some(state) = weak.upgrade() else {
             return;
         };
+        usage::finish_turn(&state, &envelope.payload);
+        let turn = envelope
+            .payload
+            .get("turn")
+            .and_then(Value::as_object)
+            .unwrap_or(&envelope.payload);
+        if turn.get("state").and_then(Value::as_str) != Some("waiting_for_form") {
+            return;
+        }
         runtime.spawn(async move {
             let tabs = state
                 .browser
@@ -222,7 +234,7 @@ struct PendingCall {
 impl Drop for PendingCall {
     fn drop(&mut self) {
         if let Ok(mut hub) = self.state.browser.0.lock() {
-            hub.pending.remove(&self.id);
+            usage::release(&mut hub, &self.id);
         }
     }
 }

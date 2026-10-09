@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { startUse, endUse, finishUse } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
@@ -77,7 +79,21 @@ export function viewedTab(browser, tab, visible) {
   armExpiry(browser, tab);
 }
 export async function executeBrowser(browser, frame) {
-  const result = await executeFrame(browser, frame);
+  if (frame.op === "use.started") { startUse(browser, frame); return; }
+  if (frame.op === "use.ended") { endUse(browser, frame.args.id, frame.args.abort); return; }
+  if (frame.op === "use.revoked") {
+    if (browser.tabs.get(frame.tab)?.owner === `conversation:${frame.session}`) browser.close(frame.tab);
+    return;
+  }
+  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
+  const tracked = ["tab.open", "tab.observe", "tab.prepare", "tab.act", "tab.dialog", "tab.close"].includes(frame.op);
+  // Direct main-only harness calls have no gateway id, but use the same lifetime.
+  if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
+  try { return await executeCall(browser, frame, tracked); }
+  finally { if (tracked) endUse(browser, frame.id); }
+}
+async function executeCall(browser, frame, tracked) {
+  const result = tracked && !browser.uses.has(frame.id) ? { status: "unknown", reason: "cancelled" } : await executeFrame(browser, frame);
   const count = frame.op === "tab.act" ? frame.args?.steps?.length : 0;
   if (count >= 1 && count <= 10 && !Array.isArray(result.steps) && result.status !== "dialog_pending") {
     const status = result.status === "unknown" ? "unknown" : "not_dispatched";
@@ -98,8 +114,8 @@ async function executeFrame(browser, frame) {
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
   if (tab.profile === "signed_in") return { status: "refused", reason: "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
-  if (op === "tab.wait") { tab.waiting = tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
-  if (op === "tab.waiting") { tab.waiting = args.value === true; browser.publish(); return { status: "ok" }; }
+  if (op === "tab.wait") { tab.waitingTurn = frame.turn_id; tab.waiting = tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
+  if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = args.value === true; browser.publish(); return { status: "ok" }; }
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
   if (op === "tab.close") return requestClose(browser,tab);
   if (op === "tab.dialog") return answerDialog(browser,tab,args);
@@ -116,6 +132,7 @@ async function executeFrame(browser, frame) {
     await new Promise(resolve=>setTimeout(resolve,0));
     connectDebugger(browser,tab);emulation(tab);browser.publish();
   }
+  if (!browser.uses.has(frame.id)) return { status: "unknown", reason: "cancelled" };
   if (op === "tab.observe") return observeTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "tab.act") {
@@ -127,7 +144,7 @@ async function executeFrame(browser, frame) {
   }
   return { status: "refused", reason: "unsupported_op" };
 }
-async function openAgent(browser, { session, args }, source) {
+async function openAgent(browser, { session, args, id: callId }, source) {
   if (args.profile === "signed_in" || args.signed_in) return { status: "refused", reason: "signed_in_unavailable" };
   const agentTabs = [...browser.tabs.values()].filter(tab => tab.agent);
   if (agentTabs.length >= 6 || agentTabs.filter(tab => tab.owner === `conversation:${session}`).length >= 3) return { status: "refused", reason: "tab_budget_exhausted" };
@@ -135,13 +152,17 @@ async function openAgent(browser, { session, args }, source) {
   if (driving.size >= 2 && !driving.has(`conversation:${session}`)) return { status: "not_dispatched", reason: "browser_busy" };
   const id = browser.create({ owner: `conversation:${session}`, url: args.url, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile }, false);
   const tab = browser.tabs.get(id);
+  const use = browser.uses.get(callId);
+  if (use) { use.tab = id; browser.publish(); }
   browser.materialize(tab); backgroundTab(browser, tab);
   // Attach only after the native host owns the view, as in output checks.
   await new Promise(resolve => setTimeout(resolve, 0));
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
+  if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   try { await tab.view.webContents.loadURL(args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
+  if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
   // The renderer activates through the normal detach/attach path only for its visible owner.
   if (!source) browser.focusRequest = id;

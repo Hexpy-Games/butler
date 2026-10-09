@@ -72,6 +72,7 @@ function FixtureWorkspace() {
   if (mode === "security") return <SecuritySettings />;
   return mode === "output" && !open ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
 }
+connectBrowser();
 createRoot(document.getElementById("root")!).render(
   <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">
     <AdaptiveShellSidebar open={mode !== "security"}><BrowserEntry /></AdaptiveShellSidebar>

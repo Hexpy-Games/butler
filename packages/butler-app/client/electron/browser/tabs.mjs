@@ -1,3 +1,4 @@
+import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import { protectPartition, wireTab } from "./tab-events.mjs";
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
   tabs = new Map();
+  uses = new Map();
   profiles = new Set();
   conversationPartitions = new Map();
   stillPreferences = new Map();
@@ -35,14 +37,16 @@ class UserBrowser {
   enabled() { return browsingEnabled() && !this.breaker.tripped; }
   snapshot() {
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].map(tab => ({ id: tab.id, owner: tab.owner, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, stills: this.stillPreferences.get(tab.owner) !== false })) };
+      tabs: [...this.tabs.values()].map(tab => ({ id: tab.id, owner: tab.owner, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), stills: this.stillPreferences.get(tab.owner) !== false })) };
   }
   publish() {
     this.onState?.(this.snapshot());
     const win = this.getWindow();
     if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("butler-browser:state", this.snapshot());
   }
+  resetUse() { resetUse(this); }
   trip() {
+    this.resetUse();
     for (const tab of this.tabs.values()) {
       this.detach(tab);
       tab.view?.webContents.close({ waitForBeforeUnload: false });
@@ -171,6 +175,7 @@ class UserBrowser {
   close(id) {
     const tab = this.tabs.get(id);
     if (!tab) return;
+    closeUse(this, tab);
     this.detach(tab);
     const profile = tab.session;
     if (tab.view && !tab.view.webContents.isDestroyed()) tab.view.webContents.close({ waitForBeforeUnload: false });
@@ -256,7 +261,7 @@ class UserBrowser {
       if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
-    if (toGroupId !== tab.owner) { tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
@@ -269,6 +274,7 @@ class UserBrowser {
     if (owner === "mine" || /^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner ?? "")) this.areaOwner = owner;
   }
   hide() {
+    this.resetUse();
     this.keyboardFocused = false; this.areaVisible = false;
     for (const tab of this.tabs.values()) {
       if (tab.holder === "user" && !tab.sticky) controlTab(this, tab, "agent");
@@ -289,6 +295,7 @@ class UserBrowser {
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
+    this.resetUse();
     this.areaVisible = false;
     clearTimeout(this.metadataTimer);
     for (const tab of this.tabs.values()) clearTimeout(tab.expiry);

@@ -7,7 +7,7 @@ import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
   id: string; owner: string; url: string; title: string; favicon: string;
-  stills?: boolean; agent?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean;
+  stills?: boolean; agent?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
 }
 export interface BrowserSnapshot {
