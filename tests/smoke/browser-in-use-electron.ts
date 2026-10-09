@@ -117,9 +117,9 @@ try {
 
   await gate("tab.observe"); const paneCall = request(); await active();
   await app.call("hide");
-  assert.equal((await state()).tabs.some(item => item.inUse), false, "pane close ends native use");
-  await cleared("pane closed");
+  assert.equal((await state()).tabs.find(item => item.id === tab.id)?.inUse, true, "pane close preserves the running work unit");
   await unblock(); await paneCall;
+  await cleared("hidden pane call completed");
   await app.call("open"); await cleared("pane reopened");
 
   await gate("tab.observe"); const reconnectCall = request(); await active();
