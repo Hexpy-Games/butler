@@ -18,7 +18,13 @@ impl SessionTitleOwner {
 }
 
 impl AppApplication {
-    pub(super) fn generate_session_title(&self, chat: String, text: String, model: String) {
+    pub(super) fn generate_session_title(
+        &self,
+        chat: String,
+        text: String,
+        attachment_names: Vec<String>,
+        model: String,
+    ) {
         if chat == "general" || chat.starts_with("steward-") || chat.starts_with("worker-") {
             return;
         }
@@ -29,8 +35,16 @@ impl AppApplication {
                 biased;
                 () = cancellation.cancelled() => return,
                 () = app.dependencies.service_shutdown.cancelled() => { cancellation.cancel(); return },
-                result = tokio::time::timeout(std::time::Duration::from_secs(5),
-                    app.generate_title(&chat, &text, &model, cancellation.clone())) => result,
+                result = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    app.generate_title(
+                        &chat,
+                        &text,
+                        &attachment_names,
+                        &model,
+                        cancellation.clone(),
+                    ),
+                ) => result,
             };
             cancellation.cancel();
             let reason = match result {
@@ -48,14 +62,16 @@ impl AppApplication {
         &self,
         chat: &str,
         text: &str,
+        attachment_names: &[String],
         model: &str,
         cancellation: CancellationToken,
     ) -> Result<(), &'static str> {
         let id = chat.to_owned();
         let prompt = text.to_owned();
+        let files = attachment_names.to_vec();
         let expected = self
             .storage
-            .read(move |db| eligible_title(db, &id, &prompt))
+            .read(move |db| eligible_title(db, &id, &prompt, &files))
             .await
             .map_err(|_| "storage")?;
         let Some(expected) = expected else {
@@ -66,7 +82,7 @@ impl AppApplication {
             .session_title_generator
             .generate(
                 AppSessionTitleInput {
-                    text: text.to_owned(),
+                    text: title_generation_input(text, attachment_names),
                     model_ref: model.to_owned(),
                 },
                 cancellation.clone(),
@@ -103,6 +119,7 @@ fn eligible_title(
     db: &Connection,
     id: &str,
     text: &str,
+    attachment_names: &[String],
 ) -> Result<Option<String>, AppStorageError> {
     let title = db
         .query_row(
@@ -115,8 +132,9 @@ fn eligible_title(
         .optional()
         .map_err(AppStorageError::sqlite)?;
     let Some(title) = title else { return Ok(None) };
+    let provisional = provisional_input(text, attachment_names);
     if !["New chat", "New project chat", "새 대화"].contains(&title.as_str())
-        && title != provisional_title(text)
+        && title != provisional_title(&provisional)
     {
         return Ok(None);
     }
@@ -137,6 +155,44 @@ fn collapsed(text: &str) -> String {
 
 fn utf16_prefix(text: &str, limit: usize) -> String {
     String::from_utf16_lossy(&text.encode_utf16().take(limit).collect::<Vec<_>>())
+}
+
+fn utf16_code_point_prefix(text: &str, limit: usize) -> &str {
+    let mut units = 0;
+    let mut end = 0;
+    for (index, character) in text.char_indices() {
+        let width = character.len_utf16();
+        if units + width > limit {
+            break;
+        }
+        units += width;
+        end = index + character.len_utf8();
+    }
+    &text[..end]
+}
+
+fn provisional_input(text: &str, attachment_names: &[String]) -> String {
+    if butler_core::public_text::trim_js_whitespace(text).is_empty() {
+        attachment_names.first().cloned().unwrap_or_default()
+    } else {
+        text.to_owned()
+    }
+}
+
+fn title_generation_input(text: &str, attachment_names: &[String]) -> String {
+    let names = attachment_names
+        .iter()
+        .filter(|name| !butler_core::public_text::trim_js_whitespace(name).is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    if names.is_empty() {
+        return text.to_owned();
+    }
+    if butler_core::public_text::trim_js_whitespace(text).is_empty() {
+        format!("Attached files: {}", names.join(", "))
+    } else {
+        format!("{text}\nAttached files: {}", names.join(", "))
+    }
 }
 
 fn provisional_title(text: &str) -> String {
@@ -163,16 +219,19 @@ fn normalized_title(text: &str) -> Option<String> {
         .trim_end_matches(['"', '\'', '`', '.'])
         .trim_start_matches('#')
         .trim();
-    if title.is_empty()
-        || title.to_lowercase().contains("steward")
-        || title.contains("스튜어드")
-        || title.chars().any(char::is_control)
-    {
+    if title.is_empty() || contains_product_name(title) || title.chars().any(char::is_control) {
         return None;
     }
     Some(if title.encode_utf16().count() > 64 {
-        format!("{}...", utf16_prefix(title, 61))
+        format!("{}...", utf16_code_point_prefix(title, 61))
     } else {
         title.to_owned()
     })
+}
+
+fn contains_product_name(title: &str) -> bool {
+    title.contains("스튜어드")
+        || title
+            .split(|character: char| !character.is_alphanumeric())
+            .any(|word| word == "Steward")
 }
