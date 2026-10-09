@@ -1,3 +1,4 @@
+import { agentPopupAllowed } from "./popup-policy.mjs";
 import { isIP } from "node:net";
 import { webUrl } from "./policy.mjs";
 
@@ -31,6 +32,9 @@ export function installNavigationGuard(tab, onViolation) {
     profile.webRequest.onBeforeRequest((detail, done) => {
       const entry = router.get(detail.webContentsId);
       if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
+      if (detail.resourceType === "mainFrame" && entry.tab.opener && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
+        done({ cancel: true }); entry.onViolation(); return;
+      }
       void guardUrl(detail.url, profile, entry.tab.policy).then(allowed => {
         done({ cancel: !allowed }); if (!allowed) entry.onViolation();
       });

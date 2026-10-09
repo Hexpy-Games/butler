@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Popup and dialog fixtures</title>
+<style>body{font:18px system-ui;background:#f5f6f9;color:#172033;padding:28px}button{display:block;margin:8px 0;padding:8px 16px}#result{white-space:pre-wrap}</style>
+<h1>Popup and dialog fixtures</h1>
+<button id="oauth" onclick="window.child=window.open('popup.html?flow=oauth','oauth','width=440,height=480')">OAuth popup</button>
+<button id="payment" onclick="window.child=window.open('popup.html?flow=payment','payment','width=440,height=480')">Payment popup</button>
+<button id="postcode" onclick="window.child=window.open('popup.html?flow=postcode','postcode','width=440,height=480')">Postcode popup</button>
+<button id="blank" onclick="window.child=window.open('about:blank');child.location='popup.html?flow=blank'">Blank popup</button>
+<button id="ad" onclick="setTimeout(()=>window.open('popup.html?flow=ad'),6000)">Ad without gesture</button>
+<button id="alert" onclick="alert('Page alert · 페이지 알림');result.textContent='alert done'">Alert</button>
+<button id="confirm" onclick="window.clicks=(window.clicks||0)+1;result.textContent=String(confirm('Continue? · 계속할까요?'))">Confirm</button>
+<button id="prompt" onclick="result.textContent=String(prompt('Name? · 이름?', 'Guest'))">Prompt</button>
+<button id="beforeunload" onclick="window.onbeforeunload=()=>true;result.textContent='beforeunload armed'">Beforeunload</button>
+<button id="print" onclick="print();result.textContent='print done'">Print</button>
+<input id="upload" type="file" onchange="result.textContent=[...this.files].map(f=>f.name).join(',')">
+<button id="unknown" onclick="window.open('https://ads.example.net/popup')">Unknown agent popup</button>
+<pre id="result">Ready</pre>
+<script>addEventListener('message', event=>{if(event.origin===location.origin && event.source===child)result.textContent=event.data});</script>

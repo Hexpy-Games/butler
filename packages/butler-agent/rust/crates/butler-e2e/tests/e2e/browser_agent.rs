@@ -98,3 +98,63 @@ async fn browser_ownership_and_control_fence_before_dispatch() -> Result<(), Har
     }
     s.finish().await
 }
+
+/// Popup policy comes from Rust, including an exact auth/utility list, never the page.
+#[tokio::test]
+async fn browser_popup_policy_is_runtime_owned() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-POPUP-POLICY")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let host = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .header("authorization", format!("Bearer {}", s.gw.token))
+        .header("x-butler-admin", s.agent.launch.admin_credential().unwrap())
+        .send()
+        .await
+        .expect("fixture host connection");
+    let call_admin = admin.clone();
+    let call = tokio::spawn(async move {
+        call_admin.send(Method::POST, "/internal/browser/calls", Some(json!({
+            "op":"tab.open","session":"general","args":{"url":"https://shop.example.com","policy":{"popup_hosts":["evil.test"]}}
+        })), &[]).await
+    });
+    use futures_util::StreamExt;
+    let mut stream = host.bytes_stream();
+    let mut body = String::new();
+    let frame = loop {
+        let chunk = stream.next().await.unwrap().unwrap();
+        body.push_str(&String::from_utf8_lossy(&chunk));
+        let found = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line.trim()).ok())
+            .find(|frame| frame["op"] == "tab.open");
+        if let Some(frame) = found {
+            break frame;
+        }
+    };
+    let policy = &frame["args"]["policy"];
+    assert_eq!(policy["popup_sites"], json!(["example.com"]));
+    let hosts = policy["popup_hosts"].as_array().unwrap();
+    assert!(hosts.contains(&json!("accounts.google.com")));
+    assert!(hosts.contains(&json!("postcode.map.daum.net")));
+    assert!(!hosts.contains(&json!("evil.test")));
+    assert!(
+        !hosts.contains(&json!("paypal.com")),
+        "payment requires an owner decision"
+    );
+    admin
+        .send(
+            Method::POST,
+            &format!(
+                "/internal/browser-host/results/{}",
+                frame["id"].as_str().unwrap()
+            ),
+            Some(json!({"status":"ok"})),
+            &[],
+        )
+        .await?;
+    assert_eq!(call.await.unwrap()?.status, 200);
+    drop(stream);
+    s.finish().await
+}

@@ -233,7 +233,7 @@ export interface BrowserCopy {
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
   signedIn: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
   stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string;
-  typeYourself: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
+  typeYourself: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
   pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
   picked: (count: number) => string; attachToChat: string; saveImage: string; copyText: string; clearSelection: string; dropToAttach: string;

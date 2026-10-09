@@ -1,3 +1,4 @@
+import type { PageDialog } from "./BrowserDialog";
 import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
@@ -6,6 +7,7 @@ import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export interface BrowserTab {
+  popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
   id: string; owner: string; url: string; title: string; favicon: string;
   stills?: boolean; agent?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;

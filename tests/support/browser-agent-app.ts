@@ -34,8 +34,10 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   for (const stream of [child.stdout!, child.stderr!]) stream.on("data", bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")));
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
   const win = `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`;
+  let lastExpression = "";
   let inspectorClient: ReturnType<typeof connectElectronMain> | undefined;
   const main = async <T>(expression: string): Promise<T> => {
+    lastExpression = expression;
     inspectorClient ??= connectElectronMain(inspector);
     return (await inspectorClient).evaluate<T>(expression);
   };
@@ -72,7 +74,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
       await main(`(async()=>{const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && !tab.view.webContents.isDestroyed() && tab.attached===${win})await tab.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")})()`);
       await page!.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img=>img.decode()))");
-      const facts=await main(`(async()=>{${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);let nativePixels;if(tab?.view && tab.attached===${win}) {const image=await tab.view.webContents.capturePage(undefined,{stayHidden:true});const pixels=image.getBitmap();let blue=0;for(let n=0;n<pixels.length;n+=4)if(pixels[n]>180 && pixels[n+1]<150 && pixels[n+2]<120)blue++;nativePixels={size:image.getSize(),blue};process.getBuiltinModule('fs').writeFileSync(${JSON.stringify(join(evidence,`${name}-native.png`))},image.toPNG());}await ${win}.webContents.capturePage();return {nativePixels,focused:${win}.isFocused(),native:tab?.view?await tab.view.webContents.executeJavaScript("({text:document.body.innerText,scroll:[scrollX,scrollY],width:innerWidth,height:innerHeight})"):null,attached:tab?.attached===${win},covered:tab?.covered,nativeCovers:browser?.nativeCovers,bounds:tab?.bounds}})()`);
+      const facts=await main(`(async()=>{${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);let nativePixels;if(tab?.view && tab.attached===${win}) {const image=await tab.view.webContents.capturePage(undefined,{stayHidden:true});const pixels=image.getBitmap();let blue=0;for(let n=0;n<pixels.length;n+=4)if(pixels[n]>180 && pixels[n+1]<150 && pixels[n+2]<120)blue++;nativePixels={size:image.getSize(),blue};process.getBuiltinModule('fs').writeFileSync(${JSON.stringify(join(evidence,`${name}-native.png`))},image.toPNG());}await ${win}.webContents.capturePage();return {nativePixels,focused:${win}.isFocused(),native:tab?.view && !tab.dialog?await tab.view.webContents.executeJavaScript("({text:document.body.innerText,scroll:[scrollX,scrollY],width:innerWidth,height:innerHeight})"):null,attached:tab?.attached===${win},covered:tab?.covered,nativeCovers:browser?.nativeCovers,bounds:tab?.bounds}})()`);
       writeFileSync(join(evidence,`${name}-capture.json`),JSON.stringify(facts));
       const capture = process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE; assert.ok(capture);
       const source = await main<string>(`${win}.getMediaSourceId()`);
@@ -93,7 +95,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       })()`), `button ${name}`);
       await page!.clickText(name,'button,[role="button"]');
     };
-    return { gateway, page, main, win, call, shot, click, stop };
+    return { gateway, page, main, win, call, shot, click, stop, debug, lastMain: () => lastExpression };
   } catch (error) {
     const state = await main(`({windows:${module}('electron').BrowserWindow.getAllWindows().map(w=>({url:w.webContents.getURL(),visible:w.isVisible()})),ready:${module}('electron').app.isReady(),lock:${module}('electron').app.hasSingleInstanceLock(),path:${module}('electron').app.getPath('userData')})`).catch(()=>null);
     writeFileSync(join(evidence,"startup-failure.json"),JSON.stringify({state,exitCode:child.exitCode,signal:child.signalCode}));

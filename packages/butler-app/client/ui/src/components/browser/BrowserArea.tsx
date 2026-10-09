@@ -3,6 +3,8 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
+import { BrowserPopupBand } from "./BrowserPopupBand";
+import { BrowserDialog } from "./BrowserDialog";
 import { AddressRow } from "./AddressRow";
 import { browserCall, useBrowserState } from "./browserBridge";
 import { useBrowserPage } from "./useBrowserPage";
@@ -14,6 +16,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
   const creating = useRef(false);
   const visibleTabs = state.tabs.filter((item) => item.owner === "mine" || publicBrowserOwner(item.owner, navigation));
   const tabs = sessionId ? visibleTabs.filter((item) => item.owner === `conversation:${sessionId}`) : visibleTabs;
@@ -63,7 +66,9 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
     <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder="none" hidden={empty || crashed || disabled}
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
-      stillSrc={stillSrc} covered={state.nativeCovered}
+      stillSrc={stillSrc} covered={state.nativeCovered || Boolean(tab?.dialog)} contentRef={setDialogContainer}
+      band={tab && <BrowserPopupBand tab={tab} />}
+      overlay={tab?.dialog && <BrowserDialog key={tab.dialog.id} tab={tab} container={dialogContainer} />}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>
       {(crashed || disabled) && <EmptyLine

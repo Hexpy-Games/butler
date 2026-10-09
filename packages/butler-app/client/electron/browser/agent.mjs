@@ -1,3 +1,4 @@
+import { drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
 import { startUse, endUse, finishUse } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
@@ -9,7 +10,7 @@ import { prepareBatch, actBatch } from "./act.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
-  tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = false;
+  tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   browser.publish();
 }
 export function wireAgentTab(browser, tab) {
@@ -26,8 +27,9 @@ export function wireAgentTab(browser, tab) {
   contents.on("before-input-event", (_event, input) => takeover(input));
   installNavigationGuard(tab, () => { tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop(); browser.close(tab.id); });
 }
-function connectDebugger(browser, tab) {
+export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
+  if (contents.debugger.isAttached()) return;
   contents.debugger.attach("1.3");
   wireDialogs(browser,tab);
   tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
@@ -100,7 +102,7 @@ async function executeCall(browser, frame, tracked) {
     result.steps = Array.from({length: count}, (_, index) => ({index, status, reason: result.reason ?? "browser_refused"}));
     if (status === "unknown") result.observe_required = true;
   }
-  return result;
+  return drainEvents(browser, frame, result);
 }
 async function executeFrame(browser, frame) {
   if (!browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
@@ -168,8 +170,4 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   if (!source) browser.focusRequest = id;
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
-}
-
-export function openAgentPopup(browser, source, url) {
-  return openAgent(browser, {session: source.owner.slice(13), args: {url, policy: source.policy}}, source);
 }
