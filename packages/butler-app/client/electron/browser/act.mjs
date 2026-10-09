@@ -1,3 +1,4 @@
+import { pendingDialog } from "./dialogs.mjs";
 import { stepStill } from "./stills.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 
@@ -60,6 +61,6 @@ export async function actBatch(tab, args, session) {
       }
     } catch { steps[index] = { status: "unknown", reason: "dispatch_interrupted" }; failed = true; }
   }
-  if (tab.dialog) { tab.pendingBatch=steps; return {status:"dialog_pending",tab:tab.id,url:tab.url,epoch:tab.epoch,dialog:tab.dialog,steps}; }
+  if (tab.dialog) { tab.pendingBatch=steps; return {...pendingDialog(tab),steps}; }
   return { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch };
 }

@@ -1,3 +1,5 @@
+import { requestClose } from "./dialogs.mjs";
+import { answerUserDialog } from "./user-dialogs.mjs";
 import { ipcMain } from "electron";
 import { createUserBrowser } from "./tabs.mjs";
 
@@ -15,7 +17,14 @@ export function installUserBrowser(app, getWindow) {
       case "presentation": return browser.pointer.present(input);
       case "scope": return browser.focusArea(input.value === true, input.owner);
       case "create": return browser.create(input);
-      case "close": return browser.close(input.id);
+      case "close": return requestClose(browser, browser.tabs.get(input.id));
+      case "popup.show": {
+        const popup = browser.tabs.get(input.id)?.popupWindow;
+        if (!popup || popup.isDestroyed()) throw new Error("unknown_popup");
+        popup.show(); popup.focus(); return;
+      }
+      case "popup.allow": return browser.allowPopup(input.id);
+      case "dialog": return answerUserDialog(browser, input);
       case "activate": return browser.activate(input.id);
       case "control": return browser.control(input.id, input.holder, input.sticky === true);
       case "stills": return browser.setStills(input.id, input.value);

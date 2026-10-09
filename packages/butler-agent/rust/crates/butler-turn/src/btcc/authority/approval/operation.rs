@@ -32,7 +32,8 @@ pub struct BrowserApprovalStep {
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
     let input = facts.input;
     if facts.capability == "browser_act"
-        || facts.capability == "browser_close" && facts.input.get("dialog").is_some()
+        || matches!(facts.capability, "browser_close" | "browser_observe")
+            && facts.input.get("dialog").is_some()
     {
         return browser_operation(facts);
     }
@@ -139,10 +140,16 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         .collect();
     if let Some(dialog) = facts.input.get("dialog") {
         targets.push(format!(
-            "{} · {}",
+            "{} · \"{}\"",
             dialog["type"].as_str().unwrap_or("dialog"),
             dialog["message"].as_str().unwrap_or("")
         ));
+        if dialog["type"] == "prompt" {
+            targets.push(format!(
+                "→ \"{}\"",
+                dialog["defaultPrompt"].as_str().unwrap_or("")
+            ));
+        }
     }
     ApprovalOperation {
         tool: facts.capability.into(),

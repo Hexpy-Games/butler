@@ -22,6 +22,25 @@ impl TabRegistry {
                 return Err("duplicate_tab");
             }
         }
+        for tab in next
+            .values()
+            .filter(|tab| tab.get("opener").is_some_and(Value::is_string))
+        {
+            let parent = next
+                .get(tab["opener"].as_str().unwrap_or(""))
+                .ok_or("invalid_opener")?;
+            if tab["owner"] != parent["owner"] || tab["profile"] != parent["profile"] {
+                return Err("invalid_popup_owner");
+            }
+            if tab["holder"] == "agent"
+                && !popup_permitted(
+                    parent["url"].as_str().unwrap_or(""),
+                    tab["url"].as_str().unwrap_or(""),
+                )
+            {
+                return Err("popup_policy");
+            }
+        }
         self.tabs = next;
         Ok(())
     }
@@ -173,4 +192,44 @@ pub fn batch_receipts(count: usize, mut result: Value) -> Value {
         result["observe_required"] = Value::Bool(true);
     }
     result
+}
+
+/// Release-maintained auth/utility policy. Payment popups require an owner decision.
+pub const POPUP_HOSTS: &[&str] = &[
+    "accounts.google.com",
+    "login.microsoftonline.com",
+    "login.live.com",
+    "appleid.apple.com",
+    "github.com",
+    "kauth.kakao.com",
+    "nid.naver.com",
+    "postcode.map.daum.net",
+    "t1.daumcdn.net",
+];
+
+pub fn navigation_policy(content_origin: &str, raw: &str) -> Value {
+    let site = site_scope(raw).unwrap_or_default();
+    let popup_site = site.strip_prefix("browser:signed_out:").unwrap_or("");
+    serde_json::json!({"content_origin":content_origin,"secure_keypads":SECURE_KEYPAD_MARKERS,
+        "sites":[site],"popup_sites":[popup_site],"popup_hosts":POPUP_HOSTS})
+}
+
+pub fn popup_permitted(parent: &str, target: &str) -> bool {
+    if target.is_empty() || target == "about:blank" {
+        return url::Url::parse(parent).is_ok_and(|url| {
+            matches!(url.scheme(), "http" | "https")
+                && url.username().is_empty()
+                && url.password().is_none()
+        });
+    }
+    let Ok(url) = url::Url::parse(target) else {
+        return false;
+    };
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && (site_scope(parent).ok() == site_scope(target).ok() || POPUP_HOSTS.contains(&host))
 }

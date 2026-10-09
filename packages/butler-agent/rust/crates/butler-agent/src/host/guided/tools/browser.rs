@@ -63,7 +63,7 @@ pub(super) async fn execute(
     let mut result = client
         .call(op, &args["tab"], &args, invocation.cancellation)
         .await;
-    if call.name == "browser_close" && result["status"] == "dialog_pending" {
+    if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }
     if call.name == "browser_observe" && result["status"] == "ok" {
@@ -182,6 +182,11 @@ fn encode_page_data(mut value: Value) -> Result<JsonDocument, ToolExecutionError
         }
     }
     delimit_labels(&mut value);
+    if let Some(events) = value.get_mut("events").and_then(Value::as_array_mut) {
+        for event in events {
+            delimit_labels(event);
+        }
+    }
     if let Some(steps) = value.get_mut("steps").and_then(Value::as_array_mut) {
         for step in steps {
             if let Some(hit) = step.get_mut("hit").and_then(Value::as_object_mut) {
@@ -198,7 +203,7 @@ fn delimit_labels(value: &mut Value) {
     let mut data = record
         .remove("untrusted_content")
         .unwrap_or_else(|| json!({"kind":"web_page_data"}));
-    for key in ["url", "title"] {
+    for key in ["url", "title", "dialog", "blockedPopup"] {
         if let Some(label) = record.remove(key) {
             data[key] = label;
         }
