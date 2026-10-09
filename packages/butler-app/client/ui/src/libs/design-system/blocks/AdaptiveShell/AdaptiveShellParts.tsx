@@ -1,29 +1,42 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type {
-  HTMLAttributes,
-  KeyboardEvent,
-  PointerEvent,
+import {
+  useId,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 import { cn } from "../../lib/utils";
 import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import styles from "./AdaptiveShell.module.css";
+import { ResizeGrip, resizeHandleClassName } from "./ResizeGrip";
 
+/**
+ * A panel's resize handle over its divider: a pill grabber on hover, focus and drag, and with `hint`
+ * ("Drag to resize") a two-line hint beside it (the `aria-label` over the hint), on the workspace side.
+ */
 export function AdaptivePanelResizeHandle({
   side,
+  hint,
   ...props
-}: Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "onKeyDown" | "onPointerDown"> & {
+}: Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "onKeyDown" | "onPointerDown" | "children"> & {
   side: "left" | "right";
+  /** Second line of the hover hint ("Drag to resize"); the first line is the `aria-label`. */
+  hint?: string;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
 }) {
+  const hintId = useId();
   return (
     <div
-      className={styles.resizeHandle}
+      className={cn(styles.resizeHandle, resizeHandleClassName)}
       data-side={side}
       role="separator"
       tabIndex={0}
+      aria-describedby={hint ? hintId : undefined}
       {...props}
-    />
+    >
+      <ResizeGrip id={hintId} title={props["aria-label"]} hint={hint} side={side === "left" ? "end" : "start"} />
+    </div>
   );
 }
 

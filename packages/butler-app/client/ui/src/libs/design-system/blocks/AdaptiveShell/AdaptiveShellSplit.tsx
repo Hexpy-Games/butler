@@ -1,8 +1,9 @@
-import { useRef, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useId, useRef, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { cn } from "../../lib/utils";
 import { BROWSER_CHAT_WIDTH, clampBrowserChatWidth } from "./conversationFrame";
 import styles from "./AdaptiveShellFrame.module.css";
+import { ResizeGrip, resizeHandleClassName } from "./ResizeGrip";
 
 export interface AdaptiveShellSplitProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children"> {
   /** The conversation column (left). It is its own `workspace` container, so it lays out at its width. */
@@ -16,6 +17,8 @@ export interface AdaptiveShellSplitProps extends Omit<DsBaseProps<HTMLAttributes
   onChatWidthChange?: (width: number) => void;
   /** Accessible name of the resize handle ("Resize conversation"). */
   resizeLabel?: string;
+  /** Second line of the handle's hover hint ("Drag to resize"), under `resizeLabel`; shown on the chat side. */
+  resizeHint?: string;
 }
 
 const KEY_STEP = 16;
@@ -27,10 +30,11 @@ const KEY_STEP = 16;
  */
 export function AdaptiveShellSplit({
   chat, pane, paneOpen, chatWidth = BROWSER_CHAT_WIDTH.default, onChatWidthChange, resizeLabel = "Resize conversation",
-  className, style, ...props
+  resizeHint, className, style, ...props
 }: AdaptiveShellSplitProps) {
   const width = clampBrowserChatWidth(chatWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
+  const hintId = useId();
   const resize = (next: number) => onChatWidthChange?.(clampBrowserChatWidth(next));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? KEY_STEP * 3 : KEY_STEP;
@@ -43,22 +47,29 @@ export function AdaptiveShellSplit({
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { x: event.clientX, width };
+    event.currentTarget.toggleAttribute("data-dragging", true);
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (drag.current) resize(drag.current.width + event.clientX - drag.current.x);
   };
-  const onPointerEnd = () => { drag.current = null; };
+  const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    drag.current = null;
+    event.currentTarget.removeAttribute("data-dragging");
+  };
   return (
     <div {...props} className={cn(styles.split, className)} data-slot="adaptive-shell-split" data-pane-open={paneOpen || undefined}
       style={{ ...style, "--browser-chat-width": `${width}px` } as CSSProperties}>
       <div className={styles.chat} data-slot="adaptive-shell-split-chat">{chat}</div>
       {paneOpen ? (
         <>
-          <div className={styles.splitHandle} role="separator" aria-orientation="vertical" aria-label={resizeLabel}
+          <div className={cn(styles.splitHandle, resizeHandleClassName)} role="separator" aria-orientation="vertical" aria-label={resizeLabel}
+            aria-describedby={resizeHint ? hintId : undefined}
             aria-valuemin={BROWSER_CHAT_WIDTH.min} aria-valuemax={BROWSER_CHAT_WIDTH.max} aria-valuenow={width}
             tabIndex={onChatWidthChange ? 0 : -1} data-locked={onChatWidthChange ? undefined : true}
             onKeyDown={onChatWidthChange ? onKeyDown : undefined} onPointerDown={onChatWidthChange ? onPointerDown : undefined}
-            onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd} />
+            onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
+            <ResizeGrip id={hintId} title={resizeLabel} hint={resizeHint} side="start" />
+          </div>
           <div className={styles.pane} data-slot="adaptive-shell-split-pane">{pane}</div>
         </>
       ) : null}
@@ -68,7 +79,7 @@ export function AdaptiveShellSplit({
 
 /**
  * The left-edge hover zone of a collapsed sidebar: entering it asks for a peek (AdaptiveShell `leftPeek`).
- * Render it only while the sidebar is closed; the product ends the peek when the pointer leaves the sidebar.
+ * Render it only while the sidebar is closed; useSidebarPeek ends the peek.
  */
 export function AdaptiveShellPeekEdge({ onPeek }: { onPeek: () => void }) {
   return <div className={styles.peekEdge} data-slot="adaptive-shell-peek-edge" aria-hidden="true" onPointerEnter={onPeek} />;
