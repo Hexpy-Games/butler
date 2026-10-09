@@ -11,6 +11,7 @@ import {
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
   AdaptiveShellPeekEdge,
+  useSidebarPeek,
   Stack,
   Spinner,
 } from "@/butler-ds";
@@ -195,6 +196,15 @@ function AppWorkspaceShell() {
   });
   const browser = useBrowserShell(shellRef, leftPanelWidth);
   const effectiveLeftOpen = leftOpen && !browser.autoCollapsed;
+  const peek = useSidebarPeek(shellRef, {
+    enabled: !effectiveLeftOpen && !isSettingsView,
+    open: browser.peek,
+    onOpenChange: browser.setPeek,
+  });
+  useEffect(() => window.butlerBrowser?.onPointer((point) => {
+    if (point) peek.pointerAt(point);
+    else peek.pointerOutside();
+  }), [peek.pointerAt, peek.pointerOutside]);
   const effectiveRightOpen = requestedRightOpen && !browser.paneOpen;
   useNarrowRightPanelAutoCollapse({
     effectiveRightOpen,
@@ -211,7 +221,7 @@ function AppWorkspaceShell() {
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={effectiveLeftOpen}
-      leftPeek={browser.peek}
+      leftPeek={peek.open}
       splitOpen={browser.paneOpen}
       compactSidebarFullWidth
       platform={nativePlatform()}
@@ -232,7 +242,6 @@ function AppWorkspaceShell() {
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
             open={effectiveLeftOpen}
-            onPointerLeave={() => browser.setPeek(false)}
           >
             <Sidebar />
           </AdaptiveShellSidebar>
@@ -257,7 +266,7 @@ function AppWorkspaceShell() {
           </AdaptiveShellWorkspace>
         </>
       )}
-      {!isSettingsView && !effectiveLeftOpen && <AdaptiveShellPeekEdge onPeek={() => browser.setPeek(true)} />}
+      {!isSettingsView && !effectiveLeftOpen && <AdaptiveShellPeekEdge onPeek={peek.show} />}
       {!isSettingsView && effectiveLeftOpen && (
         <AdaptivePanelResizeHandle
           aria-label={appCopy.titlebar.resizeLeftPanel}

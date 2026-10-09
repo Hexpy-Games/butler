@@ -9,7 +9,7 @@ import { BrowserEntry } from "../../packages/butler-app/client/ui/src/components
 import { Titlebar } from "../../packages/butler-app/client/ui/src/components/layout/Titlebar";
 import { setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store";
-import type { BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { connectBrowser, type BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
 import { useBrowserShellState } from "../../packages/butler-app/client/ui/src/components/browser/browserShellState";
 import "../../packages/butler-app/client/ui/src/libs/design-system/tokens.css";
 
@@ -38,6 +38,7 @@ const publish = () => { for (const subscriber of subscribers) subscriber({ ...sn
 const addressListeners = new Set<() => void>();
 window.butlerBrowser = {
   subscribe(callback) { subscribers.add(callback); callback(snapshot); return () => { subscribers.delete(callback); }; },
+  onPointer() { return () => {}; },
   onAddress(callback) { addressListeners.add(callback); return () => { addressListeners.delete(callback); }; },
   async call(op, raw) {
     const input = raw as { id?: string; value?: string | boolean; tabId?: string; index?: number; owner?: string; url?: string } | undefined;
@@ -60,6 +61,7 @@ window.butlerBrowser = {
     publish(); return op === "create" ? snapshot.activeId : undefined;
   },
 };
+connectBrowser();
 function FixtureWorkspace() {
   const open = useBrowserShellState((state) => Boolean(state.conversations.general?.open));
   if (mode === "security") return <SecuritySettings />;

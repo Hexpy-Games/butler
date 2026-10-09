@@ -133,7 +133,7 @@ async function escape(page: Page) {
   await page.press("Escape");
 }
 async function navigate(page: Page, url: string) {
-  await page.expression("document.querySelector('[data-slot=address-field] button').click()");
+  await page.clickSelector('[data-slot="address-field"] [role="button"]');
   await page.waitForFunction(() => Boolean(document.querySelector('input[aria-label="Address"]')));
   await page.expression(`(() => {
     const input = document.querySelector('input[aria-label="Address"]');

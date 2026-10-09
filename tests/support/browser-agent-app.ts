@@ -57,7 +57,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     await main(`${win}.setContentSize(1440,900)`);
     await main(`(() => { ${win}.show();${win}.focus();${win}.webContents.focus(); })()`);
     const versions = await main<Record<string, string>>("process.versions");
-    assert.match(versions.electron!, /^44\./u);
+    assert.equal(versions.electron, "44.5.1");
     writeFileSync(join(evidence, "electron-versions.json"), JSON.stringify(versions, null, 2));
     await main(`(() => { const make=${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/tabs.mjs"))}).createUserBrowser;
       const dummy=make({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null); const proto=Object.getPrototypeOf(dummy); const publish=proto.publish; const execute=proto.execute;
@@ -66,8 +66,8 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       proto.publish=function(){globalThis.browserAgentSubject=this;return publish.call(this)};
     })()`);
     const call = async <T>(op: string, input: unknown = {}) => page!.expression<T>(`window.butlerBrowser.call(${JSON.stringify(op)},${JSON.stringify(input)})`);
-    const shot = async (name: string) => {
-      await page!.movePointer(900, 24);
+    const shot = async (name: string, preservePointer = false) => {
+      if (!preservePointer) await page!.movePointer(900, 24);
       await waitBrowser(()=>page!.expression("!document.querySelector('[data-slot=tooltip-content]')"), "tooltip closed before screenshot");
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
       await main(`(async()=>{const browser=globalThis.browserAgentSubject;const tab=browser?.tabs.get(browser.activeId);if(tab?.view && !tab.view.webContents.isDestroyed() && tab.attached===${win})await tab.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))")})()`);
@@ -79,7 +79,7 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       writeFileSync(join(evidence, `${name}-renderer.png`), await page!.screenshot());
       const result = Bun.spawnSync([capture, source.split(":")[1]!, join(evidence, `${name}.png`)]);
       assert.equal(result.exitCode, 0, result.stderr.toString());
-      const compositor=await main<{blue:number}>(`(()=>{const t=globalThis.browserAgentSubject?.tabs.get(globalThis.browserAgentSubject.activeId);const png=${module}('electron').nativeImage.createFromPath(${JSON.stringify(join(evidence,`${name}.png`))});const size=png.getSize(),b=png.getBitmap(),bounds=t?.bounds;let blue=0;if(bounds)for(let y=Math.ceil(bounds.y*size.width/1440);y<(bounds.y+bounds.height)*size.width/1440;y++)for(let x=Math.ceil(bounds.x*size.width/1440);x<(bounds.x+bounds.width)*size.width/1440;x++){const n=(y*size.width+x)*4;if(b[n]>180 && b[n+1]<150 && b[n+2]<120)blue++}return {size,blue,attached:t?.attached===${win},covered:t?.covered,holder:t?.holder,bounds}})()`);
+      const compositor=await main<{blue:number}>(`(()=>{const t=globalThis.browserAgentSubject?.tabs.get(globalThis.browserAgentSubject.activeId);const png=${module}('electron').nativeImage.createFromPath(${JSON.stringify(join(evidence,`${name}.png`))});const size=png.getSize(),b=png.getBitmap(),bounds=t?.bounds,scale=size.width/${win}.getContentBounds().width;let blue=0;if(bounds)for(let y=Math.ceil(bounds.y*scale);y<(bounds.y+bounds.height)*scale;y++)for(let x=Math.ceil(bounds.x*scale);x<(bounds.x+bounds.width)*scale;x++){const n=(y*size.width+x)*4;if(b[n]>180 && b[n+1]<150 && b[n+2]<120)blue++}return {size,blue,attached:t?.attached===${win},covered:t?.covered,holder:t?.holder,bounds}})()`);
       writeFileSync(join(evidence,`${name}-compositor.json`),JSON.stringify(compositor));
       if ((facts as {nativePixels?:{blue:number}}).nativePixels?.blue) assert.ok(compositor.blue>0,'native page is present in the complete App window screenshot');
     };

@@ -15,6 +15,7 @@ export interface BrowserSnapshot {
 interface BrowserBridge {
   call: (op: string, input?: unknown) => Promise<unknown>;
   subscribe: (handler: (state: BrowserSnapshot) => void) => () => void;
+  onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;
   onAddress: (handler: () => void) => () => void;
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
