@@ -133,7 +133,9 @@ async function escape(page: Page) {
   await page.press("Escape");
 }
 async function navigate(page: Page, url: string) {
-  await page.clickSelector('[data-slot="address-field"] [role="button"]');
+  if (!await page.expression("Boolean(document.querySelector('input[aria-label=\"Address\"]'))")) {
+    await page.clickSelector('[data-slot="address-field"] [role="button"]');
+  }
   await page.waitForFunction(() => Boolean(document.querySelector('input[aria-label="Address"]')));
   await page.expression(`(() => {
     const input = document.querySelector('input[aria-label="Address"]');
@@ -242,14 +244,15 @@ try {
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
   await page.clickText("General", '[data-test-class="app-sidebar"] *');
   await click(page, "Browser");
-  await page.waitForFunction(() => document.body.textContent?.includes("Open a new tab"));
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Address");
+  assert.equal((await state(page)).tabs.length, 1, "hub creates exactly one new tab");
+  assert.equal(await page.expression("document.querySelector('[data-slot=page-card-content]').textContent"), "");
   for (const locale of ["ko", "en"]) for (const theme of ["dark", "light"]) {
     await gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language:locale, appearance_theme:theme }) });
     await page.reload(); await click(page, locale === "ko" ? "브라우저" : "Browser");
     await page.waitForFunction(() => Boolean(document.querySelector('[data-slot="native-view-slot"][data-hidden]')));
     await shot(page, `${locale}-${theme}-empty`);
   }
-  await click(page, "New tab");
   await navigate(page, `http://127.0.0.1:${fixture.port}/first`);
   await waitTitle(page, "Fixture");
   let snapshot = await state(page); const first = snapshot.activeId;
