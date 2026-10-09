@@ -106,12 +106,8 @@ impl RankContext<'_> {
             input.support_count.unwrap_or(0.0).ln_1p() / 17.0f64.ln(),
         );
         let metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
-        let score = match input.query_relevance {
-            None => 0.8 * fused + 0.2 * metadata,
-            Some(relevance) => {
-                0.55 * js_min(1.0, js_max(0.0, relevance)) + 0.35 * fused + 0.1 * metadata
-            }
-        };
+        let score =
+            0.55 * js_min(1.0, js_max(0.0, input.query_relevance)) + 0.35 * fused + 0.1 * metadata;
         RankedEpisode {
             input,
             score,
@@ -242,4 +238,10 @@ fn compare_nullable_time(a: Option<&str>, b: Option<&str>) -> std::cmp::Ordering
         (Some(_), None) => std::cmp::Ordering::Less,
         (Some(a), Some(b)) => a.as_bytes().cmp(b.as_bytes()),
     }
+}
+
+/// Positive cosine similarity on a 0..1 relevance scale. Orthogonal and
+/// opposite vectors provide no positive relevance; roundoff cannot exceed one.
+pub(in crate::cognition) fn cosine_relevance(distance: f64) -> f64 {
+    (1.0 - distance).clamp(0.0, 1.0)
 }
