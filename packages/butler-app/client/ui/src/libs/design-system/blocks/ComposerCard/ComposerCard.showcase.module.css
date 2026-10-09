@@ -5,6 +5,16 @@
   gap: var(--space-3);
 }
 
+/* Composers at the widths of a narrow conversation column. */
+.columns {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.column {
+  width: 100%;
+}
+
 .tone {
   padding: var(--space-3);
   border-radius: var(--radius-panel);
