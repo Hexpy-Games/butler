@@ -81,8 +81,12 @@ try {
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-test-class=browser-agent-control]'))"), false);
     await app.shot(`${language}-${theme}-${width}-released`);
     await app.click(language === "ko" ? "일반" : "General");
-    if (await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))")) await togglePane(app, false);
-    await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-test-class=message-attachment-list] a')].some(a=>a.textContent.includes('.jpg'))"), "reply crop is visible in the App");
+    if (!await app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))")) await togglePane(app, true);
+    await app.call("control", { id: tab.id, holder: "agent" });
+    assert.equal(await app.page.expression("Boolean(document.querySelector('[data-test-class=browser-agent-control]'))"), false);
+    await app.shot(`${language}-${theme}-${width}-docked-released`);
+    await togglePane(app, false);
+    await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-test-class=message-artifact-list]')].some(a=>a.textContent.includes('.jpg'))"), "reply crop is visible in the App");
     await app.shot(`${language}-${theme}-${width}-reply`);
   }
   const secure = await app.main<{ masked: boolean; cropReason: string; scoped: string }>(`(async()=>{
