@@ -29,11 +29,12 @@ const SIDEBAR = {
   "ko-KR": { nav: ["새 대화", "검색", "예약 작업", "브라우저", "서랍"], spaces: "스페이스", rows: ["사무용 의자 주문", "9월 청구서 받기", "관리비 이체", "주간 요약 페이지"], show: "사이드바 보기", inspector: "인스펙터 보기", hide: "브라우저 닫기", actions: "대화 작업" },
 } as const;
 
-function DemoSidebar({ locale }: { locale: Locale }) {
+/** `collapsed` as the App passes it (the sidebar is closed); a peek still shows the content. */
+function DemoSidebar({ locale, collapsed = false }: { locale: Locale; collapsed?: boolean }) {
   const copy = SIDEBAR[locale];
   const icons = [<PencilLine key="n" />, <Search key="s" />, <Clock3 key="c" />, <Globe2 key="g" />, <Library key="l" />];
   return (
-    <SidebarShell ariaLabel="Sidebar" scrollFade={false} titlebar={<SidebarTrafficSpace />}
+    <SidebarShell ariaLabel="Sidebar" scrollFade={false} titlebar={<SidebarTrafficSpace />} collapsed={collapsed}
       header={<SidebarBrand><Typo.AppTitle>Butler</Typo.AppTitle></SidebarBrand>}>
       <Stack gap="lg">
         <Stack gap="xs">{copy.nav.map((label, index) => <NavRow key={label} icon={icons[index]} label={label} onClick={() => undefined} />)}</Stack>
@@ -110,7 +111,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
             <IconButton label={copy.show}><PanelLeft size="md" /></IconButton>
           </ChromeFloatingToggleLayer>
         )}
-        <AdaptiveShellSidebar open={leftOpen}><DemoSidebar locale={browser.locale} /></AdaptiveShellSidebar>
+        <AdaptiveShellSidebar open={leftOpen}><DemoSidebar locale={browser.locale} collapsed={!leftOpen} /></AdaptiveShellSidebar>
         {leftOpen ? null : <AdaptiveShellPeekEdge onPeek={peek.show} />}
         <AdaptiveShellWorkspace>
           <TitlebarShell title={demo.conversation} collapsed={!leftOpen} dragRegion dataTestClass="custom-titlebar"
@@ -122,7 +123,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
                 <IconButton label={copy.inspector}><PanelRight size="md" /></IconButton>
               </ButtonContainer>
             )} />
-          <AdaptiveShellSplit paneOpen={paneOpen} chatWidth={chatWidth} onChatWidthChange={setChatWidth} resizeLabel={demo.resizeChat}
+          <AdaptiveShellSplit paneOpen={paneOpen} chatWidth={chatWidth} onChatWidthChange={setChatWidth} resizeLabel={demo.resizeChat} resizeHint={demo.dragToResize}
             chat={<DemoChat locale={browser.locale} wallpaper={wallpaper} />} pane={<BrowserDemo {...browser} placement="conversation" />} />
         </AdaptiveShellWorkspace>
       </AdaptiveShell>

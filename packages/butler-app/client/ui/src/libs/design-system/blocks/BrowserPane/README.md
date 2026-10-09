@@ -8,7 +8,9 @@ tab row, the toolbar row and the page card, inset by `--browser-card-inset`.
 
 ## When to use this block
 - Beside a conversation: `placement="conversation"` inside the `AdaptiveShellSplit`
-  pane; it stands `--space-xs` off the chat column and the window edge.
+  pane. It meets the chat column directly: its leading hairline is the
+  chat | pane divider, and its trailing edge tucks under the window frame (one
+  edge, one hairline; see Foundations > Spacing > Borders).
 - The standalone Browser view: `placement="standalone"` under the view's
   `TitlebarShell`.
 

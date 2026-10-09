@@ -3,7 +3,8 @@
 ## What is this block
 `PageCard` is the web page as one elevated card. It wraps `NativeViewSlot`, so
 the native view's bounds are exactly the card's content area (inside its 1px
-border, under the band), and it reports them with the inner corner `radius`
+transparent border, under the band; the pane's hairlines bound the card, so it
+draws no parallel line of its own), and it reports them with the inner corner `radius`
 for `View.setBorderRadius`. It shows who holds the tab, a `PageBand`, a 2px
 load line (`ProgressMeter thin`) and, for Butler's fixed 1280×800 tabs, a
 letterbox with the scale noted under the page.

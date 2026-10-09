@@ -15,6 +15,15 @@ const tokens = (pattern: RegExp) => tokenCatalog.filter((token) => pattern.test(
 
 const GAPS: StackGap[] = ["xs", "sm", "md", "lg", "xl", "2xl"];
 
+/** Where two surfaces meet, exactly one side draws the hairline. */
+const EDGE_RULES = [
+  "Side by side, the surface that follows draws its leading hairline: the workspace beside the sidebar, the browser pane beside the chat, the inspector beside the workspace. The other side draws none.",
+  "Stacked, the lower surface draws its top hairline (the pane under the title bar); a title bar draws no bottom line.",
+  "At the window edge the window frame (the workspace border) draws the line; a surface reaching it tucks its own border under the frame instead of doubling it, and leaves no strip.",
+  "A surface nested inside another (the page card in the pane) draws no parallel hairline: its elevation sets it apart. State edges (Butler's riso edge, your tab, an approval) are not structure and may draw.",
+  "A resize handle draws no line of its own: the divider is the surfaces' hairline; the handle adds the grabber.",
+];
+
 /** Stack gaps made visible: the hatch is the gap. */
 function GapsInUse() {
   return (
@@ -127,6 +136,8 @@ export function SpacingChapter({ chapter, anchor, locale, onOpen }: ChapterProps
               <Typo.Caption tone="tertiary">{token.light}</Typo.Caption>
             </div>
           ))}
+          <Typo.Label>One edge, one hairline</Typo.Label>
+          {EDGE_RULES.map((rule) => <Typo.Caption key={rule} tone="secondary">{rule}</Typo.Caption>)}
         </Stack>
       </GuideSection>
     </ChapterLayout>

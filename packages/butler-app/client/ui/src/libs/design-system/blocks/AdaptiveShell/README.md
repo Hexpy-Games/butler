@@ -27,6 +27,12 @@ exclusive open-panel state.
   the slide ends; closing commits the 0px track at once and the panel slides
   out. In the medium drawer layout the workspace width follows the committed
   track after the push, never a width transition.
+- Resize handles (`AdaptivePanelResizeHandle`, the `AdaptiveShellSplit`
+  handle) draw no line: the divider is the surfaces' hairline. Hovered,
+  focused or dragged they show a 4×64px pill grabber centred on it; with
+  `hint` / `resizeHint` ("Drag to resize") a two-line hint (the label over the
+  hint) follows after the tooltip delay, on the DOM side (never over a native
+  page). Keyboard resize and the separator's aria stay.
 - The workspace is an inline-size query container. Product resize geometry may
   retain a 320px workspace and give the inspector all remaining width; the shell
   accepts the measured widths and a standard root ref without owning preferences.

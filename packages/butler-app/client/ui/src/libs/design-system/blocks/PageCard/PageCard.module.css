@@ -1,7 +1,9 @@
 /* The page card: an elevated surface the native view is laid into. The
-   inner box clips (and keeps a 1px hairline border, so the content area,
-   and with it the native view, never moves); holder edges are drawn by
-   ::after over the border and 1px outside it. */
+   inner box clips (and keeps a 1px border, so the content area, and with it
+   the native view, never moves); holder edges are drawn by ::after over the
+   border and 1px outside it. One edge, one hairline: the card sits inside
+   the pane sheet, whose hairlines (and the window frame) already bound it,
+   so its own border stays transparent and its shadow sets it apart. */
 @property --page-card-edge-angle {
   inherits: false;
   initial-value: 135deg;
@@ -27,7 +29,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  border: var(--border-hairline) solid var(--line);
+  border: var(--border-hairline) solid transparent;
   border-radius: inherit;
   background: var(--surface-raised);
 }
