@@ -9,6 +9,14 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let op = frame["op"].as_str().unwrap_or("").to_owned();
     let session = frame["session"].as_str().unwrap_or("").to_owned();
     validate(&state, &mut frame, &op, &session)?;
+    if op == "tab.cancel" {
+        super::usage::cancel(
+            &state,
+            &session,
+            frame["args"]["call_id"].as_str().unwrap_or(""),
+        )?;
+        return response(0, json!({"status":"ok"}));
+    }
     let count = if op == "tab.act" {
         frame["args"]["steps"].as_array().map_or(0, Vec::len)
     } else {
@@ -21,45 +29,8 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     };
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
-    {
-        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        if !matches!(op.as_str(), "tab.open" | "tabs.list" | "owner.closed")
-            && let Err(reason) = hub
-                .tabs
-                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
-        {
-            return response(count, json!({"status":"not_dispatched","reason":reason}));
-        }
-        if matches!(
-            op.as_str(),
-            "tab.observe" | "tab.prepare" | "tab.act" | "tab.dialog"
-        ) {
-            let tab = hub
-                .tabs
-                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
-                .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"]
-                .as_str()
-                .is_some_and(|url| !permitted_url(&state, url))
-            {
-                return response(
-                    count,
-                    json!({"status":"not_dispatched","reason":"navigation_denied"}),
-                );
-            }
-            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(&state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS});
-        }
-        let Some(host) = hub.host.as_ref() else {
-            return response(count, json!({"status":"unavailable","reason":"no_browser"}));
-        };
-        if hub.pending.len() >= 8 {
-            return Err(error(429, "browser_busy"));
-        }
-        frame["id"] = json!(id);
-        frame["deadline_ms"] = json!(deadline);
-        host.try_send(frame)
-            .map_err(|_| error(429, "browser_busy"))?;
-        hub.pending.insert(id.clone(), sender);
+    if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
+        return Ok(refused);
     }
     let _pending = PendingCall {
         state: state.clone(),
@@ -76,6 +47,58 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     enforce_result_policy(&state, &session, &op, &mut result);
     store_still(&state, &session, &mut result).await?;
     response(count, result)
+}
+fn dispatch(
+    state: &Arc<HttpState>,
+    mut frame: Value,
+    count: usize,
+    deadline: u64,
+    id: &str,
+    sender: oneshot::Sender<Value>,
+) -> Result<Option<Response>, HttpError> {
+    let session = frame["session"].as_str().unwrap_or("").to_owned();
+    let op = frame["op"].as_str().unwrap_or("").to_owned();
+    {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        if !matches!(op.as_str(), "tab.open" | "tabs.list" | "owner.closed")
+            && let Err(reason) = hub
+                .tabs
+                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
+        {
+            return response(count, json!({"status":"not_dispatched","reason":reason})).map(Some);
+        }
+        if matches!(
+            op.as_str(),
+            "tab.observe" | "tab.prepare" | "tab.act" | "tab.dialog"
+        ) {
+            let tab = hub
+                .tabs
+                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
+                .map_err(|_| error(403, "not_your_tab"))?;
+            if tab["url"]
+                .as_str()
+                .is_some_and(|url| !permitted_url(state, url))
+            {
+                return response(
+                    count,
+                    json!({"status":"not_dispatched","reason":"navigation_denied"}),
+                )
+                .map(Some);
+            }
+            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS});
+        }
+        if hub.host.is_none() {
+            return response(count, json!({"status":"unavailable","reason":"no_browser"}))
+                .map(Some);
+        }
+        if hub.pending.len() >= 8 {
+            return Err(error(429, "browser_busy"));
+        }
+        frame["id"] = json!(id);
+        frame["deadline_ms"] = json!(deadline);
+        super::usage::dispatch(&mut hub, frame, sender)?;
+    }
+    Ok(None)
 }
 fn response(count: usize, value: Value) -> Result<Response, HttpError> {
     super::super::json(
@@ -117,7 +140,7 @@ fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mu
         && let Ok(hub) = state.browser.0.lock()
         && let Some(host) = &hub.host
     {
-        let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"tab.close","session":session,"tab":tab,"args":{},"deadline_ms":5000}));
+        let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.revoked","session":session,"tab":tab,"args":{}}));
     }
     *result = json!({"status":if op == "tab.act" {"unknown"} else {"not_dispatched"},"reason":"navigation_denied"});
 }

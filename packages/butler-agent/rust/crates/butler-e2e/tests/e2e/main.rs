@@ -15,6 +15,7 @@ mod authority_permissions;
 mod automation;
 mod browser_agent;
 mod browser_outputs;
+mod browser_usage;
 mod cassette_lint;
 mod cli_launcher;
 mod cli_remote;
