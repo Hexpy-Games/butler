@@ -13,7 +13,7 @@ function LoadFailed() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "An inline status message (info, success, warning, error) with an optional title and action.",
+  purpose: "An inline status message (neutral, info, success, warning, error) with an optional title and action.",
   whenToUse: ["A failure or warning tied to one part of the screen", "A persistent status the user should notice"],
   whenNotToUse: [
     { when: "A transient confirmation", use: "Toaster" },
@@ -27,7 +27,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Red text alone is easy to miss and has no action.", render: () => <Typo.Body tone="danger">Error</Typo.Body> },
     },
   ],
-  content: ["Multi-line messages use a body-sized IconSlot aligned to the first line; single-line messages retain their alignment.", "Titles are statements (Could not load the dashboard / 대시보드를 불러오지 못했습니다)."],
+  content: ["tone=\"neutral\" is for a waiting state or a plain fact (Waiting for your browser); color tones carry meaning.", "Multi-line messages use a body-sized IconSlot aligned to the first line; single-line messages retain their alignment.", "Titles are statements (Could not load the dashboard / 대시보드를 불러오지 못했습니다)."],
   accessibility: ["Tone is also conveyed by the title and icon, never by color alone."],
-  tokens: ["--color-danger-bg", "--color-warning-bg", "--color-info-bg", "--color-success-bg", "--radius-control", "--icon-size-md", "--typo-body-line-height"],
+  tokens: ["--muted", "--color-danger-bg", "--color-warning-bg", "--color-info-bg", "--color-success-bg", "--radius-control", "--icon-size-md", "--typo-body-line-height"],
 };

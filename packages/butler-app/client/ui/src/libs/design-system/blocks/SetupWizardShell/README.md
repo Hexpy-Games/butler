@@ -26,6 +26,19 @@ Use `SetupWizardContent surface="solid"` for an opaque raised card over wallpape
 Page content stays opaque (Tinted glass pattern); wallpaper appears only around the card. The first run (welcome, then "Pick an AI")
 uses it. `title` still names the region for assistive tech.
 
+### Focus options
+- `anchor="top"` puts the column at one top edge below the titlebar
+  (`max(titlebar + --space-lg, 12vh)`) instead of the middle of the window, so
+  an intro card and taller or shorter step cards never move their header.
+- `stepKey` replaces the card when the key changes: an inert copy of the old
+  card fades out (`--motion-exit-base`) while the new card rises in
+  (`--motion-base`, `--motion-distance-sm`) on the same top edge. Widths never
+  animate, so a 420px intro can hand over to a 520px `SetupWizardStepCard`.
+  Under reduced motion the card swaps at once. Keep one key for all steps that
+  share a card; the step card's `contentKey` fades its body between steps.
+- `SetupWizardProgress` (the wizard stepper) is exported for step headers;
+  `SetupWizardStepCard` renders it from its `steps`.
+
 ## Who can use this component
 Any setup workflow that follows a short linear sequence.
 

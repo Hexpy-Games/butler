@@ -1,22 +1,26 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { PageContainer } from "../../components/PageContainer";
-import { Box } from "../../components/Box";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
 import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
+import { SetupWizardStage } from "./SetupWizardStage";
 import styles from "./SetupWizardShell.module.css";
 import { dsClass } from "../../lib/internal";
 
-export type { SetupWizardStep } from "./SetupWizardProgress";
+export { SetupWizardProgress, type SetupWizardProgressProps, type SetupWizardStep } from "./SetupWizardProgress";
+export { SetupWizardContent, SetupWizardList, type SetupWizardContentProps } from "./SetupWizardContent";
 
 /** The first-run backdrop stays bloom, whatever the user's wallpaper. */
 const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
 
 /** `wizard`: title, stepper and a glass body. `focus`: one centered column on the backdrop. */
 export type SetupWizardVariant = "wizard" | "focus";
+
+/** Focus only. `center`: the column sits in the middle of the window. `top`: every screen shares one top edge. */
+export type SetupWizardAnchor = "center" | "top";
 
 interface SetupWizardShellProps
   extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
@@ -33,14 +37,10 @@ interface SetupWizardShellProps
   tone?: "light" | "dark";
   /** Contain the full-screen layers in the element (DS Viewer previews). */
   embedded?: boolean;
-}
-
-interface SetupWizardContentProps {
-  children: ReactNode;
-  /** Wizard: `default` 52ch, `wide` the full body. Focus: `default` 420px, `wide` 520px. */
-  width?: "default" | "wide";
-  /** Opaque content card over the wallpaper, with one shared token inset. */
-  surface?: "solid";
+  /** Focus only: where the column sits (default `center`). */
+  anchor?: SetupWizardAnchor;
+  /** Focus only: a new key replaces the card (old one fades out, new one rises in). */
+  stepKey?: string;
 }
 
 export function SetupWizardShell({
@@ -53,6 +53,8 @@ export function SetupWizardShell({
   windowControls,
   tone = "light",
   embedded = false,
+  anchor = "center",
+  stepKey,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
@@ -60,6 +62,7 @@ export function SetupWizardShell({
   return (
     <main
       className={styles.screen}
+      data-anchor={variant === "focus" ? anchor : undefined}
       data-embedded={embedded ? "true" : undefined}
       data-tone={tone}
       data-variant={variant}
@@ -89,7 +92,7 @@ export function SetupWizardShell({
             className={dsClass(styles.focusColumn)}
             aria-label={regionLabel}
           >
-            {children}
+            {stepKey === undefined ? children : <SetupWizardStage stepKey={stepKey}>{children}</SetupWizardStage>}
           </PageContainer>
         </ScrollArea>
       ) : (
@@ -127,29 +130,5 @@ export function SetupWizardShell({
         </PageContainer>
       )}
     </main>
-  );
-}
-
-export function SetupWizardContent({
-  children,
-  width = "default",
-  surface,
-}: SetupWizardContentProps) {
-  const body = <Stack gap="lg">{children}</Stack>;
-  return (
-    <Box surface={surface === "solid" ? "raised-opaque" : undefined}
-      elevation={surface === "solid" ? "card" : undefined} border={surface === "solid" ? "hairline" : undefined}
-      radius={surface === "solid" ? "panel" : undefined} padding={surface === "solid" ? "lg" : undefined}
-      className={dsClass(styles.content)} data-width={width} data-test-class="setup-wizard-content">
-      {body}
-    </Box>
-  );
-}
-
-export function SetupWizardList({ children }: SetupWizardContentProps) {
-  return (
-    <Stack as="ul" className={dsClass(styles.list)} gap="sm">
-      {children}
-    </Stack>
   );
 }

@@ -1,4 +1,6 @@
 .screen {
+  --setup-wizard-anchor-offset: 12vh;
+
   position: relative;
   display: grid;
   min-height: var(--adaptive-viewport-block-size);
@@ -141,6 +143,65 @@
   width: 100%;
   justify-items: center;
   row-gap: var(--space-lg);
+}
+
+/* anchor="top": intro and step cards share one top edge below the titlebar,
+   so a taller or shorter step never moves the card's header. */
+.screen[data-anchor="top"] .focusScrollContent {
+  align-content: start;
+  padding-top: max(
+    calc(var(--titlebar-height) + var(--space-lg)),
+    var(--setup-wizard-anchor-offset)
+  );
+}
+
+/* stepKey: the old card (an inert copy) and the new card share one grid
+   cell; only opacity and transform move, never the width. */
+.stage {
+  display: grid;
+  width: 100%;
+}
+
+.stageGhosts,
+.stageFrame {
+  min-width: 0;
+  grid-area: 1 / 1;
+}
+
+.stageGhosts {
+  display: grid;
+  pointer-events: none;
+}
+
+.stageFrame {
+  display: grid;
+  width: 100%;
+  align-content: start;
+  justify-items: center;
+  row-gap: var(--space-lg);
+}
+
+.stageExit {
+  animation: setup-wizard-stage-exit var(--motion-exit-base)
+    var(--motion-ease-accelerate) forwards;
+}
+
+.stageEnter {
+  animation: setup-wizard-stage-enter var(--motion-base)
+    var(--motion-ease-decelerate) both;
+}
+
+@keyframes setup-wizard-stage-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes setup-wizard-stage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-sm));
+  }
 }
 
 .screen[data-variant="focus"] .content {
