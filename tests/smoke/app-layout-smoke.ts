@@ -3055,6 +3055,15 @@ try {
       const workspace = document.querySelector<HTMLElement>(
         '[data-test-class~="workspace"]',
       );
+      const cardsFrame = workspace?.closest('[data-frame="cards"]');
+      const contentCard = cardsFrame
+        ? element.closest<HTMLElement>('[data-slot="adaptive-shell-card"]')
+        : null;
+      const contentRect = contentCard?.getBoundingClientRect();
+      // Wallpaper canvases may exceed the card; its overflow clips the visible paint.
+      const radiusStyle = contentCard
+        ? getComputedStyle(contentCard)
+        : workspace ? getComputedStyle(workspace) : null;
       const firstTitle = cards[0]?.querySelector<HTMLElement>(
         '[data-slot="prompt-suggestion-title"]',
       );
@@ -3094,8 +3103,14 @@ try {
         cardHeight: cardRect?.height ?? 0,
         emptyWidth: emptyRect.width,
         fluidCovers: fluidRect
-          ? Math.abs(fluidRect.top) <= 1 &&
-            fluidRect.bottom >= window.innerHeight - 1 &&
+          ? (cardsFrame && contentRect
+              ? Math.abs(fluidRect.top - contentRect.top) <= 1 &&
+                fluidRect.bottom >= contentRect.bottom - 1 &&
+                radiusStyle?.overflow === "hidden" &&
+                Math.abs(contentRect.bottom - (window.innerHeight - 8)) <= 1 &&
+                Math.abs(contentRect.right - (window.innerWidth - 8)) <= 1
+              : Math.abs(fluidRect.top) <= 1 &&
+                fluidRect.bottom >= window.innerHeight - 1) &&
             fluidRect.left <= emptyRect.left + 1 &&
             fluidRect.right >= emptyRect.right - 1
           : false,
@@ -3186,9 +3201,12 @@ try {
         workspaceTransparent: workspaceStyle
           ? workspaceStyle.backgroundColor === "rgba(0, 0, 0, 0)"
           : false,
-        workspaceLeftRadiusPreserved: workspaceStyle
-          ? Number.parseFloat(workspaceStyle.borderTopLeftRadius) > 0 &&
-            Number.parseFloat(workspaceStyle.borderBottomLeftRadius) > 0
+        workspaceLeftRadiusPreserved: radiusStyle
+          ? (cardsFrame
+              ? radiusStyle.borderTopLeftRadius === "12px" &&
+                radiusStyle.borderBottomLeftRadius === "12px"
+              : Number.parseFloat(radiusStyle.borderTopLeftRadius) > 0 &&
+                Number.parseFloat(radiusStyle.borderBottomLeftRadius) > 0)
           : false,
       };
     });
