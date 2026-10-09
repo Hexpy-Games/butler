@@ -91,6 +91,39 @@ block. Do not use it as a generic card or nested panel.
 - The pane enters with a transform; NativeViewSlot's tracker follows
   ancestors that move, so the native view tracks the page card.
 
+## Cards frame (`frame="cards"`)
+
+The approved app shell (2026-10-09). Default `frame="flat"` keeps today's
+rectangular shell.
+
+- The root paints one shell surface (`--shell-bg`, the window material):
+  sidebar, traffic lights, title row and the gaps between cards. The title
+  bar is transparent on it.
+- Content sits in rounded cards (`--shell-card-bg`, `--shell-card-radius`
+  12, one quiet `--shell-card-edge`, `--shell-card-shadow` none), inset
+  `--shell-card-inset` (8) from the window and `--shell-card-gap` (8) from
+  each other; the gap is the resize handle's lane. The workspace keeps a
+  transparent 1px frame, so the title row stays on its flat-frame pixels and
+  the cards start 1px under the 48px title row.
+- `AdaptiveShellTitle` (first child of the workspace) holds the TitlebarShell.
+  In cards it spans the inspector's column too: opening or sliding the
+  inspector never moves the trailing icons. The inspector slide clips the
+  workspace below the title row only.
+- `AdaptiveShellCard` wraps the content under the title row (conversation,
+  management pages). Flat: layout only. Do not wrap `AdaptiveShellSplit` (its
+  chat column is a card and the BrowserPane beside it is the second card) or
+  a standalone `BrowserPane` (the sheet is the card).
+- The inspector is the side card under the title row; `InspectorShell` reads
+  the frame and draws the card. `SettingsShell` puts its navigation on the
+  shell and its detail pane in a card. Blocks read the frame through
+  `useShellFrame()`.
+- A wallpaper inside a card resolves against it and is clipped to its corners;
+  no title bar overlaps a card, so the message list's top reserve drops to a
+  plain inset (`--conversation-top-reserve`).
+- Docked layout only: drawer layouts (phones, tablets) stay full-bleed.
+- The sidebar peek is visible under reduced motion (the peek resets the
+  opacity the reduced-motion rule gives a closed sidebar).
+
 ## Tags
 
 shell, drawer, inspector, responsive, adaptive, motion
