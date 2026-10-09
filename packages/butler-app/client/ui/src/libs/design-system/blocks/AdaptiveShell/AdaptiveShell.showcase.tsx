@@ -8,6 +8,7 @@ import { ChromeFloatingToggleLayer } from "../ChromeFrame";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { ConversationFrameDemo } from "../BrowserPane/fixtures/ConversationFrame";
+import { cardsStories } from "./fixtures/cardsStories";
 import {
   AdaptivePanelResizeHandle,
   AdaptivePanelTitlebar,
@@ -134,4 +135,5 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  ...cardsStories,
 ];

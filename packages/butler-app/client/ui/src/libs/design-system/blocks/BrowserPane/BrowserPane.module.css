@@ -25,6 +25,31 @@
   margin-inline-start: calc(var(--border-hairline) * -1);
 }
 
+/* AdaptiveShell frame="cards": the sheet is a card of its own (beside the
+   chat card, or the standalone Browser's card): all four corners, its own
+   quiet edge, nothing tucked under a window frame. Its surface comes from
+   the shell (--browser-pane-bg is a faint tint of the card surface there). */
+[data-panel-layout="docked"] .pane[data-frame="cards"] {
+  margin: 0;
+  padding-top: 0;
+  border: var(--border-hairline) solid var(--shell-card-edge);
+  border-radius: var(--shell-card-radius);
+  box-shadow: var(--shell-card-shadow);
+}
+
+/* The first tab sits --browser-card-inset off the card's top and left edges,
+   level with the page card's edge below it. The tab strip pads itself by the
+   focus ring's width, so the row gives the rest. The toolbar keeps its place. */
+[data-panel-layout="docked"] .pane[data-frame="cards"] .tabRow {
+  height: auto;
+  align-items: flex-start;
+  padding-top: calc(var(--browser-card-inset) - var(--focus-ring-width));
+  padding-bottom: 0;
+  padding-inline-start: calc(
+    var(--browser-card-inset) - var(--focus-ring-width)
+  );
+}
+
 .tabRow {
   display: flex;
   min-width: 0;

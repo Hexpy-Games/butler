@@ -30,7 +30,7 @@ const SIDEBAR = {
 } as const;
 
 /** `collapsed` as the App passes it (the sidebar is closed); a peek still shows the content. */
-function DemoSidebar({ locale, collapsed = false }: { locale: Locale; collapsed?: boolean }) {
+export function DemoSidebar({ locale, collapsed = false }: { locale: Locale; collapsed?: boolean }) {
   const copy = SIDEBAR[locale];
   const icons = [<PencilLine key="n" />, <Search key="s" />, <Clock3 key="c" />, <Globe2 key="g" />, <Library key="l" />];
   return (
@@ -46,7 +46,7 @@ function DemoSidebar({ locale, collapsed = false }: { locale: Locale; collapsed?
   );
 }
 
-function DemoChat({ locale, wallpaper = false }: { locale: Locale; wallpaper?: boolean }) {
+export function DemoChat({ locale, wallpaper = false }: { locale: Locale; wallpaper?: boolean }) {
   const [ask, answer, order] = BROWSER_DEMO_COPY[locale].chat;
   return (
     <Box padding="lg">
