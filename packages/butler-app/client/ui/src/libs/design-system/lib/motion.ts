@@ -15,7 +15,8 @@ export type MotionDurationName =
   | "exit-menu"
   | "exit-fast"
   | "exit-base"
-  | "exit-slow";
+  | "exit-slow"
+  | "pointer-glide";
 
 export type MotionEasingName =
   | "standard"
@@ -37,6 +38,7 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   "exit-fast": 90,
   "exit-base": 110,
   "exit-slow": 150,
+  "pointer-glide": 400,
 };
 
 const EASING_FALLBACK: Record<MotionEasingName, string> = {

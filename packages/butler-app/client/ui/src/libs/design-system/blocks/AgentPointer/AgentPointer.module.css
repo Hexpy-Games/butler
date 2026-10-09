@@ -1,6 +1,8 @@
 /* Butler's pointer layer (overlay renderer). Everything is placed with
-   translate, so moving between targets glides on --motion-pointer-glide
-   (0 under reduced motion: it jumps). */
+   translate. The arrow glides along a curve on --motion-pointer-glide
+   (transform keyframes from usePointerGlide; none under reduced motion: it
+   jumps). Rings and stops never animate geometry: they appear in place and
+   only fade. */
 .layer {
   position: absolute;
   z-index: 3;
@@ -15,18 +17,11 @@
   left: 0;
 }
 
-.pointer,
-.ring,
-.valueChip,
-.stop {
-  transition: translate var(--motion-pointer-glide) var(--motion-ease-standard);
-}
-
 .trail {
   overflow: visible;
 }
 
-.trail polyline {
+.trail path {
   fill: none;
   stroke: var(--butler-ink-purple);
   stroke-dasharray: 2 6;
@@ -35,12 +30,32 @@
   opacity: 0.7;
 }
 
-/* The target ring: dashed while reading, solid while acting. */
+/* The target ring: dashed while reading, solid while acting. It is drawn
+   at its target's geometry from its first frame and fades in; a ring whose
+   target is gone fades out where it was (data-leaving, then removed). */
 .ring {
   border: var(--border-width-strong) dashed
     color-mix(in srgb, var(--butler-ink-purple) 75%, transparent);
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--butler-ink-blue) 7%, transparent);
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.ring[data-leaving] {
+  opacity: 0;
+  animation: fade-out var(--motion-exit-fast) var(--motion-ease-accelerate);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
 }
 
 .layer[data-mode="click"] .ring {
@@ -105,7 +120,11 @@
   }
 }
 
+/* Below the field, inside its ring, so it comes and goes with the ring. */
 .valueChip {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  left: 0;
   background: var(--butler-ink-blue);
   font-weight: var(--font-weight-medium);
 }
@@ -145,6 +164,7 @@
   font-size: var(--font-size-1);
   font-weight: var(--font-weight-strong);
   font-variant-numeric: tabular-nums;
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 .stop[data-done] {
@@ -227,8 +247,10 @@
   background: var(--color-warning-text);
 }
 
-/* Reduced motion: no glide (the token is 0), no trail, a static ripple and
-   caret. `data-reduced` forces it for a renderer with its own setting. */
+/* Reduced motion: no glide, no trail, a static ripple and caret, rings and
+   stops that appear without a fade (a leaving ring is removed at once).
+   `data-reduced` is set for the OS setting, the DS scope and the renderer's
+   own `reducedMotion`. */
 .layer[data-reduced] .trail {
   display: none;
 }
@@ -236,7 +258,6 @@
 .layer[data-reduced] > *,
 .layer[data-reduced] .caret,
 .layer[data-reduced] .ripple {
-  transition: none;
   animation: none;
 }
 
@@ -245,6 +266,8 @@
     display: none;
   }
 
+  .ring,
+  .stop,
   .caret,
   .ripple {
     animation: none;
