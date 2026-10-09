@@ -61,8 +61,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
 async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), HarnessError> {
     let mut buffer = String::new();
     for op in ["tab.open", "tabs.list", "tab.observe"] {
-        let frame = next_frame(&mut stream, &mut buffer).await?;
-        assert_eq!(frame["op"], op);
+        let frame = next_call(&mut stream, &mut buffer, op).await?;
         assert_eq!(
             frame["session"], "general",
             "internal session reached browser host: {frame}"
@@ -99,8 +98,39 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
             )
             .await?;
         assert_eq!(reply.status, 200);
+        if op != "tabs.list" {
+            let ended = next_frame(&mut stream, &mut buffer).await?;
+            assert_eq!(ended["op"], "use.ended");
+            assert_eq!(ended["session"], "general");
+            assert_eq!(ended["turn_id"], frame["turn_id"]);
+            assert_eq!(ended["args"]["id"], frame["id"]);
+            assert_eq!(ended["args"]["abort"], false);
+        }
     }
     Ok(())
+}
+
+async fn next_call(
+    stream: &mut Response,
+    buffer: &mut String,
+    op: &str,
+) -> Result<Value, HarnessError> {
+    let started = if op == "tabs.list" {
+        None
+    } else {
+        let frame = next_frame(stream, buffer).await?;
+        assert_eq!(frame["op"], "use.started");
+        assert_eq!(frame["session"], "general");
+        Some(frame)
+    };
+    let frame = next_frame(stream, buffer).await?;
+    assert_eq!(frame["op"], op);
+    if let Some(started) = started {
+        assert_eq!(started["id"], frame["id"]);
+        assert_eq!(started["tab"], frame["tab"]);
+        assert_eq!(started["turn_id"], frame["turn_id"]);
+    }
+    Ok(frame)
 }
 
 async fn next_frame(stream: &mut Response, buffer: &mut String) -> Result<Value, HarnessError> {
