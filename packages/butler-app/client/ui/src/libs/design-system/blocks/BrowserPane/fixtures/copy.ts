@@ -14,6 +14,7 @@ export const BROWSER_DEMO_COPY = {
     chat: ["Remember the chairs from last week? The ones with lumbar support.", "Yes, three mesh chairs with lumbar support, ₩120–190k.",
       "Order the cheapest one arriving tomorrow."],
     signedIn: "Signed in", output: "Butler output",
+    peekEdge: "Peek the sidebar", nativePointer: "Pointer moves onto the native page", peekOpen: "Peek open", peekClosed: "Peek closed",
   },
   "ko-KR": {
     browser: "브라우저", conversation: "사무용 의자 주문", tabTitle: "사무용 의자 : 데일리굿즈", url: "https://shop.example.com/search?q=office-chair",
@@ -29,6 +30,7 @@ export const BROWSER_DEMO_COPY = {
     chat: ["지난주에 보던 의자들 기억나? 허리 받침 있는 걸로.", "네, 요추 지지대가 있는 메쉬 의자 세 개를 보셨어요. 가격대는 12~19만원이었습니다.",
       "그중에 내일 도착하는 제일 싼 걸로 주문해줘."],
     signedIn: "로그인 사용", output: "버틀러 출력물",
+    peekEdge: "사이드바 살짝 보기", nativePointer: "포인터가 네이티브 페이지로 이동", peekOpen: "열림", peekClosed: "닫힘",
   },
 } as const;
 

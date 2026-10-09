@@ -25,7 +25,16 @@
   flex: 1 1 auto;
 }
 
+/* Beside the pane the chat column contains its own layers: the conversation
+   wallpaper (a fixed, workspace-sized layer) and any glass resolve against
+   the column and are clipped to it, so they never paint over the pane. The
+   wallpaper's leading-corner radius belongs to the workspace, not the column.
+   Without the pane nothing changes: the wallpaper spans the workspace. */
 .split[data-pane-open] > .chat {
+  --workspace-left-radius: 0px;
+
+  contain: paint;
+  isolation: isolate;
   width: var(--browser-chat-width);
   flex: none;
 }

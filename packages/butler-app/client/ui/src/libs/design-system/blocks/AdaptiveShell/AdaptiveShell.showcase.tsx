@@ -110,6 +110,19 @@ export const stories: ShowcaseStory[] = [
     render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1100} height={800} sidebar="peek" />,
   },
   {
+    // useSidebarPeek: hover the left edge to peek; leaving the sidebar, Escape, a press outside or window blur
+    // closes it, and the button sends the host signal a native page view needs (pointerOutside).
+    name: "Sidebar peek (live): edge hover, dismiss, host signal",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1100} height={700} sidebar="live-peek" />,
+  },
+  {
+    // Beside the pane the chat column contains the conversation's wallpaper: it never paints over the pane.
+    name: "Conversation frame with a wallpaper (contained to the chat)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={760} wallpaper holder="none" band={null} pointer={false} />,
+  },
+  {
     // useSidebarAutoCollapse: 1100 − 304 − 400 leaves a 396px page, so the sidebar steps aside; at 1440 it stays.
     name: "Auto-collapse below a 720px page",
     states: ["collapsed"],
