@@ -32,10 +32,7 @@ export function wireTab(tab, actions) {
       if (!webUrl(destination)) event.preventDefault();
     });
   }
-  contents.setWindowOpenHandler(({ url }) => {
-    if (webUrl(url)) actions.popup(tab, url);
-    return { action: "deny" };
-  });
+  contents.setWindowOpenHandler(details => actions.popup(tab, details));
   contents.on("input-event", (_event, input) => {
     if (input.type !== "mouseMove" && input.type !== "mouseEnter") return;
     const win = tab.attached;

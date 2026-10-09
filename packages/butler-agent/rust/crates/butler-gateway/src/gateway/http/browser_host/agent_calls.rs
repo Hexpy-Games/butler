@@ -104,7 +104,10 @@ fn dispatch(
                 )
                 .map(Some);
             }
-            frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS});
+            frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
+                &format!("http://127.0.0.1:{}", super::super::content::port(state)),
+                tab["url"].as_str().unwrap_or(""),
+            );
         }
         if hub.host.is_none() {
             return response(count, json!({"status":"unavailable","reason":"no_browser"}))
@@ -209,7 +212,10 @@ fn validate(
             None => butler_runtime::browser::public_url(raw)
                 .map_err(|_| error(400, "navigation_denied"))?,
         };
-        frame["args"]["policy"] = json!({"content_origin":format!("http://127.0.0.1:{}",super::super::content::port(state)),"secure_keypads":butler_runtime::browser::SECURE_KEYPAD_MARKERS,"sites":[butler_runtime::browser::site_scope(url.as_str()).map_err(|_|error(400,"navigation_denied"))?]});
+        frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
+            &format!("http://127.0.0.1:{}", super::super::content::port(state)),
+            url.as_str(),
+        );
     }
     if op == "tab.act"
         && frame["args"]["steps"]
