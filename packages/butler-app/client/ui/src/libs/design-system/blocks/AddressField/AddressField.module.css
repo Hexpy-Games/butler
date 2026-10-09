@@ -1,0 +1,106 @@
+/* At rest a quiet filled pill; in edit mode the raised surface with the
+   focus ring around the whole field. */
+.field {
+  display: flex;
+  min-width: 0;
+  height: var(--control-height-md);
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-sm) var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--selection);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-tight);
+}
+
+.field[data-editing] {
+  background: var(--surface-raised);
+  box-shadow: var(--focus-ring);
+}
+
+.field[data-disabled] {
+  color: var(--interactive-disabled-fg);
+}
+
+.glyph {
+  display: inline-grid;
+  width: var(--icon-size-md);
+  flex: none;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.glyph[data-security="insecure"] {
+  color: var(--color-warning-text);
+}
+
+.display {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  cursor: text;
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.path {
+  color: var(--text-tertiary);
+}
+
+.placeholder {
+  color: var(--placeholder);
+}
+
+.field[data-disabled] .host,
+.field[data-disabled] .placeholder {
+  color: inherit;
+}
+
+/* The plain DS input fills the field; the field carries the ring. */
+.field .input {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: inherit;
+}
+
+.field .input:focus,
+.field .input:focus-visible {
+  box-shadow: none;
+}
+
+.tags {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.star {
+  --icon-button-size: var(--control-height-sm);
+
+  flex: none;
+}
+
+.star[aria-pressed="true"] {
+  color: var(--accent-text);
+}

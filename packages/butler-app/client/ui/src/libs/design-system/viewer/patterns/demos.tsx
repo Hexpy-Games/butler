@@ -48,7 +48,7 @@ export function AdaptiveBreakpoints() {
   );
 }
 
-const KOREAN = "Butler는 설정 페이지의 섹션 머리글을 카드 바깥에 두고, 카드 안쪽 필드 간격을 하나의 리듬으로 맞춥니다. 경로 /Users/butler/projects/design-system/viewer/tokens.css 같은 긴 토큰도 넘치지 않고 줄바꿈됩니다.";
+const KOREAN = "버틀러는 설정 페이지의 섹션 머리글을 카드 바깥에 두고, 카드 안쪽 필드 간격을 하나의 리듬으로 맞춥니다. 경로 /Users/butler/projects/design-system/viewer/tokens.css 같은 긴 토큰도 넘치지 않고 줄바꿈됩니다.";
 
 export function KoreanWrapping() {
   return (

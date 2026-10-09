@@ -84,8 +84,8 @@ describe("App foreground quit", () => {
       showMessageBox: async (input) => { options = input; return { response: 1 }; },
     });
     expect(options).toMatchObject({
-      message: "Butler를 종료하면 작업과 예약 작업이 중지됩니다.",
-      buttons: ["취소", "Butler 종료"],
+      message: "버틀러를 종료하면 작업과 예약 작업이 중지됩니다.",
+      buttons: ["취소", "버틀러 종료"],
     });
   });
 });

@@ -16,6 +16,7 @@ interface NavigationOptions {
   onClose: (tabId: string) => void;
   onMove?: (move: TabStripMove) => void;
   announce: (message: string) => void;
+  hideChip?: boolean;
 }
 
 /** The roving tab stop: the focused item while focus is inside, else the active tab (or its folded chip). */
@@ -32,8 +33,8 @@ function restingKey(groups: readonly TabStripGroup[], items: readonly TabStripIt
  * jump, Delete/Backspace close the focused tab, Cmd/Ctrl+Shift+arrows move it. Focus follows the
  * tab through re-renders (a move remounts it inside its new group).
  */
-export function useTabStripNavigation({ groups, activeTabId, labels, onClose, onMove, announce }: NavigationOptions) {
-  const items = useMemo(() => stripItems(groups), [groups]);
+export function useTabStripNavigation({ groups, activeTabId, labels, onClose, onMove, announce, hideChip = false }: NavigationOptions) {
+  const items = useMemo(() => stripItems(groups, hideChip), [groups, hideChip]);
   const nodes = useRef(new Map<string, HTMLElement>());
   const refs = useRef(new Map<string, (node: HTMLElement | null) => void>());
   const pending = useRef<string | null>(null);

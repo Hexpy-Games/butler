@@ -11,6 +11,8 @@ export interface TitlebarShellProps extends DsPrivateStyleProps {
   subtitle?: ReactNode;
   leading?: ReactNode;
   leadingVisibility?: "always" | "narrow";
+  /** `glyph` (default): a square the size of the title line. `auto`: the control keeps its own size (a conversation button). */
+  leadingSize?: "glyph" | "auto";
   trailing?: ReactNode;
   windowControls?: ReactNode;
   collapsed?: boolean;
@@ -24,6 +26,7 @@ export function TitlebarShell({
   subtitle,
   leading,
   leadingVisibility = "always",
+  leadingSize = "glyph",
   trailing,
   windowControls,
   collapsed = false,
@@ -42,6 +45,7 @@ export function TitlebarShell({
             className={styles.leading}
             data-slot="titlebar-leading"
             data-visibility={leadingVisibility}
+            data-size={leadingSize === "auto" ? "auto" : undefined}
           >
             {leading}
           </span>

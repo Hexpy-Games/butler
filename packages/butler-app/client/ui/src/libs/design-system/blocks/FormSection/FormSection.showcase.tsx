@@ -35,7 +35,7 @@ const labels = {
     searchDescription: "웹 검색 제공자와 사전 검색 계획을 설정합니다. 키가 필요한 제공자는 여기에 비밀 값을 저장할 수 있습니다.",
     model: "모델 설정",
     name: "표시 이름",
-    nameDescription: "Butler 메시지에 표시됩니다.",
+    nameDescription: "버틀러 메시지에 표시됩니다.",
     smartGroups: "스마트 그룹",
     smartGroupsDescription: "새 대화를 주제별로 자동 정리합니다.",
     provider: "검색 제공자",
@@ -53,7 +53,7 @@ function Fields({ context, id }: { context: ShowcaseRenderContext; id: string })
   return (
     <>
       <SettingsField id={`${id}-name`} label={t.name} description={t.nameDescription}
-        control={<Input id={`${id}-name`} defaultValue="Butler" />} />
+        control={<Input id={`${id}-name`} defaultValue={context.locale === "ko-KR" ? "버틀러" : "Butler"} />} />
       <SettingsField id={`${id}-groups`} label={t.smartGroups} description={t.smartGroupsDescription}
         control={<Switch id={`${id}-groups`} />} />
     </>

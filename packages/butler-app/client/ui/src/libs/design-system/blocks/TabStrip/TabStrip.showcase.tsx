@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { TabStrip } from "./TabStrip";
-import { crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
+import { IconButton } from "../../components/IconButton";
+import { TabIn } from "../../components/Icons";
+import { conversationGroup, crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
 import type { TabStripGroup } from "./tabStripModel";
 
 export const meta: ShowcaseMeta = {
@@ -54,6 +56,14 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Overflow: tabs shrink, then scroll sideways",
     render: ({ locale }) => <TabStripDemo locale={locale} initial={crowdedGroups(locale)} activeTabId="n12" />,
+  },
+  {
+    // A conversation's browser pane: only its group, no chip (the title bar names it), bring-in at the row end.
+    name: "Conversation pane: one group without its chip, trailing slot",
+    render: ({ locale }) => (
+      <TabStripDemo locale={locale} initial={conversationGroup(locale)} activeTabId="s1" hideChip
+        trailing={<IconButton label={locale === "ko-KR" ? "내 탭 가져오기" : "Bring in a tab"}><TabIn size="md" /></IconButton>} />
+    ),
   },
   {
     name: "Only my tabs (no chip)",

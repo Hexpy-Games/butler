@@ -100,7 +100,7 @@ export const LAYERS_COPY = {
     branchChat: "새 대화로 분기",
     branchProject: "프로젝트로 분기",
     more: "메시지에 추가",
-    composer: "Butler에게 무엇이든 물어보세요",
+    composer: "버틀러에게 무엇이든 물어보세요",
     dialogTitle: "새 예약 작업",
     nameLabel: "제목",
     promptLabel: "프롬프트",

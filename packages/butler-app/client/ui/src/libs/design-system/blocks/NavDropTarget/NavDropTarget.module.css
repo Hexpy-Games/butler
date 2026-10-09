@@ -100,6 +100,78 @@
   animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
 }
 
+/* Outside payloads (picked elements, a browser tab): no slot, no travel, no
+   expand. The target header gets the ring; an invalid target a dashed
+   danger ring without the tint. */
+.scope[data-payload="outside"] {
+  --nav-drop-gap: 0px;
+}
+
+.item[data-drop="outside"]::before {
+  top: var(--drop-row-top, 0);
+  height: var(--drop-row-height, 100%);
+  inset-inline: 0;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--accent);
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.item[data-drop="outside"][data-invalid="true"]::before {
+  border: var(--border-width-strong) dashed
+    color-mix(in srgb, var(--color-danger-text) 70%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The label sits just past the row's end, over the next surface. */
+.outsideLabel {
+  position: fixed;
+  z-index: var(--z-drag);
+  max-width: min(320px, 40vw);
+  overflow: hidden;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: var(--shadow-card);
+  color: var(--neutral-white);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transform: translate(var(--space-md), -50%);
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.outsideLabel[data-inside] {
+  transform: translate(calc(-100% - var(--space-sm)), -50%);
+}
+
+.outsideLabel[data-invalid="true"] {
+  background: var(--color-danger);
+}
+
+/* Auto-scroll band: the 40px edge zone of the list, with the direction. */
+.autoScroll {
+  position: fixed;
+  z-index: var(--z-drag);
+  display: grid;
+  height: var(--space-4xl);
+  place-items: center;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    transparent
+  );
+  color: var(--accent-text);
+  pointer-events: none;
+  transform: translateY(-100%);
+}
+
+/* The top band is the bottom band turned over (gradient and chevron). */
+.autoScroll[data-edge="start"] {
+  transform: rotate(180deg);
+}
+
 @keyframes indicator-in {
   from {
     opacity: 0;

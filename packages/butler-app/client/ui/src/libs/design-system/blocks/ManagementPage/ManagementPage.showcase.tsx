@@ -23,7 +23,7 @@ const labels = {
   },
   "ko-KR": {
     title: "예약 작업", meta: "예약된 프롬프트 3개", action: "새로 만들기", main: "예약된 프롬프트", aside: "최근 실행",
-    project: "Butler", description: "데스크톱 클라이언트와 게이트웨이. 월페이퍼 업그레이드 진행 중.",
+    project: "버틀러", description: "데스크톱 클라이언트와 게이트웨이. 월페이퍼 업그레이드 진행 중.",
     calm: "차분한 처리: 베일이 월페이퍼 대비를 낮춥니다.", none: "처리 없음: 월페이퍼 그대로.",
   },
 } as const;

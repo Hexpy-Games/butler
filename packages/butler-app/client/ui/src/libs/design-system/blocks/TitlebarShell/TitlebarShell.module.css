@@ -68,6 +68,16 @@
   height: auto;
 }
 
+/* An auto-sized control (the conversation button): its own box, pulled back
+   by its inner inset so its label lines up where the title would start. The
+   collapsed-sidebar inset on the titlebar is unchanged. */
+.leading[data-size="auto"] {
+  width: auto;
+  height: auto;
+  margin-inline-start: calc(var(--space-xs) * -1);
+  color: var(--text-primary);
+}
+
 .leading svg {
   display: block;
 }
@@ -120,6 +130,19 @@
   right: auto;
   left: auto;
   padding-left: 18px;
+}
+
+/* Viewer fixture of a collapsed sidebar: the inset AdaptiveShell provides
+   (traffic lights, the floating sidebar toggle, then the title). */
+.fixtureCollapsed {
+  --titlebar-collapsed-left-padding: calc(
+    var(--traffic-controls-width) + var(--sidebar-padding-inline) +
+      var(--chrome-floating-toggle-size) + var(--space-md)
+  );
+
+  position: relative;
+  right: auto;
+  left: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

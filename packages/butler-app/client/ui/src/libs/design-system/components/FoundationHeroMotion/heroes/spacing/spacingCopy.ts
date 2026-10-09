@@ -29,7 +29,7 @@ export const SPACING_COPY = {
     unit: "4px, 기준 단위",
     comfortable: "여유", compact: "촘촘",
     general: "일반", notifications: "알림",
-    sync: "시작할 때 동기화", syncHint: "Butler를 열 때 변경 사항을 가져옵니다.", sounds: "소리 재생", soundsHint: "작업이 끝나면 부드러운 알림음을 냅니다.",
+    sync: "시작할 때 동기화", syncHint: "버틀러를 열 때 변경 사항을 가져옵니다.", sounds: "소리 재생", soundsHint: "작업이 끝나면 부드러운 알림음을 냅니다.",
     badge: "배지 표시", badgeHint: "읽지 않은 답장 수를 아이콘에 표시합니다.",
     inGroup: "묶음 안", betweenRows: "행 사이", betweenSections: "섹션 사이",
     cardTitle: "릴리스 노트", cardBody: "이번 주 세 가지가 바뀌었어요.",

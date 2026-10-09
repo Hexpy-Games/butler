@@ -32,7 +32,7 @@ export const RADIUS_COPY = {
     button: "저장", tag: "초안",
     panelTitle: "주간 리포트", panelBody: "요약을 공유할 준비가 됐어요.",
     rename: "이름 바꾸기", duplicate: "복제", archive: "보관",
-    placeholder: "Butler에게 무엇이든 물어보세요", more: "더 보기", send: "보내기",
+    placeholder: "버틀러에게 무엇이든 물어보세요", more: "더 보기", send: "보내기",
     period: "기간", day: "일", week: "주", month: "월",
     cards: [["주간 리포트", "요약을 공유할 준비가 됐어요."], ["디자인 리뷰", "화요일 회의 메모."], ["릴리스 노트", "2.4 초안."]],
     shareTitle: "리포트 공유", shareBody: "링크가 있으면 누구나 볼 수 있어요.", cancel: "취소", share: "공유",

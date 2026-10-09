@@ -38,5 +38,16 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
+## Tone, indicator, badge and pressed
+- `tone`: `default`, `butler` (the icon in `--butler-ink-blue`) or `riso` (the
+  icon stroked with the riso ink gradient). Colour only: no fill, so a toggle
+  that is on never looks pressed. The focus ring is the same in every tone.
+- `indicator`: a riso dot at the top-end corner (Butler is acting on what the
+  button shows, e.g. browsing while the pane is closed).
+- `badge`: a count at the top-end corner (hidden at 0, `99+` above 99). Put
+  the count in `label` as well.
+- `pressed`: sets `aria-pressed` for toggles (the conversation's browser
+  toggle) without the `selected` fill.
+
 ## Tags
 action, icon-only, tooltip

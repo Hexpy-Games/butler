@@ -241,7 +241,7 @@ export const HARNESS_NAVIGATION: NavigationView = {
     {
       id: "general",
       kind: "chat",
-      title: "Butler 클라이언트 기능 점검",
+      title: "버틀러 클라이언트 기능 점검",
       last_activity_at: "2026-05-01T00:00:00.000Z",
       active_turn_state: "delivered",
       pinned: false,

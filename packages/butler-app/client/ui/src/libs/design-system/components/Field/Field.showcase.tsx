@@ -34,10 +34,10 @@ const labels = {
   },
   "ko-KR": {
     legend: "MCP 서버", id: "서버 ID", transport: "연결 방식", enabled: "사용",
-    enabledHint: "세션이 시작되면 Butler가 이 서버에 연결합니다.",
+    enabledHint: "세션이 시작되면 버틀러가 이 서버에 연결합니다.",
     command: "명령", args: "인자", argsHint: "한 줄에 하나씩 입력", or: "또는",
     url: "서버 URL", required: "서버 ID를 입력하세요", tooLong: "64자 이하로 입력하세요",
-    component: "Butler 에이전트", version: "0.0.21 → 0.0.22 설치 준비됨",
+    component: "버틀러 에이전트", version: "0.0.21 → 0.0.22 설치 준비됨",
   },
 } as const;
 

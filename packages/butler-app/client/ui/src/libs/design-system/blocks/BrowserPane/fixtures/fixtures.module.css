@@ -1,0 +1,58 @@
+/* Viewer-only surfaces for the browser stories (not product UI). */
+
+/* The pane colour around a lone page card, inset like BrowserPane's stage. */
+.stage {
+  display: flex;
+  padding: var(--browser-card-inset);
+  border-radius: var(--radius-panel);
+  background: var(--browser-pane-bg);
+}
+
+/* A bare card top for band samples. */
+.cardTop {
+  max-width: 100%;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--surface-raised);
+  box-shadow: var(--browser-card-shadow);
+}
+
+.cardTop::after {
+  display: block;
+  height: var(--space-2xl);
+  content: "";
+}
+
+/* Traffic lights drawn for the pop-up window preview (the OS draws them in the App). */
+.window {
+  position: relative;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line-strong);
+  border-radius: var(--radius-popover);
+  box-shadow: var(--shadow-window);
+}
+
+.lights {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  left: var(--space-lg);
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.lights span {
+  width: var(--space-md);
+  height: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--red-05);
+}
+
+.lights span:nth-child(2) {
+  background: var(--amber-05);
+}
+
+.lights span:nth-child(3) {
+  background: var(--green-05);
+}

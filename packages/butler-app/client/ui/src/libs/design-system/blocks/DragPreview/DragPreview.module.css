@@ -1,0 +1,97 @@
+/* Stacked crops: the back one turns right, the front one left. */
+.stack {
+  position: relative;
+  width: 76px;
+  height: 64px;
+}
+
+.crop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60px;
+  height: 60px;
+  border: var(--border-width-strong) solid var(--surface-raised);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-drag-lift);
+  object-fit: cover;
+  rotate: -4deg;
+}
+
+.crop:first-child:not(:last-of-type) {
+  left: var(--space-md);
+  rotate: 6deg;
+}
+
+.crop:first-child:only-of-type {
+  rotate: -3deg;
+}
+
+.badge {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--space-sm) * -1);
+  left: 56px;
+  display: grid;
+  min-width: calc(var(--space-xl) + var(--border-width-strong));
+  height: calc(var(--space-xl) + var(--border-width-strong));
+  padding: 0 var(--space-xs);
+  place-items: center;
+  border: var(--border-width-strong) solid var(--surface-raised);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge[data-invalid] {
+  left: calc(var(--space-sm) * -1);
+  background: var(--color-danger);
+}
+
+/* The lifted tab: the strip's tab, raised and slightly turned. */
+.tab {
+  position: relative;
+  display: flex;
+  width: 190px;
+  height: var(--control-height-md);
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-drag-lift);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  rotate: -1.5deg;
+}
+
+.favicon {
+  display: inline-grid;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  flex: none;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.favicon img {
+  width: 100%;
+  height: 100%;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab .badge {
+  top: calc(var(--space-sm) * -1);
+  left: auto;
+  right: calc(var(--space-sm) * -1);
+}

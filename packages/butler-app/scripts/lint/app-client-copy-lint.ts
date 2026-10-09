@@ -1,3 +1,5 @@
+import ts from "typescript";
+import { lifecycleCopy } from "../../../butler-i18n/src/lifecycle.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -132,16 +134,39 @@ for (const locale of locales) {
     localizedFindings.push({ path: "packages/butler-i18n/src/locales/" + locale, line: 1, text, reason: "default surfaces must avoid agent internal names" });
   }
 }
-const collectStrings = (value: unknown): string[] => {
-  if (typeof value === "string") return [value];
-  if (typeof value === "function" && value.length === 0) return collectStrings(value());
-  return value && typeof value === "object" ? Object.values(value).flatMap(collectStrings) : [];
-};
-for (const text of collectStrings(getAppCopy("ko-KR"))) {
-  if (!/워커|작업자|버틀러|타임존|보관함|Butler App|자동화/u.test(text)) continue;
-  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text, reason: "use the approved Korean glossary (Worker, Butler, 시간대, 아카이브, 예약 작업)" });
+// Only this key renders the product wordmark in the setup logo lockup.
+const KOREAN_WORDMARK_KEYS = new Set(["firstRun.product"]);
+
+type CopyString = { key: string; text: string };
+
+/** Inspect generated copy without invoking formatters with invented arguments. */
+function functionStrings(value: (...args: never[]) => unknown, key: string): CopyString[] {
+  const source = ts.createSourceFile("copy.ts", `(${value.toString()})`, ts.ScriptTarget.Latest, true);
+  const result: CopyString[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      result.push({ key, text: node.text });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return result;
 }
-for (const text of collectStrings(getAppCopy("en-US"))) {
+
+function collectStrings(value: unknown, key = ""): CopyString[] {
+  if (typeof value === "string") return [{ key, text: value }];
+  if (typeof value === "function") return functionStrings(value as (...args: never[]) => unknown, key);
+  return value && typeof value === "object"
+    ? Object.entries(value).flatMap(([name, child]) => collectStrings(child, key ? `${key}.${name}` : name)) : [];
+}
+for (const { key, text } of [...collectStrings(getAppCopy("ko-KR")), ...collectStrings(lifecycleCopy.ko, "lifecycle")]) {
+  const badGlossary = /워커|작업자|타임존|보관함|Butler App|자동화/u.test(text);
+  const badProductName = /Butler/u.test(text) && !(KOREAN_WORDMARK_KEYS.has(key) && text === "Butler");
+  if (!badGlossary && !badProductName) continue;
+  localizedFindings.push({ path: "packages/butler-i18n/src/locales/ko.ts", line: 1, text,
+    reason: `${key}: use the approved Korean glossary (버틀러, Worker, 시간대, 아카이브, 예약 작업); Butler is reserved for wordmarks` });
+}
+for (const { text } of collectStrings(getAppCopy("en-US"))) {
   if (!/\bautomations?\b|\bscheduled tasks?\b/iu.test(text)) continue;
   localizedFindings.push({ path: "packages/butler-i18n/src/locales/en.ts", line: 1, text, reason: "use schedule for the scheduled-run feature" });
 }
