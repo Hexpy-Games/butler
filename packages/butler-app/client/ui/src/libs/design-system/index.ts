@@ -118,6 +118,7 @@ export * from "./blocks/KeyValueRow";
 export * from "./blocks/ProgressMeter";
 export * from "./blocks/UsageSummaryRows";
 export * from "./blocks/SetupWizardShell";
+export * from "./blocks/SetupWizardStepCard";
 export * from "./blocks/TodoProgressPanel";
 export * from "./blocks/WorkerActivityPanel";
 export * from "./blocks/WorkerActivityRow";

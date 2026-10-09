@@ -142,6 +142,8 @@ const tintedPairs: Array<[text: string, surface: readonly string[]]> = [
   ["--color-warning-text", ["--color-surface-base", "--surface-raised", "--color-warning-bg"]],
   ["--color-danger-text", ["--color-surface-base", "--surface-raised", "--color-danger-bg"]],
   ["--color-info-text", ["--color-surface-base", "--surface-raised", "--color-info-bg"]],
+  // Notice tone="neutral" on an opaque setup card.
+  ["--text-secondary", ["--color-surface-base", "--surface-raised", "--muted"]],
   ["--send-fg", ["--send-bg"]],
   ["--primary-foreground", ["--primary"]],
 ];

@@ -6,9 +6,11 @@ import { Typo } from "../../components/Typo";
 import styles from "./Notice.module.css";
 import { dsClass } from "../../lib/internal";
 
+export type NoticeTone = "neutral" | "info" | "warning" | "error" | "success";
+
 export interface NoticeProps extends DsPrivateStyleProps {
-  /** Visual tone */
-  tone: "info" | "warning" | "error" | "success";
+  /** Visual tone; `neutral` is a quiet muted status (waiting, account) with no color meaning. */
+  tone: NoticeTone;
   /** Icon element */
   icon?: ReactNode;
   /** Optional notice title */
