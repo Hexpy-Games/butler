@@ -18,13 +18,7 @@ impl SessionTitleOwner {
 }
 
 impl AppApplication {
-    pub(super) fn generate_session_title(
-        &self,
-        chat: String,
-        text: String,
-        attachment_names: Vec<String>,
-        model: String,
-    ) {
+    pub(super) fn generate_session_title(&self, chat: String, model: String) {
         if chat == "general" || chat.starts_with("steward-") || chat.starts_with("worker-") {
             return;
         }
@@ -39,8 +33,6 @@ impl AppApplication {
                     std::time::Duration::from_secs(5),
                     app.generate_title(
                         &chat,
-                        &text,
-                        &attachment_names,
                         &model,
                         cancellation.clone(),
                     ),
@@ -61,20 +53,21 @@ impl AppApplication {
     async fn generate_title(
         &self,
         chat: &str,
-        text: &str,
-        attachment_names: &[String],
         model: &str,
         cancellation: CancellationToken,
     ) -> Result<(), &'static str> {
         let id = chat.to_owned();
-        let prompt = text.to_owned();
-        let files = attachment_names.to_vec();
-        let expected = self
+        let facts = self
+            .dependencies
+            .settings_facts
+            .snapshot()
+            .map_err(|_| "settings")?;
+        let input = self
             .storage
-            .read(move |db| eligible_title(db, &id, &prompt, &files))
+            .read(move |db| eligible_title(db, &id, &facts))
             .await
             .map_err(|_| "storage")?;
-        let Some(expected) = expected else {
+        let Some((expected, prompt)) = input else {
             return Ok(());
         };
         let generated = self
@@ -82,7 +75,7 @@ impl AppApplication {
             .session_title_generator
             .generate(
                 AppSessionTitleInput {
-                    text: title_generation_input(text, attachment_names),
+                    text: prompt,
                     model_ref: model.to_owned(),
                 },
                 cancellation.clone(),
@@ -118,9 +111,8 @@ impl AppApplication {
 fn eligible_title(
     db: &Connection,
     id: &str,
-    text: &str,
-    attachment_names: &[String],
-) -> Result<Option<String>, AppStorageError> {
+    facts: &AppSettingsFacts,
+) -> Result<Option<(String, String)>, AppStorageError> {
     let title = db
         .query_row(
             "SELECT title FROM chats c WHERE id=?1 AND kind IN ('chat','project') AND archived=0 \
@@ -132,17 +124,42 @@ fn eligible_title(
         .optional()
         .map_err(AppStorageError::sqlite)?;
     let Some(title) = title else { return Ok(None) };
-    let provisional = provisional_input(text, attachment_names);
+    // At most two users are needed to decide first-message eligibility.
+    let mut statement = db
+        .prepare("SELECT id,text FROM messages WHERE chat_id=?1 AND role='user' LIMIT 2")
+        .map_err(AppStorageError::sqlite)?;
+    let users = statement
+        .query_map([id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppStorageError::sqlite)?;
+    let [(message, text)] = users.as_slice() else {
+        return Ok(None);
+    };
+    let mut attachments = db
+        .prepare(
+            "SELECT f.safe_name FROM message_attachments a JOIN message_files f ON f.id=a.file_id \
+         WHERE a.message_id=?1 ORDER BY a.position",
+        )
+        .map_err(AppStorageError::sqlite)?;
+    let names = attachments
+        .query_map([message], |row| row.get::<_, String>(0))
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppStorageError::sqlite)?;
+    let default = match settings::ui_language(db, facts)? {
+        crate::gateway::ui_language::UiLanguage::English => "New chat",
+        crate::gateway::ui_language::UiLanguage::Korean => "새 대화",
+    };
+    let provisional = provisional_input(text, &names);
     if !["New chat", "New project chat", "새 대화"].contains(&title.as_str())
         && title != provisional_title(&provisional)
     {
         return Ok(None);
     }
-    let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM (SELECT id FROM messages WHERE chat_id=?1 AND role='user' LIMIT 2)",
-        [id], |row| row.get(0),
-    ).map_err(AppStorageError::sqlite)?;
-    Ok((count == 1).then_some(title))
+    Ok(Some((title, title_generation_input(text, &names, default))))
 }
 
 fn collapsed(text: &str) -> String {
@@ -179,14 +196,18 @@ fn provisional_input(text: &str, attachment_names: &[String]) -> String {
     }
 }
 
-fn title_generation_input(text: &str, attachment_names: &[String]) -> String {
+fn title_generation_input(text: &str, attachment_names: &[String], default: &str) -> String {
     let names = attachment_names
         .iter()
         .filter(|name| !butler_core::public_text::trim_js_whitespace(name).is_empty())
         .cloned()
         .collect::<Vec<_>>();
     if names.is_empty() {
-        return text.to_owned();
+        return if butler_core::public_text::trim_js_whitespace(text).is_empty() {
+            default.to_owned()
+        } else {
+            text.to_owned()
+        };
     }
     if butler_core::public_text::trim_js_whitespace(text).is_empty() {
         format!("Attached files: {}", names.join(", "))
