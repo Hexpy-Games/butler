@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { cn } from "../../lib/utils";
+import { useShellFrame } from "../AdaptiveShell/shellFrame";
 import styles from "./BrowserPane.module.css";
 
 export interface BrowserPaneProps extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "children"> {
@@ -25,7 +26,8 @@ export interface BrowserPaneProps extends Omit<DsBaseProps<HTMLAttributes<HTMLEl
  */
 export function BrowserPane({ placement = "conversation", tabs, toolbar, children, label, className, ...props }: BrowserPaneProps) {
   return (
-    <section {...props} className={cn(styles.pane, className)} data-slot="browser-pane" data-placement={placement} aria-label={label}>
+    <section {...props} className={cn(styles.pane, className)} data-slot="browser-pane" data-placement={placement}
+      data-frame={useShellFrame()} aria-label={label}>
       <div className={styles.tabRow} data-slot="browser-pane-tabs">{tabs}</div>
       {toolbar}
       <div className={styles.stage} data-slot="browser-pane-stage">{children}</div>

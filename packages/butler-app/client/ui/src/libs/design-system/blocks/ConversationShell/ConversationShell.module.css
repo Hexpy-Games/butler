@@ -68,7 +68,9 @@
   align-content: end;
   gap: 22px;
   margin: 0 auto;
-  padding: var(--titlebar-safe-area-top) 0 0;
+  /* Room for the title bar that overlays the conversation; a shell card
+     (AdaptiveShell frame="cards") sets a plain inset, no title bar overlaps. */
+  padding: var(--conversation-top-reserve, var(--titlebar-safe-area-top)) 0 0;
 }
 
 @media (width <= 560px) {

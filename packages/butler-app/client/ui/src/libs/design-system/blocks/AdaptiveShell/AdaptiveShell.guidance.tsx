@@ -2,9 +2,10 @@ import type { ShowcaseGuidance } from "../../showcase";
 import { Box } from "../../components/Box";
 import { Typo } from "../../components/Typo";
 import { useRef } from "react";
+import { TitlebarShell } from "../TitlebarShell";
 import {
-  AdaptiveShell, AdaptiveShellInspector, AdaptiveShellPeekEdge, AdaptiveShellScrim, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellWorkspace,
-  useSidebarPeek,
+  AdaptiveShell, AdaptiveShellCard, AdaptiveShellInspector, AdaptiveShellPeekEdge, AdaptiveShellScrim, AdaptiveShellSidebar, AdaptiveShellSplit,
+  AdaptiveShellTitle, AdaptiveShellWorkspace, useSidebarPeek,
 } from "./index";
 
 // #region recipe: App frame
@@ -38,6 +39,22 @@ function ConversationFrame() {
 }
 // #endregion
 
+// #region recipe: Cards frame
+function CardsFrame() {
+  return (
+    <AdaptiveShell frame="cards" leftOpen rightOpen>
+      <AdaptiveShellSidebar open><Box padding="md"><Typo.PanelTitle>Navigation</Typo.PanelTitle></Box></AdaptiveShellSidebar>
+      <AdaptiveShellWorkspace>
+        {/* The title row is the shell's: it spans the inspector's column, so its icons never move. */}
+        <AdaptiveShellTitle><TitlebarShell title="Conversation" dragRegion dataTestClass="custom-titlebar" /></AdaptiveShellTitle>
+        <AdaptiveShellCard><Box padding="md"><Typo.Body>Conversation</Typo.Body></Box></AdaptiveShellCard>
+      </AdaptiveShellWorkspace>
+      <AdaptiveShellInspector open><Box padding="md"><Typo.PanelTitle>Inspector</Typo.PanelTitle></Box></AdaptiveShellInspector>
+    </AdaptiveShell>
+  );
+}
+// #endregion
+
 /** Viewer frame only: paint containment keeps the shell's fixed drawers in the preview. */
 function Framed() {
   return <div style={{ height: 240, contain: "layout paint" }}><AppFrame /></div>;
@@ -57,6 +74,11 @@ export const guidance: ShowcaseGuidance = {
       description: "splitOpen keeps the inspector closed; the split sits under the titlebar; useSidebarPeek drives the peek edge and closes it (DOM signals plus the host's native-view signal).",
       render: () => <div style={{ height: 240, contain: "layout paint" }}><ConversationFrame /></div>,
     },
+    {
+      name: "Cards frame",
+      description: "frame=\"cards\": one shell surface (sidebar, window chrome, title row); content in rounded cards. Put the TitlebarShell in AdaptiveShellTitle and the content in AdaptiveShellCard; the split, the standalone BrowserPane, the inspector and the settings detail draw their own cards.",
+      render: () => <div style={{ height: 240, contain: "layout paint" }}><CardsFrame /></div>,
+    },
   ],
   doDont: [
     {
@@ -68,11 +90,14 @@ export const guidance: ShowcaseGuidance = {
     "The browser pane and the inspector are mutually exclusive (toggleConversationSidePanel); useSidebarAutoCollapse steps the sidebar aside below a 720px page.",
     "The scrim label is a verb: Close panel.",
     "Pass the app theme through the theme prop (appearance, sidebar, mainScreen); surfaces outside the shell (portals, first run) use adaptiveShellThemeClasses.",
+    "frame=\"cards\" applies to the docked layout only; drawers (phones, tablets) stay full-bleed. Do not wrap AdaptiveShellSplit or a standalone BrowserPane in AdaptiveShellCard: they are cards already.",
+    "A wallpaper inside a card resolves against the card and is clipped to its corners; the shell and the title row stay the window material.",
   ],
   accessibility: [
     "The scrim is a button only while open; drawers keep focus order sidebar → workspace → inspector.",
     "The split handle is a vertical separator with its value (340–560): arrows move 16px, Shift 48px, Home/End jump.",
   ],
   tokens: ["--adaptive-drawer-width", "--adaptive-inspector-width", "--adaptive-panel-duration", "--adaptive-scrim-bg", "--sidebar-width",
-    "--browser-chat-width", "--browser-chat-width-min", "--browser-chat-width-max"],
+    "--browser-chat-width", "--browser-chat-width-min", "--browser-chat-width-max",
+    "--shell-bg", "--shell-card-bg", "--shell-card-inset", "--shell-card-gap", "--shell-card-radius", "--shell-card-edge", "--shell-card-shadow"],
 };

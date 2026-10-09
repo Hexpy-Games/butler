@@ -106,6 +106,9 @@
   border-radius: var(--radius-popover);
   background: var(--adaptive-panel-bg);
   box-shadow: var(--shadow-window);
+  /* Reduced motion hides a closed docked sidebar with opacity 0; the peek
+     must undo it, or it is laid out but invisible. */
+  opacity: 1;
   transform: none;
   visibility: visible;
   animation: peek-in var(--motion-base) var(--motion-ease-standard);

@@ -2,6 +2,7 @@ import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
+import { useShellFrame } from "../AdaptiveShell/shellFrame";
 import styles from "./InspectorShell.module.css";
 
 export interface InspectorShellTab {
@@ -29,10 +30,12 @@ export function InspectorShell({
   className,
 }: InspectorShellProps) {
   const tabsFadeRef = useScrollEdges("x");
+  const contentFadeRef = useScrollEdges("y");
   return (
     <aside
       className={cn(styles.shell, open ? styles.open : styles.collapsed, className)}
       data-test-class={`right-inspector${open ? " right-inspector-open" : ""}`}
+      data-frame={useShellFrame()}
       id={id}
     >
       <div ref={tabsFadeRef} className={styles.tabs}>
@@ -49,7 +52,7 @@ export function InspectorShell({
           </button>
         ))}
       </div>
-      <div className={styles.content}>{children}</div>
+      <div ref={contentFadeRef} className={styles.content} data-slot="inspector-content">{children}</div>
     </aside>
   );
 }

@@ -1,0 +1,145 @@
+/* AdaptiveShell frame="cards" (docked layout only; drawers stay full-bleed).
+   The root paints one shell surface: the sidebar, the traffic lights, the
+   title row and the gaps between cards. Content sits in rounded cards inset
+   from the window edges (--shell-card-inset) and from each other
+   (--shell-card-gap, the resize handle's lane). Each card draws its own quiet
+   edge: no two surfaces share one any more. */
+
+/* Resolved on the shell root, so platform (Windows) and solid-sidebar
+   overrides of --sidebar-bg flow into the shell. */
+.root {
+  --shell-bg: var(--sidebar-bg);
+  --shell-card-bg: var(--workspace-bg);
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"] {
+  --titlebar-bg: transparent;
+  /* The browser sheet reads as a card on the shell, a faint ink tint of the
+     card surface so the page card inside still lifts off it. */
+  --browser-pane-bg: color-mix(
+    in srgb,
+    var(--text-primary) 2.5%,
+    var(--shell-card-bg)
+  );
+
+  background: var(--shell-bg);
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"][data-settings-active="true"] {
+  background: var(--shell-bg);
+}
+
+/* The workspace is now only the shell's room for cards. It keeps its 1px
+   frame width (transparent), so the title row stays on the exact pixels it
+   has in the flat frame, and it no longer clips: the title row reaches over
+   the inspector's column. */
+.root[data-frame="cards"][data-panel-layout="docked"]
+  > [data-slot="adaptive-shell-workspace"] {
+  overflow: visible;
+  contain: none;
+  padding: 0 calc(var(--shell-card-inset) - var(--border-hairline))
+    calc(var(--shell-card-inset) - var(--border-hairline)) 0;
+  border-color: transparent;
+  border-right-width: var(--border-hairline);
+  border-radius: 0;
+  background: transparent;
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"][data-left-track="false"]
+  > [data-slot="adaptive-shell-workspace"] {
+  padding-left: calc(var(--shell-card-inset) - var(--border-hairline));
+}
+
+/* Title row slot (both frames): pinned over the workspace's first row. */
+[data-slot="adaptive-shell-workspace"]
+  > .title[data-slot="adaptive-shell-title"] {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--titlebar-safe-area-top);
+  grid-row: auto;
+}
+
+/* Cards: the title row spans the inspector's column too, so its trailing
+   icons stay at the window edge whether the inspector is open or not. */
+.root[data-frame="cards"][data-panel-layout="docked"][data-right-track="true"]
+  .title {
+  right: calc(var(--right-panel-width) * -1);
+}
+
+/* The content card. Flat: layout only. */
+.card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.card > :last-child {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"] .card,
+.root[data-frame="cards"][data-panel-layout="docked"]
+  [data-slot="adaptive-shell-split-chat"] {
+  /* A wallpaper inside resolves against the card and is clipped to its
+     corners; no title bar overlaps the card, so the message list keeps only
+     a plain top inset. */
+  --workspace-left-radius: var(--shell-card-radius);
+  --conversation-top-reserve: var(--space-lg);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  contain: paint;
+  border: var(--border-hairline) solid var(--shell-card-edge);
+  border-radius: var(--shell-card-radius);
+  background: var(--shell-card-bg);
+  box-shadow: var(--shell-card-shadow);
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"][data-transparent-workspace="true"]
+  :is(.card, [data-slot="adaptive-shell-split-chat"]) {
+  background: transparent;
+}
+
+/* The split's handle takes the gap between the chat card and the pane card. */
+.root[data-frame="cards"][data-panel-layout="docked"]
+  [data-slot="adaptive-shell-split"]
+  > [role="separator"] {
+  width: var(--shell-card-gap);
+  margin-inline: 0;
+}
+
+/* The inspector is the side card: under the title row, inset from the
+   window, one gap off the workspace's card. */
+.root[data-frame="cards"][data-panel-layout="docked"]
+  > [data-slot="adaptive-shell-inspector"] {
+  /* Level with the content card, which starts under the workspace's
+     transparent 1px frame. */
+  top: calc(var(--titlebar-safe-area-top) + var(--border-hairline));
+  right: var(--shell-card-inset);
+  bottom: var(--shell-card-inset);
+  width: calc(var(--right-panel-width) - var(--shell-card-inset));
+  overflow: hidden;
+  border-radius: var(--shell-card-radius);
+  box-shadow: var(--shell-card-shadow);
+}
+
+.root[data-frame="cards"][data-panel-layout="docked"]
+  > [data-slot="adaptive-shell-inspector"]
+  > * {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+}
+
+/* The inspector's resize handle (a 9px grab zone) is centred in the gap
+   before its card. */
+.root[data-frame="cards"][data-panel-layout="docked"]
+  > [role="separator"][data-side="right"] {
+  right: calc(var(--right-panel-width) + (var(--shell-card-gap) - 9px) / 2);
+}

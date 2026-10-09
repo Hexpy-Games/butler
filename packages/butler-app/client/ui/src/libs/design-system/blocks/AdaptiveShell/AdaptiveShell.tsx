@@ -6,6 +6,8 @@ import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 import frame from "./AdaptiveShellFrame.module.css";
+import cards from "./AdaptiveShellCards.module.css";
+import { ShellFrameContext, type ShellFrame } from "./shellFrame";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
@@ -29,6 +31,12 @@ export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivEl
   splitOpen?: boolean;
   /** The collapsed sidebar floats over the workspace as a card (docked layout only; AdaptiveShellPeekEdge). */
   leftPeek?: boolean;
+  /**
+   * `cards`: the sidebar, window chrome and title row are one shell surface and the content sits in
+   * rounded cards (AdaptiveShellCard, the split's chat and pane, the inspector, the settings detail),
+   * inset from the window edges. Docked layout only; drawers stay full-bleed. Default `flat`.
+   */
+  frame?: ShellFrame;
 }
 export function AdaptiveShell({
   leftOpen,
@@ -41,6 +49,7 @@ export function AdaptiveShell({
   compactSidebarFullWidth = false,
   splitOpen = false,
   leftPeek = false,
+  frame: shellFrame = "flat",
   theme,
   className,
   style,
@@ -63,31 +72,35 @@ export function AdaptiveShell({
     rootRef,
     rightOpen: inspectorOpen,
     animate: !drawer && !resizing && !settingsActive,
+    frame: shellFrame,
   });
   return (
-    <div
-      ref={composedRef}
-      className={cn(styles.root, theme && adaptiveShellThemeClasses(theme), className)}
-      data-theme={theme?.appearance}
-      data-left-open={leftOpen}
-      data-left-track={leftTrack}
-      data-track-switching={switching || rightSwitching || undefined}
-      data-right-open={inspectorOpen}
-      data-split-open={splitOpen || undefined}
-      data-left-peek={leftPeek && !leftOpen ? "true" : undefined}
-      data-right-track={rightTrack}
-      data-settings-active={settingsActive}
-      data-resizing={resizing}
-      data-transparent-workspace={transparentWorkspace}
-      data-chrome-environment={chromeEnvironment}
-      data-panel-layout={drawer ? "drawer" : "docked"}
-      data-platform={platform}
-      data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
-      style={withUnsafeStyle(style, UNSAFE_style)}
-      {...props}
-    >
-      {children}
-    </div>
+    <ShellFrameContext.Provider value={shellFrame}>
+      <div
+        ref={composedRef}
+        className={cn(styles.root, cards.root, theme && adaptiveShellThemeClasses(theme), className)}
+        data-theme={theme?.appearance}
+        data-frame={shellFrame}
+        data-left-open={leftOpen}
+        data-left-track={leftTrack}
+        data-track-switching={switching || rightSwitching || undefined}
+        data-right-open={inspectorOpen}
+        data-split-open={splitOpen || undefined}
+        data-left-peek={leftPeek && !leftOpen ? "true" : undefined}
+        data-right-track={rightTrack}
+        data-settings-active={settingsActive}
+        data-resizing={resizing}
+        data-transparent-workspace={transparentWorkspace}
+        data-chrome-environment={chromeEnvironment}
+        data-panel-layout={drawer ? "drawer" : "docked"}
+        data-platform={platform}
+        data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
+        style={withUnsafeStyle(style, UNSAFE_style)}
+        {...props}
+      >
+        {children}
+      </div>
+    </ShellFrameContext.Provider>
   );
 }
 

@@ -39,6 +39,11 @@ Keep message mapping in product containers. Long timelines should use stable
 virtual row keys and identity-preserving cache/server merges so scrolling over
 cached history does not jitter.
 
+The message list reserves room for the title bar that overlays it
+(`--titlebar-safe-area-top`). In a shell card (`AdaptiveShell frame="cards"`)
+no title bar overlaps it, and the card sets `--conversation-top-reserve` to a
+plain inset instead.
+
 ## Wrong use cases
 
 Do not use this for dashboards, settings, or inspector panels. Use app-shell
