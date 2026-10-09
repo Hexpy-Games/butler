@@ -24,7 +24,9 @@
   content: "";
 }
 
-/* Traffic lights drawn for the pop-up window preview (the OS draws them in the App). */
+/* Traffic lights drawn for the pop-up window preview (the OS draws them in the App):
+   the native geometry of a pop-up on current macOS, lights at x 12 y 13
+   (butler-platform/popup-window.mjs), three 14px buttons, 9px apart (60px). */
 .window {
   position: relative;
   overflow: hidden;
@@ -36,15 +38,16 @@
 .lights {
   position: absolute;
   z-index: 1;
-  top: 14px;
-  left: var(--space-lg);
+  top: 13px;
+  left: 12px;
   display: flex;
-  gap: var(--space-sm);
+  width: 60px;
+  justify-content: space-between;
 }
 
 .lights span {
-  width: var(--space-md);
-  height: var(--space-md);
+  width: 14px;
+  height: 14px;
   border-radius: var(--radius-pill);
   background: var(--red-05);
 }

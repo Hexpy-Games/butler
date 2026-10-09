@@ -31,5 +31,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["The host only (id.example.com); never the page title."],
   accessibility: ["The lock or warning glyph carries “Secure connection” / “Not secure”.", "The bar is a window drag region; controls inside it stay clickable."],
-  tokens: ["--browser-band-height", "--popover", "--radius-panel", "--text-tertiary"],
+  tokens: ["--browser-band-height", "--chrome-toggle-inset", "--chrome-floating-toggle-size", "--chrome-floating-toggle-icon-size", "--popover", "--radius-panel", "--text-tertiary"],
 };

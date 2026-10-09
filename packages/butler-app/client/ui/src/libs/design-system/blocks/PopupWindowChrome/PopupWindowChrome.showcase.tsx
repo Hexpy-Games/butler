@@ -42,7 +42,7 @@ function PopupWindow({ context, platform, secure = true }: { context: ShowcaseRe
   const copy = COPY[context.locale];
   return (
     <div className={fixtures.window} style={{ width: "100%", maxWidth: 400, height: 540 }}>
-      {platform === "darwin" ? <span className={fixtures.lights} aria-hidden="true"><span /><span /><span /></span> : null}
+      {platform === "darwin" ? <span className={fixtures.lights} aria-hidden="true" data-ds-popup-lights=""><span /><span /><span /></span> : null}
       <PopupWindowChrome host="id.example.com" secure={secure} securityLabel={secure ? copy.secure : copy.insecure} platform={platform}
         windowControls={(
           <ButtonContainer size="icon-sm">

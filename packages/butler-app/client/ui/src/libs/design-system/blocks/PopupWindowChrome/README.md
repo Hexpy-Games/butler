@@ -27,6 +27,12 @@ The lock or warning glyph carries its name; the bar is a drag region.
 ## Responsive behavior
 Fills the window; the host truncates.
 
+## Platform layout
+On macOS the bar reserves the native lights at the start (they sit at x 12 in
+a pop-up) and starts the lock as far from the green light as TitlebarShell's
+first leading glyph sits from the main window's lights. Elsewhere nothing is
+reserved at the start and `windowControls` sit at the end.
+
 ## Wrong use cases
 - Do not title the pop-up with the page's own title.
 

@@ -1577,7 +1577,7 @@ The whole document of a Butler-owned pop-up window: a compact 40px bar with the 
 - Use for: A pop-up a page opens on a click (sign-in, payment), kept with its opener
 - Not for: The main window's title bar → `TitlebarShell`
 - Not for: A page dialog (confirm, HTTP sign-in) → `Dialog`
-- Tokens: `--browser-band-height`, `--popover`, `--radius-panel`, `--text-tertiary`
+- Tokens: `--browser-band-height`, `--chrome-toggle-inset`, `--chrome-floating-toggle-size`, `--chrome-floating-toggle-icon-size`, `--popover`, `--radius-panel`, `--text-tertiary`
 
 ### SelectionBar
 

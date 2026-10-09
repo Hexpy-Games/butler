@@ -9,7 +9,9 @@ import type { Locator, Page } from "playwright";
 // - the sidebar peek is visible under reduced motion (it was laid out but transparent);
 // - the window bounds every card: with a long conversation and a tall inspector both cards keep the 8px
 //   bottom inset and their rounded bottom corners, and an empty new chat (its stage sized to the window) keeps the
-//   title row's icons on screen after its composer takes focus (nothing scrolls the shell).
+//   title row's icons on screen after its composer takes focus (nothing scrolls the shell);
+// - PopupWindowChrome: on macOS the lock sits as far from the green light as the main titlebar's first
+//   leading glyph (the floating toggle's) sits from its own lights; on Windows nothing is reserved at the start.
 // Screenshots of every cards story, light and dark, land in .tmp/ds-shell-cards for review.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
@@ -41,7 +43,9 @@ const STORY = {
   hub: "Cards frame: standalone browser",
   tall: "Cards frame: tall content stays inside the window",
 } as const;
+const POPUP_STORY = { mac: "macOS pop-up window", windows: "Windows pop-up window" } as const;
 const bottomInsets: string[] = [];
+const popupGaps: string[] = [];
 const tabInsets: string[] = [];
 
 async function openShellPage(page: Page, theme: "light" | "dark"): Promise<void> {
@@ -190,11 +194,51 @@ try {
       const name = (await story.getAttribute("data-ds-story"))!.replace(/[^a-z0-9]+/giu, "-").slice(0, 60);
       await story.locator(`[data-ds-theme="${theme}"]`).first().screenshot({ path: join(shots, `${name}-${theme}.png`) });
     }
+    // PopupWindowChrome leading gap. The main titlebar (TitlebarShell beside the floating toggle) puts its
+    // first glyph at --traffic-controls-width + --chrome-toggle-inset + the toggle's inner inset, with the
+    // lights at x 20 (main.mjs); a pop-up's lights sit at x 12. Both draw the same lights, so the expected
+    // gap from the green light is the main glyph start minus (20 + the lights' width).
+    await page.goto(`${origin}/?page=blocks/PopupWindowChrome&theme=${theme}`, { waitUntil: "networkidle" });
+    const mac = page.locator(`[data-ds-story="${POPUP_STORY.mac}"] [data-ds-theme="${theme}"]`).first();
+    await mac.waitFor({ state: "visible", timeout: 20_000 });
+    const popup = await mac.evaluate((node) => {
+      const px = (name: string) => {
+        const probe = document.createElement("div");
+        probe.style.width = `var(${name})`;
+        document.documentElement.append(probe);
+        const width = probe.getBoundingClientRect().width;
+        probe.remove();
+        return width;
+      };
+      const lights = node.querySelector("[data-ds-popup-lights]")!.getBoundingClientRect();
+      const chrome = node.querySelector("[data-slot=popup-window-chrome]")!.getBoundingClientRect();
+      const lock = node.querySelector("[data-slot=popup-window-chrome] header [role=img]")!.getBoundingClientRect();
+      const mainGlyphStart = px("--traffic-controls-width") + px("--chrome-toggle-inset")
+        + (px("--chrome-floating-toggle-size") - px("--chrome-floating-toggle-icon-size")) / 2;
+      return { gap: lock.left - lights.right, lightsLeft: lights.left - chrome.left, expected: mainGlyphStart - (20 + lights.width) };
+    });
+    popupGaps.push(`${theme} macOS ${popup.gap.toFixed(2)} (titlebar ${popup.expected.toFixed(2)})`);
+    assert(near(popup.lightsLeft, 12) && popup.expected > 0 && near(popup.gap, popup.expected, 0.5),
+      `${theme}: the pop-up lock must sit as far from the green light as the main titlebar's leading glyph: ${JSON.stringify(popup)}`);
+    const win = page.locator(`[data-ds-story="${POPUP_STORY.windows}"] [data-ds-theme="${theme}"]`).first();
+    const winFacts = await win.evaluate((node) => {
+      const chrome = node.querySelector("[data-slot=popup-window-chrome]")!.getBoundingClientRect();
+      const lock = node.querySelector("[data-slot=popup-window-chrome] header [role=img]")!.getBoundingClientRect();
+      const controls = node.querySelector("[data-slot=popup-window-chrome] header .no-drag")?.getBoundingClientRect();
+      return { lockLeft: lock.left - chrome.left, controlsRight: controls ? chrome.right - controls.right : -1, lights: node.querySelector("[data-ds-popup-lights]") !== null };
+    });
+    popupGaps.push(`${theme} Windows lock ${winFacts.lockLeft.toFixed(2)}`);
+    assert(!winFacts.lights && near(winFacts.lockLeft, 12) && near(winFacts.controlsRight, 8),
+      `${theme}: the Windows pop-up reserves nothing at the start and keeps its controls at the end: ${JSON.stringify(winFacts)}`);
+    await mac.screenshot({ path: join(shots, `popup-macos-${theme}.png`) });
+    await win.screenshot({ path: join(shots, `popup-windows-${theme}.png`) });
+
     assert(errors.length === 0, `${theme}: page errors ${errors.join(" | ")}`);
     await context.close();
   }
   console.log(`first tab insets (px): ${tabInsets.join(" · ")}`);
   console.log(`card bottom insets (px): ${bottomInsets.join(" · ")}`);
+  console.log(`pop-up leading gaps (px): ${popupGaps.join(" · ")}`);
   console.log(`ds-shell-cards smoke: ok (screenshots in ${shots})`);
 } finally {
   await browser.close();
