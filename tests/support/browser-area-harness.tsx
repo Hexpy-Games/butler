@@ -10,6 +10,7 @@ import { Titlebar } from "../../packages/butler-app/client/ui/src/components/lay
 import { setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store";
 import type { BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { useBrowserShellState } from "../../packages/butler-app/client/ui/src/components/browser/browserShellState";
 import "../../packages/butler-app/client/ui/src/libs/design-system/tokens.css";
 
 const params = new URLSearchParams(location.search);
@@ -56,13 +57,13 @@ window.butlerBrowser = {
       const item = snapshot.tabs.find((entry) => entry.id === input?.tabId)!;
       snapshot.tabs = snapshot.tabs.filter((entry) => entry !== item); snapshot.tabs.splice(input?.index ?? 0, 0, item);
     }
-    publish(); return undefined;
+    publish(); return op === "create" ? snapshot.activeId : undefined;
   },
 };
 function FixtureWorkspace() {
-  const view = useButlerStore((state) => state.view);
+  const open = useBrowserShellState((state) => Boolean(state.conversations.general?.open));
   if (mode === "security") return <SecuritySettings />;
-  return mode === "output" && view.kind !== "browser" ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
+  return mode === "output" && !open ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
 }
 createRoot(document.getElementById("root")!).render(
   <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">

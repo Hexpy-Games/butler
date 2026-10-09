@@ -18,6 +18,7 @@ class UserBrowser {
   opened = false;
   areaVisible = false;
   keyboardFocused = false;
+  areaOwner = "mine";
   nativeCovers = 0;
   initialization = null;
   metadataTimer = null;
@@ -66,6 +67,7 @@ class UserBrowser {
     if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+    tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
     emulation(tab);
   }
   async capture(tab) {
@@ -194,7 +196,9 @@ class UserBrowser {
     const key = input.key.toLowerCase();
     if (command && key === "l") {
       this.getWindow()?.webContents.focus(); this.getWindow()?.webContents.send("butler-browser:address");
-    } else if (command && key === "t") { if (this.enabled()) this.create(); }
+    } else if (command && key === "t") {
+      if (this.enabled()) this.create({ owner: this.areaOwner });
+    }
     else if (command && key === "w") { if (this.activeId) this.close(this.activeId); }
     else if ((input.alt && ["arrowleft", "arrowright"].includes(key)) || (command && ["[", "]"].includes(key))) {
       if (this.enabled() && this.activeId) this.commandTab(key === "arrowleft" || key === "[" ? "back" : "forward", this.activeId);
@@ -260,7 +264,10 @@ class UserBrowser {
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
     if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
   }
-  focusArea(value) { this.keyboardFocused = value; }
+  focusArea(value, owner) {
+    this.keyboardFocused = value;
+    if (owner === "mine" || /^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner ?? "")) this.areaOwner = owner;
+  }
   hide() {
     this.keyboardFocused = false; this.areaVisible = false;
     for (const tab of this.tabs.values()) {

@@ -10,9 +10,9 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
+  AdaptiveShellPeekEdge,
   Stack,
   Spinner,
-  InspectorShell,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -20,7 +20,9 @@ import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationNotice";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
-import { Conversation } from "@/components/conversation/Conversation.tsx";
+import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
+import { LibraryPage } from "@/components/browser/LibraryPage";
+import { useBrowserShell } from "@/components/browser/useBrowserShell";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
 import { BrowserArea } from "@/components/browser/BrowserArea";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
@@ -36,7 +38,7 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
-import { activeChatFromNavigation, appShellTheme, isDraftChatId } from "@/app/utils.ts";
+import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
   selectIsSettingsView,
@@ -165,7 +167,7 @@ function AppWorkspaceShell() {
   const projectCreateDialogOpen = useButlerStore(
     (state) => state.projectCreateDialogOpen,
   );
-  const effectiveRightOpen = useButlerStore(selectEffectiveRightOpen);
+  const requestedRightOpen = useButlerStore(selectEffectiveRightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
   const isSettingsView = useButlerStore(selectIsSettingsView);
   const newChatActive =
@@ -191,9 +193,12 @@ function AppWorkspaceShell() {
     leftOpen,
     setLeftOpen: (value) => setLeftOpen(value),
   });
+  const browser = useBrowserShell(shellRef, leftPanelWidth);
+  const effectiveLeftOpen = leftOpen && !browser.autoCollapsed;
+  const effectiveRightOpen = requestedRightOpen && !browser.paneOpen;
   useNarrowRightPanelAutoCollapse({
     effectiveRightOpen,
-    leftOpen,
+    leftOpen: effectiveLeftOpen,
     rightOpen,
     setLeftOpen,
     setRightOpen,
@@ -205,7 +210,9 @@ function AppWorkspaceShell() {
       theme={appShellTheme(themeSettings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
-      leftOpen={leftOpen}
+      leftOpen={effectiveLeftOpen}
+      leftPeek={browser.peek}
+      splitOpen={browser.paneOpen}
       compactSidebarFullWidth
       platform={nativePlatform()}
       resizing={Boolean(resizingPanel)}
@@ -224,31 +231,34 @@ function AppWorkspaceShell() {
           <AdaptiveShellSidebar
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
-            open={leftOpen}
+            open={effectiveLeftOpen}
+            onPointerLeave={() => browser.setPeek(false)}
           >
             <Sidebar />
           </AdaptiveShellSidebar>
           <AdaptiveShellWorkspace
             data-test-class="workspace"
           >
-            <Titlebar />
+            <Titlebar sidebarOpen={effectiveLeftOpen} />
             <Stack fill gap="none">
               <LiveConnectionNotice />
               <Stack fill gap="none">
-                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "automations" ||
+                {view.kind === "browser" && window.butlerBrowser ? <BrowserArea /> : view.kind === "library" ? <LibraryPage /> : view.kind === "automations" ||
                 view.kind === "automation-detail" ? (
                   <ErrorBoundary key={view.kind} scope="schedules"><AutomationsView /></ErrorBoundary>
                 ) : view.kind === "project-dashboard" ? (
                   <ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary>
                 ) : (
-                  <ErrorBoundary key={activeChatId} scope="conversation"><Conversation /></ErrorBoundary>
+                  <ErrorBoundary key={activeChatId} scope="conversation"><ConversationBrowserFrame
+                    sessionId={activeChatId} paneOpen={browser.paneOpen} chatWidth={browser.chatWidth} /></ErrorBoundary>
                 )}
               </Stack>
             </Stack>
           </AdaptiveShellWorkspace>
         </>
       )}
-      {!isSettingsView && leftOpen && (
+      {!isSettingsView && !effectiveLeftOpen && <AdaptiveShellPeekEdge onPeek={() => browser.setPeek(true)} />}
+      {!isSettingsView && effectiveLeftOpen && (
         <AdaptivePanelResizeHandle
           aria-label={appCopy.titlebar.resizeLeftPanel}
           aria-orientation="vertical"
@@ -268,13 +278,7 @@ function AppWorkspaceShell() {
           open={effectiveRightOpen}
         >
           <ErrorBoundary scope="inspector">
-            {view.kind === "browser" ? (
-              <InspectorShell id="butler-right-inspector" activeTab="conversation"
-                tabs={[{ id: "conversation", label: activeChatFromNavigation(navigation, activeChatId).shortTitle }]}
-                onTabChange={() => undefined}>
-                <Conversation />
-              </InspectorShell>
-            ) : <Inspector id="butler-right-inspector" />}
+            <Inspector id="butler-right-inspector" />
           </ErrorBoundary>
         </AdaptiveShellInspector>
       )}
@@ -297,7 +301,7 @@ function AppWorkspaceShell() {
           label={
             effectiveRightOpen ? appCopy.titlebar.hideRightPanel : appCopy.titlebar.hideLeftPanel
           }
-          open={leftOpen || effectiveRightOpen}
+          open={effectiveLeftOpen || effectiveRightOpen}
           onDismiss={() =>
             effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)
           }
@@ -305,7 +309,10 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && (
         <AdaptiveShellChrome>
-          <WindowChromeLayer />
+          <WindowChromeLayer leftOpen={effectiveLeftOpen} onToggle={() => {
+            if (browser.autoCollapsed) browser.setPeek(!browser.peek);
+            else setLeftOpen((value) => !value);
+          }} />
         </AdaptiveShellChrome>
       )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}

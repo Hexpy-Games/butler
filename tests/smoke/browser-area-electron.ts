@@ -133,6 +133,8 @@ async function escape(page: Page) {
   await page.press("Escape");
 }
 async function navigate(page: Page, url: string) {
+  await page.expression("document.querySelector('[data-slot=address-field] button').click()");
+  await page.waitForFunction(() => Boolean(document.querySelector('input[aria-label="Address"]')));
   await page.expression(`(() => {
     const input = document.querySelector('input[aria-label="Address"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(url)});
@@ -262,6 +264,7 @@ try {
   await alignment(page, main, win, evidence);
   await call(page, "create", { url: "https://www.iana.org/" });
   await waitUntil(async () => (await state(page)).tabs.some(t => t.url.startsWith("https://www.iana.org") && t.title === "Internet Assigned Numbers Authority" && t.status === "idle"), "real HTTPS site");
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") {
   const loadStart = loadavg()[0];
   await evaluate(() => {
     const histogram = process.getBuiltinModule("node:perf_hooks")!.monitorEventLoopDelay({ resolution: 1 });
@@ -294,6 +297,7 @@ try {
     assert.ok(repeated.p99Ms<=30 && repeated.maxMs<=200, JSON.stringify(repeated));
   }
   await call(page, "close", { id: heavy });
+  }
   snapshot = await state(page);
   await call(page, "move", { tabId: first, toGroupId: "mine", index: 1 });
   assert.equal((await state(page)).tabs[1]!.id, first);
@@ -308,7 +312,7 @@ try {
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
   await shot(page, "after-artifact-return");
   const ownedPids = async () => [...new Set([...await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`), ...liveTrackedProcessIds()])];
-  await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch();

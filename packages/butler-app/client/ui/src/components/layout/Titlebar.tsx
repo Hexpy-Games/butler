@@ -30,8 +30,11 @@ import { TitlebarShell } from "@/butler-ds";
 import { SessionFolderMenu } from "./SessionFolderMenu";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
+import { BrowserToggle } from "../browser/BrowserToggle";
+import { HubConversationButton } from "../browser/HubConversationButton";
 
-export function Titlebar() {
+
+export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   useAppLocale();
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const storeView = useButlerStore((state) => state.view);
@@ -81,7 +84,9 @@ export function Titlebar() {
           />
         ) : undefined
       }
-      collapsed={!leftOpen}
+      collapsed={!(sidebarOpen ?? leftOpen)}
+      leading={storeView.kind === "browser" ? <HubConversationButton /> : undefined}
+      leadingSize="auto"
       dragRegion
       dataTestClass="custom-titlebar"
       windowControls={<WindowControls />}
@@ -124,6 +129,7 @@ export function Titlebar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
+          {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
           {rightAvailable && (
             <IconButton
               data-test-class="titlebar-right-panel-toggle"

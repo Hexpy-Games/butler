@@ -40,6 +40,7 @@ async function settings(language: string, theme: string) {
   await app.call("activate", { id: agentTab.id });
   await app.click(language === "ko" ? "브라우저" : "Browser");
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-area"]')));
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button');
   try { await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="message assistant"]'))); }
   catch(error) {writeFileSync(join(evidence!,`${language}-${theme}-ui-failure.json`),JSON.stringify(await app.page.expression("({text:document.body.innerText,classes:[...document.querySelectorAll('[data-test-class]')].map(e=>e.getAttribute('data-test-class'))})")));await app.shot(`${language}-${theme}-ui-failure`);throw error;}
 }
