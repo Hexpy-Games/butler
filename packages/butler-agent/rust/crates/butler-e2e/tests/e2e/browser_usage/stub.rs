@@ -66,7 +66,7 @@ pub(super) fn action_cassette() -> Result<Cassette, HarnessError> {
     c.exchanges.push(last);
     Ok(c)
 }
-fn response(item: &Value) -> ResponseRecord {
+pub(in super::super) fn response(item: &Value) -> ResponseRecord {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_browser","status":"in_progress","output":[]}}),
         json!({"type":"response.output_item.added","output_index":0,"item":item}),

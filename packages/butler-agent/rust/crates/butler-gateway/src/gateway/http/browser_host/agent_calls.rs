@@ -88,7 +88,7 @@ fn dispatch(
         }
         if matches!(
             op.as_str(),
-            "tab.observe" | "tab.prepare" | "tab.act" | "tab.dialog"
+            "tab.observe" | "tab.screenshot" | "tab.prepare" | "tab.act" | "tab.dialog"
         ) {
             let tab = hub
                 .tabs
@@ -189,6 +189,7 @@ fn validate(
         "tab.open"
             | "tab.observe"
             | "tab.selection"
+            | "tab.screenshot"
             | "tab.prepare"
             | "tab.act"
             | "tab.dialog"

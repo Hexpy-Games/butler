@@ -15,6 +15,7 @@ mod authority_permissions;
 mod automation;
 mod browser_agent;
 mod browser_delegation;
+mod browser_journey;
 mod browser_library;
 mod browser_outputs;
 mod browser_selection;

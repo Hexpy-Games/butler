@@ -1,6 +1,7 @@
 import { frameWorlds, evaluateWorld, hitFrame } from "./frame-worlds.mjs";
 import { randomUUID } from "node:crypto";
 import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.mjs";
+import { observationImage } from "./capture.mjs";
 
 export async function observeTab(tab, args = {}) {
   const obs = randomUUID(), epoch = tab.epoch, frames = await frameWorlds(tab);
@@ -23,8 +24,11 @@ export async function observeTab(tab, args = {}) {
   const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return { status: "refused", reason: "observation_budget_exceeded", totals: { interactive, below_fold: below } };
-  tab.observation = { obs, epoch, main:frames[0], bindings, nodes, payment, paymentFrames, addons };
-  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({frame,index})=>({id:`f${index}`,url:frame.url})), text: full, nodes, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons };
+  tab.observation = { obs, epoch, main:frames[0], bindings, nodes, payment, paymentFrames, addons, complete: selected.length === frames.length };
+  const image = args.include_image && !tab.observation.complete ? { image_status: "frame_scoped" }
+    : args.include_image && (args.look === "always" || tab.imageEpoch !== epoch)
+    ? await observationImage(tab) : args.include_image ? { image_unchanged: true } : {};
+  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({frame,index})=>({id:`f${index}`,url:frame.url})), text: full, nodes, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
 }
 export async function resolveStep(tab, obs, step, scroll = false) {
   if (!tab.observation || tab.observation.obs !== obs || tab.observation.epoch !== tab.epoch) return { reason: "stale_ref" };
@@ -32,7 +36,7 @@ export async function resolveStep(tab, obs, step, scroll = false) {
   const node = tab.observation.nodes.find(node => node.ref === step.ref);
   if (!frame || !node) return { reason: "stale_ref" };
   if (!node.actionable) return { reason: node.secure ? "secure_field" : "not_actionable" };
-  const resolved = await evaluateWorld(frame, resolveSource({ ref: step.ref, obs, epoch: tab.epoch, scroll }));
+  const resolved = await evaluateWorld(frame, resolveSource({ ref: step.ref, obs, epoch: tab.epoch, scroll, offset: step.pointOffset }));
   if (frame.parent && !resolved.reason) {
     const point=await hitFrame(frame,resolved);
     if(!point) return {reason:"blocked_by"};

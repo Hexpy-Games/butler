@@ -130,6 +130,8 @@ tool_names! {
     BrowserObserve = "browser_observe",
     BrowserAct = "browser_act",
     BrowserTabs = "browser_tabs",
+    BrowserSelection = "browser_selection",
+    BrowserScreenshot = "browser_screenshot",
     BrowserClose = "browser_close",
     BrowserWaitForUser = "browser_wait_for_user",
     OutputCheck = "output_check",

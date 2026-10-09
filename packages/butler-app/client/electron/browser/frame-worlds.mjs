@@ -14,9 +14,10 @@ export async function frameWorlds(tab) {
     const api={sendCommand:(method,params)=>command(method,params,sessionId)};
     if(!documents.has(sessionId)) documents.set(sessionId,await api.sendCommand("DOMSnapshot.captureSnapshot",{computedStyles:[]}));
     const mainId=sessionId?id:root.frame.id;
-    const closed=await closedRoots(api,id,mainId,documents.get(sessionId),true);
-    const contextId=closed.contextId;
+    let closed=await closedRoots(api,id,mainId,documents.get(sessionId),true);
     const native=closed.hasClosedRoots ? undefined : parent ? nativeFrameWorld(tab,id) : tab.view.webContents;
+    if (!native && !closed.contextId) closed=await closedRoots(api,id,mainId,documents.get(sessionId));
+    const contextId=closed.contextId;
     const url=/^about:(blank|srcdoc)$/u.test(tree.frame.url)?parent?.url:tree.frame.url;
     const webFrame=parent?tab.nativeFrames.get(tab.contextNames.get(id)):tab.view.webContents.mainFrame;
     const frame={id,url,parent,sessionId,api,contextId,native,webFrame};frames.push(frame);

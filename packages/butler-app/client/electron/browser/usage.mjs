@@ -8,6 +8,10 @@ export function endUse(browser, id, abort = false) {
   if (!use) return;
   browser.uses.delete(id);
   const tab = browser.tabs.get(use.tab);
+  if (tab && !tabInUse(browser, tab) && !tab.busy) {
+    tab.pointer = null;
+    browser.pointer.sync(tab);
+  }
   if (abort && tab) {
     // Fence the next step without invalidating receipts for dispatched input.
     tab.cancelled = true;

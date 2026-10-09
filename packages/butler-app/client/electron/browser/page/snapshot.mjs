@@ -20,7 +20,7 @@ function rootIndex(root) {
   if (index.dirty) {
     index.elements = [...root.querySelectorAll("*")];
     index.labels = [...root.querySelectorAll("label")];
-    index.candidates = [...root.querySelectorAll('button,a,select,textarea,canvas,summary,input,[role],[onclick],h1,h2,h3,h4,h5,h6,[contenteditable]')];
+    index.candidates = [...root.querySelectorAll('button,a,select,textarea,canvas,img,summary,input,[role],[onclick],[draggable],h1,h2,h3,h4,h5,h6,[contenteditable]')];
     for (const element of [...index.candidates]) if (element.hasAttribute("contenteditable")) for (const child of element.querySelectorAll("*")) index.candidates.push(child);
     index.dirty = false;
   }
@@ -71,7 +71,7 @@ function snapshot(options) {
       return;
     }
     const meaning = semantic(element, fromGrid);
-    if (!meaning.clickable && !/^h[1-6]$/u.test(element.localName)) return;
+    if (!meaning.clickable && !element.draggable && !/^(img|h[1-6])$/u.test(element.localName)) return;
     seen.add(element);
     const raw = boxOf(element);
     if (raw.top >= viewportHeight) { below++; return; }
@@ -79,9 +79,10 @@ function snapshot(options) {
     if (excluded) { hidden[excluded]++; return; }
     const point = visiblePoint(element), ref = reference(element);
     const coveredBy = point.blocker ? reference(point.blocker) : undefined;
-    nodes.push({ ref, targetId: element.id || undefined, frameOrigin: origin, role: meaning.role,
+    const rect = rectangle(element);
+    nodes.push({ ref, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, targetId: element.id || undefined, frameOrigin: origin, role: meaning.role,
       name: meaning.name, interactive: meaning.clickable, secure: meaning.secure, ad: meaning.ad, checked: meaning.checked, preselected: meaning.preselected,
-      actionable: meaning.clickable && !coveredBy && !element.disabled && element.getAttribute("aria-disabled") !== "true" && !meaning.secure,
+      actionable: (meaning.clickable || element.draggable) && !coveredBy && !element.disabled && element.getAttribute("aria-disabled") !== "true" && !meaning.secure,
       coveredBy, coveredTargetId: point.blocker?.id || undefined });
   };
   const gridCandidates=[];

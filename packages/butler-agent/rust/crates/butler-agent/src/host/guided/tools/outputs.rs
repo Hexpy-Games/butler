@@ -130,15 +130,23 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
         .json(&args)
         .timeout(std::time::Duration::from_secs(9))
         .send();
-    tokio::select! {
+    let mut result = tokio::select! {
         () = invocation.cancellation.cancelled() => json!({"status":"unknown","reason":"cancelled"}),
         result = request => match result {
             Ok(response) if response.status().is_success() => response.json::<Value>().await.unwrap_or_else(|_| json!({"status":"unknown","reason":"invalid_result"})),
             _ => json!({"status":"unknown","reason":"browser_host_lost"}),
         }
-    }
+    };
+    // Output self-check pixels share the browser's per-Turn visual byte budget.
+    let _ = super::browser::images::finish(owner, "browser_observe", &mut result).await;
+    result
 }
-async fn vision(client: &reqwest::Client, base: &str, bearer: &str, model: &str) -> bool {
+pub(super) async fn vision(
+    client: &reqwest::Client,
+    base: &str,
+    bearer: &str,
+    model: &str,
+) -> bool {
     let Ok(response) = client
         .get(format!("{base}/model-catalog"))
         .bearer_auth(bearer)
@@ -170,11 +178,11 @@ async fn vision(client: &reqwest::Client, base: &str, bearer: &str, model: &str)
         })
 }
 
-pub(super) fn restore_budget(
+pub(super) async fn restore_budget(
     owner: &GuidedTools,
     records: &[butler_turn::btcc::ToolJournalSignature],
-) {
-    let mut state = owner.state.lock();
+) -> Result<(), butler_turn::btcc::BtccError> {
+    let mut bytes = 0;
     for record in records {
         let name = if record.tool_name == "tool_call" {
             record.arguments["id"]
@@ -185,7 +193,28 @@ pub(super) fn restore_budget(
         } else {
             &record.tool_name
         };
+        if matches!(name, "browser_observe" | "output_check" | "output_publish")
+            && let Some(saved) = owner
+                .journal
+                .find_for_turn(owner.binding.turn_id.clone(), record.call_id.clone())
+                .await?
+            && let Some(result) = saved.result
+        {
+            let value: Value = serde_json::from_str(result.as_str()).unwrap_or(Value::Null);
+            for data in [
+                value.pointer("/image/data"),
+                value.pointer("/check/image/data"),
+            ]
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            {
+                bytes += (data.len() / 4 * 3)
+                    .saturating_sub(data.bytes().rev().take_while(|b| *b == b'=').count());
+            }
+        }
         if name == "output_check" || name == "output_publish" {
+            let mut state = owner.state.lock();
             state.output_checks = state.output_checks.saturating_add(1);
             if record.arguments["include_image"] == true
                 || record.arguments["arguments"]["include_image"] == true
@@ -194,4 +223,6 @@ pub(super) fn restore_budget(
             }
         }
     }
+    owner.state.lock().visual_image_bytes = bytes;
+    Ok(())
 }

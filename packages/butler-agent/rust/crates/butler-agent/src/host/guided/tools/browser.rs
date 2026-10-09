@@ -3,6 +3,7 @@ mod authority;
 mod client;
 mod dialog;
 mod effect;
+pub(super) mod images;
 use super::{GuidedTools, dispatch::encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
@@ -19,6 +20,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_act"
             | "browser_tabs"
             | "browser_selection"
+            | "browser_screenshot"
             | "browser_close"
             | "browser_wait_for_user"
     )
@@ -29,7 +31,7 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let args = Value::Object(call.arguments.clone());
+    let mut args = Value::Object(call.arguments.clone());
     if owner
         .binding
         .allowed_tools_and_effects
@@ -53,16 +55,26 @@ pub(super) async fn execute(
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
     }
+    if call.name == "browser_observe" {
+        args["include_image"] = json!(
+            args["look"] != "never"
+                && client
+                    .vision(&invocation.model_execution.active_model_ref())
+                    .await
+        );
+    }
     let op = match call.name.as_str() {
         "browser_open" => "tab.open",
         "browser_observe" => "tab.observe",
         "browser_selection" => "tab.selection",
+        "browser_screenshot" => "tab.screenshot",
         "browser_close" => "tab.close",
         _ => "tabs.list",
     };
     let mut result = client
         .call(op, &args["tab"], &args, invocation.cancellation)
         .await;
+    images::finish(owner, &call.name, &mut result).await?;
     if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }

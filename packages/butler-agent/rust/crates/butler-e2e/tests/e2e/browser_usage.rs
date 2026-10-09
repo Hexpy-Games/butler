@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     scenario::{Setup, accepted_turn_id},

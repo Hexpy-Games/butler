@@ -108,25 +108,34 @@ fn parent_item(step: usize) -> Value {
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
     if script.browser.load(Ordering::SeqCst) {
         return match step {
-            0 => call(
+            0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
+            1 => call("browser-review", "record_work_review", &review()),
+            2 => call(
                 "describe-browser",
                 "tool_describe",
                 &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe"]}),
             ),
-            1 => call(
+            3 => call(
                 "open-browser",
                 "tool_call",
                 &json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
             ),
-            2 => call(
+            4 => call(
                 "list-browser",
                 "tool_call",
                 &json!({"id":"native:browser_tabs","arguments":{}}),
             ),
-            3 => call(
+            5 => call(
                 "observe-browser",
                 "tool_call",
                 &json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
+            ),
+            6 => call(
+                "close-browser-work",
+                "record_work_disposition",
+                &json!({"work_id":work_id(body),"disposition":"completed","summary":"Browser verified",
+                    "action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],
+                    "remaining_actions":[],"followups":[]}),
             ),
             _ => message("Browser verified."),
         };

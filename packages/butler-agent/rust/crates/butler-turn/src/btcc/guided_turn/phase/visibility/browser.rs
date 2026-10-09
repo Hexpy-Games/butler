@@ -14,6 +14,8 @@ pub(super) fn authorize(
         "browser_observe",
         "browser_act",
         "browser_tabs",
+        "browser_selection",
+        "browser_screenshot",
         "browser_close",
         "browser_wait_for_user",
     ] {

@@ -1,26 +1,33 @@
 import { pendingDialog } from "./dialogs.mjs";
 import { stepStill } from "./stills.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
+import { dragTarget, dispatchDrag } from "./drag.mjs";
+
+async function resolveAction(tab, args, step, scroll = false) {
+  const target = await resolveStep(tab, args.observation, step, scroll);
+  return !target.reason && step.action === "drag" ? dragTarget(tab, args.observation, step, target, scroll) : target;
+}
 
 export async function prepareBatch(tab, args) {
   if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps" };
   const steps = [];
   for (const step of args.steps) {
-    if (!step.ref || !["click", "fill", "select", "scroll", "hover"].includes(step.action)) return { status: "refused", reason: "invalid_step" };
-    const target = await resolveStep(tab, args.observation, step);
+    if (!step.ref || !["click", "fill", "select", "scroll", "hover", "drag"].includes(step.action)) return { status: "refused", reason: "invalid_step" };
+    const target = await resolveAction(tab, args, step);
     if (target.reason) return { status: "refused", reason: target.reason, hit: target.hit };
     steps.push({ ...target, action: step.action, value_preview: typeof step.value === "string" ? [...step.value].slice(0, 40).join("") : undefined });
   }
   return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
 }
 function sameTarget(prepared, current) {
-  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.upload === current.upload && prepared.submit === current.submit && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
+  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && JSON.stringify(prepared.destination) === JSON.stringify(current.destination) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.upload === current.upload && prepared.submit === current.submit && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
 }
 async function dispatch(tab, args, step, target) {
   const contents = tab.view.webContents;
   tab.dispatching = true;
   try {
     tab.onPointer?.(step, target);
+    if (step.action === "drag") return await dispatchDrag(tab, target);
     const scale = tab.bounds?.scale ?? 1;
     const point = { x: Math.round(target.x * scale), y: Math.round(target.y * scale) };
     tab.expectedInputs = ["mouseMove", "mouseDown", "mouseUp", "mouseWheel"].map(type => ({ type, ...point }));
@@ -49,7 +56,7 @@ export async function actBatch(tab, args, session) {
       steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : failed ? "previous_step_failed" : "control_changed" }); failed = true; continue;
     }
     try {
-      const target = await resolveStep(tab, args.observation, step, true);
+      const target = await resolveAction(tab, args, step, true);
       if (target.reason) { steps.push({ status: "not_dispatched", reason: target.reason, hit: target.hit }); failed = true; continue; }
       if (!sameTarget(args.prepared_steps?.[index], target)) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
       if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : "control_changed" }); failed = true; continue; }

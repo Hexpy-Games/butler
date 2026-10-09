@@ -112,6 +112,10 @@ fn attach(
     let runtime = tokio::runtime::Handle::current();
     let subscription = state.application.subscribe_events(Arc::new(move |event| {
         let envelope = event.envelope();
+        if envelope.event_type == "subsession.changed" {
+            usage::finish_child(weak.clone(), &runtime, &envelope.payload);
+            return;
+        }
         if envelope.event_type != "turn.state_changed" {
             return;
         }
