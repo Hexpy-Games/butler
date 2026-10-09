@@ -261,13 +261,14 @@ class UserBrowser {
       if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, tab);
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
     if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
+    return tabId;
   }
   focusArea(value, owner) {
     this.keyboardFocused = value;

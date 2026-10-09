@@ -1,5 +1,6 @@
 import { useEffect, useMemo, type DragEvent, type ReactNode } from "react";
 import { NavDropScope, createDropZoneTracker, measureDropBox, type DropZoneCandidate } from "@/butler-ds";
+import { useBrowserTabDrag } from "../browser/browserTabDrag";
 import { canDrop, useSpaceDrag, type DropPosition } from "@/app/space/drag";
 import { requestSpaceMove } from "@/app/space/move";
 import { useOrganization } from "@/app/space/organization";
@@ -13,6 +14,8 @@ type Candidate = DropZoneCandidate<string> & { item: HTMLElement; header: HTMLEl
  * (DS dropZones), so the slot the rows open never moves the zones.
  */
 export function SpaceDropScope({ enabled, ariaLabel, children }: { enabled: boolean; ariaLabel: string; children: ReactNode }) {
+  const tabDragging = useBrowserTabDrag((s) => Boolean(s.tabId));
+  const tabEdge = useBrowserTabDrag((s) => s.edge);
   const dragging = useSpaceDrag((s) => s.source !== null);
   const tracker = useMemo(() => createDropZoneTracker<string>(), []);
   useEffect(() => {
@@ -85,7 +88,8 @@ export function SpaceDropScope({ enabled, ariaLabel, children }: { enabled: bool
     <NavDropScope
       as="nav"
       aria-label={ariaLabel}
-      active={dragging && enabled}
+      active={tabDragging || dragging && enabled}
+      payload={tabDragging ? "outside" : "rows"} autoScroll={tabDragging ? tabEdge : undefined}
       onDragOver={over}
       onDragLeave={(event) => {
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;

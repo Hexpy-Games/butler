@@ -29,6 +29,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     };
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
+    let tab = frame["tab"].as_str().map(str::to_owned);
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
         return Ok(refused);
     }
@@ -44,6 +45,24 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
+    if let Some(tab) = tab
+        && state
+            .browser
+            .0
+            .lock()
+            .map_err(|_| HttpError::Internal)?
+            .tabs
+            .check(&session, &tab, "tab.cancel")
+            == Err("not_your_tab")
+    {
+        // A moved page's observation must not cross the new conversation boundary.
+        if op == "tab.act" {
+            result["reason"] = json!("owner_changed");
+            result["status"] = json!("interrupted");
+        } else {
+            result = json!({"status":"not_dispatched","reason":"owner_changed"});
+        }
+    }
     enforce_result_policy(&state, &session, &op, &mut result);
     store_still(&state, &session, &mut result).await?;
     response(count, result)

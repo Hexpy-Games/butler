@@ -44,13 +44,13 @@ export async function actBatch(tab, args, session) {
   const deadline = Date.now() + Math.min(Number(args.deadline_ms) || 30000, 30000);
   for (const [index, step] of (args.steps ?? []).entries()) {
     if (failed || Date.now() >= deadline || tab.cancelled || tab.owner !== `conversation:${session}` || tab.holder !== "agent" || tab.epoch !== epoch) {
-      steps.push({ status: "not_dispatched", reason: failed ? "previous_step_failed" : "control_changed" }); failed = true; continue;
+      steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : failed ? "previous_step_failed" : "control_changed" }); failed = true; continue;
     }
     try {
       const target = await resolveStep(tab, args.observation, step, true);
       if (target.reason) { steps.push({ status: "not_dispatched", reason: target.reason, hit: target.hit }); failed = true; continue; }
       if (!sameTarget(args.prepared_steps?.[index], target)) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
-      if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: "control_changed" }); failed = true; continue; }
+      if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : "control_changed" }); failed = true; continue; }
       steps.push(await dispatch(tab, args, step, target));
       if (tab.dialog) { steps[steps.length-1] = {status:"unknown",reason:"dialog_pending",hit:target.hit}; failed=true; }
       else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
