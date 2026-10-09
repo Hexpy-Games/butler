@@ -1,7 +1,14 @@
 // Only Electron/Node and the small startup surface load before the first window.
-import { app, protocol } from "electron";
+import { createRequire } from "node:module";
 import { APP_RENDERER_SCHEME_PRIVILEGES } from "./app-renderer-protocol.mjs";
-import { createStartupWindow, failStartup, startupTiming } from "./startup-window.mjs";
+import { startupTiming } from "./startup-timing.mjs";
+import { configureChromiumFeatures } from "./butler-platform/chromium-features.mjs";
+
+// Electron's ESM facade evaluates every API getter, including nativeTheme.
+// Keep it unloaded until ready, after Chromium rebuilds its feature list.
+const { app, protocol } = createRequire(import.meta.url)("electron");
+configureChromiumFeatures(app.commandLine);
+let failStartup = () => false;
 
 protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 startupTiming("entry");
@@ -29,6 +36,9 @@ if (backgroundLaunch) {
   // Do not top-level-await ready: Electron waits for ESM evaluation before ready.
   void app.whenReady().then(async () => {
     startupTiming("app_ready");
+    const startup = await import("./startup-window.mjs");
+    failStartup = startup.failStartup;
+    const { createStartupWindow } = startup;
     await createStartupWindow();
     setImmediate(() => {
       startupTiming("runtime_import_start");
