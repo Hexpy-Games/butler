@@ -12,9 +12,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const { copy, commit, reply } = flow;
   if (!commit.connected) return (
     <FirstRunStepCard flow={flow} contentKey="finishing" icon={<ButlerThinkingMark size="lg" state="working" />}
-      title={copy.finishing} footerStart={<FirstRunPrepStatus flow={flow} />}>
-      <Typo.Caption as="div" data-test-class="first-run-finishing">{null}</Typo.Caption>
-    </FirstRunStepCard>
+      title={copy.finishing} footerStart={<FirstRunPrepStatus flow={flow} />} />
   );
   const cardId = commit.connected.cardId;
   return (
