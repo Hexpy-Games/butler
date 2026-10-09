@@ -115,3 +115,12 @@ ipcRenderer.on("butler-browser-world:call", async(_event, id, code)=>{
     ipcRenderer.send("butler-browser-world:result", id, true, value);
   }catch{ipcRenderer.send("butler-browser-world:result", id, false, null);}
 });
+
+// A real HTML drag must enter/drop on the page's native view, not the presenter.
+// Keep this private to the isolated preload; the page cannot invoke the IPC.
+window.addEventListener("dragstart", event => {
+  if (event.isTrusted) ipcRenderer.sendSync("butler-browser:page-drag", "start");
+}, true);
+window.addEventListener("dragend", event => {
+  if (event.isTrusted) ipcRenderer.send("butler-browser:page-drag", "end");
+}, true);

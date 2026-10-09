@@ -36,8 +36,10 @@ export function installUserBrowser(app, getWindow) {
   });
   ipcMain.on("butler-browser:selection-command", (event, op, id, point) => {
     if (event.sender !== browser.pointer.view?.webContents || event.senderFrame !== event.sender.mainFrame) return;
-    if (op === "drag" && Number.isFinite(point?.x) && Number.isFinite(point?.y) && id === browser.activeId) browser.selection.drag(browser.tabs.get(id), point, "start");
-    if (["attach", "scrap", "clear", "finish"].includes(op)) browser.selection.command(op, id);
+    browser.pointer.guard(() => {
+      if (op === "drag" && Number.isFinite(point?.x) && Number.isFinite(point?.y) && id === browser.activeId) browser.selection.drag(browser.tabs.get(id), point, "start");
+      if (["attach", "scrap", "clear", "finish"].includes(op)) browser.selection.command(op, id);
+    });
   });
   ipcMain.on("butler-browser:selection-chrome", (event, id, rect) => {
     if (event.sender !== browser.pointer.view?.webContents || event.senderFrame !== event.sender.mainFrame || id !== browser.activeId) return;

@@ -56,7 +56,7 @@ export class BrowserSelection {
     this.chrome = null;
     if (value && !this.browser.pointer.acceptInput(tab, true)) return;
     tab.picking = value === true;
-    this.down = null; this.clearHover(tab);
+    this.cancelDrag(); this.clearHover(tab);
     this.browser.publish();
     if (tab.picking) this.browser.pointer.view?.webContents.focus();
   }
@@ -73,7 +73,7 @@ export class BrowserSelection {
     return { status: "ok", tab: tab.id, untrusted_content: { kind: "web_page_data", elements } };
   }
   clearHover(tab) {
-    tab.pickHover = null; this.hoverInput = null; this.hoverRevision = (this.hoverRevision ?? 0) + 1;
+    if (tab) tab.pickHover = null; this.hoverInput = null; this.hoverRevision = (this.hoverRevision ?? 0) + 1;
   }
   async read(tab, input, capture = false) {
     const scale = tab.bounds?.scale ?? 1;
@@ -85,7 +85,7 @@ export class BrowserSelection {
     this.hoverInput = { tab, input, epoch: tab.epoch, revision: this.hoverRevision };
     if (this.hoverPending) return;
     this.hoverPending = true;
-    void this.updateHover().finally(() => { this.hoverPending = false; });
+    void this.updateHover().catch(() => this.browser.pointer.inputFailed()).finally(() => { this.hoverPending = false; });
   }
   async updateHover() {
     while (this.hoverInput) {
@@ -117,35 +117,54 @@ export class BrowserSelection {
     if (!tab?.picking || !["mouseDown", "mouseMove", "mouseUp"].includes(input.type)) return false;
     if (input.type === "mouseMove") this.hover(tab, input);
     if (input.type === "mouseDown" && input.button === "left") {
-      this.down = { x: input.x, y: input.y, item: this.hit(tab, input).catch(() => null) };
-    } else if (input.type === "mouseMove" && this.down && Math.hypot(input.x - this.down.x, input.y - this.down.y) > 6) {
-      const start = this.down; this.down = null;
-      void start.item.then(item => {
-        if (!item || !tab.picking) return;
-        if (!(tab.selections ?? []).some(p => this.same(p, item))) tab.selections = [...(tab.selections ?? []), item];
-        this.browser.publish(); this.drag(tab, input, "start");
-      });
-    } else if (input.type === "mouseUp" && this.down) {
-      const start = this.down; this.down = null;
-      void start.item.then(item => {
-        if (!item || !tab.picking) return;
-        const prior = tab.selections ?? [];
-        tab.selections = prior.some(p => this.same(p, item)) ? prior.filter(p => !this.same(p, item)) : [...prior, item];
-        this.browser.publish();
-      });
+      const start = { x: input.x, y: input.y, input, epoch: tab.epoch };
+      this.down = start;
+      void this.hit(tab, input).then(item => {
+        start.item = item; start.ready = true;
+        this.settle(tab, start);
+      }).catch(() => this.browser.pointer.inputFailed());
+    } else if (this.down && ["mouseMove", "mouseUp"].includes(input.type)) {
+      const start = this.down;
+      start.input = input;
+      start.moved ||= Math.hypot(input.x - start.x, input.y - start.y) > 6;
+      start.ended = input.type === "mouseUp";
+      this.settle(tab, start);
     }
     return true;
   }
+  settle(tab, start) {
+    if (this.down !== start || !start.ready) return;
+    if (!start.item || !tab.picking || tab.epoch !== start.epoch || this.browser.activeId !== tab.id) {
+      this.down = null; return;
+    }
+    if (!start.moved && !start.ended) return;
+    this.down = null;
+    const prior = tab.selections ?? [], item = start.item;
+    const exists = prior.some(p => this.same(p, item));
+    tab.selections = exists ? (start.moved ? prior : prior.filter(p => !this.same(p, item))) : [...prior, item];
+    this.browser.publish();
+    if (start.moved) {
+      this.drag(tab, start.input, "start");
+      if (start.ended) this.drag(tab, start.input, "end");
+    }
+  }
+  cancelDrag() {
+    this.down = null;
+    const tab = this.browser.tabs.get(this.dragTab);
+    if (tab) this.drag(tab, { x: 0, y: 0 }, "cancel");
+    this.dragTab = null;
+  }
   same(a, b) { return a.url === b.url && a.identity === b.identity; }
   drag(tab, input, phase) {
-    if (!tab?.selections?.length) return;
+    if (phase === "end" || phase === "cancel") this.dragTab = null;
+    if (!tab?.selections?.length || !tab.view || tab.view.webContents.isDestroyed()) return;
     const bounds = tab.view.getBounds();
     if (phase === "start") this.dragTab = tab.id;
     this.browser.getWindow()?.webContents.send("butler-browser:element-drag", {
       phase, tab: tab.id, x: bounds.x + input.x, y: bounds.y + input.y,
       ...(phase === "start" ? { elements: this.result(tab, tab.owner.slice(13)).untrusted_content.elements } : {}),
     });
-    if (phase === "end" || phase === "cancel") this.dragTab = null;
+    if (phase === "end" || phase === "cancel") this.browser.sync(tab);
   }
   command(op, id) {
     const tab = this.browser.tabs.get(id);
@@ -153,6 +172,6 @@ export class BrowserSelection {
     if (op === "attach" || op === "scrap") this.browser.getWindow()?.webContents.send("butler-browser:selection-action", { op, elements: this.result(tab, tab.owner.slice(13)).untrusted_content.elements });
     else if (op === "clear") this.clear(id);
     else if (op === "finish") this.mode(id, false);
-    else if (op === "cancel-drag") this.dragTab = null;
+    else if (op === "cancel-drag") this.cancelDrag();
   }
 }
