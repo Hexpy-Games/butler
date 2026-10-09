@@ -1,8 +1,10 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Box } from "../../components/Box";
 import { Typo } from "../../components/Typo";
+import { useRef } from "react";
 import {
   AdaptiveShell, AdaptiveShellInspector, AdaptiveShellPeekEdge, AdaptiveShellScrim, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellWorkspace,
+  useSidebarPeek,
 } from "./index";
 
 // #region recipe: App frame
@@ -20,10 +22,13 @@ function AppFrame() {
 
 // #region recipe: Conversation frame with the browser pane
 function ConversationFrame() {
+  const shell = useRef<HTMLDivElement>(null);
+  // Forward the host's "pointer entered the native view" signal to peek.pointerOutside().
+  const peek = useSidebarPeek(shell, { enabled: true });
   return (
-    <AdaptiveShell leftOpen={false} leftPeek={false} rightOpen={false} splitOpen>
+    <AdaptiveShell ref={shell} leftOpen={false} leftPeek={peek.open} rightOpen={false} splitOpen>
       <AdaptiveShellSidebar open={false}><Box padding="md"><Typo.PanelTitle>Navigation</Typo.PanelTitle></Box></AdaptiveShellSidebar>
-      <AdaptiveShellPeekEdge onPeek={() => undefined} />
+      <AdaptiveShellPeekEdge onPeek={peek.show} />
       <AdaptiveShellWorkspace>
         <AdaptiveShellSplit paneOpen chatWidth={400} onChatWidthChange={() => undefined} resizeLabel="Resize conversation"
           chat={<Box padding="md"><Typo.Body>Conversation</Typo.Body></Box>} pane={<Box padding="md"><Typo.Body>Browser pane</Typo.Body></Box>} />
@@ -49,7 +54,7 @@ export const guidance: ShowcaseGuidance = {
     { name: "App frame", description: "The frame is bounded here for the preview; in the app it fills the window.", render: () => <Framed /> },
     {
       name: "Conversation frame with the browser pane",
-      description: "splitOpen keeps the inspector closed; the split sits under the titlebar; the peek edge brings the collapsed sidebar back as a card.",
+      description: "splitOpen keeps the inspector closed; the split sits under the titlebar; useSidebarPeek drives the peek edge and closes it (DOM signals plus the host's native-view signal).",
       render: () => <div style={{ height: 240, contain: "layout paint" }}><ConversationFrame /></div>,
     },
   ],

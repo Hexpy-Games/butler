@@ -10,13 +10,14 @@ import { Stack } from "../../../components/Stack";
 import { Typo } from "../../../components/Typo";
 import {
   AdaptiveShell, AdaptiveShellPeekEdge, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellWorkspace, adaptivePanelStyle,
-  useSidebarAutoCollapse,
+  useSidebarAutoCollapse, useSidebarPeek,
 } from "../../AdaptiveShell";
 import { ChromeFloatingToggleLayer } from "../../ChromeFrame";
 import { NavRow } from "../../NavRow";
 import { NavSection } from "../../NavSection";
 import { SidebarBrand, SidebarShell, SidebarTrafficSpace } from "../../SidebarShell";
 import { TitlebarShell } from "../../TitlebarShell";
+import { Wallpaper } from "../../Wallpaper";
 import { BrowserDemo, type BrowserDemoProps } from "./BrowserDemo";
 import { BROWSER_DEMO_COPY } from "./copy";
 import { ScaledFrame } from "./ScaledFrame";
@@ -44,15 +45,19 @@ function DemoSidebar({ locale }: { locale: Locale }) {
   );
 }
 
-function DemoChat({ locale }: { locale: Locale }) {
+function DemoChat({ locale, wallpaper = false }: { locale: Locale; wallpaper?: boolean }) {
   const [ask, answer, order] = BROWSER_DEMO_COPY[locale].chat;
   return (
     <Box padding="lg">
-      <Stack gap="lg">
-        <Stack align="row" justify="end"><Box surface="muted" radius="panel" padding="md"><Typo.Body>{ask}</Typo.Body></Box></Stack>
-        <Typo.Body>{answer}</Typo.Body>
-        <Stack align="row" justify="end"><Box surface="muted" radius="panel" padding="md"><Typo.Body>{order}</Typo.Body></Box></Stack>
-      </Stack>
+      {/* The conversation's wallpaper layer, workspace-scoped as the App renders it. */}
+      {wallpaper ? <Wallpaper source={{ kind: "live", module: "butler.silk" }} /> : null}
+      <div style={{ position: "relative" }}>
+        <Stack gap="lg">
+          <Stack align="row" justify="end"><Box surface="muted" radius="panel" padding="md"><Typo.Body>{ask}</Typo.Body></Box></Stack>
+          <Typo.Body>{answer}</Typo.Body>
+          <Stack align="row" justify="end"><Box surface="muted" radius="panel" padding="md"><Typo.Body>{order}</Typo.Body></Box></Stack>
+        </Stack>
+      </div>
     </Box>
   );
 }
@@ -60,10 +65,13 @@ function DemoChat({ locale }: { locale: Locale }) {
 export interface ConversationFrameDemoProps extends Omit<BrowserDemoProps, "placement"> {
   width: number;
   height: number;
-  sidebar?: "open" | "collapsed" | "peek";
+  /** `live-peek`: collapsed, and the left edge really peeks (useSidebarPeek); the button sends the host signal. */
+  sidebar?: "open" | "collapsed" | "peek" | "live-peek";
   paneOpen?: boolean;
   /** Let the sidebar step aside when the page would be narrower than 720px. */
   autoCollapse?: boolean;
+  /** The conversation's wallpaper behind the chat (contained to the chat column beside the pane). */
+  wallpaper?: boolean;
 }
 
 /** The standalone Browser view: its title bar names the conversation that owns the tab (auto-sized leading). */
@@ -84,17 +92,18 @@ export function StandaloneFrameDemo({ width, height, ...browser }: Omit<Conversa
 }
 
 /** A whole window: sidebar, the conversation titlebar, chat | browser pane (AdaptiveShellSplit). */
-export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, ...browser }: ConversationFrameDemoProps) {
+export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, wallpaper = false, ...browser }: ConversationFrameDemoProps) {
   const copy = SIDEBAR[browser.locale];
   const demo = BROWSER_DEMO_COPY[browser.locale];
   const [chatWidth, setChatWidth] = useState(400);
   const shell = useRef<HTMLDivElement | null>(null);
   const collapsed = useSidebarAutoCollapse(shell, { enabled: paneOpen && autoCollapse, sidebarWidth: 304, chatWidth });
   const leftOpen = sidebar === "open" && !collapsed;
+  const peek = useSidebarPeek(shell, { enabled: sidebar === "live-peek" });
   const browsing = browser.holder === undefined || browser.holder === "butler";
-  return (
+  const frame = (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell ref={shell} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek"}
+      <AdaptiveShell ref={shell} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek" || peek.open}
         UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>
@@ -102,7 +111,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
           </ChromeFloatingToggleLayer>
         )}
         <AdaptiveShellSidebar open={leftOpen}><DemoSidebar locale={browser.locale} /></AdaptiveShellSidebar>
-        {leftOpen ? null : <AdaptiveShellPeekEdge onPeek={() => undefined} />}
+        {leftOpen ? null : <AdaptiveShellPeekEdge onPeek={peek.show} />}
         <AdaptiveShellWorkspace>
           <TitlebarShell title={demo.conversation} collapsed={!leftOpen} dragRegion dataTestClass="custom-titlebar"
             trailing={(
@@ -114,9 +123,22 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
               </ButtonContainer>
             )} />
           <AdaptiveShellSplit paneOpen={paneOpen} chatWidth={chatWidth} onChatWidthChange={setChatWidth} resizeLabel={demo.resizeChat}
-            chat={<DemoChat locale={browser.locale} />} pane={<BrowserDemo {...browser} placement="conversation" />} />
+            chat={<DemoChat locale={browser.locale} wallpaper={wallpaper} />} pane={<BrowserDemo {...browser} placement="conversation" />} />
         </AdaptiveShellWorkspace>
       </AdaptiveShell>
     </ScaledFrame>
+  );
+  if (sidebar !== "live-peek") return frame;
+  return (
+    <Stack gap="sm">
+      <Stack align="row" gap="sm" cross="center" wrap>
+        <Button size="sm" variant="outline" text={demo.peekEdge} onClick={peek.show} />
+        {/* Opens the peek, then reports what a host sees when the pointer moves onto a native page view. */}
+        <Button size="sm" variant="outline" text={demo.nativePointer} data-ds-peek-host-signal=""
+          onClick={() => { peek.show(); window.setTimeout(peek.pointerOutside, 600); }} />
+        <Typo.Caption tone="secondary">{peek.open ? demo.peekOpen : demo.peekClosed}</Typo.Caption>
+      </Stack>
+      {frame}
+    </Stack>
   );
 }

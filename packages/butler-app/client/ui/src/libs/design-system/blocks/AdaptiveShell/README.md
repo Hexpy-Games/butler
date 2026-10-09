@@ -51,6 +51,7 @@ Do not fetch domain data, import app stores, or add product selectors to this
 block. Do not use it as a generic card or nested panel.
 
 ## Conversation frame, peek and auto-collapse
+
 - `AdaptiveShellSplit` (inside `AdaptiveShellWorkspace`, under the titlebar):
   chat | browser pane. The chat column is its own `workspace` container,
   340–560px (`--browser-chat-width*`, default 400) and resizable by pointer
@@ -58,7 +59,25 @@ block. Do not use it as a generic card or nested panel.
   `AdaptiveShell` while the pane is open: the inspector then stays closed;
   `toggleConversationSidePanel` keeps the two mutually exclusive.
 - `leftPeek` with `AdaptiveShellPeekEdge`: the collapsed sidebar floats over
-  the workspace as a card; the track stays collapsed, nothing reflows.
+  the workspace as a card; the track stays collapsed, nothing reflows. Drive
+  it with `useSidebarPeek(shellRef, { enabled, open?, onOpenChange? })`
+  (uncontrolled, or controlled through `open` + `onOpenChange`): pass
+  `peek.open` to `leftPeek` and `peek.show` to `AdaptiveShellPeekEdge`. It
+  closes 240ms after the pointer leaves the sidebar (coming back cancels), at
+  once on window blur, Escape or a press outside, and when the pointer leaves
+  the document. Do not add your own `onPointerLeave` on the sidebar.
+- A native view (Electron `WebContentsView`) hides the pointer from the DOM,
+  so moving from the peeked sidebar straight onto the page sends no DOM event.
+  The App forwards the host's signal; the DS stays free of Electron:
+  - main process: on the attached view's `webContents` `input-event`
+    (`mouseMove`/`mouseEnter`), send the window an IPC message, optionally with
+    the point in window coordinates (view bounds + `input.x/y`);
+  - renderer: call `peek.pointerOutside()` for that message, or
+    `peek.pointerAt({ x, y })` when it carries a point (inside the sidebar rect
+    keeps the peek, outside arms the 240ms dismiss).
+- Beside the pane the chat column contains its layers (`contain: paint`): the
+  conversation's wallpaper and glass resolve against the chat column and never
+  paint over the pane. Without the pane the wallpaper spans the workspace.
 - `useSidebarAutoCollapse(rootRef, { enabled, sidebarWidth, chatWidth })`:
   true while the page would be narrower than 720px with the sidebar open
   (`sidebarAutoCollapses`, with a 32px return margin). Pass
