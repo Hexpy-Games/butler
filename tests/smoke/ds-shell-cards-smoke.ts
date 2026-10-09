@@ -6,6 +6,8 @@ import type { Locator, Page } from "playwright";
 // AdaptiveShell frame="cards" geometry on the static DS site (run after build:ds-site):
 // - opening the inspector never moves the title row's trailing icons (⋯ · browser · inspector);
 // - the cards frame draws its cards (radius, inset) and the inspector card sits under the title row;
+// - one rhythm: the gap between cards (chat | browser, content | inspector) equals the 8px right inset, and
+//   each resize handle's grab zone spans the gap with its grip centred in it;
 // - the sidebar peek is visible under reduced motion (it was laid out but transparent);
 // - the window bounds every card: with a long conversation and a tall inspector both cards keep the 8px
 //   bottom inset and their rounded bottom corners, and an empty new chat (its stage sized to the window) keeps the
@@ -47,6 +49,7 @@ const POPUP_STORY = { mac: "macOS pop-up window", windows: "Windows pop-up windo
 const bottomInsets: string[] = [];
 const popupGaps: string[] = [];
 const tabInsets: string[] = [];
+const cardGaps: string[] = [];
 
 async function openShellPage(page: Page, theme: "light" | "dark"): Promise<void> {
   await page.goto(`${origin}/?page=blocks/AdaptiveShell&theme=${theme}&width=wide`, { waitUntil: "networkidle" });
@@ -190,6 +193,47 @@ try {
       assert(near(inset.left, inset.top, 0.5), `${theme}: the first tab's left and top gaps must match: ${JSON.stringify(inset)}`);
     }
 
+    // One rhythm: the gap between two cards (outer edge to outer edge) equals the right inset (the last
+    // card's outer edge to the window edge), for the chat | browser split and the content | inspector
+    // cards, at 1440 and 1100. Each resize handle's grab zone spans the whole gap and its grip sits centred in it.
+    const gapFrames = [
+      ["split 1440", page.locator(`[data-ds-story="${STORY.browser}"] [data-ds-theme="${theme}"] [data-ds-scaled-frame]`).nth(0)],
+      ["split 1100", page.locator(`[data-ds-story="${STORY.browser}"] [data-ds-theme="${theme}"] [data-ds-scaled-frame]`).nth(1)],
+      ["inspector 1440", frames.nth(1)],
+      ["inspector 1100", frames.nth(2)],
+    ] as const;
+    for (const [label, frame] of gapFrames) {
+      const gap = await frame.evaluate((node) => {
+        const host = node as HTMLElement;
+        const box = (host.firstElementChild as HTMLElement).getBoundingClientRect();
+        const scale = box.width / Number(host.dataset.dsScaledFrame?.split("x")[0]);
+        const rect = (selector: string) => host.querySelector(selector)?.getBoundingClientRect();
+        const split = rect("[data-slot=adaptive-shell-split-chat]");
+        const lead = split ?? rect("[data-slot=adaptive-shell-card]");
+        const trail = split ? rect("[data-slot=adaptive-shell-split-pane] [data-slot=browser-pane]") : rect("[data-slot=adaptive-shell-inspector]");
+        const handle = host.querySelector<HTMLElement>(split ? "[data-slot=adaptive-shell-split] > [role=separator]" : "[role=separator][data-side=right]");
+        // Hover state is what shows the grip; its box is laid out (opacity 0) either way.
+        const grip = handle?.querySelector("[data-slot=resize-grip]")?.getBoundingClientRect();
+        const handleBox = handle?.getBoundingClientRect();
+        if (!lead || !trail || !handleBox || !grip) return null;
+        const mid = (lead.right + trail.left) / 2;
+        return {
+          gap: (trail.left - lead.right) / scale,
+          inset: (box.right - trail.right) / scale,
+          handleWidth: handleBox.width / scale,
+          handleCovers: handleBox.left <= lead.right + 0.01 * scale && handleBox.right >= trail.left - 0.01 * scale,
+          gripOffset: ((grip.left + grip.right) / 2 - mid) / scale,
+        };
+      });
+      assert(gap, `${theme} ${label}: cards or handle missing`);
+      cardGaps.push(`${theme} ${label}: gap ${gap.gap.toFixed(2)} inset ${gap.inset.toFixed(2)} handle ${gap.handleWidth.toFixed(2)} grip ${gap.gripOffset.toFixed(2)}`);
+      assert(near(gap.inset, 8, 0.5) && near(gap.gap, gap.inset, 0.5),
+        `${theme} ${label}: the gap between cards must equal the right inset (8px): ${JSON.stringify(gap)}`);
+      assert(gap.handleWidth >= gap.gap - 0.01 && gap.handleCovers,
+        `${theme} ${label}: the resize handle's grab zone must span the whole gap: ${JSON.stringify(gap)}`);
+      assert(near(gap.gripOffset, 0, 0.5), `${theme} ${label}: the grip must sit centred in the gap: ${JSON.stringify(gap)}`);
+    }
+
     for (const story of await page.locator('[data-ds-story^="Cards frame:"]').all()) {
       const name = (await story.getAttribute("data-ds-story"))!.replace(/[^a-z0-9]+/giu, "-").slice(0, 60);
       await story.locator(`[data-ds-theme="${theme}"]`).first().screenshot({ path: join(shots, `${name}-${theme}.png`) });
@@ -236,6 +280,7 @@ try {
     assert(errors.length === 0, `${theme}: page errors ${errors.join(" | ")}`);
     await context.close();
   }
+  console.log(`card gaps (px): ${cardGaps.join(" · ")}`);
   console.log(`first tab insets (px): ${tabInsets.join(" · ")}`);
   console.log(`card bottom insets (px): ${bottomInsets.join(" · ")}`);
   console.log(`pop-up leading gaps (px): ${popupGaps.join(" · ")}`);
