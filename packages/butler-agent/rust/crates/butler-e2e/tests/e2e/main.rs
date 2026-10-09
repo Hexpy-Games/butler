@@ -44,6 +44,7 @@ mod harness_hygiene;
 mod hooks;
 mod idle_resources;
 mod image_errors;
+mod image_only;
 mod install_app;
 mod install_hardening;
 mod install_lifecycle;

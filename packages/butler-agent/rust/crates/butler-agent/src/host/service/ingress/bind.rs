@@ -460,32 +460,13 @@ fn verify_context(
     Ok(())
 }
 
-/// Resolves message text, or a label for attachment-only App input.
+/// Preserve attachment-only input without inventing user text.
 fn user_message(envelope: &Envelope) -> Result<String, IngressError> {
-    if let Some(text) = envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        return Ok(text.to_owned());
-    }
-    if envelope.message.attachments.is_empty() {
+    let text = envelope.message.text.as_deref().unwrap_or_default();
+    if text.trim().is_empty() && envelope.message.attachments.is_empty() {
         return Err(invalid("Missing user message"));
     }
-    let names = envelope
-        .message
-        .attachments
-        .iter()
-        .filter_map(|attachment| attachment.file_name.as_deref())
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|name| !name.is_empty())
-        .collect::<Vec<_>>();
-    Ok(if names.is_empty() {
-        "Attached files".to_owned()
-    } else {
-        format!("Attached files: {}", names.join(", "))
-    })
+    Ok(text.to_owned())
 }
 
 fn invalid(message: &'static str) -> IngressError {
