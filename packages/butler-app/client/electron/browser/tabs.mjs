@@ -71,7 +71,10 @@ class UserBrowser {
     this.publish();
   }
   detach(tab) {
-    if (tab?.id === this.activeId) this.pointer.hide();
+    // Layout/preview occlusion must not remove a held overlay: macOS synthesizes
+    // mouseUp at (0,0), losing the click/drag release and its destination.
+    const dragging = this.pointer.captures(tab?.id) && tab.id === this.activeId && this.areaVisible && !this.nativeCovers;
+    if (tab?.id === this.activeId && !dragging) this.pointer.hide();
     if (tab?.attached && tab.view) {
       void this.capture(tab);
       if (!tab.attached.isDestroyed()) tab.attached.contentView.removeChildView(tab.view);
@@ -85,6 +88,9 @@ class UserBrowser {
       tab.bounds?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
+    // Occlusion can clear while the floating preview moves. Reattaching the page
+    // above the overlay also cancels its native capture; wait for the real release.
+    if (this.pointer.captures(tab.id) && this.pointer.attached === win && tab.attached !== win) return;
     if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
