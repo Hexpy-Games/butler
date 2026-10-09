@@ -1,7 +1,7 @@
 import { Button } from "../../../components/Button";
 import { ButtonContainer } from "../../../components/ButtonContainer";
 import { IconButton } from "../../../components/IconButton";
-import { Clock3, FileText, Globe2, ListFilter, MessageSquare, MoreHorizontal, PanelLeft, PanelRight } from "../../../components/Icons";
+import { Globe2, MessageSquare, MoreHorizontal, PanelLeft, PanelRight } from "../../../components/Icons";
 import { Switch } from "../../../components/Switch";
 import { BrowserDemo } from "../../BrowserPane/fixtures/BrowserDemo";
 import { DemoChat, DemoSidebar } from "../../BrowserPane/fixtures/ConversationFrame";
@@ -9,9 +9,6 @@ import { BROWSER_DEMO_COPY } from "../../BrowserPane/fixtures/copy";
 import { ScaledFrame } from "../../BrowserPane/fixtures/ScaledFrame";
 import { ChromeFloatingToggleLayer } from "../../ChromeFrame";
 import { FormSection } from "../../FormSection";
-import { InspectorPanel } from "../../InspectorPanel";
-import { InspectorShell } from "../../InspectorShell";
-import { ListRow } from "../../ListRow";
 import { SettingsField } from "../../SettingsField";
 import { SettingsHeader } from "../../SettingsHeader";
 import { SettingsNav } from "../../SettingsNav";
@@ -21,6 +18,7 @@ import {
   AdaptiveShell, AdaptiveShellCard, AdaptiveShellInspector, AdaptiveShellSidebar, AdaptiveShellSplit, AdaptiveShellTitle,
   AdaptiveShellWorkspace, adaptivePanelStyle, type ShellFrame,
 } from "../index";
+import { DemoConversation, DemoInspector, type ShellContent } from "./ShellContentDemo";
 
 type Locale = "en-US" | "ko-KR";
 export type ShellFrameView = "chat" | "browser" | "inspector" | "settings" | "hub";
@@ -28,14 +26,12 @@ export type ShellFrameView = "chat" | "browser" | "inspector" | "settings" | "hu
 const COPY = {
   "en-US": {
     actions: "Conversation actions", showBrowser: "Show browser", hideBrowser: "Hide browser", showInspector: "Show inspector",
-    hideInspector: "Hide inspector", showSidebar: "Show sidebar", summary: "Summary", artifacts: "Artifacts", schedules: "Schedules",
-    progress: "Progress", step: "Find and order the chair", weekly: "Weekly summary", appearance: "Appearance", general: "General",
+    hideInspector: "Hide inspector", showSidebar: "Show sidebar", appearance: "Appearance", general: "General",
     appearanceDescription: "Theme and how the app looks.", translucent: "Translucent sidebar", smartGroups: "Smart groups",
   },
   "ko-KR": {
     actions: "대화 작업", showBrowser: "브라우저 열기", hideBrowser: "브라우저 닫기", showInspector: "인스펙터 보기",
-    hideInspector: "인스펙터 숨기기", showSidebar: "사이드바 보기", summary: "요약", artifacts: "아티팩트", schedules: "예약 작업",
-    progress: "진행 상황", step: "의자 찾아 주문하기", weekly: "주간 요약", appearance: "모양", general: "일반",
+    hideInspector: "인스펙터 숨기기", showSidebar: "사이드바 보기", appearance: "모양", general: "일반",
     appearanceDescription: "앱의 테마와 화면 표시 방식을 설정합니다.", translucent: "투명 사이드바", smartGroups: "스마트 그룹",
   },
 } as const;
@@ -72,22 +68,6 @@ function DemoTitle({ locale, view, leftOpen }: { locale: Locale; view: ShellFram
   );
 }
 
-function DemoInspector({ locale }: { locale: Locale }) {
-  const copy = COPY[locale];
-  return (
-    <InspectorShell activeTab="summary" onTabChange={() => undefined} tabs={[
-      { id: "summary", label: copy.summary, icon: <ListFilter size="md" /> },
-      { id: "artifacts", label: copy.artifacts, icon: <FileText size="md" /> },
-      { id: "schedules", label: copy.schedules, icon: <Clock3 size="md" /> },
-    ]}>
-      <InspectorPanel title={copy.progress}>
-        <ListRow icon={<ListFilter size="md" />} title={copy.step} />
-        <ListRow icon={<FileText size="md" />} title={copy.weekly} />
-      </InspectorPanel>
-    </InspectorShell>
-  );
-}
-
 function DemoSettings({ locale }: { locale: Locale }) {
   const copy = COPY[locale];
   return (
@@ -115,10 +95,12 @@ export interface ShellFrameDemoProps {
   sidebar?: "open" | "collapsed" | "peek";
   /** The new-chat wallpaper: it lives inside the content card in the cards frame. */
   wallpaper?: boolean;
+  /** Content card body; `long` also fills the inspector past the window height. */
+  content?: ShellContent;
 }
 
 /** A whole window in either frame: the App's shell composition with viewer stand-ins for its content. */
-export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false }: ShellFrameDemoProps) {
+export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false, content = "chat" }: ShellFrameDemoProps) {
   const geometry = { height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) };
   if (view === "settings") {
     return (
@@ -148,10 +130,10 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
           ) : view === "hub" ? (
             <BrowserDemo locale={locale} placement="standalone" holder="none" band={null} pointer={false} agent={false} />
           ) : (
-            <AdaptiveShellCard><DemoChat locale={locale} wallpaper={wallpaper} /></AdaptiveShellCard>
+            <AdaptiveShellCard><DemoConversation locale={locale} content={content} wallpaper={wallpaper} /></AdaptiveShellCard>
           )}
         </AdaptiveShellWorkspace>
-        <AdaptiveShellInspector open={view === "inspector"}><DemoInspector locale={locale} /></AdaptiveShellInspector>
+        <AdaptiveShellInspector open={view === "inspector"}><DemoInspector locale={locale} tall={content === "long"} /></AdaptiveShellInspector>
       </AdaptiveShell>
     </ScaledFrame>
   );

@@ -21,7 +21,10 @@ export function ScaledFrame({ width, height, children }: { width: number; height
   return (
     <div ref={setHost} data-ds-scaled-frame={`${width}x${height}`}
       style={{ width: "100%", height: Math.round(height * scale), overflow: "hidden", borderRadius: "var(--radius-panel)", border: "var(--border-hairline) solid var(--line)" }}>
-      <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "0 0" }}>{children}</div>
+      {/* The frame is the window: blocks that size to the viewport (the new-chat stage) read its height. */}
+      <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "0 0", ["--adaptive-viewport-block-size" as string]: `${height}px` }}>
+        {children}
+      </div>
     </div>
   );
 }

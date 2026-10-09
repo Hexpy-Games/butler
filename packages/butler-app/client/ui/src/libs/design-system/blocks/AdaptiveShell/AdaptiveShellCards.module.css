@@ -32,7 +32,8 @@
 /* The workspace is now only the shell's room for cards. It keeps its 1px
    frame width (transparent), so the title row stays on the exact pixels it
    has in the flat frame, and it no longer clips: the title row reaches over
-   the inspector's column. */
+   the inspector's column. Its height stays bounded by the window
+   (min-height: 0 in AdaptiveShell.module.css); only the cards scroll. */
 .root[data-frame="cards"][data-panel-layout="docked"]
   > [data-slot="adaptive-shell-workspace"] {
   overflow: visible;
@@ -119,11 +120,14 @@
 .root[data-frame="cards"][data-panel-layout="docked"]
   > [data-slot="adaptive-shell-inspector"] {
   /* Level with the content card, which starts under the workspace's
-     transparent 1px frame. */
+     transparent 1px frame. Its height comes from top and bottom alone: the
+     panels' shared height: 100% would win over bottom and run the card past
+     the window's bottom inset. */
   top: calc(var(--titlebar-safe-area-top) + var(--border-hairline));
   right: var(--shell-card-inset);
   bottom: var(--shell-card-inset);
   width: calc(var(--right-panel-width) - var(--shell-card-inset));
+  height: auto;
   overflow: hidden;
   border-radius: var(--shell-card-radius);
   box-shadow: var(--shell-card-shadow);

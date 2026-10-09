@@ -156,6 +156,11 @@
   display: grid;
   contain: paint;
   min-width: 0;
+  /* The window bounds the workspace in every frame. Without this, a frame
+     that lets the workspace overflow (cards) gets a content-sized automatic
+     minimum, the shell's row grows past the window and focus can scroll the
+     shell off its title row. */
+  min-height: 0;
   height: 100%;
   grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
   overflow: hidden;
