@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "./browser-agent-app";
 import { browserStub } from "./browser-agent-stub";
 import { shellReady } from "./browser-shell-acceptance";
+import type { NativeAppServerOptions } from "./native-app-server";
 
-export async function redesignApp(evidence: string) {
+export async function redesignApp(evidence: string, options: NativeAppServerOptions = {}) {
   const stub = browserStub();
-  const app = await browserAgentApp(evidence, stub.handler);
+  const app = await browserAgentApp(evidence, stub.handler, undefined, options);
   const send = async (text: string) => {
     const prior = await app.gateway.api<{ latest_turn?: { id: string } }>("/session-view?session_id=general");
     await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text, client_message_id: crypto.randomUUID() }) });

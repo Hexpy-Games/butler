@@ -1,3 +1,4 @@
+// test-category: race
 /** S3 real App control transitions, native overlay and KO/EN visual matrix. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -32,7 +33,10 @@ try {
   await app.settings("en", "light", 1440); await app.call("activate", { id: tab }); await app.click("Browser");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=page-card]'))"), "card mounted");
-  await nativeAligned(app); await holder("butler");
+  await nativeAligned(app); await holder("none");
+  // Presenter fixture for capture isolation; input blocking below uses a real held native call.
+  await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
+  await holder("butler");
   await pointerAction(app, tab, "click");
   await waitBrowser(() => app.main(`Boolean(globalThis.browserAgentSubject.pointer.ready && globalThis.browserAgentSubject.pointer.attached)`), "native overlay attached");
   assert.equal(await app.main(`${overlay}.executeJavaScript("document.querySelector('[data-slot=agent-pointer]')?.dataset.mode")`), "click");
@@ -46,6 +50,7 @@ try {
     fs.writeFileSync(${JSON.stringify(join(evidence, "observation-without-overlay.png"))},hidden);
     return {equal:visible.equals(hidden),bytes:visible.length};
   })()`); assert.equal(isolation.equal, true);
+  await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-presentation'}})"); await holder("none");
   // Hold a real observe call at native ingress so actual user input hits a busy Butler page.
   await app.main(`(()=>{const t=${subject()},debug=t.view.webContents.debugger,send=debug.sendCommand.bind(debug);globalThis.controlSend=send;debug.sendCommand=(method,...args)=>method==='Page.getFrameTree'?new Promise(resolve=>{debug.sendCommand=send;globalThis.controlRelease=()=>send(method,...args).then(resolve)}):send(method,...args)})()`);
   const pending = app.internal("tab.observe", tab);
@@ -57,8 +62,8 @@ try {
   await app.click("Take over"); await holder("user");
   await app.main(`(()=>{${subject()}.view.webContents.debugger.sendCommand=globalThis.controlSend;globalThis.controlRelease()})()`);
   assert.equal((await pending).reason, "user_control");
-  await app.click("Give back to Butler"); await holder("butler");
-  await app.click("Take over");
+  await app.click("Give back to Butler"); await holder("none");
+  await app.call("control", { id: tab, holder: "user" });
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_wait_for_user", { tab })]);
   await app.send("Wait for the user, then stop this task");
   await holder("waiting"); await app.click("Stop task");
@@ -69,9 +74,11 @@ try {
     await app.settings(language, theme, width); await app.call("activate", { id: tab }); await hub(language);
     await app.page.clickSelector('[data-slot="titlebar-leading"] button');
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=page-card]'))"), "card mounted"); await nativeAligned(app);
-    await app.call("control", { id: tab, holder: "agent" }); await holder("butler");
+    await app.call("control", { id: tab, holder: "agent" });
     const prefix = `${language}-${theme}-${width}`;
+    await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
     const release = await holdObservation(app, tab);
+    await holder("butler");
     await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=page-band-actions] button').dataset.variant === 'default'"), "busy takeover emphasis");
     await app.shot(`${prefix}-agent-busy`); await release();
     for (const [name, action, batch] of [["click", "click", false], ["type", "fill", false], ["scroll", "scroll", false], ["batch", "click", true]] as const) {
@@ -94,6 +101,7 @@ try {
     assert.equal(await app.main(`${overlay}.executeJavaScript("getComputedStyle(document.querySelector('[data-slot=agent-pointer] > :last-child')).transitionDuration")`), "0s");
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ reduce_motion: false }) });
     await app.click(language === "ko" ? "작업 중지" : "Stop task");
+    await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-presentation'}})");
     await hub(language); await app.call("activate", { id: mine }); await holder("none"); await app.shot(`${prefix}-none`);
   }
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, isolation, notes }, null, 2));

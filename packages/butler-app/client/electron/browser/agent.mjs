@@ -1,6 +1,6 @@
 import { browserEvent, drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
-import { startUse, endUse, finishUse, tabInUse } from "./usage.mjs";
+import { startUse, endUse, finishUse, tabInUse, bindUse, releaseHold } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose, resolveDialog } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
@@ -11,6 +11,7 @@ import { screenshotTab } from "./capture.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
+  if (holder === "user") releaseHold(browser, tab);
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   browser.publish();
@@ -170,7 +171,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);
-  if (use) { use.tab = id; browser.publish(); }
+  bindUse(browser, use, tab);
   browser.materialize(tab); backgroundTab(browser, tab);
   // Attach only after the native host owns the view, as in output checks.
   await new Promise(resolve => setTimeout(resolve, 0));
