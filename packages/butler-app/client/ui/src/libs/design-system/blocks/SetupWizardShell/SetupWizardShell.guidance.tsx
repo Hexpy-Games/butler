@@ -50,7 +50,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Every setting on one screen overwhelms a first run.", render: () => <Typo.Body>Language, safety, model, keys and theme on one page</Typo.Body> },
     },
   ],
-  content: ["Titles are questions or instructions; buttons are the answers."],
+  content: [
+    "Titles are questions or instructions; buttons are the answers.",
+    "A multi-screen focus flow uses anchor=\"top\" so every card shares one top edge, and stepKey to swap the intro card for the step card.",
+  ],
   accessibility: ["The step progress is labelled (progressLabel) and announces the current step."],
-  tokens: ["--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
+  tokens: ["--titlebar-height", "--motion-base", "--motion-exit-base", "--motion-distance-sm", "--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
 };

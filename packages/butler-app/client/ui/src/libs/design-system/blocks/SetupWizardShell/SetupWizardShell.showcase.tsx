@@ -2,7 +2,7 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Typo } from "../../components/Typo";
-import { SetupWizardContent, SetupWizardList, SetupWizardShell } from "./SetupWizardShell";
+import { SetupWizardContent, SetupWizardList, SetupWizardProgress, SetupWizardShell } from "./SetupWizardShell";
 
 export const meta: ShowcaseMeta = {
   title: "SetupWizardShell",
@@ -50,10 +50,10 @@ const focusLabels = {
   "ko-KR": { title: "반갑습니다", body: "버틀러는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
 } as const;
 
-function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {
+function Focus({ context, tone, anchor = "center" }: { context: ShowcaseRenderContext; tone: "light" | "dark"; anchor?: "center" | "top" }) {
   const copy = focusLabels[context.locale];
   return (
-    <SetupWizardShell embedded title="Butler" tone={tone} variant="focus">
+    <SetupWizardShell anchor={anchor} embedded title="Butler" tone={tone} variant="focus">
       <SetupWizardContent surface="solid">
         <Typo.H3 as="h1" align="center">{copy.title}</Typo.H3>
         <Typo.Body align="center">{copy.body}</Typo.Body>
@@ -68,4 +68,14 @@ export const stories: ShowcaseStory[] = [
   { name: "Step (dark backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="dark" /> },
   { name: "Focus (one column, light)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="light" /> },
   { name: "Focus (one column, dark)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="dark" /> },
+  { name: "Focus anchored to the top (light)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="light" /> },
+  { name: "Focus anchored to the top (dark)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="dark" /> },
+  {
+    name: "Step indicator (SetupWizardProgress)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <SetupWizardProgress activeIndex={1} ariaLabel={context.locale === "ko-KR" ? "설정 단계" : "Setup steps"}
+        steps={text(context).steps.map((label) => ({ id: label, label }))} />
+    ),
+  },
 ];

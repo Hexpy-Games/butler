@@ -1,0 +1,20 @@
+/* The glyph's line box is the H4 line, so `IconSlot minHeight="line"`
+   centers it on the title's first line. */
+.glyph {
+  display: inline-flex;
+  flex: none;
+  font-size: var(--typo-h4-size);
+  line-height: var(--typo-h4-line-height);
+}
+
+/* contentKey: the next step's content fades in; the frame and header stay. */
+.bodyEnter {
+  animation: setup-step-enter var(--motion-base) var(--motion-ease-decelerate)
+    both;
+}
+
+@keyframes setup-step-enter {
+  from {
+    opacity: 0;
+  }
+}
