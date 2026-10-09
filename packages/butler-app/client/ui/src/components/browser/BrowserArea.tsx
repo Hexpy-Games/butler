@@ -63,7 +63,10 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     onBlurCapture={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
     }} tabs={<TabStrip groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
-      onPointerDownCapture={drag} onKeyDownCapture={() => useBrowserTabDrag.setState({ outside: false })} trailing={sessionId ? <BringTabButton sessionId={sessionId} /> : undefined}
+      onPointerDownCapture={drag} onKeyDownCapture={() => {
+        // Modifier keys during a pointer drag must retain the outside-drop guard.
+        if (!useBrowserTabDrag.getState().tabId) useBrowserTabDrag.setState({ outside: false });
+      }} trailing={sessionId ? <BringTabButton sessionId={sessionId} /> : undefined}
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
         untitled: copy.newTab, loading: copy.loading, working: copy.agentControl, waiting: copy.waiting, crashed: copy.crashed,
         tabCount: (count) => copy.tabCount.replace("{count}", String(count)),
