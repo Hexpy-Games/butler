@@ -164,7 +164,8 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);
-  if (!source) { browser.focusRequest = id; browser.activeId = id; }
+  // The renderer activates through the normal detach/attach path only for its visible owner.
+  if (!source) browser.focusRequest = id;
   browser.publish();
   return { status: "ok", tab: id, url: tab.url, title: tab.title, epoch: tab.epoch, profile: tab.profile };
 }

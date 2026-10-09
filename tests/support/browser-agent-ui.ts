@@ -19,9 +19,10 @@ export async function browserOutputEntry(app:App,evidence:string) {
   const state=await app.call<{activeId:string;tabs:Array<{id:string;owner:string;agent:boolean}>}>("state");
   const opened=state.tabs.find(tab=>tab.id===state.activeId)!;
   assert.equal(opened.owner,"conversation:general");assert.equal(opened.agent,false);
-  assert.equal(await app.page.expression("Boolean(document.querySelector('button[aria-label=\"Hide right panel\"]'))"),true,"artifact entry docks its conversation");
+  assert.equal(await app.page.expression("Boolean(document.querySelector('[data-slot=adaptive-shell-split][data-pane-open] [data-slot=adaptive-shell-split-chat] [data-test-class~=conversation]'))"),true,"artifact entry opens its real conversation frame");
+  assert.equal(await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-right-open')"),"false","artifact entry closes the inspector");
   await app.call("close",{id:opened.id});
-  writeFileSync(join(evidence,"public-artifact-entry.json"),JSON.stringify({opened,rightChat:true},null,2));
+  writeFileSync(join(evidence,"public-artifact-entry.json"),JSON.stringify({opened,conversationFrame:true},null,2));
 }
 
 export async function browserUiChecks(app:App,agentTab:string,evidence:string) {
@@ -62,6 +63,7 @@ async function dragTo(app:App,kind:string,evidence:string) {
 /** Real App presentation of the native crashed-state snapshot, including folded groups. */
 export async function browserGroupSnapshotChecks(app:App,tab:string,language:string,theme:string,evidence:string) {
   await app.main(`(()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)});t.status='crashed';b.sync(t);b.publish()})()`);
+  await app.click(language === "ko" ? "브라우저" : "Browser");
   const selector='[data-test-class="tab-strip-chip"] [data-kind="conversation"][data-state="crashed"]';
   try {
     await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="tab-strip-chip"] [data-kind="conversation"][data-state="crashed"]')));

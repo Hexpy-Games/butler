@@ -219,17 +219,7 @@ fn mutate_session(
         params![title, i32::from(archived), now, session_id],
     )
     .map_err(AppStorageError::sqlite)?;
-    let session = read::session(&tx, session_id)?;
-    let event = events::append_unpublished(
-        &tx,
-        "session.updated",
-        None,
-        butler_core::json::json_object!({"session":session}),
-        &clock.now_iso(),
-    )?;
-    tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, &event);
-    Ok(AppSessionActionResult { session })
+    finish_update(tx, subscribers, session_id, clock)
 }
 
 fn delete_permanently(
@@ -267,4 +257,48 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         message: message.to_owned(),
         source: None,
     }
+}
+
+pub(in crate::gateway::application) fn compare_and_set_title(
+    db: &mut Connection,
+    subscribers: &events::EventSubscribers,
+    id: &str,
+    expected: &str,
+    title: &str,
+    clock: &dyn crate::gateway::application::AppIdentityClock,
+) -> Result<(), AppStorageError> {
+    if title == expected {
+        return Ok(());
+    }
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    let changed = tx
+        .execute(
+            "UPDATE chats SET title=?1,updated_at=?2 WHERE id=?3 AND title=?4",
+            params![title, clock.now_iso(), id, expected],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if changed == 0 {
+        tx.commit().map_err(AppStorageError::sqlite)?;
+        return Ok(());
+    }
+    finish_update(tx, subscribers, id, clock).map(|_| ())
+}
+
+fn finish_update(
+    tx: rusqlite::Savepoint<'_>,
+    subscribers: &events::EventSubscribers,
+    session_id: &str,
+    clock: &dyn crate::gateway::application::AppIdentityClock,
+) -> Result<AppSessionActionResult, AppStorageError> {
+    let session = read::session(&tx, session_id)?;
+    let event = events::append_unpublished(
+        &tx,
+        "session.updated",
+        None,
+        butler_core::json::json_object!({"session":session}),
+        &clock.now_iso(),
+    )?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    events::publish(subscribers, &event);
+    Ok(AppSessionActionResult { session })
 }

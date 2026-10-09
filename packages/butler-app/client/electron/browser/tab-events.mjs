@@ -36,6 +36,15 @@ export function wireTab(tab, actions) {
     if (webUrl(url)) actions.popup(tab, url);
     return { action: "deny" };
   });
+  contents.on("input-event", (_event, input) => {
+    if (input.type !== "mouseMove" && input.type !== "mouseEnter") return;
+    const win = tab.attached;
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+    const bounds = tab.view.getBounds();
+    const point = Number.isFinite(input.x) && Number.isFinite(input.y)
+      ? { x: bounds.x + input.x, y: bounds.y + input.y } : null;
+    win.webContents.send("butler-browser:pointer", point);
+  });
   contents.on("before-input-event", (event, input) => {
     if (actions.shortcut(input)) event.preventDefault();
   });

@@ -10,6 +10,7 @@ import { Titlebar } from "../../packages/butler-app/client/ui/src/components/lay
 import { setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store";
 import { connectBrowser, type BrowserSnapshot } from "../../packages/butler-app/client/ui/src/components/browser/browserBridge";
+import { useBrowserShellState } from "../../packages/butler-app/client/ui/src/components/browser/browserShellState";
 import "../../packages/butler-app/client/ui/src/libs/design-system/tokens.css";
 
 const params = new URLSearchParams(location.search);
@@ -18,7 +19,12 @@ const theme = params.get("theme") === "dark" ? "dark" : "light";
 setAppCopyLanguage(locale);
 document.body.classList.add(`theme-${theme}`, "sidebar-translucent");
 const mode = params.get("state") ?? "empty";
-useButlerStore.setState({ view: { kind: mode === "output" ? "session" : "browser" }, activeChatId: "general" });
+useButlerStore.setState({
+  view: { kind: mode === "output" ? "session" : "browser" }, activeChatId: "general",
+  navigation: { ...useButlerStore.getState().navigation, chats: [{
+    id: "general", kind: "chat", title: "General", last_activity_at: "2026-10-09T00:00:00Z", pinned: false, archived: false,
+  }] },
+});
 const canvas = document.createElement("canvas");
 canvas.width = 1440; canvas.height = 720;
 const context = canvas.getContext("2d")!;
@@ -37,6 +43,7 @@ const publish = () => { for (const subscriber of subscribers) subscriber({ ...sn
 const addressListeners = new Set<() => void>();
 window.butlerBrowser = {
   subscribe(callback) { subscribers.add(callback); callback(snapshot); return () => { subscribers.delete(callback); }; },
+  onPointer() { return () => {}; },
   onAddress(callback) { addressListeners.add(callback); return () => { addressListeners.delete(callback); }; },
   async call(op, raw) {
     const input = raw as { id?: string; value?: string | boolean; tabId?: string; index?: number; owner?: string; url?: string } | undefined;
@@ -56,15 +63,15 @@ window.butlerBrowser = {
       const item = snapshot.tabs.find((entry) => entry.id === input?.tabId)!;
       snapshot.tabs = snapshot.tabs.filter((entry) => entry !== item); snapshot.tabs.splice(input?.index ?? 0, 0, item);
     }
-    publish(); return undefined;
+    publish(); return op === "create" ? snapshot.activeId : undefined;
   },
 };
-function FixtureWorkspace() {
-  const view = useButlerStore((state) => state.view);
-  if (mode === "security") return <SecuritySettings />;
-  return mode === "output" && view.kind !== "browser" ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
-}
 connectBrowser();
+function FixtureWorkspace() {
+  const open = useBrowserShellState((state) => Boolean(state.conversations.general?.open));
+  if (mode === "security") return <SecuritySettings />;
+  return mode === "output" && !open ? <OutputFrame outputId={"a".repeat(64)} title="Fixture output" /> : <BrowserArea />;
+}
 createRoot(document.getElementById("root")!).render(
   <AdaptiveShell theme={{ appearance: theme }} leftOpen={mode !== "security"} rightOpen={false} chromeEnvironment="electron">
     <AdaptiveShellSidebar open={mode !== "security"}><BrowserEntry /></AdaptiveShellSidebar>

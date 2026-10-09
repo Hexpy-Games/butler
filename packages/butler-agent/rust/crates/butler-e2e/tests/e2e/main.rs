@@ -14,6 +14,7 @@ mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
 mod browser_agent;
+mod browser_delegation;
 mod browser_outputs;
 mod browser_usage;
 mod cassette_lint;
@@ -172,3 +173,5 @@ mod skills_cleanup;
 mod storage_concurrency_support;
 
 mod task_graphs;
+
+mod session_titles;

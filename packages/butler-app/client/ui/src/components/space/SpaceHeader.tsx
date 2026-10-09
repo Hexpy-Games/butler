@@ -18,6 +18,7 @@ import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
 import type { SpaceRowData } from "@/app/space/projection";
 import { BrowserEntry } from "../browser/BrowserEntry";
+import { LibraryEntry } from "../browser/LibraryEntry";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceBrand } from "./SpaceBrand";
 
@@ -49,6 +50,7 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
             onClick={() => useButlerStore.getState().setView({ kind: "automations" })}
           />
           <BrowserEntry />
+          <LibraryEntry />
         </SidebarNav>
       </Stack>
       <Stack gap="sm">

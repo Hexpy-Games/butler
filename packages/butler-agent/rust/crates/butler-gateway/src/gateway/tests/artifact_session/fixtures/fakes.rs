@@ -110,6 +110,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         work_streams: Arc::new(TestSessions),
         subsessions: Arc::new(TestSessions),
         branch_conversations: Arc::new(TestBranchConversations),
+        session_title_generator: Arc::new(TestBranchSummarizer),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }
@@ -431,5 +432,15 @@ impl AppAuthorityHandoff for TestAuthority {
     }
     fn settle_question_followup(&self, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
+    }
+}
+
+impl crate::gateway::AppSessionTitleGenerator for TestBranchSummarizer {
+    fn generate(
+        &self,
+        _input: crate::gateway::AppSessionTitleInput,
+        _cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::gateway::ApplicationFuture<String> {
+        Box::pin(async { Ok("Generated chat title".into()) })
     }
 }

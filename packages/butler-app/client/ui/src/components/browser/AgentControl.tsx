@@ -1,5 +1,5 @@
 import { appCopy } from "@/app/copy";
-import { useButlerStore } from "@/app/store";
+import { stopBrowserTurn } from "./stopBrowserTurn";
 import { ButlerThinkingMark, Button, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, MoreHorizontal, Square, Stack, Typo } from "@/butler-ds";
 import { browserCall, type BrowserTab } from "./browserBridge";
 
@@ -15,7 +15,7 @@ export function AgentControl({ tab }: { tab?: BrowserTab }) {
     </Stack>
     <ButtonContainer size="xs">
       <Button size="xs" variant="outline" onClick={() => void browserCall("control", { id: tab.id, holder: human ? "agent" : "user", sticky: true })}>{human ? copy.handBack : copy.takeOver}</Button>
-      {!human && <Button size="xs" variant="outline" onClick={() => void useButlerStore.getState().cancelActiveTurn()} iconStart={<Square size="sm" />}>{copy.stop}</Button>}
+      {!human && <Button size="xs" variant="outline" onClick={() => void stopBrowserTurn(tab.owner)} iconStart={<Square size="sm" />}>{copy.stop}</Button>}
       <DropdownMenu><DropdownMenuTrigger asChild><Button size="xs" variant="outline" aria-label={copy.stills}><MoreHorizontal size="sm" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end"><DropdownMenuCheckboxItem checked={tab.stills !== false} onCheckedChange={(value) => void browserCall("stills", { id: tab.id, value })}>{copy.stills}</DropdownMenuCheckboxItem></DropdownMenuContent>
       </DropdownMenu>

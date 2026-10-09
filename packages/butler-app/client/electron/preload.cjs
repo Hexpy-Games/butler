@@ -1381,6 +1381,11 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     browserCall("state").then(handler);
     return () => ipcRenderer.removeListener("butler-browser:state", listener);
   },
+  onPointer: (handler) => {
+    const listener = (_event, point) => handler(point);
+    ipcRenderer.on("butler-browser:pointer", listener);
+    return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
   onAddress: (handler) => {
     const listener = () => handler();
     ipcRenderer.on("butler-browser:address", listener);

@@ -425,6 +425,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         work_streams: Arc::new(UnprovidedSessions),
         subsessions: Arc::new(UnprovidedSessions),
         branch_conversations: Arc::new(UnprovidedBranchConversations),
+        session_title_generator: Arc::new(TestBranchSummarizer),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }
@@ -472,4 +473,14 @@ pub(super) fn temp_path(label: &str) -> PathBuf {
         std::process::id(),
         uuid::Uuid::new_v4()
     ))
+}
+
+impl crate::gateway::AppSessionTitleGenerator for TestBranchSummarizer {
+    fn generate(
+        &self,
+        _input: crate::gateway::AppSessionTitleInput,
+        _cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::gateway::ApplicationFuture<String> {
+        Box::pin(async { Ok("Generated chat title".into()) })
+    }
 }

@@ -133,6 +133,10 @@ async function escape(page: Page) {
   await page.press("Escape");
 }
 async function navigate(page: Page, url: string) {
+  if (!await page.expression("Boolean(document.querySelector('input[aria-label=\"Address\"]'))")) {
+    await page.clickSelector('[data-slot="address-field"] [role="button"]');
+  }
+  await page.waitForFunction(() => Boolean(document.querySelector('input[aria-label="Address"]')));
   await page.expression(`(() => {
     const input = document.querySelector('input[aria-label="Address"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(url)});
@@ -240,14 +244,15 @@ try {
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
   await page.clickText("General", '[data-test-class="app-sidebar"] *');
   await click(page, "Browser");
-  await page.waitForFunction(() => document.body.textContent?.includes("Open a new tab"));
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Address");
+  assert.equal((await state(page)).tabs.length, 1, "hub creates exactly one new tab");
+  assert.equal(await page.expression("document.querySelector('[data-slot=page-card-content]').textContent"), "");
   for (const locale of ["ko", "en"]) for (const theme of ["dark", "light"]) {
     await gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language:locale, appearance_theme:theme }) });
     await page.reload(); await click(page, locale === "ko" ? "브라우저" : "Browser");
     await page.waitForFunction(() => Boolean(document.querySelector('[data-slot="native-view-slot"][data-hidden]')));
     await shot(page, `${locale}-${theme}-empty`);
   }
-  await click(page, "New tab");
   await navigate(page, `http://127.0.0.1:${fixture.port}/first`);
   await waitTitle(page, "Fixture");
   let snapshot = await state(page); const first = snapshot.activeId;
@@ -262,6 +267,7 @@ try {
   await alignment(page, main, win, evidence);
   await call(page, "create", { url: "https://www.iana.org/" });
   await waitUntil(async () => (await state(page)).tabs.some(t => t.url.startsWith("https://www.iana.org") && t.title === "Internet Assigned Numbers Authority" && t.status === "idle"), "real HTTPS site");
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") {
   const loadStart = loadavg()[0];
   await evaluate(() => {
     const histogram = process.getBuiltinModule("node:perf_hooks")!.monitorEventLoopDelay({ resolution: 1 });
@@ -294,6 +300,7 @@ try {
     assert.ok(repeated.p99Ms<=30 && repeated.maxMs<=200, JSON.stringify(repeated));
   }
   await call(page, "close", { id: heavy });
+  }
   snapshot = await state(page);
   await call(page, "move", { tabId: first, toGroupId: "mine", index: 1 });
   assert.equal((await state(page)).tabs[1]!.id, first);
@@ -308,7 +315,7 @@ try {
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
   await shot(page, "after-artifact-return");
   const ownedPids = async () => [...new Set([...await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`), ...liveTrackedProcessIds()])];
-  await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
+  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch();

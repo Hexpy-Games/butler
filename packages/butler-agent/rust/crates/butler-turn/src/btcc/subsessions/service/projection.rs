@@ -29,6 +29,28 @@ impl SubsessionService {
         ))
     }
 
+    /// Canonical App conversation for browser ownership, including nested workers.
+    /// A child binding is never an App docking target, even if its context has an App ID.
+    pub async fn browser_owner(&self, session_id: &str) -> Result<Option<String>, BtccError> {
+        let owner = self.authority_owner(session_id).await?;
+        let binding = self
+            .bindings
+            .get_by_session_id(&owner)
+            .await
+            .map_err(BtccError::from)?;
+        Ok(binding
+            .filter(|binding| binding.role == crate::workspace::SessionRole::Butler)
+            .and_then(|binding| {
+                binding
+                    .transport_bindings
+                    .into_iter()
+                    .find(|transport| {
+                        transport.transport == "app" && !transport.peer_id.trim().is_empty()
+                    })
+                    .map(|transport| transport.peer_id)
+            }))
+    }
+
     /// Prompt lines describing the parent's worker tasks.
     pub async fn worker_prompt_lines(
         &self,
