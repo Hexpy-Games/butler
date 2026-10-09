@@ -3,14 +3,20 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
+import { AgentControl, browserHolder } from "./AgentControl";
 import { AddressRow } from "./AddressRow";
+import { BringTabButton } from "./BringTabButton";
+import { useBrowserTabDragHandler } from "./useBrowserTabDrag";
+import { useBrowserTabDrag } from "./browserTabDrag";
 import { browserCall, useBrowserState } from "./browserBridge";
 import { useBrowserPage } from "./useBrowserPage";
 import { publicBrowserOwner } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
 export function BrowserArea({ sessionId }: { sessionId?: string }) {
-  useAppLocale();
+  const locale = useAppLocale();
+  const reducedMotion = useButlerStore((store) => store.settings.reduce_motion);
+  useEffect(() => { void browserCall("presentation", { locale, reducedMotion }); }, [locale, reducedMotion]);
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -41,6 +47,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     group.tabs.push({ id: item.id, title: item.title, faviconSrc: item.favicon,
       state: item.busy ? "working" : item.status === "idle" ? undefined : item.status });
   }
+  const drag = useBrowserTabDragHandler(groups.flatMap((group) => group.collapsed ? [] : group.tabs.map((item) => tabs.find((tab) => tab.id === item.id)!)));
   const call = (op: string, value?: unknown) => browserCall(op, { id: tab?.id, value });
   const create = () => void browserCall("create", sessionId ? { owner: `conversation:${sessionId}`, profile: "signed_out" } : undefined);
   const empty = !tab || !tab.url;
@@ -52,6 +59,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     onBlurCapture={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
     }} tabs={<TabStrip groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
+      onPointerDownCapture={drag} onKeyDownCapture={() => useBrowserTabDrag.setState({ outside: false })} trailing={sessionId ? <BringTabButton sessionId={sessionId} /> : undefined}
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
         untitled: copy.newTab, loading: copy.loading, working: copy.agentControl, waiting: copy.waiting, crashed: copy.crashed,
         tabCount: (count) => copy.tabCount.replace("{count}", String(count)),
@@ -59,9 +67,9 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       onActivate={(id) => void browserCall("activate", { id })} onClose={(id) => void browserCall("close", { id })}
       onToggleGroup={(id, value) => setCollapsed((current) => ({ ...current, [id]: value }))}
       onNewTab={state.enabled ? create : undefined}
-      onMove={(move) => void browserCall("move", move)} />}
+      onMove={(move) => { if (!useBrowserTabDrag.getState().outside) void browserCall("move", move); }} />}
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
-    <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder="none" hidden={empty || crashed || disabled}
+    <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} band={<AgentControl tab={tab} />} hidden={empty || crashed || disabled}
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={stillSrc} covered={state.nativeCovered}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}

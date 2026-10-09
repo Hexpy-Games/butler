@@ -92,7 +92,7 @@ export default defineConfig({
     buildStart: () => checkWallpaperPosters(process.cwd()),
   }],
   // Font slices stay files so unicode-range fetches them lazily.
-  build: { assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
+  build: { rollupOptions: { input: { app: path.resolve(process.cwd(), "index.html"), overlay: path.resolve(process.cwd(), "browser-overlay.html") } }, assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
   resolve: {
     alias: [
       {
