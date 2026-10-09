@@ -9,6 +9,7 @@ pub(super) struct Client {
     bearer: String,
     admin: String,
     pub session: String,
+    turn: String,
 }
 impl Client {
     pub(super) async fn new(owner: &GuidedTools) -> Option<Self> {
@@ -25,6 +26,7 @@ impl Client {
         .ok()?;
         Some(Self {
             client: reqwest::Client::new(),
+            turn: owner.binding.turn_id.clone(),
             base: endpoint.base_url,
             bearer: endpoint.local_auth.token()?.to_string(),
             admin: admin["secret"].as_str()?.into(),
@@ -52,9 +54,22 @@ impl Client {
             .post(format!("{}/internal/browser/calls", self.base))
             .bearer_auth(&self.bearer)
             .header("x-butler-admin", &self.admin)
-            .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id}))
+            .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id,"turn_id":self.turn}))
             .timeout(std::time::Duration::from_secs(31))
             .send();
+        let request = async {
+            match request.await {
+                Ok(response) if response.status().is_success() => response
+                    .json::<Value>()
+                    .await
+                    .unwrap_or_else(|_| json!({"status":"unknown","reason":"invalid_result"})),
+                Ok(response) if response.status().is_server_error() => {
+                    json!({"status":"unknown","reason":"browser_result_unknown"})
+                }
+                Ok(_) => json!({"status":"not_dispatched","reason":"browser_refused"}),
+                Err(_) => json!({"status":"unknown","reason":"browser_host_lost"}),
+            }
+        };
         let result = tokio::select! {
             ()=signal.cancelled()=>{
                 let _ = self.client.post(format!("{}/internal/browser/calls",self.base))
@@ -63,12 +78,7 @@ impl Client {
                     .timeout(std::time::Duration::from_secs(2)).send().await;
                 json!({"status":"unknown","reason":"cancelled"})
             },
-            result=request=>match result {
-                Ok(response) if response.status().is_success()=>response.json::<Value>().await.unwrap_or_else(|_|json!({"status":"unknown","reason":"invalid_result"})),
-                Ok(response) if response.status().is_server_error()=>json!({"status":"unknown","reason":"browser_result_unknown"}),
-                Ok(_)=>json!({"status":"not_dispatched","reason":"browser_refused"}),
-                Err(_)=>json!({"status":"unknown","reason":"browser_host_lost"}),
-            }
+            result=request=>result
         };
         let count = if op == "tab.act" {
             args["steps"].as_array().map_or(0, Vec::len)

@@ -106,18 +106,18 @@ impl AppApplication {
                     match self.dependencies.native_ingress.find(native).await? {
                         Some(receipt) => receipt,
                         None => {
-                            let error = self.dispatch_error(claim, error).await?;
-                            if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping")
+                            let error = if matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping")
                             {
-                                return Err(error);
-                            }
-                            self.fail_dispatch(claim, "app_transport_enqueue_failed")
-                                .await?;
-                            return Err(public(
-                                503,
-                                "app_transport_enqueue_failed",
-                                "The message could not be queued.",
-                            ));
+                                error
+                            } else {
+                                public(
+                                    503,
+                                    "app_transport_enqueue_failed",
+                                    "The message could not be queued.",
+                                )
+                                .with_source(error)
+                            };
+                            return Err(self.dispatch_error(claim, error).await?);
                         }
                     }
                 } else {
@@ -194,6 +194,11 @@ impl AppApplication {
                 "Service is stopping. Try again.",
             ));
         }
+        let code: &str = match &error {
+            GatewayApplicationError::Public { code, .. } => code,
+            GatewayApplicationError::Internal { .. } => "queued_message_dispatch_failed",
+        };
+        self.fail_dispatch(claim, code).await?;
         Ok(error)
     }
 }
