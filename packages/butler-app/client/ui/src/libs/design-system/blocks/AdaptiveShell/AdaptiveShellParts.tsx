@@ -8,7 +8,27 @@ import {
 import { cn } from "../../lib/utils";
 import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import styles from "./AdaptiveShell.module.css";
+import cards from "./AdaptiveShellCards.module.css";
 import { ResizeGrip, resizeHandleClassName } from "./ResizeGrip";
+
+/**
+ * The title row slot: the first child of AdaptiveShellWorkspace, holding the TitlebarShell. It is
+ * pinned over the workspace's first row. In the cards frame it belongs to the shell and spans the
+ * inspector's column too, so opening the inspector never moves the title's trailing icons.
+ */
+export function AdaptiveShellTitle({ className, ...props }: DsBaseProps<HTMLAttributes<HTMLDivElement>>) {
+  return <div className={cn(cards.title, className)} data-slot="adaptive-shell-title" {...props} />;
+}
+
+/**
+ * The content under the title row (a conversation, a management page, the browser hub's content).
+ * Flat: layout only. Cards: a rounded card inset from the window, the box a wallpaper resolves
+ * against. The conversation split (AdaptiveShellSplit) and the standalone BrowserPane draw their own
+ * cards: do not wrap them in this.
+ */
+export function AdaptiveShellCard({ className, ...props }: DsBaseProps<HTMLAttributes<HTMLDivElement>>) {
+  return <div className={cn(cards.card, className)} data-slot="adaptive-shell-card" {...props} />;
+}
 
 /**
  * A panel's resize handle over its divider: a pill grabber on hover, focus and drag, and with `hint`

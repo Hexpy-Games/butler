@@ -22,6 +22,7 @@ const EDGE_RULES = [
   "At the window edge the window frame (the workspace border) draws the line; a surface reaching it tucks its own border under the frame instead of doubling it, and leaves no strip.",
   "A surface nested inside another (the page card in the pane) draws no parallel hairline: its elevation sets it apart. State edges (Butler's riso edge, your tab, an approval) are not structure and may draw.",
   "A resize handle draws no line of its own: the divider is the surfaces' hairline; the handle adds the grabber.",
+  "In the cards frame (AdaptiveShell frame=\"cards\") no two surfaces share an edge: each card (conversation, browser sheet, inspector, settings detail) draws one quiet --shell-card-edge of its own, 8px off the window and off the next card; the gap is the resize handle's lane. The page card inside the sheet still draws none.",
 ];
 
 /** Stack gaps made visible: the hatch is the gap. */

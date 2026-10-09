@@ -27,6 +27,16 @@
   border-left-color: transparent;
 }
 
+/* AdaptiveShell frame="cards": the inspector is the side card. It fills the
+   card slot the shell places under the title row; its own edge replaces the
+   leading hairline it drew against the workspace. */
+[data-panel-layout="docked"] .shell[data-frame="cards"] {
+  height: 100%;
+  border: var(--border-hairline) solid var(--shell-card-edge);
+  border-radius: var(--shell-card-radius);
+  background: var(--shell-card-bg);
+}
+
 .tabs {
   display: flex;
   flex: 0 0 var(--titlebar-height);

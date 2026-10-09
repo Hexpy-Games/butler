@@ -9,4 +9,5 @@ export { useSidebarAutoCollapse } from "./useSidebarAutoCollapse";
 export { useSidebarPeek, type SidebarPeek, type UseSidebarPeekOptions } from "./useSidebarPeek";
 export { createSidebarPeekController, PEEK_DISMISS_MS, type SidebarPeekCloseReason, type SidebarPeekPoint } from "./sidebarPeek";
 export { adaptivePanelStyle } from "./panel-geometry";
+export { useShellFrame, type ShellFrame } from "./shellFrame";
 export * from "./theme";

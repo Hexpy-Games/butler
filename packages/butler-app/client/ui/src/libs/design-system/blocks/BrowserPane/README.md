@@ -39,6 +39,15 @@ the toolbar's address takes the remaining width and truncates. Below a 520px
 toolbar only the last page action stays (make it More, carrying the others),
 so the address keeps at least 120px.
 
+## In the cards frame
+Inside `AdaptiveShell frame="cards"` (docked) the sheet is a card of its own:
+four 12px corners, one quiet `--shell-card-edge`, no edge tucked under a
+window frame. Beside a conversation it is the second card after the chat
+card; in the standalone Browser it is the card (do not wrap it in
+`AdaptiveShellCard`). The shell sets `--browser-pane-bg` to a 2.5% ink tint of
+the card surface, so the sheet reads as a card on the shell and the page card
+still lifts off it.
+
 ## Wrong use cases
 - Do not lay glass over the page top: the page is a native view that glass
   cannot blur (see the approved design's glass verdict).

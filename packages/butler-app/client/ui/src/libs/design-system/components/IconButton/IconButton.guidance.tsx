@@ -1,7 +1,7 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { Button } from "../Button";
 import { ButtonContainer } from "../ButtonContainer";
-import { PanelLeft, PanelRightClose, Trash2 } from "../Icons";
+import { PanelLeft, PanelRight, PanelRightClose, Trash2 } from "../Icons";
 import { IconButton } from "./IconButton";
 
 // #region recipe: Titlebar panel toggles
@@ -15,6 +15,17 @@ function PanelToggles() {
 }
 // #endregion
 
+// #region recipe: Panel toggle shows on by icon colour
+function PanelToggleOn() {
+  return (
+    <ButtonContainer size="icon-sm">
+      <IconButton label="Show inspector" pressed={false}><PanelRight size="md" /></IconButton>
+      <IconButton label="Hide inspector" pressed tone="butler"><PanelRight size="md" /></IconButton>
+    </ButtonContainer>
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "An icon-only action with a required label that doubles as its tooltip.",
   whenToUse: ["An action whose icon is universally understood (close, back, panel toggles)", "Compact row or toolbar actions"],
@@ -23,7 +34,14 @@ export const guidance: ShowcaseGuidance = {
     { when: "Copying text with confirmation", use: "CopyButton" },
     { when: "A rounded chip with an icon and text", use: "PillButton" },
   ],
-  recipes: [{ name: "Titlebar panel toggles", description: "Group icon buttons with ButtonContainer size icon-sm.", render: () => <PanelToggles /> }],
+  recipes: [
+    { name: "Titlebar panel toggles", description: "Group icon buttons with ButtonContainer size icon-sm.", render: () => <PanelToggles /> },
+    {
+      name: "Panel toggle shows on by icon colour",
+      description: "A title-bar panel toggle (inspector, browser) keeps one icon: off is the default tone, on is tone=\"butler\" with pressed (aria-pressed). Never a pressed fill; the label says what a press does.",
+      render: () => <PanelToggleOn />,
+    },
+  ],
   doDont: [
     {
       do: { caption: "The label says what happens; the tooltip shows it on hover and focus.", render: () => <IconButton label="Delete row"><Trash2 size="md" /></IconButton> },
