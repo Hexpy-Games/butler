@@ -8,12 +8,6 @@ startupTiming("entry");
 // A web tab GPU reset must not block the trusted App origin from restoring WebGL.
 // Chromium 152 has no per-origin exemption; the Browser five-loss breaker remains.
 app.commandLine.appendSwitch("disable-domain-blocking-for-3d-apis");
-// Investigation prototype: Chromium 152's native overlay path, before ready.
-// Opt in explicitly; this process-wide feature also affects browser web content.
-if (process.env.BUTLER_APP_OVERLAY_SCROLLBARS === "1") {
-  const features = app.commandLine.getSwitchValue("enable-features").split(",").filter(Boolean);
-  app.commandLine.appendSwitch("enable-features", [...new Set([...features, "OverlayScrollbar"])].join(","));
-}
 app.once("will-finish-launching", () => startupTiming("will_finish_launching"));
 app.setName("Butler");
 if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
