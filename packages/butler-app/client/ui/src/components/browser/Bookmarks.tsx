@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bookmark, Box, Button, ButtonContainer, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, Folder, DropdownMenuTrigger, EmptyLine, Grid, IconButton, Input, PageContainer, ScrollArea, Section, Stack, Typo } from "@/butler-ds";
+import { Bookmark, Tag, Box, Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, Folder, DropdownMenuTrigger, EmptyLine, Grid, IconButton, Input, PageContainer, ScrollArea, Section, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
@@ -34,11 +34,13 @@ export function NewTabPage() {
   const page = useLibraryPage("bookmark");
   const scraps = useLibraryPage("scrap");
   const [attachment, setAttachment] = useState<LibraryItem>(), [folder, setFolder] = useState<LibraryItem>();
+  const folders = [...new Set(page.items.map(item => item.folder ?? ""))];
   return <ScrollArea fill><PageContainer width="full" gutter="xl"><Box paddingY="xl"><Stack gap="xl"><Section title={appCopy.browser.bookmarks}>
-    <Grid columns={{ base: "3", wide: "4" }} gap="md">{page.items.map(item => <Stack key={item.id} gap="xs">
-      <LibraryItemCard item={item} onAttach={() => setAttachment(item)} />
-      <ButtonContainer size="xs"><Button size="xs" variant="ghost" onClick={() => setFolder(item)}>{item.folder || appCopy.browser.bookmarkFolder}</Button></ButtonContainer>
-    </Stack>)}</Grid>
+    <Stack gap="lg">{folders.map(name => <Stack key={name} gap="sm">
+      {name && <Tag icon={<Folder size="xs" />} data-test-class="bookmark-folder">{name}</Tag>}
+      <Grid columns={{ base: "3", wide: "4" }} gap="md">{page.items.filter(item => (item.folder ?? "") === name).map(item =>
+        <LibraryItemCard key={item.id} item={item} onAttach={() => setAttachment(item)} onFolder={() => setFolder(item)} />)}</Grid>
+    </Stack>)}</Stack>
     {!page.loading && !page.items.length && <EmptyLine message={page.failed ? appCopy.browser.failed : appCopy.browser.emptyLibrary} />}
     {page.next_cursor && <Button variant="ghost" disabled={page.loading} onClick={page.more}>{appCopy.browser.loadMore}</Button>}
   </Section><Section title={appCopy.browser.recentScraps} actions={<Button size="xs" variant="ghost" onClick={() => useButlerStore.getState().setView({ kind: "library" })}>{appCopy.browser.viewAll}</Button>}>

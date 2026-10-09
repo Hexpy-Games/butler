@@ -64,6 +64,8 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     })()`);
     const call = async <T>(op: string, input: unknown = {}) => page!.expression<T>(`window.butlerBrowser.call(${JSON.stringify(op)},${JSON.stringify(input)})`);
     const shot = async (name: string, preservePointer = false) => {
+      // An occluded Electron renderer can pause rAF; focus before awaiting paint.
+      await main(`${module}('electron').app.focus({steal:true});${win}.show();${win}.focus();${win}.moveTop();${win}.webContents.focus()`);
       if (!preservePointer) await page!.movePointer(900, 24);
       await waitBrowser(()=>page!.expression("!document.querySelector('[data-slot=tooltip-content]')"), "tooltip closed before screenshot");
       await page!.evaluate(() => new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));

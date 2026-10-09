@@ -2,13 +2,39 @@ import { randomUUID } from "node:crypto";
 import { isPickShortcut } from "../butler-platform/browser-shortcuts.mjs";
 
 /** DOM content is read in an isolated world, never inserted into the page. */
-function elementAt(x, y, documentToken) {
+function elementAt(x, y, documentToken, capture) {
   const element = document.elementFromPoint(x, y);
   if (!element || element === document.documentElement || element === document.body) return null;
   // A crop must not retain a secret field. Reject ancestors containing one too.
   if (element.matches('input,textarea,iframe,[contenteditable="true"]') || element.querySelector('input,textarea,[contenteditable="true"]')) return null;
   const r = element.getBoundingClientRect();
-  const rect = { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.min(innerWidth, r.right) - Math.max(0, r.x), height: Math.min(innerHeight, r.bottom) - Math.max(0, r.y) };
+  const clip = box => ({ x: Math.max(0, box.left), y: Math.max(0, box.top),
+    width: Math.min(innerWidth, box.right) - Math.max(0, box.left), height: Math.min(innerHeight, box.bottom) - Math.max(0, box.top) });
+  const rect = clip(r);
+  if (!capture) return rect.width > 0 && rect.height > 0 ? { rect, tag: element.tagName.toLowerCase() } : null;
+  // Text ranges avoid a block's empty width; visual media contribute their own boxes.
+  const content = [];
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      const parent = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      const style = getComputedStyle(parent);
+      if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0) return NodeFilter.FILTER_REJECT;
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      return node.matches("img,svg,canvas,video") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+    },
+  });
+  if (element.matches("img,svg,canvas,video")) content.push(r);
+  else while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const range = document.createRange(); range.selectNodeContents(node);
+      content.push(...range.getClientRects());
+    } else content.push(node.getBoundingClientRect());
+  }
+  const visible = content.filter(box => box.width > 0 && box.height > 0 && box.right > rect.x && box.bottom > rect.y && box.left < r.right && box.top < r.bottom);
+  const cropRect = visible.length ? clip({ left: Math.max(r.left, Math.min(...visible.map(box => box.left))),
+    top: Math.max(r.top, Math.min(...visible.map(box => box.top))), right: Math.min(r.right, Math.max(...visible.map(box => box.right))),
+    bottom: Math.min(r.bottom, Math.max(...visible.map(box => box.bottom))) }) : rect;
   if (rect.width <= 0 || rect.height <= 0) return null;
   const text = element.innerText || element.textContent || element.getAttribute("alt") || "";
   const title = (element.getAttribute("aria-label") || element.getAttribute("alt") || text || element.tagName).trim().split("\n")[0];
@@ -16,7 +42,7 @@ function elementAt(x, y, documentToken) {
   // cannot turn a drag of an already picked DOM node into another selection.
   const state = globalThis.__butlerPickNodes ??= { nodes: new Map(), documentToken };
   if (!state.nodes.has(element)) state.nodes.set(element, state.nodes.size + 1);
-  return { title, text, tag: element.tagName.toLowerCase(), rect, identity: `${state.documentToken}:${state.nodes.get(element)}` };
+  return { title, text, tag: element.tagName.toLowerCase(), rect, cropRect, identity: `${state.documentToken}:${state.nodes.get(element)}` };
 }
 export class BrowserSelection {
   constructor(browser) { this.browser = browser; }
@@ -30,7 +56,7 @@ export class BrowserSelection {
     this.chrome = null;
     if (value && !this.browser.pointer.acceptInput(tab, true)) return;
     tab.picking = value === true;
-    this.down = null;
+    this.down = null; this.clearHover(tab);
     this.browser.publish();
     if (tab.picking) this.browser.pointer.view?.webContents.focus();
   }
@@ -46,13 +72,39 @@ export class BrowserSelection {
     });
     return { status: "ok", tab: tab.id, untrusted_content: { kind: "web_page_data", elements } };
   }
+  clearHover(tab) {
+    tab.pickHover = null; this.hoverInput = null; this.hoverRevision = (this.hoverRevision ?? 0) + 1;
+  }
+  async read(tab, input, capture = false) {
+    const scale = tab.bounds?.scale ?? 1;
+    const code = `(${elementAt.toString()})(${JSON.stringify(input.x / scale)},${JSON.stringify(input.y / scale)},${JSON.stringify(randomUUID())},${capture})`;
+    return tab.view.webContents.executeJavaScriptInIsolatedWorld(1004, [{ code }]);
+  }
+  hover(tab, input) {
+    this.hoverRevision = (this.hoverRevision ?? 0) + 1;
+    this.hoverInput = { tab, input, epoch: tab.epoch, revision: this.hoverRevision };
+    if (this.hoverPending) return;
+    this.hoverPending = true;
+    void this.updateHover().finally(() => { this.hoverPending = false; });
+  }
+  async updateHover() {
+    while (this.hoverInput) {
+      const { tab, input, epoch, revision } = this.hoverInput; this.hoverInput = null;
+      const result = await this.read(tab, input).catch(() => null);
+      if (revision !== this.hoverRevision || !tab.picking || tab.epoch !== epoch || this.browser.activeId !== tab.id) continue;
+      tab.pickHover = result ? { rect: result.rect, tag: result.tag } : null;
+      this.browser.pointer.sync(tab);
+    }
+  }
   async hit(tab, input) {
     const epoch = tab.epoch, url = tab.url;
-    const scale = tab.bounds?.scale ?? 1;
-    const code = `(${elementAt.toString()})(${JSON.stringify(input.x / scale)},${JSON.stringify(input.y / scale)},${JSON.stringify(randomUUID())})`;
-    const result = await tab.view.webContents.executeJavaScriptInIsolatedWorld(1004, [{ code }]);
+    const result = await this.read(tab, input, true);
     if (!result) return null;
-    const rect = Object.fromEntries(Object.entries(result.rect).map(([key, value]) => [key, Math.round(value * scale)]));
+    const scale = tab.bounds?.scale ?? 1;
+    const crop = result.cropRect;
+    const rect = { x: Math.floor(crop.x * scale), y: Math.floor(crop.y * scale),
+      width: Math.ceil((crop.x + crop.width) * scale) - Math.floor(crop.x * scale),
+      height: Math.ceil((crop.y + crop.height) * scale) - Math.floor(crop.y * scale) };
     const image = await tab.view.webContents.capturePage(rect, { stayHidden: true });
     if (image.isEmpty()) return null;
     if (!this.browser.tabs.has(tab.id) || tab.epoch !== epoch || tab.url !== url) return null;
@@ -63,6 +115,7 @@ export class BrowserSelection {
   }
   mouse(tab, input) {
     if (!tab?.picking || !["mouseDown", "mouseMove", "mouseUp"].includes(input.type)) return false;
+    if (input.type === "mouseMove") this.hover(tab, input);
     if (input.type === "mouseDown" && input.button === "left") {
       this.down = { x: input.x, y: input.y, item: this.hit(tab, input).catch(() => null) };
     } else if (input.type === "mouseMove" && this.down && Math.hypot(input.x - this.down.x, input.y - this.down.y) > 6) {
