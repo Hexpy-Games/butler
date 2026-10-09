@@ -1,8 +1,20 @@
 .window {
-  /* The native lights' reserve in a pop-up (hiddenInset): lights at x 20,
-     three 12px buttons, 8px gaps. Own value: the main window's
+  /* macOS: the same leading geometry as TitlebarShell. The main window keeps
+     --traffic-controls-width (72px) for lights at x 20; a pop-up's lights sit
+     8px nearer the edge, at x 12 (butler-platform/popup-window.mjs), so its reserve
+     is 64px. After the reserve comes the toggle inset, and the lock sits where
+     the floating toggle's glyph sits, so the gap from the green light matches
+     the main titlebar on every macOS light size. Own value: the main window's
      --traffic-controls-width is 0 inside a browser-hosted shell. */
-  --popup-lights-reserve: 72px;
+  --popup-lights-reserve: 64px;
+  --popup-leading-start: calc(
+    var(--popup-lights-reserve) + var(--chrome-toggle-inset) +
+      (
+        var(--chrome-floating-toggle-size) -
+          var(--chrome-floating-toggle-icon-size)
+      ) /
+      2
+  );
 
   display: flex;
   width: 100%;
@@ -26,7 +38,7 @@
 }
 
 .window[data-platform="darwin"] .bar {
-  padding-inline-start: var(--popup-lights-reserve);
+  padding-inline-start: var(--popup-leading-start);
 }
 
 .lock {
