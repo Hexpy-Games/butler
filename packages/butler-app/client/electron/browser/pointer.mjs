@@ -138,6 +138,7 @@ export class BrowserPointer {
     }
     if (this.browser.selection.mouse(tab, input)) return;
     if (this.acceptInput(tab, input.type === "mouseDown")) {
+      if (input.type === "mouseDown") tab.view.webContents.focus();
       tab.view.webContents.sendInputEvent(input);
     }
   }

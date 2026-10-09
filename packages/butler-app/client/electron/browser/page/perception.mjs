@@ -10,7 +10,7 @@ export function styleValue(element, property) {
 export function boxOf(element) {
   const cache = globalThis.__butlerPerceptionCache;
   if (!cache) return element.getBoundingClientRect();
-  if (!cache.boxes.has(element)) cache.boxes.set(element,element.getBoundingClientRect());
+  if (!cache.boxes.has(element)) cache.boxes.set(element, element.getBoundingClientRect());
   return cache.boxes.get(element);
 }
 // Functions are serialized into a Butler-owned isolated world, shared by the L1 provider.
@@ -19,49 +19,49 @@ export function parentElementOf(element) {
 }
 export function clippingBounds(element) {
   const state=globalThis.__butlerPerceptionCache, cache=state?.clipping;
-  if (!element) return {left:0,top:0,right:state?.viewport?.width ?? innerWidth,bottom:state?.viewport?.height ?? innerHeight};
+  if (!element) return { left:0, top:0, right:state?.viewport?.width ?? innerWidth, bottom:state?.viewport?.height ?? innerHeight };
   if (cache?.has(element)) return cache.get(element);
   const inherited=clippingBounds(parentElementOf(element));
-  const clipsX=/(hidden|clip|scroll|auto)/u.test(styleValue(element,"overflowX"));
-  const clipsY=/(hidden|clip|scroll|auto)/u.test(styleValue(element,"overflowY"));
+  const clipsX=/(hidden|clip|scroll|auto)/u.test(styleValue(element, "overflowX"));
+  const clipsY=/(hidden|clip|scroll|auto)/u.test(styleValue(element, "overflowY"));
   let result=inherited;
   if (clipsX || clipsY) {
     const box=boxOf(element);
-    result={left:clipsX?Math.max(inherited.left,box.left):inherited.left,
-      right:clipsX?Math.min(inherited.right,box.right):inherited.right,
-      top:clipsY?Math.max(inherited.top,box.top):inherited.top,
-      bottom:clipsY?Math.min(inherited.bottom,box.bottom):inherited.bottom};
+    result={ left:clipsX?Math.max(inherited.left, box.left):inherited.left,
+      right:clipsX?Math.min(inherited.right, box.right):inherited.right,
+      top:clipsY?Math.max(inherited.top, box.top):inherited.top,
+      bottom:clipsY?Math.min(inherited.bottom, box.bottom):inherited.bottom };
   }
-  cache?.set(element,result);
+  cache?.set(element, result);
   return result;
 }
 export function rectangle(element) {
   const cache=globalThis.__butlerPerceptionCache?.rectangles;
   if (cache?.has(element)) return cache.get(element);
   const box=boxOf(element), clip=clippingBounds(parentElementOf(element));
-  const left=Math.max(clip.left,box.left), top=Math.max(clip.top,box.top);
-  const right=Math.min(clip.right,box.right), bottom=Math.min(clip.bottom,box.bottom);
-  const rect={x:left,y:top,width:Math.max(0,right-left),height:Math.max(0,bottom-top)};
-  cache?.set(element,rect);
+  const left=Math.max(clip.left, box.left), top=Math.max(clip.top, box.top);
+  const right=Math.min(clip.right, box.right), bottom=Math.min(clip.bottom, box.bottom);
+  const rect={ x:left, y:top, width:Math.max(0, right-left), height:Math.max(0, bottom-top) };
+  cache?.set(element, rect);
   return rect;
 }
 export function paintState(element) {
   const cache=globalThis.__butlerPerceptionCache?.paint;
   if(cache?.has(element)) return cache.get(element);
-  const parent=parentElementOf(element), inherited=parent?paintState(parent):{opacity:1,invisible:false};
-  const opacity=inherited.opacity*Number(styleValue(element,"opacity"));
-  const clip=styleValue(element,"clip"), clipPath=styleValue(element,"clipPath");
-  const invisible=inherited.invisible || styleValue(element,"display")==="none" || styleValue(element,"visibility")!=="visible"
+  const parent=parentElementOf(element), inherited=parent?paintState(parent):{ opacity:1, invisible:false };
+  const opacity=inherited.opacity*Number(styleValue(element, "opacity"));
+  const clip=styleValue(element, "clip"), clipPath=styleValue(element, "clipPath");
+  const invisible=inherited.invisible || styleValue(element, "display")==="none" || styleValue(element, "visibility")!=="visible"
     || element.hasAttribute("inert") || element.getAttribute("aria-hidden")==="true"
     || clip!=="auto" && /rect\(0px, 0px, 0px, 0px\)/u.test(clip)
     || clipPath==="inset(100%)" || clipPath==="circle(0px)";
-  const result={opacity,invisible};cache?.set(element,result);return result;
+  const result={ opacity, invisible };cache?.set(element, result);return result;
 }
 export function rendering(element) {
   const cache=globalThis.__butlerPerceptionCache?.renderings;
   if(cache?.has(element)) return cache.get(element);
   const result=renderingState(element);
-  cache?.set(element,result);
+  cache?.set(element, result);
   return result;
 }
 export function renderingState(element) {
@@ -70,9 +70,20 @@ export function renderingState(element) {
   if (fullyClipped(element)) return "invisible";
   const box = rectangle(element);
   if (box.width < 4 || box.height < 4) return "tiny";
-  if (parseFloat(styleValue(element,"fontSize")) < 6 && element.textContent?.trim()) return "tiny";
-  if (contrast(element) < 1.5 && element.textContent?.trim()) return "low_contrast";
+  const text = paintedTextParents(element);
+  if (text.length && text.every(parent => parseFloat(styleValue(parent, "fontSize")) < 6)) return "tiny";
+  if (text.length && text.every(parent => contrast(parent) < 1.5)) return "low_contrast";
   return null;
+}
+export function paintedTextParents(element) {
+  const parents = new Set(), walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode, parent = node.parentElement;
+    if (!parent || !node.textContent?.trim() || parent.closest("script,style,noscript")) continue;
+    const paint = paintState(parent);
+    if (!paint.invisible && paint.opacity >= .1 && !fullyClipped(parent)) parents.add(parent);
+  }
+  return [...parents];
 }
 export function contrast(element) {
   const rgb = value => {
@@ -92,9 +103,9 @@ export function contrast(element) {
   const luminance = values => {
     const cache=globalThis.__butlerPerceptionCache?.luminances;
     if(cache?.has(values)) return cache.get(values);
-    const value=values.slice(0,3).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4)
-      .reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);
-    cache?.set(values,value);return value;
+    const value=values.slice(0, 3).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4)
+      .reduce((sum, v, i)=>sum+v*[0.2126, 0.7152, 0.0722][i], 0);
+    cache?.set(values, value);return value;
   };
   const a = luminance(fg), b = luminance(bg);
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
@@ -103,12 +114,16 @@ export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
   const page=globalThis.__butlerPerceptionCache?.page;
   const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: "canvas", img: "image", summary: "button" }[tag])
+    ?? (/^h[1-6]$/u.test(tag) ? "heading" : undefined)
     ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
-  const clickable = Boolean(role && role !== "image" || element.draggable || element.hasAttribute("onclick") || discoverPointer && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
+  const interactiveRole = /^(button|link|combobox|textbox|checkbox|radio|slider|spinbutton|switch|option|menuitem|menuitemcheckbox|menuitemradio|tab|treeitem|canvas|scroll_region)$/u.test(role);
+  const ancestor = parentElementOf(element)?.closest('button,a,input,select,textarea,summary,[role="button"],[role="option"],[role="tab"],[role="menuitem"],[onclick],[contenteditable="true"]');
+  const clickable = Boolean(interactiveRole || element.draggable || element.hasAttribute("onclick") || discoverPointer && !ancestor && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
   if (!clickable && !/^(img|h[1-6])$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
   const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
+  name ||= globalThis.__butlerObservation?.accessibleNames?.get(element) ?? "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
@@ -117,6 +132,13 @@ export function semantic(element, discoverPointer = true) {
 export function hitAt(root, x, y) {
   let hit = root.elementFromPoint(x, y);
   while (hit?.shadowRoot) { const deeper = hit.shadowRoot.elementFromPoint(x, y); if (!deeper || deeper === hit) break; hit = deeper; }
+  return hit;
+}
+export function actionableTarget(hit) {
+  for (let element = hit; element; element = parentElementOf(element)) {
+    const meaning = semantic(element);
+    if (meaning.clickable && (element === hit || meaning.role !== "scroll_region")) return element;
+  }
   return hit;
 }
 export function visiblePoint(element) {
@@ -135,7 +157,7 @@ export function visiblePoint(element) {
 
         if (styleValue(parent, "position") === "fixed" && Number(styleValue(parent, "zIndex")) > 0) coverer = parent;
       }
-      blocker ??= coverer;
+      blocker ??= coverer === hit ? actionableTarget(hit) : coverer;
     }
   }
   return { blocker };
@@ -192,12 +214,12 @@ export function modalLayer() {
   const declared = [...document.querySelectorAll('dialog[open],[aria-modal="true"]')]
     .filter(element => !paintState(element).invisible && paintState(element).opacity >= .1);
   let modal = declared.at(-1) ?? null;
-  for (const [x,y] of [[innerWidth/2,innerHeight/2],[innerWidth/4,innerHeight/4],[innerWidth*3/4,innerHeight*3/4]]) {
-    for (let hit = hitAt(document,x,y); hit; hit = parentElementOf(hit)) {
-      if (styleValue(hit,"position") !== "fixed" || Number(styleValue(hit,"zIndex")) <= 0) continue;
+  for (const [x, y] of [[innerWidth/2, innerHeight/2], [innerWidth/4, innerHeight/4], [innerWidth*3/4, innerHeight*3/4]]) {
+    for (let hit = hitAt(document, x, y); hit; hit = parentElementOf(hit)) {
+      if (styleValue(hit, "position") !== "fixed" || Number(styleValue(hit, "zIndex")) <= 0) continue;
       const box = rectangle(hit);
       if (box.width * box.height < innerWidth * innerHeight / 2 || paintState(hit).opacity < .1) continue;
-      if (!modal || Number(styleValue(hit,"zIndex")) > Number(styleValue(modal,"zIndex"))) modal = hit;
+      if (!modal || Number(styleValue(hit, "zIndex")) > Number(styleValue(modal, "zIndex"))) modal = hit;
     }
   }
   if (cache) cache.modal = modal;
@@ -208,8 +230,25 @@ export function modalLayer() {
 export function scrollRegion(element) {
   const box = boxOf(element);
   if (box.width < 4 || box.height < 4 || box.top >= innerHeight || box.bottom <= 0) return false;
-  const vertical = /^(auto|scroll)$/u.test(styleValue(element,"overflowY"));
-  const horizontal = /^(auto|scroll)$/u.test(styleValue(element,"overflowX"));
+  const vertical = /^(auto|scroll)$/u.test(styleValue(element, "overflowY"));
+  const horizontal = /^(auto|scroll)$/u.test(styleValue(element, "overflowX"));
   return vertical && element.scrollHeight > element.clientHeight
     || horizontal && element.scrollWidth > element.clientWidth;
+}
+
+/** Semantic layout geometry supports cropping without site selectors or guessed coordinates. */
+export function layoutRegions(elements) {
+  const regions = [];
+  for (const element of elements) {
+    const role = element.getAttribute("role"), tag = element.localName;
+    const kind = /^(banner|navigation|main|complementary|contentinfo)$/u.test(role ?? "") ? role
+      : /^(header|nav|main|aside|footer)$/u.test(tag) ? tag : null;
+    if (!kind) continue;
+    const paint = paintState(element), rect = rectangle(element);
+    if (paint.invisible || paint.opacity < .1 || fullyClipped(element) || rect.width < 4 || rect.height < 4) continue;
+    regions.push({ kind, name: element.getAttribute("aria-label") || kind,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      contains_fields: Boolean(element.querySelector('input,select,textarea,canvas,[contenteditable="true"]')) });
+  }
+  return regions;
 }

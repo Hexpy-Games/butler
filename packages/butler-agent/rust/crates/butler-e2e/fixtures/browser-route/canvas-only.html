@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>Canvas controls</title>
+<style>html,body{margin:0;background:#eef4ec}canvas{display:block}</style>
+<canvas width="1280" height="800"></canvas>
+<script>
+const canvas=document.querySelector('canvas'),context=canvas.getContext('2d');
+const state={clicked:false,dragged:false,scrolled:false};let start;
+function draw(){
+ context.fillStyle='#eef4ec';context.fillRect(0,0,1280,800);
+ context.fillStyle=state.clicked?'#16a34a':'#dc2626';context.fillRect(180,140,120,80);
+ context.fillStyle='#172033';context.font='22px sans-serif';context.fillText('Click this marker',160,120);
+ context.fillText('Drag the map right, then scroll down',420,400);
+ context.fillText(JSON.stringify(state),420,450);
+ context.strokeStyle=state.dragged?'#16a34a':'#2563eb';context.lineWidth=12;
+ context.beginPath();context.moveTo(460,300);context.lineTo(state.dragged?760:600,300);context.stroke();
+ context.fillStyle=state.scrolled?'#16a34a':'#2563eb';context.fillRect(900,600,80,80);
+}
+canvas.addEventListener('pointerdown',e=>{start=[e.offsetX,e.offsetY]});
+canvas.addEventListener('pointerup',e=>{
+ if(start&&e.offsetX-start[0]>80)state.dragged=true;
+ else if(e.offsetX>=180&&e.offsetX<=300&&e.offsetY>=140&&e.offsetY<=220)state.clicked=true;
+ start=null;draw();
+});
+canvas.addEventListener('wheel',e=>{e.preventDefault();state.scrolled=e.deltaY>0;draw()},{passive:false});
+draw();
+</script>

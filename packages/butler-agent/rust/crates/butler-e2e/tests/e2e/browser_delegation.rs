@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 use super::steward_presentation::stub;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup, security::AdminClient};
 use reqwest::{Method, Response};
 use serde_json::{Value, json};
@@ -42,6 +43,47 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
         .to_owned();
     assert_ne!(child, "");
     assert_ne!(child, "general");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("safePathLabel"))
+        {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        script.requests.lock().unwrap().iter().any(|request| request
+            .to_string()
+            .contains("attached to your reply automatically")),
+        "the parent model receives the canonical capture path, not only an evidence id"
+    );
+    assert!(
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.to_string().contains("input_image"))
+    );
+    {
+        let requests = script.requests.lock().unwrap();
+        for recovery in [
+            "Retry with the exact bound work_id:",
+            "Use the exact bound work_id:",
+        ] {
+            assert!(
+                requests
+                    .iter()
+                    .any(|request| request.to_string().contains(recovery)),
+                "a wrong Work identifier returns its exact bound recovery target"
+            );
+        }
+    }
     let navigation = s.gw.get("/navigation").await?;
     assert!(
         !navigation.text.contains(&child),
@@ -60,7 +102,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
 
 async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), HarnessError> {
     let mut buffer = String::new();
-    for op in ["tab.open", "tabs.list", "tab.observe"] {
+    for op in ["tab.open", "tabs.list", "tab.observe", "tab.screenshot"] {
         let frame = next_call(&mut stream, &mut buffer, op).await?;
         assert_eq!(
             frame["session"], "general",
@@ -81,7 +123,10 @@ async fn serve_host(mut stream: Response, admin: AdminClient) -> Result<(), Harn
         let result = match op {
             "tabs.list" => json!({"tabs":[tab]}),
             "tab.observe" => {
-                json!({"status":"ok","tab":"parent-tab","obs":"observation","url":"https://example.com/","text":"Parent page"})
+                json!({"status":"ok","tab":"parent-tab","obs":"parent-observation","url":"https://example.com/","text":"Parent page","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
+            }
+            "tab.screenshot" => {
+                json!({"status":"ok","tab":"parent-tab","url":"https://example.com/","image":{"mime_type":"image/jpeg","data":STANDARD.encode(include_bytes!("browser_outputs/pixel.jpg"))}})
             }
             _ => json!({"status":"ok","tab":"parent-tab","url":"https://example.com/"}),
         };

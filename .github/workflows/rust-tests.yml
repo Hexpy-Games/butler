@@ -26,6 +26,46 @@ on:
 permissions:
   contents: read
 jobs:
+  browser-fixtures:
+    if: ${{ !inputs.performance-only && inputs.e2e && inputs.platform == 'darwin-arm64' }}
+    name: Offline browser fixtures
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/bun-setup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive
+      - name: Prepare the existing Agent and Electron UI
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent"
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile
+          python3 .github/scripts/isolated.py bun run app:ui:build
+      - name: Run canvas and route fixtures with stub model responses
+        env:
+          BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/rust-archive/butler-agent
+          BUTLER_E2E_TIER: stub
+        run: |
+          BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"
+          export BUTLER_SMOKE_ELECTRON_EXECUTABLE
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/canvas"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-canvas-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/route"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-route-electron.ts
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-fixtures-${{ inputs.platform }}
+          path: ${{ runner.temp }}/browser-fixtures
+          if-no-files-found: error
+          retention-days: 7
+      - if: always()
+        uses: ./.github/actions/assert-home-untouched
   workspace:
     if: ${{ !inputs.performance-only && inputs.workspace }}
     runs-on: ${{ inputs.runner }}

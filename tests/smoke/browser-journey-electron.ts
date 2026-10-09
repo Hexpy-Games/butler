@@ -10,10 +10,16 @@ import { togglePane } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
-const stub = browserStub(), app = await browserAgentApp(evidence, stub.handler);
+const stub = browserStub(), app = await browserAgentApp(evidence, stub.handler, undefined, {
+  stubReply: request => {
+    const path = JSON.stringify(request.messages).match(/artifacts\/public-data\/browser-[a-f0-9-]+\.jpg/u)?.[0];
+    return path ? `![Blue dress](${path})` : "Fixture published.";
+  },
+});
 const fixture = `<!doctype html><meta charset="utf-8"><title>Browser journey</title>
 <style>body{font:18px system-ui;padding:40px;background:#f4f5fa;color:#172033}main{background:white;padding:30px}button{padding:14px}input{width:300px}img{display:block;width:180px;height:120px}</style>
 <main><h1>Browser journey</h1><button onclick="document.querySelector('#result').textContent='Confirmed'">Confirm</button>
+<button aria-label="Icon confirm" style="position:absolute;left:900px;top:30px;width:48px;height:48px;padding:0" onclick="document.querySelector('#result').textContent='Icon confirmed'"><svg aria-hidden="true" width="40" height="40"><circle cx="20" cy="20" r="18" fill="#365bf5"/></svg></button>
 <p id="result">Ready</p><label>Brightness <input type="range" aria-label="Brightness" value="20" oninput="document.querySelector('#value').textContent=this.value"></label><p id="value">20</p>
 <img alt="Blue dress" src="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="#365bf5"/><path d="M80 20h20l30 85H50z" fill="#fff"/></svg>')}"></main>`;
 
@@ -47,6 +53,9 @@ try {
   stub.set([
     () => ({ name: "tool_describe", arguments: { ids: names.map(name => `native:${name}`) } }),
     () => bridgeBrowser("browser_open", { url: view.url }), observe,
+    request => { const o=latestBrowser(request,"obs");return bridgeBrowser("browser_act",{tab:o.tab,observation:o.obs,steps:[{action:"click",point:[739,43],expect:"button Icon confirm"}]}); },
+    observe,
+    request => { assert.ok((latestBrowser(request,"obs").untrusted_content as {text:string}).text.includes("Icon confirmed")); return observe(request); },
     request => { const { ref, ...args } = observed(request, "button", "Confirm"); return bridgeBrowser("browser_act", { ...args, steps: [{ action: "click", ref }] }); },
     observe,
     request => { const { ref, ...args } = observed(request, "slider", "Brightness"); return bridgeBrowser("browser_act", { ...args, steps: [{ action: "drag", ref, offset: [100, 0] }] }); },
@@ -56,7 +65,7 @@ try {
   ]);
   const started = performance.now(); await send("Open, observe, click Confirm by ref, drag Brightness, attach the Blue dress crop and finish.");
   const turnElapsedMs = performance.now() - started;
-  assert.ok(!JSON.stringify(stub.results).includes('"stubFailure"'), JSON.stringify(stub.results));
+  assert.deepEqual(stub.results.filter(result=>result&&typeof result==="object"&&"stubFailure" in result),[]);
   const snapshot = await app.call<{ tabs: Array<{ id: string; agent: boolean; inUse: boolean; busy: boolean }> }>("state");
   const tab = snapshot.tabs.find(item => item.agent); assert.ok(tab);
   assert.equal(tab.inUse, false); assert.equal(tab.busy, false);
@@ -87,6 +96,7 @@ try {
     await app.shot(`${language}-${theme}-${width}-docked-released`);
     await togglePane(app, false);
     await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-test-class=message-artifact-list]')].some(a=>a.textContent.includes('.jpg'))"), "reply crop is visible in the App");
+    await waitBrowser(() => app.page.expression("[...document.querySelectorAll('img')].some(img=>img.alt==='Blue dress'&&img.complete&&img.naturalWidth>0)"), "signed image is decoded inline in the reply");
     await app.shot(`${language}-${theme}-${width}-reply`);
   }
   const secure = await app.main<{ masked: boolean; cropReason: string; scoped: string }>(`(async()=>{
@@ -95,15 +105,15 @@ try {
     const args={op:'tab.observe',session:'general',tab:t.id,args:{include_image:true,look:'always'}};
     const r=await b.execute(args),node=r.nodes.find(n=>n.secure);
     const image=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})('electron').nativeImage.createFromDataURL('data:image/jpeg;base64,'+r.image.data);
-    const raw=await t.view.webContents.capturePage(),scale=(t.bounds?.scale??1)*image.getSize().width/raw.getSize().width;
+    const viewport=await t.view.webContents.executeJavaScript('innerWidth'),scale=image.getSize().width/viewport;
     const x=Math.round((node.rect.x+node.rect.width/2)*scale),y=Math.round((node.rect.y+node.rect.height/2)*scale),pixels=image.getBitmap(),i=(y*image.getSize().width+x)*4;
     const crop=await b.execute({op:'tab.screenshot',session:'general',tab:t.id,args:{observation:r.obs,ref:node.ref}});
     await t.view.webContents.executeJavaScript("document.querySelector('main').insertAdjacentHTML('beforeend','<iframe src=about:blank></iframe>')");
     const scoped=await b.execute({...args,args:{...args.args,frame:'f0'}});
-    return {masked:pixels[i]<20&&pixels[i+1]<20&&pixels[i+2]<20,cropReason:crop.reason,scoped:scoped.image_status};
+    return {masked:pixels[i]<20&&pixels[i+1]<20&&pixels[i+2]<20,cropReason:crop.reason,scoped:Boolean(scoped.image?.data)};
   })()`);
   assert.equal(secure.masked, true); assert.equal(secure.cropReason, "secure_field");
-  assert.equal(secure.scoped, "frame_scoped");
-  writeFileSync(join(evidence, "journey.json"), JSON.stringify({ turnElapsedMs, elapsedMs: performance.now() - started, native, pixels, secure, reply, tabs: snapshot.tabs.map(item=>({...item,url:"[local fixture]"})), requestSchemas: app.gateway.stubModelCalls.filter(call => call.stream).map(call => call.body.tools) }, null, 2));
+  assert.equal(secure.scoped, true, "frame-scoped DOM observations also carry fresh, secure-masked viewport pixels");
+  writeFileSync(join(evidence, "journey.json"), JSON.stringify({ turnElapsedMs, elapsedMs: performance.now() - started, native, pixels, secure, reply, tabs: snapshot.tabs.map(item=>({ ...item, url:"[local fixture]" })), requestSchemas: app.gateway.stubModelCalls.filter(call => call.stream).map(call => call.body.tools) }, null, 2));
   console.log(JSON.stringify({ status: "passed", native, pixels, attachments: reply.attachments?.length }));
 } finally { await app.stop(); }

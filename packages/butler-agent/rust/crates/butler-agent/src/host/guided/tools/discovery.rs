@@ -22,13 +22,57 @@ pub(super) async fn execute(
     outer_call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     match call.name.as_str() {
-        "tool_search" => Box::pin(search(owner, &call.arguments, invocation.cancellation)).await,
+        "tool_search" => {
+            Box::pin(search_with_recovery(
+                owner,
+                &call.arguments,
+                invocation.cancellation,
+            ))
+            .await
+        }
         "tool_describe" => {
             Box::pin(describe(owner, &call.arguments, invocation.cancellation)).await
         }
         "tool_call" => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
         _ => Err(integrity("guided_bridge_tool_invalid")),
     }
+}
+
+async fn search_with_recovery(
+    owner: &GuidedTools,
+    args: &Map<String, Value>,
+    signal: &tokio_util::sync::CancellationToken,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = Box::pin(search(owner, args, signal)).await?;
+    let mut value: Value = result
+        .read()
+        .map_err(|_| integrity("guided_bridge_catalog_json"))?;
+    let filtered_empty = value
+        .get("results")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty)
+        && (args.contains_key("category") || args.contains_key("provider"));
+    if !filtered_empty {
+        return Ok(result);
+    }
+    let mut unfiltered = args.clone();
+    unfiltered.remove("category");
+    unfiltered.remove("provider");
+    let alternatives = Box::pin(search(owner, &unfiltered, signal)).await?;
+    let alternatives: Value = alternatives
+        .read()
+        .map_err(|_| integrity("guided_bridge_catalog_json"))?;
+    if let Some(record) = value.as_object_mut() {
+        record.insert(
+            "other_matches".into(),
+            alternatives
+                .get("results")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        );
+        record.insert("recovery_hint".into(), json!("No tools match the requested filters. This does not mean the capability is unavailable. Inspect other_matches from this session's native surface, describe an enabled match, or retry without provider/category filters."));
+    }
+    encoded(&value)
 }
 
 pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<String>) {

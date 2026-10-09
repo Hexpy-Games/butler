@@ -95,6 +95,7 @@ struct State {
     output_checks: u8,
     output_images: u8,
     visual_image_bytes: usize,
+    browser_image_bytes: HashMap<String, usize>,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
 }

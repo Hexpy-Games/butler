@@ -113,7 +113,7 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             2 => call(
                 "describe-browser",
                 "tool_describe",
-                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe"]}),
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot"]}),
             ),
             3 => call(
                 "open-browser",
@@ -131,6 +131,25 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
                 &json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
             ),
             6 => call(
+                "capture-browser",
+                "tool_call",
+                &json!({"id":"native:browser_screenshot","arguments":{"tab":"parent-tab","observation":"parent-observation"}}),
+            ),
+            7 => {
+                let mut wrong = work_id(body);
+                wrong.pop();
+                call(
+                    "wrong-browser-work",
+                    "record_work_disposition",
+                    &json!({"work_id":wrong,"disposition":"completed","summary":"Browser verified"}),
+                )
+            }
+            8 => call(
+                "wrong-browser-continuation",
+                "continue_work",
+                &json!({"work_id":format!("{}-wrong",work_id(body))}),
+            ),
+            9 => call(
                 "close-browser-work",
                 "record_work_disposition",
                 &json!({"work_id":work_id(body),"disposition":"completed","summary":"Browser verified",
