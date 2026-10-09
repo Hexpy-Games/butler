@@ -50,7 +50,6 @@ pub(super) fn select(
         channels,
         SeedOptions {
             max_seeds: 32,
-            time_bounded: false,
             context_only: false,
             lexical_partial: partial,
         },
