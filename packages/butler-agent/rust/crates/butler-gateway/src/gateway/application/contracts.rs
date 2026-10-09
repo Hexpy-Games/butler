@@ -154,6 +154,20 @@ pub trait AppBranchSummarizer: Send + Sync + 'static {
 }
 
 #[derive(Clone, Debug)]
+pub struct AppSessionTitleInput {
+    pub text: String,
+    pub model_ref: String,
+}
+
+pub trait AppSessionTitleGenerator: Send + Sync + 'static {
+    fn generate(
+        &self,
+        input: AppSessionTitleInput,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<String>;
+}
+
+#[derive(Clone, Debug)]
 pub struct AppAuthorityPage {
     pub requests: Vec<Value>,
     pub permissions: Vec<Value>,
@@ -326,6 +340,7 @@ pub struct AppApplicationDependencies {
     pub work_streams: Arc<dyn AppWorkStreamReader>,
     pub subsessions: Arc<dyn AppSubsessionPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
+    pub session_title_generator: Arc<dyn AppSessionTitleGenerator>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,
     pub setup: Arc<dyn super::AppSetupPort>,
 }

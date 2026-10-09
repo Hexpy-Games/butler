@@ -171,3 +171,5 @@ mod skills_cleanup;
 mod storage_concurrency_support;
 
 mod task_graphs;
+
+mod session_titles;

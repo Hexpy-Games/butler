@@ -1,6 +1,7 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
 use crate::host::AppSubsessions;
 
+mod composition;
 mod security_store;
 mod startup;
 
@@ -23,7 +24,9 @@ use butler_turn::btcc::BtccError;
 use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
-use crate::host::app::runtime_ports::{AppMemoryManagement, AppRuntimeInfo};
+use crate::host::app::runtime_ports::{
+    AppMemoryManagement, AppRuntimeInfo, AppSessionTitleGeneratorAdapter,
+};
 use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
@@ -124,93 +127,24 @@ impl AppServer {
         listener: TcpListener,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
-        let identity_clock: Arc<dyn AppIdentityClock> = super::schedule_clock::clock();
         let address = listener.local_addr().map_err(|error| {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address, installation).await?);
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
-        let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
-        let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready.clone());
-        let dependencies = AppApplicationDependencies {
-            hooks: Some(runtime.hooks.clone()),
-            service_shutdown: runtime.service_shutdown.clone(),
-            updates: Arc::new(open_updates(data_root, installation)?),
-            setup: Arc::new(setup.clone()),
-            skills: runtime.skills.clone(),
-            mcp_client: runtime.mcp_client.clone(),
-            native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
-            native_assets: native_assets(runtime, data_root),
-            executor_readiness: Arc::new(readiness),
-            admission: Arc::new(AppAdmission::new(
-                runtime.project_ledger.clone(),
-                runtime.image_files.clone(),
-                runtime.models.configuration.clone(),
-                runtime.mcp_client.clone(),
-                artifacts.clone(),
-            )),
-            artifact_materializer: artifacts.clone(),
-            message_files: artifacts.clone(),
-            settings_facts: settings.clone(),
-            settings_mutations: Arc::new(AppSettingsMutation::new(
-                runtime.models.configuration.clone(),
-                runtime.profile.clone(),
-                installation.clone(),
-                data_root.to_path_buf(),
-            )),
-            runtime_info: Arc::new(AppRuntimeInfo::open(installation)),
-            model_catalog: Arc::new(AppModelCatalog::new(
-                runtime.models.configuration.clone(),
-                settings.clone(),
-                installation.clone(),
-                data_root.to_path_buf(),
-            )),
-            memory_management: Arc::new(AppMemoryManagement::for_runtime(
+        let dependencies = composition::dependencies(
+            composition::Context {
                 runtime,
-                identity_clock.clone(),
-            )),
-            personalization: Arc::new(crate::host::AppPersonalization::new(
-                runtime.profile.clone(),
-                runtime.models.configuration.clone(),
-                installation.clone(),
-                data_root.to_path_buf(),
-                identity_clock.clone(),
-            )),
-            monitoring: Arc::new(AppMonitoring::for_runtime(runtime, data_root)),
-            context_read: Arc::new(AppContextRead::for_runtime(runtime, data_root).await?),
-            identity_clock,
-            approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
-            queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
-            authority_handoff: Arc::new(AuthorityHandoff::new(
-                runtime.authority.clone(),
-                owners.queue.clone(),
-                Arc::new(|| {
-                    butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
-                }),
-            )),
-            session_workspaces: session_workspaces.clone(),
-            relocation_host: session_workspaces,
-            session_work_progress: Arc::new(AppSessionProgress::new(
-                runtime.session_work.clone(),
-                runtime.project_ledger.clone(),
-            )),
-            project_dashboard_ledger: Arc::new(AppDashboardLedger::new(
-                runtime.project_ledger.clone(),
-            )),
-            project_dashboard_briefing: Arc::new(AppDashboardBriefing::new(
-                &runtime.models,
                 data_root,
-            )),
-            plan_decision_ledger: Arc::new(AppPlanDecisionLedger::new(
-                runtime.project_ledger.clone(),
-            )),
-            work_streams: runtime.work_streams.clone(),
-            subsessions: Arc::new(AppSubsessions::new(runtime, settings.clone())),
-            branch_conversations: Arc::new(AppBranchConversations::new(
-                runtime.conversations.clone(),
-            )),
-            branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
-        };
+                installation,
+            },
+            &owners,
+            artifacts.clone(),
+            settings,
+            setup.clone(),
+            listener_ready.clone(),
+        )
+        .await?;
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         Self::activate_listener(

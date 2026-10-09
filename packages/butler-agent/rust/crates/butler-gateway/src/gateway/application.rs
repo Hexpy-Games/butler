@@ -59,6 +59,7 @@ mod session_branches;
 mod session_controls;
 mod session_queue_mutations;
 mod session_relocation;
+mod session_titles;
 mod session_views;
 mod sessions;
 mod settings;
@@ -197,6 +198,7 @@ pub struct AppApplication {
     session_creation: sessions::SessionCreationOwner,
     project_creation: projects::ProjectCreationOwner,
     session_branches: session_branches::SessionBranchOwner,
+    session_titles: session_titles::SessionTitleOwner,
     space_mutations: Arc<space::SpaceMutationOwner>,
     transcript_exports: TranscriptExportOwner,
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
@@ -225,18 +227,25 @@ async fn initial_project_root(
     }
 }
 
+async fn open_storage(
+    config: &AppApplicationConfig,
+    dependencies: &AppApplicationDependencies,
+) -> Result<AppStorage, GatewayApplicationError> {
+    AppStorage::open(
+        config.database_path.clone(),
+        Some(config.butler_data.clone()),
+        dependencies.identity_clock.now_iso(),
+    )
+    .await
+    .map_err(app_error)
+}
+
 impl AppApplication {
     pub async fn open(
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let storage = AppStorage::open(
-            config.database_path,
-            Some(config.butler_data.clone()),
-            dependencies.identity_clock.now_iso(),
-        )
-        .await
-        .map_err(app_error)?;
+        let storage = open_storage(&config, &dependencies).await?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let project_root =
             initial_project_root(&storage, config.project_workspace_root.clone()).await?;
@@ -292,6 +301,7 @@ impl AppApplication {
                 config.folder_selection_secret,
             ),
             session_branches: session_branches::SessionBranchOwner::new(),
+            session_titles: session_titles::SessionTitleOwner::default(),
             space_mutations: Arc::new(space::SpaceMutationOwner::new()),
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
@@ -378,6 +388,7 @@ impl AppApplication {
 
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
+        self.session_titles.close().await;
         measure_shutdown(
             "app_project_dashboard_briefing_join",
             self.project_dashboard_briefing.close(),
