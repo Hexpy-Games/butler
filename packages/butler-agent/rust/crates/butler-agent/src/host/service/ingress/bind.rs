@@ -460,15 +460,13 @@ fn verify_context(
     Ok(())
 }
 
-/// The non-blank text of the user message an envelope carries.
+/// Preserve attachment-only input without inventing user text.
 fn user_message(envelope: &Envelope) -> Result<String, IngressError> {
-    envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| invalid("Missing user message"))
+    let text = envelope.message.text.as_deref().unwrap_or_default();
+    if text.trim().is_empty() && envelope.message.attachments.is_empty() {
+        return Err(invalid("Missing user message"));
+    }
+    Ok(text.to_owned())
 }
 
 fn invalid(message: &'static str) -> IngressError {
