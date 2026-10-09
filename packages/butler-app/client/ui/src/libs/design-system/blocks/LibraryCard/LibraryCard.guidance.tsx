@@ -34,7 +34,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Do not nest the menu inside a clickable card.", render: () => <Card interactive onClick={() => undefined}><Typo.Text>Scrap ⋯</Typo.Text></Card> },
     },
   ],
-  content: ["Kind tags are one word: Element / 요소, View / 화면, Document / 문서. Meta is “source · date”."],
+  content: [
+    "Kind tags are one word: Element / 요소, View / 화면, Document / 문서. Meta is “source · date”.",
+    "Pass crops as they are: every picture is whole; typical shapes span the slot, extreme strips and columns sit inset on the matte. Never pre-crop or pad them.",
+  ],
   accessibility: ["The media and title are one button named by the title; the ⋯ menu is a separate button.", "Images are decorative (the title names the item)."],
-  tokens: ["--radius-control", "--muted", "--line-height-body", "--text-tertiary"],
+  tokens: ["--radius-control", "--muted", "--line-height-body", "--text-tertiary", "--browser-card-shadow"],
 };

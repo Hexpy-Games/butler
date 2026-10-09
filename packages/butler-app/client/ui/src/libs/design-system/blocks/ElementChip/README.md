@@ -5,13 +5,19 @@
 title and the site, with remove in the composer and read-only in sent
 messages. `AttachmentList` renders it for items with `element`.
 
+The 28px crop is shown whole on a neutral matte (`contain`), never cropped to
+fill: a wide heading is a strip, a tall column a strip down the middle. An
+empty or failing `src` shows the pick glyph on the matte.
+
 ## When to use this block
 Use it (through `AttachmentList`) for elements picked in the browser and
 added to the chat.
 
 ## Container vs Presenter
 The App maps picks to `AttachmentListItem`s with `element: { site }` and
-`thumbnail.src` (the crop).
+`thumbnail.src` (the crop). Capture crops tight to the element's content
+(for text, the text's own box): a block element's full width is mostly empty
+page, which the chip can only show as a thin strip.
 
 ## Usage
 
