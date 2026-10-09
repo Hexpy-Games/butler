@@ -148,37 +148,35 @@ async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "d
   await page.screenshot({ path: join(output, `${prefix}-chat.png`) });
 }
 
-async function otherConnections(page: Page) {
-  const copy = firstRunCopy.ko;
-  for (const kind of ["key", "local", "custom"] as const) {
-    await reset(page, "ko", "light");
-    stub.state.local = kind === "local";
-    await reachProviders(page, "ko");
-    if (kind === "key") {
-      await page.locator('[data-card-id="claude"]').click();
-      await capture(page, "after-key");
-      await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
-    } else if (kind === "local") {
-      await page.locator('[data-card-id="local"]').click();
-      await page.locator('[role="radio"]').waitFor();
-      await capture(page, "after-local");
-      await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
-    } else {
-      await page.getByRole("button", { name: /다른 서비스/u }).click();
-      await page.locator('[data-card-id="other"]').click();
-      await capture(page, "after-custom");
-      const catalog = await server.api<ModelCatalog>("/model-catalog");
-      const address = catalog.registered_models.find(model => model.model_ref === "local/stub")!.server_url;
-      await page.locator("#first-run-server-url").fill(address!);
-      await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
-      await page.locator('[role="radio"]').waitFor();
-      await capture(page, "after-custom-models");
-      await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
-    }
-    await confirmReady(page, "ko", copy.providerNames[kind === "key" ? "claude" : kind === "local" ? "local" : "other"]);
-    await capture(page, `after-ready-${kind}`);
-    await finish(page, "ko");
+async function otherConnection(page: Page, language: "ko" | "en", theme: "light" | "dark", kind: "key" | "local" | "custom") {
+  const copy = firstRunCopy[language], prefix = `after-${language}-${theme}`;
+  await reset(page, language, theme);
+  stub.state.local = kind === "local";
+  await reachProviders(page, language);
+  if (kind === "key") {
+    await page.locator('[data-card-id="claude"]').click();
+    await capture(page, `${prefix}-key`);
+    await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
+  } else if (kind === "local") {
+    await page.locator('[data-card-id="local"]').click();
+    await page.locator('[role="radio"]').waitFor();
+    await capture(page, `${prefix}-local`);
+    await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
+  } else {
+    await page.locator('[aria-controls="first-run-more-providers"]').click();
+    await page.locator('[data-card-id="other"]').click();
+    await capture(page, `${prefix}-custom`);
+    const catalog = await server.api<ModelCatalog>("/model-catalog");
+    const address = catalog.registered_models.find(model => model.model_ref === "local/stub")!.server_url;
+    await page.locator("#first-run-server-url").fill(address!);
+    await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
+    await page.locator('[role="radio"]').waitFor();
+    await capture(page, `${prefix}-custom-models`);
+    await page.getByRole("button", { name: copy.customConnect, exact: true }).click();
   }
+  await confirmReady(page, language, copy.providerNames[kind === "key" ? "claude" : kind === "local" ? "local" : "other"]);
+  await capture(page, `${prefix}-ready-${kind}`);
+  await finish(page, language);
 }
 type ModelCatalog = { registered_models: Array<{ model_ref: string; server_url?: string }> };
 
@@ -241,7 +239,8 @@ try {
   await page.clock.install();
   await page.setViewportSize({ width: 960, height: 710 });
   for (const language of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) await matrixCase(page, language, theme);
-  await otherConnections(page);
+  for (const language of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const)
+    for (const kind of ["key", "local", "custom"] as const) await otherConnection(page, language, theme, kind);
   await preparationStates(page);
   await renewalAndRerun(page);
   for (const width of [320, 375, 390, 430]) {
