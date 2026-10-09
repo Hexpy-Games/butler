@@ -56,7 +56,9 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
     page = await electronPage(debug);
     await main(`${win}.setContentSize(1440,900)`);
     await main(`(() => { ${win}.show();${win}.focus();${win}.webContents.focus(); })()`);
-    assert.match(await main<string>("process.versions.electron"), /^44\./u);
+    const versions = await main<Record<string, string>>("process.versions");
+    assert.match(versions.electron!, /^44\./u);
+    writeFileSync(join(evidence, "electron-versions.json"), JSON.stringify(versions, null, 2));
     await main(`(() => { const make=${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/tabs.mjs"))}).createUserBrowser;
       const dummy=make({getPath:()=>${JSON.stringify(dir)},on:()=>{}},()=>null); const proto=Object.getPrototypeOf(dummy); const publish=proto.publish; const execute=proto.execute;
       const snapshot=proto.snapshot;proto.snapshot=function(){globalThis.browserAgentSubject=this;return snapshot.call(this)};

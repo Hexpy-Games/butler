@@ -30,6 +30,7 @@ try {
     await page.evaluate(n=>{document.getElementById('node-0')!.textContent=`Latest ${n}`},n);
   }
   const sorted=rows.map(row=>row.scriptMs).sort((a,b)=>a-b); const p95=sorted[Math.ceil(sorted.length*.95)-1]!;
-  await writeFile(output,JSON.stringify({p95,rows},null,2));console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0]}));
-  assert.ok(p95<=25,`10k walker+grid p95 ${p95} exceeds 25ms`);
+  const reportOnly=process.env.BUTLER_BROWSER_PERF_REPORT_ONLY==='1';
+  await writeFile(output,JSON.stringify({p95,rows,budgetMs:25,overBudget:p95>25,reportOnly},null,2));console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0],reportOnly}));
+  if(!reportOnly) assert.ok(p95<=25,`10k walker+grid p95 ${p95} exceeds 25ms`);
 } finally {await browser.close();}

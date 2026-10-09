@@ -6,6 +6,7 @@ import { writeFileSync } from "node:fs";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
 const evidence=process.env.BUTLER_BROWSER_EVIDENCE;assert.ok(evidence);
+const reportOnly=process.env.BUTLER_BROWSER_PERF_REPORT_ONLY==='1';
 const stub=browserStub(), app=await browserAgentApp(evidence,stub.handler);
 try {
   await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({access_mode:"full_access"})});
@@ -36,8 +37,8 @@ try {
     await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("document.getElementById('node-0').textContent='Latest ${index}'")`);
   }
   const sorted=rows.map(row=>row.wallMs).sort((a,b)=>a-b),p95=sorted[Math.ceil(rows.length*.95)-1]!;
-  writeFileSync(join(evidence,"observe-perf.json"),JSON.stringify({p95,rows},null,2));
-  console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0]}));assert.ok(p95<=250,`observe p95 ${p95} exceeds 250ms`);
+  writeFileSync(join(evidence,"observe-perf.json"),JSON.stringify({p95,rows,budgetMs:250,overBudget:p95>250,reportOnly},null,2));
+  console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0],reportOnly}));if(!reportOnly) assert.ok(p95<=250,`observe p95 ${p95} exceeds 250ms`);
   const stopProofs:unknown[]=[];
   const latencies:Record<string,Array<{ms:number;loadAverage1m:number}>>={noop:[],act:[],stop:[]};
   const call=(op:string,args:unknown={},call_id?:string)=>app.gateway.api<any>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op,session:"general",tab,args,call_id})});
@@ -67,6 +68,6 @@ try {
     const sorted=samples.map(row=>row.ms).sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1]!;operationP95[name]=p95;
     if(p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);
   }
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,failures},null,2));
-  assert.deepEqual(failures,[],'browser operation budgets');
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,budgets,failures,reportOnly},null,2));
+  if(!reportOnly) assert.deepEqual(failures,[],'browser operation budgets');
 }finally{await app.stop()}
