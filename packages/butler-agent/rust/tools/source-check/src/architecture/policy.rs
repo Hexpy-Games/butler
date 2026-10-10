@@ -27,6 +27,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "app_update" => &["process_control", "process_names", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
+        // Other browsers' profile folders are found under the user's home.
+        "browser_profiles" => &["user_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.
@@ -51,6 +53,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
         "context" | "skills" | "outputs" | "browser" | "previews" => &[],
+        // Imported sign-ins key on the browser policy's registrable site.
+        "browser_import" => &["browser"],
         "operations" => &["context"],
         "web_access" => &["context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.

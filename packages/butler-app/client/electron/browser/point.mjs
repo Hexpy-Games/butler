@@ -1,5 +1,15 @@
 import { accessibleName } from "./accessibility.mjs";
 import { evaluateWorld, framePoint, hitFrame } from "./frame-worlds.mjs";
+import { frameClass, signedInPolicy, topSite } from "./signed-in.mjs";
+
+/** Points into other-site frames: signed-in tabs follow decision 25, signed-out tabs keep same-origin only. */
+function frameRefusal(tab, frame, main) {
+  if (!frame.parent) return null;
+  const policy = signedInPolicy(tab);
+  if (!policy) return new URL(frame.url).origin !== new URL(main.url).origin ? { reason: "frame_not_granted" } : null;
+  if (frameClass(frame.url, tab.url, policy) !== "unknown") return null;
+  return { reason: "frame_grant_required", site: topSite(tab.url, policy), frame_site: new URL(frame.url).hostname };
+}
 
 // Runs with the same isolated-world perception helpers as ref resolution.
 function pointHit({ x, y, expect }) {
@@ -12,6 +22,7 @@ function pointHit({ x, y, expect }) {
   // A non-control is described by its tag and visible text.
   const hit = { role: meaning.role ?? element.localName, name: meaning.name ?? [...visibleLabel(element)].slice(0, 60).join(""), frame: location.hostname, class_words: classWords(element),
     rect: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } };
+  if (meaning.keypad) return { reason: "user_required", user_required: "secure_keypad", hit };
   if (meaning.secure) return { reason: "secure_field", hit };
   const hidden = rendering(element);
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable", hit };
@@ -42,7 +53,8 @@ export async function resolvePoint(tab, obs, point, expect) {
     if (!origin) continue;
     const local = { x: css.x - origin.x, y: css.y - origin.y };
     if (!await hitFrame(frame, local)) continue;
-    if (frame.parent && new URL(frame.url).origin !== new URL(observation.main.url).origin) return { reason: "frame_not_granted" };
+    const refused = frameRefusal(tab, frame, observation.main);
+    if (refused) return refused;
     const result = await evaluateWorld(frame, `(${pointHit.toString()})(${JSON.stringify({ ...local, expect })})`);
     if (result.reason) return pointRefusal(observation, point, expect, result, origin);
     if (observation.nodes.find(node => node.ref === result.hit.ref)?.name_source === "accessibility") {

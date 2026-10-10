@@ -51,14 +51,7 @@ pub(super) async fn gate(
             source_work_id: String::new(),
             workspace_path: owner.binding.workspace_path.to_string_lossy().into_owned(),
             plan_revision_id: String::new(),
-            action_key: input
-                .get("dialog")
-                .and_then(|d| d.get("id"))
-                .and_then(Value::as_str)
-                .map_or_else(
-                    || occurrence.into(),
-                    |id| format!("{occurrence}:dialog:{id}"),
-                ),
+            action_key: action_key(occurrence, input),
             authority_generation: 1,
             capability: call.name.clone(),
             target: target.into(),
@@ -78,6 +71,52 @@ pub(super) async fn gate(
         ),
         _ => Gate::Pending(json!({"ok":false,"error":"authority_request_denied"})),
     })
+}
+
+/// One durable slot per distinct decision inside a call: a dialog, a site
+/// grant, a sign-in fill and a sign-in hand-back never share a request.
+fn action_key(occurrence: &str, input: &Value) -> String {
+    if let Some(id) = input["dialog"]["id"].as_str() {
+        return format!("{occurrence}:dialog:{id}");
+    }
+    if let Some(grant) = input.get("grant") {
+        let site = grant["site"].as_str().unwrap_or("");
+        let frame = grant["frame_site"].as_str().unwrap_or("");
+        return format!("{occurrence}:grant:{site}:{frame}");
+    }
+    if input.get("sign_in").is_some() {
+        return format!("{occurrence}:sign_in");
+    }
+    if input.get("wait").is_some() {
+        return format!("{occurrence}:wait");
+    }
+    occurrence.into()
+}
+
+/// The input of the allowed request this resumed call is bound to, while unconsumed.
+pub(super) async fn bound(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+) -> Result<Option<Value>, ToolExecutionError> {
+    let Some(reference) = resume_reference(owner, occurrence) else {
+        return Ok(None);
+    };
+    let stored = owner
+        .authority
+        .execution(AuthorityExecutionInput {
+            owner_session_id: owner.binding.owner_session_id.clone(),
+            request_ref: reference.to_owned(),
+            source_session_id: Some(owner.binding.source_session_id.clone()),
+            client_message_id: None,
+            turn_id: owner.binding.turn_id.clone(),
+        })
+        .await
+        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    Ok((stored.decision == RequestDecision::Allowed
+        && stored.capability == call.name
+        && stored.source_call_id.as_deref() == Some(occurrence))
+    .then_some(stored.normalized_input))
 }
 
 pub(super) async fn act_gate(

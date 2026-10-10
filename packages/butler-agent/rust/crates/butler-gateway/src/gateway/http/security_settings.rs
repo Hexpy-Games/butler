@@ -83,6 +83,13 @@ pub(super) async fn route(
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
     let client = local_client(request.extensions().get::<Client>())?.clone();
+    let path = request.uri().path();
+    if path == "/security/signins" || path.starts_with("/security/signins/") {
+        return super::signins::route(state, request).await;
+    }
+    if path.starts_with("/security/browser-import/") {
+        return super::browser_import::route(state, request).await;
+    }
     match (request.method().clone(), request.uri().path()) {
         (Method::GET, "/security") => ok(view(&state)?),
         (Method::POST, "/security/pairing") => {

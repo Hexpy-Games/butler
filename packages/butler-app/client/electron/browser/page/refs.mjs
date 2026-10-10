@@ -12,6 +12,7 @@ export function resolveRef({ ref, obs, epoch, scroll = false, offset }) {
     }
   }
   const hidden = rendering(element), meaning = semantic(element);
+  if (meaning.keypad) return { reason: "user_required", user_required: "secure_keypad" };
   if (meaning.secure) return { reason: "secure_field" };
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable" };
   if (element.disabled || element.getAttribute("aria-disabled") === "true") return { reason: "disabled" };

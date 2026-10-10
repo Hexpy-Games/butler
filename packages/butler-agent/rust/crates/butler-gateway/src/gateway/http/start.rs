@@ -54,6 +54,7 @@ pub(in crate::gateway) fn serve(
             uploads: tokio::sync::Semaphore::new(2),
             static_ui_root: config.static_ui_root,
             output_data: config.output_data,
+            signin_secrets: super::signin_secrets::SignInSecrets::new(),
         });
         super::browser_host::observe_lifetime(&state)
             .map_err(|_| std::io::Error::other("preview lifetime unavailable"))?;

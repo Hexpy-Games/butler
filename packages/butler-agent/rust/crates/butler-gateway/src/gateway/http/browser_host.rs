@@ -1,8 +1,10 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
 mod downloads;
+mod fill;
 mod previews;
 mod report;
+pub(super) mod signed_in;
 mod usage;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -32,6 +34,7 @@ struct Inner {
     tabs: butler_runtime::browser::TabRegistry,
     uses: HashMap<String, usage::Use>,
     turns: HashSet<(String, String)>,
+    fills: HashMap<String, fill::Fill>,
 }
 struct HostStream {
     state: Arc<HttpState>,
@@ -46,6 +49,7 @@ impl Drop for HostStream {
             hub.tabs.clear();
             hub.uses.clear();
             hub.turns.clear();
+            hub.fills.clear();
         }
     }
 }
@@ -81,6 +85,12 @@ pub(super) async fn route(
         }
         (&Method::POST, "/internal/browser-host/events") => {
             agent_calls::events(state, read_json(request).await?).await
+        }
+        (&Method::POST, p) if p.starts_with("/internal/browser-host/credentials/") => {
+            let token = p
+                .trim_start_matches("/internal/browser-host/credentials/")
+                .to_owned();
+            fill::credentials(state, &token, &read_json(request).await?).await
         }
         (&Method::POST, p) if p.starts_with("/internal/browser-host/results/") => {
             let id = p.trim_start_matches("/internal/browser-host/results/");

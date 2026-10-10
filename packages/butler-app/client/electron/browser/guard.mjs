@@ -1,6 +1,7 @@
 import { agentPopupAllowed } from "./popup-policy.mjs";
 import { isIP } from "node:net";
 import { webUrl } from "./policy.mjs";
+import { signedInPlace } from "./signed-in.mjs";
 
 export function privateAddress(address) {
   const v = address.toLowerCase().replace(/^::ffff:/u, "");
@@ -8,7 +9,12 @@ export function privateAddress(address) {
   const [a, c] = v.split(".").map(Number);
   return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && c === 254) || (a === 172 && c >= 16 && c <= 31) || (a === 192 && c === 168) || (a === 100 && c >= 64 && c <= 127);
 }
-export async function guardUrl(raw, profile, policy = {}) {
+export async function guardUrl(raw, profile, policy = {}, mainFrame = true) {
+  if (!await publicUrl(raw, profile, policy)) return false;
+  // Signed-in tabs reach only granted sites and identity pages at top level.
+  return policy.mode !== "signed_in" || !mainFrame || signedInPlace(raw, policy) !== "denied";
+}
+async function publicUrl(raw, profile, policy) {
   const value = webUrl(raw);
   if (!value) return false;
   const url = new URL(value);
@@ -40,7 +46,9 @@ export function installNavigationGuard(tab, onViolation) {
       if (detail.resourceType === "mainFrame" && entry.tab.opener && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
         done({ cancel: true }); entry.onViolation(detail.url); return;
       }
-      void guardUrl(detail.url, profile, entry.tab.policy).then(allowed => {
+      // While the user holds the tab they browse freely; Rust re-checks the page at hand-back.
+      const policy = entry.tab.holder === "user" ? { ...entry.tab.policy, mode: undefined } : entry.tab.policy;
+      void guardUrl(detail.url, profile, policy, detail.resourceType === "mainFrame").then(allowed => {
         done({ cancel: !allowed }); if (!allowed) entry.onViolation();
       });
     });

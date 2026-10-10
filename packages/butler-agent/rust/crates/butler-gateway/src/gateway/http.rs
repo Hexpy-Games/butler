@@ -6,6 +6,7 @@ mod library;
 mod start;
 pub(super) use start::serve;
 mod automations;
+mod browser_import;
 mod dashboard;
 mod error;
 mod favicons;
@@ -34,6 +35,8 @@ mod sessions;
 mod settings;
 mod setup;
 mod shell;
+mod signin_secrets;
+mod signins;
 mod skills;
 mod space_mutations;
 mod static_ui;
@@ -90,6 +93,7 @@ struct HttpState {
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
+    signin_secrets: signin_secrets::SignInSecrets,
 }
 
 /// Who sent an authorized request (a request extension for the routes).

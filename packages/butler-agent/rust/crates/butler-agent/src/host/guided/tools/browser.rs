@@ -3,9 +3,11 @@ mod authority;
 mod client;
 mod dialog;
 mod effect;
+mod grant;
 pub(super) mod images;
 mod observe_after;
 mod preview;
+mod signin;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};
 use butler_core::json::JsonDocument;
@@ -28,6 +30,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_screenshot"
             | "browser_close"
             | "browser_wait_for_user"
+            | "browser_sign_in"
     )
 }
 pub(super) async fn execute(
@@ -63,6 +66,9 @@ pub(super) async fn execute(
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
     }
+    if call.name == "browser_sign_in" {
+        return signin::execute(owner, invocation, call, occurrence, client, args).await;
+    }
     // look "never" asks for a text-only observation: no screenshot, no vision.
     let text_only =
         call.name == "browser_observe" && args["look"] == "never" && args.get("region").is_none();
@@ -80,18 +86,16 @@ pub(super) async fn execute(
     }
     // A region makes the observation a close-up of the newest observation.
     let zoom = call.name == "browser_observe" && args.get("region").is_some();
-    let op = match call.name.as_str() {
-        "browser_open" => "tab.open",
-        "browser_observe" if zoom => "tab.zoom",
-        "browser_observe" => "tab.observe",
-        "browser_selection" => "tab.selection",
-        "browser_screenshot" => "tab.screenshot",
-        "browser_close" => "tab.close",
-        _ => "tabs.list",
-    };
-    let mut result = client
-        .call(op, &args["tab"], &args, invocation.cancellation)
-        .await;
+    let request = (host_op(&call.name, zoom), &args["tab"], &args);
+    let mut result = grant::call(
+        owner,
+        call,
+        occurrence,
+        &client,
+        request,
+        invocation.cancellation,
+    )
+    .await?;
     let image_class = if zoom { "browser_zoom" } else { &call.name };
     if !text_only {
         images::finish(owner, image_class, &mut result).await?;
@@ -105,6 +109,17 @@ pub(super) async fn execute(
         project_observation(&mut result);
     }
     encode_page_data(result)
+}
+fn host_op(name: &str, zoom: bool) -> &'static str {
+    match name {
+        "browser_open" => "tab.open",
+        "browser_observe" if zoom => "tab.zoom",
+        "browser_observe" => "tab.observe",
+        "browser_selection" => "tab.selection",
+        "browser_screenshot" => "tab.screenshot",
+        "browser_close" => "tab.close",
+        _ => "tabs.list",
+    }
 }
 fn project_observation(result: &mut Value) {
     result["schema"] = json!("butler.browser-observation.v1");
@@ -169,9 +184,19 @@ async fn act(
     if let Some(refused) = act_refusal(owner, invocation, &client, &mut args).await {
         return finish_batch(&args, refused);
     }
-    let mut prepared = client
-        .call("tab.prepare", &args["tab"], &args, invocation.cancellation)
-        .await;
+    let request = ("tab.prepare", &args["tab"], &args);
+    let mut prepared = grant::call(
+        owner,
+        call,
+        occurrence,
+        &client,
+        request,
+        invocation.cancellation,
+    )
+    .await?;
+    if prepared["authority_pending"] == true {
+        return finish_batch(&args, prepared);
+    }
     if prepared["status"] == "dialog_pending" {
         return dialog::finish(
             owner, invocation, call, occurrence, client, &args, &prepared,
@@ -185,8 +210,7 @@ async fn act(
             .await;
         return finish_batch(&args, prepared);
     }
-    let scope = butler_runtime::browser::site_scope(prepared["url"].as_str().unwrap_or(""))
-        .unwrap_or_default();
+    let scope = act_scope(&prepared);
     let input = approval_input(&args, &mut prepared, &scope);
     let approval = match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
         authority::Gate::Pending(value) => {
@@ -299,7 +323,22 @@ fn approval_input(args: &Value, prepared: &mut Value, scope: &str) -> Value {
             }
         }
     }
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":"signed_out","always_confirm":always})
+    let mode = if prepared["profile"] == "signed_in" {
+        "signed_in"
+    } else {
+        "signed_out"
+    };
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always})
+}
+/// The act's authority target: the page's site under its tab profile.
+fn act_scope(prepared: &Value) -> String {
+    let url = prepared["url"].as_str().unwrap_or("");
+    if prepared["profile"] == "signed_in" {
+        return butler_runtime::browser::site_of(url)
+            .map(|site| butler_runtime::browser::signed_in_scope(&site))
+            .unwrap_or_default();
+    }
+    butler_runtime::browser::site_scope(url).unwrap_or_default()
 }
 struct ApprovedBatch<'a> {
     args: &'a Value,

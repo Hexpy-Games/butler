@@ -134,6 +134,7 @@ tool_names! {
     BrowserScreenshot = "browser_screenshot",
     BrowserClose = "browser_close",
     BrowserWaitForUser = "browser_wait_for_user",
+    BrowserSignIn = "browser_sign_in",
     OutputCheck = "output_check",
     PreviewStart = "preview_start",
     PreviewStop = "preview_stop",

@@ -14,6 +14,10 @@ export interface BrowserTab {
   preview?: string; picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
+  /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
+  signinStep?: string;
+  /** "로그인 저장" after a takeover sign-in; never carries the password. */
+  saveOffer?: { username: string; host: string };
 }
 export interface BrowserSnapshot {
   enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
