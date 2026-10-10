@@ -19,7 +19,7 @@ async function publicUrl(raw, profile, policy) {
   if (!value) return false;
   const url = new URL(value);
   if (url.username || url.password) return false;
-  if (policy.content_origin === url.origin && url.pathname.startsWith("/__o/")) return true;
+  if (policy.content_origin === url.origin && (url.pathname.startsWith("/__o/") || policy.preview === true)) return true;
   const host = url.hostname.replace(/^\[|\]$/gu, "");
   if (host === "localhost" || host.endsWith(".localhost")) return false;
   if (isIP(host)) return !privateAddress(host);

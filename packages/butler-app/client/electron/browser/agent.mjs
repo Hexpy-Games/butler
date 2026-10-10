@@ -96,6 +96,10 @@ export function viewedTab(browser, tab, visible) {
   armExpiry(browser, tab);
 }
 export async function executeBrowser(browser, frame) {
+  if (frame.op === "preview.closed") {
+    for (const tab of [...browser.tabs.values()]) if (tab.owner === `conversation:${frame.session}` && tab.preview === frame.args.preview_id) browser.close(tab.id);
+    return { status: "ok" };
+  }
   if (frame.op === "use.started") { startUse(browser, frame); return; }
   if (frame.op === "use.ended") { endUse(browser, frame.args.id, frame.args.abort); return; }
   if (frame.op === "use.revoked") {
@@ -179,7 +183,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   if (agentTabs.length >= 6 || agentTabs.filter(tab => tab.owner === `conversation:${session}`).length >= 3) return { status: "refused", reason: "tab_budget_exhausted" };
   const driving = new Set(agentTabs.filter(tab => tab.holder === "agent").map(tab => tab.owner));
   if (driving.size >= 2 && !driving.has(`conversation:${session}`)) return { status: "not_dispatched", reason: "browser_busy" };
-  const id = browser.create({ owner: `conversation:${session}`, url: args.url, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
+  const id = browser.create({ owner: `conversation:${session}`, url: args.url, preview_id: args.preview_id, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);

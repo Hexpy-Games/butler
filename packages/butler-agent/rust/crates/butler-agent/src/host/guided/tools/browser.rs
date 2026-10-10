@@ -6,6 +6,7 @@ mod effect;
 mod grant;
 pub(super) mod images;
 mod observe_after;
+mod preview;
 mod signin;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};
@@ -19,7 +20,9 @@ use std::sync::Arc;
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         name,
-        "browser_open"
+        "preview_start"
+            | "preview_stop"
+            | "browser_open"
             | "browser_observe"
             | "browser_act"
             | "browser_tabs"
@@ -51,6 +54,9 @@ pub(super) async fn execute(
     let Some(client) = client::Client::new(owner).await else {
         return finish_batch(&args, json!({"status":"unavailable","reason":"no_browser"}));
     };
+    if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
+        return preview::execute(owner, invocation, call, occurrence, client).await;
+    }
     if call.name == "browser_close" && owner.binding.access_mode == AccessMode::ReadOnly {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }

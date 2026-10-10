@@ -29,6 +29,8 @@ futures-core.workspace = true
 futures-util.workspace = true
 http-body-util.workspace = true
 http.workspace = true
+hyper = { version = "1.11.1", features = ["http1"] }
+hyper-util = { version = "0.1.20", features = ["tokio"] }
 image.workspace = true
 indexmap.workspace = true
 notify.workspace = true

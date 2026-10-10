@@ -30,3 +30,5 @@ pub mod operations;
 pub mod outputs;
 pub mod skills;
 pub mod web_access;
+
+pub mod previews;

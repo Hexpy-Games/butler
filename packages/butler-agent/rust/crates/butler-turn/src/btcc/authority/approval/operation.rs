@@ -62,7 +62,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             }
         }
         "list_files" | "grep_files" => vec![input["root"].as_str().unwrap_or(".")],
-        "run_command" | "run_command_remote_observation" => {
+        "run_command" | "run_command_remote_observation" | "preview_start" => {
             vec![input["cwd"].as_str().unwrap_or(".")]
         }
         _ => Vec::new(),
