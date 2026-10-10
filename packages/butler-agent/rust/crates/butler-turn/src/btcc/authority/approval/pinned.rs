@@ -167,5 +167,8 @@ fn assert_sign_in_wait_summary() {
         assert_eq!(operation["sign_in_step"], reason);
         assert_eq!(operation["allow_conversation"], false);
         assert!(!operation.to_string().contains("private-tab-id"));
+        // The hand-back resumes the request whose stored target is its tab.
+        let stored = summary("browser_sign_in", "private-tab-id", &input);
+        assert_eq!(stored["targets"][0]["path"], "private-tab-id");
     }
 }

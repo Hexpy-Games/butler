@@ -54,7 +54,8 @@ export function finishUse(browser, session, turn) {
     affected.add(use.tab); endUse(browser, use.id, true);
   }
   for (const tab of browser.tabs.values()) if (tab.owner === `conversation:${session}`) {
-    if (tab.waitingTurn === turn) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; affected.add(tab.id); }
+    // The finished turn no longer waits on a sign-in step; the user keeps the tab.
+    if (tab.waitingTurn === turn) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.signinStep = null; affected.add(tab.id); }
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
   browser.publish();

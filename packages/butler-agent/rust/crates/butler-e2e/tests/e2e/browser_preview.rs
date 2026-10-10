@@ -81,15 +81,58 @@ Bun.serve({hostname:"127.0.0.1",port,fetch(request,server){
 },websocket:{open(ws){ws.send("ready")},message(ws,message){ws.send(message)}}});
 "#,
     )?;
-    let s = setup.start().await?;
+    let mut s = setup.start().await?;
     let created =
         s.gw.post("/sessions", json!({"kind":"chat","title":"Preview"}))
             .await?;
     let session = created.data()["session"]["id"].as_str().unwrap().to_owned();
-    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let (first, child, second, third) = (port(), port(), port(), port());
     let command = |port, child| format!("bun server.mjs {port} {child}");
     let args = |id: &str, port, child| json!({"agent":"preview-agent","preview_id":id,"command":command(port,child),"cwd":cwd,"port":port});
+    // These events precede the first preview request and its lifetime observer.
+    let early =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"Closed before preview"}),
+        )
+        .await?;
+    let early = early.data()["session"]["id"].as_str().unwrap();
+    s.gw.post(&format!("/sessions/{early}/archive"), json!({}))
+        .await?;
+    // Restart clears the in-memory closed set; admission must consult storage.
+    s.restart().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    assert_eq!(
+        call(
+            &admin,
+            early,
+            "preview.start",
+            args("preview-archived", first, 0)
+        )
+        .await?["reason"],
+        "session_closed"
+    );
+    assert_eq!(
+        s.gw.delete(&format!("/sessions/{early}?permanent=true"))
+            .await?
+            .status,
+        200
+    );
+    assert_eq!(
+        call(
+            &admin,
+            early,
+            "preview.start",
+            args("preview-deleted", first, 0)
+        )
+        .await?["reason"],
+        "session_closed"
+    );
+    assert!(
+        tokio::net::TcpStream::connect(("127.0.0.1", first))
+            .await
+            .is_err()
+    );
     let started = call(
         &admin,
         &session,

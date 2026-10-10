@@ -3,6 +3,7 @@ pub(super) mod agent_calls;
 mod backend;
 mod downloads;
 mod fill;
+mod hand_back;
 mod previews;
 mod report;
 pub(super) mod signed_in;
@@ -17,7 +18,6 @@ use axum::{
     },
 };
 use futures_util::stream;
-pub(super) use previews::observe_lifetime;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -157,7 +157,7 @@ fn attach(
                 .lock()
                 .map(|hub| hub.tabs.ready_waits())
                 .unwrap_or_default();
-            let _ = agent_calls::resume_waits(&state, &tabs).await;
+            let _ = hand_back::resume_waits(&state, &tabs).await;
         });
     }))?;
     let shutdown = state.shutdown.clone();

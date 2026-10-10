@@ -82,6 +82,7 @@ struct HttpState {
     browser: browser_host::Hub,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
     previews: butler_runtime::previews::Previews,
+    preview_lifetime_started: parking_lot::Mutex<bool>,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,

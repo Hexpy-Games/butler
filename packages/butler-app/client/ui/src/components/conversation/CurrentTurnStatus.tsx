@@ -8,6 +8,7 @@ import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
 import { AssistantStatusLabel } from "./AssistantStatusLabel";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
 import { Typo } from "@/butler-ds";
+import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import { useElapsedTime } from "./hooks/useElapsedTime";
 
 export function CurrentTurnStatus({
@@ -38,7 +39,11 @@ export function CurrentTurnStatus({
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
-  const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting : appCopy.interfaceStatus.approvalWaiting;
+  // A sign-in hand-off waits on the user's step in the tab, not on an approval.
+  const signInWaiting = useButlerStore((store) =>
+    selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool === "browser_sign_in_wait");
+  const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
+    : signInWaiting ? appCopy.interfaceStatus.signInWaiting : appCopy.interfaceStatus.approvalWaiting;
   const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
     (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??

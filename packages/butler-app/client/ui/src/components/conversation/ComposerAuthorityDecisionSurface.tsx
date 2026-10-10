@@ -7,6 +7,7 @@ import {
   MessageSquarePlus, RefreshCcw, ShieldCheck, SplitButton, Tag, Terminal, Typo, type TagTone,
 } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
+import { ComposerSignInHandoffSurface } from "./ComposerSignInHandoffSurface";
 
 /** What the request touches, at a glance: a folder for file edits (as in the README demo), a terminal for commands. */
 const KIND_ICONS: Record<ApprovalActionKind, typeof ShieldCheck> = {
@@ -18,6 +19,8 @@ const RISK_TONES: Record<ApprovalRisk, TagTone> = { low: "neutral", medium: "war
 
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
+  const { handoff } = decision;
+  if (handoff) return <ComposerSignInHandoffSurface decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
     icon={<Icon aria-hidden="true" size="lg" />}
