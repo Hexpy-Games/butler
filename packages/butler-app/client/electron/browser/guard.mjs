@@ -29,8 +29,13 @@ export function installNavigationGuard(tab, onViolation) {
   const router = routers.get(profile) ?? new Map();
   if (!routers.has(profile)) {
     routers.set(profile, router);
+    // In-flight page requests (fetch/XHR) let observe-after-act wait for results.
+    const finished = detail => router.get(detail.webContentsId)?.tab.pendingRequests?.delete(detail.id);
+    profile.webRequest.onCompleted(finished);
+    profile.webRequest.onErrorOccurred(finished);
     profile.webRequest.onBeforeRequest((detail, done) => {
       const entry = router.get(detail.webContentsId);
+      if (entry && detail.resourceType === "xhr") (entry.tab.pendingRequests ??= new Map()).set(detail.id, Date.now());
       if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
       if (detail.resourceType === "mainFrame" && entry.tab.opener && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
         done({ cancel: true }); entry.onViolation(detail.url); return;

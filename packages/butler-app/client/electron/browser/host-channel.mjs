@@ -24,7 +24,11 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     await flushState();
     let result;
     try { result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" }; }
-    catch { result = { status: "unknown", reason: "executor_error" }; }
+    catch (error) {
+      // Keep the cause: an executor error is otherwise invisible to diagnosis.
+      console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
+      result = { status: "unknown", reason: "executor_error" };
+    }
     await flushState();
     await request(`/internal/browser-host/results/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),

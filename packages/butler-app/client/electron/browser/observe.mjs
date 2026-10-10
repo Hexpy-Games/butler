@@ -58,12 +58,22 @@ const quiet = (quietMs, maxMs) => `new Promise(done=>{let timer;const end=()=>{o
   const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(end,${quietMs})});
   observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
   timer=setTimeout(end,${quietMs});const cap=setTimeout(end,${maxMs})})`;
-/** After an action, wait briefly for loading and DOM updates (suggestions, recalculated results) to settle. */
-async function settle(tab, maxMs = 2000) {
+// A request still open after this long is a stream or long poll, not a result.
+const LONG_REQUEST_MS = 5000;
+const busy = tab => tab.view.webContents.isLoading()
+  || [...(tab.pendingRequests?.values() ?? [])].some(start => Date.now() - start < LONG_REQUEST_MS);
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+/** After an action, wait for loading, the page's own requests and DOM updates
+ * (suggestions, recalculated results) to settle. Quiet pages return at once. */
+async function settle(tab, maxMs = 5000) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
-  while (contents.isLoading() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
-  const remaining = deadline - Date.now();
-  if (remaining > 0) await contents.executeJavaScriptInIsolatedWorld(9001, [{ code: quiet(300, remaining) }]).catch(() => {});
+  for (let round = 0; round < 3 && Date.now() < deadline; round++) {
+    while (busy(tab) && Date.now() < deadline) await pause(100);
+    const remaining = deadline - Date.now();
+    if (remaining > 0) await contents.executeJavaScriptInIsolatedWorld(9001, [{ code: quiet(300, Math.min(remaining, 2000)) }]).catch(() => {});
+    // A DOM update may start the next request (a debounced search); settle that too.
+    if (!busy(tab)) return;
+  }
 }
 /** Retries an observation that a load-time navigation interrupted. */
 export async function observeTab(tab, args = {}) {

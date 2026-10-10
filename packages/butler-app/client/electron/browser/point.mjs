@@ -33,7 +33,9 @@ export async function resolvePoint(tab, obs, point, expect) {
   if (point[0] < 0 || point[1] < 0 || point[0] >= image.width || point[1] >= image.height) return { reason: "point_outside_viewport" };
   const css = { x: point[0] * image.cssWidth / image.width, y: point[1] * image.cssHeight / image.height };
   for (const frame of [...observation.frames].reverse()) {
-    const origin = await framePoint(frame, { x: 0, y: 0 });
+    // A hidden iframe has no layout box, so it cannot be where the point is.
+    const origin = await framePoint(frame, { x: 0, y: 0 }).catch(() => null);
+    if (!origin) continue;
     const local = { x: css.x - origin.x, y: css.y - origin.y };
     if (!await hitFrame(frame, local)) continue;
     if (frame.parent && new URL(frame.url).origin !== new URL(observation.main.url).origin) return { reason: "frame_not_granted" };
