@@ -48,6 +48,7 @@ export const guidance: ShowcaseGuidance = {
   accessibility: [
     "The content area is the tab panel (panelId); the band is the live region for holder changes.",
     "With reserveBand the band stays in the DOM as one node, so tone changes are announced, not remounted.",
+    "An empty reserved row is decorative: no text, no role; the band that arrives carries the live region.",
     "The riso edge turns on --motion-agent-edge and stops under reduced motion (a static edge).",
   ],
   tokens: ["--radius-popover", "--browser-card-shadow", "--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink", "--motion-agent-edge", "--motion-loop-count"],
