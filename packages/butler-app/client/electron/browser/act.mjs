@@ -5,7 +5,7 @@ import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
 import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
 import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from "./navigate.mjs";
-import { recordBatch, repeatRefusal } from "./progress.mjs";
+import { recordBatch, repeatRefusal, rememberRefusal, resentRefusal } from "./progress.mjs";
 import { canvasBefore, canvasEffect } from "./canvas-effect.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
@@ -71,6 +71,9 @@ const afterInputStep = (steps, index) => steps.slice(0, index).some(step => step
 export async function prepareBatch(tab, args) {
   if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps",
     recovery: "Send 1–10 steps per call. No steps were dispatched." };
+  return resentRefusal(tab, args) ?? rememberRefusal(tab, args, await prepareSteps(tab, args));
+}
+async function prepareSteps(tab, args) {
   // Suggestions appear after an autocomplete fill, so nothing may follow it in
   // the batch; steps before it (e.g. clicking the field) are safe.
   if (args.steps.slice(0, -1).some(step => step.action === "fill" && tab.observation?.nodes.some(node =>

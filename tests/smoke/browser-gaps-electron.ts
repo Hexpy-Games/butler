@@ -79,6 +79,9 @@ try {
     // The drawn line stays selected; a drag from its end handle edits it.
     keep(act(() => [{ action: "drag", point: [cx + 60, cy + 40], target_point: [cx + 180, cy - 20], expect: "canvas" }])),
     keep(act(() => [{ action: "press", value: "Escape" }, { action: "drag", point: [cx + 180, cy - 20], target_point: [cx + 220, cy + 60], expect: "canvas" }])),
+    // A refused point (it hits the canvas, not the expected button), resent unchanged.
+    act(() => [{ action: "click", point: [cx, cy + 100], expect: "button Noop" }]),
+    act(() => [{ action: "click", point: [cx, cy + 100], expect: "button Noop" }]),
     keep(() => null),
   ]);
   await send("Use the page.");
@@ -108,6 +111,7 @@ try {
   assert.match(results, /This same batch already ran from this same page state and changed nothing visible/u, "the second Noop was refused");
   assert.match(results, /This same batch already ran from this same page state and cleared field 1/u, "the second Directions (a new element, same target) was refused");
   assert.match(results, /The first 1 step of this batch already ran from this same page state/u, "a doubled Directions was refused too");
+  assert.match(results, /This exact batch was already refused from this same page state \(point_mismatch at step 0; it hit canvas/u, "an unchanged resend of a refused batch is refused at once with what it hit");
   assert.ok(!flatNotes(added, addedAgain, retyped).some(note => note.includes("changed nothing")), "a visible counter and retyping are progress");
   assert.ok(noop.notes.some(note => note.includes("changed nothing visible")), JSON.stringify(noop.notes));
   assert.ok(edited.notes.some(note => note.includes("likely edited or moved an existing object")), JSON.stringify(edited.notes));

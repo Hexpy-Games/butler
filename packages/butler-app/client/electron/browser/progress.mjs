@@ -54,6 +54,33 @@ export function repeatRefusal(tab, args, prepared) {
   return null;
 }
 
+// A refused batch never ran, so the loop guard above cannot see it. Remember it
+// by the page state and the exact steps; resending it unchanged gets the same
+// refusal at once, with what was hit and a pointer to choose differently.
+function refusalKey(tab, args) {
+  const state = tab.progressHistory?.at(-1);
+  return state && state.obs === args.observation ? `${state.fingerprint}\n${JSON.stringify(args.steps)}` : null;
+}
+
+/** Records a refusal so an unchanged resend from the same state is answered at once. */
+export function rememberRefusal(tab, args, refusal) {
+  const key = refusalKey(tab, args);
+  if (!key || refusal.status !== "refused") return refusal;
+  const seen = tab.refusedBatches ??= new Map();
+  seen.set(key, { reason: refusal.reason, step_index: refusal.step_index, hit: refusal.hit, rejected_point: refusal.rejected_point });
+  if (seen.size > 50) seen.delete(seen.keys().next().value);
+  return refusal;
+}
+
+/** Refuses an unchanged resend of a batch that was refused from this same page state. */
+export function resentRefusal(tab, args) {
+  const key = refusalKey(tab, args), last = key && tab.refusedBatches?.get(key);
+  if (!last) return null;
+  const hit = last.hit?.role ? ` it hit ${last.hit.role} "${last.hit.name ?? ""}"${last.rejected_point ? ` at [${last.rejected_point}]` : ""}` : "";
+  return { status: "refused", reason: "repeated_refusal", previous_reason: last.reason, step_index: last.step_index ?? 0, hit: last.hit,
+    recovery: `This exact batch was already refused from this same page state (${last.reason} at step ${last.step_index ?? 0};${hit || " see that result"}). Sending it unchanged gives the same result. Pick a different point or target: move the point off what it hit (for a drag on a canvas, onto empty canvas shown in the screenshot), use the hit's ref if that is the intended control, or dismiss what covers the target first. No steps were dispatched.` };
+}
+
 function cleared(previous, entry, batch) {
   const filled = new Set(batch.steps.filter(step => step.completed && ["fill", "type"].includes(step.action) && step.ref).map(step => step.ref));
   return [...previous.values].filter(([key, before]) => before.value && entry.values.get(key)?.value === "" && !filled.has(before.ref))
