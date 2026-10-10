@@ -52,17 +52,26 @@ async fn browser_site_notes_zoom_history_and_upload_scope() -> Result<(), Harnes
         "refused uploads never reach the App"
     );
     let requests = s.provider()?.requests();
-    let opened = output(&requests[2]);
+    let search = output(&requests[1]);
+    assert!(
+        search["output"]["other_matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["id"] == "native:browser_observe"),
+        "a category guess that matches something else still shows the browser tools"
+    );
+    let opened = output(&requests[3]);
     assert_eq!(
         opened["output"]["site_note"]["note"],
         "Owner note: the search box is at the top."
     );
-    let zoom = output(&requests[4]);
+    let zoom = output(&requests[5]);
     assert_eq!(zoom["output"]["schema"], "butler.browser-zoom.v1");
     assert!(zoom["output"]["mapping"].as_str().unwrap().contains("o1"));
     for (index, reason) in [
-        (6, "upload_outside_workspace"),
-        (7, "upload_sensitive_file"),
+        (7, "upload_outside_workspace"),
+        (8, "upload_sensitive_file"),
     ] {
         assert_eq!(output(&requests[index])["output"]["reason"], reason);
     }
@@ -176,6 +185,10 @@ fn cassette() -> Result<Cassette, HarnessError> {
     let upload = |path: &str| json!({"tab":"t1","observation":"o2","steps":[{"action":"upload","ref":"f0-e1","value":path}]});
     let calls = [
         (
+            "tool_search",
+            json!({"query":"browser page click screenshot","category":"automation","limit":10}),
+        ),
+        (
             "tool_describe",
             json!({"ids":["native:browser_open","native:browser_observe","native:browser_act"]}),
         ),
@@ -198,7 +211,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         let mut exchange = template.exchanges[0].clone();
         exchange.request.key.user_request = "Browser round two".into();
         exchange.request.key.round = round.clone();
-        let (tool, args) = if name == "tool_describe" {
+        let (tool, args) = if matches!(name, "tool_search" | "tool_describe") {
             (name, args)
         } else {
             (
