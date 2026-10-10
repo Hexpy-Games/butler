@@ -111,6 +111,13 @@ try {
   const secure = await prepare(card, "fill");
   assert.equal(secure.reason, "secure_field", JSON.stringify(secure)); assert.match(String(secure.recovery), /browser_wait_for_user/u);
   console.log("frames: utility acts, payment confirmed, card takeover-only, unknown closed");
+  // An unknown frame opens only after this conversation's frame grant (the card's effect).
+  const asked = await internal("tab.observe", mine, { include_image: false, frame: "f3" });
+  assert.deepEqual([asked.reason, asked.site, asked.frame_site], ["frame_grant_required", "fixture-shop.test", "fixture-ads.test"], JSON.stringify(asked));
+  await internal("signin.grant", "", { site: "fixture-shop.test", frame_site: "fixture-ads.test" });
+  const opened = await internal("tab.observe", mine, { include_image: false });
+  assert.ok(String(opened.text).includes("지금 설치"), "granted frame is observed");
+  console.log("frame grant: unknown frame opens only after the grant");
 
   // A security keypad answers user_required on every act.
   await internal("signin.grant", "", { site: "fixture-bank.test" });
