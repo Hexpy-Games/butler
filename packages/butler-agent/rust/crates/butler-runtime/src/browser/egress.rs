@@ -38,6 +38,10 @@ impl ContentOrigin {
     pub fn origin(self) -> String {
         format!("http://127.0.0.1:{}", self.0)
     }
+    /// Butler's output origin itself, any path (a registered preview's root mount).
+    fn hosts(self, host: &str, port: u16) -> bool {
+        host == "127.0.0.1" && port == self.0
+    }
     fn admits(self, host: &str, port: u16, path: &str) -> bool {
         host == "127.0.0.1" && port == self.0 && path.starts_with("/__o/")
     }
@@ -92,6 +96,19 @@ pub async fn guard_url(raw: &str, content: Option<ContentOrigin>) -> bool {
         return true;
     }
     public_url(raw).is_ok() && public_addresses(host, port).await.is_ok()
+}
+
+/// [`guard_url`] for a registered preview's tab: also the output origin's
+/// root mount, where the preview's dev server is proxied.
+pub async fn guard_preview_url(raw: &str, content: Option<ContentOrigin>) -> bool {
+    let preview = url::Url::parse(raw).is_ok_and(|url| {
+        url.scheme() == "http"
+            && url.username().is_empty()
+            && url.password().is_none()
+            && content
+                .is_some_and(|c| c.hosts(url.host_str().unwrap_or(""), url.port().unwrap_or(0)))
+    });
+    preview || guard_url(raw, content).await
 }
 
 /// The guard's one test exception: loopback addresses a test fixture serves,
@@ -176,6 +193,22 @@ pub fn guarded_client(
         }))
 }
 
+#[derive(Clone, Copy)]
+struct Scope {
+    content: Option<ContentOrigin>,
+    preview: bool,
+}
+
+impl Scope {
+    /// The output origin as this proxy may reach it, for `host:port` + `path`.
+    fn content(self, host: &str, port: u16, path: Option<&str>) -> bool {
+        self.content.is_some_and(|c| {
+            (self.preview && c.hosts(host, port))
+                || path.is_some_and(|path| c.admits(host, port, path))
+        })
+    }
+}
+
 /// A loopback HTTP proxy that admits public destinations only.
 pub struct EgressProxy {
     address: SocketAddr,
@@ -183,7 +216,26 @@ pub struct EgressProxy {
 }
 
 impl EgressProxy {
+    /// A proxy for conversation tabs: public destinations and output capabilities.
     pub async fn start(content: Option<ContentOrigin>) -> io::Result<Self> {
+        Self::listen(Scope {
+            content,
+            preview: false,
+        })
+        .await
+    }
+
+    /// A proxy for a registered dev-server preview's tabs: also the output
+    /// origin's root mount and its WebSocket (HMR), nothing else on loopback.
+    pub async fn start_preview(content: ContentOrigin) -> io::Result<Self> {
+        Self::listen(Scope {
+            content: Some(content),
+            preview: true,
+        })
+        .await
+    }
+
+    async fn listen(scope: Scope) -> io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
         let address = listener.local_addr()?;
         let stop = CancellationToken::new();
@@ -204,7 +256,7 @@ impl EgressProxy {
                 tokio::spawn(async move {
                     tokio::select! {
                         () = token.cancelled() => {},
-                        _ = tokio::time::timeout(MAX_TUNNEL, serve(client, content)) => {},
+                        _ = tokio::time::timeout(MAX_TUNNEL, serve(client, scope)) => {},
                     }
                 });
             }
@@ -287,18 +339,18 @@ async fn connect(addresses: &[SocketAddr]) -> Option<TcpStream> {
     None
 }
 
-async fn serve(mut client: TcpStream, content: Option<ContentOrigin>) {
+async fn serve(mut client: TcpStream, scope: Scope) {
     let Some(head) = read_head(&mut client).await else {
         return;
     };
     if head.method.eq_ignore_ascii_case("CONNECT") {
-        tunnel(client, head).await;
+        tunnel(client, head, scope).await;
     } else {
-        forward(client, head, content).await;
+        forward(client, head, scope).await;
     }
 }
 
-async fn tunnel(mut client: TcpStream, head: Head) {
+async fn tunnel(mut client: TcpStream, head: Head, scope: Scope) {
     let Some((host, port)) = head
         .target
         .rsplit_once(':')
@@ -306,8 +358,13 @@ async fn tunnel(mut client: TcpStream, head: Head) {
     else {
         return refuse(&mut client).await;
     };
-    let Ok(addresses) = public_addresses(&host, port).await else {
-        return refuse(&mut client).await;
+    let addresses = if scope.content(&host, port, None) {
+        vec![SocketAddr::from(([127, 0, 0, 1], port))]
+    } else {
+        let Ok(addresses) = public_addresses(&host, port).await else {
+            return refuse(&mut client).await;
+        };
+        addresses
     };
     let Some(mut upstream) = connect(&addresses).await else {
         let _ = client
@@ -345,7 +402,7 @@ fn rewrite(first_line: &str, headers: &[(String, String)]) -> Vec<u8> {
     out.into_bytes()
 }
 
-async fn forward(mut client: TcpStream, head: Head, content: Option<ContentOrigin>) {
+async fn forward(mut client: TcpStream, head: Head, scope: Scope) {
     let Ok(url) = url::Url::parse(&head.target) else {
         return refuse(&mut client).await;
     };
@@ -355,7 +412,7 @@ async fn forward(mut client: TcpStream, head: Head, content: Option<ContentOrigi
     if url.scheme() != "http" || !url.username().is_empty() || url.password().is_some() {
         return refuse(&mut client).await;
     }
-    let addresses = if content.is_some_and(|c| c.admits(host, port, url.path())) {
+    let addresses = if scope.content(host, port, Some(url.path())) {
         vec![SocketAddr::from(([127, 0, 0, 1], port))]
     } else {
         match public_addresses(host, port).await {

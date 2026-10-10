@@ -40,6 +40,6 @@ src/web_access/providers/codex.rs	<CodexSubscriptionWebSearchProvider as SearchP
 src/web_access/providers/duckduckgo.rs	<DuckDuckGoHtmlSearchProvider as SearchProvider>::search	81
 src/web_access/read.rs	WebSession::web_read	124
 src/web_access/read.rs	bounded_result	83
-src/web_access/read/lightpanda.rs	run_dump	101
+src/web_access/read/lightpanda.rs	run_dump	89
 src/web_access/search.rs	WebSession::web_search	172
 src/web_access/search.rs	execute_planned	98

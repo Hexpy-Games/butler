@@ -13,11 +13,15 @@
 //! throwaway profile directory with it.
 mod act;
 mod browser;
+mod calls;
 mod capture;
 mod cdp;
+mod check;
 mod dialogs;
+pub mod downloads;
 mod events;
 mod frames;
+mod hidden;
 mod imaging;
 mod input;
 pub mod install;
@@ -28,6 +32,7 @@ mod names;
 mod observe;
 mod page;
 mod progress;
+mod render;
 mod scripts;
 mod settle;
 mod state;
@@ -35,10 +40,11 @@ mod steps;
 mod targets;
 mod validate;
 
-use super::egress::{ContentOrigin, guard_url};
+use super::egress::{ContentOrigin, guard_preview_url, guard_url};
 use browser::Browser;
 pub use install::InstallSource;
 use install::{Installer, Progress};
+pub use render::{Rendered, reader};
 use serde_json::{Value, json};
 use std::{
     path::PathBuf,
@@ -58,6 +64,8 @@ pub struct HeadlessConfig {
     pub install: InstallSource,
     /// Butler's output origin, the only loopback destination.
     pub content: Option<ContentOrigin>,
+    /// Settings → Security; changeable while running.
+    pub enabled: bool,
 }
 
 pub struct Headless {
@@ -66,6 +74,9 @@ pub struct Headless {
     current: Mutex<Option<Arc<Browser>>>,
     starting: tokio::sync::Mutex<()>,
     in_flight: AtomicUsize,
+    enabled: std::sync::atomic::AtomicBool,
+    reports: check::SharedReports,
+    downloads: Arc<downloads::Downloads>,
 }
 
 fn refused(reason: &str) -> Value {
@@ -85,11 +96,15 @@ impl Headless {
     pub fn new(config: HeadlessConfig, shutdown: CancellationToken) -> Arc<Self> {
         let headless = Arc::new(Self {
             installer: Installer::new(config.install.clone()),
+            enabled: std::sync::atomic::AtomicBool::new(config.enabled),
+            reports: check::SharedReports::default(),
+            downloads: downloads::Downloads::new(&config.root),
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
             in_flight: AtomicUsize::new(0),
         });
+        render::register(&headless);
         let weak = Arc::downgrade(&headless);
         tokio::spawn(async move {
             shutdown.cancelled().await;
@@ -98,6 +113,24 @@ impl Headless {
             }
         });
         headless
+    }
+
+    /// Where conversation downloads land and become outputs (the gateway).
+    pub fn set_download_port(&self, port: Arc<dyn downloads::DownloadPort>) {
+        self.downloads.set_port(port);
+    }
+
+    /// Whether new work may start here (Settings → Security).
+    pub fn enabled(&self) -> bool {
+        self.enabled.load(Ordering::SeqCst)
+    }
+
+    /// Turns the backend on or off; off ends the browser and its tabs now.
+    pub async fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::SeqCst);
+        if !enabled {
+            self.shutdown().await;
+        }
     }
 
     fn browser(&self) -> Option<Arc<Browser>> {
@@ -117,6 +150,12 @@ impl Headless {
             .get(id)
             .filter(|t| t.admitted)
             .map(state::Tab::snapshot)
+    }
+
+    /// Whether any headless tab is open (its calls stay here until it closes).
+    pub fn has_tabs(&self) -> bool {
+        self.browser()
+            .is_some_and(|b| !b.shared.lock().tabs.is_empty())
     }
 
     /// This conversation's headless tab ids.
@@ -252,9 +291,14 @@ impl Headless {
                 return Err(json!({"status":"unavailable","reason":reason}));
             }
         };
-        let browser = Browser::launch(&executable, &self.config.root, self.config.content)
-            .await
-            .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
+        let browser = Browser::launch(
+            &executable,
+            &self.config.root,
+            self.config.content,
+            self.downloads.clone(),
+        )
+        .await
+        .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
         *self.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(browser.clone());
         tokio::spawn(lifecycle::janitor(Arc::downgrade(self), browser.clone()));
         Ok(browser)
@@ -264,9 +308,17 @@ impl Headless {
         if args["profile"] == "signed_in" || args["signed_in"] == true {
             return refused("signed_in_unavailable");
         }
+        if !self.enabled() {
+            return json!({"status":"unavailable","reason":"no_browser"});
+        }
         let started = Instant::now();
         let url = args["url"].as_str().unwrap_or("").to_owned();
-        if !guard_url(&url, self.config.content).await {
+        let admitted = if lifecycle::preview_of(args).is_some() {
+            guard_preview_url(&url, self.config.content).await
+        } else {
+            guard_url(&url, self.config.content).await
+        };
+        if !admitted {
             return refused("navigation_denied");
         }
         let browser = match self.ready().await {
@@ -366,10 +418,10 @@ impl Headless {
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,
             "tab.prepare" => act::prepare(&page, args).await,
-            "tab.act" => return act_call(&page, args, frame).await,
+            "tab.act" => return calls::act_call(&page, args, frame).await,
             _ => return refused("unsupported_op"),
         };
-        outcome.unwrap_or_else(|error| failed(&browser, &error))
+        outcome.unwrap_or_else(|error| calls::failed(&browser, &error))
     }
 
     /// Closes every tab of an archived or deleted conversation.
@@ -390,6 +442,25 @@ impl Headless {
             targets::close(&browser, &id).await;
         }
         browser.shared.lock().events.remove(&owner);
+    }
+
+    /// Closes a stopped preview's tabs, as the App does on `preview.closed`.
+    pub async fn close_preview(&self, session: &str, preview: &str) {
+        let Some(browser) = self.browser() else {
+            return;
+        };
+        let owner = format!("conversation:{session}");
+        let ids: Vec<String> = browser
+            .shared
+            .lock()
+            .tabs
+            .values()
+            .filter(|t| t.owner == owner && t.preview.as_deref() == Some(preview))
+            .map(|t| t.id.clone())
+            .collect();
+        for id in ids {
+            targets::close(&browser, &id).await;
+        }
     }
 
     /// A tab whose reported page fell outside policy: closed at once.
@@ -425,42 +496,4 @@ impl Headless {
             browser.stop().await;
         }
     }
-}
-
-fn failed(browser: &Browser, error: &str) -> Value {
-    if browser.alive.is_cancelled() || error == "browser_closed" {
-        return json!({"status":"unknown","reason":"browser_host_lost"});
-    }
-    eprintln!("WARN [browser] headless call failed: {error}");
-    json!({"status":"unknown","reason":"executor_error"})
-}
-
-async fn act_call(page: &page::Page, args: &Value, frame: &Value) -> Value {
-    let owner = page
-        .shared
-        .with_tab(&page.tab, |t| t.owner.clone())
-        .unwrap_or_default();
-    let busy = {
-        let state = page.shared.lock();
-        let owners: std::collections::HashSet<&String> = state
-            .tabs
-            .values()
-            .filter(|t| t.busy)
-            .map(|t| &t.owner)
-            .collect();
-        (owners.len() >= 2 && !owners.contains(&owner))
-            || state.tabs.get(&page.tab).is_some_and(|t| t.busy)
-    };
-    if busy {
-        return json!({"status":"not_dispatched","reason":"browser_busy"});
-    }
-    page.shared.with_tab(&page.tab, |t| {
-        t.busy = true;
-        t.cancelled = false;
-        t.call_id = frame["call_id"].as_str().map(str::to_owned);
-    });
-    let deadline = frame["deadline_ms"].as_u64().unwrap_or(30_000);
-    let result = act::act(page, args, deadline).await;
-    page.shared.with_tab(&page.tab, |t| t.busy = false);
-    result.unwrap_or_else(|_| json!({"status":"unknown","reason":"executor_error"}))
 }

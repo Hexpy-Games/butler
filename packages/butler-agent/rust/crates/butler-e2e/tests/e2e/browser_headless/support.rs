@@ -105,10 +105,18 @@ pub(crate) fn center(observation: &Value, node: &Value) -> Value {
 
 /// Runs the "Publish fixture" turn and returns the output's content URL.
 pub(crate) async fn publish(s: &Scenario) -> Result<String, HarnessError> {
+    Ok(publish_as(s, "Publish fixture").await?.1)
+}
+
+/// Runs a publishing turn; returns the output id and its content URL.
+pub(crate) async fn publish_as(
+    s: &Scenario,
+    prompt: &str,
+) -> Result<(String, String), HarnessError> {
     let port = reqwest::Url::parse(&s.gw.base).unwrap().port().unwrap();
     s.provider()?
         .add_placeholder("GATEWAY_PORT", port.to_string());
-    let (turn, _) = s.turn("general", "Publish fixture").await?;
+    let (turn, _) = s.turn("general", prompt).await?;
     let db = butler_platform::sqlite::open_with_flags(
         s.sandbox.data.join("agent-runtime/btcc.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -124,7 +132,7 @@ pub(crate) async fn publish(s: &Scenario) -> Result<String, HarnessError> {
         .to_owned();
     let view = s.gw.get(&format!("/outputs/{id}/view")).await?;
     assert_eq!(view.status, 200, "{}", view.text);
-    Ok(view.data()["url"].as_str().unwrap().to_owned())
+    Ok((id, view.data()["url"].as_str().unwrap().to_owned()))
 }
 
 /// `chrome-headless-shell` processes whose command line names `marker`.
@@ -132,6 +140,14 @@ pub(crate) fn browser_processes(marker: &str) -> Vec<String> {
     butler_platform::browser_process::matching_processes("chrome-headless-shell", marker)
         .expect("the scenario's browser process listing is readable")
 }
+
+/// The fixture's downloadable file.
+pub(crate) const REPORT: &str = "quarter,total\nQ3,42\n";
+
+/// An output with a script error, a wide block and a root-absolute image.
+const BROKEN: &str = r#"<!doctype html><meta charset="utf-8"><title>Broken fixture</title>
+<body style="margin:0"><h1>Broken page</h1><div style="width:1600px;height:40px;background:#c33"></div>
+<img src="/missing.png" alt=""><script>console.error("fixture failed to start")</script></body>"#;
 
 const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixture</title>
 <style>body{font:18px system-ui;padding:24px;margin:0}button,input,a{font:inherit;margin:8px;padding:8px 16px}p{margin:8px}</style>
@@ -144,6 +160,7 @@ const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixt
 <p><a id="rebind" href="http://localhost.:{{GATEWAY_PORT}}/health">Loopback by name</a></p>
 <p><a id="private" href="http://10.0.0.1/">Private address</a></p>
 <p><a id="local" href="file:///etc/hosts">Local file</a></p>
+<p><a id="report" href="./report.csv" download="report.csv">Download report</a></p>
 </main>"#;
 const POPUP: &str = r#"<!doctype html><meta charset="utf-8"><title>Popup fixture</title><main><h1>Popup page</h1><button onclick="document.title='Pressed'">Popup button</button></main>"#;
 
@@ -159,6 +176,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
         )
     };
     match prompt {
+        "Publish broken" => vec![
+            (
+                "write_file",
+                json!({"path":"broken-site/index.html","content":BROKEN,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"broken-site","title":"Broken fixture"}),
+            ),
+        ],
         "Publish fixture" => vec![
             (
                 "write_file",
@@ -167,6 +194,10 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
             (
                 "write_file",
                 json!({"path":"headless-site/popup.html","content":POPUP,"create_parents":true}),
+            ),
+            (
+                "write_file",
+                json!({"path":"headless-site/report.csv","content":REPORT,"create_parents":true}),
             ),
             (
                 "output_publish",
@@ -194,6 +225,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
     cassette.exchanges.clear();
     for history in 0..=6 {
         for prompt in [
+            "Publish broken",
             "Publish fixture",
             "Open fixture",
             "Observe fixture",

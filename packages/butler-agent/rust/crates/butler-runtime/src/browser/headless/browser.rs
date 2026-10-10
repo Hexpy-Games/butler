@@ -18,12 +18,16 @@ pub(crate) struct Browser {
     pub shared: Shared,
     pub content: Option<ContentOrigin>,
     pub proxy_url: String,
+    /// The proxy of registered previews' tabs (their own contexts).
+    pub preview_proxy_url: Option<String>,
     /// Cancelled when the browser's pipe ends.
     pub alive: CancellationToken,
     /// Signals a change in the set of tabs (for expiry and the idle reap).
     pub changed: Notify,
+    pub downloads: Arc<super::downloads::Downloads>,
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
+    _preview_proxy: Option<EgressProxy>,
     profile: PathBuf,
 }
 
@@ -91,12 +95,21 @@ impl Browser {
         executable: &Path,
         root: &Path,
         content: Option<ContentOrigin>,
+        downloads: Arc<super::downloads::Downloads>,
     ) -> Result<Arc<Self>, &'static str> {
         let (profile, log) = prepare(root).map_err(|_| "browser_unavailable")?;
         let proxy = EgressProxy::start(content)
             .await
             .map_err(|_| "browser_unavailable")?;
         let proxy_url = proxy.url();
+        let preview_proxy = match content {
+            Some(content) => Some(
+                EgressProxy::start_preview(content)
+                    .await
+                    .map_err(|_| "browser_unavailable")?,
+            ),
+            None => None,
+        };
         let mut process =
             browser_process::spawn(executable, &arguments(&profile, &proxy_url), &log)
                 .map_err(|_| "browser_unavailable")?;
@@ -107,12 +120,17 @@ impl Browser {
             shared: Shared::default(),
             content,
             proxy_url,
+            preview_proxy_url: preview_proxy.as_ref().map(EgressProxy::url),
             alive: CancellationToken::new(),
             changed: Notify::new(),
+            downloads: downloads.clone(),
             process: Mutex::new(Some(process)),
             _proxy: proxy,
+            _preview_proxy: preview_proxy,
             profile,
         });
+        let _ = std::fs::create_dir_all(&downloads.stage);
+        downloads.attach(&browser);
         tokio::spawn(super::events::run(browser.clone(), events));
         if let Err(_error) = browser.attach_root().await {
             let reason = failure(&log);

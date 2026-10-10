@@ -32,6 +32,9 @@ fn apply(browser: &Arc<Browser>, event: Event) {
         "Target.detachedFromTarget" => detached(browser, &params),
         "Target.targetDestroyed" => destroyed(browser, params["targetId"].as_str().unwrap_or("")),
         "Target.targetInfoChanged" => info_changed(browser, &params["targetInfo"]),
+        "Browser.downloadWillBegin" | "Browser.downloadProgress" => {
+            browser.downloads.queue(&method, params);
+        }
         "Target.targetCrashed" => crashed(browser, params["targetId"].as_str().unwrap_or("")),
         "Fetch.requestPaused" => {
             if let Some(session) = session {
@@ -73,6 +76,9 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
     let Some(tab) = state.tabs.get_mut(&id) else {
         return;
     };
+    if let Some(diagnostics) = tab.diagnostics.as_mut() {
+        diagnostics.event(method, params, &tab.target);
+    }
     let main = |frame: &Value| frame == tab.target.as_str();
     match method {
         "Page.frameNavigated" | "Page.navigatedWithinDocument" => tab.changed(),

@@ -19,7 +19,11 @@ pub(super) enum Backend {
 /// Tab ops go where the tab lives; new tabs follow the turn's pin, then the
 /// conversation's live tabs, then the attached App, then headless.
 pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backend {
-    let Some(headless) = state.headless.as_ref() else {
+    let Some(headless) = state
+        .headless
+        .as_ref()
+        .filter(|h| h.enabled() || h.has_tabs())
+    else {
         return Backend::App;
     };
     let op = frame["op"].as_str().unwrap_or("");
@@ -150,6 +154,12 @@ pub(super) async fn headless_call(
                 &format!("http://127.0.0.1:{}", super::super::content::port(&state)),
                 tab["url"].as_str().unwrap_or(""),
             );
+            if state
+                .previews
+                .owned(session, tab["preview"].as_str().unwrap_or(""))
+            {
+                frame["args"]["policy"]["preview"] = json!(true);
+            }
         }
     }
     let limit = deadline(op, &frame["args"]);

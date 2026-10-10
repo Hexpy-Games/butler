@@ -117,6 +117,11 @@ pub(crate) struct Tab {
     /// Butler's isolated world per (CDP session, frame id).
     pub contexts: HashMap<(String, String), i64>,
     pub upload: Option<Upload>,
+    /// Butler's own page (output check, reader render), never a conversation's.
+    pub hidden: Option<super::hidden::Purpose>,
+    pub diagnostics: Option<super::hidden::Diagnostics>,
+    /// The registered preview this tab shows (its own context and proxy).
+    pub preview: Option<String>,
 }
 
 impl Tab {
@@ -154,6 +159,9 @@ impl Tab {
             frames: HashMap::new(),
             contexts: HashMap::new(),
             upload: None,
+            hidden: None,
+            diagnostics: None,
+            preview: None,
         }
     }
 
@@ -175,7 +183,7 @@ impl Tab {
             "title":self.title,"status":if self.crashed {"crashed"} else if self.loading {"loading"} else {"idle"},
             "agent":true,"driven":false,"profile":"signed_out","epoch":self.epoch,"holder":"agent","sticky":false,
             "waiting":self.waiting,"busy":self.busy,"inUse":self.busy,"picking":false,"selectionCount":0,
-            "stills":true})
+            "stills":true,"preview":self.preview})
     }
 
     pub(crate) fn pending_dialog(&self) -> Value {

@@ -17,7 +17,10 @@ export async function setAllowedHosts(hosts: string[]): Promise<void> {
 
 export async function setContentHosts(hosts: string[]): Promise<void> { await updateSecurity({ content_hosts: hosts }); }
 
-async function updateSecurity(security: { remote_access_enabled?: boolean; allowed_hosts?: string[]; content_hosts?: string[] }): Promise<void> {
+/** Applies at once; off closes the built-in browser's tabs. */
+export async function setHeadlessBrowser(enabled: boolean): Promise<void> { await updateSecurity({ headless_browser: enabled }); }
+
+async function updateSecurity(security: { remote_access_enabled?: boolean; allowed_hosts?: string[]; content_hosts?: string[]; headless_browser?: boolean }): Promise<void> {
   await api("/settings", { method: "PATCH", body: JSON.stringify({ security }) });
 }
 

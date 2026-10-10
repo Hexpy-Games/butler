@@ -644,6 +644,8 @@ export interface SecurityView {
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
   content_hosts?: string[];
+  /** Butler's own browser while no App is attached; absent where the host has none. */
+  headless_browser?: boolean;
 }
 
 export interface ModelFallbackSettingsView {

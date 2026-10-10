@@ -8,7 +8,11 @@
     reason = "test assertions"
 )]
 mod backend;
+mod downloads;
 mod guard;
+mod preview;
+mod selfcheck;
+mod settings;
 mod support;
 
 use butler_e2e::e2e::HarnessError;

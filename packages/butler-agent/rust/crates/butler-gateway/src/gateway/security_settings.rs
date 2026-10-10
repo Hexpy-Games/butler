@@ -52,6 +52,10 @@ pub trait GatewaySecurityStore: Send + Sync {
     fn rotate_connection_code(&self) -> ApplicationFuture<RotatedConnectionCode>;
     /// Persists the exposure, so the next start binds the same way.
     fn save_exposure(&self, exposure: GatewayExposure) -> ApplicationFuture<()>;
+    /// Persists whether Butler's own headless browser is on.
+    fn save_headless_browser(&self, _enabled: bool) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// Why an allowed host name was refused.
