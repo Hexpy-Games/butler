@@ -129,15 +129,8 @@ pub(crate) async fn publish(s: &Scenario) -> Result<String, HarnessError> {
 
 /// `chrome-headless-shell` processes whose command line names `marker`.
 pub(crate) fn browser_processes(marker: &str) -> Vec<String> {
-    let output = std::process::Command::new("ps")
-        .args(["-axo", "pid=,command="])
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|line| line.contains("chrome-headless-shell") && line.contains(marker))
-        .map(str::to_owned)
-        .collect()
+    butler_platform::browser_process::matching_processes("chrome-headless-shell", marker)
+        .expect("the scenario's browser process listing is readable")
 }
 
 const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixture</title>
