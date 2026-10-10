@@ -1,7 +1,7 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
 pub mod egress;
 pub mod headless;
-pub use egress::{ContentOrigin, LoopbackFixtures, fetch_permitted, guarded_client};
+pub use egress::{ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guarded_client};
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, Rendered,
     downloads::{DownloadPort, PortFuture},

@@ -167,7 +167,8 @@ async fn lightpanda_fallback_runs_and_reaps_configured_child() {
     fs::write(
         &binary,
         format!(
-            "#!/bin/sh\nprintf '%s' '{}'\n",
+            // Renders only behind the egress guard's loopback proxy.
+            "#!/bin/sh\ncase \" $* \" in *\" --http-proxy http://127.0.0.1:\"*) ;; *) exit 3;; esac\nprintf '%s' '{}'\n",
             rendered.replace('\'', "'\\''")
         ),
     )
