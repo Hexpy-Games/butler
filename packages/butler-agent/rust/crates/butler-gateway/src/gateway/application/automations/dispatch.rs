@@ -59,6 +59,10 @@ impl AppApplication {
             self.dependencies.identity_clock.new_uuid()
         );
         let placeholder_id = format!("message-{}", self.dependencies.identity_clock.new_uuid());
+        let message_id = super::super::admission_identity::stable_client_id(
+            Some(&json!(format!("automation-{id}-{run_id}"))),
+            &*self.dependencies.identity_clock,
+        )?;
         let stored_placeholder_id = placeholder_id.clone();
         let run = run_id.clone();
         let automation_id = id.clone();
@@ -71,6 +75,11 @@ impl AppApplication {
             db.execute(
                 "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at) VALUES(?1,?2,?3,'running',?4,?5)",
                 params![run,row.id,row.target_id,trigger,started],
+            ).map_err(AppStorageError::sqlite)?;
+            // Bind the schedule input before dispatch can run any browser tools.
+            db.execute(
+                "INSERT INTO app_automation_run_inputs(message_id,run_id) VALUES(?1,?2)",
+                params![message_id, run],
             ).map_err(AppStorageError::sqlite)?;
             if busy {
                 db.execute(

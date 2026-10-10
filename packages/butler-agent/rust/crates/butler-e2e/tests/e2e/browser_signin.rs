@@ -11,6 +11,7 @@
 mod fill;
 mod host;
 mod import;
+mod schedule;
 mod tool;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};

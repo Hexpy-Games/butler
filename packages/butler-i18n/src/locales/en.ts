@@ -499,6 +499,7 @@ export const enUsCopy: AppCopy = {
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
+      signInStep: reason => ({mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form"} as Record<string, string>)[reason] ?? "Check sign-in form",
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
         const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;

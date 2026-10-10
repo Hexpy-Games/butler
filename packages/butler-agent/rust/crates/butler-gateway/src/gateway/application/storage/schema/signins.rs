@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS app_automation_grant_sources (
   source_session_id TEXT NOT NULL,
   PRIMARY KEY (automation_id, source_session_id)
 );
+CREATE TABLE IF NOT EXISTS app_automation_run_inputs (
+  message_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL UNIQUE REFERENCES app_automation_runs(id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS automation_runs_turn_idx ON app_automation_runs(turn_id);
 CREATE TABLE IF NOT EXISTS browser_import_audit (
   id INTEGER PRIMARY KEY,
