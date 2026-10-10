@@ -87,8 +87,9 @@ try {
   const tab=state.tabs.find(t=>t.agent);assert.ok(tab);assert.equal(tab.inUse, false);assert.equal(tab.busy, false);
   const paint=await app.main<{ strokes:Array<{ tool:string;color:string;released:boolean;points:Array<{ x:number;y:number;buttons:number;trusted:boolean }> }>;picks:Array<{ trusted:boolean }>;webgl:boolean }>(
     `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).view.webContents.executeJavaScript("paint")`);
-  const observation=await app.main<{captureRegions:Array<{name:string;region:number[]}>}>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).observation`);
+  const observation=await app.main<{captureRegions:Array<{name:string;region:number[];bounds:{left:number;top:number;right:number;bottom:number}}> }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab.id)}).observation`);
   assert.ok(observation.captureRegions.some((c:{name:string;region:number[]})=>c.name === "Drawing" && c.region.join(",") === "64,64,680,440"),"canvas crop hint uses screenshot coordinates");
+  assert.deepEqual(observation.captureRegions.find((c:{name:string})=>c.name === "Drawing")?.bounds, {left:64,top:64,right:744,bottom:504});
   assert.equal(paint.webgl, true, "graphical web apps can initialize WebGL");
   writeFileSync(join(evidence, "stroke-paths.json"), JSON.stringify(paint));
   assert.equal(paint.strokes.length, paths.length);assert.equal(paint.picks.length, 4);

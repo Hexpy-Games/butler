@@ -36,7 +36,7 @@ async function graphicalPoints(observation) {
     const y = Math.round((origin.y + r.y + r.height / 2) * geometry.height / geometry.cssHeight);
     const left = Math.ceil((origin.x + r.x) * geometry.width / geometry.cssWidth), top = Math.ceil((origin.y + r.y) * geometry.height / geometry.cssHeight);
     const right = Math.floor((origin.x + r.x + r.width) * geometry.width / geometry.cssWidth), bottom = Math.floor((origin.y + r.y + r.height) * geometry.height / geometry.cssHeight);
-    const bounds = node.role === "canvas" ? ` canvas screenshot bounds=[${left},${top},${right-left},${bottom-top}]` : "";
+    const bounds = node.role === "canvas" ? ` canvas screenshot bounds=[${left},${top},${right-left},${bottom-top}] (x,y,width,height); drag endpoints require ${left}<=x<${right}, ${top}<=y<${bottom}` : "";
     return `[${node.ref}] center=[${x},${y}] expect=${JSON.stringify(node.role === "canvas" ? "canvas" : `${node.role} icon`)}${bounds}`;
   }).join("\n")}` : "";
 }

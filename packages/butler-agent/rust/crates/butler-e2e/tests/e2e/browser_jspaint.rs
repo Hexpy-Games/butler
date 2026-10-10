@@ -65,6 +65,10 @@ async fn luna_jspaint_replays_point_strokes_pixels_attachment_and_release()
                 a["kind"] == "image"
                     && a["mime_type"] == "image/jpeg"
                     && a["size_bytes"].as_u64().unwrap() > 0
+                    && m["text"].as_str().unwrap().contains(&format!(
+                        "(artifacts/public-data/{})",
+                        a["safe_name"].as_str().unwrap()
+                    ))
             })
         })
     }));

@@ -56,6 +56,6 @@ function pointRefusal(observation, point, expect, result) {
   return { ...result, rejected_point: point, image_geometry: observation.imageGeometry,
     untrusted_content: { kind: "web_page_data", capture_regions: observation.captureRegions },
     recovery: canvas && !result.hit?.ref
-      ? "This screenshot point does not hit the observed drawing canvas. No steps were dispatched; this is coordinate validation, not an input delivery failure. Observe fresh pixels, then keep both drag endpoints inside the canvas screenshot bounds/capture_regions. Tool and color selection are separate clicks."
+      ? "This screenshot point does not hit the observed drawing canvas. No steps were dispatched; this is coordinate validation, not an input delivery failure. Observe fresh pixels and replan the complete shape with both endpoints inside one canvas: left<=x<right, top<=y<bottom in capture_regions.bounds. A region is [x,y,width,height], so its bottom is y+height, not height. Do not repeat the rejected point. Tool and color selection are separate clicks."
       : result.recovery };
 }
