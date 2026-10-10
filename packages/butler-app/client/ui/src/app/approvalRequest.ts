@@ -88,6 +88,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   const browser_steps = normalizeBrowserSteps(value.browser_steps);
   return { tool: value.tool, access: value.access, targets,
     ...(browser_steps ? { browser_steps } : {}),
+    ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
     ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
     ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
@@ -122,6 +123,7 @@ export function approvalRequestView(
     title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
     details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+      ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
       ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
       : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",

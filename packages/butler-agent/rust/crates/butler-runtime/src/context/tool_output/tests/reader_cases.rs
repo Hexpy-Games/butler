@@ -1,5 +1,6 @@
 use super::*;
 
+// test-category: format-pin
 #[tokio::test]
 async fn source_bun_reader_documents_match_utf16_cursor_search_and_error_branches() {
     let fixture = Fixture::new();
@@ -58,11 +59,14 @@ async fn source_bun_reader_documents_match_utf16_cursor_search_and_error_branche
             .await
             .unwrap()
             .unwrap();
-        let document = read
-            .to_json_document()
-            .unwrap()
-            .replace(reference.path.to_str().unwrap(), "<path>")
-            .replace(&reference.id, "<id>");
+        let mut document = read.to_json_document().unwrap();
+        if let Some(artifact) = &read.artifact {
+            // Explicit paths are normalized; id lookups retain the root spelling.
+            // Both must identify the retained artifact, including with TMPDIR="T//".
+            assert_eq!(artifact.path, reference.path);
+            document = document.replace(artifact.path.to_str().unwrap(), "<path>");
+        }
+        let document = document.replace(&reference.id, "<id>");
         assert_eq!(
             document,
             case["document"].as_str().unwrap(),

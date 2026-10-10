@@ -210,7 +210,13 @@ fn grants(db: &Connection, session: &str, turn: Option<&str>) -> Result<Value> {
                 "SELECT s.source_session_id FROM app_automation_runs r \
                  JOIN app_automation_grant_sources s ON s.automation_id=r.automation_id \
                  JOIN app_automations a ON a.id=r.automation_id \
-                 WHERE r.turn_id=?1 AND r.target_session_id=?2",
+                 WHERE r.turn_id=?1 AND r.target_session_id=?2 \
+                 UNION SELECT s.source_session_id FROM turns t \
+                 JOIN app_automation_run_inputs i ON i.message_id=t.user_message_id \
+                 JOIN app_automation_runs r ON r.id=i.run_id \
+                 JOIN app_automation_grant_sources s ON s.automation_id=r.automation_id \
+                 JOIN app_automations a ON a.id=r.automation_id \
+                 WHERE t.id=?1 AND t.chat_id=?2 AND r.target_session_id=?2",
             )
             .map_err(sql)?;
         let sources = statement

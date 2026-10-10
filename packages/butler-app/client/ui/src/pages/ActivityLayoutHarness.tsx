@@ -52,14 +52,15 @@ export function ActivityLayoutHarness() {
   const [observer, setObserver] = useState(params.get("observer") === "1");
   const count = params.get("list") === "1" ? 4 : 1;
   const theme = params.get("theme") === "dark" ? "dark" : "light";
-  const settings = { ...EMPTY_SETTINGS, appearance_theme: theme, language: "ko" } as const;
+  const language = params.get("lang") === "en" ? "en" : "ko";
+  const settings = { ...EMPTY_SETTINGS, appearance_theme: theme, language } as const;
   usePortalThemeClasses(settings);
   useEffect(() => {
-    setAppCopyLanguage("ko");
+    setAppCopyLanguage(language);
     useButlerStore.setState({ activeChatId: "activity-layout", settings: {
-      ...EMPTY_SETTINGS, language: "ko", appearance_theme: theme,
+      ...EMPTY_SETTINGS, language, appearance_theme: theme,
     } });
-  }, [theme]);
+  }, [theme, language]);
   useEffect(() => {
     useButlerStore.setState({ summary: { session_id: "activity-layout", turn_state: running ? "running" : "delivered",
       latest_progress: { turn_id: "activity-layout-0", state: running ? "running" : "delivered", safe_progress_rows: rows } } });
@@ -78,7 +79,8 @@ export function ActivityLayoutHarness() {
     status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined });
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "activity-layout-0",
     state: running ? "running" : "delivered", progress: { safe_progress_rows: rows } };
-  const approval = normalizeApprovalSummary({ action_kind: "other", count: 1, risk: "low",
+  const approvalFixture = (window as Window & { butlerApprovalFixture?: unknown }).butlerApprovalFixture;
+  const approval = normalizeApprovalSummary(approvalFixture ?? { action_kind: "other", count: 1, risk: "low",
     targets: [{ kind: "folder", path: "C:\\Users\\test\\Downloads" }], examples: ["C:\\Users\\test\\Downloads"],
     operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
   const decision = approvalRequestView({ approval, reason: "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
