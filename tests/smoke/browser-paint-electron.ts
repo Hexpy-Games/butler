@@ -10,6 +10,7 @@ import type { StubModelRequest } from "../support/native-app-server";
 
 const evidence=process.env.BUTLER_BROWSER_EVIDENCE;assert.ok(evidence);
 const baseline=process.env.BUTLER_PAINT_BASELINE==="1";
+const extraCapture=process.env.BUTLER_PAINT_EXTRA_CAPTURE==="1";
 const stub=browserStub();
 const app=await browserAgentApp(evidence, stub.handler, undefined, { stubReply:request=>{
   const paths=JSON.stringify(request.messages).match(/artifacts\/public-data\/browser-[a-f0-9-]+\.jpg/gu);
@@ -39,6 +40,11 @@ function draw(indexes:number[]) {
     })) });
   };
 }
+const capture=(r:StubModelRequest)=>{
+  const o=latestBrowser(r, "obs"), g=o.image_geometry as { width:number;height:number;cssWidth:number;cssHeight:number };
+  return bridgeBrowser("browser_screenshot", { tab:o.tab, observation:o.obs,
+    region:[80*g.width/g.cssWidth, 80*g.height/g.cssHeight, 850*g.width/g.cssWidth, 550*g.height/g.cssHeight] });
+};
 async function send(text:string) {
   const prior=await app.gateway.api<{ latest_turn?:{ id:string } }>("/session-view?session_id=general");
   await app.gateway.api("/messages", { method:"POST", body:JSON.stringify({ chat_id:"general", text, client_message_id:crypto.randomUUID() }) });
@@ -64,9 +70,7 @@ try {
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"drag",point:[200,200],target_point:[200,600],expect:"canvas"}]});},
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:Array.from({length:11},()=>({action:"click",point:[200,200],expect:"canvas"}))});},
     draw([0, 1, 2, 3, 4, 5]), observe, pick("Ellipse"), observe, pickColor(128), observe, draw([6]), observe,
-    r=>{const o=latestBrowser(r, "obs"), g=o.image_geometry as { width:number;height:number;cssWidth:number;cssHeight:number };
-      return bridgeBrowser("browser_screenshot", { tab:o.tab, observation:o.obs,
-        region:[80*g.width/g.cssWidth, 80*g.height/g.cssHeight, 850*g.width/g.cssWidth, 550*g.height/g.cssHeight] });},
+    ...(extraCapture?[capture]:[]), capture,
   ]);
   await send("마우스로 집과 해를 그리고 캡처해줘.");
   writeFileSync(join(evidence, "tool-results.json"), JSON.stringify(stub.results));
@@ -109,9 +113,9 @@ try {
   await shellReady(app, "ko");
   await app.click("일반");
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
-  const count=await app.page.expression<number>("document.querySelectorAll('[data-test-class=markdown-inline-image]').length");assert.equal(count, 1);
+  const count=await app.page.expression<number>("document.querySelectorAll('[data-test-class=markdown-inline-image]').length");assert.equal(count, extraCapture?2:1);
   assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-artifact-list]').length"), baseline?2:1, "image card is removed; web fixture card stays");
-  if(!baseline)assert.ok(await app.page.expression("Boolean(document.querySelector('[data-test-class=message-image] button'))"), "save stays with the image");
+  if(!baseline)assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-image] :is(button,a)').length"), count, "save stays with every image");
   writeFileSync(join(evidence, "paint-result.json"), JSON.stringify({ paint, tab, count }));
   for(const language of ["ko", "en"])for(const theme of ["light", "dark"])for(const width of [1440, 1100]) {
     await app.gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language, appearance_theme:theme }) });
@@ -120,6 +124,6 @@ try {
     await app.click(language === "ko" ? "일반" : "General");
     await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
     await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="markdown-inline-image"]')].every(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
-    await app.shot(`${baseline?"before":"after"}-${language}-${theme}-${width}`);
+    await app.shot(`${baseline?"before":"after"}-${extraCapture?"extra-":""}${language}-${theme}-${width}`);
   }
 }finally{await app.stop();}
