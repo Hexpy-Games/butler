@@ -906,6 +906,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "zeroize",
  "zip",
 ]
 
@@ -1103,6 +1104,7 @@ dependencies = [
  "regex",
  "regress",
  "reqwest 0.12.28",
+ "roxmltree",
  "rusqlite",
  "ryu-js",
  "semver",
@@ -1119,6 +1121,7 @@ dependencies = [
  "url",
  "uuid",
  "webp",
+ "zeroize",
  "zip",
 ]
 

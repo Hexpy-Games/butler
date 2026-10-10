@@ -53,6 +53,7 @@ pub(in crate::gateway) fn serve(
             uploads: tokio::sync::Semaphore::new(2),
             static_ui_root: config.static_ui_root,
             output_data: config.output_data,
+            signin_secrets: super::signin_secrets::SignInSecrets::new(),
         });
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.

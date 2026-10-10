@@ -38,6 +38,7 @@ serde_json.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
 subtle.workspace = true
+zeroize.workspace = true
 tokio.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
 tz-rs.workspace = true
