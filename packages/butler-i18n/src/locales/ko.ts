@@ -1305,6 +1305,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       allowedHosts: "허용 호스트",
       signIns: "로그인",
       browserImport: "다른 브라우저에서 가져오기",
+      headlessBrowser: "앱 없이 쓰는 브라우저",
     },
     pageSectionDescriptions: {
       grants: "묻지 않고 실행하도록 허용한 작업입니다.",
@@ -1733,6 +1734,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     security: {
       remoteAccess: "다른 컴퓨터에서 접속 허용",
       remoteAccessDescription: "같은 네트워크의 기기에서 연결 코드를 입력해 접속합니다.",
+      headlessBrowser: "앱이 꺼져 있어도 브라우저 사용",
+      headlessBrowserDescription: "버틀러 전용 브라우저를 씁니다. 처음 쓸 때 약 100MB를 내려받습니다.",
       addresses: "접속 주소",
       noAddresses: "네트워크 주소 없음",
       copyAddress: "주소 복사",

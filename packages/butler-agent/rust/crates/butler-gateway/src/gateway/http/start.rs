@@ -35,6 +35,7 @@ pub(in crate::gateway) fn serve(
                     root: browser.root,
                     install: browser.install,
                     content: Some(content),
+                    enabled: browser.enabled,
                 },
                 shutdown.clone(),
             )

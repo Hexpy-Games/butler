@@ -60,6 +60,24 @@ impl GatewaySecurityStore for AppSecurityStore {
         })
     }
 
+    fn save_headless_browser(&self, enabled: bool) -> ApplicationFuture<()> {
+        let data_root = self.data_root.clone();
+        let installation = self.installation.clone();
+        Box::pin(async move {
+            let mut patch = Map::new();
+            patch.insert("headlessBrowser".into(), Value::Bool(enabled));
+            crate::host::cli::gateway::patch_app_config(&data_root, &installation, patch)
+                .await
+                .map_err(|error| {
+                    public_error(
+                        "security_settings_unavailable",
+                        "Security settings could not be saved.",
+                    )
+                    .with_source(error)
+                })
+        })
+    }
+
     fn save_exposure(&self, exposure: GatewayExposure) -> ApplicationFuture<()> {
         let data_root = self.data_root.clone();
         let installation = self.installation.clone();

@@ -9,6 +9,7 @@
 )]
 mod backend;
 mod guard;
+mod settings;
 mod support;
 
 use butler_e2e::e2e::HarnessError;

@@ -1303,6 +1303,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       allowedHosts: "Allowed hosts",
       signIns: "Sign-ins",
       browserImport: "Import from another browser",
+      headlessBrowser: "Browser without the app",
     },
     pageSectionDescriptions: {
       grants: "Actions Butler runs without asking.",
@@ -1732,6 +1733,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     security: {
       remoteAccess: "Allow access from other computers",
       remoteAccessDescription: "Devices on your network enter the connection code to connect.",
+      headlessBrowser: "Browse when the app is closed",
+      headlessBrowserDescription: "Butler uses its own browser. About 100 MB downloads on first use.",
       addresses: "Addresses",
       noAddresses: "No network address",
       copyAddress: "Copy address",

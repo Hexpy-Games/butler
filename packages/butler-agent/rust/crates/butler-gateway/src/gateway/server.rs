@@ -50,6 +50,8 @@ pub struct HeadlessBrowserConfig {
     /// Profile and log directory (emptied when the browser is reaped).
     pub root: std::path::PathBuf,
     pub install: butler_runtime::browser::InstallSource,
+    /// On at start (Settings → Security changes it while running).
+    pub enabled: bool,
 }
 
 impl Default for GatewayConfig {

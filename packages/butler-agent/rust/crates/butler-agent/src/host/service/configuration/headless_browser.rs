@@ -23,7 +23,8 @@ pub(super) fn headless_browser(
         _ => configured
             .unwrap_or_else(|| env_value("BUTLER_APP_BUNDLED_SUPERVISOR").as_deref() != Some("1")),
     };
-    enabled.then(|| HeadlessBrowserConfig {
+    Some(HeadlessBrowserConfig {
+        enabled,
         root: data_root.join("state/browser/headless"),
         install: InstallSource {
             cache_root: env_value("BUTLER_BROWSER_CACHE_DIR")

@@ -58,6 +58,8 @@ pub struct HeadlessConfig {
     pub install: InstallSource,
     /// Butler's output origin, the only loopback destination.
     pub content: Option<ContentOrigin>,
+    /// Settings → Security; changeable while running.
+    pub enabled: bool,
 }
 
 pub struct Headless {
@@ -66,6 +68,7 @@ pub struct Headless {
     current: Mutex<Option<Arc<Browser>>>,
     starting: tokio::sync::Mutex<()>,
     in_flight: AtomicUsize,
+    enabled: std::sync::atomic::AtomicBool,
 }
 
 fn refused(reason: &str) -> Value {
@@ -85,6 +88,7 @@ impl Headless {
     pub fn new(config: HeadlessConfig, shutdown: CancellationToken) -> Arc<Self> {
         let headless = Arc::new(Self {
             installer: Installer::new(config.install.clone()),
+            enabled: std::sync::atomic::AtomicBool::new(config.enabled),
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
@@ -98,6 +102,19 @@ impl Headless {
             }
         });
         headless
+    }
+
+    /// Whether new work may start here (Settings → Security).
+    pub fn enabled(&self) -> bool {
+        self.enabled.load(Ordering::SeqCst)
+    }
+
+    /// Turns the backend on or off; off ends the browser and its tabs now.
+    pub async fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::SeqCst);
+        if !enabled {
+            self.shutdown().await;
+        }
     }
 
     fn browser(&self) -> Option<Arc<Browser>> {
@@ -117,6 +134,12 @@ impl Headless {
             .get(id)
             .filter(|t| t.admitted)
             .map(state::Tab::snapshot)
+    }
+
+    /// Whether any headless tab is open (its calls stay here until it closes).
+    pub fn has_tabs(&self) -> bool {
+        self.browser()
+            .is_some_and(|b| !b.shared.lock().tabs.is_empty())
     }
 
     /// This conversation's headless tab ids.
@@ -263,6 +286,9 @@ impl Headless {
     async fn open(self: &Arc<Self>, session: &str, args: &Value, deadline_ms: u64) -> Value {
         if args["profile"] == "signed_in" || args["signed_in"] == true {
             return refused("signed_in_unavailable");
+        }
+        if !self.enabled() {
+            return json!({"status":"unavailable","reason":"no_browser"});
         }
         let started = Instant::now();
         let url = args["url"].as_str().unwrap_or("").to_owned();

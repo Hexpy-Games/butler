@@ -89,6 +89,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "grants", kind: "list", fields: [] },
     { id: "saved-keys", kind: "list", fields: [] },
     { id: "diagnostics", kind: "form", fields: ["diagnostics"] },
+    { id: "headless-browser", kind: "form", fields: ["headless-browser-enabled"], optional: true },
     { id: "security-advanced", kind: "form", fields: [], optional: true },
     { id: "allowed-hosts", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],

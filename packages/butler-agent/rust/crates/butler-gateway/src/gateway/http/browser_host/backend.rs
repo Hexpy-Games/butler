@@ -19,7 +19,11 @@ pub(super) enum Backend {
 /// Tab ops go where the tab lives; new tabs follow the turn's pin, then the
 /// conversation's live tabs, then the attached App, then headless.
 pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backend {
-    let Some(headless) = state.headless.as_ref() else {
+    let Some(headless) = state
+        .headless
+        .as_ref()
+        .filter(|h| h.enabled() || h.has_tabs())
+    else {
         return Backend::App;
     };
     let op = frame["op"].as_str().unwrap_or("");
