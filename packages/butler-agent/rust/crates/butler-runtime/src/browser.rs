@@ -1,4 +1,8 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
+pub mod egress;
+pub mod headless;
+pub use egress::ContentOrigin;
+pub use headless::{Headless, HeadlessConfig, InstallSource};
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
 
@@ -73,6 +77,10 @@ impl TabRegistry {
             .collect();
         ids.sort();
         ids
+    }
+    /// Whether the App reported this tab, whoever owns it.
+    pub fn contains(&self, id: &str) -> bool {
+        self.tabs.contains_key(id)
     }
     pub fn is_user(&self, id: &str) -> bool {
         self.tabs.get(id).is_some_and(|tab| tab["holder"] == "user")

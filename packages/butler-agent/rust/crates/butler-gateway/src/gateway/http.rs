@@ -77,6 +77,7 @@ const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
 struct HttpState {
     browser: browser_host::Hub,
+    headless: Option<Arc<butler_runtime::browser::Headless>>,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,

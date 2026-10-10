@@ -19,6 +19,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "process_control" => &["process_table"],
         // Hook processes compose shell selection and tree containment.
         "hook_process" => &["command_sandbox", "process_control"],
+        // The headless browser's DevTools pipe runs in a contained process tree.
+        "browser_process" => &["process_control"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],

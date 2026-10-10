@@ -41,6 +41,9 @@ struct TypedGatewaySettings {
     content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
+    /// `headlessBrowser`: Butler's own headless browser on or off; absent
+    /// means on without the App and off with it.
+    headless_browser: Option<bool>,
 }
 
 impl TypedGatewaySettings {
@@ -61,6 +64,7 @@ impl TypedGatewaySettings {
                 .get("remoteAccessEnabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            headless_browser: config.get("headlessBrowser").and_then(Value::as_bool),
         }
     }
 }
@@ -162,11 +166,15 @@ impl AppServiceConfiguration {
             db_configured,
             enabled,
             folder_selection_secret: folder_secret,
-            gateway: gateway_config(
-                LocalAuthConfig::required(token),
-                TypedGatewaySettings::read(config),
-                admin.ok(),
-            ),
+            gateway: {
+                let settings = TypedGatewaySettings::read(config);
+                let headless =
+                    super::headless_browser::headless_browser(data_root, settings.headless_browser);
+                let mut gateway =
+                    gateway_config(LocalAuthConfig::required(token), settings, admin.ok());
+                gateway.headless_browser = headless;
+                gateway
+            },
             credential_errors,
         }
     }
@@ -217,6 +225,7 @@ impl AppServiceConfiguration {
             message_rate_limit_window: self.gateway.message_rate_limit_window,
             static_ui_root: self.gateway.static_ui_root.clone(),
             favicon_cache_root: self.gateway.favicon_cache_root.clone(),
+            headless_browser: self.gateway.headless_browser.clone(),
         }
     }
 }
@@ -305,6 +314,7 @@ fn gateway_config(
         },
         static_ui_root: None,
         favicon_cache_root: None,
+        headless_browser: None,
     }
 }
 
