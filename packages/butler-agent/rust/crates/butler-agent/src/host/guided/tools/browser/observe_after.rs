@@ -53,6 +53,36 @@ pub(super) fn combine(observation: Value, mut action: Value) -> Value {
     if let Some(still) = action.as_object_mut().and_then(|a| a.remove("still_file")) {
         combined["still_file"] = still;
     }
+    let notes = action.as_object_mut().and_then(|a| a.remove("notes"));
     combined["action"] = action;
-    combined
+    lead_with_notes(combined, notes)
+}
+
+/// Batch notes join the observation's progress notes, which lead the result so
+/// the model reads them before the page data.
+fn lead_with_notes(combined: Value, batch_notes: Option<Value>) -> Value {
+    let Value::Object(mut record) = combined else {
+        return combined;
+    };
+    let mut progress = record.remove("progress").unwrap_or_else(|| json!({}));
+    let mut notes = match batch_notes {
+        Some(Value::Array(items)) => items,
+        _ => Vec::new(),
+    };
+    notes.extend(
+        progress
+            .get("notes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .cloned(),
+    );
+    if notes.is_empty() {
+        return Value::Object(record);
+    }
+    progress["notes"] = Value::Array(notes);
+    let mut ordered = serde_json::Map::new();
+    ordered.insert("progress".into(), progress);
+    ordered.extend(record);
+    Value::Object(ordered)
 }

@@ -17,7 +17,7 @@ body { margin: 0; background: #fff; font: 14px sans-serif; }
 #list div { padding: 4px 6px; cursor: pointer; background: #fff; border-bottom: 1px solid #ddd; }
 </style>
 <div id="shell"><div id="board"><canvas id="canvas" width="600" height="400"></canvas></div></div>
-<div id="tools"><button>Rectangle</button><button>Line</button><button id="open-blocker">Open blocker</button><button id="open-modal">Open modal</button><button id="noop">Noop</button></div>
+<div id="tools"><button>Rectangle</button><button>Line</button><button id="open-blocker">Open blocker</button><button id="open-modal">Open modal</button><button id="noop">Noop</button><button id="add">Add one</button><span id="count" style="font-size:40px">0</span></div>
 <div id="side"><div class="picker" role="dialog" aria-modal="true"><button>Red</button><button>Blue</button></div></div>
 <div role="dialog" aria-modal="true" style="display:none"><button>Hidden dialog button</button></div>
 <dialog id="closed"><button>Closed dialog button</button></dialog>
@@ -27,17 +27,32 @@ body { margin: 0; background: #fff; font: 14px sans-serif; }
 <dialog id="modal"><button id="close-modal">Close modal</button></dialog>
 <div id="form"><input id="place" placeholder="Place"><div id="list"></div><a href="#" id="reset">Directions</a></div>
 <script>
-window.log = { strokes: 0 };
+window.log = { strokes: 0, edits: 0 };
 const canvas = document.querySelector('#canvas'), context = canvas.getContext('2d');
-let start = null;
-canvas.addEventListener('mousedown', event => { start = [event.offsetX, event.offsetY]; });
+// Like drawing apps: a drag draws a line and leaves it selected; a drag that starts
+// on the selected line's end handle moves that end instead of drawing.
+const lines = [];
+let start = null, selected = null, editing = false;
+const redraw = () => {
+  context.clearRect(0, 0, canvas.width, canvas.height); context.lineWidth = 4;
+  for (const line of lines) { context.beginPath(); context.moveTo(line[0], line[1]); context.lineTo(line[2], line[3]); context.stroke(); }
+  if (selected) { context.strokeStyle = '#66f'; context.strokeRect(selected[2] - 5, selected[3] - 5, 10, 10); context.strokeStyle = '#000'; }
+};
+canvas.addEventListener('mousedown', event => {
+  start = [event.offsetX, event.offsetY];
+  editing = Boolean(selected && Math.hypot(selected[2] - start[0], selected[3] - start[1]) <= 10);
+});
 canvas.addEventListener('mouseup', event => {
   if (!start) return;
-  context.strokeRect(start[0], start[1], event.offsetX - start[0], event.offsetY - start[1]); start = null; log.strokes++;
-  // Like drawing apps: a shape opens an inline properties widget that declares aria-modal.
+  if (editing) { selected[2] = event.offsetX; selected[3] = event.offsetY; log.edits++; }
+  else { selected = [start[0], start[1], event.offsetX, event.offsetY]; lines.push(selected); log.strokes++; }
+  start = null; redraw();
+  // A shape opens an inline properties widget that declares aria-modal.
   if (!document.querySelector('#props')) document.querySelector('#side').insertAdjacentHTML('beforeend',
     '<div id="props" class="picker" role="dialog" aria-modal="true"><button>Thin</button><button>Bold</button></div>');
 });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') { selected = null; redraw(); } });
+document.querySelector('#add').onclick = () => { const count = document.querySelector('#count'); count.textContent = String(Number(count.textContent) + 1); };
 document.querySelector('#open-blocker').onclick = () => { document.querySelector('#backdrop').style.display = 'block'; };
 document.querySelector('#close-blocker').onclick = () => { document.querySelector('#backdrop').style.display = 'none'; };
 document.querySelector('#open-modal').onclick = () => document.querySelector('#modal').showModal();
@@ -50,5 +65,10 @@ place.addEventListener('input', () => {
     return option;
   }));
 });
-document.querySelector('#reset').onclick = event => { event.preventDefault(); place.value = ''; list.replaceChildren(); };
+// The reset link re-renders on every click, so each click meets a new element.
+const reset = event => {
+  event.preventDefault(); place.value = ''; list.replaceChildren();
+  const next = event.currentTarget.cloneNode(true); next.onclick = reset; event.currentTarget.replaceWith(next);
+};
+document.querySelector('#reset').onclick = reset;
 </script></html>

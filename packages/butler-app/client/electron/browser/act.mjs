@@ -5,7 +5,8 @@ import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
 import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
 import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from "./navigate.mjs";
-import { recordBatch } from "./progress.mjs";
+import { recordBatch, repeatRefusal } from "./progress.mjs";
+import { canvasBefore, canvasEffect } from "./canvas-effect.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
 const ACTIONS = [...POINTER, "press", "type", "wait", ...NAVIGATION];
@@ -86,7 +87,7 @@ export async function prepareBatch(tab, args) {
     const value = step.action === "upload" ? step.value.split(/[\\/]/u).at(-1) : step.value;
     steps.push({ ...target, action: step.action, value_preview: typeof value === "string" ? [...value].slice(0, 40).join("") : undefined });
   }
-  return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
+  return repeatRefusal(tab, args, steps) ?? { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
 }
 const sensitive = target => Boolean(target.payment && target.submit || target.upload || target.frame_payment);
 function sameTarget(prepared, current) {
@@ -141,7 +142,9 @@ const RECOVERY = {
 };
 function batchResult(tab, steps, failed) {
   const completed = steps.filter(step => step.status === "completed").length;
-  const result = { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch, completed };
+  // Notes lead the result so they are read before the receipts.
+  const notes = steps.flatMap((step, index) => step.canvas_effect ? [`Step ${index}: ${step.canvas_effect.note}`] : []);
+  const result = { ...(notes.length ? { notes } : {}), status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch, completed };
   const first = steps.findIndex(step => step.status !== "completed");
   if (first >= 0 && result.status === "interrupted") {
     result.next_step_index = first;
@@ -164,7 +167,12 @@ export async function actBatch(tab, args, session) {
       if (target.reason) { steps.push({ status: "not_dispatched", ...target }); failed = true; continue; }
       if (!sameTarget(prepared, target)) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
       if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : "control_changed" }); failed = true; continue; }
+      const before = step.action === "drag" ? await canvasBefore(tab, target) : null;
       steps.push(await dispatch(tab, args, step, target));
+      if (before && steps.at(-1).status === "completed") {
+        const effect = await canvasEffect(tab, before, target);
+        if (effect) steps.at(-1).canvas_effect = effect;
+      }
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
       else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
         steps.at(-1).still = await stepStill(tab);
