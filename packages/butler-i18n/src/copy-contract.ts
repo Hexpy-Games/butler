@@ -580,6 +580,9 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** What a waiting browser hand-off needs, in place of `attention`. */
+    signInAttention: string;
+    tabAttention: string;
     newGroup: string;
     saveFailed: string;
     views: string;

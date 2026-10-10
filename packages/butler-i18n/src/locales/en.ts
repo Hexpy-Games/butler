@@ -655,6 +655,8 @@ export const enUsCopy: AppCopy = {
     allFavorites: "Show all favorites",
     working: "Working",
     attention: "Needs attention",
+    signInAttention: "Sign-in needs you",
+    tabAttention: "Needs you in the tab",
     newGroup: "New group",
     saveFailed: "Could not save organization changes.",
     views: "Conversation views",
