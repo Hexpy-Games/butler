@@ -69,9 +69,11 @@ const afterInputStep = (steps, index) => steps.slice(0, index).some(step => step
 export async function prepareBatch(tab, args) {
   if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps",
     recovery: "Send 1–10 steps per call. Split tool/color selection from strokes: select, observe fresh pixels, then draw a group of strokes. No steps were dispatched." };
-  if (args.steps.length > 1 && args.steps.some(step => step.action === "fill" && tab.observation?.nodes.some(node =>
+  // Suggestions appear after an autocomplete fill, so nothing may follow it in
+  // the batch; steps before it (e.g. clicking the field) are safe.
+  if (args.steps.slice(0, -1).some(step => step.action === "fill" && tab.observation?.nodes.some(node =>
     node.ref === step.ref && (node.role === "combobox" || ["list", "both"].includes(node.autocomplete))))) {
-    return { status: "refused", reason: "autocomplete_requires_observation", recovery: "Fill one field, observe its suggestions, select one, then observe before the next action." };
+    return { status: "refused", reason: "autocomplete_requires_observation", recovery: "An autocomplete fill must be the batch's last step: fill it (optionally after clicking it), observe its suggestions, select one, then continue. No steps were dispatched." };
   }
   const steps = [];
   for (const [index, step] of args.steps.entries()) {
