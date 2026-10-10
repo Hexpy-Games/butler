@@ -3,6 +3,7 @@ pub(super) mod agent_calls;
 mod backend;
 mod downloads;
 mod fill;
+mod hand_back;
 mod previews;
 mod report;
 pub(super) mod signed_in;
@@ -157,7 +158,7 @@ fn attach(
                 .lock()
                 .map(|hub| hub.tabs.ready_waits())
                 .unwrap_or_default();
-            let _ = agent_calls::resume_waits(&state, &tabs).await;
+            let _ = hand_back::resume_waits(&state, &tabs).await;
         });
     }))?;
     let shutdown = state.shutdown.clone();
