@@ -1,6 +1,7 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
 mod backend;
+mod downloads;
 mod report;
 mod usage;
 use super::{Client, HttpError, HttpState};
@@ -72,6 +73,9 @@ pub(super) async fn route(
     let path = request.uri().path().to_owned();
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => attach(state, client.keys.live_streams()),
+        (&Method::POST, "/internal/browser-host/downloads") => {
+            downloads::handle(state, read_json(request).await?).await
+        }
         (&Method::POST, "/internal/browser/calls") => call(state, request).await,
         (&Method::POST, "/internal/browser-host/stills") => {
             agent_calls::still(state, read_json(request).await?).await
