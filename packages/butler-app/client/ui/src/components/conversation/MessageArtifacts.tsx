@@ -5,6 +5,8 @@ import { useButlerStore } from "@/app/store.ts";
 import { ArtifactList, FileText, Space } from "@/butler-ds";
 import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { artifactDescription } from "@/components/artifacts/artifactDisplay";
+import { useMemo } from "react";
+import { inlineImageFiles } from "./inlineImageFiles";
 
 function fallbackArtifacts(
   attachments: MessageFileRef[],
@@ -26,14 +28,17 @@ function fallbackArtifacts(
 export function MessageArtifacts({
   artifacts,
   attachments = [],
+  text = "",
 }: {
   artifacts: SessionArtifactSummary[];
   attachments?: MessageFileRef[];
+  text?: string;
 }) {
   useAppLocale();
   const openArtifact = useButlerStore((state) => state.openArtifact);
-  const visibleArtifacts =
-    artifacts.length > 0 ? artifacts : fallbackArtifacts(attachments);
+  const inlineFiles = useMemo(() => inlineImageFiles(text, attachments, artifacts), [text, attachments, artifacts]);
+  const visibleArtifacts = (artifacts.length > 0 ? artifacts : fallbackArtifacts(attachments))
+    .filter(artifact => artifact.kind !== "image" || !artifact.url || !inlineFiles.has(artifact.url));
   if (visibleArtifacts.length === 0) return null;
   return (
     <>

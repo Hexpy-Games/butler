@@ -12,10 +12,11 @@ function pointHit({ x, y, expect }) {
   const hidden = rendering(element);
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable", hit };
   if (element.disabled || element.getAttribute("aria-disabled") === "true") return { reason: "disabled", hit };
-  const words = expect.toLowerCase().trim().split(/\s+/u), role = words.shift();
-  if (role !== meaning.role || meaning.role !== "canvas" && !words.every(word => meaning.name?.toLowerCase().includes(word))) return { reason: "point_mismatch", hit };
-  if (!meaning.clickable) return { reason: "not_actionable", hit };
   for (const [ref, weak] of globalThis.__butlerObservation.refs) if (weak.deref() === element) { hit.ref = ref; break; }
+  const words = expect.toLowerCase().trim().split(/\s+/u), role = words.shift();
+  if (role !== meaning.role || meaning.role !== "canvas" && !words.every(word => meaning.name?.toLowerCase().includes(word))) return { reason: "point_mismatch", hit,
+    recovery: meaning.role === "canvas" ? "This point hit the drawing canvas, not a toolbar/palette control. Use a current element ref or its Graphical targets screenshot center for a control. Do not use the canvas ref/center for tool or color selection. No steps were dispatched." : hit.ref ? "The point hit a different semantic target. Inspect its role/name and the fresh screenshot; use hit.ref if it is the intended control. Otherwise choose a corrected point. Palette graphics may be element icons, not the drawing canvas." : "No observed control matched this point. Observe again, then choose a visible ref or a point within the intended target." };
+  if (!meaning.clickable) return { reason: "not_actionable", hit };
   const rect = rectangle(element);
   return { x, y, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hit,
     verification: meaning.role === "canvas" ? "unverified" : "verified",
