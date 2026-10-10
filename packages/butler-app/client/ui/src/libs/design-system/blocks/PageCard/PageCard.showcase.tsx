@@ -5,7 +5,7 @@ import { PageCardDemo } from "./PageCard.demo";
 export const meta: ShowcaseMeta = {
   title: "PageCard",
   category: "Browser",
-  tags: ["browser", "page", "native view", "holder", "riso edge", "letterbox", "band", "loading"],
+  tags: ["browser", "page", "native view", "holder", "riso edge", "letterbox", "band", "reserved band", "loading"],
   status: "beta",
 };
 
@@ -13,10 +13,22 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Butler holds the tab (riso edge, fixed 1280×800 page)",
     states: ["loading"],
-    render: ({ locale }) => <PageCardDemo locale={locale} holder="butler" band="agent" agent height={420} readout />,
+    render: ({ locale }) => <PageCardDemo locale={locale} holder="butler" band="agent" agent height={420} readout reserveBand />,
   },
-  { name: "You hold the tab", render: ({ locale }) => <PageCardDemo locale={locale} holder="user" band="user" agent height={420} /> },
-  { name: "Waiting for approval (static amber)", render: ({ locale }) => <PageCardDemo locale={locale} holder="waiting" band="waiting" agent height={420} /> },
+  {
+    // The band row is reserved: idle, agent and pick leave the native view's bounds (the readout) unchanged.
+    name: "Reserved band row: the page never moves",
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Grid columns="3" gap="md">
+        <PageCardDemo locale={locale} holder="none" band="idle" agent height={240} readout reserveBand />
+        <PageCardDemo locale={locale} holder="butler" band="agent" agent height={240} readout reserveBand />
+        <PageCardDemo locale={locale} holder="none" band="pick" agent height={240} readout reserveBand />
+      </Grid>
+    ),
+  },
+  { name: "You hold the tab", render: ({ locale }) => <PageCardDemo locale={locale} holder="user" band="user" agent height={420} reserveBand /> },
+  { name: "Waiting for approval (static amber)", render: ({ locale }) => <PageCardDemo locale={locale} holder="waiting" band="waiting" agent height={420} reserveBand /> },
   {
     // The native view's bounds are the content area: inside the 1px border, under the band.
     name: "Your page at the card's size, loading",

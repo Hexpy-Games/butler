@@ -3,9 +3,8 @@ import { appCopy, useAppLocale } from "@/app/copy";
 import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
-import { BrowserPopupBand } from "./BrowserPopupBand";
 import { BrowserDialog } from "./BrowserDialog";
-import { AgentControl, browserHolder } from "./AgentControl";
+import { AgentControl, browserHoldable, browserHolder } from "./AgentControl";
 import { AddressRow } from "./AddressRow";
 import { NewTabPage } from "./Bookmarks";
 import { BringTabButton } from "./BringTabButton";
@@ -81,7 +80,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       occluderSelector='[data-slot="nav-drop-label"]'
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={stillSrc} covered={state.nativeCovered || Boolean(tab?.dialog)} contentRef={setDialogContainer}
-      band={<><AgentControl tab={tab} />{tab && <BrowserPopupBand tab={tab} />}</>}
+      band={<AgentControl tab={tab} />} reserveBand={browserHoldable(tab)}
       overlay={tab?.dialog && <BrowserDialog key={tab.dialog.id} tab={tab} container={dialogContainer} />}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>

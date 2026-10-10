@@ -9,7 +9,7 @@ import fixtures from "../BrowserPane/fixtures/fixtures.module.css";
 export const meta: ShowcaseMeta = {
   title: "PageBand",
   category: "Browser",
-  tags: ["browser", "band", "page state", "agent", "approval", "picking", "pop-up", "take over"],
+  tags: ["browser", "band", "page state", "agent", "approval", "picking", "pop-up", "take over", "idle", "no shift"],
   status: "beta",
 };
 
@@ -21,7 +21,7 @@ function OnCard({ children, width }: { children: ReactNode; width?: number }) {
 }
 
 const TONES: Array<[DemoBandKind, string]> = [
-  ["agent", "agent"], ["user", "user"], ["waiting", "waiting"], ["need-you", "warning"], ["pick", "pick"], ["popup", "info"],
+  ["idle", "idle"], ["agent", "agent"], ["user", "user"], ["waiting", "waiting"], ["need-you", "warning"], ["pick", "pick"], ["popup", "info"],
 ];
 
 export const stories: ShowcaseStory[] = [
@@ -44,6 +44,12 @@ export const stories: ShowcaseStory[] = [
     name: "At 736px: one line, two buttons",
     widths: ["app", "wide"],
     render: ({ locale }) => <OnCard width={736}><DemoBand kind="agent" copy={BROWSER_DEMO_COPY[locale]} /></OnCard>,
+  },
+  {
+    // Two states at once stay one line: the blocked pop-up becomes the detail.
+    name: "Butler holds the tab and a pop-up is blocked: one band",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <OnCard width={736}><DemoBand kind="agent-popup" copy={BROWSER_DEMO_COPY[locale]} /></OnCard>,
   },
   {
     name: "Narrow card: the hint drops, the detail truncates",
