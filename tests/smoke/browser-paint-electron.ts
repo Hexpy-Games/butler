@@ -125,6 +125,7 @@ try {
     await app.click(language === "ko" ? "일반" : "General");
     await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
     await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="markdown-inline-image"]')].every(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
+    await app.page.expression("Promise.all([...document.querySelectorAll('[data-test-class=markdown-inline-image]')].map(image=>image.decode()))");
     await app.shot(`${baseline?"before":"after"}-${extraCapture?"extra-":""}${language}-${theme}-${width}`);
   }
 }finally{await app.stop();}
