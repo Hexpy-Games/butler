@@ -88,13 +88,16 @@ pub(in crate::gateway::http) fn observe_lifetime(state: &Arc<HttpState>) -> Resu
         let Some(session) = envelope.payload.get("session") else {
             return;
         };
-        if session["archived"] != true && envelope.event_type != "session.permanently_deleted" {
-            return;
-        }
         let Some(id) = session["id"].as_str().map(str::to_owned) else {
             return;
         };
         if let Some(state) = weak.upgrade() {
+            if session["archived"] != true && envelope.event_type != "session.permanently_deleted" {
+                if session["archived"] == false {
+                    state.previews.reopen(&id);
+                }
+                return;
+            }
             state.previews.close(&id);
             runtime.spawn(async move {
                 state.previews.stop_closed(&id).await;

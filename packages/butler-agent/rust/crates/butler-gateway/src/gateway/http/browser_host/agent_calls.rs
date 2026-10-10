@@ -323,6 +323,7 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
     Ok(())
 }
 pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
+    state.previews.close(session);
     state.previews.stop_closed(session).await;
     if let Ok(hub) = state.browser.0.lock()
         && let Some(host) = &hub.host

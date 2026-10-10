@@ -46,6 +46,18 @@ async fn websocket(origin: &str, cookie: &str) -> String {
         .unwrap();
     String::from_utf8_lossy(&result[..n]).into_owned()
 }
+async fn listening(port: u16) {
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_err()
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("fixture child is listening");
+}
 #[tokio::test]
 async fn preview_registry_proxies_only_registered_ports_and_archive_kills_descendants()
 -> Result<(), HarnessError> {
@@ -62,6 +74,7 @@ async fn preview_registry_proxies_only_registered_ports_and_archive_kills_descen
 const port=Number(process.argv[2]),child=Number(process.argv[3]);
 if(child)Bun.spawn([process.execPath,import.meta.filename,String(child)],{stdout:"ignore",stderr:"ignore"});
 process.stdout.write("x".repeat(100000)+"TAIL");
+if(process.argv[4]==="pending")await Bun.sleep(10000);
 Bun.serve({hostname:"127.0.0.1",port,fetch(request,server){
  if(new URL(request.url).pathname==="/hmr" && server.upgrade(request))return;
  return new Response(JSON.stringify({path:new URL(request.url).pathname,cookie:request.headers.get("cookie"),auth:request.headers.get("authorization"),body:"preview"}),{headers:{"content-type":"application/json"}});
@@ -217,5 +230,66 @@ Bun.serve({hostname:"127.0.0.1",port,fetch(request,server){
         .await?["reason"],
         "session_closed"
     );
+    assert_eq!(
+        s.gw.patch(&format!("/sessions/{session}"), json!({"archived":false}))
+            .await?
+            .status,
+        200
+    );
+    assert_eq!(
+        call(
+            &admin,
+            &session,
+            "preview.start",
+            args("preview-restored", third, 0)
+        )
+        .await?["status"],
+        "ok"
+    );
+    s.gw.post(&format!("/sessions/{session}/archive"), json!({}))
+        .await?;
+    assert!(
+        tokio::net::TcpStream::connect(("127.0.0.1", third))
+            .await
+            .is_err()
+    );
+    let created =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"Pending preview"}),
+        )
+        .await?;
+    let pending_session = created.data()["session"]["id"].as_str().unwrap();
+    let (pending_port, pending_child, independent_port) = (port(), port(), port());
+    let mut pending = args("preview-pending", pending_port, pending_child);
+    pending["command"] = json!(format!("{} pending", command(pending_port, pending_child)));
+    let (pending, archived) = tokio::join!(
+        call(&admin, pending_session, "preview.start", pending),
+        async {
+            listening(pending_child).await;
+            let mut independent = args("preview-independent", independent_port, 0);
+            independent["agent"] = json!("independent-agent");
+            assert_eq!(
+                call(&admin, pending_session, "preview.start", independent).await?["status"],
+                "ok"
+            );
+            assert!(
+                tokio::net::TcpStream::connect(("127.0.0.1", pending_child))
+                    .await
+                    .is_ok()
+            );
+            s.gw.post(&format!("/sessions/{pending_session}/archive"), json!({}))
+                .await
+        }
+    );
+    assert_eq!(archived?.status, 200);
+    assert_eq!(pending?["status"], "not_dispatched");
+    for port in [pending_port, pending_child, independent_port] {
+        assert!(
+            tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_err()
+        );
+    }
     s.finish().await
 }
