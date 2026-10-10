@@ -64,14 +64,8 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
             continue;
         };
         if observation {
-            if let Some(obs_id) = field(output, "obs").as_str() {
-                tabs.entry(tab).or_default().push(Cycle {
-                    obs_index: index,
-                    obs_id: obs_id.into(),
-                    act_indices: Vec::new(),
-                    acted: Vec::new(),
-                });
-            }
+            let call = call.filter(|call| call.name == "browser_act");
+            open_cycle(&mut tabs, message, &mut value, (index, tab), call);
         } else {
             if strip_desktop_stills(output) {
                 message.content = value.to_string().into();
@@ -87,6 +81,40 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
         tabs,
         latest_acts,
         acts,
+    }
+}
+
+/// A fresh observation opens a cycle. With `browser_act {observe:true}` its batch
+/// also acted on the source cycle.
+fn open_cycle(
+    tabs: &mut HashMap<String, Vec<Cycle>>,
+    message: &mut ModelRoundMessage,
+    value: &mut Value,
+    (index, tab): (usize, String),
+    act: Option<&ModelRoundToolCall>,
+) {
+    if let Some(call) = act
+        && let Some(output) = value.get_mut("output")
+        && output.get("action").is_some()
+    {
+        if strip_desktop_stills(output) {
+            message.content = value.to_string().into();
+        }
+        attach_act(
+            tabs,
+            &tab,
+            index,
+            call,
+            field(field(value, "output"), "action"),
+        );
+    }
+    if let Some(obs_id) = field(field(value, "output"), "obs").as_str() {
+        tabs.entry(tab).or_default().push(Cycle {
+            obs_index: index,
+            obs_id: obs_id.into(),
+            act_indices: Vec::new(),
+            acted: Vec::new(),
+        });
     }
 }
 
@@ -182,6 +210,9 @@ fn strip_desktop_stills(output: &mut Value) -> bool {
     let mut changed = output
         .as_object_mut()
         .is_some_and(|record| record.remove("still_file").is_some());
+    if let Some(action) = output.get_mut("action") {
+        changed |= strip_desktop_stills(action);
+    }
     if let Some(steps) = output.get_mut("steps").and_then(Value::as_array_mut) {
         for step in steps {
             if let Some(record) = step.as_object_mut() {

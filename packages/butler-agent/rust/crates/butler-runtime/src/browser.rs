@@ -62,6 +62,18 @@ impl TabRegistry {
         }
         Ok(tab)
     }
+    /// This conversation's tab ids, so a mistyped id can be corrected without guessing.
+    pub fn owned(&self, session: &str) -> Vec<String> {
+        let owner = format!("conversation:{session}");
+        let mut ids: Vec<_> = self
+            .tabs
+            .iter()
+            .filter(|(_, tab)| tab["owner"] == owner.as_str())
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
     pub fn is_user(&self, id: &str) -> bool {
         self.tabs.get(id).is_some_and(|tab| tab["holder"] == "user")
     }

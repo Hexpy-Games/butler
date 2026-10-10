@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Batch controls</title>
+<style>
+body { margin: 0; background: #eee; font: 14px sans-serif; }
+form { position: absolute; top: 20px; left: 40px; display: flex; gap: 12px; }
+#board { position: absolute; top: 200px; left: 40px; background: white; }
+</style>
+<form id="search"><label>Query <input id="q" name="q" autocomplete="off"></label><label>Secret <input id="pw" type="password"></label><button>Go</button></form>
+<canvas id="board" width="600" height="300" aria-label="Board"></canvas>
+<script>
+window.log = { keys: [], submits: [], clicks: [], strokes: [], menus: 0 };
+const q = document.querySelector('#q'), pw = document.querySelector('#pw'), board = document.querySelector('#board');
+document.addEventListener('keydown', e => log.keys.push({ key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey, trusted: e.isTrusted, target: e.target.id || e.target.localName }));
+document.querySelector('#search').addEventListener('submit', e => { e.preventDefault(); log.submits.push({ q: q.value, pw: pw.value.length, trusted: e.isTrusted }); });
+board.addEventListener('click', e => log.clicks.push({ type: 'click', detail: e.detail, shift: e.shiftKey, button: e.button, trusted: e.isTrusted }));
+board.addEventListener('dblclick', e => log.clicks.push({ type: 'dblclick', shift: e.shiftKey, trusted: e.isTrusted }));
+board.addEventListener('contextmenu', e => { e.preventDefault(); log.menus++; });
+let stroke;
+const pos = e => { const r = board.getBoundingClientRect(); return { x: e.clientX - r.x, y: e.clientY - r.y, buttons: e.buttons, shift: e.shiftKey }; };
+board.addEventListener('pointerdown', e => { if (e.button !== 0 || e.detail > 1) return; board.setPointerCapture(e.pointerId); stroke = { points: [pos(e)] }; log.strokes.push(stroke); });
+board.addEventListener('pointermove', e => { if (stroke) stroke.points.push(pos(e)); });
+board.addEventListener('pointerup', e => { if (stroke) { stroke.points.push(pos(e)); stroke = null; } });
+</script></html>

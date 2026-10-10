@@ -4,6 +4,7 @@ mod client;
 mod dialog;
 mod effect;
 pub(super) mod images;
+mod observe_after;
 use super::{GuidedTools, dispatch::encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
@@ -207,19 +208,23 @@ async fn act(
         result["status"].as_str().unwrap_or("unknown"),
     )
     .await?;
-    finish_batch(&args, result)
+    observe_after::finish(owner, invocation, &client, &args, result).await
 }
-pub(super) fn finish_batch(
-    args: &Value,
-    mut value: Value,
-) -> Result<JsonDocument, ToolExecutionError> {
+pub(super) fn finish_batch(args: &Value, value: Value) -> Result<JsonDocument, ToolExecutionError> {
+    encoded(&batch_value(args, value))
+}
+/// Per-step receipts with delimited page labels, as the model sees a batch.
+fn batch_value(args: &Value, mut value: Value) -> Value {
     let count = args["steps"].as_array().map_or(0, Vec::len);
     if count > 0 {
         value["schema"] = json!("butler.browser-action.v1");
     }
-    encode_page_data(butler_runtime::browser::batch_receipts(count, value))
+    page_data(butler_runtime::browser::batch_receipts(count, value))
 }
-fn encode_page_data(mut value: Value) -> Result<JsonDocument, ToolExecutionError> {
+fn encode_page_data(value: Value) -> Result<JsonDocument, ToolExecutionError> {
+    encoded(&page_data(value))
+}
+fn page_data(mut value: Value) -> Value {
     if let Some(tabs) = value.get_mut("tabs").and_then(Value::as_array_mut) {
         for tab in tabs {
             delimit_labels(tab);
@@ -238,7 +243,7 @@ fn encode_page_data(mut value: Value) -> Result<JsonDocument, ToolExecutionError
             }
         }
     }
-    encoded(&value)
+    value
 }
 fn delimit_labels(value: &mut Value) {
     let Some(record) = value.as_object_mut() else {

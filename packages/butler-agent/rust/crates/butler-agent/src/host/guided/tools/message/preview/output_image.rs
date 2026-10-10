@@ -7,7 +7,7 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
     if !result.ok
         || !matches!(
             result.name.as_str(),
-            "output_check" | "browser_observe" | "browser_screenshot" | "tool_call"
+            "output_check" | "browser_observe" | "browser_act" | "browser_screenshot" | "tool_call"
         )
     {
         return false;

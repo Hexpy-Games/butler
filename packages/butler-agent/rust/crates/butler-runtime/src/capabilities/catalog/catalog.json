@@ -5831,7 +5831,7 @@
       "definition": {
         "type": "function",
         "name": "browser_act",
-        "description": "Use native pointer input. Every step uses exactly one of ref or point, never both. For titled toolbar controls use their ref. For an unlabeled graphical control, match its visible swatch to the observation Graphical targets screenshot center and use that ref, or point with expect \"element icon\". expect must start with the actual observed role: never invent color, palette, swatch or tool roles. For canvas strokes use action drag with point, target_point and expect \"canvas\", omitting ref. When a field returns blocked_by, inspect blocker.controls, observe and select or dismiss the visible popup before retrying the field. Coverage is page state, not a permission failure. Use untrusted_content.fields to identify existing input refs, current values and visible order. For an ordered route, the first and last fields are origin and destination; every intermediate stop needs one waypoint field in the same order. Once the required field count exists, do not add more. A popup covering a field does not mean it is missing. Act by fresh refs or verified screenshot points. Point steps require vision, point [x,y] bounded by returned image_geometry.width/height (not CSS viewport size), and expect (role and name, or canvas). Click, fill, select, scroll, hover, drag. Positive scroll value moves down. Ref drag uses target_ref or offset; point drag uses target_point. Before the first canvas stroke, explicitly click both the drawing tool AND an available palette color, even if the default already looks right. Use fresh refs or matching screenshot points for these selections, then take a fresh observation before drawing. Custom titled controls have role element. Use line, rectangle or ellipse tools for geometric shapes, or brush drags for freehand strokes. Rectangle and Ellipse tools use ONE diagonal drag between opposite corners of the shape bounding box, with both width and height nonzero; horizontal/vertical drags produce degenerate shapes. Do not draw ellipse outlines segment by segment: each drag creates another ellipse. Select Line before straight segments, then Ellipse before a round shape. After a successful selection and fresh observation, proceed to its planned strokes rather than repeatedly selecting the same tool/palette. For a multi-segment outline, choose Line and drag each segment separately; polygon click sequences depend on the page tool. Plan the complete drawing in screenshot coordinates before starting: choose a bounding box for each shape and reuse shared corners exactly so connected outlines meet. Keep those coordinates consistent across tool changes. Prefer separate Line drags for connected outlines. Select a visible contrasting palette swatch by its screenshot location; unlabeled icons also include color previews and tool options, so do not guess their function from ref order. Keep all endpoints within the visible drawing canvas, not the gray workspace. Observe fresh pixels after changing tool/color and after each group of strokes. Canvas hit tests confirm the surface, not the painted result: visually verify all requested shapes before capturing the canvas region. Use only pointer input to draw, never injected scripts or generated image data. Observe after each page update; do not replay unknown steps. Secure fields require takeover. Fill one autocomplete field, then observe and select its suggestion before editing another. Filling text does not commit a suggested place. Do not batch across navigation or changed controls. Autocomplete fills must be single-step calls; a fill plus another action is refused before dispatch so an updated popup cannot receive an old ref. For multi-stop directions, use the first stop as origin, the last as destination, and middle stops as waypoints. After adding a waypoint, observe the newly added field. Verify the selected values and their visible order before capture; do not infer stop order from URL path segments. For repeated route fields, count the required middle stops: add exactly that many waypoint fields, never an extra field for the destination. Use the observation’s Visible editable fields section to count and identify the current origin, waypoints and destination. Add all needed waypoint fields first, observe their visible order, then fill the fields from top to bottom. If the destination is blank, fill the destination field; do not add another waypoint. A newly added field may be inserted before an existing waypoint; never assume its position. If verification shows the wrong order, correct the form and recalculate before capturing.",
+        "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call, e.g. click a search field, type text, press Enter; or select a tool, then several strokes. Set observe:true to receive the fresh post-batch observation (screenshot, refs, fields) in this result instead of a separate browser_observe call; it is taken after loading and DOM updates settle (up to 2 s), so suggestions and recalculated results are usually present. Act on its new observation id next; call browser_observe only if that observation still shows a pending update. Pointer actions: click (button left|right|middle; click_count 2 or 3 selects a word or line), fill, select, scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag. modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. A point drag may add path: up to 24 ordered intermediate screenshot points, drawn as one stroke with the button held (freehand curves, polylines). Keyboard actions take no ref or point and go to the focused element: press sends one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Backspace\", \"Control+Z\"); type inserts text at the focus without clearing it (use fill to replace a field's value). wait pauses 50–5000 ms for animations or recalculation. A page's own keyboard shortcuts (undo, confirm, dismiss) are often the shortest correction. Every pointer step uses exactly one of ref or point, never both. For titled toolbar controls use their ref. For an unlabeled graphical control, match its visible swatch to the observation Graphical targets screenshot center and use that ref, or point with expect \"element icon\". expect must start with the actual observed role: never invent color, palette, swatch or tool roles. For canvas strokes use action drag with point, target_point and expect \"canvas\", omitting ref. When a field returns blocked_by, inspect blocker.controls, observe and select or dismiss the visible popup before retrying the field. Coverage is page state, not a permission failure. Use untrusted_content.fields to identify existing input refs, current values and visible order. For an ordered route, the first and last fields are origin and destination; every intermediate stop needs one waypoint field in the same order. Once the required field count exists, do not add more. A popup covering a field does not mean it is missing. Act by fresh refs or verified screenshot points. Point steps require vision, point [x,y] bounded by returned image_geometry.width/height (not CSS viewport size), and expect (role and name, or canvas). Ref drag uses target_ref or offset; point drag uses target_point. Before the first canvas stroke, explicitly click both the drawing tool AND an available palette color, even if the default already looks right. Use fresh refs or matching screenshot points for these selections, then take a fresh observation before drawing. Custom titled controls have role element. Use line, rectangle or ellipse tools for geometric shapes, or brush drags for freehand strokes. Rectangle and Ellipse tools use ONE diagonal drag between opposite corners of the shape bounding box, with both width and height nonzero; horizontal/vertical drags produce degenerate shapes. Do not draw ellipse outlines segment by segment: each drag creates another ellipse. Select Line before straight segments, then Ellipse before a round shape. After a successful selection and fresh observation, proceed to its planned strokes rather than repeatedly selecting the same tool/palette. For a multi-segment outline, choose Line and drag each segment separately; polygon click sequences depend on the page tool. Plan the complete drawing in screenshot coordinates before starting: choose a bounding box for each shape and reuse shared corners exactly so connected outlines meet. Keep those coordinates consistent across tool changes. Prefer separate Line drags for connected outlines. Select a visible contrasting palette swatch by its screenshot location; unlabeled icons also include color previews and tool options, so do not guess their function from ref order. Keep all endpoints within the visible drawing canvas, not the gray workspace. Observe fresh pixels after changing tool/color and after each group of strokes. Canvas hit tests confirm the surface, not the painted result: visually verify all requested shapes before capturing the canvas region. Use only pointer input to draw, never injected scripts or generated image data. Observe after each page update; do not replay unknown steps. Secure fields require takeover. Fill one autocomplete field, then observe and select its suggestion before editing another. Filling text does not commit a suggested place. Do not batch across navigation or changed controls. Autocomplete fills must be single-step calls; a fill plus another action is refused before dispatch so an updated popup cannot receive an old ref. For multi-stop directions, use the first stop as origin, the last as destination, and middle stops as waypoints. After adding a waypoint, observe the newly added field. Verify the selected values and their visible order before capture; do not infer stop order from URL path segments. For repeated route fields, count the required middle stops: add exactly that many waypoint fields, never an extra field for the destination. Use the observation’s Visible editable fields section to count and identify the current origin, waypoints and destination. Add all needed waypoint fields first, observe their visible order, then fill the fields from top to bottom. If the destination is blank, fill the destination field; do not add another waypoint. A newly added field may be inserted before an existing waypoint; never assume its position. If verification shows the wrong order, correct the form and recalculate before capturing.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5861,11 +5861,15 @@
                       "select",
                       "scroll",
                       "hover",
-                      "drag"
+                      "drag",
+                      "press",
+                      "type",
+                      "wait"
                     ]
                   },
                   "value": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "fill/select/type text; press key or chord; scroll \"dy\" or \"dx,dy\"; wait milliseconds."
                   },
                   "target_ref": {
                     "type": "string",
@@ -5905,12 +5909,61 @@
                   "target_expect": {
                     "type": "string",
                     "description": "Expected destination hit; defaults to expect."
+                  },
+                  "button": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "right",
+                      "middle"
+                    ],
+                    "description": "click only; default left."
+                  },
+                  "click_count": {
+                    "type": "integer",
+                    "enum": [
+                      1,
+                      2,
+                      3
+                    ],
+                    "description": "click only: 2 double-clicks, 3 triple-clicks."
+                  },
+                  "modifiers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "Shift",
+                        "Control",
+                        "Alt",
+                        "Meta"
+                      ]
+                    },
+                    "maxItems": 4,
+                    "description": "Held during click, drag or scroll."
+                  },
+                  "path": {
+                    "type": "array",
+                    "maxItems": 24,
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "description": "Point drag only: intermediate screenshot points between point and target_point, in order."
                   }
                 },
                 "required": [
                   "action"
                 ]
               }
+            },
+            "observe": {
+              "type": "boolean",
+              "description": "Return the fresh observation, with its screenshot, after the batch and a short settle."
             }
           },
           "required": [
@@ -10649,7 +10702,7 @@
     "browser_act": {
       "type": "function",
       "name": "browser_act",
-      "description": "Use native pointer input. Every step uses exactly one of ref or point, never both. For titled toolbar controls use their ref. For an unlabeled graphical control, match its visible swatch to the observation Graphical targets screenshot center and use that ref, or point with expect \"element icon\". expect must start with the actual observed role: never invent color, palette, swatch or tool roles. For canvas strokes use action drag with point, target_point and expect \"canvas\", omitting ref. When a field returns blocked_by, inspect blocker.controls, observe and select or dismiss the visible popup before retrying the field. Coverage is page state, not a permission failure. Use untrusted_content.fields to identify existing input refs, current values and visible order. For an ordered route, the first and last fields are origin and destination; every intermediate stop needs one waypoint field in the same order. Once the required field count exists, do not add more. A popup covering a field does not mean it is missing. Act by fresh refs or verified screenshot points. Point steps require vision, point [x,y] bounded by returned image_geometry.width/height (not CSS viewport size), and expect (role and name, or canvas). Click, fill, select, scroll, hover, drag. Positive scroll value moves down. Ref drag uses target_ref or offset; point drag uses target_point. Before the first canvas stroke, explicitly click both the drawing tool AND an available palette color, even if the default already looks right. Use fresh refs or matching screenshot points for these selections, then take a fresh observation before drawing. Custom titled controls have role element. Use line, rectangle or ellipse tools for geometric shapes, or brush drags for freehand strokes. Rectangle and Ellipse tools use ONE diagonal drag between opposite corners of the shape bounding box, with both width and height nonzero; horizontal/vertical drags produce degenerate shapes. Do not draw ellipse outlines segment by segment: each drag creates another ellipse. Select Line before straight segments, then Ellipse before a round shape. After a successful selection and fresh observation, proceed to its planned strokes rather than repeatedly selecting the same tool/palette. For a multi-segment outline, choose Line and drag each segment separately; polygon click sequences depend on the page tool. Plan the complete drawing in screenshot coordinates before starting: choose a bounding box for each shape and reuse shared corners exactly so connected outlines meet. Keep those coordinates consistent across tool changes. Prefer separate Line drags for connected outlines. Select a visible contrasting palette swatch by its screenshot location; unlabeled icons also include color previews and tool options, so do not guess their function from ref order. Keep all endpoints within the visible drawing canvas, not the gray workspace. Observe fresh pixels after changing tool/color and after each group of strokes. Canvas hit tests confirm the surface, not the painted result: visually verify all requested shapes before capturing the canvas region. Use only pointer input to draw, never injected scripts or generated image data. Observe after each page update; do not replay unknown steps. Secure fields require takeover. Fill one autocomplete field, then observe and select its suggestion before editing another. Filling text does not commit a suggested place. Do not batch across navigation or changed controls. Autocomplete fills must be single-step calls; a fill plus another action is refused before dispatch so an updated popup cannot receive an old ref. For multi-stop directions, use the first stop as origin, the last as destination, and middle stops as waypoints. After adding a waypoint, observe the newly added field. Verify the selected values and their visible order before capture; do not infer stop order from URL path segments. For repeated route fields, count the required middle stops: add exactly that many waypoint fields, never an extra field for the destination. Use the observation’s Visible editable fields section to count and identify the current origin, waypoints and destination. Add all needed waypoint fields first, observe their visible order, then fill the fields from top to bottom. If the destination is blank, fill the destination field; do not add another waypoint. A newly added field may be inserted before an existing waypoint; never assume its position. If verification shows the wrong order, correct the form and recalculate before capturing.",
+      "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call, e.g. click a search field, type text, press Enter; or select a tool, then several strokes. Set observe:true to receive the fresh post-batch observation (screenshot, refs, fields) in this result instead of a separate browser_observe call; it is taken after loading and DOM updates settle (up to 2 s), so suggestions and recalculated results are usually present. Act on its new observation id next; call browser_observe only if that observation still shows a pending update. Pointer actions: click (button left|right|middle; click_count 2 or 3 selects a word or line), fill, select, scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag. modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. A point drag may add path: up to 24 ordered intermediate screenshot points, drawn as one stroke with the button held (freehand curves, polylines). Keyboard actions take no ref or point and go to the focused element: press sends one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Backspace\", \"Control+Z\"); type inserts text at the focus without clearing it (use fill to replace a field's value). wait pauses 50–5000 ms for animations or recalculation. A page's own keyboard shortcuts (undo, confirm, dismiss) are often the shortest correction. Every pointer step uses exactly one of ref or point, never both. For titled toolbar controls use their ref. For an unlabeled graphical control, match its visible swatch to the observation Graphical targets screenshot center and use that ref, or point with expect \"element icon\". expect must start with the actual observed role: never invent color, palette, swatch or tool roles. For canvas strokes use action drag with point, target_point and expect \"canvas\", omitting ref. When a field returns blocked_by, inspect blocker.controls, observe and select or dismiss the visible popup before retrying the field. Coverage is page state, not a permission failure. Use untrusted_content.fields to identify existing input refs, current values and visible order. For an ordered route, the first and last fields are origin and destination; every intermediate stop needs one waypoint field in the same order. Once the required field count exists, do not add more. A popup covering a field does not mean it is missing. Act by fresh refs or verified screenshot points. Point steps require vision, point [x,y] bounded by returned image_geometry.width/height (not CSS viewport size), and expect (role and name, or canvas). Ref drag uses target_ref or offset; point drag uses target_point. Before the first canvas stroke, explicitly click both the drawing tool AND an available palette color, even if the default already looks right. Use fresh refs or matching screenshot points for these selections, then take a fresh observation before drawing. Custom titled controls have role element. Use line, rectangle or ellipse tools for geometric shapes, or brush drags for freehand strokes. Rectangle and Ellipse tools use ONE diagonal drag between opposite corners of the shape bounding box, with both width and height nonzero; horizontal/vertical drags produce degenerate shapes. Do not draw ellipse outlines segment by segment: each drag creates another ellipse. Select Line before straight segments, then Ellipse before a round shape. After a successful selection and fresh observation, proceed to its planned strokes rather than repeatedly selecting the same tool/palette. For a multi-segment outline, choose Line and drag each segment separately; polygon click sequences depend on the page tool. Plan the complete drawing in screenshot coordinates before starting: choose a bounding box for each shape and reuse shared corners exactly so connected outlines meet. Keep those coordinates consistent across tool changes. Prefer separate Line drags for connected outlines. Select a visible contrasting palette swatch by its screenshot location; unlabeled icons also include color previews and tool options, so do not guess their function from ref order. Keep all endpoints within the visible drawing canvas, not the gray workspace. Observe fresh pixels after changing tool/color and after each group of strokes. Canvas hit tests confirm the surface, not the painted result: visually verify all requested shapes before capturing the canvas region. Use only pointer input to draw, never injected scripts or generated image data. Observe after each page update; do not replay unknown steps. Secure fields require takeover. Fill one autocomplete field, then observe and select its suggestion before editing another. Filling text does not commit a suggested place. Do not batch across navigation or changed controls. Autocomplete fills must be single-step calls; a fill plus another action is refused before dispatch so an updated popup cannot receive an old ref. For multi-stop directions, use the first stop as origin, the last as destination, and middle stops as waypoints. After adding a waypoint, observe the newly added field. Verify the selected values and their visible order before capture; do not infer stop order from URL path segments. For repeated route fields, count the required middle stops: add exactly that many waypoint fields, never an extra field for the destination. Use the observation’s Visible editable fields section to count and identify the current origin, waypoints and destination. Add all needed waypoint fields first, observe their visible order, then fill the fields from top to bottom. If the destination is blank, fill the destination field; do not add another waypoint. A newly added field may be inserted before an existing waypoint; never assume its position. If verification shows the wrong order, correct the form and recalculate before capturing.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10679,11 +10732,15 @@
                     "select",
                     "scroll",
                     "hover",
-                    "drag"
+                    "drag",
+                    "press",
+                    "type",
+                    "wait"
                   ]
                 },
                 "value": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "fill/select/type text; press key or chord; scroll \"dy\" or \"dx,dy\"; wait milliseconds."
                 },
                 "target_ref": {
                   "type": "string",
@@ -10723,12 +10780,61 @@
                 "target_expect": {
                   "type": "string",
                   "description": "Expected destination hit; defaults to expect."
+                },
+                "button": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "right",
+                    "middle"
+                  ],
+                  "description": "click only; default left."
+                },
+                "click_count": {
+                  "type": "integer",
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ],
+                  "description": "click only: 2 double-clicks, 3 triple-clicks."
+                },
+                "modifiers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "Shift",
+                      "Control",
+                      "Alt",
+                      "Meta"
+                    ]
+                  },
+                  "maxItems": 4,
+                  "description": "Held during click, drag or scroll."
+                },
+                "path": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "description": "Point drag only: intermediate screenshot points between point and target_point, in order."
                 }
               },
               "required": [
                 "action"
               ]
             }
+          },
+          "observe": {
+            "type": "boolean",
+            "description": "Return the fresh observation, with its screenshot, after the batch and a short settle."
           }
         },
         "required": [

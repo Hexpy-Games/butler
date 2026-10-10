@@ -7,6 +7,27 @@ use butler_runtime::capabilities::{describe_native, validate_native_arguments};
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
 
+/// A wrapped bridge call is a call-shape slip, not a disabled capability.
+pub(super) fn nested(call: &ModelRoundToolCall) -> Option<Value> {
+    if text(&call.arguments, "id") != Some("native:tool_call") {
+        return None;
+    }
+    let inner = call
+        .arguments
+        .get("arguments")
+        .and_then(Value::as_object)
+        .and_then(|args| text(args, "id"))
+        .unwrap_or("the inner catalog id");
+    let mut error = bridge_error(
+        "nested_tool_call",
+        &format!(
+            "tool_call cannot invoke itself; nothing ran. Call tool_call once with id {inner} and its arguments directly."
+        ),
+    );
+    error["error"]["id"] = json!("native:tool_call");
+    Some(error)
+}
+
 pub(super) async fn run(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,

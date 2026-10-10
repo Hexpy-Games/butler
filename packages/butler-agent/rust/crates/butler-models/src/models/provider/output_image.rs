@@ -6,7 +6,9 @@ use serde_json::{Value, json};
 pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
     if !matches!(
         message.name.as_deref(),
-        Some("output_check" | "browser_observe" | "browser_screenshot" | "tool_call")
+        Some(
+            "output_check" | "browser_observe" | "browser_act" | "browser_screenshot" | "tool_call"
+        )
     ) {
         return None;
     }

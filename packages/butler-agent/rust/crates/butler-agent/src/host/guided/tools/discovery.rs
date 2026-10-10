@@ -33,7 +33,10 @@ pub(super) async fn execute(
         "tool_describe" => {
             Box::pin(describe(owner, &call.arguments, invocation.cancellation)).await
         }
-        "tool_call" => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
+        "tool_call" => match invoke::nested(call) {
+            Some(error) => encoded(&error),
+            None => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
+        },
         _ => Err(integrity("guided_bridge_tool_invalid")),
     }
 }

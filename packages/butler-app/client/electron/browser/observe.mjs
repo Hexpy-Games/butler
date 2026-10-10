@@ -48,7 +48,33 @@ function observationBudget(args, interactive, below) {
       : "Observe again with scope=\"text\" to retain the complete controls and screenshot within the existing text budget. Inspect any open dialog and close it by its fresh ref before drawing or capturing. Do not reuse the older observation." };
 }
 
+// A navigation during observation is page state, not a user takeover.
+function changed(tab) {
+  return tab.holder !== "agent" ? { status: "not_dispatched", reason: "user_control" }
+    : { status: "not_dispatched", reason: "page_changed", recovery: "The page navigated while it was observed. Observe again; no action was taken." };
+}
+// Resolves after the main document has had no DOM mutation for quietMs, or at maxMs.
+const quiet = (quietMs, maxMs) => `new Promise(done=>{let timer;const end=()=>{observer.disconnect();clearTimeout(cap);done(true)};
+  const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(end,${quietMs})});
+  observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
+  timer=setTimeout(end,${quietMs});const cap=setTimeout(end,${maxMs})})`;
+/** After an action, wait briefly for loading and DOM updates (suggestions, routes) to settle. */
+async function settle(tab, maxMs = 2000) {
+  const deadline = Date.now() + maxMs, contents = tab.view.webContents;
+  while (contents.isLoading() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+  const remaining = deadline - Date.now();
+  if (remaining > 0) await contents.executeJavaScriptInIsolatedWorld(9001, [{ code: quiet(300, remaining) }]).catch(() => {});
+}
+/** Retries an observation that a load-time navigation interrupted. */
 export async function observeTab(tab, args = {}) {
+  if (args.settle === true) await settle(tab);
+  for (let attempt = 0; ; attempt++) {
+    const result = await observeOnce(tab, args);
+    if (result.reason !== "page_changed" || attempt === 2) return result;
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+}
+async function observeOnce(tab, args) {
   const obs = randomUUID(), epoch = tab.epoch, frames = await frameWorlds(tab);
   const selected=frames.map((frame, index)=>({ frame, index })).filter(({ index })=>args.frame===undefined || args.frame===`f${index}`);
   if(!selected.length) return { status:"refused", reason:"frame_unavailable" };
@@ -74,7 +100,7 @@ export async function observeTab(tab, args = {}) {
     scriptMs += result.scriptMs; gridSampleMs += result.gridSampleMs; below += result.totals.below_fold; interactive += result.totals.interactive;
     payment ||= result.payment; addons.push(...result.addons);
   }
-  if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "user_control" };
+  if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\nNode rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
@@ -83,7 +109,7 @@ export async function observeTab(tab, args = {}) {
   if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable" };
   const pointText = await graphicalPoints(tab.observation);
   const observedText = [full, pointText].filter(Boolean).join("\n");
-  if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "user_control" };
+  if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   if (Buffer.byteLength(observedText) > maxChars) return observationBudget(args, interactive, below);
   tab.observation.captureRegions = contentRegions(regions, tab.observation.imageGeometry);
   return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
