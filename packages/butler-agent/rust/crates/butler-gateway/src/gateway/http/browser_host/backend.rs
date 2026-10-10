@@ -154,6 +154,12 @@ pub(super) async fn headless_call(
                 &format!("http://127.0.0.1:{}", super::super::content::port(&state)),
                 tab["url"].as_str().unwrap_or(""),
             );
+            if state
+                .previews
+                .owned(session, tab["preview"].as_str().unwrap_or(""))
+            {
+                frame["args"]["policy"]["preview"] = json!(true);
+            }
         }
     }
     let limit = deadline(op, &frame["args"]);

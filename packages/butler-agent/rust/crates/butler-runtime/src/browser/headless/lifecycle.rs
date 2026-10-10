@@ -16,7 +16,8 @@ pub(super) async fn open_tab(
     args: &Value,
     budget: Duration,
 ) -> Result<Value, String> {
-    let context = targets::context(browser, owner).await?;
+    let preview = preview_of(args);
+    let context = targets::context(browser, owner, preview).await?;
     let (target, session) = targets::create(&browser.cdp, &browser.shared, &context).await?;
     let id = {
         let mut state = browser.shared.lock();
@@ -29,6 +30,7 @@ pub(super) async fn open_tab(
         );
         tab.policy = args["policy"].clone();
         tab.context = context;
+        tab.preview = preview.map(str::to_owned);
         state.tabs.insert(id.clone(), tab);
         state.sessions.insert(session.clone(), id.clone());
         id
@@ -71,6 +73,14 @@ pub(super) async fn open_tab(
         json!({"status":"ok","tab":t.id,"url":t.url,"title":t.title,"epoch":t.epoch,"profile":"signed_out"})
     });
     Ok(snapshot.unwrap_or_else(|| json!({"status":"unknown","reason":"navigation_failed"})))
+}
+
+/// The registered preview a `tab.open` shows: the gateway sets
+/// `policy.preview` only for a preview this conversation owns.
+pub(super) fn preview_of(args: &Value) -> Option<&str> {
+    args["preview_id"]
+        .as_str()
+        .filter(|_| args["policy"]["preview"] == true)
 }
 
 /// Closes idle agent tabs and ends the process tree 60 s after the last tab.

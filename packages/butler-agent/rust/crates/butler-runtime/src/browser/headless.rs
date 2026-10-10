@@ -40,7 +40,7 @@ mod steps;
 mod targets;
 mod validate;
 
-use super::egress::{ContentOrigin, guard_url};
+use super::egress::{ContentOrigin, guard_preview_url, guard_url};
 use browser::Browser;
 pub use install::InstallSource;
 use install::{Installer, Progress};
@@ -313,7 +313,12 @@ impl Headless {
         }
         let started = Instant::now();
         let url = args["url"].as_str().unwrap_or("").to_owned();
-        if !guard_url(&url, self.config.content).await {
+        let admitted = if lifecycle::preview_of(args).is_some() {
+            guard_preview_url(&url, self.config.content).await
+        } else {
+            guard_url(&url, self.config.content).await
+        };
+        if !admitted {
             return refused("navigation_denied");
         }
         let browser = match self.ready().await {
@@ -437,6 +442,25 @@ impl Headless {
             targets::close(&browser, &id).await;
         }
         browser.shared.lock().events.remove(&owner);
+    }
+
+    /// Closes a stopped preview's tabs, as the App does on `preview.closed`.
+    pub async fn close_preview(&self, session: &str, preview: &str) {
+        let Some(browser) = self.browser() else {
+            return;
+        };
+        let owner = format!("conversation:{session}");
+        let ids: Vec<String> = browser
+            .shared
+            .lock()
+            .tabs
+            .values()
+            .filter(|t| t.owner == owner && t.preview.as_deref() == Some(preview))
+            .map(|t| t.id.clone())
+            .collect();
+        for id in ids {
+            targets::close(&browser, &id).await;
+        }
     }
 
     /// A tab whose reported page fell outside policy: closed at once.

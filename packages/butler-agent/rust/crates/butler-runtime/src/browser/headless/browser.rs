@@ -18,6 +18,8 @@ pub(crate) struct Browser {
     pub shared: Shared,
     pub content: Option<ContentOrigin>,
     pub proxy_url: String,
+    /// The proxy of registered previews' tabs (their own contexts).
+    pub preview_proxy_url: Option<String>,
     /// Cancelled when the browser's pipe ends.
     pub alive: CancellationToken,
     /// Signals a change in the set of tabs (for expiry and the idle reap).
@@ -25,6 +27,7 @@ pub(crate) struct Browser {
     pub downloads: Arc<super::downloads::Downloads>,
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
+    _preview_proxy: Option<EgressProxy>,
     profile: PathBuf,
 }
 
@@ -99,6 +102,14 @@ impl Browser {
             .await
             .map_err(|_| "browser_unavailable")?;
         let proxy_url = proxy.url();
+        let preview_proxy = match content {
+            Some(content) => Some(
+                EgressProxy::start_preview(content)
+                    .await
+                    .map_err(|_| "browser_unavailable")?,
+            ),
+            None => None,
+        };
         let mut process =
             browser_process::spawn(executable, &arguments(&profile, &proxy_url), &log)
                 .map_err(|_| "browser_unavailable")?;
@@ -109,11 +120,13 @@ impl Browser {
             shared: Shared::default(),
             content,
             proxy_url,
+            preview_proxy_url: preview_proxy.as_ref().map(EgressProxy::url),
             alive: CancellationToken::new(),
             changed: Notify::new(),
             downloads: downloads.clone(),
             process: Mutex::new(Some(process)),
             _proxy: proxy,
+            _preview_proxy: preview_proxy,
             profile,
         });
         let _ = std::fs::create_dir_all(&downloads.stage);

@@ -31,6 +31,11 @@ pub(super) async fn call(state: Arc<HttpState>, frame: Value) -> Result<Response
             {
                 let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"preview.closed","session":session,"args":{"preview_id":id}}));
             }
+            if result.is_ok()
+                && let Some(headless) = &state.headless
+            {
+                headless.close_preview(session, id).await;
+            }
             result
         }
         _ => Err("invalid_preview_op"),

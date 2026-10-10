@@ -6,7 +6,7 @@ use super::{
     cdp::Cdp,
     state::{Shared, Tab, short_id},
 };
-use crate::browser::egress::guard_url;
+use crate::browser::egress::{guard_preview_url, guard_url};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
@@ -81,13 +81,33 @@ pub(crate) async fn claim(shared: &Shared, target: &str) -> Option<String> {
 }
 
 /// A conversation's in-memory browser context, created on its first tab.
-pub(crate) async fn context(browser: &Browser, owner: &str) -> Result<String, String> {
-    if let Some(id) = browser.shared.lock().contexts.get(owner).cloned() {
+/// A registered preview gets its own context behind the preview proxy, as the
+/// App gives it its own partition.
+pub(crate) async fn context(
+    browser: &Browser,
+    owner: &str,
+    preview: Option<&str>,
+) -> Result<String, String> {
+    let (key, proxy) = match preview {
+        Some(id) => (
+            format!("{owner}:preview:{id}"),
+            browser
+                .preview_proxy_url
+                .clone()
+                .ok_or("navigation_denied")?,
+        ),
+        None => (owner.to_owned(), browser.proxy_url.clone()),
+    };
+    if let Some(id) = browser.shared.lock().contexts.get(&key).cloned() {
         return Ok(id);
     }
     let created = browser
         .cdp
-        .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url,"proxyBypassList":"<-loopback>"}), None)
+        .send(
+            "Target.createBrowserContext",
+            json!({"disposeOnDetach":true,"proxyServer":proxy,"proxyBypassList":"<-loopback>"}),
+            None,
+        )
         .await?;
     let id = created["browserContextId"]
         .as_str()
@@ -103,11 +123,7 @@ pub(crate) async fn context(browser: &Browser, owner: &str) -> Result<String, St
         .cdp
         .send("Browser.setDownloadBehavior", behavior, None)
         .await;
-    browser
-        .shared
-        .lock()
-        .contexts
-        .insert(owner.to_owned(), id.clone());
+    browser.shared.lock().contexts.insert(key, id.clone());
     Ok(id)
 }
 
@@ -177,14 +193,14 @@ pub(crate) async fn close(browser: &Browser, id: &str) {
     forget(browser, &tab).await;
 }
 
-/// A conversation's in-memory context ends with its last tab, as the App
-/// clears a conversation partition.
+/// A conversation's (or preview's) in-memory context ends with its last tab,
+/// as the App clears a conversation partition.
 pub(crate) async fn forget(browser: &Browser, tab: &Tab) {
     let owner_left = {
         let mut state = browser.shared.lock();
-        let left = !state.tabs.values().any(|t| t.owner == tab.owner);
+        let left = !state.tabs.values().any(|t| t.context == tab.context);
         if left {
-            state.contexts.remove(&tab.owner);
+            state.contexts.retain(|_, id| *id != tab.context);
         }
         left
     };
@@ -281,11 +297,11 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
                 t.owner.clone(),
                 t.url.clone(),
                 t.policy.clone(),
-                t.context.clone(),
+                (t.context.clone(), t.preview.clone()),
             )
         })
     });
-    let Some((opener, owner, parent_url, policy, context)) = opener else {
+    let Some((opener, owner, parent_url, policy, (context, preview))) = opener else {
         let claimed = {
             let mut state = browser.shared.lock();
             let creating = state.creating > 0;
@@ -325,6 +341,7 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
             tab.popup_parent_url = Some(parent_url);
             tab.policy = policy;
             tab.context = context;
+            tab.preview = preview;
             tab.url = web_url(&url).map(|u| u.to_string()).unwrap_or_default();
             state.tabs.insert(id.clone(), tab);
             state.sessions.insert(session.clone(), id.clone());
@@ -381,7 +398,12 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
         return;
     };
     let popup_violation = popup && !popup_allowed(&policy, &parent, &url);
-    if !popup_violation && guard_url(&url, browser.content).await {
+    let admitted = if policy["preview"] == true {
+        guard_preview_url(&url, browser.content).await
+    } else {
+        guard_url(&url, browser.content).await
+    };
+    if !popup_violation && admitted {
         let _ = browser
             .cdp
             .send(
