@@ -160,7 +160,7 @@ pub fn load_from(dir: &Path, scenario: &str) -> Result<Cassette, HarnessError> {
     })
 }
 
-/// Writes one recorded scenario (exchanges already sanitized).
+/// Writes one recorded scenario, normalizing opaque IDs before hashing.
 pub fn write(dir: &Path, mut meta: Meta, exchanges: &[Exchange]) -> Result<(), HarnessError> {
     if dir.exists() {
         fs::remove_dir_all(dir)?;
@@ -168,9 +168,15 @@ pub fn write(dir: &Path, mut meta: Meta, exchanges: &[Exchange]) -> Result<(), H
     fs::create_dir_all(dir)?;
     meta.files.clear();
     meta.fingerprint.clear();
+    let note = "opaque UUIDs -> stable same-width aliases";
+    if !meta.sanitization.iter().any(|entry| entry == note) {
+        meta.sanitization.push(note.to_owned());
+    }
     for (index, exchange) in exchanges.iter().enumerate() {
+        let mut exchange = exchange.clone();
+        normalize_response_ids(&mut exchange.response);
         let name = format!("{index:03}.json");
-        let bytes = serde_json::to_vec_pretty(exchange)?;
+        let bytes = serde_json::to_vec_pretty(&exchange)?;
         fs::write(dir.join(&name), &bytes)?;
         meta.files.push(FileHash {
             file: name,
@@ -180,6 +186,18 @@ pub fn write(dir: &Path, mut meta: Meta, exchanges: &[Exchange]) -> Result<(), H
     }
     fs::write(dir.join("meta.json"), serde_json::to_vec_pretty(&meta)?)?;
     Ok(())
+}
+
+/// Normalize the whole stream so UUIDs split across chunks remain consistent.
+/// Aliases have the same ASCII byte length, retaining content boundaries/delays.
+fn normalize_response_ids(response: &mut ResponseRecord) {
+    let body = super::sanitize::normalize_opaque_ids(&response.body());
+    let mut offset = 0;
+    for chunk in &mut response.chunks {
+        let end = offset + chunk.text.len();
+        chunk.text = body[offset..end].to_owned();
+        offset = end;
+    }
 }
 
 /// Structural fingerprint of one response: status plus, per SSE `data:` JSON

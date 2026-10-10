@@ -100,7 +100,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"f986a65e-26b6-4466-96b6-9d77e0456966\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"item_id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"obfuscation\":\"UGx7eBZqCgn3bV\",\"output_index\":1,\"sequence_number\":5}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-bcd53a4ff2a27142d8c6141e29a01\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"item_id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"obfuscation\":\"UGx7eBZqCgn3bV\",\"output_index\":1,\"sequence_number\":5}\n\n"
       },
       {
         "delay_ms": 0,
@@ -436,11 +436,11 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"f986a65e-26b6-4466-96b6-9d77e0456966\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"item_id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"output_index\":1,\"sequence_number\":89}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-bcd53a4ff2a27142d8c6141e29a01\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"item_id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"output_index\":1,\"sequence_number\":89}\n\n"
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"f986a65e-26b6-4466-96b6-9d77e0456966\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":90}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-bcd53a4ff2a27142d8c6141e29a01\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":90}\n\n"
       },
       {
         "delay_ms": 0,
