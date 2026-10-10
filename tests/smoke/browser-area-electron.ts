@@ -1,4 +1,4 @@
-import { spawnElectron } from "../support/electron-child";
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Public Browser area on an isolated, real Electron App and stub gateway. */
 import { type ChildProcess } from "node:child_process";
 import { strict as assert } from "node:assert";
@@ -11,6 +11,7 @@ import { createNativeAppServer, freePort, liveTrackedProcessIds } from "../suppo
 import { alignment, idleWrites, publicationStub } from "../support/browser-area-acceptance";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { electronMain } from "../support/electron-main-cdp";
+import { assertNewTabContent, populatedNewTab } from "../support/browser-newtab-acceptance";
 import { smokeElectronArgs } from "../support/smoke-browser";
 
 const root = process.cwd();
@@ -34,13 +35,10 @@ const nativeCount = `${win}.contentView.children.filter(v=>'webContents' in v &&
 const evaluate = <T>(fn: () => T) => main<Awaited<T>>(`(${fn.toString()})()`);
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
 const logs: string[] = [];
+const quits: Array<{ code: number; windows: number; contents: string[] }> = [];
 
 async function stopApp() {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGTERM");
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline && child.exitCode === null && child.signalCode === null) await new Promise(done=>setTimeout(done, 100));
-  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  if (child) await stopElectronChild(child);
 }
 
 async function quitAndStop(page: Page) {
@@ -58,6 +56,8 @@ async function quitAndStop(page: Page) {
   await page.expression("window.butlerApp.quitApp({confirmed:true})");
   const result = await quit;
   assert.equal(result.code, 0);assert.equal(result.windows, 0);assert.deepEqual(result.contents, []);
+  quits.push(result);
+  writeFileSync(join(evidence!, "verified-quits.json"), JSON.stringify(quits, null, 2));
   // Bare Electron 44 also remains resident after quit in this runner. Release
   // only our PID after the App has closed and flushed, then test real restore.
   connected?.close();await stopApp();
@@ -245,13 +245,16 @@ try {
   await click(page, "Browser");
   await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Address");
   assert.equal((await state(page)).tabs.length, 1, "hub creates exactly one new tab");
-  assert.equal(await page.expression("document.querySelector('[data-slot=page-card-content]').textContent"), "");
+  await assertNewTabContent(page, "en");
   for (const locale of ["ko", "en"]) for (const theme of ["dark", "light"]) {
     await gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language:locale, appearance_theme:theme }) });
     await page.reload(); await click(page, locale === "ko" ? "브라우저" : "Browser");
-    await page.waitForFunction(() => Boolean(document.querySelector('[data-slot="native-view-slot"][data-hidden]')));
+    await assertNewTabContent(page, locale);
+    await waitUntil(() => main<boolean>(`${nativeCount} === 0`), "new-tab native view detached");
+    assert.equal(await main<number>(nativeCount), 0, "new tab has no attached native document");
     await shot(page, `${locale}-${theme}-empty`);
   }
+  await populatedNewTab(page, gateway, () => shot(page, "en-light-newtab-populated"));
   await navigate(page, `http://127.0.0.1:${fixture.port}/first`);
   await waitTitle(page, "Fixture");
   let snapshot = await state(page); const first = snapshot.activeId;
@@ -338,7 +341,7 @@ try {
       await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
     }
   }
-  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, logs, tabs: (await state(page)).tabs.length }));
+  writeFileSync(join(evidence, "electron-result.json"), JSON.stringify({ ok: true, quits, logs, tabs: (await state(page)).tabs.length }));
 } catch (error) {
   writeFileSync(join(evidence, "electron-failure.txt"), `${String(error)}\n${logs.join("\n")}`);
   if (gateway) {
