@@ -94,8 +94,6 @@ struct State {
     next_call_index: u64,
     output_checks: u8,
     output_images: u8,
-    visual_image_bytes: usize,
-    browser_image_bytes: HashMap<String, usize>,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
 }
@@ -346,7 +344,7 @@ impl GuidedTools {
                     .list_signatures(self.binding.turn_id.clone())
                     .await
                     .map_err(BtccError::from)?;
-                outputs::restore_budget(self, &signatures).await?;
+                outputs::restore_output_checks(self, &signatures);
                 Ok(Mutex::new(ResumePool::new(signatures)?))
             })
             .await

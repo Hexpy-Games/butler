@@ -5806,7 +5806,7 @@
                 "always",
                 "never"
               ],
-              "description": "Vision observations always include a fresh screenshot; retained for compatibility."
+              "description": "never: a text-only observation without a screenshot (refs work; points and captures need a later observation with a screenshot). auto/always include the screenshot."
             },
             "region": {
               "type": "array",
@@ -10710,7 +10710,7 @@
               "always",
               "never"
             ],
-            "description": "Vision observations always include a fresh screenshot; retained for compatibility."
+            "description": "never: a text-only observation without a screenshot (refs work; points and captures need a later observation with a screenshot). auto/always include the screenshot."
           },
           "region": {
             "type": "array",

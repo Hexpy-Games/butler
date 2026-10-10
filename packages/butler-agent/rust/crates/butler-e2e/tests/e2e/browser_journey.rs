@@ -341,11 +341,11 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ),
     ];
     // A real multi-stop journey observes >2 MiB over time. Old pixels must not
-    // prevent the newest viewport from reaching the provider (even look=never).
+    // prevent the newest viewport from reaching the provider.
     for _ in 0..20 {
         calls.insert(
             calls.len() - 2,
-            ("browser_observe", json!({"tab":"fixture","look":"never"})),
+            ("browser_observe", json!({"tab":"fixture"})),
         );
     }
     let mut round = Vec::new();

@@ -18,6 +18,7 @@ pub(in crate::host::guided::tools) async fn finish(
             result["status"] = json!("refused");
             result["image_status"] = json!("image_unavailable");
         }
+        newest_without_pixels(name, result);
         return Ok(());
     };
     let bytes = image["data"]
@@ -38,46 +39,28 @@ pub(in crate::host::guided::tools) async fn finish(
         ) {
             result["status"] = json!("refused");
         }
+        newest_without_pixels(name, result);
         return Ok(());
     };
-    if matches!(
-        name,
-        "browser_observe" | "browser_zoom" | "browser_screenshot" | "output_check"
-    ) {
-        let mut state = owner.state.lock();
-        // Only the newest observation and close-up per tab stay in context.
-        let tab_id = result["tab"].as_str().unwrap_or("");
-        let tab = match name {
-            "browser_observe" => Some(tab_id.to_owned()),
-            "browser_zoom" => Some(format!("zoom:{tab_id}")),
-            _ => None,
-        };
-        let retained = state.browser_image_bytes.values().sum::<usize>();
-        let replaced = tab
-            .as_ref()
-            .and_then(|tab| state.browser_image_bytes.get(tab))
-            .copied()
-            .unwrap_or(0);
-        // Superseded browser images leave provider context; charge only the latest per tab.
-        if state.visual_image_bytes + retained - replaced + bytes.len() > 2 * 1024 * 1024 {
-            result.as_object_mut().map(|value| value.remove("image"));
-            result["image_status"] = json!("image_budget_exhausted");
-            if matches!(
-                name,
-                "browser_observe" | "browser_zoom" | "browser_screenshot"
-            ) {
-                result["status"] = json!("refused");
-            }
-        } else if let Some(tab) = tab {
-            state.browser_image_bytes.insert(tab, bytes.len());
-        } else {
-            state.visual_image_bytes += bytes.len();
-        }
-    }
+    // No per-turn byte budget: context stays bounded because only the newest
+    // observation and close-up per tab keep their pixels (older ones become text
+    // stubs), and reply captures leave context as artifacts.
     if name == "browser_screenshot" && result["status"] == "ok" && result.get("image").is_some() {
         save_capture(owner, result, bytes).await;
     }
     Ok(())
+}
+
+/// The host already made this observation the newest one, so earlier ids are
+/// stale even though its pixels were not returned.
+fn newest_without_pixels(name: &str, result: &mut Value) {
+    if name == "browser_observe"
+        && let Some(obs) = result["obs"].as_str().map(str::to_owned)
+    {
+        result["recovery"] = json!(format!(
+            "The page was observed as {obs}, which replaced every earlier observation id, but its screenshot was not returned. Call browser_observe again before acting or capturing; look \"never\" returns the text-only observation."
+        ));
+    }
 }
 
 async fn save_capture(owner: &GuidedTools, result: &mut Value, bytes: Vec<u8>) {

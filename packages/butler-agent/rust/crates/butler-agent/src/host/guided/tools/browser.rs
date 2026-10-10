@@ -57,15 +57,19 @@ pub(super) async fn execute(
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
     }
+    // look "never" asks for a text-only observation: no screenshot, no vision.
+    let text_only =
+        call.name == "browser_observe" && args["look"] == "never" && args.get("region").is_none();
     if matches!(call.name.as_str(), "browser_observe" | "browser_screenshot") {
-        if !client
-            .vision(&invocation.model_execution.active_model_ref())
-            .await
+        if !text_only
+            && !client
+                .vision(&invocation.model_execution.active_model_ref())
+                .await
         {
             return encoded(&json!({"status":"unavailable","reason":"vision_required"}));
         }
         if call.name == "browser_observe" {
-            args["include_image"] = json!(true);
+            args["include_image"] = json!(!text_only);
         }
     }
     // A region makes the observation a close-up of the newest observation.
@@ -83,7 +87,9 @@ pub(super) async fn execute(
         .call(op, &args["tab"], &args, invocation.cancellation)
         .await;
     let image_class = if zoom { "browser_zoom" } else { &call.name };
-    images::finish(owner, image_class, &mut result).await?;
+    if !text_only {
+        images::finish(owner, image_class, &mut result).await?;
+    }
     if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }
