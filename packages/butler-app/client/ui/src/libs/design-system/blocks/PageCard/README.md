@@ -20,9 +20,10 @@ radius) and `onOcclusion` to the main process and picks the holder:
 `none`, `butler` (rotating riso edge on `--motion-agent-edge`), `user` (strong
 neutral edge) or `waiting` (static amber). Holder edges are drawn outside the
 content area, so changing the holder never moves the native view. The App
-passes `reserveBand` for every tab Butler can hold (a conversation's signed-out
-tab) and fills the row with an `idle` PageBand when nothing else shows; your
-own tabs keep no row until a band appears.
+passes `reserveBand` for every tab. When nothing else shows, a tab Butler can
+hold (a conversation's signed-out tab) fills the row with an `idle` PageBand;
+your own tabs and signed-in tabs leave it empty: a quiet strip with the band's
+hairline, since nothing there needs you (the toolbar already says Signed in).
 
 ## Usage
 
@@ -44,8 +45,9 @@ letterbox below on `--muted`.
 
 ## Wrong use cases
 - Do not change the card's border or size per holder in product CSS.
-- Do not toggle `reserveBand` with the holder; it follows whether Butler can
-  hold the tab at all, so it stays fixed for the tab's life.
+- Do not toggle `reserveBand` with the holder or the tab's state; it stays on
+  for every tab, so no band ever moves the page.
+- Do not fill an empty row with a status line nobody can act on.
 - Do not draw pick highlights or Butler's pointer in the page DOM; use the
   overlay layer (`AgentPointer`, `SelectionBar`).
 

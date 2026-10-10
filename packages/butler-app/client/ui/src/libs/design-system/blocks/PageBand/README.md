@@ -37,8 +37,8 @@ truncates. Below 560px the hint drops; below 360px the detail drops.
 - Do not put app-wide messages in the band; use `Notice` or a toast.
 - Do not exceed three actions.
 - Do not stack two bands; merge the second state into the detail.
-- Do not mount and unmount the band on a card Butler can hold; use
-  `PageCard reserveBand` and the `idle` tone so the page never moves.
+- Do not mount and unmount the band on a bare card; use `PageCard reserveBand`
+  so the page never moves (`idle` on Butler's tabs, an empty row elsewhere).
 
 ## Tags
 browser, band, page state, agent, approval, picking

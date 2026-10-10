@@ -113,6 +113,12 @@
   overflow: hidden;
 }
 
+/* An empty reserved row is a quiet strip of the card's surface with the
+   band's hairline, so a band arriving only adds content, never a line. */
+.bandRow:empty {
+  border-bottom: var(--border-hairline) solid var(--line);
+}
+
 /* The page area: the native view's rect, and the container overlays and
    anchored dialogs position in. */
 .content {

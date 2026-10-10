@@ -20,7 +20,8 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   band?: ReactNode;
   /**
    * Keep one band row (`--browser-band-height`) whether or not a band shows, so a band appearing,
-   * changing tone or leaving never moves the native view. Use it for every tab Butler can hold.
+   * changing tone or leaving never moves the native view. Use it for every tab in BrowserPane;
+   * with no band the row is a quiet strip with the band's hairline.
    */
   reserveBand?: boolean;
   /** Page load progress (0–100): a 2px line on the card's top edge. Omit when loaded. */

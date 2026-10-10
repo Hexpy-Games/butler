@@ -169,6 +169,27 @@ fn prompt_cache_key(text: &str, start: usize) -> bool {
     window.contains("prompt_cache_key")
 }
 
+/// Stable, same-width aliases for opaque UUIDs, including identifiers embedded
+/// in tool argument strings. Keeping the byte width preserves SSE chunk boundaries.
+pub fn normalize_opaque_ids(text: &str) -> String {
+    static UUID: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(uuid) = UUID.get_or_init(|| {
+        Regex::new(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b").ok()
+    }) else {
+        return text.to_owned();
+    };
+    uuid.replace_all(text, |found: &regex::Captures<'_>| {
+        let identifier = &found[0];
+        if prompt_cache_key(text, found.get(0).map_or(0, |value| value.start())) {
+            identifier.to_owned()
+        } else {
+            let hash = super::sha256_hex(identifier.to_ascii_lowercase().as_bytes());
+            format!("opaque-{}", &hash[..29])
+        }
+    })
+    .into_owned()
+}
+
 fn uuid_finding(text: &str) -> Option<String> {
     static UUID: OnceLock<Option<Regex>> = OnceLock::new();
     let uuid = UUID

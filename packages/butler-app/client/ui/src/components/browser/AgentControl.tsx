@@ -4,7 +4,7 @@ import { ButlerThinkingMark, Button, ButtonContainer, PageBand, Pick, Popup, Squ
 import { browserCall, type BrowserTab } from "./browserBridge";
 import { popupNotice } from "./browserPopupNotice";
 
-/** Tabs Butler can hold keep a reserved band row for their whole life, so no band ever moves the page. */
+/** Tabs Butler can hold show the idle line in the reserved row; your tabs and signed-in tabs leave it empty. */
 export function browserHoldable(tab?: BrowserTab) {
   return Boolean(tab && tab.owner !== "mine" && tab.profile !== "signed_in");
 }
@@ -16,7 +16,7 @@ export function browserHolder(tab?: BrowserTab): PageCardHolder {
   return tab.inUse || tab.busy ? "butler" : "none";
 }
 
-/** The tab's one band: pick mode, the holder, a pop-up, or (reserved row) the idle line. A second state joins as the detail. */
+/** The tab's one band: pick mode, the holder, a pop-up, or the idle line on Butler's tabs. A second state joins as the detail. */
 export function AgentControl({ tab }: { tab?: BrowserTab }) {
   const copy = appCopy.browser;
   const popup = tab ? popupNotice(tab) : null;
