@@ -30,6 +30,6 @@ function canvasRegions(regions, { width, height, cssWidth, cssHeight }) {
     const farX = Math.min(width, Math.floor((r.x + r.width) * width / cssWidth));
     const farY = Math.min(height, Math.floor((r.y + r.height) * height / cssHeight));
     return { name, region: [x, y, farX - x, farY - y], bounds: { left: x, top: y, right: farX, bottom: farY },
-      verification: "Visible canvas bounds in screenshot coordinates. Verify the drawing in fresh pixels before choosing this crop." };
+      verification: "Visible canvas bounds in screenshot coordinates. Check fresh pixels before choosing this crop." };
   }).filter(({ region: [,,w,h] }) => w > 0 && h > 0);
 }

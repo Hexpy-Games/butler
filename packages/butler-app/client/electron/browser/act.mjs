@@ -68,7 +68,7 @@ const afterInputStep = (steps, index) => steps.slice(0, index).some(step => step
 
 export async function prepareBatch(tab, args) {
   if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps",
-    recovery: "Send 1–10 steps per call. Split tool/color selection from strokes: select, observe fresh pixels, then draw a group of strokes. No steps were dispatched." };
+    recovery: "Send 1–10 steps per call. No steps were dispatched." };
   // Suggestions appear after an autocomplete fill, so nothing may follow it in
   // the batch; steps before it (e.g. clicking the field) are safe.
   if (args.steps.slice(0, -1).some(step => step.action === "fill" && tab.observation?.nodes.some(node =>

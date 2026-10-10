@@ -168,7 +168,7 @@ export function visiblePoint(element) {
 }
 
 /** The active state a page exposes generically: ARIA states, focus and
- * selected/active class tokens (toolbars, tabs, swatches). */
+ * selected/active class tokens. */
 export function activeState(element) {
   const states = [], attribute = name => element.getAttribute(name);
   if (attribute("aria-pressed") === "true") states.push("pressed");

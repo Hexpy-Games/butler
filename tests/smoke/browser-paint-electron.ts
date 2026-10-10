@@ -78,9 +78,9 @@ try {
   assert.ok(JSON.stringify(stub.results).includes("point_mismatch"), "palette mismatch is refused before dispatch");
   assert.ok(JSON.stringify(stub.results).includes("use hit.ref if it is the intended control"), "mismatch preserves a concrete recovery path");
   assert.ok(JSON.stringify(stub.results).includes("exactly one of ref or point"), "ambiguous targets are refused with repair instructions");
-  assert.ok(JSON.stringify(stub.results).includes("not a toolbar/palette control"));
+  assert.ok(JSON.stringify(stub.results).includes("hit a canvas, not the expected control"));
   assert.ok(JSON.stringify(stub.results).includes("coordinate validation, not an input delivery failure"));
-  assert.ok(JSON.stringify(stub.results).includes("including earlier tool/color clicks"));
+  assert.ok(JSON.stringify(stub.results).includes("including earlier steps"));
   assert.ok(JSON.stringify(stub.results).includes("rejected_point"));
   assert.ok(JSON.stringify(stub.results).includes("step_index"));
   assert.ok(JSON.stringify(stub.results).includes("existing text budget"), "budget refusal explains how to obtain complete fresh controls");

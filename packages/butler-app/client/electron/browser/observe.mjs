@@ -57,7 +57,7 @@ const quiet = (quietMs, maxMs) => `new Promise(done=>{let timer;const end=()=>{o
   const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(end,${quietMs})});
   observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
   timer=setTimeout(end,${quietMs});const cap=setTimeout(end,${maxMs})})`;
-/** After an action, wait briefly for loading and DOM updates (suggestions, routes) to settle. */
+/** After an action, wait briefly for loading and DOM updates (suggestions, recalculated results) to settle. */
 async function settle(tab, maxMs = 2000) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   while (contents.isLoading() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));

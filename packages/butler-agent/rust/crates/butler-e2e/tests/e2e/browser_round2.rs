@@ -1,5 +1,5 @@
-//! Site notes as data, close-ups that keep acting coordinates, history steps and
-//! workspace-only uploads, through the public browser tools.
+//! Close-ups that keep acting coordinates, history steps and workspace-only
+//! uploads, through the public browser tools.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -13,15 +13,9 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 #[tokio::test]
-async fn browser_site_notes_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
+async fn browser_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("BROWSER-ROUND2")?.stub_cassette(cassette()?);
-    let notes = setup.sandbox.data.join("browser/site-notes");
-    std::fs::create_dir_all(&notes)?;
-    std::fs::write(
-        notes.join("example.com.md"),
-        "Owner note: the search box is at the top.",
-    )?;
     std::fs::create_dir_all(setup.sandbox.data.join("auth"))?;
     std::fs::write(setup.sandbox.data.join("auth/token.json"), "{}")?;
     std::fs::write(setup.sandbox.data.join("../outside.txt"), "outside")?;
@@ -60,11 +54,6 @@ async fn browser_site_notes_zoom_history_and_upload_scope() -> Result<(), Harnes
             .iter()
             .any(|tool| tool["id"] == "native:browser_observe"),
         "a category guess that matches something else still shows the browser tools"
-    );
-    let opened = output(&requests[3]);
-    assert_eq!(
-        opened["output"]["site_note"]["note"],
-        "Owner note: the search box is at the top."
     );
     let zoom = output(&requests[5]);
     assert_eq!(zoom["output"]["schema"], "butler.browser-zoom.v1");

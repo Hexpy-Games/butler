@@ -5,7 +5,6 @@ mod dialog;
 mod effect;
 pub(super) mod images;
 mod observe_after;
-mod site_notes;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};
 use butler_core::json::JsonDocument;
@@ -90,11 +89,8 @@ pub(super) async fn execute(
     }
     if zoom && result["status"] == "ok" {
         result["schema"] = json!("butler.browser-zoom.v1");
-    } else if matches!(call.name.as_str(), "browser_open" | "browser_observe") {
-        if call.name == "browser_observe" && result["status"] == "ok" {
-            project_observation(&mut result);
-        }
-        site_notes::attach(owner, &mut result).await;
+    } else if call.name == "browser_observe" && result["status"] == "ok" {
+        project_observation(&mut result);
     }
     encode_page_data(result)
 }
