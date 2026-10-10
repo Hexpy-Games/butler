@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { SourceTextModule, SyntheticModule, createContext } from "node:vm";
-import { configureChromiumFeatures } from "../../packages/butler-app/client/electron/butler-platform/chromium-features.mjs";
+import { configureChromiumFeatures, chromiumLaunchArgs } from "../../packages/butler-app/client/electron/butler-platform/chromium-features.mjs";
 
 const entry = new URL("../../packages/butler-app/client/electron/bootstrap.mjs", import.meta.url);
 const source = await readFile(entry, "utf8");
@@ -21,6 +21,13 @@ for (const initial of ["", "Existing,Other:param/value", "Existing,OverlayScroll
   if (initial.includes("Other:param/value")) assert(values.includes("Other:param/value"));
 }
 console.info("PASS: packaged bootstrap ordering on Windows/Linux/macOS; five feature merge cases");
+for (const platform of ["win32", "linux", "darwin"]) {
+  const initial = ["--enable-features=Existing", "--enable-features=Other:param/value", "app"];
+  const launched = chromiumLaunchArgs(initial, platform);
+  assert.deepEqual(initial, ["--enable-features=Existing", "--enable-features=Other:param/value", "app"]);
+  assert.deepEqual(launched, platform === "darwin" ? initial : ["--enable-features=Existing,Other:param/value,OverlayScrollbar", "app"]);
+  assert.deepEqual(chromiumLaunchArgs(launched, platform), launched);
+}
 
 function switches(initial) {
   const values = new Map([["enable-features", initial]]);
@@ -66,6 +73,7 @@ async function verifyBootstrap(platform) {
   });
   await module.link((name) => {
     assert.notEqual(name, "electron", "ESM Electron eagerly initializes nativeTheme");
+    if (name === "./stdio-errors.mjs") return synthetic({}, context);
     if (name === "node:module") return synthetic({ createRequire: () => () => ({
       app, protocol: { registerSchemesAsPrivileged() {} },
     }) }, context);

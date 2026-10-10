@@ -2,6 +2,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { closeSync, mkdtempSync, openSync, readSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { chromiumLaunchArgs } from "../../packages/butler-app/client/electron/butler-platform/chromium-features.mjs";
 
 const children = new Set<ChildProcess>();
 function killOwnedChildren(): void {
@@ -46,7 +47,7 @@ export function spawnElectron(
     rmSync(dir, { recursive: true, force: true });
   };
   try {
-    const child = trackElectronChild(spawn(command, args, { ...spawnOptions, stdio: ["ignore", writer, writer] }));
+    const child = trackElectronChild(spawn(command, chromiumLaunchArgs(args), { ...spawnOptions, stdio: ["ignore", writer, writer] }));
     child.once("exit", drain);
     child.once("close", cleanup);
     return child;
