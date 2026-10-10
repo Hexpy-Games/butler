@@ -4,7 +4,7 @@ import { completedWorkBlocks } from "@/app/conversation-progress/terminal-activi
 import { MessageList } from "@/components/conversation/MessageList";
 import { SessionObserverTimeline } from "@/components/layout/SessionObserverTimeline";
 import { ComposerAuthorityDecisionSurface } from "@/components/conversation/ComposerAuthorityDecisionSurface";
-import { normalizeApprovalSummary, approvalRequestView, signInHandoffView } from "@/app/approvalRequest";
+import { normalizeApprovalSummary, approvalRequestView, browserHandoffView } from "@/app/approvalRequest";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { setAppCopyLanguage } from "@/app/copy";
@@ -85,13 +85,13 @@ export function ActivityLayoutHarness() {
     operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
   const decision = approvalRequestView({ approval, reason: "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   const canOpenTab = params.get("browser") === "1";
-  const handoff = signInHandoffView({ approval }, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
+  const handoff = browserHandoffView({ approval }, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return (
     <AdaptiveShell leftOpen={false} rightOpen={false} theme={appShellTheme(settings)}>
       <AdaptiveShellSidebar open={false} />
       <AdaptiveShellWorkspace><Stack fill gap="md" data-stub-stream-complete={length === answer.length}>
       {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision, ...handoff,
-        ...(handoff ? { handoff: { canOpenTab, onOpenTab: () => {}, onStop: () => {} } } : {}),
+        ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, onOpenTab: () => {}, onStop: () => {} } } : {}),
         pending: false, pendingCount: 1, scope: undefined, composingMessage: false,
         onAllow: async () => {}, onAllowConversation: async () => {}, onDeny: async () => {},
         onShowDecision: () => {}, onOpenSource: () => {}, onComposeMessage: () => {},

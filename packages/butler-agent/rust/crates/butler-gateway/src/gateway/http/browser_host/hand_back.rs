@@ -30,22 +30,28 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
     }
     Ok(())
 }
-/// Only the requested tab's hand-back resumes its durable nonterminal wait. A
-/// wait-for-user card names the tab; a sign-in hand-off card shows the site
-/// only, so its request's stored target (the tab) is matched instead.
+/// Only the requested tab's hand-back resumes its durable nonterminal wait.
+/// The hand-off cards show the site, never the tab id, so the request's
+/// stored target (the tab) is matched.
 fn waits_on(request: &Value, tab: &Value) -> bool {
     let approval = &request["approval"];
-    let names = |targets: &Value, field: Option<&str>| {
-        targets
-            .as_array()
-            .is_some_and(|targets| targets.iter().any(|t| field.map_or(t, |f| &t[f]) == tab))
-    };
-    match request["executable"].as_str() {
-        Some("browser_wait_for_user") => names(&approval["operation"]["targets"], None),
-        Some("browser_sign_in") => {
-            approval["operation"]["tool"] == "browser_sign_in_wait"
-                && names(&approval["targets"], Some("path"))
-        }
+    let hand_off = match request["executable"].as_str() {
+        Some("browser_wait_for_user") => true,
+        Some("browser_sign_in") => approval["operation"]["tool"] == "browser_sign_in_wait",
         _ => false,
-    }
+    };
+    hand_off
+        && approval["targets"]
+            .as_array()
+            .is_some_and(|targets| targets.iter().any(|t| &t["path"] == tab))
+}
+/// The site of a tab for the wait card, which never shows the tab id ("" when unknown).
+pub(super) fn tab_site(state: &HttpState, tab: &Value) -> String {
+    let url = state.browser.0.lock().ok().and_then(|hub| {
+        hub.tabs
+            .get(tab.as_str().unwrap_or(""))
+            .and_then(|tab| tab["url"].as_str().map(str::to_owned))
+    });
+    url.and_then(|url| butler_runtime::browser::site_of(&url))
+        .unwrap_or_default()
 }

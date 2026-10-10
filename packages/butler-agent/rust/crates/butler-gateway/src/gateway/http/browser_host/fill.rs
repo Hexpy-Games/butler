@@ -39,7 +39,7 @@ pub(super) async fn lookup(state: &Arc<HttpState>, tab: &Value) -> Result<Value,
     if !signin_secrets::available(state).await {
         return Ok(refused(
             "signin_unavailable",
-            "Saved sign-ins are off on this computer. Ask the user to sign in in the tab, then call browser_wait_for_user.",
+            "Saved sign-ins are off on this computer. Ask the user to sign in in the tab, then call browser_wait_for_user with reason sign_in.",
         ));
     }
     let site =
@@ -52,7 +52,7 @@ pub(super) async fn lookup(state: &Arc<HttpState>, tab: &Value) -> Result<Value,
     if entry.is_null() {
         return Ok(refused(
             "no_saved_sign_in",
-            "No sign-in is saved for this site. Ask the user to sign in in the tab, then call browser_wait_for_user.",
+            "No sign-in is saved for this site. Ask the user to sign in in the tab, then call browser_wait_for_user with reason sign_in.",
         ));
     }
     if entry["policy"] == "never" {

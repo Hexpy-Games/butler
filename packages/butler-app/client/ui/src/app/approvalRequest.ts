@@ -89,6 +89,7 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   return { tool: value.tool, access: value.access, targets,
     ...(browser_steps ? { browser_steps } : {}),
     ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
+    ...(typeof value.wait_reason === "string" ? { wait_reason: value.wait_reason } : {}),
     ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
     ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
@@ -196,18 +197,23 @@ function details(
   return fallback ? [fallback] : [];
 }
 
-/** A sign-in step only the user can do: a hand-off to the tab, not a permission. */
-export interface SignInHandoffView { title: string; details: string[] }
+/** A step only the user can do in a tab (a sign-in step, a secure field, ...):
+ * a hand-off, not a permission. The tab id never reaches the card. */
+export interface BrowserHandoffView { title: string; details: string[]; signIn: boolean }
 
-export function signInHandoffView(
+export function browserHandoffView(
   card: Pick<AuthorityApprovalCard, "approval">,
   copy: ApprovalRequestCopy,
   canOpenTab: boolean,
-): SignInHandoffView | undefined {
+): BrowserHandoffView | undefined {
   const operation = card.approval?.operation;
-  if (operation?.tool !== "browser_sign_in_wait") return undefined;
-  const step = copy.signInStep(operation.sign_in_step ?? "unknown_form");
-  const site = operation.targets.find(Boolean);
-  return { title: copy.signInHandoff.title,
-    details: [site ? `${site} · ${step}` : step, canOpenTab ? copy.signInHandoff.inTab : copy.signInHandoff.onDesktop] };
+  const where = canOpenTab ? copy.signInHandoff.inTab : copy.signInHandoff.onDesktop;
+  const site = operation?.targets.find(Boolean);
+  if (operation?.tool === "browser_sign_in_wait") {
+    const step = copy.signInStep(operation.sign_in_step ?? "unknown_form");
+    return { title: copy.signInHandoff.title, details: [site ? `${site} · ${step}` : step, where], signIn: true };
+  }
+  if (operation?.tool !== "browser_wait_for_user") return undefined;
+  const reason = operation.wait_reason ?? "other";
+  return { title: copy.waitHandoff(reason), details: site ? [site, where] : [where], signIn: ["sign_in", "secure_field", "secure_keypad"].includes(reason) };
 }

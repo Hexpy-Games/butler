@@ -13,6 +13,7 @@ mod host;
 mod import;
 mod schedule;
 mod tool;
+mod wait;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use host::{admin, attach, call, call_turn, snapshot, tab};
