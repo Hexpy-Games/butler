@@ -21,6 +21,7 @@ fn executes(op: &str) -> bool {
             | "tab.act"
             | "tab.dialog"
             | "tab.close"
+            | "signin.fill"
     )
 }
 pub(super) fn dispatch(

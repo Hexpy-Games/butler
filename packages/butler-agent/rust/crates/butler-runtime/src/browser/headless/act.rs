@@ -193,7 +193,7 @@ async fn prepare_steps(page: &Page, args: &Value) -> Result<Value, String> {
         .with_tab(&page.tab, |t| (t.epoch, t.url.clone()))
         .unwrap_or_default();
     Ok(
-        json!({"status":"ok","tab":page.tab,"epoch":epoch,"obs":args["observation"],"url":url,"steps":prepared}),
+        json!({"status":"ok","tab":page.tab,"epoch":epoch,"obs":args["observation"],"url":url,"profile":"signed_out","steps":prepared}),
     )
 }
 

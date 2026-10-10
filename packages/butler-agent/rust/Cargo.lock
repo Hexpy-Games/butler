@@ -888,6 +888,8 @@ dependencies = [
  "futures-util",
  "http",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "image",
  "indexmap 2.14.2",
  "notify",
@@ -906,6 +908,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "zeroize",
  "zip",
 ]
 
@@ -1103,6 +1106,7 @@ dependencies = [
  "regex",
  "regress",
  "reqwest 0.12.28",
+ "roxmltree",
  "rusqlite",
  "ryu-js",
  "semver",
@@ -1119,6 +1123,7 @@ dependencies = [
  "url",
  "uuid",
  "webp",
+ "zeroize",
  "zip",
 ]
 

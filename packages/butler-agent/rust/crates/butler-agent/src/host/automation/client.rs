@@ -127,6 +127,7 @@ impl ScheduleClient {
                     "schedule_type": kind, "run_at": args.get("run_at"), "start_at": args.get("start_at"),
                     "interval_seconds": seconds,
                     "access_mode": args.get("access_mode"),
+                    "source_session_id": session,
                 }))).await?
             }
             "list_automations" => {

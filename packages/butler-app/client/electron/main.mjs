@@ -2118,6 +2118,11 @@ async function createWindow() {
     void loadInitialNativeShellPreferences().catch(() => undefined);
     userBrowser ??= installUserBrowser(app, () => mainWindow);
     userBrowser.onState = () => browserHost.changed();
+    userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
+    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+      ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
+      adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
+    });
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
@@ -2533,6 +2538,16 @@ ipcMain.handle("butler:security-request", async (event, input) => {
     adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     onRotated: () => bundledAgentSupervisor.reloadLocalAuth(),
   });
+});
+
+// Browser import: the native dialog picks the export file; its contents are
+// read only by the Agent and never reach the renderer.
+ipcMain.handle("butler:pick-import-file", async (event, kind) => {
+  if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
+  const filters = kind === "bookmarks" ? [{ name: "HTML", extensions: ["html", "htm"] }] : [{ name: "CSV", extensions: ["csv"] }];
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, { properties: ["openFile"], filters });
+  const path = result.canceled ? null : result.filePaths[0];
+  return path ? { path, name: basename(path) } : null;
 });
 
 ipcMain.handle("butler:start-openai-oauth-login", async () =>

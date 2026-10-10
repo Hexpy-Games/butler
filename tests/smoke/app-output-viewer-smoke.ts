@@ -3,7 +3,8 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { type Page } from "playwright";
-import { createNativeAppServer, freePort, spawnTrackedProcess, type NativeAppServerHandle } from "../support/native-app-server.ts";
+import { createNativeAppServer, freePort, type NativeAppServerHandle } from "../support/native-app-server.ts";
+import { spawnElectron, stopElectronChild } from "../support/electron-child.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { electronPage, electronFrame } from "../support/electron-page-cdp.ts";
 import { outputTunnel } from "../support/output-tunnel.ts";
@@ -133,9 +134,8 @@ async function electronClient(server: NativeAppServerHandle, language: string) {
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   if (!executable) return;
   const port = await freePort();
-  const processHandle = spawnTrackedProcess(executable,
-    [resolve("packages/butler-app/client/electron/main.mjs"), `--remote-debugging-port=${port}`], {
-      stdio: "ignore",
+  const childProcess = spawnElectron(executable,
+    [resolve("packages/butler-app/client/electron"), `--remote-debugging-port=${port}`], {
       env: { ...process.env, BUTLER_DATA:server.butlerData,
         BUTLER_NATIVE_AGENT_EXECUTABLE:join(dirname(server.butlerData), "install/bin/butler-agent"),
         BUTLER_APP_SERVER_URL:server.url, BUTLER_APP_SERVER_PORT:String(server.port),
@@ -175,7 +175,7 @@ async function electronClient(server: NativeAppServerHandle, language: string) {
   } finally {
     child?.close();
     page?.close();
-    await processHandle.stop();
+    await stopElectronChild(childProcess);
   }
 }
 

@@ -17,6 +17,10 @@ pub struct CreateAutomationRequest {
     /// The access the schedule's runs get; the target conversation's
     /// current access mode when omitted.
     pub access_mode: Option<AccessMode>,
+    /// The conversation that created the schedule; its live site grants
+    /// apply to runs in another target conversation.
+    #[serde(default)]
+    pub source_session_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

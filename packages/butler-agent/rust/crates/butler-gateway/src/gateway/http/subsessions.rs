@@ -42,10 +42,13 @@ pub(super) async fn route(
             .or_else(|| parameters.get("sessionId"))
             .cloned()
             .ok_or_else(|| HttpError::public(400, "session_required", "Session id is required."))?;
-        let data = if uri.path() == "/session-summary" {
-            state.application.session_summary_view(public_id).await?
+        let mut data = if uri.path() == "/session-summary" {
+            state
+                .application
+                .session_summary_view(public_id.clone())
+                .await?
         } else if uri.path() == "/context-details" {
-            state.application.context_details(public_id).await?
+            state.application.context_details(public_id.clone()).await?
         } else {
             let page = session_page(&parameters, &public_id, &state.session_cursor_secret)?;
             let data = state
@@ -60,6 +63,9 @@ pub(super) async fn route(
                 &state.session_cursor_secret,
             )?
         };
+        if let Some(artifacts) = data.get_mut("artifacts").and_then(Value::as_array_mut) {
+            artifacts.extend(state.previews.artifacts(&public_id));
+        }
         return Ok(Some(response_json(
             StatusCode::OK,
             ApiEnvelope {

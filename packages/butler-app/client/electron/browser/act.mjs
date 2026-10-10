@@ -90,7 +90,7 @@ async function prepareSteps(tab, args) {
     const value = step.action === "upload" ? step.value.split(/[\\/]/u).at(-1) : step.value;
     steps.push({ ...target, action: step.action, value_preview: typeof value === "string" ? [...value].slice(0, 40).join("") : undefined });
   }
-  return repeatRefusal(tab, args, steps) ?? { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
+  return repeatRefusal(tab, args, steps) ?? { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, profile: tab.profile, steps };
 }
 const sensitive = target => Boolean(target.payment && target.submit || target.upload || target.frame_payment);
 function sameTarget(prepared, current) {

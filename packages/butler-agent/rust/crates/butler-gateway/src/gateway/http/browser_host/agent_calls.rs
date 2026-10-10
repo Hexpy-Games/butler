@@ -14,7 +14,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     } else {
         0
     };
-    let frame = match super::backend::route(&state, frame, &op, &session, count).await? {
+    let mut frame = match super::backend::route(&state, frame, &op, &session, count).await? {
         Ok(response) => return Ok(response),
         Err(frame) => frame,
     };
@@ -26,9 +26,13 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         )?;
         return response(0, json!({"status":"ok"}));
     }
+    if let Some(answer) = signed_in_call(&state, &mut frame, &op, &session).await? {
+        return response(count, answer);
+    }
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
+        "signin.fill" => 25000,
         // A post-batch observation first waits up to 2 s for the page to settle.
         "tab.observe" if frame["args"]["settle"] == true => 8000,
         _ => 5000,
@@ -36,6 +40,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
+    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
         return Ok(refused);
     }
@@ -69,9 +74,47 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
             result = json!({"status":"not_dispatched","reason":"owner_changed"});
         }
     }
+    super::signed_in::recheck(&sent, &mut result);
     enforce_result_policy(&state, &session, &op, &mut result);
+    if op == "signin.fill" {
+        result = super::fill::finish(&state, &sent, &session, &result).await?;
+    }
     store_still(&state, &session, &mut result).await?;
     response(count, result)
+}
+
+/// Signed-in fence and sign-in ops answered before (or instead of) native dispatch.
+async fn signed_in_call(
+    state: &Arc<HttpState>,
+    frame: &mut Value,
+    op: &str,
+    session: &str,
+) -> Result<Option<Value>, HttpError> {
+    if op == "signin.grant" {
+        return super::signed_in::grant(state, session, &frame["args"])
+            .await
+            .map(Some);
+    }
+    if let Some(refused) = super::signed_in::admit(state, frame, op, session).await? {
+        return Ok(Some(refused));
+    }
+    if !op.starts_with("signin.") {
+        return Ok(None);
+    }
+    let tab = {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        match hub
+            .tabs
+            .check(session, frame["tab"].as_str().unwrap_or(""), op)
+        {
+            Ok(tab) => tab.clone(),
+            Err(reason) => return Ok(Some(json!({"status":"not_dispatched","reason":reason}))),
+        }
+    };
+    if op == "signin.lookup" {
+        return super::fill::lookup(state, &tab).await.map(Some);
+    }
+    super::fill::prepare(state, frame, &tab).await
 }
 fn dispatch(
     state: &Arc<HttpState>,
@@ -107,6 +150,7 @@ fn dispatch(
                 | "tab.prepare"
                 | "tab.act"
                 | "tab.dialog"
+                | "signin.fill"
         ) {
             let tab = hub
                 .tabs
@@ -114,7 +158,7 @@ fn dispatch(
                 .map_err(|_| error(403, "not_your_tab"))?;
             if tab["url"]
                 .as_str()
-                .is_some_and(|url| !permitted_url(state, url))
+                .is_some_and(|url| !permitted_url(state, &session, url))
             {
                 return response(
                     count,
@@ -122,10 +166,18 @@ fn dispatch(
                 )
                 .map(Some);
             }
-            frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
-                &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-                tab["url"].as_str().unwrap_or(""),
-            );
+            if frame["args"]["policy"]["mode"] != "signed_in" {
+                frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
+                    &format!("http://127.0.0.1:{}", super::super::content::port(state)),
+                    tab["url"].as_str().unwrap_or(""),
+                );
+            }
+            if state
+                .previews
+                .owned(&session, tab["preview"].as_str().unwrap_or(""))
+            {
+                frame["args"]["policy"]["preview"] = json!(true);
+            }
         }
         if hub.host.is_none() {
             return response(count, json!({"status":"unavailable","reason":"no_browser"}))
@@ -150,7 +202,7 @@ pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError
         butler_runtime::browser::batch_receipts(count, value),
     )
 }
-pub(super) fn permitted_url(state: &HttpState, raw: &str) -> bool {
+pub(super) fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool {
     butler_runtime::browser::public_url(raw).is_ok()
         || url::Url::parse(raw).is_ok_and(|u| {
             u.scheme() == "http"
@@ -158,7 +210,9 @@ pub(super) fn permitted_url(state: &HttpState, raw: &str) -> bool {
                 && u.password().is_none()
                 && u.host_str() == Some("127.0.0.1")
                 && u.port() == Some(super::super::content::port(state))
-                && u.path().starts_with("/__o/")
+                && (u.path().starts_with("/__o/")
+                    || u.path().starts_with("/__p/")
+                    || state.previews.has_active(session))
         })
 }
 pub(super) fn enforce_result_policy(
@@ -170,7 +224,7 @@ pub(super) fn enforce_result_policy(
     let denied = result
         .get("url")
         .and_then(Value::as_str)
-        .is_some_and(|url| !permitted_url(state, url))
+        .is_some_and(|url| !permitted_url(state, session, url))
         || result
             .get("frames")
             .and_then(Value::as_array)
@@ -179,7 +233,7 @@ pub(super) fn enforce_result_policy(
                     frame
                         .as_str()
                         .or_else(|| frame["url"].as_str())
-                        .is_none_or(|url| !permitted_url(state, url))
+                        .is_none_or(|url| !permitted_url(state, session, url))
                 })
             });
     if !denied {
@@ -231,25 +285,41 @@ fn validate(
             | "tab.waiting"
             | "tab.cancel"
             | "owner.closed"
+            | "signin.lookup"
+            | "signin.fill"
+            | "signin.grant"
     ) {
         return Err(error(400, "invalid_browser_op"));
     }
     if op == "tab.open" {
-        let raw = frame["args"]["url"].as_str().unwrap_or("");
-        let content = url::Url::parse(raw).ok().filter(|u| {
+        let raw = frame["args"]["url"].as_str().unwrap_or("").to_owned();
+        let content = url::Url::parse(&raw).ok().filter(|u| {
             u.host_str() == Some("127.0.0.1")
                 && u.port() == Some(super::super::content::port(state))
-                && u.path().starts_with("/__o/")
+                && u.scheme() == "http"
+                && u.username().is_empty()
+                && u.password().is_none()
+                && (u.path().starts_with("/__o/")
+                    || super::super::content::preview::owner_id(state, session, &raw).is_some())
         });
         let url = match content {
             Some(url) => url,
-            None => butler_runtime::browser::public_url(raw)
+            None => butler_runtime::browser::public_url(&raw)
                 .map_err(|_| error(400, "navigation_denied"))?,
         };
         frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
             &format!("http://127.0.0.1:{}", super::super::content::port(state)),
             url.as_str(),
         );
+        if let Some(id) = super::super::content::preview::owner_id(state, session, &raw) {
+            frame["args"]["preview_id"] = json!(id);
+        }
+        if state
+            .previews
+            .owned(session, frame["args"]["preview_id"].as_str().unwrap_or(""))
+        {
+            frame["args"]["policy"]["preview"] = json!(true);
+        }
     }
     if op == "tab.act"
         && frame["args"]["steps"]
@@ -264,8 +334,9 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
     let tabs = value["tabs"]
         .as_array()
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
-    let handed_back = {
+    let (handed_back, handovers) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        let handovers = hub.tabs.handovers(tabs);
         let changed: Vec<Value> = tabs
             .iter()
             .filter(|tab| {
@@ -278,8 +349,9 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         hub.tabs
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
-        changed
+        (changed, handovers)
     };
+    super::signed_in::record_handovers(&state, handovers).await?;
     resume_waits(&state, &handed_back).await?;
     super::super::json(StatusCode::OK, json!({"ok":true}))
 }
@@ -293,11 +365,11 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
         };
         let owner = crate::gateway::application::app_session_hint(session);
         let requests = state.application.authority_list(owner.clone()).await?;
-        for request in requests
-            .requests
-            .iter()
-            .filter(|r| r["executable"] == "browser_wait_for_user")
-        {
+        for request in requests.requests.iter().filter(|r| {
+            r["executable"] == "browser_wait_for_user"
+                || r["executable"] == "browser_sign_in"
+                    && r["approval"]["operation"]["tool"] == "browser_sign_in_wait"
+        }) {
             // Only the requested tab's hand-back resumes its durable nonterminal wait.
             if request["approval"]["operation"]["targets"]
                 .as_array()
@@ -318,12 +390,11 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
     }
     Ok(())
 }
-pub(in crate::gateway::http) fn close_owner(state: &HttpState, session: &str) {
+pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
+    state.previews.close(session);
+    state.previews.stop_closed(session).await;
     if let Some(headless) = state.headless.clone() {
-        let session = session.to_owned();
-        drop(tokio::spawn(
-            async move { headless.close_owner(&session).await },
-        ));
+        headless.close_owner(session).await;
     }
     if let Ok(hub) = state.browser.0.lock()
         && let Some(host) = &hub.host

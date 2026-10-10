@@ -411,7 +411,10 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     if tool.durable {
         return false;
     }
-    if matches!(tool.name.as_str(), "browser_act" | "browser_wait_for_user") {
+    if matches!(
+        tool.name.as_str(),
+        "browser_act" | "browser_wait_for_user" | "browser_sign_in"
+    ) {
         return true;
     }
     if tool.effect_boundary.as_deref() != Some("none") {

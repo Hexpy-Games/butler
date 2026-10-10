@@ -9,6 +9,7 @@ export function pointHit({ x, y, expect }) {
   // A non-control is described by its tag and visible text.
   const hit = { role: meaning.role ?? element.localName, name: meaning.name ?? [...visibleLabel(element)].slice(0, 60).join(""), frame: location.hostname, class_words: classWords(element),
     rect: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } };
+  if (meaning.keypad) return { reason: "user_required", user_required: "secure_keypad", hit };
   if (meaning.secure) return { reason: "secure_field", hit };
   const hidden = rendering(element);
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable", hit };

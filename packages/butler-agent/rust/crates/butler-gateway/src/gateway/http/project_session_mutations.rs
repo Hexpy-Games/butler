@@ -175,7 +175,7 @@ async fn session_lifecycle(
     {
         let id = super::subsessions::decode_component(encoded)?;
         let data = state.application.archive_session(id.clone(), None).await?;
-        super::browser_host::agent_calls::close_owner(&state, &id);
+        super::browser_host::agent_calls::close_owner(&state, &id).await;
         return json(
             StatusCode::OK,
             ApiEnvelope {
@@ -196,7 +196,7 @@ async fn session_lifecycle(
             .application
             .delete_session(id.clone(), permanent)
             .await?;
-        super::browser_host::agent_calls::close_owner(&state, &id);
+        super::browser_host::agent_calls::close_owner(&state, &id).await;
         return json(
             StatusCode::OK,
             ApiEnvelope {

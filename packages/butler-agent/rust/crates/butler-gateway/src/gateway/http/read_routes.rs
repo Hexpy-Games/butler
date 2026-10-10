@@ -40,7 +40,11 @@ pub(super) async fn get_artifacts(state: Arc<HttpState>, uri: &Uri) -> Result<Re
         .application
         .refresh_message_projection(session_id.clone())
         .await?;
-    let artifacts = state.application.list_artifacts(session_id).await?;
+    let artifacts = state.application.list_artifacts(session_id.clone()).await?;
+    let mut artifacts = serde_json::to_value(artifacts).map_err(|_| HttpError::Internal)?;
+    if let Some(items) = artifacts.as_array_mut() {
+        items.extend(state.previews.artifacts(&session_id));
+    }
     json(
         StatusCode::OK,
         ApiEnvelope {

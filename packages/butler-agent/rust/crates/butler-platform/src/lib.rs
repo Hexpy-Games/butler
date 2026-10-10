@@ -36,6 +36,7 @@
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
+//! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! implements what the service needs to run and stop (process identity,
@@ -50,6 +51,7 @@
 
 pub mod app_update;
 pub mod browser_process;
+pub mod browser_profiles;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
@@ -73,3 +75,5 @@ pub mod user_dirs;
 mod process_table;
 
 pub mod hook_process;
+
+pub mod preview_process;

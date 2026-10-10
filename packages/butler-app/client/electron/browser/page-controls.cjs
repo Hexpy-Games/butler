@@ -124,3 +124,18 @@ window.addEventListener("dragstart", event => {
 window.addEventListener("dragend", event => {
   if (event.isTrusted) ipcRenderer.send("butler-browser:page-drag", "end");
 }, true);
+// Signed-in tabs only: a submitted sign-in may be offered for saving ("로그인 저장").
+// Main keeps it only for a conversation tab the user holds, and only in memory.
+if (process.argv.includes("--butler-signin-capture")) {
+  const capture = scope => {
+    const root = scope?.querySelectorAll ? scope : document;
+    const password = [...root.querySelectorAll('input[type="password"]')].find(input => input.value);
+    if (!password) return;
+    const fields = [...(password.form ?? document).querySelectorAll("input")].filter(input => /^(text|email|tel|)$/u.test(input.type) && input.value);
+    const username = fields.filter(input => input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1)?.value ?? "";
+    if (username) ipcRenderer.send("butler-browser:signin-candidate", { username, password: password.value });
+  };
+  window.addEventListener("submit", event => { if (event.isTrusted) capture(event.target); }, true);
+  window.addEventListener("keydown", event => { if (event.isTrusted && event.key === "Enter" && event.target?.type === "password") capture(event.target.form ?? document); }, true);
+  window.addEventListener("click", event => { const button = event.isTrusted && event.target?.closest?.('button,input[type="submit"]'); if (button) capture(button.form ?? document); }, true);
+}

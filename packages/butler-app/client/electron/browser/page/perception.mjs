@@ -141,13 +141,14 @@ export function semantic(element, discoverPointer = true) {
   const clickable = Boolean(interactiveRole || titled || graphic || element.draggable || element.hasAttribute("onclick") || discoverPointer && !ancestor && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
   if (!clickable && role !== "image" && !/^(img|h[1-6])$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
-  const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
+  const keypad = secureKeypad(element) || readonlyKeypad(element);
+  const secure = keypad || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   name ||= globalThis.__butlerObservation?.accessibleNames?.get(element) ?? "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}${classHint(element)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
-  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
+  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, keypad, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
 }
 /** Words from an unlabeled control's class names (e.g. "car" in "car car-disabled"),
  * a hint for what the icon is; state words and hash-like tokens are left out. */
@@ -221,6 +222,19 @@ export function secureKeypad(element) {
     if(markers.some(marker=>label.includes(marker))) return true;
   }
   return false;
+}
+
+/** A readonly password-like input beside a grid of image keys is a security keypad. */
+export function readonlyKeypad(element) {
+  if (element.localName !== "input" || !element.readOnly) return false;
+  if (element.type !== "password" && !/pw|pass|pin|비밀/iu.test(`${element.id} ${element.getAttribute("name") ?? ""} ${element.getAttribute("class") ?? ""}`)) return false;
+  const cache = globalThis.__butlerPerceptionCache;
+  if (cache?.keyImages !== undefined) return cache.keyImages >= 10;
+  const label = node => `${node?.id ?? ""} ${node?.getAttribute?.("class") ?? ""}`;
+  const count = [...element.ownerDocument.querySelectorAll('img,input[type="image"],[style*="background"]')]
+    .filter(node => /key|pad|kbd/iu.test(`${label(node)} ${label(node.parentElement)}`)).length;
+  if (cache) cache.keyImages = count;
+  return count >= 10;
 }
 
 /** Exact approval metadata is reread immediately before every dispatch. */

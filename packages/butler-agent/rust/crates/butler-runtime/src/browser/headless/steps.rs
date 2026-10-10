@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub(crate) const NAVIGATION: [&str; 3] = ["back", "forward", "reload"];
+const TAKEOVER: &str = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user.";
 
 fn reason(value: &str) -> Value {
     json!({"reason":value})
@@ -77,8 +78,13 @@ pub(crate) async fn resolve_step(
         return Ok(reason("stale_ref"));
     };
     if node["actionable"] != true {
+        if node["keypad"] == true {
+            return Ok(
+                json!({"reason":"user_required","user_required":"secure_keypad","recovery":TAKEOVER}),
+            );
+        }
         if node["secure"] == true {
-            return Ok(reason("secure_field"));
+            return Ok(json!({"reason":"secure_field","recovery":TAKEOVER}));
         }
         if !node["coveredBy"].is_null() {
             return Ok(

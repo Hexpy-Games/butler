@@ -432,7 +432,13 @@ fn assemble(
         result.insert("progress".into(), progress);
     }
     let body = json!({"status":"ok","tab":id,"obs":obs,"epoch":epoch,"url":url,
-        "frames":selected.iter().map(|i| json!({"id":format!("f{i}"),"url":frames[*i].url})).collect::<Vec<_>>(),
+        "frames":selected.iter().map(|i| {
+            let mut frame = json!({"id":format!("f{i}"),"url":frames[*i].url});
+            if frames[*i].parent.is_none() {
+                frame["class"] = json!("main");
+            }
+            frame
+        }).collect::<Vec<_>>(),
         "text":observed,"nodes":g.nodes,"fields":g.fields,"layout_regions":g.regions,"capture_regions":regions,
         "hidden":hidden,"totals":{"interactive":g.interactive,"below_fold":g.below},"cursor":null,
         "scriptMs":g.script_ms,"gridSampleMs":g.grid_ms,"payment":g.payment,"addons":g.addons});

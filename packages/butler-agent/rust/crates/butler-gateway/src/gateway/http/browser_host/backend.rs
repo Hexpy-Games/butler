@@ -24,6 +24,13 @@ pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backe
     };
     let op = frame["op"].as_str().unwrap_or("");
     let session = frame["session"].as_str().unwrap_or("");
+    // Sign-in is the App's: grants are gateway-local, signed-in tabs exist
+    // only in the App browser. Without the App, headless refuses signed-in.
+    let signed_in = op == "tab.open"
+        && (frame["args"]["signed_in"] == true || frame["args"]["profile"] == "signed_in");
+    if op == "signin.grant" || signed_in && hub.host.is_some() {
+        return Backend::App;
+    }
     if !matches!(op, "tab.open" | "tabs.list" | "owner.closed") {
         let tab = frame["tab"].as_str().unwrap_or("");
         if !hub.tabs.contains(tab) && headless.tab(tab).is_some() {
@@ -132,7 +139,7 @@ pub(super) async fn headless_call(
         ) {
             if tab["url"]
                 .as_str()
-                .is_some_and(|url| !url.is_empty() && !permitted_url(&state, url))
+                .is_some_and(|url| !url.is_empty() && !permitted_url(&state, session, url))
             {
                 return response(
                     count,

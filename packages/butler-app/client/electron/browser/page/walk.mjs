@@ -85,7 +85,7 @@ export function snapshot(options) {
     nodes.push({ ref, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, targetId: element.id || undefined, frameOrigin: origin, role: meaning.role,
       name: meaning.name, value: !meaning.secure && /^(textbox|combobox)$/u.test(meaning.role) && typeof element.value === "string" ? element.value : undefined,
       autocomplete: element.getAttribute("aria-autocomplete") || undefined,
-      interactive: meaning.clickable, secure: meaning.secure, ad: meaning.ad, checked: meaning.checked, preselected: meaning.preselected,
+      interactive: meaning.clickable, secure: meaning.secure, keypad: meaning.keypad || undefined, ad: meaning.ad, checked: meaning.checked, preselected: meaning.preselected,
       state: activeState(element),
       actionable: (meaning.clickable || element.draggable) && !coveredBy && !element.disabled && element.getAttribute("aria-disabled") !== "true" && !meaning.secure,
       coveredBy, coveredTargetId: point.blocker?.id || undefined });
@@ -112,7 +112,7 @@ export function snapshot(options) {
     const hit = hitAt(document, x, y); if (hit && !seen.has(hit)) emit(hit, true);
   }
   const gridSampleMs = performance.now() - gridStart;
-  const text = nodes.map(node => `${node.role} ${JSON.stringify(node.name)} [${node.ref}]${node.value === undefined ? "" : ` value=${JSON.stringify(node.value)}`}${node.coveredBy ? ` covered_by ${node.coveredBy}` : ""}${node.secure ? " secure (takeover only)" : ""}${node.ad ? " ad?" : ""}${node.checked ? " checked" : ""}${node.preselected ? " preselected" : ""}${node.state?.length ? ` state=${node.state.join(",")}` : ""} frame=${hostname}`).join("\n");
+  const text = nodes.map(node => `${node.role} ${JSON.stringify(node.name)} [${node.ref}]${node.value === undefined ? "" : ` value=${JSON.stringify(node.value)}`}${node.coveredBy ? ` covered_by ${node.coveredBy}` : ""}${node.keypad ? " secure keypad (takeover only)" : node.secure ? " secure (takeover only)" : ""}${node.ad ? " ad?" : ""}${node.checked ? " checked" : ""}${node.preselected ? " preselected" : ""}${node.state?.length ? ` state=${node.state.join(",")}` : ""} frame=${hostname}`).join("\n");
   const proseStart=performance.now();
   const prose = readingText(options.scope,elements);
   return { nodes, layout_regions: layoutRegions(elements), text: [text, prose].filter(Boolean).join("\n"), hidden, totals: { interactive: nodes.filter(node=>node.interactive).length, below_fold: below }, scriptMs: performance.now() - start, gridSampleMs, walkerMs:gridStart-start, proseMs:performance.now()-proseStart,

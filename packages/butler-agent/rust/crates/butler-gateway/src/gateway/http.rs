@@ -6,6 +6,7 @@ mod library;
 mod start;
 pub(super) use start::serve;
 mod automations;
+mod browser_import;
 mod dashboard;
 mod error;
 mod favicons;
@@ -34,6 +35,8 @@ mod sessions;
 mod settings;
 mod setup;
 mod shell;
+mod signin_secrets;
+mod signins;
 mod skills;
 mod space_mutations;
 mod static_ui;
@@ -78,6 +81,7 @@ const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 struct HttpState {
     browser: browser_host::Hub,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
+    previews: butler_runtime::previews::Previews,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
@@ -90,6 +94,7 @@ struct HttpState {
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
+    signin_secrets: signin_secrets::SignInSecrets,
 }
 
 /// Who sent an authorized request (a request extension for the routes).
@@ -213,6 +218,9 @@ async fn route_for_client(
     }
     if uri.path().starts_with("/__o/") {
         return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    if uri.path().starts_with("/previews/") {
+        return content::preview::view(&state, &request);
     }
     if uri.path().starts_with("/outputs/") {
         return content::view(state, request).await;

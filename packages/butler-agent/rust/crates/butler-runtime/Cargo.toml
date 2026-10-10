@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 semver.workspace = true
 psl = "2.1"
+roxmltree = "0.20"
+zeroize.workspace = true
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }

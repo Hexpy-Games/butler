@@ -61,7 +61,19 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); }
     if (running) reconnect = setTimeout(connect, 1000);
   }
+  /** The fill password, once per token; never logged, never returned to Rust. */
+  async function credential(token, origin) {
+    const unavailable = { error: "credential_unavailable" };
+    if (!running || !controller || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string") return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/credentials/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      const value = await response.json();
+      return typeof value?.password === "string" ? { password: value.password } : unavailable;
+    } catch { return unavailable; }
+  }
   return {
+    credential,
     start() { if (!running && enabled()) { running = true; void connect(); } },
     changed() {
       revision++;

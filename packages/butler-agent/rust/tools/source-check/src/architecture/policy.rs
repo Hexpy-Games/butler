@@ -17,10 +17,10 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite file synchronization consumes the durable filesystem facade.
         "sqlite" => &["secure_fs"],
         "process_control" => &["process_table"],
-        // Hook processes compose shell selection and tree containment.
-        "hook_process" => &["command_sandbox", "process_control"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" => &["process_control"],
+        // Hook processes compose shell selection and tree containment.
+        "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],
@@ -29,6 +29,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "app_update" => &["process_control", "process_names", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
+        // Other browsers' profile folders are found under the user's home.
+        "browser_profiles" => &["user_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.
@@ -52,7 +54,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-runtime: capability adapters consume the skills facade; catalog
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
-        "context" | "skills" | "outputs" | "browser" => &[],
+        "context" | "skills" | "outputs" | "browser" | "previews" => &[],
+        // Imported sign-ins key on the browser policy's registrable site.
+        "browser_import" => &["browser"],
         "operations" => &["context"],
         "web_access" => &["context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.

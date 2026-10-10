@@ -1,6 +1,7 @@
 //! Capability-only content origin: never dispatches an API route or authenticates cookies.
 mod capability;
 mod headers;
+pub(super) mod preview;
 use super::{HttpError, HttpState, error::error_response};
 use axum::{
     Router,
@@ -16,14 +17,17 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: CancellationToken) {
-    let router = Router::new().fallback(any(dispatch)).with_state(state);
+    let router = Router::new()
+        .fallback(any(dispatch))
+        .with_state(state.clone());
     drop(tokio::spawn(async move {
-        axum::serve(
+        let _ = axum::serve(
             listener,
             router.into_make_service_with_connect_info::<SocketAddr>(),
         )
         .with_graceful_shutdown(closed.cancelled_owned())
-        .await
+        .await;
+        state.previews.shutdown();
     }));
 }
 pub(super) fn port(state: &HttpState) -> u16 {
@@ -73,7 +77,13 @@ fn content_host(state: &HttpState, value: &str) -> bool {
                 })))
 }
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let result = serve(&state, request).await;
+    let result = if !content_host(&state, host(request.headers()).unwrap_or("")) {
+        Err(refused())
+    } else if request.uri().path().starts_with("/__o/") {
+        serve(&state, request).await
+    } else {
+        preview::serve(state.clone(), request).await
+    };
     let mut response = result.unwrap_or_else(|e| error_response(&e));
     response.headers_mut().extend(headers::build(&state));
     response

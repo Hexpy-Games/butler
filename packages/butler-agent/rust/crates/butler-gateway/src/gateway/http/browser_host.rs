@@ -2,7 +2,10 @@
 pub(super) mod agent_calls;
 mod backend;
 mod downloads;
+mod fill;
+mod previews;
 mod report;
+pub(super) mod signed_in;
 mod usage;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -14,6 +17,7 @@ use axum::{
     },
 };
 use futures_util::stream;
+pub(super) use previews::observe_lifetime;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -33,6 +37,7 @@ struct Inner {
     turns: HashSet<(String, String)>,
     /// Session → (turn, backend) its newest turn's tabs open on.
     pins: HashMap<String, (String, backend::Backend)>,
+    fills: HashMap<String, fill::Fill>,
 }
 struct HostStream {
     state: Arc<HttpState>,
@@ -47,6 +52,7 @@ impl Drop for HostStream {
             hub.tabs.clear();
             hub.uses.clear();
             hub.turns.clear();
+            hub.fills.clear();
         }
     }
 }
@@ -82,6 +88,12 @@ pub(super) async fn route(
         }
         (&Method::POST, "/internal/browser-host/events") => {
             agent_calls::events(state, read_json(request).await?).await
+        }
+        (&Method::POST, p) if p.starts_with("/internal/browser-host/credentials/") => {
+            let token = p
+                .trim_start_matches("/internal/browser-host/credentials/")
+                .to_owned();
+            fill::credentials(state, &token, &read_json(request).await?).await
         }
         (&Method::POST, p) if p.starts_with("/internal/browser-host/results/") => {
             let id = p.trim_start_matches("/internal/browser-host/results/");
@@ -174,6 +186,12 @@ fn attach(
 }
 async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let mut args = read_json(request).await?;
+    if args["op"]
+        .as_str()
+        .is_some_and(|op| op.starts_with("preview."))
+    {
+        return previews::call(state, args).await;
+    }
     if args.get("op").is_some() {
         return agent_calls::call(state, args).await;
     }
