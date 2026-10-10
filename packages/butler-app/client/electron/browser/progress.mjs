@@ -2,7 +2,9 @@
 // approach: fields it cleared (and the earlier state that brought back), a batch
 // that repeats an earlier one with the same outcome, no effect at all, or new
 // options right after typing. Notes carry refs and ids, never page text.
+// A batch whose outcome was no progress is not run again from the same state.
 const HISTORY = 12;
+const GRID = 8;
 
 const fieldKey = field => `${field.position}:${field.name}`;
 
@@ -12,6 +14,7 @@ function snapshot(current) {
     obs: current.obs,
     fingerprint: [current.url, ...current.fields.map(field => `${fieldKey(field)}=${field.value}`),
       ...actionable.map(node => `${node.role} ${node.name}`).sort()].join("\n"),
+    thumb: current.thumb,
     values: new Map(current.fields.map(field => [fieldKey(field), { ref: field.ref, value: field.value }])),
     refs: new Set(actionable.map(node => node.ref)),
     fieldRefs: new Set(current.fields.map(field => field.ref)),
@@ -19,11 +22,36 @@ function snapshot(current) {
   };
 }
 
+// The element a step reaches (role and name, whatever ref or point named it),
+// its value, and its points on a coarse grid.
+function identity(step, hit) {
+  const grid = point => Array.isArray(point) ? point.map(value => Math.round(value / GRID)).join(",") : "";
+  return [step?.action, `${hit?.role ?? ""} ${hit?.name ?? ""}`, step?.value ?? "", grid(step?.point), grid(step?.target_point),
+    (step?.path ?? []).map(grid).join(";")].join("|");
+}
+
 /** Records the batch so the next observation can compare against its start. */
 export function recordBatch(tab, args, steps) {
   tab.lastBatch = { from: args.observation, steps: (args.steps ?? []).map((step, index) => ({
     action: step?.action, ref: step?.ref, point: Boolean(step?.point), value: step?.value,
-    completed: steps[index]?.status === "completed" })) };
+    identity: identity(step, steps[index]?.hit), completed: steps[index]?.status === "completed" })) };
+}
+
+/** Refuses, before anything is dispatched, a batch that starts with steps that
+ * already ran from this same page state and made no progress: repeating or
+ * extending them would replay the same outcome first. */
+export function repeatRefusal(tab, args, prepared) {
+  const state = tab.progressHistory?.at(-1);
+  if (!state || state.obs !== args.observation || !tab.noProgress?.size) return null;
+  const identities = args.steps.map((step, index) => identity(step, prepared[index]?.hit));
+  for (let length = 1; length <= identities.length; length++) {
+    const last = tab.noProgress.get([state.fingerprint, ...identities.slice(0, length)].join("\n"));
+    if (!last) continue;
+    const scope = length === identities.length ? "This same batch" : `The first ${length} step${length === 1 ? "" : "s"} of this batch`;
+    return { status: "refused", reason: "repeated_no_progress", previous_result: last.obs, step_index: 0,
+      recovery: `${scope} already ran from this same page state and ${last.what} (see ${last.obs}). Nothing was run again. Use a different control or approach; re-observe if the page should have changed. No steps were dispatched.` };
+  }
+  return null;
 }
 
 function cleared(previous, entry, batch) {
@@ -37,10 +65,16 @@ function domOnly(previous, batch) {
   return batch.steps.every(step => step.ref && !step.point && ["click", "fill", "select"].includes(step.action) && !previous.targets.get(step.ref)?.startsWith("canvas "));
 }
 
-// The same steps on the same targets, from the same page state.
-function signature(previous, batch) {
-  if (batch.steps.some(step => step.point)) return null;
-  return [previous.fingerprint, ...batch.steps.map(step => `${step.action} ${previous.targets.get(step.ref) ?? ""} ${step.value ?? ""}`)].join("\n");
+// Pixels decide when both observations carry a thumbnail: a button that pans
+// or zooms a map changes pixels, not the DOM.
+function samePixels(before, after) {
+  if (!before || !after || before.length !== after.length) return true;
+  let changed = 0;
+  for (let index = 0; index < before.length; index += 4) {
+    const delta = Math.abs(before[index] - after[index]) + Math.abs(before[index + 1] - after[index + 1]) + Math.abs(before[index + 2] - after[index + 2]);
+    if (delta > 60 && ++changed >= 3) return false;
+  }
+  return true;
 }
 
 function suggestions(previous, entry, batch) {
@@ -52,23 +86,25 @@ function suggestions(previous, entry, batch) {
   return `${appeared.length} new clickable options appeared right after typing${field}: ${appeared.slice(0, 12).join(", ")}${appeared.length > 12 ? ", …" : ""}. Typed text alone may not commit a choice; select the option that matches, then check the field.`;
 }
 
+function remember(tab, previous, entry, batch, what) {
+  if (!batch.steps.every(step => step.completed)) return;
+  const key = [previous.fingerprint, ...batch.steps.map(step => step.identity)].join("\n");
+  const seen = tab.noProgress ??= new Map();
+  seen.set(key, { obs: entry.obs, what });
+  if (seen.size > 50) seen.delete(seen.keys().next().value);
+}
+
 function outcomes(tab, previous, entry, batch, history) {
   const notes = [];
   const lost = cleared(previous, entry, batch);
   if (lost.length) {
     const earlier = history.slice(0, -2).findLast(old => old.fingerprint === entry.fingerprint);
     notes.push(`The last batch cleared field ${lost.join(", ")}, which had a value before${earlier ? `; the page is back to its state at ${earlier.obs}` : ""}. Unless clearing was intended, this undid progress; use a different control instead.`);
+    remember(tab, previous, entry, batch, `cleared field ${lost.join(", ")}`);
   }
-  // A repeat matters only when its outcome is not progress: lost values, or no change
-  // the DOM can judge (keys and canvas input change pixels it cannot see).
-  const unchanged = entry.fingerprint === previous.fingerprint;
-  const key = signature(previous, batch), seen = tab.batchOutcomes ??= new Map();
-  if (key && (lost.length || unchanged && domOnly(previous, batch)) && seen.get(key)?.fingerprint === entry.fingerprint) {
-    notes.push(`This batch already ran from the same page state and led to the same result (${seen.get(key).obs}). Repeating it will not change the outcome; change approach.`);
-  }
-  if (key) { seen.set(key, { obs: entry.obs, fingerprint: entry.fingerprint }); if (seen.size > 50) seen.delete(seen.keys().next().value); }
-  if (unchanged && domOnly(previous, batch)) {
-    notes.push("The last batch changed no URL, field or control. Check the screenshot; if nothing happened, try a different control or approach instead of repeating it.");
+  if (entry.fingerprint === previous.fingerprint && samePixels(previous.thumb, entry.thumb) && domOnly(previous, batch)) {
+    notes.push("The last batch changed nothing visible: no URL, field, control or pixel changed. Try a different control or approach instead of repeating it.");
+    remember(tab, previous, entry, batch, "changed nothing visible");
   }
   const options = suggestions(previous, entry, batch);
   if (options) notes.push(options);

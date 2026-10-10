@@ -106,15 +106,16 @@ async function observeOnce(tab, args) {
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
-  const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields });
   const image = args.include_image ? await observationImage(tab) : {};
+  const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields, thumb: tab.observation.thumb });
   if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable" };
   const pointText = await graphicalPoints(tab.observation);
   const observedText = [full, pointText].filter(Boolean).join("\n");
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   if (Buffer.byteLength(observedText) > maxChars) return observationBudget(args, interactive, below);
   tab.observation.captureRegions = contentRegions(regions, tab.observation.imageGeometry);
-  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...(progress ? { progress } : {}), ...image };
+  // Progress notes lead the result so they are read before the page data.
+  return { ...(progress ? { progress } : {}), status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
 }
 export async function resolveStep(tab, obs, step, scroll = false) {
   if (!tab.observation || tab.observation.obs !== obs || tab.observation.epoch !== tab.epoch) return { reason: "stale_ref" };

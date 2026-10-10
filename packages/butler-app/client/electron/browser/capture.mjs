@@ -73,6 +73,8 @@ function encode(image, max = 1024) {
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });
+  // A tiny unmarked thumbnail lets progress notes tell a pixel-only change from none.
+  if (!image.isEmpty()) tab.observation.thumb = image.resize({ width: 160, height: 100 }).toBitmap();
   const captured = encode(await markedImage(image, await bitmapMarks(tab, image, await boxes(tab))));
   if (epoch !== tab.epoch || tab.holder !== "agent") return { image_status: "control_changed" };
   if (captured.image) {
