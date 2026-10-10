@@ -6,6 +6,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { Stack } from "../../components/Stack";
 import { MessageFooter } from "../MessageRow";
 import { MarkdownCodeFrame, MarkdownContent, MarkdownTable, useStreamingReveal } from "./index";
+import { MarkdownImageSample } from "./MarkdownImageSample";
 import { MarkdownLinkSample } from "./MarkdownLinkSample";
 
 export const meta: ShowcaseMeta = {
@@ -22,7 +23,7 @@ const labels = {
     nested: "Nested items keep the same rhythm", steps: ["Plan the change", "Verify it"], quote: "Quoted notes use a quiet rule and secondary text.",
     matrix: "Verification matrix", head: ["Check", "Command", "Result"], rows: [["Types", "bun run typecheck", "Passed"], ["Design lint", "bun run lint:design", "Passed"]],
     copy: "Copy code", copied: "Copied", replay: "Replay stream",
-    imageIntro: "Inline images in a reply stay bounded so the text keeps its measure.", imageAlt: "Settings screen at 375px",
+    imageIntro: "An image smaller than the column keeps its natural size.", imageAlt: "Settings screen at 375px",
     stream: "Streaming text **fades in per chunk**: each appended chunk keeps its own span, so nothing moves while the answer grows. Settled messages render plain markdown.",
   },
   "ko-KR": {
@@ -31,7 +32,7 @@ const labels = {
     nested: "중첩 항목도 같은 리듬을 따릅니다", steps: ["변경 계획하기", "검증하기"], quote: "인용은 조용한 선과 보조 텍스트를 씁니다.",
     matrix: "검증 표", head: ["점검", "명령", "결과"], rows: [["타입", "bun run typecheck", "통과"], ["디자인 린트", "bun run lint:design", "통과"]],
     copy: "코드 복사", copied: "복사됨", replay: "스트림 다시 재생",
-    imageIntro: "답변 안의 인라인 이미지는 크기가 제한되어 본문 폭을 지킵니다.", imageAlt: "375px 설정 화면",
+    imageIntro: "본문 폭보다 작은 이미지는 원래 크기로 보입니다.", imageAlt: "375px 설정 화면",
     stream: "스트리밍 텍스트는 **조각마다 서서히 나타납니다**. 새 조각마다 자기 span을 유지하므로 답이 길어져도 아무것도 움직이지 않습니다. 끝난 메시지는 일반 마크다운으로 그립니다.",
   },
 } as const;
@@ -115,7 +116,7 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    // MessageMarkdown renders reply images inline; the block caps their width.
+    // Images never upscale: one smaller than the column keeps its natural size.
     name: "Inline image",
     widths: ["375", "app"],
     render: (context) => (
@@ -125,5 +126,7 @@ export const stories: ShowcaseStory[] = [
       </MarkdownContent>
     ),
   },
+  // MessageInlineImage: captures fill the column up to a bounded height; Open and Save sit under them.
+  { name: "Reply captures", widths: ["375", "430", "app", "wide"], render: (context) => <MarkdownImageSample {...context} /> },
   { name: "Streaming reveal", states: ["streaming"], render: (context) => <StreamingDemo context={context} /> },
 ];

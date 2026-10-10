@@ -43,6 +43,13 @@ title or domain, full URL in the tooltip, opened in the system browser).
 mailto, fragment and relative links stay plain anchors as before. Without
 `faviconSrc` every external link shows the globe.
 
+Images keep their natural size and never upscale; a larger one fills the
+column width, capped at 60% of the window height (640px at most), aspect
+ratio kept. Reply captures (`MessageInlineImage`) put the image in an
+`ArtifactPreviewImage` with `onClick` (zoom-in cursor, opens the viewer) and
+Open and Save under it. Small images such as badges stay inline in their
+sentence.
+
 ## Wrong use cases
 Do not use it for chat message chrome or editable rich text. Use MessageRow or an editor-specific block instead.
 
