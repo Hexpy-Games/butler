@@ -9,6 +9,7 @@
 )]
 mod backend;
 mod guard;
+mod selfcheck;
 mod settings;
 mod support;
 

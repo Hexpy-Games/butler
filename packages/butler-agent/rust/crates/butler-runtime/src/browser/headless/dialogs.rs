@@ -30,6 +30,21 @@ pub(crate) fn opening(browser: &Arc<Browser>, session: &str, params: &Value) {
     let Some(tab) = state.tabs.get_mut(&id) else {
         return;
     };
+    if tab.hidden.is_some() {
+        // Butler's own pages show no dialogs (the App's `disableDialogs`).
+        let cdp = browser.cdp.clone();
+        let session = session.to_owned();
+        drop(tokio::spawn(async move {
+            let _ = cdp
+                .send(
+                    "Page.handleJavaScriptDialog",
+                    json!({"accept":false}),
+                    Some(&session),
+                )
+                .await;
+        }));
+        return;
+    }
     if tab.dialog.is_some() {
         return;
     }

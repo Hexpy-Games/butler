@@ -2,7 +2,7 @@
 pub mod egress;
 pub mod headless;
 pub use egress::{ContentOrigin, LoopbackFixtures, fetch_permitted, guarded_client};
-pub use headless::{Headless, HeadlessConfig, InstallSource};
+pub use headless::{Headless, HeadlessConfig, InstallSource, Rendered, reader as headless_reader};
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
 mod signed_in;

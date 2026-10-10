@@ -73,6 +73,9 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
     let Some(tab) = state.tabs.get_mut(&id) else {
         return;
     };
+    if let Some(diagnostics) = tab.diagnostics.as_mut() {
+        diagnostics.event(method, params, &tab.target);
+    }
     let main = |frame: &Value| frame == tab.target.as_str();
     match method {
         "Page.frameNavigated" | "Page.navigatedWithinDocument" => tab.changed(),

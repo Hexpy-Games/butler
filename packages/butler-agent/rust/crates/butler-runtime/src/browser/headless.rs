@@ -15,9 +15,11 @@ mod act;
 mod browser;
 mod capture;
 mod cdp;
+mod check;
 mod dialogs;
 mod events;
 mod frames;
+mod hidden;
 mod imaging;
 mod input;
 pub mod install;
@@ -28,6 +30,7 @@ mod names;
 mod observe;
 mod page;
 mod progress;
+mod render;
 mod scripts;
 mod settle;
 mod state;
@@ -39,6 +42,7 @@ use super::egress::{ContentOrigin, guard_url};
 use browser::Browser;
 pub use install::InstallSource;
 use install::{Installer, Progress};
+pub use render::{Rendered, reader};
 use serde_json::{Value, json};
 use std::{
     path::PathBuf,
@@ -69,6 +73,7 @@ pub struct Headless {
     starting: tokio::sync::Mutex<()>,
     in_flight: AtomicUsize,
     enabled: std::sync::atomic::AtomicBool,
+    reports: check::SharedReports,
 }
 
 fn refused(reason: &str) -> Value {
@@ -89,11 +94,13 @@ impl Headless {
         let headless = Arc::new(Self {
             installer: Installer::new(config.install.clone()),
             enabled: std::sync::atomic::AtomicBool::new(config.enabled),
+            reports: check::SharedReports::default(),
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
             in_flight: AtomicUsize::new(0),
         });
+        render::register(&headless);
         let weak = Arc::downgrade(&headless);
         tokio::spawn(async move {
             shutdown.cancelled().await;

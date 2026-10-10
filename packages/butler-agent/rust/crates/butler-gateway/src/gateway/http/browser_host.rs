@@ -198,6 +198,19 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     let view = super::content::check_view(&state, &args).await?;
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
+    let attached = state
+        .browser
+        .0
+        .lock()
+        .map_err(|_| HttpError::Internal)?
+        .host
+        .is_some();
+    if !attached && let Some(headless) = state.headless.clone().filter(|h| h.enabled()) {
+        // No App: Butler's own browser checks the output, same policy and shape.
+        let origin = format!("http://127.0.0.1:{}", super::content::port(&state));
+        let value = headless.output_check(&args, &origin).await;
+        return super::json(StatusCode::OK, checked(&value, &args));
+    }
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     {
@@ -222,24 +235,33 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     let result = tokio::select! {
         () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
         result = tokio::time::timeout(Duration::from_secs(8), receiver) => match result {
-            Ok(Ok(value)) => {
-                if value["status"] == "ok" && !allowed_result_url(&value, &args) {
-                    json!({"status":"navigation_denied"})
-                } else {
-                    let mut report = report::shape(&value);
-                    if args["include_image"] != true && let Some(r) = report.as_object_mut() { r.remove("image"); }
-                    if args["include_image"] == true && report.get("image").is_none() && report["status"] != "unknown" {
-                        report["status"] = json!("unknown");
-                        report["reason"] = json!("image_unavailable");
-                    }
-                    report
-                }
-            },
+            Ok(Ok(value)) => checked(&value, &args),
             Ok(Err(_)) => json!({"status":"unknown","reason":"browser_host_lost"}),
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
     super::json(StatusCode::OK, result)
+}
+
+/// An executor's check result as the tool reports it, whichever browser ran it.
+fn checked(value: &Value, args: &Value) -> Value {
+    if value["status"] == "ok" && !allowed_result_url(value, args) {
+        return json!({"status":"navigation_denied"});
+    }
+    let mut report = report::shape(value);
+    if args["include_image"] != true
+        && let Some(r) = report.as_object_mut()
+    {
+        r.remove("image");
+    }
+    if args["include_image"] == true
+        && report.get("image").is_none()
+        && report["status"] != "unknown"
+    {
+        report["status"] = json!("unknown");
+        report["reason"] = json!("image_unavailable");
+    }
+    report
 }
 
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {

@@ -349,6 +349,9 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
 pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value) {
     let request = params["requestId"].clone();
     let url = params["request"]["url"].as_str().unwrap_or("").to_owned();
+    if super::hidden::answer(&browser, &session, &params).await {
+        return;
+    }
     let facts = {
         let state = browser.shared.lock();
         state
