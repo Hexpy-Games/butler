@@ -1,3 +1,4 @@
+import { savePickedImages, copyPickedText } from "./selection-actions.mjs";
 import { randomUUID } from "node:crypto";
 import { isPickShortcut } from "../butler-platform/browser-shortcuts.mjs";
 
@@ -166,9 +167,11 @@ export class BrowserSelection {
     });
     if (phase === "end" || phase === "cancel") this.browser.sync(tab);
   }
-  command(op, id) {
+  async command(op, id) {
     const tab = this.browser.tabs.get(id);
     if (!tab || tab.id !== this.browser.activeId) return;
+    if (op === "save-image") return savePickedImages(this.browser, tab);
+    if (op === "copy-text") return copyPickedText(this.browser, tab);
     if (op === "attach" || op === "scrap") this.browser.getWindow()?.webContents.send("butler-browser:selection-action", { op, elements: this.result(tab, tab.owner.slice(13)).untrusted_content.elements });
     else if (op === "clear") this.clear(id);
     else if (op === "finish") this.mode(id, false);

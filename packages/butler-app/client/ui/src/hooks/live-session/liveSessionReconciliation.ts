@@ -8,6 +8,7 @@ const SESSION_VIEW_REFRESH_EVENT_TYPES = new Set([
   "message.created",
   "message.updated",
   "message.deleted",
+  "outputs.changed",
   "turn.state_changed",
   "turn.progress",
   "turn.queued",
@@ -28,7 +29,7 @@ interface SessionViewState {
   } | null;
   refreshSessionView: (
     sessionId: string,
-    options?: { isCurrent?: () => boolean },
+    options?: { isCurrent?: () => boolean; snapshot?: boolean },
   ) => Promise<unknown>;
 }
 
@@ -37,7 +38,7 @@ interface ReconciliationStore {
 }
 
 export interface LiveSessionReconciliation {
-  requestRefresh(immediate?: boolean): void;
+  requestRefresh(immediate?: boolean, snapshot?: boolean): void;
   dispose(): void;
 }
 
@@ -52,6 +53,7 @@ export function createLiveSessionReconciliation(
   let lastRefreshStartedAt = Number.NEGATIVE_INFINITY;
   let refreshRequestToken = 0;
   let urgent = false;
+  let snapshotPending = false;
 
   const isCurrentSession = () => {
     const state = store.getState();
@@ -86,10 +88,13 @@ export function createLiveSessionReconciliation(
     const startedRefreshToken = ++refreshRequestToken;
     refreshInFlight = true;
     lastRefreshStartedAt = Date.now();
+    const snapshot = snapshotPending;
+    snapshotPending = false;
     Promise.resolve()
       .then(
         () =>
           store.getState().refreshSessionView(currentSessionId, {
+            ...(snapshot ? { snapshot: true } : {}),
             isCurrent: () =>
               !disposed &&
               startedRefreshToken === refreshRequestToken &&
@@ -113,10 +118,11 @@ export function createLiveSessionReconciliation(
       });
   };
 
-  const requestRefresh = (immediate = false) => {
+  const requestRefresh = (immediate = false, snapshot = false) => {
     if (!isCurrentSession()) return;
     refreshDirty = true;
     urgent ||= immediate;
+    snapshotPending ||= snapshot;
     if (immediate && refreshTimer) {
       clearTimeout(refreshTimer);
       refreshTimer = undefined;

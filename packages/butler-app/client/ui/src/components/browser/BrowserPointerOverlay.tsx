@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AgentPointer, MessageSquarePlus, PickOutline, Scrap, SelectionBar, Stack, setReducedMotionOverride, type PickOutlineProps, type AgentPointerProps } from "@/butler-ds";
+import { AgentPointer, Copy, ImageIcon, MessageSquarePlus, PickOutline, Scrap, SelectionBar, Stack, setReducedMotionOverride, type PickOutlineProps, type AgentPointerProps } from "@/butler-ds";
 import { getAppCopy, type AppLocale } from "../../../../../../butler-i18n/src/index";
 import "@/butler-ds/tokens.css";
 type Frame = AgentPointerProps & PickOutlineProps & { locale: AppLocale; pointerVisible: boolean; picking: boolean; selectionCount: number; tab: string };
@@ -33,6 +33,8 @@ function BrowserPointerOverlay() {
       clearLabel={copy.clearSelection} onClear={() => command("clear")}
       actions={[
         { id: "attach", label: copy.attachToChat, icon: <MessageSquarePlus size="sm" />, onSelect: () => command("attach") },
+        { id: "save-image", label: copy.saveImage, icon: <ImageIcon size="sm" />, onSelect: () => command("save-image") },
+        { id: "copy-text", label: copy.copyText, icon: <Copy size="sm" />, onSelect: () => command("copy-text") },
         { id: "scrap", label: copy.scrap, icon: <Scrap size="sm" />, onSelect: () => command("scrap") },
       ]} /></Stack>}
   </>;

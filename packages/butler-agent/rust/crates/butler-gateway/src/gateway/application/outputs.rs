@@ -4,6 +4,74 @@ use crate::gateway::{ArtifactKind, ArtifactOpenAction, MessageRecord, SessionArt
 use butler_runtime::outputs::OutputStore;
 
 impl AppApplication {
+    pub(super) async fn browser_download_context_owned(
+        &self,
+        session_id: String,
+    ) -> Result<serde_json::Value, GatewayApplicationError> {
+        let session = self.get_session(session_id.clone()).await?;
+        if session.archived {
+            return Err(GatewayApplicationError::internal());
+        }
+        let project_workspace_path = self.project_workspace_path(session.project_id).await?;
+        let workspace = self
+            .dependencies
+            .session_workspaces
+            .download_workspace(super::AppSessionBranchQuery {
+                runtime_session_id: session.session_hint,
+                project_workspace_path,
+            })
+            .await?
+            .unwrap_or_else(|| self.butler_data.to_string_lossy().into_owned());
+        let turn = self
+            .storage
+            .read(move |db| read_model::latest_turn(db, &session_id))
+            .await
+            .map_err(app_error)?;
+        Ok(serde_json::json!({"workspace_path":workspace,
+            "turn_id":turn.as_ref().map(|t|t.id.clone()).unwrap_or_default(),
+            "message_id":turn.and_then(|t|t.user_message_id).unwrap_or_default()}))
+    }
+    pub(super) async fn browser_download_published_owned(
+        &self,
+        output: butler_runtime::outputs::Output,
+    ) -> Result<(), GatewayApplicationError> {
+        let revision = output
+            .revisions
+            .last()
+            .ok_or_else(GatewayApplicationError::internal)?;
+        let item = super::library::output(&butler_runtime::outputs::OutputSummary {
+            output_id: output.output_id.clone(),
+            session_id: output.session_id.clone(),
+            message_id: output.message_id,
+            turn_id: output.turn_id.clone(),
+            title: output.title,
+            size_bytes: revision.size_bytes,
+            created_at: revision.created_at.clone(),
+        });
+        let subscribers = self.subscribers.clone();
+        let now = self.dependencies.identity_clock.now_iso();
+        self.storage
+            .execute(move |db| {
+                let tx = db.savepoint().map_err(super::AppStorageError::sqlite)?;
+                super::library::save(&tx, &item)?;
+                let payload =
+                    serde_json::json!({"chat_id":output.session_id,"output_id":output.output_id})
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default();
+                super::events::append(
+                    &tx,
+                    &subscribers,
+                    "outputs.changed",
+                    Some(&output.turn_id),
+                    payload,
+                    &now,
+                )?;
+                tx.commit().map_err(super::AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)
+    }
     pub(super) async fn message_page(
         &self,
         chat_id: String,

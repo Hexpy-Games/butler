@@ -1,3 +1,4 @@
+import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
 import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
@@ -37,6 +38,7 @@ class UserBrowser {
     this.getWindow = getWindow;
     this.pointer = new BrowserPointer(this, controlTab);
     this.selection = new BrowserSelection(this);
+    this.downloads = new BrowserDownloads(this, join(app.getPath("userData"), "browser-downloads"));
     this.breaker = createLossBreaker(() => this.trip());
     this.restore = createTabRestore(join(app.getPath("userData"), "browser"), () =>
       [...this.tabs.values()].filter((tab) => tab.owner === "mine" && !tab.popup).map((tab) => tab.url));
@@ -145,7 +147,7 @@ class UserBrowser {
     if (tab.wired || !this.enabled()) return;
     const partition = tab.partition;
     if (!this.profiles.has(partition)) {
-      protectPartition(partition, () => this.nativeCover()); this.profiles.add(partition);
+      protectPartition(partition, this); this.profiles.add(partition);
     }
     const supplied = Boolean(tab.view);
     tab.view ??= new WebContentsView({ webPreferences: this.pagePreferences(tab) });
@@ -208,6 +210,7 @@ class UserBrowser {
     if (!tab || tab.closing) return;
     tab.closing = true;
     clearOffer(tab);
+    this.downloads.cancelTab(id);
     closeUse(this, tab);
     void resolveDialog(this, tab, { accept: false }, "tab_closed");
     this.detach(tab);
@@ -304,6 +307,7 @@ class UserBrowser {
       if(toGroupId==="mine" ? peers.length>=30 : (tab.agent || tab.driven) && peers.filter(item=>item.agent || item.driven).length>=3) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
+    if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
     if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
@@ -341,6 +345,7 @@ class UserBrowser {
   syncAll() { for (const tab of this.tabs.values()) this.sync(tab); }
   flush() { return this.restore.flush(); }
   async dispose() {
+    this.downloads.stop();
     this.resetUse();
     this.areaVisible = false;
     clearTimeout(this.metadataTimer);

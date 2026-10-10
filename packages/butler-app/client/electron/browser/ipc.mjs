@@ -53,7 +53,7 @@ export function installUserBrowser(app, getWindow) {
     if (event.sender !== browser.pointer.view?.webContents || event.senderFrame !== event.sender.mainFrame) return;
     browser.pointer.guard(() => {
       if (op === "drag" && Number.isFinite(point?.x) && Number.isFinite(point?.y) && id === browser.activeId) browser.selection.drag(browser.tabs.get(id), point, "start");
-      if (["attach", "scrap", "clear", "finish"].includes(op)) browser.selection.command(op, id);
+      if (["attach", "scrap", "clear", "finish", "save-image", "copy-text"].includes(op)) void browser.selection.command(op, id).catch(() => browser.getWindow()?.webContents.send("butler-browser:selection-action", { op: "failed", elements: [] }));
     });
   });
   ipcMain.on("butler-browser:selection-chrome", (event, id, rect) => {

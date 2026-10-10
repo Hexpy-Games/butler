@@ -270,7 +270,7 @@ export const enUsCopy: AppCopy = {
     showPopup: "Show pop-up", newTabOpened: "New tab opened", downloaded: "Downloaded", pointerButler: "Butler", pointerLooking: "Looking",
     pointerTyping: "Typing", pointerWaiting: "Waiting", pointerAwaitingApproval: "Awaiting approval", pointerNeedInput: "Waiting for your input",
     pickMode: "Picking", pickMulti: "More", pickRegion: "Area", dragToChat: "Drag into the chat", finish: "Done",
-    pickHint: "Pick page elements", pickFirst: "Pick an element first", picked: (count) => `${count} selected`, attachToChat: "Add to chat", saveImage: "Save image", copyText: "Copy text", clearSelection: "Clear",
+    pickHint: "Pick page elements", pickFirst: "Pick an element first", picked: (count) => `${count} selected`, attachToChat: "Add to chat", saveImage: "Save image", downloadSaved: "Download saved", downloadFailed: "Download failed", downloadFileLimit: "100 MB file limit", downloadSessionLimit: "500 MB conversation limit", imagesSaved: (count) => `${count} images saved`, copyText: "Copy text", clearSelection: "Clear",
     dropToAttach: "Drop to add", dropAttachTo: (title) => `Add to ‘${title}’`, dropSaveToLibrary: "Save to Library as scraps",
     dropMoveTabTo: (title) => `Move tab to ‘${title}’`, dropInvalid: "Can't drop here", attachedTo: (title) => `Added to ‘${title}’`,
     scraps: "Scraps", documents: "Documents", outputs: "Outputs", loadMore: "More", emptyLibrary: "No items", bookmarkFolder: "Folder",

@@ -2123,6 +2123,12 @@ async function createWindow() {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
+    userBrowser.downloadRequest = async input => {
+      const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
+        headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
+      if (!response.ok) throw new Error("download_request_failed");
+      return response.json();
+    };
     browserHost.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {

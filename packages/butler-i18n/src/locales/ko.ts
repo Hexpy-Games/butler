@@ -266,7 +266,7 @@ export const koKrCopy: AppCopy = {
     typeYourself: "직접 입력해 주세요", chooseFile: "파일 선택", printer: "프린터", noPrinters: "프린터 없음", popupBlocked: "팝업 차단됨", allow: "허용", popupOpened: "팝업 열림", showPopup: "팝업 보기", newTabOpened: "새 탭 열림",
     downloaded: "다운로드함", pointerButler: "버틀러", pointerLooking: "보는 중", pointerTyping: "입력 중", pointerWaiting: "기다리는 중",
     pointerAwaitingApproval: "승인 기다리는 중", pointerNeedInput: "직접 입력을 기다리는 중", pickMode: "요소 선택 중", pickMulti: "여러 개", pickRegion: "영역",
-    dragToChat: "끌어서 대화에 놓기", finish: "끝내기", pickHint: "페이지 요소 선택", pickFirst: "먼저 요소를 선택하세요", picked: (count) => `${count}개 선택됨`, attachToChat: "대화에 첨부", saveImage: "이미지로 저장", copyText: "텍스트 복사",
+    dragToChat: "끌어서 대화에 놓기", finish: "끝내기", pickHint: "페이지 요소 선택", pickFirst: "먼저 요소를 선택하세요", picked: (count) => `${count}개 선택됨`, attachToChat: "대화에 첨부", saveImage: "이미지 저장", downloadSaved: "다운로드 저장됨", downloadFailed: "다운로드 실패", downloadFileLimit: "파일 한도 100 MB", downloadSessionLimit: "대화 한도 500 MB", imagesSaved: (count) => `${count}개 이미지 저장됨`, copyText: "텍스트 복사",
     clearSelection: "선택 해제", dropToAttach: "놓아서 첨부", dropAttachTo: (title) => `‘${title}’에 첨부`, dropSaveToLibrary: "서랍에 스크랩으로 저장",
     dropMoveTabTo: (title) => `‘${title}’로 탭 옮기기`, dropInvalid: "여기에는 놓을 수 없어요", attachedTo: (title) => `‘${title}’에 첨부함`,
     scraps: "스크랩", documents: "문서", outputs: "결과물", loadMore: "더 보기", emptyLibrary: "항목 없음", bookmarkFolder: "폴더",

@@ -237,7 +237,7 @@ export interface BrowserCopy {
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
   pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
-  pickHint: string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; copyText: string; clearSelection: string; dropToAttach: string;
+  pickHint: string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;
   dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
   attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
   viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
