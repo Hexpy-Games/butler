@@ -28,8 +28,20 @@ pub(in crate::gateway) fn serve(
             allowed_hosts: config.allowed_hosts.clone(),
             content_hosts: config.content_hosts.clone(),
         };
+        let content = butler_runtime::browser::ContentOrigin(local_addr.port().saturating_add(1));
+        let headless = config.headless_browser.map(|browser| {
+            butler_runtime::browser::Headless::new(
+                butler_runtime::browser::HeadlessConfig {
+                    root: browser.root,
+                    install: browser.install,
+                    content: Some(content),
+                },
+                shutdown.clone(),
+            )
+        });
         let state = Arc::new(HttpState {
             browser: super::browser_host::Hub::default(),
+            headless,
             previews: butler_runtime::previews::Previews::default(),
             application,
             devices,

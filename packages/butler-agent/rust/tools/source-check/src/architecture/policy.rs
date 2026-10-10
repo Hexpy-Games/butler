@@ -17,6 +17,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite file synchronization consumes the durable filesystem facade.
         "sqlite" => &["secure_fs"],
         "process_control" => &["process_table"],
+        // The headless browser's DevTools pipe runs in a contained process tree.
+        "browser_process" => &["process_control"],
         // Hook processes compose shell selection and tree containment.
         "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
@@ -56,7 +58,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Imported sign-ins key on the browser policy's registrable site.
         "browser_import" => &["browser"],
         "operations" => &["context"],
-        "web_access" => &["context", "operations"],
+        "web_access" => &["browser", "context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
         "project_ledger" => &[],
         // butler-memory: Cognition coordinates writers, reads the profile and

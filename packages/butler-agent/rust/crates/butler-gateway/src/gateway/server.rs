@@ -38,6 +38,18 @@ pub struct GatewayConfig {
     /// Site icon cache, normally BUTLER_DATA/cache/favicons.
     pub favicon_cache_root: Option<std::path::PathBuf>,
     pub static_ui_root: Option<std::path::PathBuf>,
+    /// Butler's own headless browser, used while no App is attached. `None`
+    /// turns it off (calls without an App answer `no_browser`).
+    pub headless_browser: Option<HeadlessBrowserConfig>,
+}
+
+/// Where the headless browser keeps its throwaway profile and its pinned
+/// Chrome for Testing install.
+#[derive(Clone, Debug)]
+pub struct HeadlessBrowserConfig {
+    /// Profile and log directory (emptied when the browser is reaped).
+    pub root: std::path::PathBuf,
+    pub install: butler_runtime::browser::InstallSource,
 }
 
 impl Default for GatewayConfig {
@@ -56,6 +68,7 @@ impl Default for GatewayConfig {
             message_rate_limit_window: std::time::Duration::from_secs(60),
             static_ui_root: None,
             favicon_cache_root: None,
+            headless_browser: None,
         }
     }
 }

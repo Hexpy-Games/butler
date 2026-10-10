@@ -1,5 +1,6 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
+mod backend;
 mod downloads;
 mod fill;
 mod previews;
@@ -34,6 +35,8 @@ struct Inner {
     tabs: butler_runtime::browser::TabRegistry,
     uses: HashMap<String, usage::Use>,
     turns: HashSet<(String, String)>,
+    /// Session → (turn, backend) its newest turn's tabs open on.
+    pins: HashMap<String, (String, backend::Backend)>,
     fills: HashMap<String, fill::Fill>,
 }
 struct HostStream {
