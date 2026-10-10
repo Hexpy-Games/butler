@@ -16,7 +16,7 @@ use butler_e2e::e2e::sanitize;
 
 // test-category: security
 #[test]
-fn sanitization_redacts_every_array_item_and_preserves_public_content() {
+fn sanitization_and_recorder_preserve_public_content() {
     let body = serde_json::json!([
         {"account_id": "fixture-first", "position": 1},
         {"rows": [{"account_id": "fixture-second", "position": 2}]},
@@ -33,6 +33,76 @@ fn sanitization_redacts_every_array_item_and_preserves_public_content() {
             {"position": 3, "label": "kept"}
         ])
     );
+    assert_writer_normalizes_split_identifiers();
+}
+
+fn assert_writer_normalizes_split_identifiers() {
+    let id = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    let body = format!("data: {{\"tab\":\"{id}\",\"obs\":\"{id}\",\"label\":\"kept\"}}\n\n");
+    let split = 25;
+    let response = cassette::ResponseRecord {
+        status: 200,
+        headers: vec![("content-type".into(), "text/event-stream".into())],
+        chunks: vec![
+            cassette::Chunk {
+                delay_ms: 7,
+                text: body[..split].into(),
+            },
+            cassette::Chunk {
+                delay_ms: 11,
+                text: body[split..].into(),
+            },
+        ],
+    };
+    let exchange = cassette::Exchange {
+        request: cassette::RequestRecord {
+            method: "POST".into(),
+            path: "/responses".into(),
+            key: cassette::MatchKey {
+                path: "/responses".into(),
+                model: "fixture".into(),
+                effort: None,
+                user_request: "kept".into(),
+                round: vec![],
+            },
+        },
+        response: response.clone(),
+    };
+    let dir = std::env::temp_dir().join(format!("cassette-writer-{}", uuid::Uuid::new_v4()));
+    let meta = cassette::Meta {
+        recorded_at: "fixture-time".into(),
+        provider: "fixture".into(),
+        ..Default::default()
+    };
+    cassette::write(&dir, meta, &[exchange]).unwrap();
+    let loaded = load_from(&dir, "fixture").unwrap();
+    let actual = &loaded.exchanges[0].response;
+    assert_eq!(actual.body(), sanitize::normalize_opaque_ids(&body));
+    let event: serde_json::Value =
+        serde_json::from_str(actual.body().trim().strip_prefix("data: ").unwrap()).unwrap();
+    assert_eq!(event["tab"], event["obs"]);
+    assert_eq!(event["label"], "kept");
+    assert_ne!(event["tab"], id);
+    assert_ne!(
+        sanitize::normalize_opaque_ids(id),
+        sanitize::normalize_opaque_ids("3f2504e0-4f89-11d3-9a0c-0305e82c3302"),
+    );
+    assert_eq!(sanitize::lint(&actual.body()), Vec::<String>::new());
+    assert_eq!(actual.headers, response.headers);
+    assert_eq!(
+        cassette::fingerprint(actual),
+        cassette::fingerprint(&response)
+    );
+    for (actual, original) in actual.chunks.iter().zip(&response.chunks) {
+        assert_eq!(actual.delay_ms, original.delay_ms);
+        assert_eq!(actual.text.len(), original.text.len());
+    }
+    assert_eq!(loaded.meta.recorded_at, "fixture-time");
+    let normalized = actual.body();
+    assert_eq!(sanitize::normalize_opaque_ids(&normalized), normalized);
+    let cache = format!("{{\"prompt_cache_key\":\"{id}\"}}");
+    assert_eq!(sanitize::normalize_opaque_ids(&cache), cache);
+    fs::remove_dir_all(dir).unwrap();
 }
 
 fn scenario_dirs(root: &Path, prefix: &str, out: &mut Vec<(String, std::path::PathBuf)>) {
