@@ -95,7 +95,8 @@ try {
     assert.equal(await app.page.expression("Boolean(document.querySelector('[data-test-class=browser-agent-control]'))"), false);
     await app.shot(`${language}-${theme}-${width}-docked-released`);
     await togglePane(app, false);
-    await waitBrowser(() => app.page.expression("[...document.querySelectorAll('[data-test-class=message-artifact-list]')].some(a=>a.textContent.includes('.jpg'))"), "reply crop is visible in the App");
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=message-image] button'))"), "reply crop retains an image save action");
+    assert.equal(await app.page.expression("[...document.querySelectorAll('[data-test-class=message-artifact-list]')].some(a=>a.textContent.includes('.jpg'))"), false, "inline capture has no duplicate file card");
     await waitBrowser(() => app.page.expression("[...document.querySelectorAll('img')].some(img=>img.alt==='Blue dress'&&img.complete&&img.naturalWidth>0)"), "signed image is decoded inline in the reply");
     await app.shot(`${language}-${theme}-${width}-reply`);
   }

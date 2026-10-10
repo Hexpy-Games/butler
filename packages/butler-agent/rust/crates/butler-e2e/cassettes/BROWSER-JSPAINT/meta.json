@@ -1,0 +1,321 @@
+{
+  "scenario": "BROWSER-JSPAINT",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-luna",
+  "effort": "medium",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "7629c4a937c96203742f1545049f5fb594d95265-dirty",
+  "recorded_at": "2026-10-10T00:07:55.204815Z",
+  "recorder": "isolated Electron live proxy; butler-e2e browser_import",
+  "sanitization": [
+    "Existing butler-e2e sanitizer; request echoes and credentials removed; work echo IDs normalized; request keys only"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "31acb196104f947bcc773fe90f13d257f95aadee5f8adb29e3ef0d8df6f148f5"
+    },
+    {
+      "file": "001.json",
+      "sha256": "8dfbc5d956d7c09a0f7474caa31c690b61885e7db3be70fbf7fc78f81c89170e"
+    },
+    {
+      "file": "002.json",
+      "sha256": "913843b261695695a666d6f8d5c87c873e6894ced7452120b55b6911916ac6e5"
+    },
+    {
+      "file": "003.json",
+      "sha256": "5ebfdffbbddf92fc77f9a838f6f74518f5c0cdf40fb3a273e77a9ca5022aa4bc"
+    },
+    {
+      "file": "004.json",
+      "sha256": "281aeb6b81ba97d544bb335b352700b64e75b8277acfe60c5296f2025749737d"
+    },
+    {
+      "file": "005.json",
+      "sha256": "097d823f3ea3ee738c86e195b0181a3d352a4019a4268acee9b837426d989016"
+    },
+    {
+      "file": "006.json",
+      "sha256": "974655a60cf481714eb21aa0f1ffb85b3aede4c1ac90917aa34a6aa04b5f383a"
+    },
+    {
+      "file": "007.json",
+      "sha256": "88310e0ed224c2d823925a13eba2ca2563347212088a4f338ee97a4d51f79d6b"
+    },
+    {
+      "file": "008.json",
+      "sha256": "057881a9d2d192510beeb726bec43410e9cc604071a40aa10b4114a4888395be"
+    },
+    {
+      "file": "009.json",
+      "sha256": "96a4b3a690448c0d4f1856c4181474ba4fd0892e53c5a038b5703685f06bb4cb"
+    },
+    {
+      "file": "010.json",
+      "sha256": "0933f9e3a2940280a82cffe8e354648ec7fcbc08ebbd31a17f1740cd85053e0a"
+    },
+    {
+      "file": "011.json",
+      "sha256": "590a1f3a4bbd9f74d59ce36de00c540751ccdefe42f9c69fa201cbf9b9768b03"
+    },
+    {
+      "file": "012.json",
+      "sha256": "3118b02c16eb4b8626fc1d39e787b49c7599531791e6235c89aa3d33216c981f"
+    },
+    {
+      "file": "013.json",
+      "sha256": "a3e5938295572a087699b33793ea09d45ec209da21fd76d0de4efd6c1f68b50d"
+    },
+    {
+      "file": "014.json",
+      "sha256": "36a0be41092266f0b52cfbd726058833d7b1ecdd118da0842fba3aea37cd8453"
+    },
+    {
+      "file": "015.json",
+      "sha256": "790b94df1f74dbb989f515ec1565ff7a456834df6079fd2216f0bd4cef508b8f"
+    },
+    {
+      "file": "016.json",
+      "sha256": "c6cd825c53bc0ad3ab9460f9508bd687b7886c63cc36772a106cc97edd2e1826"
+    },
+    {
+      "file": "017.json",
+      "sha256": "2627575d4034615703f20dd2c5598aa0310b3e77af89ce86d1eccd69e327fe0d"
+    },
+    {
+      "file": "018.json",
+      "sha256": "34b62e37b4e3deefb864e731c4d37bdd47f395933f70ef13ae63b09548090849"
+    },
+    {
+      "file": "019.json",
+      "sha256": "52e77a88e7744ec1845575d1ef8727ca5a257cfcb4ff689e9423edad3f583ee6"
+    },
+    {
+      "file": "020.json",
+      "sha256": "bd48fbff7119a7f8897e680e09cf70ded0fa02e5fef89d77dd2b2b059c2a13a1"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ]
+  ]
+}

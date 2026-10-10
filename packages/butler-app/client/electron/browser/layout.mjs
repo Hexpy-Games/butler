@@ -14,10 +14,22 @@ export function contentRegions(regions, geometry) {
       if (r.y + r.height >= cssHeight - 1) bottom = Math.min(bottom, r.y);
     }
   }
-  if (left === 0 && top === 0 && right === cssWidth && bottom === cssHeight) return [];
+  const canvases = canvasRegions(regions, geometry);
+  if (left === 0 && top === 0 && right === cssWidth && bottom === cssHeight) return canvases;
   const x = Math.ceil(left * width / cssWidth), y = Math.ceil(top * height / cssHeight);
   const farX = Math.floor(right * width / cssWidth), farY = Math.floor(bottom * height / cssHeight);
-  if (farX <= x || farY <= y) return [];
+  if (farX <= x || farY <= y) return canvases;
   return [{ name: "viewport_without_edge_navigation", region: [x, y, farX - x, farY - y],
-    verification: "Candidate excludes semantic edge navigation only. Check the screenshot: retain all requested content before choosing it." }];
+    verification: "Candidate excludes semantic edge navigation only. Check the screenshot: retain all requested content before choosing it." }, ...canvases];
+}
+
+function canvasRegions(regions, { width, height, cssWidth, cssHeight }) {
+  return regions.filter(region => region.kind === "canvas").map(({ name, rect: r }) => {
+    const x = Math.max(0, Math.ceil(r.x * width / cssWidth));
+    const y = Math.max(0, Math.ceil(r.y * height / cssHeight));
+    const farX = Math.min(width, Math.floor((r.x + r.width) * width / cssWidth));
+    const farY = Math.min(height, Math.floor((r.y + r.height) * height / cssHeight));
+    return { name, region: [x, y, farX - x, farY - y], bounds: { left: x, top: y, right: farX, bottom: farY },
+      verification: "Visible canvas bounds in screenshot coordinates. Verify the drawing in fresh pixels before choosing this crop." };
+  }).filter(({ region: [,,w,h] }) => w > 0 && h > 0);
 }

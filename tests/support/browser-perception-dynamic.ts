@@ -7,9 +7,15 @@ export async function dynamicPerceptionCheck(context: BrowserContext) {
   const page = await context.newPage();
   try {
     await page.setContent('<button id="old">Original</button><div id="role">Role target</div><section id="host"></section><label for="field">Original label</label><input id="field">');
+    const identities = new Map<string, string>();
     const observe = async (ids: string[], names?: string[]) => {
-      const result = await page.evaluate(perceptionSource({ obs: crypto.randomUUID(), epoch: 1, prefix: "f0-" })) as {nodes: Array<{targetId: string; name: string}>};
+      const result = await page.evaluate(perceptionSource({ obs: crypto.randomUUID(), epoch: 1, prefix: "f0-" })) as {nodes: Array<{targetId: string; name: string; ref: string}>};
       assert.deepEqual(result.nodes.map((node: {targetId: string}) => node.targetId), ids);
+      for (const node of result.nodes) {
+        const previous = identities.get(node.targetId);
+        if (previous) assert.equal(node.ref, previous, "DOM insertions must not renumber existing targets");
+        else { assert.ok(![...identities.values()].includes(node.ref), "new elements must not reuse another target ref"); identities.set(node.targetId, node.ref); }
+      }
       if (names) assert.deepEqual(result.nodes.map((node: {name: string}) => node.name), names);
     };
     await observe(["old", "field"], ["Original", "Original label"]);

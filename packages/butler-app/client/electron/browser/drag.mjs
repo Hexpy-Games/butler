@@ -33,7 +33,9 @@ export async function dispatchDrag(tab, source) {
       expected({ x, y });
       current = { x, y };
       contents.sendInputEvent({ type: "mouseMove", x, y, button: "left", modifiers: ["leftButtonDown"] });
-      await new Promise(done => setTimeout(done, 0));
+      // A zero-delay yield lets Chromium coalesce a whole stroke into one move.
+      // Wait for an input frame so canvas apps receive the held-button path.
+      await new Promise(done => setTimeout(done, 20));
     }
     return { status: "completed", hit: source.hit, destination: source.destination.hit };
   } finally {

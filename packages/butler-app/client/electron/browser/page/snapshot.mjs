@@ -12,7 +12,7 @@ function rootIndex(root) {
   if (!index) {
     index = { dirty: true };
     index.observer = new MutationObserver(records => { index.dirty ||= elementChanges(records); });
-    index.observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["role", "onclick", "contenteditable"] });
+    index.observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["role", "title", "onclick", "contenteditable"] });
     indexes.set(root, index);
   }
   const changes = index.observer.takeRecords();
@@ -20,7 +20,8 @@ function rootIndex(root) {
   if (index.dirty) {
     index.elements = [...root.querySelectorAll("*")];
     index.labels = [...root.querySelectorAll("label")];
-    index.candidates = [...root.querySelectorAll('button,a,select,textarea,canvas,img,summary,input,[role],[onclick],[draggable],h1,h2,h3,h4,h5,h6,[contenteditable]')];
+    index.candidates = [...root.querySelectorAll('button,a,select,textarea,canvas,img,summary,input,[role],[title],[onclick],[draggable],h1,h2,h3,h4,h5,h6,[contenteditable]')];
+    for (const canvas of root.querySelectorAll("canvas")) if (canvas.parentElement) index.candidates.push(canvas.parentElement);
     for (const element of [...index.candidates]) if (element.hasAttribute("contenteditable")) for (const child of element.querySelectorAll("*")) index.candidates.push(child);
     index.dirty = false;
   }
@@ -53,11 +54,14 @@ function snapshot(options) {
     index.observer.disconnect(); globalThis.__butlerPerceptionImplementation.indexes.delete(root);
   }
   const collectMs = performance.now() - start;
-  const refs = new Map(), keys = new WeakMap();
+  const refs = new Map();
+  const identity = globalThis.__butlerPerceptionImplementation;
   globalThis.__butlerObservation = { ...options, refs };
   const reference = element => {
-    if (!keys.has(element)) { const ref = `${options.prefix}e${keys.size ?? refs.size}`; keys.set(element, ref); refs.set(ref, new WeakRef(element)); }
-    return keys.get(element);
+    if (!identity.targetIds.has(element)) identity.targetIds.set(element, identity.nextTargetId++);
+    const ref = `${options.prefix}e${identity.targetIds.get(element)}`;
+    refs.set(ref, new WeakRef(element));
+    return ref;
   };
   let below = 0;
   const seen = new Set();
@@ -71,7 +75,7 @@ function snapshot(options) {
       return;
     }
     const meaning = semantic(element, fromGrid);
-    if (!meaning.clickable && !element.draggable && !/^(img|h[1-6])$/u.test(element.localName)) return;
+    if (!meaning.clickable && !element.draggable && meaning.role !== "image" && !/^(img|h[1-6])$/u.test(element.localName)) return;
     seen.add(element);
     const raw = boxOf(element);
     if (raw.top >= viewportHeight) { below++; return; }
@@ -127,7 +131,7 @@ export function perceptionSource(options) {
       ${implementation}
       Object.assign(globalThis, { ${Object.keys(helpers).join(", ")} });
       for (const index of globalThis.__butlerPerceptionImplementation?.indexes?.values() ?? []) index.observer.disconnect();
-      globalThis.__butlerPerceptionImplementation = { source, snapshot, indexes: new Map() };
+      globalThis.__butlerPerceptionImplementation = { source, snapshot, indexes: new Map(), targetIds: new WeakMap(), nextTargetId: 0 };
     }
     return globalThis.__butlerPerceptionImplementation.snapshot(${JSON.stringify(options)});
   })()`;

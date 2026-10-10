@@ -16,6 +16,7 @@ mod automation;
 mod browser_agent;
 mod browser_delegation;
 mod browser_journey;
+mod browser_jspaint;
 mod browser_library;
 mod browser_naver;
 mod browser_outputs;

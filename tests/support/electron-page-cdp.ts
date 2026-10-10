@@ -6,6 +6,7 @@ export interface ElectronPage {
   expression<T>(expression: string): Promise<T>;
   frameExpression<T>(origin: string, expression: string): Promise<T>;
   press(key: "Escape" | "Enter" | "Home" | "End" | "ArrowRight"): Promise<void>;
+  insertText(text: string): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
   clickSelector(selector: string): Promise<void>;
@@ -118,6 +119,7 @@ async function connect(url: string): Promise<ElectronPage> {
       await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode });
       await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode });
     },
+    insertText: async text => { await send("Input.insertText", { text }); },
     frameExpression: (origin, text) => {
       const id = [...contexts].find(([, value]) => value === origin)?.[0];
       if (!id) return Promise.reject(new Error("Electron output context not ready"));

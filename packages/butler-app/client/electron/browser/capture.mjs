@@ -23,6 +23,8 @@ async function markedImage(image, marks) {
         if(mark.secure){context.fillStyle='#000';context.fillRect(x,y,width,height);continue;}
         context.strokeStyle='#222';context.lineWidth=2*labelScale;context.strokeRect(x,y,width,height);
         const w=context.measureText(mark.ref).width+6*labelScale,h=16*labelScale,top=Math.max(0,y-h);
+        // Tiny packed controls remain visible; their named refs are in the observation.
+        if(width<w || height<h)continue;
         context.fillStyle='#fff';context.fillRect(x,top,w,h);context.fillStyle='#000';context.fillText(mark.ref,x+3*labelScale,top+12*labelScale);
       }
       return canvas.toDataURL('image/png');
@@ -36,7 +38,7 @@ async function boxes(tab) {
   for (const node of tab.observation.nodes) {
     if (!node.rect) continue;
     // Preserve all DOM refs; do not paint labels over unlabeled raster tiles or containers.
-    if (node.role === "image" && /^icon \d+×\d+ at /u.test(node.name) || !node.actionable && node.role !== "image") continue;
+    if (/^icon \d+×\d+ at /u.test(node.name) || !node.actionable && node.role !== "image") continue;
     const frame = tab.observation.bindings.get(node.ref);
     const point = await framePoint(frame, node.rect);
     const scale = tab.bounds?.scale ?? 1;
