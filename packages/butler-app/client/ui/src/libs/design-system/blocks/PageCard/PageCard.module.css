@@ -102,6 +102,17 @@
   inset: 0 0 auto;
 }
 
+/* A reserved band row: one band's height, kept when no band shows, so the
+   content area below it (and the native view) never moves. One band at a
+   time; anything taller is clipped, never pushed into the page. */
+.bandRow {
+  display: flex;
+  height: var(--browser-band-height);
+  flex: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* The page area: the native view's rect, and the container overlays and
    anchored dialogs position in. */
 .content {

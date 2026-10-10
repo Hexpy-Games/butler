@@ -8,9 +8,10 @@ import styles from "./PageBand.module.css";
 
 /**
  * `agent` Butler holds the tab (riso), `user` you hold it, `waiting` an approval waits, `warning` Butler
- * needs your input (keypad, MFA), `pick` element picking, `info` page events such as a blocked pop-up.
+ * needs your input (keypad, MFA), `pick` element picking, `info` page events such as a blocked pop-up,
+ * `idle` Butler can use the tab but holds nothing (no tint, quiet text: the row stays, nothing moves).
  */
-export type PageBandTone = "agent" | "user" | "waiting" | "warning" | "pick" | "info";
+export type PageBandTone = "agent" | "user" | "waiting" | "warning" | "pick" | "info" | "idle";
 
 export interface PageBandProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children" | "title"> {
   tone: PageBandTone;

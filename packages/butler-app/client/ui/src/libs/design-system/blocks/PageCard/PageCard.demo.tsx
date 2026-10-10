@@ -27,10 +27,11 @@ export interface PageCardDemoProps {
   height?: number;
   overlay?: ReactNode;
   readout?: boolean;
+  reserveBand?: boolean;
 }
 
 /** A page card with a stand-in page, inset in a pane-coloured stage like BrowserPane's. */
-export function PageCardDemo({ locale, holder = "none", band, loading, agent = false, state = "page", height = 320, overlay, readout = false }: PageCardDemoProps) {
+export function PageCardDemo({ locale, holder = "none", band, loading, agent = false, state = "page", height = 320, overlay, readout = false, reserveBand = false }: PageCardDemoProps) {
   const copy = COPY[locale];
   const [bounds, setBounds] = useState<PageCardBounds | null>(null);
   const hidden = state !== "page";
@@ -40,7 +41,7 @@ export function PageCardDemo({ locale, holder = "none", band, loading, agent = f
   return (
     <Stack gap="xs">
       <div className={fixtures.stage} style={{ height }}>
-        <PageCard holder={holder} band={band ? <DemoBand kind={band} copy={BROWSER_DEMO_COPY[locale]} /> : undefined} loading={loading}
+        <PageCard holder={holder} reserveBand={reserveBand} band={band ? <DemoBand kind={band} copy={BROWSER_DEMO_COPY[locale]} /> : undefined} loading={loading}
           viewport={agent ? { width: 1280, height: 800 } : undefined} hidden={hidden} onBoundsChange={setBounds} overlay={overlay}>
           {hidden ? fallback : <img src={shopPage(locale)} alt="" draggable={false} style={PAGE_STYLE} />}
         </PageCard>

@@ -18,6 +18,11 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   holder?: PageCardHolder;
   /** A PageBand attached to the card's top. */
   band?: ReactNode;
+  /**
+   * Keep one band row (`--browser-band-height`) whether or not a band shows, so a band appearing,
+   * changing tone or leaving never moves the native view. Use it for every tab Butler can hold.
+   */
+  reserveBand?: boolean;
   /** Page load progress (0–100): a 2px line on the card's top edge. Omit when loaded. */
   loading?: number;
   loadingLabel?: string;
@@ -47,10 +52,11 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
 /**
  * The web page as one elevated card inside BrowserPane: it wraps NativeViewSlot, so the native view's
  * bounds are exactly the card's content area (inside its border, under the band). Holder edges are
- * drawn outside the content, so changing the holder never moves the native view.
+ * drawn outside the content, so changing the holder never moves the native view; with `reserveBand`
+ * the band row is fixed too, so neither does a band.
  */
 export function PageCard({
-  holder = "none", band, loading, loadingLabel = "Loading", viewport, onBoundsChange, onOcclusion, hidden = false, covered, stillSrc,
+  holder = "none", band, reserveBand = false, loading, loadingLabel = "Loading", viewport, onBoundsChange, onOcclusion, hidden = false, covered, stillSrc,
   stillAlt, occluderSelector, children, internal, overlay, contentRef, panelId, className, ...props
 }: PageCardProps) {
   const inner = useRef<HTMLDivElement | null>(null);
@@ -72,7 +78,7 @@ export function PageCard({
         {loading !== undefined ? (
           <div className={styles.loadLine}><ProgressMeter thin value={loading} ariaLabel={loadingLabel} /></div>
         ) : null}
-        {band}
+        {reserveBand ? <div className={styles.bandRow} data-slot="page-card-band">{band}</div> : band}
         <div ref={contentRef} className={styles.content} id={panelId} role={panelId ? "tabpanel" : undefined} style={ratio}
           data-slot="page-card-content">
           {internal ? <div className={styles.internal}>{internal}</div> : (
