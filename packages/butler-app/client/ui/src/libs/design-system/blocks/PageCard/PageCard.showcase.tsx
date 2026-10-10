@@ -27,6 +27,17 @@ export const stories: ShowcaseStory[] = [
       </Grid>
     ),
   },
+  {
+    // Your tab: the row stays empty and quiet until a band (pick, a pop-up) arrives; the bounds do not change.
+    name: "Your tab: an empty reserved row",
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <Grid columns="2" gap="md">
+        <PageCardDemo locale={locale} holder="none" height={240} readout reserveBand />
+        <PageCardDemo locale={locale} holder="none" band="popup" height={240} readout reserveBand />
+      </Grid>
+    ),
+  },
   { name: "You hold the tab", render: ({ locale }) => <PageCardDemo locale={locale} holder="user" band="user" agent height={420} reserveBand /> },
   { name: "Waiting for approval (static amber)", render: ({ locale }) => <PageCardDemo locale={locale} holder="waiting" band="waiting" agent height={420} reserveBand /> },
   {
