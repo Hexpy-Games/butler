@@ -24,6 +24,7 @@ interface BrowserBridge {
   onPointer: (handler: (point: { x: number; y: number } | null) => void) => () => void;
   onElementDrag: (handler: (event: ElementDragEvent) => void) => () => void;
   onSelectionAction: (handler: (event: { op: string; elements: PickedElement[] }) => void) => () => void;
+  onDownload?: (handler: (event: { type: string; session: string; reason?: string }) => void) => () => void;
   onAddress: (handler: () => void) => () => void;
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
@@ -31,8 +32,21 @@ export const useBrowserState = create<BrowserSnapshot>(() => ({
   enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [],
 }));
 let unsubscribe: (() => void) | undefined;
+let downloadUnsubscribe: (() => void) | undefined;
 export function connectBrowser() {
   connectElementDrag();
+  if (!downloadUnsubscribe) downloadUnsubscribe = window.butlerBrowser?.onDownload?.(event => {
+    const store = useButlerStore.getState();
+    if (!publicBrowserOwner(`conversation:${event.session}`, store.navigation)) return;
+    if (event.type === "download_completed") {
+      if (store.activeChatId === event.session) void store.refreshSessionView(event.session, { snapshot: true });
+      notifyStatus(appCopy.browser.downloadSaved);
+    } else {
+      const label = event.reason === "download_file_limit" ? appCopy.browser.downloadFileLimit
+        : event.reason === "download_session_limit" ? appCopy.browser.downloadSessionLimit : appCopy.browser.downloadFailed;
+      notifyStatus(label, { tone: "error" });
+    }
+  });
   if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => {
     const previous = useBrowserState.getState();
     useBrowserState.setState(state);
