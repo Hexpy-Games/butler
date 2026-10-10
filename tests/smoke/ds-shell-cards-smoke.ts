@@ -17,7 +17,8 @@ import type { Locator, Page } from "playwright";
 //   leading glyph (the floating toggle's) sits from its own lights; on Windows nothing is reserved at the start.
 // - AgentPointer over the browser card (tests/support/agent-pointer-motion.ts): rings appear in place and never
 //   interpolate geometry, a whole-page target draws no ring, the glide curves and ends on target, a retarget
-//   mid-glide does not jump, and reduced motion jumps without fades.
+//   mid-glide does not jump, the click ripple starts only on arrival (a retarget cancels it), and reduced
+//   motion jumps without fades.
 // Screenshots of every cards story, light and dark, land in .tmp/ds-shell-cards for review.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");

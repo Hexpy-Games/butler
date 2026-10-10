@@ -23,7 +23,8 @@ function playhead(glide: Glide): number {
  * Moves the pointer node along a curve whenever `at` changes: transform-only keyframes (composited) over
  * --motion-pointer-glide. A new target mid-glide continues from the drawn position along its heading at
  * its current speed, so nothing jumps; batch moves between consecutive stops follow the path through the
- * stops. Reduced motion (OS, DS scope or `reduced`) cancels any glide: the pointer jumps.
+ * stops. Reduced motion (OS, DS scope or `reduced`) cancels any glide: the pointer jumps. `arrived`
+ * reports when the pointer rests on `at`, for effects that belong to the arrival (the click ripple).
  */
 export function usePointerGlide(at: PathPoint, steps: PathPoint[], batch: boolean, reduced: boolean) {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,10 +32,14 @@ export function usePointerGlide(at: PathPoint, steps: PathPoint[], batch: boolea
   const glide = useRef<Glide | null>(null);
   // The curve of the latest glide, so the trail shows the path actually taken (after a retarget, too).
   const [path, setPath] = useState<Cubic | null>(null);
+  // Where the pointer last came to rest: set when a glide finishes (at once when it jumps), cleared when a
+  // glide starts. A retarget cancels the glide, so its arrival never happens.
+  const [arrived, setArrived] = useState<PathPoint | null>(() => ({ x: at.x, y: at.y }));
   useLayoutEffect(() => {
     const node = ref.current;
     const previous = last.current;
-    last.current = { x: at.x, y: at.y };
+    const goal = { x: at.x, y: at.y };
+    last.current = goal;
     if (!node || !previous || samePoint(previous, at)) return;
     const running = glide.current;
     glide.current = null;
@@ -42,7 +47,7 @@ export function usePointerGlide(at: PathPoint, steps: PathPoint[], batch: boolea
       ? sampleAt(running.samples, playhead(running)) : null;
     running?.animation.cancel();
     const duration = motionDuration("pointer-glide");
-    if (reduced || prefersReducedMotion() || duration <= 0) return;
+    if (reduced || prefersReducedMotion() || duration <= 0) { setArrived(goal); return; }
     let curve: Cubic;
     let ease = (t: number) => easeProgress("standard", t);
     if (live && running) {
@@ -60,9 +65,18 @@ export function usePointerGlide(at: PathPoint, steps: PathPoint[], batch: boolea
     const animation = animateMotion(node, samples.map((point, index) => ({
       translate: `${point.x}px ${point.y}px`, offset: index / (samples.length - 1),
     })), { duration: "pointer-glide", easing: "linear" });
-    if (animation) glide.current = { animation, samples, duration };
     setPath(curve);
+    if (!animation) { setArrived(goal); return; }
+    const current: Glide = { animation, samples, duration };
+    glide.current = current;
+    setArrived(null);
+    animation.finished.then(() => { if (glide.current === current) setArrived(goal); }, () => undefined);
   }, [at.x, at.y]);
   useLayoutEffect(() => () => glide.current?.animation.cancel(), []);
-  return { ref, path: path && samePoint(path[3], at) ? path : null };
+  return {
+    ref,
+    path: path && samePoint(path[3], at) ? path : null,
+    /** The resting point once the pointer has arrived at `at`; null while it is still on its way. */
+    arrived: arrived && samePoint(arrived, at) ? arrived : null,
+  };
 }

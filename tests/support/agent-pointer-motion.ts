@@ -7,7 +7,10 @@ import type { Browser, Locator } from "playwright";
 // - a whole-page target draws no ring;
 // - the glide is curved (samples leave the straight chord) and ends exactly on the target;
 // - a new target mid-glide continues from the drawn position (no jump > 2px in that frame);
-// - reduced motion (forced by the prop, and the OS setting): the pointer jumps, no animation, no ring fade.
+// - the click ripple starts only when the pointer arrives (within 50ms of the landing frame), anchored on the
+//   arrival point, and a target abandoned mid-glide never gets one;
+// - reduced motion (forced by the prop, and the OS setting): the pointer jumps, no animation, no ring fade,
+//   and the ripple is there at once.
 
 const LAB = "Motion lab: curved glide, retarget mid-glide, whole page";
 const REDUCED_LAB = "Motion lab, reduced motion: jumps, rings without fades";
@@ -28,7 +31,12 @@ function assert(condition: unknown, message: string): asserts condition {
 interface Trace {
   start: { x: number; y: number };
   target: { x: number; y: number };
-  samples: { x: number; y: number; t: number }[];
+  /** Per frame: the drawn pointer, and the click ripple's anchor (null when there is none). */
+  samples: { x: number; y: number; t: number; ripple: { x: number; y: number } | null }[];
+  /** The ripple in the frame of the click, after the update committed. */
+  rippleAtPress: { x: number; y: number } | null;
+  /** The target that was replaced mid-glide. */
+  abandoned?: { x: number; y: number };
   /** Per ring element: every rect it had while it existed, and whether it ever animated more than opacity. */
   rings: { rects: number[][]; leavingSeen: boolean; nonOpacity: string[] }[];
   maxRings: number;
@@ -50,6 +58,7 @@ async function play(lab: Locator, button: "next" | "page", interruptAfterMs?: nu
     const pointer = () => stage.querySelector<HTMLElement>("[data-part=pointer]")!;
     const parse = (value: string) => { const [x = 0, y = 0] = value.split(" ").map((part) => Number.parseFloat(part) || 0); return { x, y }; };
     const drawn = () => parse(getComputedStyle(pointer()).translate);
+    const ripple = () => { const node = stage.querySelector<HTMLElement>("[data-part=ripple]"); return node ? parse(node.style.translate) : null; };
     const frame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
     const rings = new Map<Element, { rects: number[][]; leavingSeen: boolean; nonOpacity: string[] }>();
     let maxRings = 0;
@@ -72,8 +81,10 @@ async function play(lab: Locator, button: "next" | "page", interruptAfterMs?: nu
     const start = drawn();
     watchRings();
     await press(which);
+    const rippleAtPress = ripple();
     let target = parse(pointer().style.translate);
-    const samples: { x: number; y: number; t: number }[] = [];
+    let abandoned: { x: number; y: number } | undefined;
+    const samples: { x: number; y: number; t: number; ripple: { x: number; y: number } | null }[] = [];
     let jump: number | undefined;
     let interruptedAt: number | undefined;
     const begin = await frame();
@@ -86,14 +97,15 @@ async function play(lab: Locator, button: "next" | "page", interruptAfterMs?: nu
         if (document.timeline.currentTime !== frameTime) throw new Error("retarget: a frame passed before the update committed");
         jump = Math.hypot(after.x - before.x, after.y - before.y);
         interruptedAt = now - begin;
+        abandoned = target;
         target = parse(pointer().style.translate);
       }
-      samples.push({ ...drawn(), t: now - begin });
+      samples.push({ ...drawn(), t: now - begin, ripple: ripple() });
       watchRings();
     }
     const end = drawn();
     return {
-      start, target, samples, jump, interruptedAt, maxRings,
+      start, target, samples, jump, interruptedAt, maxRings, rippleAtPress, abandoned,
       rings: [...rings.values()],
       settled: { ...end, running: pointer().getAnimations().length, rings: stage.querySelectorAll("[data-part=ring]").length },
     };
@@ -115,6 +127,25 @@ function assertRingsInPlace(trace: Trace, label: string): void {
     assert(ring.nonOpacity.length === 0, `${label}: ring animations may only fade: ${ring.nonOpacity.join(", ")}`);
   }
   assert(trace.maxRings <= 2, `${label}: at most the old and the new ring at once, saw ${trace.maxRings}`);
+}
+
+/**
+ * The click ripple starts only on arrival: none in the click frame or while the pointer is on its way, then
+ * within 50ms of the frame the pointer lands, anchored on the target; a target abandoned mid-glide never
+ * gets one.
+ */
+function assertRippleOnArrival(trace: Trace, label: string): string {
+  const same = (a: { x: number; y: number } | null | undefined, b: { x: number; y: number }) => !!a && Math.hypot(a.x - b.x, a.y - b.y) <= 0.01;
+  const arrival = trace.samples.findIndex((p) => same(p, trace.target));
+  const first = trace.samples.findIndex((p) => p.ripple);
+  assert(trace.rippleAtPress === null, `${label}: a ripple was showing in the click frame: ${JSON.stringify(trace.rippleAtPress)}`);
+  assert(arrival >= 0 && first >= arrival, `${label}: the ripple started before the pointer arrived (ripple frame ${first}, arrival frame ${arrival})`);
+  const lag = trace.samples[first]!.t - trace.samples[arrival]!.t;
+  assert(lag <= 50, `${label}: the ripple started ${lag.toFixed(1)}ms after the arrival`);
+  assert(trace.samples.slice(first).every((p) => same(p.ripple, trace.target)), `${label}: the ripple must stay anchored on the arrival point ${JSON.stringify(trace.target)}`);
+  const { abandoned } = trace;
+  assert(!abandoned || !trace.samples.some((p) => same(p.ripple, abandoned)), `${label}: the abandoned target got a ripple`);
+  return `${label}: arrival ${trace.samples[arrival]!.t.toFixed(0)}ms, ripple +${lag.toFixed(1)}ms`;
 }
 
 function assertSettled(trace: Trace, label: string): void {
@@ -141,6 +172,7 @@ export async function checkAgentPointerMotion(browser: Browser, origin: string, 
   assert(moving.length >= 8, `glide: too few frames while moving (${moving.length})`);
   assert(bow >= Math.max(6, travel * 0.06), `glide: the path must curve off the straight line (bow ${bow.toFixed(2)}px over ${travel.toFixed(1)}px)`);
   assertSettled(change, "glide");
+  report.push(assertRippleOnArrival(change, "ripple"));
   assertRingsInPlace(change, "target change");
   assert(change.rings.some((ring) => ring.leavingSeen) && change.settled.rings === 1,
     `target change: the old ring fades out where it was and only the new ring stays: ${JSON.stringify({ rings: change.rings.length, settled: change.settled })}`);
@@ -158,6 +190,7 @@ export async function checkAgentPointerMotion(browser: Browser, origin: string, 
   assert(retarget.jump !== undefined && retarget.jump <= 2, `retarget: the pointer jumped ${retarget.jump}px when the target changed mid-glide`);
   assert(speedAfter <= speedBefore * 2 + 0.05, `retarget: the pointer lurched after the retarget (${speedBefore.toFixed(2)} → ${speedAfter.toFixed(2)} px/ms)`);
   assertSettled(retarget, "retarget");
+  report.push(assertRippleOnArrival(retarget, "retarget ripple"));
   assertRingsInPlace(retarget, "retarget");
 
   // 3. Whole page: no ring; the card ring fades out in place.
@@ -203,6 +236,7 @@ async function assertJumps(lab: Locator, label: string): Promise<string> {
       drawn: getComputedStyle(pointer).translate, target: pointer.style.translate,
       animations: pointer.getAnimations().length + rings.reduce((sum, ring) => sum + ring.getAnimations().length, 0),
       rings: rings.map((ring) => ({ opacity: getComputedStyle(ring).opacity, leaving: ring.hasAttribute("data-leaving") })),
+      ripple: stage.querySelector<HTMLElement>("[data-part=ripple]")?.style.translate ?? null,
     };
   });
   const near = (a: string, b: string) => {
@@ -210,6 +244,7 @@ async function assertJumps(lab: Locator, label: string): Promise<string> {
     return Math.hypot(ax - bx, ay - by) <= 0.01;
   };
   assert(near(facts.drawn, facts.target) && facts.animations === 0, `${label}: the pointer must jump with no animation: ${JSON.stringify(facts)}`);
+  assert(facts.ripple !== null && near(facts.ripple, facts.target), `${label}: the ripple starts at once on the target: ${JSON.stringify(facts)}`);
   assert(facts.rings.length === 1 && facts.rings[0]!.opacity === "1" && !facts.rings[0]!.leaving, `${label}: one ring, shown at once: ${JSON.stringify(facts.rings)}`);
-  return `jump to ${facts.target}, ${facts.animations} animations, rings ${JSON.stringify(facts.rings)}`;
+  return `jump to ${facts.target}, ripple at ${facts.ripple}, ${facts.animations} animations, rings ${JSON.stringify(facts.rings)}`;
 }

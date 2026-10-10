@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { Grid } from "../../components/Grid";
+import { motionDuration } from "../../lib/motion";
 import { shopCardRect } from "../BrowserPane/fixtures/pages";
 import { AgentPointer, type AgentPointerProps } from "./AgentPointer";
 import { PageStage, POINTER_LABELS, type StageScale } from "./AgentPointer.demo";
@@ -37,6 +38,8 @@ function holdAt(node: HTMLElement, ms: number) {
   for (const animation of node.getAnimations({ subtree: true })) {
     // Held by an earlier phase: keep its frame.
     if (animation.playState === "paused") continue;
+    // Over by then: let it finish, so what follows it (the ripple on arrival) happens.
+    if (Number(animation.effect?.getComputedTiming().endTime) <= ms) { animation.finish(); continue; }
     animation.pause();
     animation.currentTime = Math.max(0, ms);
   }
@@ -60,7 +63,12 @@ function Frame({ motion, time, scale, locale, reducedMotion }: { motion: Motion;
     const started = motion.at[phase - 1]!;
     const next = motion.at[phase];
     holdAt(node, Math.min(time, next ?? Infinity) - started);
-    if (next !== undefined && time > next) setPhase(phase + 1);
+    if (next !== undefined && time > next) { setPhase(phase + 1); return; }
+    if (next !== undefined) return;
+    // Last phase: what starts on arrival (the ripple) is held at the time since the glide ended.
+    const observer = new MutationObserver(() => holdAt(node, time - started - motionDuration("pointer-glide")));
+    observer.observe(node, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [phase, motion, time]);
   const scene = motion.scenes[Math.min(phase, motion.scenes.length - 1)]!(scale);
   return (

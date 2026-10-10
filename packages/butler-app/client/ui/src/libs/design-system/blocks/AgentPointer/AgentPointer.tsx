@@ -111,7 +111,10 @@ export function AgentPointer({
           </div>
         );
       })}
-      {mode === "click" ? <span className={styles.ripple} style={place(at)} /> : null}
+      {/* The click lands when the pointer arrives: a new ripple per arrival, none while gliding. */}
+      {mode === "click" && glide.arrived ? (
+        <span key={`${glide.arrived.x},${glide.arrived.y}`} className={styles.ripple} style={place(glide.arrived)} data-part="ripple" />
+      ) : null}
       {mode === "scroll" ? <div className={styles.rail} style={{ height: height * 0.64, translate: `0 ${height * 0.18}px` }}><span className={styles.thumb} /></div> : null}
       <div ref={glide.ref}className={styles.pointer} style={place(at)} data-part="pointer" data-flip={flip || undefined}>
         <svg width="22" height="26" viewBox="0 0 22 26" focusable="false">

@@ -39,7 +39,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Draw it in the page DOM: the site can restyle, hide or read it.", render: () => <Typo.Code>{"page.evaluate(() => document.body.append(cursor))"}</Typo.Code> },
     },
     {
-      do: { caption: "Pass each new `at` and `target` as it comes: the arrow glides on a curve (and retargets mid-glide without a jump); rings appear in place and fade.", render: () => <Clicking /> },
+      do: { caption: "Pass each new `at` and `target` as it comes: the arrow glides on a curve (and retargets mid-glide without a jump), the click ripple starts on arrival; rings appear in place and fade.", render: () => <Clicking /> },
       dont: { caption: "Tween the pointer or a ring in the renderer, or send a whole-page rect expecting a ring: it draws none (the page edge shows it).", render: () => <Typo.Code>{"target={{ x: 0, y: 0, width: layer.width, height: layer.height }}"}</Typo.Code> },
     },
   ],

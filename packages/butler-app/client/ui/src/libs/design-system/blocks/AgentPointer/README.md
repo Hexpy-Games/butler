@@ -15,6 +15,9 @@ target rings, a dotted trail and a 400ms glide (`--motion-pointer-glide`).
 - **Retarget mid-glide**: the new glide starts from the drawn position,
   leaves along the current heading and keeps the current speed, then eases
   into the new target; nothing jumps.
+- **Click ripple on arrival**: the ripple starts when the glide ends, anchored
+  on the arrival point (at once when the pointer jumps); a retarget mid-glide
+  cancels the pending ripple.
 - **Batch**: moves between consecutive stops follow one smooth path through
   every stop (the trail).
 - **Rings never morph**: a ring is drawn at its target's geometry from its
