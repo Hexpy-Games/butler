@@ -888,6 +888,8 @@ dependencies = [
  "futures-util",
  "http",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "image",
  "indexmap 2.14.2",
  "notify",

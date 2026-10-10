@@ -119,7 +119,7 @@ pub(super) struct ApprovalFacts<'a> {
 
 pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     match facts.capability {
-        "run_command" => command(facts, ApprovalActionKind::RunCommand),
+        "run_command" | "preview_start" => command(facts, ApprovalActionKind::RunCommand),
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
         "call_mcp_tool" => single(
             ApprovalActionKind::UseConnector,

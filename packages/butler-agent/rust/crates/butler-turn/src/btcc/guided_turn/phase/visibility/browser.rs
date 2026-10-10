@@ -6,6 +6,13 @@ pub(super) fn authorize(
     policy: &GuidedExecutionPolicy,
     worker: bool,
 ) {
+    if policy.access_mode != AccessMode::ReadOnly {
+        for name in ["preview_start", "preview_stop"] {
+            if catalog.tool(name).is_some() {
+                names.insert(name.into());
+            }
+        }
+    }
     if worker {
         return;
     }

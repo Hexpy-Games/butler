@@ -1,5 +1,6 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
+mod previews;
 mod report;
 mod usage;
 use super::{Client, HttpError, HttpState};
@@ -12,6 +13,7 @@ use axum::{
     },
 };
 use futures_util::stream;
+pub(super) use previews::observe_lifetime;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -167,6 +169,12 @@ fn attach(
 }
 async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let mut args = read_json(request).await?;
+    if args["op"]
+        .as_str()
+        .is_some_and(|op| op.starts_with("preview."))
+    {
+        return previews::call(state, args).await;
+    }
     if args.get("op").is_some() {
         return agent_calls::call(state, args).await;
     }
