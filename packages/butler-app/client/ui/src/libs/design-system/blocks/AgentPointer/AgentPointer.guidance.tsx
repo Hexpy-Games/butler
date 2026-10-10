@@ -38,12 +38,16 @@ export const guidance: ShowcaseGuidance = {
       do: { caption: "Geometry in layer pixels (page CSS pixels × page scale); the block draws, the renderer measures.", render: () => <Clicking /> },
       dont: { caption: "Draw it in the page DOM: the site can restyle, hide or read it.", render: () => <Typo.Code>{"page.evaluate(() => document.body.append(cursor))"}</Typo.Code> },
     },
+    {
+      do: { caption: "Pass each new `at` and `target` as it comes: the arrow glides on a curve (and retargets mid-glide without a jump), the click ripple starts on arrival; rings appear in place and fade.", render: () => <Clicking /> },
+      dont: { caption: "Tween the pointer or a ring in the renderer, or send a whole-page rect expecting a ring: it draws none (the page edge shows it).", render: () => <Typo.Code>{"target={{ x: 0, y: 0, width: layer.width, height: layer.height }}"}</Typo.Code> },
+    },
   ],
   content: ["Tag copy: Butler / 버틀러, Looking / 보는 중, Typing / 입력 중, Awaiting approval / 승인 기다리는 중.", "Masked values (passwords) are masked by the App before they reach `value`."],
   accessibility: [
     "Decorative (aria-hidden): the PageBand announces what Butler does.",
-    "Reduced motion (OS, the DS scope or `reducedMotion`): no glide, trail or ripple; the pointer jumps.",
+    "Reduced motion (OS, the DS scope or `reducedMotion`): no glide, trail, ripple or ring fade; the pointer jumps and rings appear at once.",
     "Outline: a dark halo under a white keyline reaches 3:1 on white, black and photo pages (tested).",
   ],
-  tokens: ["--motion-pointer-glide", "--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink", "--browser-overlay-shadow"],
+  tokens: ["--motion-pointer-glide", "--motion-ease-standard", "--motion-fast", "--motion-exit-fast", "--butler-ink-blue", "--butler-ink-purple", "--butler-ink-pink", "--browser-overlay-shadow"],
 };

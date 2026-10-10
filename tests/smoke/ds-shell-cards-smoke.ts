@@ -1,4 +1,5 @@
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { checkAgentPointerMotion } from "../support/agent-pointer-motion.ts";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
 import type { Locator, Page } from "playwright";
@@ -14,6 +15,10 @@ import type { Locator, Page } from "playwright";
 //   title row's icons on screen after its composer takes focus (nothing scrolls the shell);
 // - PopupWindowChrome: on macOS the lock sits as far from the green light as the main titlebar's first
 //   leading glyph (the floating toggle's) sits from its own lights; on Windows nothing is reserved at the start.
+// - AgentPointer over the browser card (tests/support/agent-pointer-motion.ts): rings appear in place and never
+//   interpolate geometry, a whole-page target draws no ring, the glide curves and ends on target, a retarget
+//   mid-glide does not jump, the click ripple starts only on arrival (a retarget cancels it), and reduced
+//   motion jumps without fades.
 // Screenshots of every cards story, light and dark, land in .tmp/ds-shell-cards for review.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
@@ -284,6 +289,7 @@ try {
   console.log(`first tab insets (px): ${tabInsets.join(" · ")}`);
   console.log(`card bottom insets (px): ${bottomInsets.join(" · ")}`);
   console.log(`pop-up leading gaps (px): ${popupGaps.join(" · ")}`);
+  console.log(`agent pointer: ${(await checkAgentPointerMotion(browser, origin, shots)).join(" · ")}`);
   console.log(`ds-shell-cards smoke: ok (screenshots in ${shots})`);
 } finally {
   await browser.close();

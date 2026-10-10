@@ -1524,7 +1524,7 @@ Butler's own pointer for the transparent overlay layer above a page: where Butle
 - Use for: Showing that Butler waits (parked) while you hold the tab or an approval waits
 - Not for: Saying what Butler is doing in words → `PageBand`
 - Not for: A pick highlight the user made → `SelectionBar`
-- Tokens: `--motion-pointer-glide`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--browser-overlay-shadow`
+- Tokens: `--motion-pointer-glide`, `--motion-ease-standard`, `--motion-fast`, `--motion-exit-fast`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--browser-overlay-shadow`
 
 ### BrowserPane
 
