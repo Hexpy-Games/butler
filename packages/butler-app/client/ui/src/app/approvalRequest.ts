@@ -195,3 +195,19 @@ function details(
   const fallback = (card.scope?.description ?? card.reason).trim();
   return fallback ? [fallback] : [];
 }
+
+/** A sign-in step only the user can do: a hand-off to the tab, not a permission. */
+export interface SignInHandoffView { title: string; details: string[] }
+
+export function signInHandoffView(
+  card: Pick<AuthorityApprovalCard, "approval">,
+  copy: ApprovalRequestCopy,
+  canOpenTab: boolean,
+): SignInHandoffView | undefined {
+  const operation = card.approval?.operation;
+  if (operation?.tool !== "browser_sign_in_wait") return undefined;
+  const step = copy.signInStep(operation.sign_in_step ?? "unknown_form");
+  const site = operation.targets.find(Boolean);
+  return { title: copy.signInHandoff.title,
+    details: [site ? `${site} · ${step}` : step, canOpenTab ? copy.signInHandoff.inTab : copy.signInHandoff.onDesktop] };
+}

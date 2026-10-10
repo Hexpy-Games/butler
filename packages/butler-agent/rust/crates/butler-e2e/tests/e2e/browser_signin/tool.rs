@@ -52,9 +52,13 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
                     .unwrap();
                 assert_eq!(pulled.status, 200);
                 // Main hands the tab to the user and publishes that before it answers.
+                // Another tab Butler holds in the same conversation never resumes it.
                 snapshot(
                     &admin,
-                    json!([tab("t1", "conversation:general", LOGIN, "user")]),
+                    json!([
+                        tab("t1", "conversation:general", LOGIN, "user"),
+                        tab("t2", "conversation:general", LOGIN, "agent")
+                    ]),
                 )
                 .await
                 .unwrap();
@@ -101,7 +105,18 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
         json!(["fixture-shop.test"])
     );
     assert_eq!(card["approval"]["operation"]["sign_in_step"], "mfa");
-    // The wait holds while the user has the tab; their hand-back resumes it.
+    let shown = card["approval"]["operation"].to_string();
+    assert!(!shown.contains("\"t1\""), "no tab id on the card: {card}");
+    // The wait holds while the user has the tab, also when Butler's other
+    // tab changes; only this tab's hand-back resumes it.
+    snapshot(
+        &admin,
+        json!([
+            tab("t1", "conversation:general", LOGIN, "user"),
+            tab("t2", "conversation:general", LOGIN, "agent")
+        ]),
+    )
+    .await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(
         s.gw.approval_requests("general").await?.len(),
@@ -110,7 +125,10 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
     );
     snapshot(
         &admin,
-        json!([tab("t1", "conversation:general", LOGIN, "agent")]),
+        json!([
+            tab("t1", "conversation:general", LOGIN, "agent"),
+            tab("t2", "conversation:general", LOGIN, "agent")
+        ]),
     )
     .await?;
     let done =

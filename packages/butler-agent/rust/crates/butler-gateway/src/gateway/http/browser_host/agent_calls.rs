@@ -352,43 +352,8 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         (changed, handovers)
     };
     super::signed_in::record_handovers(&state, handovers).await?;
-    resume_waits(&state, &handed_back).await?;
+    super::hand_back::resume_waits(&state, &handed_back).await?;
     super::super::json(StatusCode::OK, json!({"ok":true}))
-}
-pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<(), HttpError> {
-    for tab in tabs {
-        let Some(session) = tab["owner"]
-            .as_str()
-            .and_then(|s| s.strip_prefix("conversation:"))
-        else {
-            continue;
-        };
-        let owner = crate::gateway::application::app_session_hint(session);
-        let requests = state.application.authority_list(owner.clone()).await?;
-        for request in requests.requests.iter().filter(|r| {
-            r["executable"] == "browser_wait_for_user"
-                || r["executable"] == "browser_sign_in"
-                    && r["approval"]["operation"]["tool"] == "browser_sign_in_wait"
-        }) {
-            // Only the requested tab's hand-back resumes its durable nonterminal wait.
-            if request["approval"]["operation"]["targets"]
-                .as_array()
-                .is_some_and(|targets| targets.iter().any(|t| t == &tab["id"]))
-            {
-                state
-                    .application
-                    .authority_decide(crate::gateway::AppAuthorityDecisionInput {
-                        owner_session_id: owner.clone(),
-                        request_ref: request["request_ref"].as_str().unwrap_or("").into(),
-                        action: "allow".into(),
-                        allow_scope: Some("once".into()),
-                        alternative_input: None,
-                    })
-                    .await?;
-            }
-        }
-    }
-    Ok(())
 }
 pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
     state.previews.close(session);

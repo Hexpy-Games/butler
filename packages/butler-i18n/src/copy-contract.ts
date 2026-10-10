@@ -131,6 +131,8 @@ type CountFormatter = (count: number) => string;
 export interface ApprovalRequestCopy {
   browserMode: { signed_out: string; signed_in: string };
   signInStep: (reason: string) => string;
+  /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
+  signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
   browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
@@ -642,6 +644,7 @@ export interface AppCopy {
     generating: string;
     modelWaiting: string;
     approvalWaiting: string;
+    signInWaiting: string;
     answerWaiting: string;
     workerCall: string;
     work: string;

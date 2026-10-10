@@ -21,6 +21,10 @@ const labels = {
   ko: ["2단계 인증", "패스키", "보안 문자", "보안 키패드", "로그인 양식 확인"],
   en: ["Two-step verification", "Passkey", "CAPTCHA", "Security keypad", "Check sign-in form"],
 };
+const handoff = {
+  ko: ["탭에서 마친 뒤 버틀러에게 돌려주세요", "데스크톱 앱에서 마무리해 주세요"],
+  en: ["Finish in the tab, then give it back to Butler", "Finish in the desktop app"],
+};
 const reasons = ["mfa", "passkey", "captcha", "secure_keypad", "unknown_form"];
 let checked = 0;
 try {
@@ -40,13 +44,16 @@ try {
   for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
     for (const lang of ["ko", "en"] as const) for (const [index, reason] of reasons.entries()) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`${native?.url ?? `http://127.0.0.1:${server!.port}/`}?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&stage=${stage}&reason=${reason}`);
+      const browserParam = width > 375 ? "&browser=1" : "";
+      await page.goto(`${native?.url ?? `http://127.0.0.1:${server!.port}/`}?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&stage=${stage}&reason=${reason}${browserParam}`);
       if (stage === "after") {
-        await page.getByText(labels[lang][index], { exact: true }).waitFor();
-        await page.getByText("example.test", { exact: true }).waitFor();
+        const card = page.locator('[data-test-class="composer-signin-handoff"]');
+        await card.getByText(`example.test · ${labels[lang][index]}`, { exact: true }).waitFor();
+        await card.getByText(handoff[lang][width > 375 ? 0 : 1], { exact: true }).waitFor();
         const text = await page.locator("body").innerText();
         assert.ok(!text.includes("private-tab-id"), "tab ids stay out of the card");
         assert.ok(!text.includes(reason), "raw sign-in codes stay out of the card");
+        assert.equal(await page.locator('[data-test-class="approval-risk"]').count(), 0, "a hand-off has nothing to allow");
       } else await page.getByText("private-tab-id", { exact: true }).waitFor();
       if (index === 0) await page.screenshot({ path: join(output, `${stage}-${lang}-${theme}-${width}.png`) });
       checked++;
