@@ -5,6 +5,8 @@ mod dialog;
 mod effect;
 pub(super) mod images;
 mod observe_after;
+mod site_notes;
+mod upload;
 use super::{GuidedTools, dispatch::encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
@@ -67,8 +69,11 @@ pub(super) async fn execute(
             args["include_image"] = json!(true);
         }
     }
+    // A region makes the observation a close-up of the newest observation.
+    let zoom = call.name == "browser_observe" && args.get("region").is_some();
     let op = match call.name.as_str() {
         "browser_open" => "tab.open",
+        "browser_observe" if zoom => "tab.zoom",
         "browser_observe" => "tab.observe",
         "browser_selection" => "tab.selection",
         "browser_screenshot" => "tab.screenshot",
@@ -78,12 +83,18 @@ pub(super) async fn execute(
     let mut result = client
         .call(op, &args["tab"], &args, invocation.cancellation)
         .await;
-    images::finish(owner, &call.name, &mut result).await?;
+    let image_class = if zoom { "browser_zoom" } else { &call.name };
+    images::finish(owner, image_class, &mut result).await?;
     if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
     }
-    if call.name == "browser_observe" && result["status"] == "ok" {
-        project_observation(&mut result);
+    if zoom && result["status"] == "ok" {
+        result["schema"] = json!("butler.browser-zoom.v1");
+    } else if matches!(call.name.as_str(), "browser_open" | "browser_observe") {
+        if call.name == "browser_observe" && result["status"] == "ok" {
+            project_observation(&mut result);
+        }
+        site_notes::attach(owner, &mut result).await;
     }
     encode_page_data(result)
 }
@@ -125,19 +136,19 @@ async fn act_refusal(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     client: &client::Client,
-    args: &Value,
-) -> Option<&'static str> {
+    args: &mut Value,
+) -> Option<Value> {
     if owner.binding.access_mode == AccessMode::ReadOnly {
-        return Some("read_only");
+        return Some(json!({"status":"not_dispatched","reason":"read_only"}));
     }
     if has_point_steps(args)
         && !client
             .vision(&invocation.model_execution.active_model_ref())
             .await
     {
-        return Some("vision_required");
+        return Some(json!({"status":"not_dispatched","reason":"vision_required"}));
     }
-    None
+    upload::resolve(owner, args).await.err()
 }
 async fn act(
     owner: &GuidedTools,
@@ -145,10 +156,10 @@ async fn act(
     call: &ModelRoundToolCall,
     occurrence: &str,
     client: client::Client,
-    args: Value,
+    mut args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if let Some(reason) = act_refusal(owner, invocation, &client, &args).await {
-        return finish_batch(&args, json!({"status":"not_dispatched","reason":reason}));
+    if let Some(refused) = act_refusal(owner, invocation, &client, &mut args).await {
+        return finish_batch(&args, refused);
     }
     let mut prepared = client
         .call("tab.prepare", &args["tab"], &args, invocation.cancellation)

@@ -27,6 +27,7 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
         Some(
             "butler.output-check.v1"
                 | "butler.browser-observation.v1"
+                | "butler.browser-zoom.v1"
                 | "butler.browser-capture.v1"
         )
     ) || value["image"]["mime_type"] != "image/jpeg"

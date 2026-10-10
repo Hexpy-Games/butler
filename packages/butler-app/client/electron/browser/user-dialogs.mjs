@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { beginDialog, resolveDialog, publicDialog } from "./dialogs.mjs";
 import { webUrl } from "./policy.mjs";
 import { browserEvent } from "./events.mjs";
+import { approvedUpload } from "./navigate.mjs";
 
 const registries = new Map();
 let installed = false;
@@ -40,6 +41,7 @@ export function wireUserDialogs(browser, tab) {
       if (!["alert", "confirm", "prompt", "beforeunload", "print", "file"].includes(input?.type)) { event.returnValue = null; return; }
       if (input.type === "beforeunload") { source.pageUnloadPrepared = true; event.returnValue = true; return; }
       if (source.dialog) { event.returnValue = null; return; }
+      if (input.type === "file" && source.pendingUpload) { event.returnValue = approvedUpload(source.pendingUpload); return; }
       if ((source.agent || source.driven) && source.holder !== "user" && ["print", "file"].includes(input.type)) {
         event.returnValue = null;
         browserEvent(host, source, input.type === "file" ? "file_chooser" : "print_requested", { reason: "owner_required" }); return;

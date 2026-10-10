@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Round two</title>
+<style>
+body { margin: 0; background: #fff; font: 14px sans-serif; }
+#bar { position: absolute; top: 20px; left: 40px; display: flex; gap: 8px; }
+#bar div, #bar button { padding: 6px 10px; border: 1px solid #888; background: #eee; }
+#bar .tool.selected { background: #9cf; }
+#tiny { position: absolute; top: 120px; left: 40px; font-size: 6px; }
+#up { position: absolute; top: 160px; left: 40px; padding: 6px 10px; border: 1px solid #888; }
+#file { display: none; }
+#next { position: absolute; top: 220px; left: 40px; }
+</style>
+<div id="bar"><div class="tool" title="Pencil">P</div><div class="tool selected" title="Line">L</div><button aria-pressed="true">Bold</button><button aria-pressed="false">Italic</button></div>
+<div id="tiny">tiny code 4721</div>
+<label id="up" role="button" tabindex="0" for="file">Upload file</label><input id="file" type="file">
+<a id="next" href="?page=2">Next page</a>
+<script>
+window.log = { files: [] };
+document.querySelector('#file').addEventListener('change', event => {
+  for (const file of event.target.files) void file.text().then(text => log.files.push({ name: file.name, size: file.size, text, trusted: event.isTrusted }));
+});
+const bar = document.querySelector('#bar');
+bar.addEventListener('click', event => {
+  const tool = event.target.closest('.tool'); if (!tool) return;
+  bar.querySelectorAll('.tool').forEach(node => node.classList.toggle('selected', node === tool));
+});
+document.title = 'Round two ' + (new URLSearchParams(location.search).get('page') || '1');
+</script></html>

@@ -1,5 +1,4 @@
 import { frameWorlds, evaluateWorld, hitFrame, framePoint } from "./frame-worlds.mjs";
-import { randomUUID } from "node:crypto";
 import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.mjs";
 import { accessibleName, nameObservation } from "./accessibility.mjs";
 import { contentRegions } from "./layout.mjs";
@@ -75,7 +74,8 @@ export async function observeTab(tab, args = {}) {
   }
 }
 async function observeOnce(tab, args) {
-  const obs = randomUUID(), epoch = tab.epoch, frames = await frameWorlds(tab);
+  // Per-tab sequence: unique for staleness checks and short enough to copy.
+  const obs = `o${tab.observationSeq = (tab.observationSeq ?? 0) + 1}`, epoch = tab.epoch, frames = await frameWorlds(tab);
   const selected=frames.map((frame, index)=>({ frame, index })).filter(({ index })=>args.frame===undefined || args.frame===`f${index}`);
   if(!selected.length) return { status:"refused", reason:"frame_unavailable" };
   const text = [], nodes = [], fields = [], regions = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };

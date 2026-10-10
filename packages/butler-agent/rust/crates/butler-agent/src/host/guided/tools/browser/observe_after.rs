@@ -43,6 +43,7 @@ pub(super) async fn finish(
         return super::encoded(&action);
     }
     project_observation(&mut observation);
+    super::site_notes::attach(owner, &mut observation).await;
     super::encoded(&combine(observation, action))
 }
 

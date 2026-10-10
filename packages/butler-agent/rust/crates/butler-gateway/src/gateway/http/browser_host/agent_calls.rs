@@ -97,7 +97,12 @@ fn dispatch(
         }
         if matches!(
             op.as_str(),
-            "tab.observe" | "tab.screenshot" | "tab.prepare" | "tab.act" | "tab.dialog"
+            "tab.observe"
+                | "tab.zoom"
+                | "tab.screenshot"
+                | "tab.prepare"
+                | "tab.act"
+                | "tab.dialog"
         ) {
             let tab = hub
                 .tabs
@@ -198,6 +203,7 @@ fn validate(
         "tab.open"
             | "tab.observe"
             | "tab.selection"
+            | "tab.zoom"
             | "tab.screenshot"
             | "tab.prepare"
             | "tab.act"
@@ -384,7 +390,7 @@ async fn upload_still(
 
 fn pointer_event(op: &str, args: &Value) -> Option<Value> {
     let mode = match op {
-        "tab.observe" => "observe",
+        "tab.observe" | "tab.zoom" => "observe",
         "tab.prepare" | "tab.act" => {
             let steps = args["steps"].as_array()?;
             if steps.len() > 1 {

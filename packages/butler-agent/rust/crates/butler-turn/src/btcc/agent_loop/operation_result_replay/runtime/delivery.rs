@@ -144,7 +144,11 @@ impl OperationResultReplayRuntime {
                     .get("output")
                     .and_then(|output| output.get("schema"))
                     .and_then(Value::as_str),
-                Some("butler.browser-observation.v1" | "butler.browser-action.v1")
+                Some(
+                    "butler.browser-observation.v1"
+                        | "butler.browser-action.v1"
+                        | "butler.browser-zoom.v1"
+                )
             )
         });
         Ok(browser

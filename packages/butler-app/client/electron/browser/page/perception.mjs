@@ -167,6 +167,23 @@ export function visiblePoint(element) {
   return { blocker };
 }
 
+/** The active state a page exposes generically: ARIA states, focus and
+ * selected/active class tokens (toolbars, tabs, swatches). */
+export function activeState(element) {
+  const states = [], attribute = name => element.getAttribute(name);
+  if (attribute("aria-pressed") === "true") states.push("pressed");
+  if (attribute("aria-selected") === "true") states.push("selected");
+  if (attribute("aria-checked") === "true" && !("checked" in element)) states.push("checked");
+  if (attribute("aria-expanded") === "true") states.push("expanded");
+  const current = attribute("aria-current");
+  if (current && current !== "false") states.push("current");
+  if (/(?:^|[\s_-])(?:active|selected|pressed|current|checked|on)(?=$|\s)/iu.test(attribute("class") ?? "") && !states.length) states.push("active");
+  let focus = document.activeElement;
+  while (focus?.shadowRoot?.activeElement) focus = focus.shadowRoot.activeElement;
+  if (focus === element && element !== document.body) states.push("focused");
+  return states;
+}
+
 /** Policy markers come from Rust, and cover every descendant of a keypad. */
 export function secureKeypad(element) {
   const markers=globalThis.__butlerObservation?.secureKeypads ?? [];

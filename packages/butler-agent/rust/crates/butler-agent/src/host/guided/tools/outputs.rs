@@ -220,7 +220,12 @@ pub(super) async fn restore_budget(
                     .saturating_sub(data.bytes().rev().take_while(|b| *b == b'=').count());
                 if matches!(name, "browser_observe" | "browser_act") {
                     if let Some(tab) = value["tab"].as_str() {
-                        browser_bytes.insert(tab.to_owned(), size);
+                        let key = if value["schema"] == "butler.browser-zoom.v1" {
+                            format!("zoom:{tab}")
+                        } else {
+                            tab.to_owned()
+                        };
+                        browser_bytes.insert(key, size);
                     }
                 } else {
                     bytes += size;

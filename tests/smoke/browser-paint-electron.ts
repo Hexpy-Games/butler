@@ -117,7 +117,8 @@ try {
   await app.page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="markdown-inline-image"]')));
   const count=await app.page.expression<number>("document.querySelectorAll('[data-test-class=markdown-inline-image]').length");assert.equal(count, extraCapture?2:1);
   assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-artifact-list]').length"), baseline?2:1, "image card is removed; web fixture card stays");
-  if(!baseline)assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-image] :is(button,a)').length"), count, "save stays with every image");
+  if(!baseline)assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=message-image] :is(button,a)').length"), count * 2, "open and save stay with every image");
+  if(!baseline)assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=browser-step-still]').length"), 0, "a captured turn does not repeat a step still above the reply");
   writeFileSync(join(evidence, "paint-result.json"), JSON.stringify({ paint, tab, count }));
   for(const language of ["ko", "en"])for(const theme of ["light", "dark"])for(const width of [1440, 1100]) {
     await app.gateway.api("/settings", { method:"PATCH", body:JSON.stringify({ language, appearance_theme:theme }) });
@@ -128,5 +129,13 @@ try {
     await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="markdown-inline-image"]')].every(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
     await app.page.expression("Promise.all([...document.querySelectorAll('[data-test-class=markdown-inline-image]')].map(image=>image.decode()))");
     await app.shot(`${baseline?"before":"after"}-${extraCapture?"extra-":""}${language}-${theme}-${width}`);
+  }
+  if(!baseline) {
+    await app.page.clickSelector('[data-test-class="message-image-open"]');
+    await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="artifact-viewer"] img')].some(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
+    const shown=await app.page.expression<number>("Math.max(...[...document.querySelectorAll('[data-test-class=artifact-viewer] img')].map(image=>image.getBoundingClientRect().width))");
+    const inline=await app.page.expression<number>("document.querySelector('[data-test-class=markdown-inline-image]').getBoundingClientRect().width");
+    assert.ok(shown>inline, `the capture opens larger in the artifact viewer (${shown} > ${inline})`);
+    await app.shot("after-open-en-dark-1100");
   }
 }finally{await app.stop();}

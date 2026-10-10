@@ -21,6 +21,7 @@ mod browser_jspaint;
 mod browser_library;
 mod browser_naver;
 mod browser_outputs;
+mod browser_round2;
 mod browser_selection;
 mod browser_usage;
 mod cassette_lint;

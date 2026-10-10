@@ -19,6 +19,7 @@ pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
         Some(
             "butler.output-check.v1"
                 | "butler.browser-observation.v1"
+                | "butler.browser-zoom.v1"
                 | "butler.browser-capture.v1"
         )
     ) {

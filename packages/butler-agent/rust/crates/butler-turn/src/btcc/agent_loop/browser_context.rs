@@ -3,6 +3,7 @@ use super::contracts::{ModelRoundMessage, ModelRoundRole, ModelRoundToolCall};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 mod summary;
+mod zoom;
 
 // Text snapshots collapse immediately: cached stale snapshots still cost tokens
 // and occupy the window. Only the cycle being replaced invalidates the prefix.
@@ -162,6 +163,7 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
         let output = field(&value, "output");
         message.content = json!({"ok":field(&value, "ok"),"output":{"schema":"butler.browser-action.v1","obs":call.arguments.get("observation"),"status":field(output, "status"),"steps":summary::steps(output),"superseded":true}}).to_string().into();
     }
+    zoom::supersede(messages);
 }
 
 fn replace_observation(message: &mut ModelRoundMessage, cycle: &Cycle, tab: &str, latest: &str) {
