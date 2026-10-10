@@ -82,7 +82,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"item_id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"obfuscation\":\"VJxPn5keQLdkwZ\",\"output_index\":0,\"sequence_number\":3}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"item_id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"obfuscation\":\"VJxPn5keQLdkwZ\",\"output_index\":0,\"sequence_number\":3}\n\n"
       },
       {
         "delay_ms": 0,
@@ -238,11 +238,11 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"item_id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"output_index\":0,\"sequence_number\":42}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"item_id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"output_index\":0,\"sequence_number\":42}\n\n"
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"call_id\":\"call_TPmcYsYWE27QyCJTyLRqlpZR\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":43}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_041323e6ef3359bc016ac96a59bef887d0a17f349c8487ca9b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_observe\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"scope\\\":\\\"interactive\\\"}}\",\"call_id\":\"call_TPmcYsYWE27QyCJTyLRqlpZR\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":43}\n\n"
       },
       {
         "delay_ms": 0,

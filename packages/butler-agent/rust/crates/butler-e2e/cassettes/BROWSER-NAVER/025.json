@@ -84,7 +84,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"d76c146b-de2b-4836-abd3-0c92d136e434\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"item_id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"obfuscation\":\"9pCV098x3MlLB5\",\"output_index\":0,\"sequence_number\":3}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-0358145624d0bebf9a539298f300c\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"item_id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"obfuscation\":\"9pCV098x3MlLB5\",\"output_index\":0,\"sequence_number\":3}\n\n"
       },
       {
         "delay_ms": 0,
@@ -416,11 +416,11 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"d76c146b-de2b-4836-abd3-0c92d136e434\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"item_id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"output_index\":0,\"sequence_number\":86}\n\n"
+        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-0358145624d0bebf9a539298f300c\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"item_id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"output_index\":0,\"sequence_number\":86}\n\n"
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"b29ef132-6fcf-495d-abc1-b275a5aee962\\\",\\\"observation\\\":\\\"d76c146b-de2b-4836-abd3-0c92d136e434\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":87}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-0358145624d0bebf9a539298f300c\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":87}\n\n"
       },
       {
         "delay_ms": 0,
