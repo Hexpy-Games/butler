@@ -18,6 +18,11 @@ use std::path::Path;
 
 use tokio::sync::mpsc;
 
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::matching_processes;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
