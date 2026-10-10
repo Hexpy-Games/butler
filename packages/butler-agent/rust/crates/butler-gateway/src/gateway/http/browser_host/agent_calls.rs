@@ -351,16 +351,8 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
         };
         let owner = crate::gateway::application::app_session_hint(session);
         let requests = state.application.authority_list(owner.clone()).await?;
-        for request in requests.requests.iter().filter(|r| {
-            r["executable"] == "browser_wait_for_user"
-                || r["executable"] == "browser_sign_in"
-                    && r["approval"]["operation"]["tool"] == "browser_sign_in_wait"
-        }) {
-            // Only the requested tab's hand-back resumes its durable nonterminal wait.
-            if request["approval"]["operation"]["targets"]
-                .as_array()
-                .is_some_and(|targets| targets.iter().any(|t| t == &tab["id"]))
-            {
+        for request in &requests.requests {
+            if waits_on(request, &tab["id"]) {
                 state
                     .application
                     .authority_decide(crate::gateway::AppAuthorityDecisionInput {
@@ -375,6 +367,25 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
         }
     }
     Ok(())
+}
+/// Only the requested tab's hand-back resumes its durable nonterminal wait. A
+/// wait-for-user card names the tab; a sign-in hand-off card shows the site
+/// only, so its request's stored target (the tab) is matched instead.
+fn waits_on(request: &Value, tab: &Value) -> bool {
+    let approval = &request["approval"];
+    let names = |targets: &Value, field: Option<&str>| {
+        targets
+            .as_array()
+            .is_some_and(|targets| targets.iter().any(|t| field.map_or(t, |f| &t[f]) == tab))
+    };
+    match request["executable"].as_str() {
+        Some("browser_wait_for_user") => names(&approval["operation"]["targets"], None),
+        Some("browser_sign_in") => {
+            approval["operation"]["tool"] == "browser_sign_in_wait"
+                && names(&approval["targets"], Some("path"))
+        }
+        _ => false,
+    }
 }
 pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
     state.previews.close(session);

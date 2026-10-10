@@ -500,6 +500,7 @@ export const enUsCopy: AppCopy = {
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
       signInStep: reason => ({mfa: "Two-step verification", passkey: "Passkey", captcha: "CAPTCHA", secure_keypad: "Security keypad", unknown_form: "Check sign-in form"} as Record<string, string>)[reason] ?? "Check sign-in form",
+      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish in the desktop app", openTab: "Open tab", stop: "Stop task" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
         const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;
@@ -717,6 +718,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     generating: "Generating response",
     modelWaiting: "Waiting for model response",
     approvalWaiting: "Waiting for approval.",
+    signInWaiting: "Waiting for you to finish signing in.",
     answerWaiting: "Waiting for your answer.",
     workerCall: "Delegated work",
     work: "Work",

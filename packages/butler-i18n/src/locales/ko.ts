@@ -494,6 +494,7 @@ export const koKrCopy: AppCopy = {
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
       signInStep: reason => ({mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인"} as Record<string, string>)[reason] ?? "로그인 양식 확인",
+      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", openTab: "탭 열기", stop: "작업 중지" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
         const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란", focus: "현재 포커스에", document: "페이지에", wait: "" };
@@ -710,6 +711,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     generating: "응답 생성 중",
     modelWaiting: "모델 응답 대기",
     approvalWaiting: "허용 여부를 기다리고 있습니다.",
+    signInWaiting: "로그인 확인을 기다리고 있습니다.",
     answerWaiting: "답변을 기다리고 있습니다.",
     workerCall: "작업 위임",
     work: "Work",
