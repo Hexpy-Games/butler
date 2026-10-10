@@ -30,6 +30,7 @@ pub(in crate::gateway) fn serve(
         };
         let state = Arc::new(HttpState {
             browser: super::browser_host::Hub::default(),
+            previews: butler_runtime::previews::Previews::default(),
             application,
             devices,
             security: security::GatewaySecurity::new(security::SecurityConfig {
@@ -54,6 +55,8 @@ pub(in crate::gateway) fn serve(
             static_ui_root: config.static_ui_root,
             output_data: config.output_data,
         });
+        super::browser_host::observe_lifetime(&state)
+            .map_err(|_| std::io::Error::other("preview lifetime unavailable"))?;
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
-import { AddressField, ArrowLeft, ArrowRight, BrowserToolbar, ButtonContainer, IconButton, Pick, RefreshCcw, Square } from "@/butler-ds";
+import { AddressField, ArrowLeft, ArrowRight, BrowserToolbar, ButtonContainer, IconButton, Pick, RefreshCcw, Square, Tag } from "@/butler-ds";
 import { BookmarksMenu } from "./Bookmarks";
 import { saveLibrary, deleteLibrary, useBookmark } from "./libraryStore";
 import { notifyStatus } from "@/app/notifications";
@@ -32,5 +32,5 @@ export function AddressRow({ tab, enabled }: { tab?: BrowserTab; enabled: boolea
       security={!tab?.url ? "internal" : tab.url.startsWith("https:") ? "secure" : "insecure"}
       labels={{ field: copy.address, placeholder: copy.addressPlaceholder, secure: copy.secure,
         insecure: copy.notSecure, bookmarkAdd: copy.bookmarkAdd, bookmarked: copy.bookmarked }} />}
-    actions={<ButtonContainer size="icon-sm"><IconButton label={copy.pick} disabled={locked || !tab?.url} aria-pressed={tab?.picking === true} onClick={() => call("pick", !tab?.picking)}><Pick size="md" /></IconButton><BookmarksMenu /><BrowserOptions tab={tab} /></ButtonContainer>} />;
+    actions={<ButtonContainer size="icon-sm">{tab?.preview && <Tag data-test-class="browser-preview-tag">{copy.preview}</Tag>}<IconButton label={copy.pick} disabled={locked || !tab?.url} aria-pressed={tab?.picking === true} onClick={() => call("pick", !tab?.picking)}><Pick size="md" /></IconButton><BookmarksMenu /><BrowserOptions tab={tab} /></ButtonContainer>} />;
 }

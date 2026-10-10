@@ -35,7 +35,9 @@
     "read_skill_file",
     "ask_user",
     "project_artifacts",
-    "output_publish"
+    "output_publish",
+    "preview_start",
+    "preview_stop"
   ],
   "tools": [
     {
@@ -6177,6 +6179,82 @@
         "tabs"
       ],
       "durable": false
+    },
+    {
+      "name": "preview_start",
+      "definition": {
+        "type": "function",
+        "name": "preview_start",
+        "description": "Start a reviewed dev server and open its preview. At most two per agent.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Workspace directory."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "command",
+            "cwd",
+            "port"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "preview",
+        "web",
+        "browser"
+      ],
+      "durable": false
+    },
+    {
+      "name": "preview_stop",
+      "definition": {
+        "type": "function",
+        "name": "preview_stop",
+        "description": "Stop this agent’s preview process tree.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preview_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "preview_id"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "preview",
+        "web",
+        "browser"
+      ],
+      "durable": false
     }
   ],
   "workerForbidden": [
@@ -11003,6 +11081,60 @@
         ]
       },
       "effectBoundary": "none",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "preview_start": {
+      "type": "function",
+      "name": "preview_start",
+      "description": "Start a reviewed dev server and open its preview. At most two per agent.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Workspace directory."
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "command",
+          "cwd",
+          "port"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "preview_stop": {
+      "type": "function",
+      "name": "preview_stop",
+      "description": "Stop this agent’s preview process tree.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "preview_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_id"
+        ]
+      },
+      "effectBoundary": "turn_local",
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"

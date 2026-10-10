@@ -11,7 +11,7 @@ import { useBrowserShellState } from "./browserShellState";
 export interface BrowserTab {
   popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
   id: string; owner: string; url: string; title: string; favicon: string;
-  picking?: boolean; selectionCount?: number;
+  preview?: string; picking?: boolean; selectionCount?: number;
   stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
 }
@@ -75,12 +75,12 @@ export async function browserCall(op: string, input?: unknown) {
   try { return await window.butlerBrowser?.call(op, input); }
   catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); return undefined; }
 }
-export async function openBrowser(output?: { url: string; sessionId: string }) {
+export async function openBrowser(output?: { url: string; sessionId: string; previewId?: string }) {
   if (!window.butlerBrowser) return;
   connectBrowser();
   if (output) {
     if (!publicBrowserOwner(`conversation:${output.sessionId}`, useButlerStore.getState().navigation)) return;
-    const id = await browserCall("create", { owner: `conversation:${output.sessionId}`, url: output.url });
+    const id = await browserCall("create", { owner: `conversation:${output.sessionId}`, url: output.url, preview_id: output.previewId });
     if (typeof id === "string") await openConversationBrowser(output.sessionId, id);
     return;
   }

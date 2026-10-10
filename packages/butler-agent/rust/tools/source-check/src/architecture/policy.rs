@@ -18,7 +18,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "sqlite" => &["secure_fs"],
         "process_control" => &["process_table"],
         // Hook processes compose shell selection and tree containment.
-        "hook_process" => &["command_sandbox", "process_control"],
+        "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],
@@ -50,7 +50,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-runtime: capability adapters consume the skills facade; catalog
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
-        "context" | "skills" | "outputs" | "browser" => &[],
+        "context" | "skills" | "outputs" | "browser" | "previews" => &[],
         "operations" => &["context"],
         "web_access" => &["context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.

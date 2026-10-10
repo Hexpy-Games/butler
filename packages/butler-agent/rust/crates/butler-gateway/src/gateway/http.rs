@@ -77,6 +77,7 @@ const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
 struct HttpState {
     browser: browser_host::Hub,
+    previews: butler_runtime::previews::Previews,
     devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
@@ -212,6 +213,9 @@ async fn route_for_client(
     }
     if uri.path().starts_with("/__o/") {
         return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    if uri.path().starts_with("/previews/") {
+        return content::preview::view(&state, &request);
     }
     if uri.path().starts_with("/outputs/") {
         return content::view(state, request).await;

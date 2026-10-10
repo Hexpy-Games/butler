@@ -110,7 +110,7 @@ fn dispatch(
                 .map_err(|_| error(403, "not_your_tab"))?;
             if tab["url"]
                 .as_str()
-                .is_some_and(|url| !permitted_url(state, url))
+                .is_some_and(|url| !permitted_url(state, &session, url))
             {
                 return response(
                     count,
@@ -122,6 +122,12 @@ fn dispatch(
                 &format!("http://127.0.0.1:{}", super::super::content::port(state)),
                 tab["url"].as_str().unwrap_or(""),
             );
+            if state
+                .previews
+                .owned(&session, tab["preview"].as_str().unwrap_or(""))
+            {
+                frame["args"]["policy"]["preview"] = json!(true);
+            }
         }
         if hub.host.is_none() {
             return response(count, json!({"status":"unavailable","reason":"no_browser"}))
@@ -146,7 +152,7 @@ fn response(count: usize, value: Value) -> Result<Response, HttpError> {
         butler_runtime::browser::batch_receipts(count, value),
     )
 }
-fn permitted_url(state: &HttpState, raw: &str) -> bool {
+fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool {
     butler_runtime::browser::public_url(raw).is_ok()
         || url::Url::parse(raw).is_ok_and(|u| {
             u.scheme() == "http"
@@ -154,14 +160,16 @@ fn permitted_url(state: &HttpState, raw: &str) -> bool {
                 && u.password().is_none()
                 && u.host_str() == Some("127.0.0.1")
                 && u.port() == Some(super::super::content::port(state))
-                && u.path().starts_with("/__o/")
+                && (u.path().starts_with("/__o/")
+                    || u.path().starts_with("/__p/")
+                    || state.previews.has_active(session))
         })
 }
 fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mut Value) {
     let denied = result
         .get("url")
         .and_then(Value::as_str)
-        .is_some_and(|url| !permitted_url(state, url))
+        .is_some_and(|url| !permitted_url(state, session, url))
         || result
             .get("frames")
             .and_then(Value::as_array)
@@ -170,7 +178,7 @@ fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mu
                     frame
                         .as_str()
                         .or_else(|| frame["url"].as_str())
-                        .is_none_or(|url| !permitted_url(state, url))
+                        .is_none_or(|url| !permitted_url(state, session, url))
                 })
             });
     if !denied {
@@ -218,21 +226,34 @@ fn validate(
         return Err(error(400, "invalid_browser_op"));
     }
     if op == "tab.open" {
-        let raw = frame["args"]["url"].as_str().unwrap_or("");
-        let content = url::Url::parse(raw).ok().filter(|u| {
+        let raw = frame["args"]["url"].as_str().unwrap_or("").to_owned();
+        let content = url::Url::parse(&raw).ok().filter(|u| {
             u.host_str() == Some("127.0.0.1")
                 && u.port() == Some(super::super::content::port(state))
-                && u.path().starts_with("/__o/")
+                && u.scheme() == "http"
+                && u.username().is_empty()
+                && u.password().is_none()
+                && (u.path().starts_with("/__o/")
+                    || super::super::content::preview::owner_id(state, session, &raw).is_some())
         });
         let url = match content {
             Some(url) => url,
-            None => butler_runtime::browser::public_url(raw)
+            None => butler_runtime::browser::public_url(&raw)
                 .map_err(|_| error(400, "navigation_denied"))?,
         };
         frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
             &format!("http://127.0.0.1:{}", super::super::content::port(state)),
             url.as_str(),
         );
+        if let Some(id) = super::super::content::preview::owner_id(state, session, &raw) {
+            frame["args"]["preview_id"] = json!(id);
+        }
+        if state
+            .previews
+            .owned(session, frame["args"]["preview_id"].as_str().unwrap_or(""))
+        {
+            frame["args"]["policy"]["preview"] = json!(true);
+        }
     }
     if op == "tab.act"
         && frame["args"]["steps"]
@@ -301,7 +322,9 @@ pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<()
     }
     Ok(())
 }
-pub(in crate::gateway::http) fn close_owner(state: &HttpState, session: &str) {
+pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
+    state.previews.close(session);
+    state.previews.stop_closed(session).await;
     if let Ok(hub) = state.browser.0.lock()
         && let Some(host) = &hub.host
     {

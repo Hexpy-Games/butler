@@ -135,6 +135,8 @@ tool_names! {
     BrowserClose = "browser_close",
     BrowserWaitForUser = "browser_wait_for_user",
     OutputCheck = "output_check",
+    PreviewStart = "preview_start",
+    PreviewStop = "preview_stop",
     OutputPublish = "output_publish",
 }
 
