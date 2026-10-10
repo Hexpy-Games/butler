@@ -16,16 +16,18 @@ async function resolveAction(tab, args, step, scroll = false) {
 }
 
 export async function prepareBatch(tab, args) {
-  if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps" };
+  if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps",
+    recovery: "Send 1–10 steps per call. Split tool/color selection from strokes: select, observe fresh pixels, then draw a group of strokes. No steps were dispatched." };
   if (args.steps.length > 1 && args.steps.some(step => step.action === "fill" && tab.observation?.nodes.some(node =>
     node.ref === step.ref && (node.role === "combobox" || ["list", "both"].includes(node.autocomplete))))) {
     return { status: "refused", reason: "autocomplete_requires_observation", recovery: "Fill one field, observe its suggestions, select one, then observe before the next action." };
   }
   const steps = [];
   for (const step of args.steps) {
-    if (Boolean(step.ref) === Boolean(step.point) || !["click", "fill", "select", "scroll", "hover", "drag"].includes(step.action) || step.point && !["click", "scroll", "hover", "drag"].includes(step.action)) return { status: "refused", reason: "invalid_step" };
+    if (Boolean(step.ref) === Boolean(step.point) || !["click", "fill", "select", "scroll", "hover", "drag"].includes(step.action) || step.point && !["click", "scroll", "hover", "drag"].includes(step.action)) return { status: "refused", reason: "invalid_step",
+      recovery: "Each step must use exactly one of ref or point, never both. For screenshot canvas drags omit ref; use action drag, point, target_point and expect canvas. Supported actions: click, fill, select, scroll, hover, drag; fill/select require ref." };
     const target = await resolveAction(tab, args, step);
-    if (target.reason) return { status: "refused", ...target };
+    if (target.reason) return { status: "refused", step_index: steps.length, action: step.action, ...target };
     steps.push({ ...target, action: step.action, value_preview: typeof step.value === "string" ? [...step.value].slice(0, 40).join("") : undefined });
   }
   return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };

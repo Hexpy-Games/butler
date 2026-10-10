@@ -24,6 +24,30 @@ async function blockerInfo(tab, node) {
   return { ref: node.coveredBy, role: value.role, controls };
 }
 
+async function graphicalPoints(observation) {
+  const geometry = observation.imageGeometry;
+  if (!geometry) return "";
+  const nodes = observation.nodes.filter(node => node.actionable && /^icon \d+×\d+ at /u.test(node.name));
+  const origins = new Map();
+  for (const frame of new Set(nodes.map(node => observation.bindings.get(node.ref)))) origins.set(frame, await framePoint(frame, { x: 0, y: 0 }));
+  return nodes.length ? `Graphical targets in screenshot coordinates (ref or point, never both):\n${nodes.map(node => {
+    const origin = origins.get(observation.bindings.get(node.ref)), r = node.rect;
+    const x = Math.round((origin.x + r.x + r.width / 2) * geometry.width / geometry.cssWidth);
+    const y = Math.round((origin.y + r.y + r.height / 2) * geometry.height / geometry.cssHeight);
+    const left = Math.ceil((origin.x + r.x) * geometry.width / geometry.cssWidth), top = Math.ceil((origin.y + r.y) * geometry.height / geometry.cssHeight);
+    const right = Math.floor((origin.x + r.x + r.width) * geometry.width / geometry.cssWidth), bottom = Math.floor((origin.y + r.y + r.height) * geometry.height / geometry.cssHeight);
+    const bounds = node.role === "canvas" ? ` canvas screenshot bounds=[${left},${top},${right-left},${bottom-top}] (x,y,width,height); drag endpoints require ${left}<=x<${right}, ${top}<=y<${bottom}` : "";
+    return `[${node.ref}] center=[${x},${y}] expect=${JSON.stringify(node.role === "canvas" ? "canvas" : `${node.role} icon`)}${bounds}`;
+  }).join("\n")}` : "";
+}
+
+function observationBudget(args, interactive, below) {
+  return { status: "refused", reason: "observation_budget_exceeded", totals: { interactive, below_fold: below },
+    recovery: args.scope === "text"
+      ? "Observe one returned frame at a time. No complete observation was returned; do not act or capture with an older observation."
+      : "Observe again with scope=\"text\" to retain the complete controls and screenshot within the existing text budget. Inspect any open dialog and close it by its fresh ref before drawing or capturing. Do not reuse the older observation." };
+}
+
 export async function observeTab(tab, args = {}) {
   const obs = randomUUID(), epoch = tab.epoch, frames = await frameWorlds(tab);
   const selected=frames.map((frame, index)=>({ frame, index })).filter(({ index })=>args.frame===undefined || args.frame===`f${index}`);
@@ -51,14 +75,18 @@ export async function observeTab(tab, args = {}) {
     payment ||= result.payment; addons.push(...result.addons);
   }
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "user_control" };
-  const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
+  const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\nNode rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
   const maxChars = args.scope === "text" ? 32000 : 16000;
-  if (Buffer.byteLength(full) > maxChars) return { status: "refused", reason: "observation_budget_exceeded", totals: { interactive, below_fold: below } };
+  if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
   const image = args.include_image ? await observationImage(tab) : {};
   if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable" };
+  const pointText = await graphicalPoints(tab.observation);
+  const observedText = [full, pointText].filter(Boolean).join("\n");
+  if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "user_control" };
+  if (Buffer.byteLength(observedText) > maxChars) return observationBudget(args, interactive, below);
   tab.observation.captureRegions = contentRegions(regions, tab.observation.imageGeometry);
-  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: full, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
+  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
 }
 export async function resolveStep(tab, obs, step, scroll = false) {
   if (!tab.observation || tab.observation.obs !== obs || tab.observation.epoch !== tab.epoch) return { reason: "stale_ref" };

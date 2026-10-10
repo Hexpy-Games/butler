@@ -135,7 +135,7 @@ class UserBrowser {
   pagePreferences(tab) {
     return { preload: fileURLToPath(new URL("./page-controls.cjs", import.meta.url)),
       nodeIntegrationInSubFrames: true, additionalArguments: tab.agent ? ["--butler-agent-page"] : [],
-      disableDialogs: !tab.agent, partition: tab.partition, webgl: !tab.agent,
+      disableDialogs: !tab.agent, partition: tab.partition, webgl: true,
       contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false };
   }
   materialize(tab) {

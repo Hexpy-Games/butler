@@ -59,8 +59,10 @@ function MessageContentComponent({
       )}
       {message.role === "assistant" && (
         <MessageArtifacts
+          text={message.text}
           artifacts={artifacts}
           attachments={message.attachments ?? []}
+          refreshFileUrls={refreshFileUrls}
         />
       )}
       {message.role === "assistant" && (

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Pointer paint</title>
+<style>
+body { margin: 0; background: #ccc; font: 14px sans-serif; }
+#tools { position: absolute; top: 30px; left: 8px; width: 60px; }
+#tools div { padding: 8px; border: 1px solid #555; background: #eee; }
+#palette { position: absolute; top: 650px; left: 80px; display: flex; }
+#palette div { width: 30px; height: 30px; border: 1px solid #555; }
+#drawing { position: absolute; top: 80px; left: 80px; background: white; touch-action: none; }
+#colors { position: absolute; top: 650px; left: 170px; }
+dialog div { display: inline-block; width: 20px; height: 20px; margin: 2px; }
+dialog canvas { width: 20px; height: 20px; pointer-events: none; }
+</style>
+<div id="tools"><div title="Brush">Brush</div><div title="Line">Line</div><div title="Rectangle">Rect</div><div title="Ellipse">Oval</div></div>
+<div id="palette"><div data-color="#000" style="background:black"><canvas width="30" height="30" style="pointer-events:none"></canvas></div><div data-color="#e87800" style="background:#e87800"><canvas width="30" height="30" style="pointer-events:none"></canvas></div></div>
+<canvas id="drawing" width="850" height="550" aria-label="Drawing"></canvas>
+<button id="colors">Colors</button><dialog id="color-dialog"><button id="close-colors">Close colors</button><section></section></dialog>
+<script>
+const canvas=document.querySelector('#drawing'), ctx=canvas.getContext('2d');
+window.paint={tool:'Brush',color:'#000',strokes:[],picks:[],webgl:!!document.createElement('canvas').getContext('webgl')};
+const dialog=document.querySelector('#color-dialog');
+for(let i=0;i<100;i++){const tile=document.createElement('div');tile.style.background=`hsl(${i*3.6} 80% 50%)`;tile.append(document.createElement('canvas'));dialog.querySelector('section').append(tile);}
+document.querySelector('#colors').onclick=()=>dialog.showModal();
+document.querySelector('#close-colors').onclick=()=>dialog.close();
+document.querySelector('#tools').addEventListener('click',event=>{
+  const target=event.target.closest('[title]');if(!target)return;
+  if(!document.querySelector('#options')) {const options=document.createElement('div');options.id='options';options.title='Shape options';options.textContent='Outline';document.querySelector('#tools').append(options);}
+  paint.tool=target.title;paint.picks.push({tool:paint.tool,trusted:event.isTrusted});
+});
+document.querySelector('#palette').addEventListener('click',event=>{
+  const target=event.target.closest('[data-color]');if(!target)return;
+  paint.color=target.dataset.color;paint.picks.push({color:paint.color,trusted:event.isTrusted});
+});
+let stroke;
+function position(event) {const rect=canvas.getBoundingClientRect();return {x:event.clientX-rect.x,y:event.clientY-rect.y,buttons:event.buttons,trusted:event.isTrusted};}
+canvas.addEventListener('pointerdown',event=>{
+  if(event.button!==0)return;canvas.setPointerCapture(event.pointerId);
+  stroke={tool:paint.tool,color:paint.color,points:[position(event)],released:false};paint.strokes.push(stroke);
+});
+canvas.addEventListener('pointermove',event=>{if(stroke)stroke.points.push(position(event));});
+canvas.addEventListener('pointerup',event=>{
+  if(!stroke)return;stroke.points.push(position(event));stroke.released=true;
+  const start=stroke.points[0],end=stroke.points.at(-1);ctx.strokeStyle=stroke.color;ctx.lineWidth=3;ctx.beginPath();
+  if(stroke.tool==='Rectangle')ctx.rect(start.x,start.y,end.x-start.x,end.y-start.y);
+  else if(stroke.tool==='Ellipse')ctx.ellipse((start.x+end.x)/2,(start.y+end.y)/2,Math.abs(end.x-start.x)/2,Math.abs(end.y-start.y)/2,0,0,Math.PI*2);
+  else {ctx.moveTo(start.x,start.y);for(const point of stroke.points.slice(1))ctx.lineTo(point.x,point.y);}
+  ctx.stroke();stroke=null;
+});
+</script></html>

@@ -113,13 +113,17 @@ export function contrast(element) {
 export function semantic(element, discoverPointer = true) {
   const tag = element.localName, type = element.getAttribute("type");
   const page=globalThis.__butlerPerceptionCache?.page;
-  const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: "canvas", img: "image", summary: "button" }[tag])
+  const role = element.getAttribute("role") ?? ({ button: "button", a: "link", select: "combobox", textarea: "textbox", canvas: styleValue(element, "pointerEvents") === "none" ? "image" : "canvas", img: "image", summary: "button" }[tag])
     ?? (/^h[1-6]$/u.test(tag) ? "heading" : undefined)
     ?? (tag === "input" ? ({ checkbox: "checkbox", radio: "radio", range: "slider", submit: "button", button: "button" }[type] ?? "textbox") : scrollRegion(element) ? "scroll_region" : "");
   const interactiveRole = /^(button|link|combobox|textbox|checkbox|radio|slider|spinbutton|switch|option|menuitem|menuitemcheckbox|menuitemradio|tab|treeitem|canvas|scroll_region)$/u.test(role);
   const ancestor = parentElementOf(element)?.closest('button,a,input,select,textarea,summary,[role="button"],[role="option"],[role="tab"],[role="menuitem"],[onclick],[contenteditable="true"]');
-  const clickable = Boolean(interactiveRole || element.draggable || element.hasAttribute("onclick") || discoverPointer && !ancestor && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
-  if (!clickable && !/^(img|h[1-6])$/u.test(tag)) return { clickable: false };
+  // Custom graphical controls often use delegated listeners and a native tooltip.
+  // Expose their actual label as an element, without inventing a button role.
+  const titled = Boolean(element.getAttribute("title")?.trim());
+  const graphic = [...element.children].some(child => child.localName === "canvas" && styleValue(child, "pointerEvents") === "none");
+  const clickable = Boolean(interactiveRole || titled || graphic || element.draggable || element.hasAttribute("onclick") || discoverPointer && !ancestor && styleValue(element, "cursor") === "pointer" || element.isContentEditable);
+  if (!clickable && role !== "image" && !/^(img|h[1-6])$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
   const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
@@ -127,7 +131,7 @@ export function semantic(element, discoverPointer = true) {
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
-  return { role: role || "button", name: name.replace(/\s+/gu, " "), secure, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
+  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
 }
 export function hitAt(root, x, y) {
   let hit = root.elementFromPoint(x, y);
@@ -242,8 +246,8 @@ export function layoutRegions(elements) {
   for (const element of elements) {
     const role = element.getAttribute("role"), tag = element.localName;
     const kind = /^(banner|navigation|main|complementary|contentinfo)$/u.test(role ?? "") ? role
-      : /^(header|nav|main|aside|footer)$/u.test(tag) ? tag : null;
-    if (!kind) continue;
+      : /^(header|nav|main|aside|footer|canvas)$/u.test(tag) ? tag : null;
+    if (!kind || kind === "canvas" && (styleValue(element,"pointerEvents") === "none" || visiblePoint(element).blocker)) continue;
     const paint = paintState(element), rect = rectangle(element);
     if (paint.invisible || paint.opacity < .1 || fullyClipped(element) || rect.width < 4 || rect.height < 4) continue;
     regions.push({ kind, name: element.getAttribute("aria-label") || kind,
