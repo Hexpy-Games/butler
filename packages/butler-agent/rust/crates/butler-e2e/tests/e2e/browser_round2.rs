@@ -55,6 +55,13 @@ async fn browser_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
             .any(|tool| tool["id"] == "native:browser_observe"),
         "a category guess that matches something else still shows the browser tools"
     );
+    assert!(
+        search["output"]["recovery_hint"]
+            .as_str()
+            .unwrap()
+            .contains("best match for this query is outside the requested filter: native:browser_"),
+        "the hint names the better match outside the guessed category: {search}"
+    );
     let zoom = output(&requests[5]);
     assert_eq!(zoom["output"]["schema"], "butler.browser-zoom.v1");
     assert!(zoom["output"]["mapping"].as_str().unwrap().contains("o1"));

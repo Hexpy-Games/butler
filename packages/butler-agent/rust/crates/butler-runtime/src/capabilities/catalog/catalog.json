@@ -2704,11 +2704,12 @@
                 "mcp",
                 "dispatch",
                 "control",
+                "browser",
                 "all",
                 "native",
                 "workspace"
               ],
-              "description": "Optional category filter. command=shell, file=filesystem; all/native/workspace mean no filter."
+              "description": "Optional category filter. command=shell, file=filesystem, browser=web page tabs and input (part of control), automation=scheduled prompts, search=web search and reading; all/native/workspace mean no filter. A query alone searches every category."
             },
             "provider": {
               "type": "string",
@@ -10015,11 +10016,12 @@
               "mcp",
               "dispatch",
               "control",
+              "browser",
               "all",
               "native",
               "workspace"
             ],
-            "description": "Optional category filter. command=shell, file=filesystem; all/native/workspace mean no filter."
+            "description": "Optional category filter. command=shell, file=filesystem, browser=web page tabs and input (part of control), automation=scheduled prompts, search=web search and reading; all/native/workspace mean no filter. A query alone searches every category."
           },
           "provider": {
             "type": "string",

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Gaps</title>
+<style>
+body { margin: 0; background: #fff; font: 14px sans-serif; }
+#shell { position: fixed; inset: 0; z-index: 1; }
+#board { position: absolute; left: 300px; top: 260px; width: 600px; height: 400px; border: 1px solid #999; cursor: crosshair; }
+#tools { position: fixed; top: 16px; left: 320px; z-index: 10; display: flex; gap: 8px; }
+#tools button, #side button, #form button, #form a { padding: 6px 10px; }
+#side { position: fixed; top: 80px; left: 16px; z-index: 10; display: grid; gap: 8px; }
+.picker { display: flex; gap: 4px; }
+#hud { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+#hud button { position: absolute; right: 24px; bottom: 24px; pointer-events: auto; }
+#nonmodal { position: fixed; left: 960px; top: 80px; margin: 0; z-index: 10; }
+#backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .4); display: none; }
+#backdrop button { position: absolute; left: 600px; top: 380px; }
+#form { position: fixed; left: 960px; top: 200px; z-index: 10; display: grid; gap: 6px; width: 260px; background: #f6f6f6; padding: 8px; }
+#list div { padding: 4px 6px; cursor: pointer; background: #fff; border-bottom: 1px solid #ddd; }
+</style>
+<div id="shell"><div id="board"><canvas id="canvas" width="600" height="400"></canvas></div></div>
+<div id="tools"><button>Rectangle</button><button>Line</button><button id="open-blocker">Open blocker</button><button id="open-modal">Open modal</button><button id="noop">Noop</button></div>
+<div id="side"><div class="picker" role="dialog" aria-modal="true"><button>Red</button><button>Blue</button></div></div>
+<div role="dialog" aria-modal="true" style="display:none"><button>Hidden dialog button</button></div>
+<dialog id="closed"><button>Closed dialog button</button></dialog>
+<dialog open id="nonmodal"><button>Non-modal close</button></dialog>
+<div id="hud"><button>HUD action</button></div>
+<div id="backdrop"><button id="close-blocker">Close blocker</button></div>
+<dialog id="modal"><button id="close-modal">Close modal</button></dialog>
+<div id="form"><input id="place" placeholder="Place"><div id="list"></div><a href="#" id="reset">Directions</a></div>
+<script>
+window.log = { strokes: 0 };
+const canvas = document.querySelector('#canvas'), context = canvas.getContext('2d');
+let start = null;
+canvas.addEventListener('mousedown', event => { start = [event.offsetX, event.offsetY]; });
+canvas.addEventListener('mouseup', event => {
+  if (!start) return;
+  context.strokeRect(start[0], start[1], event.offsetX - start[0], event.offsetY - start[1]); start = null; log.strokes++;
+  // Like drawing apps: a shape opens an inline properties widget that declares aria-modal.
+  if (!document.querySelector('#props')) document.querySelector('#side').insertAdjacentHTML('beforeend',
+    '<div id="props" class="picker" role="dialog" aria-modal="true"><button>Thin</button><button>Bold</button></div>');
+});
+document.querySelector('#open-blocker').onclick = () => { document.querySelector('#backdrop').style.display = 'block'; };
+document.querySelector('#close-blocker').onclick = () => { document.querySelector('#backdrop').style.display = 'none'; };
+document.querySelector('#open-modal').onclick = () => document.querySelector('#modal').showModal();
+document.querySelector('#close-modal').onclick = () => document.querySelector('#modal').close();
+const place = document.querySelector('#place'), list = document.querySelector('#list');
+place.addEventListener('input', () => {
+  list.replaceChildren(...['North', 'South', 'East'].map(word => {
+    const option = document.createElement('div'); option.textContent = `${place.value} ${word}`;
+    option.onclick = () => { place.value = option.textContent; list.replaceChildren(); };
+    return option;
+  }));
+});
+document.querySelector('#reset').onclick = event => { event.preventDefault(); place.value = ''; list.replaceChildren(); };
+</script></html>

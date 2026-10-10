@@ -5,6 +5,7 @@ import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
 import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
 import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from "./navigate.mjs";
+import { recordBatch } from "./progress.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
 const ACTIONS = [...POINTER, "press", "type", "wait", ...NAVIGATION];
@@ -171,6 +172,7 @@ export async function actBatch(tab, args, session) {
       }
     } catch { steps[index] = { status: "unknown", reason: "dispatch_interrupted" }; failed = true; }
   }
+  recordBatch(tab, args, steps);
   if (tab.dialog) { tab.pendingBatch=steps; return { ...pendingDialog(tab), steps }; }
   return batchResult(tab, steps, failed);
 }
