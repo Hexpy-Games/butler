@@ -119,6 +119,10 @@ impl AppApplication {
                 "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,schedule_type,run_at,start_at,access_mode,schedule_json,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?13,'enabled',?11,NULL,'never_run',NULL,0,0,?12,?12)",
                 params![id,title,prompt,kind,target,input.interval_seconds,schedule_type,input.run_at,input.start_at,settings::access_mode_name(&access),next,now,input.schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?],
             ).map_err(AppStorageError::sqlite)?;
+            // A schedule for another conversation runs on its creator's live site grants.
+            if let Some(source) = input.source_session_id.as_deref().map(str::trim).filter(|s| !s.is_empty() && *s != target) {
+                db.execute("INSERT OR IGNORE INTO app_automation_grant_sources(automation_id,source_session_id) VALUES(?1,?2)", params![id, source]).map_err(AppStorageError::sqlite)?;
+            }
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.created", &json!({"automation":automation.summary}), &now)?;
             Ok(AutomationMutationResult { automation: serde_json::to_value(automation).map_err(json_error)? })

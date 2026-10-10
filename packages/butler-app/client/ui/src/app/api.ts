@@ -459,6 +459,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
+  const signIns = signInBridgeCall(method, url.pathname, options.body);
+  if (signIns) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, signIns.action, signIns.input));
   const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
   if (method === "DELETE" && deviceMatch) {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokePairedDevice", {
@@ -1003,6 +1005,20 @@ const CODED_SETTINGS_METHODS = new Set([
   "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
+
+/** Settings → Security → Sign-ins and browser import: main adds the admin credential. */
+function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
+  const payload = () => parseBody(body);
+  if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
+  if (path === "/security/signins/site" && method === "POST") return { action: "updateSignInSite", input: payload() };
+  const entry = path.match(/^\/security\/signins\/([0-9a-f-]{36})$/u)?.[1];
+  if (entry && method === "PATCH") return { action: "updateSignIn", input: { id: entry, payload: payload() } };
+  if (entry && method === "DELETE") return { action: "deleteSignIn", input: { id: entry } };
+  if (path === "/security/browser-import/sources" && method === "GET") return { action: "listImportSources" };
+  if (path === "/security/browser-import/preview" && method === "POST") return { action: "previewImport", input: payload() };
+  if (path === "/security/browser-import/run" && method === "POST") return { action: "runImport", input: payload() };
+  return null;
+}
 
 async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];

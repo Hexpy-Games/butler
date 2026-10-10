@@ -12,6 +12,7 @@ import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
 import { SecurityPairingSection } from "./SecurityPairingSection";
 import { SecurityDevicesSection } from "./SecurityDevicesSection";
 import { SecurityRemoteAccessFields } from "./SecurityRemoteAccessFields";
+import { SecuritySignInsSections } from "./SecuritySignInsSection";
 import { useSecuritySettings } from "./useSecuritySettings";
 
 /**
@@ -70,6 +71,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
         </>
       )}
       {securityAuthoritySections({ models, savedKeys, grants })}
+      {view && <SecuritySignInsSections />}
       {view && (
         <SettingsSection id="security-advanced" kind="form" title={settingsCopy.security.advanced}>
           <DisclosureRow

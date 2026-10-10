@@ -231,7 +231,8 @@ export interface BrowserCopy {
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
-  signedIn: string; butlerTab: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
+  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
+  butlerTab: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
   stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string;
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
@@ -1113,7 +1114,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1717,6 +1718,54 @@ export interface AppCopy {
       deleteConfirmModels: (name: string, count: number) => string;
       deletedStatus: (name: string) => string;
       errors: { delete: string };
+    };
+    /** Settings → Security → Sign-ins. Passwords are never shown. */
+    signIns: {
+      empty: string;
+      /** Tooltip when only the owner-only file store exists. */
+      unavailable: string;
+      add: string;
+      site: string;
+      sitePlaceholder: string;
+      username: string;
+      password: string;
+      save: string;
+      cancel: string;
+      saved: string;
+      failed: string;
+      policyLabel: string;
+      policy: { always: string; ask: string; never: string };
+      noPassword: string;
+      conversations: (count: number) => string;
+      lastUsed: (when: string) => string;
+      notUsed: string;
+      allConversations: string;
+      deletePassword: string;
+      deleteConfirm: (site: string) => string;
+      signOut: string;
+      signedOut: string;
+      revoke: string;
+      revokeConfirm: (site: string) => string;
+      revoked: string;
+    };
+    /** Settings → Security → import from another browser (counts only). */
+    browserImport: {
+      source: string;
+      noSources: string;
+      bookmarks: string;
+      passwords: string;
+      htmlFile: string;
+      csvFile: string;
+      chooseFile: string;
+      preview: string;
+      bookmarkCount: (count: number, folders: number) => string;
+      passwordCount: (count: number, sites: number) => string;
+      run: string;
+      imported: (count: number, skipped: number) => string;
+      deleteCsv: string;
+      fullDiskAccess: string;
+      failed: string;
+      needsKeychain: string;
     };
   };
   titlebar: {

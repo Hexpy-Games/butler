@@ -1181,6 +1181,18 @@ const butlerApp = Object.freeze({
   listPairedDevices: () => requestSecurity("listPairedDevices"),
   revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),
   revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
+  // Sign-ins and browser import (host only). A password typed here goes to main,
+  // then to the Agent's keychain store; no route ever answers one.
+  listSignIns: () => requestSecurity("listSignIns"),
+  addSignIn: (payload) => requestSecurity("addSignIn", { payload }),
+  updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),
+  deleteSignIn: ({ id } = {}) => requestSecurity("deleteSignIn", { id }),
+  updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
+  listImportSources: () => requestSecurity("listImportSources"),
+  previewImport: (payload) => requestSecurity("previewImport", { payload }),
+  runImport: (payload) => requestSecurity("runImport", { payload }),
+  // The file path is chosen in a native dialog and stays in main and the Agent.
+  pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {
