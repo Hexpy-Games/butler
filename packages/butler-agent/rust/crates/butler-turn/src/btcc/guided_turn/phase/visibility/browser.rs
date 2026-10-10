@@ -18,9 +18,11 @@ pub(super) fn authorize(
         "browser_screenshot",
         "browser_close",
         "browser_wait_for_user",
+        "browser_sign_in",
     ] {
         if catalog.tool(name).is_some()
-            && (name != "browser_act" || policy.access_mode != AccessMode::ReadOnly)
+            && (!matches!(name, "browser_act" | "browser_sign_in")
+                || policy.access_mode != AccessMode::ReadOnly)
         {
             names.insert(name.into());
         }

@@ -9,12 +9,15 @@ import { observeTab } from "./observe.mjs";
 import { prepareBatch, actBatch } from "./act.mjs";
 import { screenshotTab } from "./capture.mjs";
 import { zoomTab } from "./zoom.mjs";
+import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed-in.mjs";
+import { fillSignIn } from "./signin-fill.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
   if (holder === "user") releaseHold(browser, tab);
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
+  if (holder === "agent") tab.signinStep = null;
   browser.publish();
 }
 export function wireAgentTab(browser, tab) {
@@ -34,7 +37,9 @@ export function wireAgentTab(browser, tab) {
   });
   installNavigationGuard(tab, popupUrl => {
     if (popupUrl) browserEvent(browser, tab, "popup_blocked", { url: popupUrl, reason: "popup_policy" });
-    tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop(); browser.close(tab.id);
+    tab.epoch++; tab.observation = null; tab.policyViolation = true; contents.stop();
+    // The user's own handed-over page is fenced back to them, never closed.
+    if (tab.agent) browser.close(tab.id); else controlTab(browser, tab, "user", true);
   });
 }
 export function connectDebugger(browser, tab) {
@@ -94,11 +99,13 @@ export async function executeBrowser(browser, frame) {
   if (frame.op === "use.started") { startUse(browser, frame); return; }
   if (frame.op === "use.ended") { endUse(browser, frame.args.id, frame.args.abort); return; }
   if (frame.op === "use.revoked") {
-    if (browser.tabs.get(frame.tab)?.owner === `conversation:${frame.session}`) browser.close(frame.tab);
+    const tab = browser.tabs.get(frame.tab);
+    if (tab?.owner === `conversation:${frame.session}`) { if (tab.agent) browser.close(frame.tab); else controlTab(browser, tab, "user", true); }
     return;
   }
+  if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -119,7 +126,7 @@ async function executeFrame(browser, frame) {
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
-  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner) };
+  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, ...tab }) => tab) };
   if (op === "owner.closed") {
     for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id);
     browser.events?.delete(owner); return { status: "ok" };
@@ -128,7 +135,8 @@ async function executeFrame(browser, frame) {
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
   if (op === "tab.selection") return browser.selection.result(tab, session);
-  if (tab.profile === "signed_in") return { status: "refused", reason: "signed_in_unavailable" };
+  if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
+    return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
   if (op === "tab.wait") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user"; browser.publish(); return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch }; }
   if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }
@@ -154,6 +162,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.screenshot") return screenshotTab(tab, args);
   if (op === "tab.zoom") return zoomTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
+  if (op === "signin.fill") return fillSignIn(browser, tab, args, controlTab);
   if (op === "tab.act") {
     if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
@@ -164,12 +173,13 @@ async function executeFrame(browser, frame) {
   return { status: "refused", reason: "unsupported_op" };
 }
 async function openAgent(browser, { session, args, id: callId }, source) {
-  if (args.profile === "signed_in" || args.signed_in) return { status: "refused", reason: "signed_in_unavailable" };
+  const signedIn = args.profile === "signed_in" || args.signed_in === true;
+  if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   const agentTabs = [...browser.tabs.values()].filter(tab => tab.agent);
   if (agentTabs.length >= 6 || agentTabs.filter(tab => tab.owner === `conversation:${session}`).length >= 3) return { status: "refused", reason: "tab_budget_exhausted" };
   const driving = new Set(agentTabs.filter(tab => tab.holder === "agent").map(tab => tab.owner));
   if (driving.size >= 2 && !driving.has(`conversation:${session}`)) return { status: "not_dispatched", reason: "browser_busy" };
-  const id = browser.create({ owner: `conversation:${session}`, url: args.url, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile }, false);
+  const id = browser.create({ owner: `conversation:${session}`, url: args.url, agent: true, policy: args.policy, partition: source?.partition, profile: source?.profile ?? (signedIn ? "signed_in" : undefined) }, false);
   const tab = browser.tabs.get(id);
   tab.onPointer=(step,target)=>browser.pointer.step(tab,step,target);
   const use = browser.uses.get(callId);

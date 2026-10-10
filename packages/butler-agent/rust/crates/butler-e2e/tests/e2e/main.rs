@@ -24,6 +24,7 @@ mod browser_naver;
 mod browser_outputs;
 mod browser_round2;
 mod browser_selection;
+mod browser_signin;
 mod browser_usage;
 mod cassette_lint;
 mod cli_launcher;
