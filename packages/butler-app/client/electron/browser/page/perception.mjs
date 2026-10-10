@@ -128,10 +128,19 @@ export function semantic(element, discoverPointer = true) {
   const secure = secureKeypad(element) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   name ||= globalThis.__butlerObservation?.accessibleNames?.get(element) ?? "";
-  if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}`; }
+  if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}${classHint(element)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
   return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
+}
+/** Words from an unlabeled control's class names (e.g. "car" in "car car-disabled"),
+ * a hint for what the icon is; state words and hash-like tokens are left out. */
+export function classHint(element) {
+  const state = /^(btn|button|icon|ico|img|link|item|wrap|inner|box|on|off|active|selected|disabled|enabled|hover|focus|current|default)$/u;
+  const words = [...element.classList].flatMap(token => token.toLowerCase().split(/[-_]/u))
+    .filter(word => /^[a-z]{3,16}$/u.test(word) && !state.test(word));
+  const unique = [...new Set(words)].slice(0, 3);
+  return unique.length ? ` (class ${unique.join(" ")})` : "";
 }
 export function hitAt(root, x, y) {
   let hit = root.elementFromPoint(x, y);

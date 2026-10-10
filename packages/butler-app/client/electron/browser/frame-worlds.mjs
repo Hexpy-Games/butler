@@ -55,8 +55,13 @@ export async function framePoint(frame,point) {
   return local;
 }
 
-/** Hit-test inside every renderer target and its embedding iframe. */
+/** Hit-test inside every renderer target and its embedding iframe. A frame whose
+ * owner has no layout box (a hidden iframe) contains no point. */
 export async function hitFrame(frame,local) {
+  try { return await hitFrameChecked(frame,local); }
+  catch (error) { if (/box model|frame_unavailable|No node/u.test(String(error?.message))) return null; throw error; }
+}
+async function hitFrameChecked(frame,local) {
   const point=await framePoint(frame,local);
   let current=frame, owner;
   while(current) {
