@@ -71,9 +71,25 @@ export function renderingState(element) {
   const box = rectangle(element);
   if (box.width < 4 || box.height < 4) return "tiny";
   const text = paintedTextParents(element);
-  if (text.length && text.every(parent => parseFloat(styleValue(parent, "fontSize")) < 6)) return "tiny";
-  if (text.length && text.every(parent => contrast(parent) < 1.5)) return "low_contrast";
+  // Hidden text over a painted icon (image replacement) is the icon's label, not an
+  // invisible control: judge such controls by their graphics.
+  if (text.length && text.every(parent => parseFloat(styleValue(parent, "fontSize")) < 6)) return paintedGraphic(element) ? null : "tiny";
+  if (text.length && text.every(parent => contrast(parent) < 1.5)) return paintedGraphic(element) ? null : "low_contrast";
   return null;
+}
+/** A background image, a pseudo-element with content, or an svg/img/canvas child
+ * paints the control even when its own text is hidden. */
+export function paintedGraphic(element) {
+  const pseudo = name => {
+    const style = getComputedStyle(element, name);
+    return style.content !== "none" && style.content !== "normal" && style.display !== "none";
+  };
+  if (styleValue(element, "backgroundImage") !== "none" || pseudo("::before") || pseudo("::after")) return true;
+  if (element.children.length > 12) return false;
+  return [...element.querySelectorAll("svg,img,canvas,picture,[style*='background']")].slice(0, 12).some(child => {
+    const box = rectangle(child);
+    return box.width >= 4 && box.height >= 4 && !paintState(child).invisible;
+  });
 }
 export function paintedTextParents(element) {
   const parents = new Set(), walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -136,11 +152,14 @@ export function semantic(element, discoverPointer = true) {
 /** Words from an unlabeled control's class names (e.g. "car" in "car car-disabled"),
  * a hint for what the icon is; state words and hash-like tokens are left out. */
 export function classHint(element) {
-  const state = /^(btn|button|icon|ico|img|link|item|wrap|inner|box|on|off|active|selected|disabled|enabled|hover|focus|current|default)$/u;
-  const words = [...element.classList].flatMap(token => token.toLowerCase().split(/[-_]/u))
-    .filter(word => /^[a-z]{3,16}$/u.test(word) && !state.test(word));
-  const unique = [...new Set(words)].slice(0, 3);
+  const unique = classWords(element);
   return unique.length ? ` (class ${unique.join(" ")})` : "";
+}
+export function classWords(element) {
+  const state = /^(btn|button|icon|ico|img|link|item|wrap|inner|box|on|off|active|selected|disabled|enabled|hover|focus|current|default)$/u;
+  const words = [...(element.classList ?? [])].flatMap(token => token.toLowerCase().split(/[-_]/u))
+    .filter(word => /^[a-z]{3,16}$/u.test(word) && !state.test(word));
+  return [...new Set(words)].slice(0, 3);
 }
 export function hitAt(root, x, y) {
   let hit = root.elementFromPoint(x, y);

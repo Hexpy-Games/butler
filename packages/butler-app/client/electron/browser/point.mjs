@@ -7,7 +7,11 @@ function pointHit({ x, y, expect }) {
   let element = hitAt(document, x, y);
   if (!element) return { reason: "point_mismatch" };
   element = actionableTarget(element);
-  const meaning = semantic(element), hit = { role: meaning.role, name: meaning.name, frame: location.hostname };
+  const box = rectangle(element), meaning = semantic(element);
+  // What the point reached, so a refusal can say so: role, name, class words and rect.
+  // A non-control is described by its tag and visible text.
+  const hit = { role: meaning.role ?? element.localName, name: meaning.name ?? [...visibleLabel(element)].slice(0, 60).join(""), frame: location.hostname, class_words: classWords(element),
+    rect: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } };
   if (meaning.secure) return { reason: "secure_field", hit };
   const hidden = rendering(element);
   if (hidden) return { reason: hidden === "invisible" ? "transparent_overlay" : "not_actionable", hit };
@@ -40,24 +44,42 @@ export async function resolvePoint(tab, obs, point, expect) {
     if (!await hitFrame(frame, local)) continue;
     if (frame.parent && new URL(frame.url).origin !== new URL(observation.main.url).origin) return { reason: "frame_not_granted" };
     const result = await evaluateWorld(frame, `(${pointHit.toString()})(${JSON.stringify({ ...local, expect })})`);
-    if (result.reason) return pointRefusal(observation, point, expect, result);
+    if (result.reason) return pointRefusal(observation, point, expect, result, origin);
     if (observation.nodes.find(node => node.ref === result.hit.ref)?.name_source === "accessibility") {
       const name = await accessibleName(tab, frame, result.hit.ref);
       if (name) result.hit.name = name;
-      if (!expect.toLowerCase().trim().split(/\s+/u).slice(1).every(word => result.hit.name.toLowerCase().includes(word))) return { reason: "point_mismatch", hit: result.hit };
+      if (!expect.toLowerCase().trim().split(/\s+/u).slice(1).every(word => result.hit.name.toLowerCase().includes(word))) return pointRefusal(observation, point, expect, { reason: "point_mismatch", hit: result.hit }, origin);
     }
     return { ...result, ...css, rect: { ...result.rect, x: result.rect.x + origin.x, y: result.rect.y + origin.y },
       payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame) };
   }
-  return { reason: "blocked_by" };
+  return pointRefusal(observation, point, expect, { reason: "blocked_by" }, { x: 0, y: 0 });
 }
 
-function pointRefusal(observation, point, expect, result) {
-  if (!["point_mismatch", "not_actionable"].includes(result.reason)) return result;
+/** The observed main-frame control closest to a screenshot point, with its center. */
+function nearestControl(observation, point) {
+  const image = observation.imageGeometry, sx = image.width / image.cssWidth, sy = image.height / image.cssHeight;
+  let best = null;
+  for (const node of observation.nodes) {
+    if (!node.actionable || !node.rect || observation.bindings.get(node.ref) !== observation.main) continue;
+    const left = node.rect.x * sx, top = node.rect.y * sy, right = left + node.rect.width * sx, bottom = top + node.rect.height * sy;
+    const distance = Math.hypot(Math.max(left - point[0], 0, point[0] - right), Math.max(top - point[1], 0, point[1] - bottom));
+    if (distance <= 80 && (!best || distance < best.distance)) best = { distance, node, center: [Math.round((left + right) / 2), Math.round((top + bottom) / 2)] };
+  }
+  return best && { ref: best.node.ref, role: best.node.role, name: best.node.name, point: best.center, distance: Math.round(best.distance), kind: "untrusted_web_page_data" };
+}
+
+function pointRefusal(observation, point, expect, result, origin) {
+  if (!["point_mismatch", "not_actionable", "transparent_overlay", "disabled", "blocked_by"].includes(result.reason)) return result;
+  const image = observation.imageGeometry, sx = image.width / image.cssWidth, sy = image.height / image.cssHeight;
+  const hit = result.hit && { ...result.hit, kind: "untrusted_web_page_data", rect: result.hit.rect && [Math.round((result.hit.rect.x + origin.x) * sx), Math.round((result.hit.rect.y + origin.y) * sy),
+    Math.round(result.hit.rect.width * sx), Math.round(result.hit.rect.height * sy)] };
+  const nearest = nearestControl(observation, point);
   const canvas = /^canvas(?:\s|$)/iu.test(expect);
-  return { ...result, rejected_point: point, image_geometry: observation.imageGeometry,
+  const generic = `The point reached ${hit ? "the element in hit (role, name, class_words, screenshot rect [x,y,width,height])" : "no element that accepts input"}; ${result.reason === "not_actionable" ? "it does not accept input. " : ""}${nearest ? "nearest is the closest observed control and its screenshot point: use nearest.ref if it is the intended control." : "no observed control is near; observe again or choose a visible ref."} No steps were dispatched.`;
+  return { ...result, ...(hit ? { hit } : {}), ...(nearest ? { nearest } : {}), rejected_point: point, image_geometry: observation.imageGeometry,
     untrusted_content: { kind: "web_page_data", capture_regions: observation.captureRegions },
     recovery: canvas && !result.hit?.ref
       ? "This screenshot point does not hit the observed canvas. NO steps in the batch were dispatched, including earlier steps. This is coordinate validation, not an input delivery failure. Keep every point inside one canvas: left<=x<right, top<=y<bottom in capture_regions.bounds (a region is [x,y,width,height], so its bottom is y+height). Then resend the whole batch."
-      : result.recovery };
+      : result.recovery ? `${result.recovery} ${generic}` : generic };
 }
