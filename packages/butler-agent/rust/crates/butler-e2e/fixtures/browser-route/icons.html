@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Icons</title>
+<style>
+body { margin: 0; font: 16px sans-serif; }
+.at { position: absolute; width: 40px; height: 40px; border: 1px solid #888; padding: 0; background-color: #eee; }
+/* Image replacement: the label is in the markup, the icon is a background image. */
+.ir { font-size: 0; text-indent: -9999px; overflow: hidden; background: #eee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Cpath d='M9 2h2v16H9zM2 9h16v2H2z' fill='%23333'/%3E%3C/svg%3E") center no-repeat; }
+.ghost { color: transparent; background: #eee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='7' fill='%23333'/%3E%3C/svg%3E") center no-repeat; }
+.close::before { content: "\00d7"; font-size: 28px; line-height: 40px; display: block; text-align: center; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+#veil { position: absolute; left: 0; top: 0; width: 600px; height: 400px; pointer-events: none; background: rgba(0, 0, 120, .04); }
+#note { position: absolute; left: 160px; top: 200px; margin: 0; width: 160px; }
+</style>
+<svg width="0" height="0" style="position:absolute"><symbol id="plus" viewBox="0 0 20 20"><path d="M9 2h2v16H9zM2 9h16v2H2z"/></symbol></svg>
+<button class="at ir" id="add" style="left:100px;top:100px">Add stop</button>
+<a href="#" class="at ghost" id="settings" style="left:200px;top:100px">Settings</a>
+<button class="at zoom-in" id="zoom" style="left:300px;top:100px"><svg width="20" height="20"><use href="#plus"/></svg></button>
+<a href="#" class="at close" id="close" style="left:400px;top:100px"><span class="sr">Close</span></a>
+<div role="button" class="at share" id="share" style="left:100px;top:200px"><span><span><svg width="20" height="20"><circle cx="10" cy="10" r="6"/></svg></span></span></div>
+<div id="veil"></div>
+<p id="note">Plain words, not a control.</p>
+<script>
+window.log = {};
+for (const id of ['add', 'settings', 'zoom', 'close', 'share']) {
+  document.getElementById(id).addEventListener('click', event => { event.preventDefault(); log[id] = (log[id] ?? 0) + 1; });
+}
+</script></html>
