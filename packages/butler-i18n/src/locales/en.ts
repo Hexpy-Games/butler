@@ -2021,7 +2021,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     signIns: {
       empty: "No saved sign-ins",
-      unavailable: "Requires the system keychain",
+      unavailable: "Needs the system password store",
       add: "Add",
       site: "Site",
       sitePlaceholder: "example.com",
@@ -2062,7 +2062,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       deleteCsv: "Delete the CSV file now",
       fullDiskAccess: "Needs Full Disk Access · choose an HTML file instead",
       failed: "Couldn't import",
-      needsKeychain: "Requires the system keychain",
+      needsKeychain: "Needs the system password store",
     },
   },
   titlebar: {

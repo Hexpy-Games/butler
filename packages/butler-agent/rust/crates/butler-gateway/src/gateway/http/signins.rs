@@ -122,7 +122,7 @@ async fn add(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError
         return Err(HttpError::public(
             409,
             "signin_unavailable",
-            "Sign-ins need the system keychain.",
+            "Sign-ins need the system password store.",
         ));
     }
     let source = if body["origin"].is_string() {

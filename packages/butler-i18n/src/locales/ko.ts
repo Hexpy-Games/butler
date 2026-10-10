@@ -2022,7 +2022,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     signIns: {
       empty: "저장한 로그인 없음",
-      unavailable: "시스템 키체인이 있어야 쓸 수 있어요",
+      unavailable: "시스템 암호 저장소가 있어야 쓸 수 있어요",
       add: "추가",
       site: "사이트",
       sitePlaceholder: "example.com",
@@ -2063,7 +2063,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       deleteCsv: "CSV 파일은 지금 삭제하세요",
       fullDiskAccess: "전체 디스크 접근 권한이 필요해요 · HTML 파일을 선택하세요",
       failed: "가져오지 못했어요",
-      needsKeychain: "시스템 키체인이 있어야 가져올 수 있어요",
+      needsKeychain: "시스템 암호 저장소가 있어야 가져올 수 있어요",
     },
   },
   titlebar: {
