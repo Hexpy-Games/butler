@@ -163,7 +163,7 @@ export function useLiveSessionEvents(): void {
       );
       refreshSessionViewSubscriptions(event);
       if (refreshesCanonicalParent) {
-        reconciliation.requestRefresh(event.type === "subsession.changed");
+        reconciliation.requestRefresh(event.type === "subsession.changed", event.type === "outputs.changed");
         if (eventSessionId(event) !== activeSessionId) {
           navigationReconciliation.requestRefresh();
         }

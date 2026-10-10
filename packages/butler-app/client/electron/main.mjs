@@ -2118,6 +2118,12 @@ async function createWindow() {
     void loadInitialNativeShellPreferences().catch(() => undefined);
     userBrowser ??= installUserBrowser(app, () => mainWindow);
     userBrowser.onState = () => browserHost.changed();
+    userBrowser.downloadRequest = async input => {
+      const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
+        headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
+      if (!response.ok) throw new Error("download_request_failed");
+      return response.json();
+    };
     browserHost.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {

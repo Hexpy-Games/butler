@@ -1377,6 +1377,11 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
 contextBridge.exposeInMainWorld("butlerBrowser", {
+  onDownload(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:download", listener);
+    return () => ipcRenderer.removeListener("butler-browser:download", listener);
+  },
   onElementDrag(handler) {
     const listener = (_event, value) => handler(value);
     ipcRenderer.on("butler-browser:element-drag", listener);

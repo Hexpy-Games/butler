@@ -1,14 +1,16 @@
 import { Menu, session } from "electron";
 import { webUrl } from "./policy.mjs";
 
-export function protectPartition(partition, nativeCover) {
+export function protectPartition(partition, browser) {
   const profile = session.fromPartition(partition);
   profile.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   profile.setPermissionCheckHandler(() => false);
   profile.setDevicePermissionHandler(() => false);
   profile.setDisplayMediaRequestHandler((_request, callback) => callback({}));
-  profile.on("will-download", (_event, item) => {
-    const release = nativeCover();
+  profile.on("will-download", (_event, item, contents) => {
+    const tab = [...browser.tabs.values()].find(tab => tab.view?.webContents === contents);
+    if (tab && tab.owner !== "mine") { browser.downloads.start(item, tab); return; }
+    const release = browser.nativeCover();
     item.setSaveDialogOptions({ defaultPath: item.getFilename() });
     item.on("updated", () => { if (item.getSavePath()) release(); });
     item.once("done", release);
