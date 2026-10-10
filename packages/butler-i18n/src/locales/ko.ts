@@ -494,6 +494,7 @@ export const koKrCopy: AppCopy = {
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
       signInStep: reason => ({mfa: "2단계 인증", passkey: "패스키", captcha: "보안 문자", secure_keypad: "보안 키패드", unknown_form: "로그인 양식 확인"} as Record<string, string>)[reason] ?? "로그인 양식 확인",
+      waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "데스크톱 앱에서 마무리해 주세요", openTab: "탭 열기", stop: "작업 중지" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
@@ -712,6 +713,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     modelWaiting: "모델 응답 대기",
     approvalWaiting: "허용 여부를 기다리고 있습니다.",
     signInWaiting: "로그인 확인을 기다리고 있습니다.",
+    tabWaiting: "탭에서 마치기를 기다리고 있습니다.",
     answerWaiting: "답변을 기다리고 있습니다.",
     workerCall: "작업 위임",
     work: "Work",
@@ -2022,7 +2024,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     signIns: {
       empty: "저장한 로그인 없음",
-      unavailable: "시스템 키체인이 있어야 쓸 수 있어요",
+      unavailable: "시스템 암호 저장소가 있어야 쓸 수 있어요",
       add: "추가",
       site: "사이트",
       sitePlaceholder: "example.com",
@@ -2063,7 +2065,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       deleteCsv: "CSV 파일은 지금 삭제하세요",
       fullDiskAccess: "전체 디스크 접근 권한이 필요해요 · HTML 파일을 선택하세요",
       failed: "가져오지 못했어요",
-      needsKeychain: "시스템 키체인이 있어야 가져올 수 있어요",
+      needsKeychain: "시스템 암호 저장소가 있어야 가져올 수 있어요",
     },
   },
   titlebar: {

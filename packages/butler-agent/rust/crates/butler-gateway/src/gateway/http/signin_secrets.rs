@@ -30,7 +30,7 @@ fn unavailable() -> HttpError {
     HttpError::public(
         409,
         "signin_unavailable",
-        "Sign-ins need the system keychain.",
+        "Sign-ins need the system password store.",
     )
 }
 

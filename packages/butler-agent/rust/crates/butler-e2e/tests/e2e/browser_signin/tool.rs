@@ -172,7 +172,7 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
     s.finish().await
 }
 
-async fn waiting_card(
+pub(super) async fn waiting_card(
     s: &butler_e2e::e2e::scenario::Scenario,
     id: &str,
 ) -> Result<Value, HarnessError> {

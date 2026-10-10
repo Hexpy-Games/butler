@@ -189,7 +189,7 @@ async fn passwords(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<
         return Err(HttpError::public(
             409,
             "signin_unavailable",
-            "Sign-ins need the system keychain.",
+            "Sign-ins need the system password store.",
         ));
     }
     let request = body.clone();

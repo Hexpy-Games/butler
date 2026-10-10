@@ -6,7 +6,7 @@ import { observationImage } from "./capture.mjs";
 import { noteProgress } from "./progress.mjs";
 import { frameClass, signedInPolicy, topSite } from "./signed-in.mjs";
 
-const TAKEOVER = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user.";
+const TAKEOVER = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user with reason secure_field (secure_keypad for a keypad).";
 /** Decision 25 on signed-in tabs: unknown frames stay closed, payment frames show labels only. */
 function signedInFrame(tab, frame, index, args) {
   const policy = signedInPolicy(tab);

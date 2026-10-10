@@ -39,11 +39,11 @@ export function CurrentTurnStatus({
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
-  // A sign-in hand-off waits on the user's step in the tab, not on an approval.
-  const signInWaiting = useButlerStore((store) =>
-    selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool === "browser_sign_in_wait");
+  // A browser hand-off waits on the user's step in the tab, not on an approval.
+  const handoffTool = useButlerStore((store) => selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool);
   const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
-    : signInWaiting ? appCopy.interfaceStatus.signInWaiting : appCopy.interfaceStatus.approvalWaiting;
+    : handoffTool === "browser_sign_in_wait" ? appCopy.interfaceStatus.signInWaiting
+      : handoffTool === "browser_wait_for_user" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
   const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
     (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??

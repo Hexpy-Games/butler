@@ -6105,13 +6105,23 @@
       "definition": {
         "type": "function",
         "name": "browser_wait_for_user",
-        "description": "Durably wait for the user to hand this tab back. After hand-back observe again; all previous refs are stale.",
+        "description": "Durably wait for the user to hand this tab back. Pass the reason from the refusal (sign_in, secure_field, secure_keypad, captcha; else other); the user's card says what to do. After hand-back observe again; all previous refs are stale.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "tab": {
               "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "sign_in",
+                "secure_field",
+                "secure_keypad",
+                "captcha",
+                "other"
+              ]
             }
           },
           "required": [
@@ -11041,13 +11051,23 @@
     "browser_wait_for_user": {
       "type": "function",
       "name": "browser_wait_for_user",
-      "description": "Durably wait for the user to hand this tab back. After hand-back observe again; all previous refs are stale.",
+      "description": "Durably wait for the user to hand this tab back. Pass the reason from the refusal (sign_in, secure_field, secure_keypad, captcha; else other); the user's card says what to do. After hand-back observe again; all previous refs are stale.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "tab": {
             "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "sign_in",
+              "secure_field",
+              "secure_keypad",
+              "captcha",
+              "other"
+            ]
           }
         },
         "required": [

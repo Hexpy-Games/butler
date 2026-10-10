@@ -19,6 +19,9 @@ pub struct ApprovalOperation {
     pub browser_steps: Vec<BrowserApprovalStep>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sign_in_step: Option<String>,
+    /// Why `browser_wait_for_user` hands the tab to the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,16 +46,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         return browser_operation(facts);
     }
     if facts.capability == "browser_wait_for_user" {
-        return ApprovalOperation {
-            tool: facts.capability.into(),
-            access: "read_only".into(),
-            targets: vec![facts.target.into()],
-            command: None,
-            allow_conversation: Some(false),
-            browser_mode: None,
-            browser_steps: Vec::new(),
-            sign_in_step: None,
-        };
+        return wait_operation(&facts);
     }
     let command = input["command"].as_str().map(str::to_owned);
     let paths = match facts.capability {
@@ -103,6 +97,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
+        wait_reason: None,
     }
 }
 
@@ -168,6 +163,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
         sign_in_step: None,
+        wait_reason: None,
     }
 }
 
@@ -206,6 +202,32 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         browser_mode: (access == "change").then(|| "signed_in".into()),
         sign_in_step: (tool == "browser_sign_in_wait")
             .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
+        wait_reason: None,
         browser_steps: Vec::new(),
     })
+}
+
+/// `browser_wait_for_user`: the site and why, never the tab id; the
+/// hand-back matches the request's stored target.
+fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
+    let input = facts.input;
+    let site = input.pointer("/wait/site").and_then(Value::as_str);
+    ApprovalOperation {
+        tool: facts.capability.into(),
+        access: "read_only".into(),
+        targets: site
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .into_iter()
+            .collect(),
+        command: None,
+        allow_conversation: Some(false),
+        browser_mode: None,
+        browser_steps: Vec::new(),
+        sign_in_step: None,
+        wait_reason: input
+            .pointer("/wait/reason")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    }
 }

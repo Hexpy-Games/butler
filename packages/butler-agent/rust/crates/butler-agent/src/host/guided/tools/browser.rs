@@ -402,17 +402,26 @@ async fn wait(
     client: client::Client,
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    // Resumed by the hand-back: the stored wait is the decision; the user
+    // may have navigated meanwhile, so the page is not re-read for it.
+    if authority::bound(owner, call, occurrence).await?.is_some() {
+        settle(owner, owner.binding.authority_request_ref.clone(), "ok").await?;
+        return encoded(&json!({"status":"ready","observe_required":true}));
+    }
     let status = client
         .call("tab.wait", &args["tab"], &args, invocation.cancellation)
         .await;
     if status["status"] != "user_control" && owner.binding.authority_request_ref.is_none() {
         return encoded(&status);
     }
+    // The card names the site and why; the tab id stays the request target.
+    let reason = args["reason"].as_str().filter(|r| WAIT_REASONS.contains(r));
+    let input = json!({"tab":args["tab"],"wait":{"site":status["site"],"reason":reason.unwrap_or("other")}});
     match authority::gate(
         owner,
         call,
         occurrence,
-        &args,
+        &input,
         args["tab"].as_str().unwrap_or(""),
     )
     .await?
@@ -430,6 +439,13 @@ async fn wait(
         }
     }
 }
+const WAIT_REASONS: &[&str] = &[
+    "sign_in",
+    "secure_field",
+    "secure_keypad",
+    "captcha",
+    "other",
+];
 async fn settle(
     owner: &GuidedTools,
     reference: Option<String>,
