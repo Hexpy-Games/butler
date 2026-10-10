@@ -47,7 +47,12 @@ async fn browser_batch_observes_after_keyboard_and_path_steps() -> Result<(), Ha
         "each observe:true batch is followed by exactly one observation"
     );
     let requests = s.provider()?.requests();
-    let after_first = act_output(&requests[4]);
+    let nested = act_output(&requests[2]);
+    assert_eq!(
+        nested["error"]["code"], "nested_tool_call",
+        "a wrapped bridge call names the direct call instead of a disabled tool"
+    );
+    let after_first = act_output(&requests[5]);
     assert_eq!(
         after_first["output"]["schema"],
         "butler.browser-observation.v1"
@@ -201,6 +206,10 @@ fn cassette() -> Result<Cassette, HarnessError> {
         (
             "tool_describe",
             json!({"ids":["native:browser_open","native:browser_observe","native:browser_act"]}),
+        ),
+        (
+            "tool_call",
+            json!({"id":"native:browser_open","arguments":{}}),
         ),
         ("browser_open", json!({"url":"https://example.com"})),
         ("browser_observe", json!({"tab":"fixture"})),
