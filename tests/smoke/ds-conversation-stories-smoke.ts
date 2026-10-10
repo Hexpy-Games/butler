@@ -165,8 +165,10 @@ async function checkInlineImage(page: Page, baseUrl: string): Promise<void> {
       const documentBox = img.parentElement?.parentElement?.getBoundingClientRect();
       return { complete: img.complete, naturalWidth: img.naturalWidth, width: img.getBoundingClientRect().width, documentWidth: documentBox?.width ?? 0 };
     });
-    assert(state.complete && state.naturalWidth > 0 && state.width > 0 && state.width <= state.documentWidth * 0.31,
-      `markdown inline image should load and stay bounded (${width}): ${JSON.stringify(state)}`);
+    // Natural size when it fits, the column width when it does not; never upscaled.
+    const expected = Math.min(state.naturalWidth, state.documentWidth);
+    assert(state.complete && state.naturalWidth > 0 && Math.abs(state.width - expected) <= 1,
+      `markdown inline image should load at min(natural, column) width (${width}): ${JSON.stringify(state)}`);
     if (width === "375") await story.screenshot({ path: join(screenshotDir, "inline-image-375.png"), animations: "disabled" });
   }
 }

@@ -26,6 +26,10 @@
   border-radius: var(--radius-control);
 }
 
+.image[data-openable="true"] {
+  cursor: zoom-in;
+}
+
 .frame {
   width: 100%;
   min-height: 520px;
