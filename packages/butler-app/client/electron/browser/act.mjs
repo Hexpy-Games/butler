@@ -27,7 +27,7 @@ export async function prepareBatch(tab, args) {
     if (Boolean(step.ref) === Boolean(step.point) || !["click", "fill", "select", "scroll", "hover", "drag"].includes(step.action) || step.point && !["click", "scroll", "hover", "drag"].includes(step.action)) return { status: "refused", reason: "invalid_step",
       recovery: "Each step must use exactly one of ref or point, never both. For screenshot canvas drags omit ref; use action drag, point, target_point and expect canvas. Supported actions: click, fill, select, scroll, hover, drag; fill/select require ref." };
     const target = await resolveAction(tab, args, step);
-    if (target.reason) return { status: "refused", ...target };
+    if (target.reason) return { status: "refused", step_index: steps.length, action: step.action, ...target };
     steps.push({ ...target, action: step.action, value_preview: typeof step.value === "string" ? [...step.value].slice(0, 40).join("") : undefined });
   }
   return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };

@@ -38,7 +38,7 @@ export async function resolvePoint(tab, obs, point, expect) {
     if (!await hitFrame(frame, local)) continue;
     if (frame.parent && new URL(frame.url).origin !== new URL(observation.main.url).origin) return { reason: "frame_not_granted" };
     const result = await evaluateWorld(frame, `(${pointHit.toString()})(${JSON.stringify({ ...local, expect })})`);
-    if (result.reason) return result;
+    if (result.reason) return pointRefusal(observation, point, expect, result);
     if (observation.nodes.find(node => node.ref === result.hit.ref)?.name_source === "accessibility") {
       const name = await accessibleName(tab, frame, result.hit.ref);
       if (name) result.hit.name = name;
@@ -48,4 +48,14 @@ export async function resolvePoint(tab, obs, point, expect) {
       payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame) };
   }
   return { reason: "blocked_by" };
+}
+
+function pointRefusal(observation, point, expect, result) {
+  if (!["point_mismatch", "not_actionable"].includes(result.reason)) return result;
+  const canvas = /^canvas(?:\s|$)/iu.test(expect);
+  return { ...result, rejected_point: point, image_geometry: observation.imageGeometry,
+    untrusted_content: { kind: "web_page_data", capture_regions: observation.captureRegions },
+    recovery: canvas && !result.hit?.ref
+      ? "This screenshot point does not hit the observed drawing canvas. No steps were dispatched; this is coordinate validation, not an input delivery failure. Observe fresh pixels, then keep both drag endpoints inside the canvas screenshot bounds/capture_regions. Tool and color selection are separate clicks."
+      : result.recovery };
 }

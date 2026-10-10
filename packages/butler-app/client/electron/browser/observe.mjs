@@ -34,7 +34,10 @@ async function graphicalPoints(observation) {
     const origin = origins.get(observation.bindings.get(node.ref)), r = node.rect;
     const x = Math.round((origin.x + r.x + r.width / 2) * geometry.width / geometry.cssWidth);
     const y = Math.round((origin.y + r.y + r.height / 2) * geometry.height / geometry.cssHeight);
-    return `[${node.ref}] center=[${x},${y}] expect=${JSON.stringify(node.role === "canvas" ? "canvas" : `${node.role} icon`)}`;
+    const left = Math.ceil((origin.x + r.x) * geometry.width / geometry.cssWidth), top = Math.ceil((origin.y + r.y) * geometry.height / geometry.cssHeight);
+    const right = Math.floor((origin.x + r.x + r.width) * geometry.width / geometry.cssWidth), bottom = Math.floor((origin.y + r.y + r.height) * geometry.height / geometry.cssHeight);
+    const bounds = node.role === "canvas" ? ` canvas screenshot bounds=[${left},${top},${right-left},${bottom-top}]` : "";
+    return `[${node.ref}] center=[${x},${y}] expect=${JSON.stringify(node.role === "canvas" ? "canvas" : `${node.role} icon`)}${bounds}`;
   }).join("\n")}` : "";
 }
 

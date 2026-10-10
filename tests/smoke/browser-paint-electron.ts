@@ -61,6 +61,7 @@ try {
     pick("Close colors"), observe, pick("Line"), observe, pickColor(96, "canvas"), observe, pickColor(96), observe,
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"drag",ref:"f0-e0",point:[200,200],target_point:[250,250],expect:"canvas"}]});},
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"click",point:[200,200],expect:"element icon"}]});},
+    r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"drag",point:[200,200],target_point:[200,600],expect:"canvas"}]});},
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:Array.from({length:11},()=>({action:"click",point:[200,200],expect:"canvas"}))});},
     draw([0, 1, 2, 3, 4, 5]), observe, pick("Ellipse"), observe, pickColor(128), observe, draw([6]), observe,
     r=>{const o=latestBrowser(r, "obs"), g=o.image_geometry as { width:number;height:number;cssWidth:number;cssHeight:number };
@@ -74,6 +75,9 @@ try {
   assert.ok(JSON.stringify(stub.results).includes("use hit.ref if it is the intended control"), "mismatch preserves a concrete recovery path");
   assert.ok(JSON.stringify(stub.results).includes("exactly one of ref or point"), "ambiguous targets are refused with repair instructions");
   assert.ok(JSON.stringify(stub.results).includes("not a toolbar/palette control"));
+  assert.ok(JSON.stringify(stub.results).includes("coordinate validation, not an input delivery failure"));
+  assert.ok(JSON.stringify(stub.results).includes("rejected_point"));
+  assert.ok(JSON.stringify(stub.results).includes("step_index"));
   assert.ok(JSON.stringify(stub.results).includes("existing text budget"), "budget refusal explains how to obtain complete fresh controls");
   const state=await app.call<{ tabs:Array<{ id:string;agent:boolean;inUse:boolean;busy:boolean }> }>("state");
   const tab=state.tabs.find(t=>t.agent);assert.ok(tab);assert.equal(tab.inUse, false);assert.equal(tab.busy, false);
