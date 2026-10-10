@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub(crate) const NAVIGATION: [&str; 3] = ["back", "forward", "reload"];
-const TAKEOVER: &str = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user.";
+const TAKEOVER: &str = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user with reason secure_field (secure_keypad for a keypad).";
 
 fn reason(value: &str) -> Value {
     json!({"reason":value})

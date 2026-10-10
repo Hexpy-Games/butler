@@ -47,7 +47,7 @@ try {
       const browserParam = width > 375 ? "&browser=1" : "";
       await page.goto(`${native?.url ?? `http://127.0.0.1:${server!.port}/`}?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&stage=${stage}&reason=${reason}${browserParam}`);
       if (stage === "after") {
-        const card = page.locator('[data-test-class="composer-signin-handoff"]');
+        const card = page.locator('[data-test-class="composer-browser-handoff"]');
         await card.getByText(`example.test · ${labels[lang][index]}`, { exact: true }).waitFor();
         await card.getByText(handoff[lang][width > 375 ? 0 : 1], { exact: true }).waitFor();
         const text = await page.locator("body").innerText();

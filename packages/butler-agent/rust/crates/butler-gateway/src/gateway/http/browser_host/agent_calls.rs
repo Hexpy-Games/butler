@@ -76,6 +76,9 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     }
     super::signed_in::recheck(&sent, &mut result);
     enforce_result_policy(&state, &session, &op, &mut result);
+    if op == "tab.wait" {
+        result["site"] = json!(super::hand_back::tab_site(&state, &sent["tab"]));
+    }
     if op == "signin.fill" {
         result = super::fill::finish(&state, &sent, &session, &result).await?;
     }

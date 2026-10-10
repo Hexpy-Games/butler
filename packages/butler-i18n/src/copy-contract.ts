@@ -133,6 +133,8 @@ export interface ApprovalRequestCopy {
   signInStep: (reason: string) => string;
   /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
   signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
+  /** The wait-for-user hand-off card title, by why the user must act. */
+  waitHandoff: (reason: string) => string;
   browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
@@ -645,6 +647,7 @@ export interface AppCopy {
     modelWaiting: string;
     approvalWaiting: string;
     signInWaiting: string;
+    tabWaiting: string;
     answerWaiting: string;
     workerCall: string;
     work: string;
