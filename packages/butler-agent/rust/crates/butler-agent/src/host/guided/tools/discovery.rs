@@ -50,14 +50,16 @@ async fn search_with_recovery(
     let mut value: Value = result
         .read()
         .map_err(|_| integrity("guided_bridge_catalog_json"))?;
-    let filtered_empty = value
-        .get("results")
-        .and_then(Value::as_array)
-        .is_some_and(Vec::is_empty)
-        && (args.contains_key("category") || args.contains_key("provider"));
-    if !filtered_empty {
+    // A category guess can hide the right tool even when something else
+    // matches; filtered searches always show the unfiltered matches too.
+    if !(args.contains_key("category") || args.contains_key("provider")) {
         return Ok(result);
     }
+    let found: Vec<Value> = value
+        .get("results")
+        .and_then(Value::as_array)
+        .map(|results| results.iter().map(|tool| tool["id"].clone()).collect())
+        .unwrap_or_default();
     let mut unfiltered = args.clone();
     unfiltered.remove("category");
     unfiltered.remove("provider");
@@ -68,12 +70,17 @@ async fn search_with_recovery(
     if let Some(record) = value.as_object_mut() {
         record.insert(
             "other_matches".into(),
-            alternatives
-                .get("results")
-                .cloned()
-                .unwrap_or_else(|| json!([])),
+            json!(
+                alternatives
+                    .get("results")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter(|tool| !found.contains(&tool["id"]))
+                    .collect::<Vec<_>>()
+            ),
         );
-        record.insert("recovery_hint".into(), json!("No tools match the requested filters. This does not mean the capability is unavailable. Inspect other_matches from this session's native surface, describe an enabled match, or retry without provider/category filters."));
+        record.insert("recovery_hint".into(), json!("Filters narrow the search; a capability outside the guessed category is still available. Inspect other_matches from this session's native surface and describe an enabled match before concluding a tool is missing."));
     }
     encoded(&value)
 }

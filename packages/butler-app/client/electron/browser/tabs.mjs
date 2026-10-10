@@ -3,6 +3,7 @@ import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
+import { shortId } from "./ids.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
@@ -176,7 +177,7 @@ class UserBrowser {
       if(agents.length>=6 || agents.filter(tab=>tab.owner===owner).length>=3) throw new Error("tab_budget_exhausted");
     }
     if (profile === "signed_out" && !this.conversationPartitions.has(owner)) this.conversationPartitions.set(owner, `butler-conv-${randomUUID()}`);
-    const tab = { id: randomUUID(), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
+    const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(owner)),
       agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, bounds: null, covered: false, capture: null };
     this.tabs.set(tab.id, tab);

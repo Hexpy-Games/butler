@@ -4,20 +4,22 @@ import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
 import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
+import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from "./navigate.mjs";
 
-const POINTER = ["click", "fill", "select", "scroll", "hover", "drag"];
-const ACTIONS = [...POINTER, "press", "type", "wait"];
+const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
+const ACTIONS = [...POINTER, "press", "type", "wait", ...NAVIGATION];
 const MODIFIERS = { Shift: "shift", Control: "control", Alt: "alt", Meta: "meta" };
-const STEP_HELP = "Pointer steps (click, fill, select, scroll, hover, drag) use exactly one of ref or point, never both; fill/select require ref. press, type and wait take no target: press sends one key or chord (\"Enter\", \"Escape\", \"Control+Z\") to the focused element, type inserts text at the focus, wait pauses 50–5000 ms. button and click_count apply to click; modifiers to click, drag and scroll; path only to a point drag. No steps were dispatched.";
+const STEP_HELP = "Pointer steps (click, fill, select, scroll, hover, drag) use exactly one of ref or point, never both; fill/select require ref. upload clicks the page's upload control (ref or point) with value = the workspace file. back, forward and reload take no target and end the batch. press, type and wait take no target: press sends one key or chord (\"Enter\", \"Escape\", \"Control+Z\") to the focused element, type inserts text at the focus, wait pauses 50–5000 ms. button and click_count apply to click; modifiers to click, drag and scroll; path only to a point drag. No steps were dispatched.";
 
 function stepError(step) {
   const action = step?.action;
   if (!ACTIONS.includes(action)) return "invalid_step";
   if (POINTER.includes(action)) {
-    if (Boolean(step.ref) === Boolean(step.point) || step.point && !["click", "scroll", "hover", "drag"].includes(action)) return "invalid_step";
+    if (Boolean(step.ref) === Boolean(step.point) || step.point && !["click", "scroll", "hover", "drag", "upload"].includes(action)) return "invalid_step";
   } else if (step.ref || step.point || step.target_ref || step.target_point) return "invalid_step";
   if (action === "press" && !parseChord(step.value)) return "invalid_key";
   if (action === "type" && (typeof step.value !== "string" || !step.value || step.value.length > 2000)) return "invalid_step";
+  if (action === "upload" && (typeof step.value !== "string" || !step.value.startsWith("/") && !/^[A-Za-z]:[\\/]/u.test(step.value))) return "invalid_step";
   if (action === "wait" && !(Number(step.value) >= 50 && Number(step.value) <= 5000)) return "invalid_step";
   if (step.button !== undefined && (action !== "click" || !["left", "right", "middle"].includes(step.button))) return "invalid_step";
   if (step.click_count !== undefined && (action !== "click" || ![1, 2, 3].includes(step.click_count))) return "invalid_step";
@@ -39,6 +41,7 @@ async function resolvePath(tab, obs, step) {
 
 async function resolveAction(tab, args, step, scroll = false, afterInput = false) {
   if (step.action === "wait") return { hit: { role: "wait", name: "", frame: "" }, payment: false, upload: false, submit: false, frame_payment: false, addons: [] };
+  if (NAVIGATION.includes(step.action)) return navigationTarget(tab, step.action);
   if (["press", "type"].includes(step.action)) {
     const key = step.action === "press" ? parseChord(step.value)?.keyCode : undefined;
     // An earlier step in this batch may move focus; the approval names that dependency.
@@ -55,6 +58,8 @@ async function resolveAction(tab, args, step, scroll = false, afterInput = false
     return { ...target, destination, path: path.path, payment: target.payment || destination.payment,
       frame_payment: target.frame_payment || destination.frame_payment, upload: target.upload || destination.upload, submit: target.submit || destination.submit };
   }
+  // Every upload is always confirmed, whatever control opens the chooser.
+  if (!target.reason && step.action === "upload") return { ...target, upload: true };
   return !target.reason && step.action === "drag" ? dragTarget(tab, args.observation, step, target, scroll) : target;
 }
 
@@ -63,18 +68,22 @@ const afterInputStep = (steps, index) => steps.slice(0, index).some(step => step
 
 export async function prepareBatch(tab, args) {
   if (!Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 10) return { status: "refused", reason: "invalid_steps",
-    recovery: "Send 1–10 steps per call. Split tool/color selection from strokes: select, observe fresh pixels, then draw a group of strokes. No steps were dispatched." };
-  if (args.steps.length > 1 && args.steps.some(step => step.action === "fill" && tab.observation?.nodes.some(node =>
+    recovery: "Send 1–10 steps per call. No steps were dispatched." };
+  // Suggestions appear after an autocomplete fill, so nothing may follow it in
+  // the batch; steps before it (e.g. clicking the field) are safe.
+  if (args.steps.slice(0, -1).some(step => step.action === "fill" && tab.observation?.nodes.some(node =>
     node.ref === step.ref && (node.role === "combobox" || ["list", "both"].includes(node.autocomplete))))) {
-    return { status: "refused", reason: "autocomplete_requires_observation", recovery: "Fill one field, observe its suggestions, select one, then observe before the next action." };
+    return { status: "refused", reason: "autocomplete_requires_observation", recovery: "An autocomplete fill must be the batch's last step: fill it (optionally after clicking it), observe its suggestions, select one, then continue. No steps were dispatched." };
   }
   const steps = [];
   for (const [index, step] of args.steps.entries()) {
     const error = stepError(step);
     if (error) return { status: "refused", reason: error, step_index: index, action: step?.action, recovery: STEP_HELP };
+    if (NAVIGATION.includes(step.action) && index !== args.steps.length - 1) return { status: "refused", reason: "navigation_not_last", step_index: index, action: step.action, recovery: "back, forward and reload replace the page: send them as the batch's last step. No steps were dispatched." };
     const target = await resolveAction(tab, args, step, false, afterInputStep(args.steps, index));
     if (target.reason) return { status: "refused", step_index: steps.length, action: step.action, ...target };
-    steps.push({ ...target, action: step.action, value_preview: typeof step.value === "string" ? [...step.value].slice(0, 40).join("") : undefined });
+    const value = step.action === "upload" ? step.value.split(/[\\/]/u).at(-1) : step.value;
+    steps.push({ ...target, action: step.action, value_preview: typeof value === "string" ? [...value].slice(0, 40).join("") : undefined });
   }
   return { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, steps };
 }
@@ -96,21 +105,24 @@ async function dispatch(tab, args, step, target) {
     if (step.action === "wait") { await new Promise(resolve => setTimeout(resolve, Number(step.value))); return { status: "completed", hit: target.hit }; }
     if (step.action === "press") { dispatchKey(tab, parseChord(step.value)); await new Promise(resolve => setTimeout(resolve, 0)); return { status: "completed", hit: target.hit }; }
     if (step.action === "type") { tab.expectedInputs = []; await contents.insertText(step.value); return { status: "completed", hit: target.hit }; }
+    if (NAVIGATION.includes(step.action)) { dispatchNavigation(tab, step.action); return { status: "completed", hit: target.hit }; }
     const modifiers = (step.modifiers ?? []).map(name => MODIFIERS[name]);
     if (step.action === "drag") return await dispatchDrag(tab, target, modifiers);
     const scale = tab.bounds?.scale ?? 1;
     const point = { x: Math.round(target.x * scale), y: Math.round(target.y * scale) };
     tab.expectedInputs = ["mouseMove", "mouseDown", "mouseUp", "mouseWheel"].map(type => ({ type, ...point }));
     if (step.action === "select") return await selectStep(tab, args.observation, step);
-    contents.sendInputEvent({ type: "mouseMove", ...point });
-    if (step.action === "scroll") contents.sendInputEvent({ type: "mouseWheel", ...point, ...wheelDelta(step.value), modifiers, canScroll: true });
-    if (["click", "fill"].includes(step.action)) {
+    const click = () => {
       const button = step.button ?? "left";
       for (let count = 1; count <= (step.click_count ?? 1); count++) {
         contents.sendInputEvent({ type: "mouseDown", ...point, button, clickCount: count, modifiers });
         contents.sendInputEvent({ type: "mouseUp", ...point, button, clickCount: count, modifiers });
       }
-    }
+    };
+    contents.sendInputEvent({ type: "mouseMove", ...point });
+    if (step.action === "upload") return { ...await dispatchUpload(tab, step.value, click), hit: target.hit };
+    if (step.action === "scroll") contents.sendInputEvent({ type: "mouseWheel", ...point, ...wheelDelta(step.value), modifiers, canScroll: true });
+    if (["click", "fill"].includes(step.action)) click();
     if (step.action === "fill") {
       await selectTextStep(tab, args.observation, step);
       await contents.insertText(String(step.value ?? ""));

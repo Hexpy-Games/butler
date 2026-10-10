@@ -1,5 +1,5 @@
 import { stepStill } from "./stills.mjs";
-import { randomUUID } from "node:crypto";
+import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
 
 export const DIALOG_TIMEOUT_MS = 120_000;
@@ -11,7 +11,7 @@ export function publicDialog(tab) {
 }
 export function beginDialog(browser, tab, value, callback) {
   if (tab.dialog) return;
-  const dialog = { id: randomUUID(), epoch: tab.epoch, type: value.type, message: String(value.message ?? ""),
+  const dialog = { id: shortId("d"), epoch: tab.epoch, type: value.type, message: String(value.message ?? ""),
     defaultPrompt: String(value.defaultPrompt ?? ""), origin: value.url ?? value.origin ?? tab.url, deadline: Date.now() + DIALOG_TIMEOUT_MS,
     sessionId: value.sessionId, beforeUnloadClose: value.beforeUnloadClose, pageBeforeUnload: value.pageBeforeUnload, navigation: value.navigation, callback };
   tab.dialog = dialog; tab.waiting = true;
@@ -46,7 +46,13 @@ export function wireDialogs(browser, tab) {
       browserEvent(browser, tab, "dialog_cancelled", { dialog: tab.dialog.id, dialog_type: tab.dialog.type, reason: "page_closed" });
       clearTimeout(tab.dialog.timer); tab.dialog = null; tab.waiting = false; browser.publish(); browser.sync(tab);
     }
-    if (method === "Page.fileChooserOpened") browserEvent(browser, tab, "file_chooser", { reason: "owner_required" });
+    if (method === "Page.fileChooserOpened") {
+      // An approved upload step answers its own chooser; any other chooser needs the owner.
+      const upload = tab.pendingUpload;
+      if (upload) void contents.debugger.sendCommand("DOM.setFileInputFiles", { files: [upload.path], backendNodeId: value.backendNodeId }, sessionId || undefined)
+        .then(() => upload.done({ status: "completed", files: 1 }), () => upload.done({ status: "unknown", reason: "upload_failed" }));
+      else browserEvent(browser, tab, "file_chooser", { reason: "owner_required" });
+    }
   });
   void contents.debugger.sendCommand("Page.setInterceptFileChooserDialog", { enabled: true }).catch(() => {});
 }

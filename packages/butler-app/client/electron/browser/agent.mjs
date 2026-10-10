@@ -8,6 +8,7 @@ import { guardUrl, installNavigationGuard } from "./guard.mjs";
 import { observeTab } from "./observe.mjs";
 import { prepareBatch, actBatch } from "./act.mjs";
 import { screenshotTab } from "./capture.mjs";
+import { zoomTab } from "./zoom.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
@@ -97,7 +98,7 @@ export async function executeBrowser(browser, frame) {
     return;
   }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -151,6 +152,7 @@ async function executeFrame(browser, frame) {
   if (!browser.uses.has(frame.id)) return { status: "unknown", reason: "cancelled" };
   if (op === "tab.observe") return observeTab(tab, args);
   if (op === "tab.screenshot") return screenshotTab(tab, args);
+  if (op === "tab.zoom") return zoomTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "tab.act") {
     if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};

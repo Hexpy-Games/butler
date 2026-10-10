@@ -15,7 +15,7 @@ function pointHit({ x, y, expect }) {
   for (const [ref, weak] of globalThis.__butlerObservation.refs) if (weak.deref() === element) { hit.ref = ref; break; }
   const words = expect.toLowerCase().trim().split(/\s+/u), role = words.shift();
   if (role !== meaning.role || meaning.role !== "canvas" && !words.every(word => meaning.name?.toLowerCase().includes(word))) return { reason: "point_mismatch", hit,
-    recovery: meaning.role === "canvas" ? "This point hit the drawing canvas, not a toolbar/palette control. Use a current element ref or its Graphical targets screenshot center for a control. Do not use the canvas ref/center for tool or color selection. No steps were dispatched." : hit.ref ? "The point hit a different semantic target. Inspect its role/name and the fresh screenshot; use hit.ref if it is the intended control. Otherwise choose a corrected point. Palette graphics may be element icons, not the drawing canvas." : "No observed control matched this point. Observe again, then choose a visible ref or a point within the intended target." };
+    recovery: meaning.role === "canvas" ? "This point hit a canvas, not the expected control. Use the control's current ref or its Graphical targets screenshot center. No steps were dispatched." : hit.ref ? "The point hit a different semantic target. Inspect its role/name and the fresh screenshot; use hit.ref if it is the intended control. Otherwise choose a corrected point." : "No observed control matched this point. Observe again, then choose a visible ref or a point within the intended target." };
   if (!meaning.clickable) return { reason: "not_actionable", hit };
   const rect = rectangle(element);
   return { x, y, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hit,
@@ -56,6 +56,6 @@ function pointRefusal(observation, point, expect, result) {
   return { ...result, rejected_point: point, image_geometry: observation.imageGeometry,
     untrusted_content: { kind: "web_page_data", capture_regions: observation.captureRegions },
     recovery: canvas && !result.hit?.ref
-      ? "This screenshot point does not hit the observed drawing canvas. NO steps in the entire batch were dispatched, including earlier tool/color clicks; the previous tool is still selected. This is coordinate validation, not an input delivery failure. Select the intended tool/color in a separate successful call, observe fresh pixels, then replan all strokes inside one canvas: left<=x<right, top<=y<bottom in capture_regions.bounds. A region is [x,y,width,height], so its bottom is y+height, not height. Do not repeat the rejected point or assume a refused batch selected a tool."
+      ? "This screenshot point does not hit the observed canvas. NO steps in the batch were dispatched, including earlier steps. This is coordinate validation, not an input delivery failure. Keep every point inside one canvas: left<=x<right, top<=y<bottom in capture_regions.bounds (a region is [x,y,width,height], so its bottom is y+height). Then resend the whole batch."
       : result.recovery };
 }

@@ -10,7 +10,11 @@ pub(in crate::host::guided::tools) async fn finish(
     result: &mut Value,
 ) -> Result<(), ToolExecutionError> {
     let Some(image) = result.get("image") else {
-        if matches!(name, "browser_observe" | "browser_screenshot") && result["status"] == "ok" {
+        if matches!(
+            name,
+            "browser_observe" | "browser_zoom" | "browser_screenshot"
+        ) && result["status"] == "ok"
+        {
             result["status"] = json!("refused");
             result["image_status"] = json!("image_unavailable");
         }
@@ -28,18 +32,26 @@ pub(in crate::host::guided::tools) async fn finish(
     let Some(bytes) = bytes else {
         result.as_object_mut().map(|value| value.remove("image"));
         result["image_status"] = json!("invalid_image");
-        if matches!(name, "browser_observe" | "browser_screenshot") {
+        if matches!(
+            name,
+            "browser_observe" | "browser_zoom" | "browser_screenshot"
+        ) {
             result["status"] = json!("refused");
         }
         return Ok(());
     };
     if matches!(
         name,
-        "browser_observe" | "browser_screenshot" | "output_check"
+        "browser_observe" | "browser_zoom" | "browser_screenshot" | "output_check"
     ) {
         let mut state = owner.state.lock();
-        let tab =
-            (name == "browser_observe").then(|| result["tab"].as_str().unwrap_or("").to_owned());
+        // Only the newest observation and close-up per tab stay in context.
+        let tab_id = result["tab"].as_str().unwrap_or("");
+        let tab = match name {
+            "browser_observe" => Some(tab_id.to_owned()),
+            "browser_zoom" => Some(format!("zoom:{tab_id}")),
+            _ => None,
+        };
         let retained = state.browser_image_bytes.values().sum::<usize>();
         let replaced = tab
             .as_ref()
@@ -50,7 +62,10 @@ pub(in crate::host::guided::tools) async fn finish(
         if state.visual_image_bytes + retained - replaced + bytes.len() > 2 * 1024 * 1024 {
             result.as_object_mut().map(|value| value.remove("image"));
             result["image_status"] = json!("image_budget_exhausted");
-            if matches!(name, "browser_observe" | "browser_screenshot") {
+            if matches!(
+                name,
+                "browser_observe" | "browser_zoom" | "browser_screenshot"
+            ) {
                 result["status"] = json!("refused");
             }
         } else if let Some(tab) = tab {
@@ -90,7 +105,7 @@ async fn save_capture(owner: &GuidedTools, result: &mut Value, bytes: Vec<u8>) {
         result["artifacts"] = json!([{"path":path,"kind":"image",
             "mime_type":"image/jpeg","size_bytes":size}]);
         result["next"] = json!(
-            "Review these actual pixels together with source_observation and untrusted_content.fields. If they satisfy the requested outcome, retain the pictured page state, display the exact artifact inline, and finish your task. Accept a verified canonical place name or visitor entrance instead of editing valid fields to force a literal query label. Do not reset, reload or navigate away merely to release the tab: ending the Turn releases it automatically. Change the page and recapture only if the requested outcome is actually incorrect or incomplete."
+            "Review these actual pixels together with source_observation and untrusted_content.fields. If they satisfy the requested outcome, retain the pictured page state, display the exact artifact inline, and finish your task. Do not edit correct values merely because the page words them differently from the request. Do not reset, reload or navigate away merely to release the tab: ending the Turn releases it automatically. Change the page and recapture only if the requested outcome is actually incorrect or incomplete."
         );
     } else {
         *result = json!({"status":"unknown","reason":"capture_write_failed"});

@@ -93,7 +93,7 @@ export async function screenshotTab(tab, args) {
     if (args.ref || !geometry || !Array.isArray(region) || region.length !== 4 || !region.every(Number.isFinite)) return { status: "refused", reason: "invalid_region" };
     const [x, y, width, height] = region;
     if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > geometry.width || y + height > geometry.height) return { status: "refused", reason: "invalid_region", image_geometry: geometry,
-      recovery: "Use observation image coordinates: x + width <= image_geometry.width and y + height <= image_geometry.height. Correct the region without omitting route information." };
+      recovery: "Use observation image coordinates: x + width <= image_geometry.width and y + height <= image_geometry.height. Correct the region without cutting off requested content." };
     if (x === 0 && y === 0 && width === geometry.width && height === geometry.height) return { status: "refused", reason: "region_is_viewport", image_geometry: geometry,
       untrusted_content: { capture_regions: observation.captureRegions },
       recovery: "This region does not crop anything. For a content crop, inspect the screenshot and choose a measured capture_regions candidate that retains all requested content. Only for an explicitly requested whole viewport, omit region." };
