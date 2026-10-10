@@ -9,6 +9,15 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let op = frame["op"].as_str().unwrap_or("").to_owned();
     let session = frame["session"].as_str().unwrap_or("").to_owned();
     validate(&state, &mut frame, &op, &session)?;
+    let count = if op == "tab.act" {
+        frame["args"]["steps"].as_array().map_or(0, Vec::len)
+    } else {
+        0
+    };
+    let mut frame = match super::backend::route(&state, frame, &op, &session, count).await? {
+        Ok(response) => return Ok(response),
+        Err(frame) => frame,
+    };
     if op == "tab.cancel" {
         super::usage::cancel(
             &state,
@@ -18,16 +27,8 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         return response(0, json!({"status":"ok"}));
     }
     if let Some(answer) = signed_in_call(&state, &mut frame, &op, &session).await? {
-        return response(
-            frame["args"]["steps"].as_array().map_or(0, Vec::len),
-            answer,
-        );
+        return response(count, answer);
     }
-    let count = if op == "tab.act" {
-        frame["args"]["steps"].as_array().map_or(0, Vec::len)
-    } else {
-        0
-    };
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
@@ -195,13 +196,13 @@ fn dispatch(
     }
     Ok(None)
 }
-fn response(count: usize, value: Value) -> Result<Response, HttpError> {
+pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError> {
     super::super::json(
         StatusCode::OK,
         butler_runtime::browser::batch_receipts(count, value),
     )
 }
-fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool {
+pub(super) fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool {
     butler_runtime::browser::public_url(raw).is_ok()
         || url::Url::parse(raw).is_ok_and(|u| {
             u.scheme() == "http"
@@ -214,7 +215,12 @@ fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool {
                     || state.previews.has_active(session))
         })
 }
-fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mut Value) {
+pub(super) fn enforce_result_policy(
+    state: &HttpState,
+    session: &str,
+    op: &str,
+    result: &mut Value,
+) {
     let denied = result
         .get("url")
         .and_then(Value::as_str)
@@ -233,11 +239,19 @@ fn enforce_result_policy(state: &HttpState, session: &str, op: &str, result: &mu
     if !denied {
         return;
     }
-    if let Some(tab) = result.get("tab").and_then(Value::as_str)
-        && let Ok(hub) = state.browser.0.lock()
-        && let Some(host) = &hub.host
-    {
-        let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.revoked","session":session,"tab":tab,"args":{}}));
+    if let Some(tab) = result.get("tab").and_then(Value::as_str) {
+        if let Some(headless) = state.headless.clone()
+            && headless.tab(tab).is_some()
+        {
+            let (session, tab) = (session.to_owned(), tab.to_owned());
+            drop(tokio::spawn(async move {
+                headless.revoke(&session, &tab).await;
+            }));
+        } else if let Ok(hub) = state.browser.0.lock()
+            && let Some(host) = &hub.host
+        {
+            let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.revoked","session":session,"tab":tab,"args":{}}));
+        }
     }
     *result = json!({"status":if op == "tab.act" {"unknown"} else {"not_dispatched"},"reason":"navigation_denied"});
 }
@@ -390,6 +404,9 @@ fn waits_on(request: &Value, tab: &Value) -> bool {
 pub(in crate::gateway::http) async fn close_owner(state: &HttpState, session: &str) {
     state.previews.close(session);
     state.previews.stop_closed(session).await;
+    if let Some(headless) = state.headless.clone() {
+        headless.close_owner(session).await;
+    }
     if let Ok(hub) = state.browser.0.lock()
         && let Some(host) = &hub.host
     {
@@ -401,14 +418,14 @@ pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Res
     let session = value["session"].as_str().unwrap_or("").to_owned();
     {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        hub.tabs
-            .check(&session, value["tab"].as_str().unwrap_or(""), "tab.observe")
-            .map_err(|_| error(403, "not_your_tab"))?;
+        if !super::backend::owns(&state, &hub, &session, value["tab"].as_str().unwrap_or("")) {
+            return Err(error(403, "not_your_tab"));
+        }
     }
     upload_still(&state, &session, &mut value).await?;
     super::super::json(StatusCode::OK, json!({"still_file":value["still_file"]}))
 }
-async fn store_still(
+pub(super) async fn store_still(
     state: &HttpState,
     session: &str,
     result: &mut Value,
@@ -444,11 +461,7 @@ async fn upload_still(
     };
     {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        if hub
-            .tabs
-            .check(session, result["tab"].as_str().unwrap_or(""), "tab.observe")
-            .is_err()
-        {
+        if !super::backend::owns(state, &hub, session, result["tab"].as_str().unwrap_or("")) {
             return Ok(());
         }
     }

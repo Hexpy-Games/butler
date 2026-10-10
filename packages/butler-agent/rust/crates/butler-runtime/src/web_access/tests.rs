@@ -29,18 +29,21 @@ fn access_with_prompt(
         search_endpoint,
         Some(prompt),
         Arc::new(DirectPageRoute),
+        &[search_endpoint],
     )
 }
 
 /// Serves every logical page URL from `origin` at `/<host><path>`, reporting
 /// the logical URL as where the page settled.
 fn access_with_pages(data_root: PathBuf, search_endpoint: &str, origin: &str) -> WebAccess {
+    let fixtures = [search_endpoint, origin];
     let origin = Url::parse(origin).expect("test page origin is a URL");
     configured(
         data_root,
         search_endpoint,
         None,
         Arc::new(LocalPages(origin)),
+        &fixtures,
     )
 }
 
@@ -323,6 +326,26 @@ async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
         .unwrap_err();
     assert_eq!(credential_url.code(), "invalid_arguments");
     assert!(!credential_url.message().contains("secret"));
+    // The egress guard: loopback outside the named fixtures, private, link-local
+    // and localhost names are refused before any request is made.
+    for denied in [
+        "http://127.0.0.1:1/",
+        "http://10.0.0.1/",
+        "http://169.254.169.254/latest",
+        "http://localhost./",
+        "http://intranet.localhost/",
+    ] {
+        let page = access
+            .session_for_turn(String::new())
+            .web_read(&json!({"url":denied}), &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(page["ok"], false, "{denied}");
+        assert!(
+            page.to_string().contains("page-read-denied"),
+            "{denied}: {page}"
+        );
+    }
     let _ = fs::remove_dir_all(root);
 }
 

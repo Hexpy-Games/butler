@@ -13,6 +13,8 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))
-        .env("XDG_STATE_HOME", home.join(".local/state"));
+        .env("XDG_STATE_HOME", home.join(".local/state"))
+        // Only headless-browser scenarios start (and download) Chromium.
+        .env("BUTLER_BROWSER_HEADLESS", "off");
     command
 }

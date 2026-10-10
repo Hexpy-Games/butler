@@ -1,4 +1,8 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
+pub mod egress;
+pub mod headless;
+pub use egress::{ContentOrigin, LoopbackFixtures, fetch_permitted, guarded_client};
+pub use headless::{Headless, HeadlessConfig, InstallSource};
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
 mod signed_in;
@@ -94,6 +98,10 @@ impl TabRegistry {
         ids.sort();
         ids
     }
+    /// Whether the App reported this tab, whoever owns it.
+    pub fn contains(&self, id: &str) -> bool {
+        self.tabs.contains_key(id)
+    }
     pub fn is_user(&self, id: &str) -> bool {
         self.tabs.get(id).is_some_and(|tab| tab["holder"] == "user")
     }
@@ -122,7 +130,11 @@ pub fn public_url(value: &str) -> Result<url::Url, &'static str> {
         return Err("navigation_denied");
     }
     match url.host().ok_or("navigation_denied")? {
-        url::Host::Domain(host) if host == "localhost" || host.ends_with(".localhost") => {
+        // A trailing dot names the same host ("localhost." is localhost).
+        url::Host::Domain(host)
+            if host.trim_end_matches('.') == "localhost"
+                || host.trim_end_matches('.').ends_with(".localhost") =>
+        {
             return Err("navigation_denied");
         }
         url::Host::Ipv4(ip) if private_ip(IpAddr::V4(ip)) => return Err("navigation_denied"),

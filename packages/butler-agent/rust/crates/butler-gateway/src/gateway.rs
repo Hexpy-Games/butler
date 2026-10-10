@@ -122,7 +122,7 @@ pub use security_settings::{
     ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
     MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
 };
-pub use server::{GatewayConfig, GatewayServer, serve_gateway};
+pub use server::{GatewayConfig, GatewayServer, HeadlessBrowserConfig, serve_gateway};
 mod error;
 pub use error::{ApplicationFuture, GatewayApplicationError};
 pub use session_references::resolve_session_references;
