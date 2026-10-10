@@ -157,8 +157,8 @@ export function visiblePoint(element) {
     if (hit === element || element.contains(hit)) return { x, y, blocker: null };
     if (hit) {
       let coverer = hit;
-      for (let parent = hit; parent; parent = parentElementOf(parent)) {
-
+      // Name the covering layer, never a container that also holds the target.
+      for (let parent = hit; parent && !parent.contains(element); parent = parentElementOf(parent)) {
         if (styleValue(parent, "position") === "fixed" && Number(styleValue(parent, "zIndex")) > 0) coverer = parent;
       }
       blocker ??= coverer === hit ? actionableTarget(hit) : coverer;
@@ -228,21 +228,21 @@ export function visibleLabel(element) {
   return text.join(" ").replace(/\s+/gu, " ").trim();
 }
 
-/** Respect native/ARIA modality and large fixed dialog surfaces used by older sites. */
+/** A layer that blocks everything outside it, as the browser enforces it: a native modal
+ * dialog, or an ARIA modal whose page made the rest inert. An aria-modal claim alone (often
+ * on inline widgets) or a large fixed layer blocks nothing by itself; real occlusion is what
+ * per-element hit testing in visiblePoint reports. */
 export function modalLayer() {
   const cache = globalThis.__butlerPerceptionCache;
   if (cache && "modal" in cache) return cache.modal;
-  const declared = [...document.querySelectorAll('dialog[open],[aria-modal="true"]')]
-    .filter(element => !paintState(element).invisible && paintState(element).opacity >= .1);
-  let modal = declared.at(-1) ?? null;
-  for (const [x, y] of [[innerWidth/2, innerHeight/2], [innerWidth/4, innerHeight/4], [innerWidth*3/4, innerHeight*3/4]]) {
-    for (let hit = hitAt(document, x, y); hit; hit = parentElementOf(hit)) {
-      if (styleValue(hit, "position") !== "fixed" || Number(styleValue(hit, "zIndex")) <= 0) continue;
-      const box = rectangle(hit);
-      if (box.width * box.height < innerWidth * innerHeight / 2 || paintState(hit).opacity < .1) continue;
-      if (!modal || Number(styleValue(hit, "zIndex")) > Number(styleValue(modal, "zIndex"))) modal = hit;
-    }
-  }
+  const shown = element => !paintState(element).invisible && paintState(element).opacity >= .1;
+  const native = [...document.querySelectorAll("dialog[open]")].filter(element => {
+    try { return element.matches(":modal") && shown(element); } catch { return false; }
+  });
+  const inert = [...document.querySelectorAll("[inert]")];
+  const declared = inert.length ? [...document.querySelectorAll('[aria-modal="true"]')]
+    .filter(element => shown(element) && !element.closest("[inert]") && inert.some(other => !other.contains(element))) : [];
+  const modal = native.at(-1) ?? declared.at(-1) ?? null;
   if (cache) cache.modal = modal;
   return modal;
 }

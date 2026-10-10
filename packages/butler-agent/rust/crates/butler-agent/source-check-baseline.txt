@@ -29,7 +29,6 @@ src/host/guided/project_tools/options.rs	command	144
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/tools.rs	GuidedTools::new	97
-src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
 src/host/guided/tools/dispatch.rs	execute	291

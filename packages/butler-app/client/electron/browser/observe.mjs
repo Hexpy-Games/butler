@@ -3,6 +3,7 @@ import { perceptionSource, resolveSource, selectSource } from "./page/snapshot.m
 import { accessibleName, nameObservation } from "./accessibility.mjs";
 import { contentRegions } from "./layout.mjs";
 import { observationImage } from "./capture.mjs";
+import { noteProgress } from "./progress.mjs";
 
 function editableFields(nodes) {
   return nodes.filter(node => !node.secure && node.value !== undefined)
@@ -105,6 +106,7 @@ async function observeOnce(tab, args) {
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
+  const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields });
   const image = args.include_image ? await observationImage(tab) : {};
   if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable" };
   const pointText = await graphicalPoints(tab.observation);
@@ -112,7 +114,7 @@ async function observeOnce(tab, args) {
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   if (Buffer.byteLength(observedText) > maxChars) return observationBudget(args, interactive, below);
   tab.observation.captureRegions = contentRegions(regions, tab.observation.imageGeometry);
-  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };
+  return { status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...(progress ? { progress } : {}), ...image };
 }
 export async function resolveStep(tab, obs, step, scroll = false) {
   if (!tab.observation || tab.observation.obs !== obs || tab.observation.epoch !== tab.epoch) return { reason: "stale_ref" };
