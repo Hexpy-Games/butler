@@ -9,6 +9,7 @@ mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
 mod security;
+mod signins;
 mod space;
 mod supporting;
 mod wallpapers;
@@ -77,6 +78,7 @@ pub(super) fn migrate(
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
+    signins::create(connection)?;
     message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
     library::recover(connection, butler_data)?;

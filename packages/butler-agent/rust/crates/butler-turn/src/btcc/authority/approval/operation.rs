@@ -31,6 +31,9 @@ pub struct BrowserApprovalStep {
 
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
     let input = facts.input;
+    if let Some(operation) = signed_in_operation(&facts) {
+        return operation;
+    }
     if facts.capability == "browser_act"
         || matches!(facts.capability, "browser_close" | "browser_observe")
             && facts.input.get("dialog").is_some()
@@ -113,6 +116,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         facts
             .target
             .strip_prefix("browser:signed_out:")
+            .or_else(|| facts.target.strip_prefix("browser:signed_in:"))
             .unwrap_or(facts.target)
             .to_owned(),
     ];
@@ -160,4 +164,44 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
     }
+}
+
+/// Signed-in site grants, sign-in fills and the sign-in hand-back wait: one
+/// exact card each, never a standing conversation permission.
+fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
+    let input = facts.input;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
+    let (tool, access, targets) = if let Some(grant) = input.get("grant") {
+        let frame = text(&grant["frame_site"]);
+        if frame.is_empty() {
+            ("browser_site_access", "change", vec![text(&grant["site"])])
+        } else {
+            let target = format!("{} · {frame}", text(&grant["site"]));
+            ("browser_frame_access", "change", vec![target])
+        }
+    } else if let Some(sign_in) = input.get("sign_in") {
+        let target = format!(
+            "{} · {}",
+            text(&sign_in["site"]),
+            text(&sign_in["username"])
+        );
+        ("browser_sign_in", "change", vec![target])
+    } else if facts.capability == "browser_sign_in" && input.get("wait").is_some() {
+        let targets = vec![
+            facts.target.to_owned(),
+            text(input.pointer("/wait/reason").unwrap_or(&Value::Null)),
+        ];
+        ("browser_sign_in_wait", "read_only", targets)
+    } else {
+        return None;
+    };
+    Some(ApprovalOperation {
+        tool: tool.into(),
+        access: access.into(),
+        targets,
+        command: None,
+        allow_conversation: Some(false),
+        browser_mode: (access == "change").then(|| "signed_in".into()),
+        browser_steps: Vec::new(),
+    })
 }

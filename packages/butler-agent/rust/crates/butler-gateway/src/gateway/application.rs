@@ -27,6 +27,8 @@ mod hooks;
 mod internal_continuation;
 mod library;
 pub use library::AppLibraryCommand;
+mod signins;
+pub use signins::{AppSignInCommand, AppSignInUpsert, GatewaySignIns};
 mod mcp_servers;
 mod memory_management;
 mod message_files;

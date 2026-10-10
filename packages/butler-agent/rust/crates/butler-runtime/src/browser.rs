@@ -1,6 +1,8 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
+mod signed_in;
+pub use signed_in::*;
 
 #[derive(Default)]
 pub struct TabRegistry {
@@ -53,14 +55,32 @@ impl TabRegistry {
             op,
             "tab.wait" | "tab.waiting" | "tab.cancel" | "tab.selection"
         ) {
-            if tab["profile"] == "signed_in" {
-                return Err("signed_in_unavailable");
-            }
+            // Signed-in tabs are fenced per call by the conversation's site grants.
             if tab["holder"] == "user" {
                 return Err("user_control");
             }
         }
         Ok(tab)
+    }
+    pub fn get(&self, id: &str) -> Option<&Value> {
+        self.tabs.get(id)
+    }
+    /// Signed-in tabs the user dragged from their own tabs into a conversation
+    /// in this snapshot, as `(session, url)`: the drag is that conversation's grant.
+    pub fn handovers(&self, next: &[Value]) -> Vec<(String, String)> {
+        next.iter()
+            .filter(|tab| tab["profile"] == "signed_in")
+            .filter_map(|tab| {
+                let previous = self.tabs.get(tab["id"].as_str()?)?;
+                let session = tab["owner"].as_str()?.strip_prefix("conversation:")?;
+                (previous["owner"] == "mine").then(|| {
+                    (
+                        session.to_owned(),
+                        tab["url"].as_str().unwrap_or("").to_owned(),
+                    )
+                })
+            })
+            .collect()
     }
     /// This conversation's tab ids, so a mistyped id can be corrected without guessing.
     pub fn owned(&self, session: &str) -> Vec<String> {
@@ -150,22 +170,24 @@ pub fn site_scope(value: &str) -> Result<String, &'static str> {
 
 /// Payment widgets remain per-act authority targets even on signed-out tabs.
 pub fn payment_host(host: &str) -> bool {
-    const HOSTS: &[&str] = &[
-        "stripe.com",
-        "stripe.network",
-        "paypal.com",
-        "paypalobjects.com",
-        "tosspayments.com",
-        "inicis.com",
-        "nicepay.co.kr",
-        "kakaopay.com",
-        "naverpay.com",
-        "pay.naver.com",
-    ];
-    HOSTS
+    PAYMENT_SITES
         .iter()
         .any(|site| host == *site || host.ends_with(&format!(".{site}")))
 }
+
+/// Payment widget hosts (release-maintained).
+pub const PAYMENT_SITES: &[&str] = &[
+    "stripe.com",
+    "stripe.network",
+    "paypal.com",
+    "paypalobjects.com",
+    "tosspayments.com",
+    "inicis.com",
+    "nicepay.co.kr",
+    "kakaopay.com",
+    "naverpay.com",
+    "pay.naver.com",
+];
 
 /// Native security keypad containers remain under human control.
 pub const SECURE_KEYPAD_MARKERS: &[&str] = &[
