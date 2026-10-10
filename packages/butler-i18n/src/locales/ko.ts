@@ -648,6 +648,8 @@ export const koKrCopy: AppCopy = {
     allFavorites: "즐겨찾기 모두 보기",
     working: "작업 중",
     attention: "확인 필요",
+    signInAttention: "로그인 확인 필요",
+    tabAttention: "직접 확인 필요",
     newGroup: "새 그룹",
     saveFailed: "목록 변경을 저장하지 못했습니다.",
     views: "대화 보기",

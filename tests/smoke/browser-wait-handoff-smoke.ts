@@ -159,6 +159,7 @@ try {
   await send(desk, ASK);
   await checkCard(desk, "ko", true);
   assert.ok(hostOps.includes("tab.wait"), `wait dispatched: ${hostOps}`);
+  await desk.getByText(`${ASK} · 직접 확인 필요`, { exact: true }).waitFor();
 
   // 2. Screenshots: desktop 1440/1100 with the browser, phone 375 without; light/dark; KO/EN.
   const phone = await newPage(375, false);

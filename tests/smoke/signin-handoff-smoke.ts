@@ -168,6 +168,7 @@ try {
   await send(desk, "쇼핑몰에 로그인해 줘");
   await checkCard(desk, "ko", true);
   await desk.getByText("로그인 확인을 기다리고 있습니다.", { exact: true }).waitFor();
+  await desk.getByText("쇼핑몰에 로그인해 줘 · 로그인 확인 필요", { exact: true }).waitFor();
   assert.ok(hostOps.includes("signin.fill"), `fill dispatched: ${hostOps}`);
 
   // 2. Screenshots: desktop 1440/1100 with the browser, phone 375 without; light/dark; KO/EN.
