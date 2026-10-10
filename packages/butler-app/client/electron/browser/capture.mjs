@@ -59,15 +59,26 @@ async function bitmapMarks(tab, image, marks) {
     width: mark.rect.width * sx, height: mark.rect.height * sy } }));
 }
 
+/** A JPEG within the 150 KB per-image carrier limit: busy pages step the quality
+ * down, then the size, instead of being refused (as output_check does). */
+export function fitJpeg(image, max = 1024) {
+  const size = image.getSize();
+  for (const side of [max, Math.round(max * 0.75)]) {
+    const scale = Math.min(1, side / Math.max(size.width, size.height));
+    const resized = scale === 1 ? image : image.resize({ width: Math.max(1, Math.round(size.width * scale)),
+      height: Math.max(1, Math.round(size.height * scale)) });
+    for (const quality of [75, 60, 45, 30]) {
+      const jpeg = resized.toJPEG(quality);
+      if (jpeg.length <= 150 * 1024) return { jpeg, width: resized.getSize().width, height: resized.getSize().height };
+    }
+  }
+  return null;
+}
 function encode(image, max = 1024) {
   if (image.isEmpty()) return { image_status: "image_unavailable" };
-  const size = image.getSize(), scale = Math.min(1, max / Math.max(size.width, size.height));
-  const resized = image.resize({ width: Math.max(1, Math.round(size.width * scale)),
-    height: Math.max(1, Math.round(size.height * scale)) });
-  const jpeg = resized.toJPEG(75);
-  if (jpeg.length > 150 * 1024) return { image_status: "image_budget_exhausted" };
-  return { image: { mime_type: "image/jpeg", data: jpeg.toString("base64"),
-    width: resized.getSize().width, height: resized.getSize().height } };
+  const fitted = fitJpeg(image, max);
+  if (!fitted) return { image_status: "image_too_large" };
+  return { image: { mime_type: "image/jpeg", data: fitted.jpeg.toString("base64"), width: fitted.width, height: fitted.height } };
 }
 
 export async function observationImage(tab) {

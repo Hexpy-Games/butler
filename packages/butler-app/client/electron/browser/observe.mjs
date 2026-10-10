@@ -107,8 +107,10 @@ async function observeOnce(tab, args) {
   if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
   const image = args.include_image ? await observationImage(tab) : {};
+  // This observation is already the newest one, so name it: earlier ids are stale.
+  if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
+    recovery: `The page was observed as ${obs}, which replaced every earlier observation id, but no screenshot could be made. Observe again; look "never" returns a text-only observation.` };
   const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields, thumb: tab.observation.thumb });
-  if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable" };
   const pointText = await graphicalPoints(tab.observation);
   const observedText = [full, pointText].filter(Boolean).join("\n");
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);

@@ -178,12 +178,11 @@ pub(super) async fn vision(
         })
 }
 
-pub(super) async fn restore_budget(
+/// Restores the per-turn output_check counters from the journal on resume.
+pub(super) fn restore_output_checks(
     owner: &GuidedTools,
     records: &[butler_turn::btcc::ToolJournalSignature],
-) -> Result<(), butler_turn::btcc::BtccError> {
-    let mut bytes = 0;
-    let mut browser_bytes = std::collections::HashMap::new();
+) {
     for record in records {
         let name = if record.tool_name == "tool_call" {
             record.arguments["id"]
@@ -194,44 +193,6 @@ pub(super) async fn restore_budget(
         } else {
             &record.tool_name
         };
-        if matches!(
-            name,
-            "browser_observe"
-                | "browser_act"
-                | "browser_screenshot"
-                | "output_check"
-                | "output_publish"
-        ) && let Some(saved) = owner
-            .journal
-            .find_for_turn(owner.binding.turn_id.clone(), record.call_id.clone())
-            .await?
-            && let Some(result) = saved.result
-        {
-            let value: Value = serde_json::from_str(result.as_str()).unwrap_or(Value::Null);
-            for data in [
-                value.pointer("/image/data"),
-                value.pointer("/check/image/data"),
-            ]
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            {
-                let size = (data.len() / 4 * 3)
-                    .saturating_sub(data.bytes().rev().take_while(|b| *b == b'=').count());
-                if matches!(name, "browser_observe" | "browser_act") {
-                    if let Some(tab) = value["tab"].as_str() {
-                        let key = if value["schema"] == "butler.browser-zoom.v1" {
-                            format!("zoom:{tab}")
-                        } else {
-                            tab.to_owned()
-                        };
-                        browser_bytes.insert(key, size);
-                    }
-                } else {
-                    bytes += size;
-                }
-            }
-        }
         if name == "output_check" || name == "output_publish" {
             let mut state = owner.state.lock();
             state.output_checks = state.output_checks.saturating_add(1);
@@ -242,8 +203,4 @@ pub(super) async fn restore_budget(
             }
         }
     }
-    let mut state = owner.state.lock();
-    state.visual_image_bytes = bytes;
-    state.browser_image_bytes = browser_bytes;
-    Ok(())
 }

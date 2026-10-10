@@ -19,6 +19,7 @@ mod browser_delegation;
 mod browser_journey;
 mod browser_jspaint;
 mod browser_library;
+mod browser_long;
 mod browser_naver;
 mod browser_outputs;
 mod browser_round2;

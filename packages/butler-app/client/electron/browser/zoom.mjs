@@ -1,6 +1,7 @@
 import { nativeImage } from "electron";
 import { secureBoxes } from "./capture-security.mjs";
 import { evaluateWorld } from "./frame-worlds.mjs";
+import { fitJpeg } from "./capture.mjs";
 
 const MAX_SIDE = 1024;
 
@@ -28,13 +29,11 @@ export async function zoomTab(tab, args) {
     clip: { ...css, x: css.x + page.x, y: css.y + page.y, scale }, fromSurface: true, captureBeyondViewport: false });
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
   // The surface may carry a device pixel ratio; bound the bitmap actually returned.
-  let image = nativeImage.createFromBuffer(Buffer.from(shot?.data ?? "", "base64"));
+  const image = nativeImage.createFromBuffer(Buffer.from(shot?.data ?? "", "base64"));
   if (image.isEmpty()) return { status: "refused", reason: "image_unavailable" };
-  const size = image.getSize(), fit = Math.min(1, MAX_SIDE / Math.max(size.width, size.height));
-  if (fit < 1) image = image.resize({ width: Math.round(size.width * fit), height: Math.round(size.height * fit) });
-  const jpeg = image.toJPEG(80);
-  if (jpeg.length > 150 * 1024) return { status: "refused", reason: "image_budget_exhausted" };
-  const { width: imageWidth, height: imageHeight } = image.getSize();
+  const fitted = fitJpeg(image, MAX_SIDE);
+  if (!fitted) return { status: "refused", reason: "image_too_large" };
+  const { jpeg, width: imageWidth, height: imageHeight } = fitted;
   return { status: "ok", tab: tab.id, url: tab.url, source_observation: observation.obs, region, scale,
     image: { mime_type: "image/jpeg", data: jpeg.toString("base64"), width: imageWidth, height: imageHeight },
     mapping: `This close-up is for looking only. A pixel (u,v) here is observation point [${x}+u*${width}/${imageWidth}, ${y}+v*${height}/${imageHeight}]; act with observation ${observation.obs} coordinates.`,
