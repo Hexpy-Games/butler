@@ -97,6 +97,16 @@
   background: var(--muted);
 }
 
+/* Butler can use the tab but holds nothing: the row keeps its place on the
+   card's surface, the text stays quiet. */
+.band[data-tone="idle"] .label {
+  color: var(--text-secondary);
+}
+
+.band[data-tone="idle"] .icon {
+  color: var(--text-tertiary);
+}
+
 @container page-band (width < 560px) {
   .hint {
     display: none;

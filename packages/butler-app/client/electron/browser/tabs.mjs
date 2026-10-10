@@ -18,6 +18,7 @@ import { protectPartition, wireTab } from "./tab-events.mjs";
 class UserBrowser {
   tabs = new Map();
   uses = new Map();
+  holds = new Map();
   profiles = new Set();
   conversationPartitions = new Map();
   stillPreferences = new Map();
@@ -314,7 +315,6 @@ class UserBrowser {
     if (owner === "mine" || /^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner ?? "")) this.areaOwner = owner;
   }
   hide() {
-    this.resetUse();
     this.keyboardFocused = false; this.areaVisible = false;
     for (const tab of this.tabs.values()) {
       if (tab.dialog) tab.waiting = true;

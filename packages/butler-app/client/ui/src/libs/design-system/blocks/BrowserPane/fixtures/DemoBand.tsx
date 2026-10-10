@@ -6,7 +6,7 @@ import { Key, Pick, Popup, ShieldQuestion, Square, X } from "../../../components
 import { PageBand } from "../../PageBand";
 import type { BrowserDemoCopy } from "./copy";
 
-export type DemoBandKind = "agent" | "user" | "waiting" | "need-you" | "pick" | "popup";
+export type DemoBandKind = "agent" | "user" | "waiting" | "need-you" | "pick" | "popup" | "idle" | "agent-popup";
 
 /** The page band for each state, as the App's band container composes it. */
 export function DemoBand({ kind, copy }: { kind: DemoBandKind; copy: BrowserDemoCopy }) {
@@ -36,6 +36,13 @@ export function DemoBand({ kind, copy }: { kind: DemoBandKind; copy: BrowserDemo
       return (
         <PageBand tone="pick" icon={<Pick size="md" />} label={copy.pickMode} detail={copy.dragToChat} hint={copy.pickHint}
           actions={<ButtonContainer size="xs"><Button size="xs" variant="outline" text={copy.finish} /></ButtonContainer>} />
+      );
+    case "idle":
+      return <PageBand tone="idle" icon={<ButlerThinkingMark size="sm" />} label={copy.butlerTab} />;
+    case "agent-popup":
+      return (
+        <PageBand tone="agent" icon={<ButlerThinkingMark size="sm" state="working" />} label={copy.agentUsing} detail={copy.popupBlocked}
+          actions={<ButtonContainer size="xs"><Button size="xs" variant="outline" text={copy.takeOver} />{stop}</ButtonContainer>} />
       );
     case "popup":
       return (

@@ -20,7 +20,13 @@ export async function browserVisionStub(root: string, handler: NonNullable<Nativ
     const call = { stream: body.stream === true, messages, body }; requests.push(call);
     const tool = Array.isArray(body.tools) && body.tools.length ? handler(call) : null;
     const id = `stub-${requests.length}`;
-    const text = reply ? await reply(call) : "Stub reply from the isolated smoke model.";
+    let text: string;
+    try { text = reply ? await reply(call) : "Stub reply from the isolated smoke model."; }
+    catch {
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "Injected stub provider failure", type: "server_error" } }));
+      return;
+    }
     const item = tool ? { type: "function_call", id: `fc-${id}`, call_id: `call-${id}`, name: tool.name, arguments: JSON.stringify(tool.arguments), status: "completed" }
       : { type: "message", id: `msg-${id}`, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
     const events = [

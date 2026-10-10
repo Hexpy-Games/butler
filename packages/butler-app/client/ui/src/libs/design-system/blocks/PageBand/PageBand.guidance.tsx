@@ -19,6 +19,12 @@ function AgentBand() {
 }
 // #endregion
 
+// #region recipe: Butler's tab, idle
+function IdleBand() {
+  return <PageBand tone="idle" icon={<ButlerThinkingMark size="sm" />} label="Butler's tab" />;
+}
+// #endregion
+
 // #region recipe: Waiting for approval
 function WaitingBand() {
   return (
@@ -37,6 +43,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Butler is browsing", description: "Agent tone: the riso inks, the working mark, two outline buttons.", render: () => <AgentBand /> },
+    { name: "Butler's tab, idle", description: "Holds the reserved row when Butler holds nothing: no tint, no actions, nothing moves.", render: () => <IdleBand /> },
     { name: "Waiting for approval", description: "Decisions happen on the approval card in the chat; the band points there.", render: () => <WaitingBand /> },
   ],
   doDont: [
@@ -46,7 +53,8 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
-    "Labels: Butler is browsing / 버틀러가 조작 중, You're in control / 직접 조작 중, Waiting for approval / 승인 대기.",
+    "Labels: Butler is browsing / 버틀러가 조작 중, You're in control / 직접 조작 중, Waiting for approval / 승인 대기, Butler's tab / 버틀러가 쓰는 탭 (idle).",
+    "One band per tab: a second state (a blocked pop-up) becomes the detail, its action joins the band's.",
     "Stop task (작업 중지) ends the task; Take over (직접 조작) pauses Butler on this tab only.",
   ],
   accessibility: ["The label and detail are a polite live region; the actions sit outside it.", "Icons are decorative; the label carries the meaning."],
