@@ -4,7 +4,6 @@ import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
 import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
-import { canvasStep, pixelsBefore, pixelChange } from "./verify.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag"];
 const ACTIONS = [...POINTER, "press", "type", "wait"];
@@ -130,8 +129,6 @@ const RECOVERY = {
 function batchResult(tab, steps, failed) {
   const completed = steps.filter(step => step.status === "completed").length;
   const result = { status: steps.some(step => step.status === "unknown") ? "unknown" : failed ? "interrupted" : "ok", tab: tab.id, steps, url: tab.url, epoch: tab.epoch, completed };
-  const unpainted = steps.flatMap((step, index) => step.changed_pixels === 0 ? [index] : []);
-  if (unpainted.length) result.unpainted = { steps: unpainted, note: "These canvas steps completed but changed no pixels around their points: the selected tool, color or a covering layer is wrong. Fix that before drawing more; never assume they painted." };
   const first = steps.findIndex(step => step.status !== "completed");
   if (first >= 0 && result.status === "interrupted") {
     result.next_step_index = first;
@@ -154,11 +151,9 @@ export async function actBatch(tab, args, session) {
       if (target.reason) { steps.push({ status: "not_dispatched", ...target }); failed = true; continue; }
       if (!sameTarget(prepared, target)) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
       if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : "control_changed" }); failed = true; continue; }
-      const before = canvasStep(step, target) ? await pixelsBefore(tab, target) : null;
       steps.push(await dispatch(tab, args, step, target));
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
       else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
-        if (before) steps.at(-1).changed_pixels = await pixelChange(tab, before);
         steps.at(-1).still = await stepStill(tab);
         if(tab.dialog) {steps[steps.length-1]={ status:"unknown", reason:"dialog_pending", hit:target.hit };failed=true;}
       }

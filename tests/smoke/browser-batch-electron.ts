@@ -56,7 +56,6 @@ try {
   assert.ok(results.includes("secure_field"), "keyboard input never reaches a focused secure field");
   assert.ok(results.includes("next_step_index"), "an interrupted batch names where to continue");
   assert.ok(results.includes("invalid_key"), "an unknown chord is refused before dispatch");
-  assert.ok(results.includes("changed no pixels"), "a canvas stroke that paints nothing is reported, not assumed");
   assert.ok((results.match(/butler\.browser-observation\.v1/gu) ?? []).length >= 5, "observe:true returns observations");
   const state = await app.call<{ tabs: Array<{ id: string; agent: boolean; inUse: boolean; busy: boolean }> }>("state");
   const tab = state.tabs.find(t => t.agent); assert.ok(tab); assert.equal(tab.inUse, false); assert.equal(tab.busy, false);
