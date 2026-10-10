@@ -27,21 +27,6 @@ impl PageRoute for DirectPageRoute {
 }
 
 impl WebAccess {
-    pub(in crate::web_access) async fn fetch_to_spool(
-        &self,
-        url: Url,
-        accept: &'static str,
-        cancellation: &CancellationToken,
-    ) -> Result<FetchedBody, WebAccessError> {
-        let request = self
-            .inner
-            .client
-            .get(url)
-            .header(reqwest::header::ACCEPT, accept)
-            .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.8,ko;q=0.6");
-        self.fetch_request_to_spool(request, cancellation).await
-    }
-
     pub(in crate::web_access) async fn fetch_page_to_spool(
         &self,
         logical_url: Url,
@@ -49,9 +34,20 @@ impl WebAccess {
         cancellation: &CancellationToken,
     ) -> Result<(FetchedBody, Url), WebAccessError> {
         let route = &self.inner.page_route;
-        let fetched = self
-            .fetch_to_spool(route.request_url(&logical_url), accept, cancellation)
-            .await?;
+        let request_url = route.request_url(&logical_url);
+        if !self.page_permitted(&request_url) {
+            return Err(WebAccessError::new(
+                WebAccessCode::WebAccessRequestFailed,
+                "Page address is not public.",
+            ));
+        }
+        let request = self
+            .inner
+            .page_client
+            .get(request_url)
+            .header(reqwest::header::ACCEPT, accept)
+            .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.8,ko;q=0.6");
+        let fetched = self.fetch_request_to_spool(request, cancellation).await?;
         let final_url = route
             .settled_url(logical_url, &fetched.final_url)
             .ok_or_else(|| {

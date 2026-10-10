@@ -25,6 +25,9 @@ pub struct WebAccess {
 struct WebAccessInner {
     data_root: PathBuf,
     client: Client,
+    /// `web_read` page fetches: behind the browser egress guard.
+    page_client: Client,
+    fixtures: crate::browser::LoopbackFixtures,
     search_endpoint: Url,
     configuration: Option<Arc<butler_models::models::ModelConfiguration>>,
     prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
@@ -63,7 +66,10 @@ impl WebAccess {
             Some(prompt),
             metrics,
             false,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -79,7 +85,10 @@ impl WebAccess {
             None,
             metrics,
             false,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -96,7 +105,10 @@ impl WebAccess {
             None,
             metrics,
             true,
-            Arc::new(DirectPageRoute),
+            (
+                Arc::new(DirectPageRoute),
+                crate::browser::LoopbackFixtures::none(),
+            ),
         )
     }
 
@@ -107,7 +119,7 @@ impl WebAccess {
         prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
         planning_disabled: bool,
-        page_route: Arc<dyn PageRoute>,
+        (page_route, fixtures): (Arc<dyn PageRoute>, crate::browser::LoopbackFixtures),
     ) -> Result<Self, WebAccessError> {
         let search_endpoint = Url::parse(endpoint).map_err(|source| {
             WebAccessError::new(
@@ -136,10 +148,26 @@ impl WebAccess {
                 )
                 .with_source(source)
             })?;
+        let page_client = crate::browser::guarded_client(
+            Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .user_agent("butler-native-web-access/0.1"),
+            fixtures.clone(),
+        )
+        .build()
+        .map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::WebAccessUnavailable,
+                "Public web client is unavailable.",
+            )
+            .with_source(source)
+        })?;
         Ok(Self {
             inner: Arc::new(WebAccessInner {
                 data_root,
                 client,
+                page_client,
+                fixtures,
                 search_endpoint,
                 configuration,
                 prompt,
@@ -209,6 +237,11 @@ impl WebAccess {
 
     pub(super) fn planning_disabled(&self) -> bool {
         self.inner.planning_disabled
+    }
+
+    /// Whether `web_read` may fetch `url` (the browser egress guard).
+    pub(super) fn page_permitted(&self, url: &Url) -> bool {
+        crate::browser::fetch_permitted(url, &self.inner.fixtures)
     }
 
     pub(super) fn client(&self) -> &Client {

@@ -69,6 +69,15 @@ impl WebAccess {
                 "page-reader-disabled",
             ));
         }
+        if !self.page_permitted(&url) {
+            return Ok(PageRead::unavailable(
+                requested_url,
+                requested_url,
+                "butler-lightweight",
+                "Only public pages are read: private, loopback and local addresses are refused.",
+                "page-read-denied",
+            ));
+        }
         let mut page =
             match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
                 Ok(page) => page,

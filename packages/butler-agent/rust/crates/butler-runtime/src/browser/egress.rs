@@ -94,6 +94,88 @@ pub async fn guard_url(raw: &str, content: Option<ContentOrigin>) -> bool {
     public_url(raw).is_ok() && public_addresses(host, port).await.is_ok()
 }
 
+/// The guard's one test exception: loopback addresses a test fixture serves,
+/// named exactly (IP literal and port). Production passes none, and nothing
+/// else on loopback, the LAN or link-local becomes reachable through it.
+#[derive(Clone, Debug, Default)]
+pub struct LoopbackFixtures(Vec<SocketAddr>);
+
+impl LoopbackFixtures {
+    /// Production: no exception.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// The loopback `host:port` of each fixture URL (others are ignored).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn serving(urls: &[&str]) -> Self {
+        Self(
+            urls.iter()
+                .filter_map(|raw| url::Url::parse(raw).ok())
+                .filter_map(|url| {
+                    let ip = url.host_str()?.parse::<IpAddr>().ok()?;
+                    let port = url.port_or_known_default()?;
+                    ip.is_loopback().then(|| SocketAddr::new(ip, port))
+                })
+                .collect(),
+        )
+    }
+
+    fn admits(&self, url: &url::Url) -> bool {
+        let Some(ip) = url
+            .host_str()
+            .and_then(|h| h.trim_matches(['[', ']']).parse::<IpAddr>().ok())
+        else {
+            return false;
+        };
+        url.port_or_known_default()
+            .is_some_and(|port| self.0.contains(&SocketAddr::new(ip, port)))
+    }
+}
+
+/// Whether a server-side fetch (`web_read`) may request `url`: the
+/// navigation guard's syntax (`http`/`https`, no credentials, no localhost
+/// names, no private address literal); names are checked when they resolve.
+pub fn fetch_permitted(url: &url::Url, fixtures: &LoopbackFixtures) -> bool {
+    fixtures.admits(url) || public_url(url.as_str()).is_ok()
+}
+
+/// Resolves only names whose every address is public, so the client
+/// connects to exactly the addresses this check saw (no DNS rebinding).
+struct PublicResolver;
+
+impl reqwest::dns::Resolve for PublicResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_owned();
+        Box::pin(async move {
+            let addresses = public_addresses(&host, 0).await?;
+            Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// A fetch client behind the egress guard: public resolution, and every
+/// redirect hop re-checked. Hops carrying credentials stop, as before.
+pub fn guarded_client(
+    builder: reqwest::ClientBuilder,
+    fixtures: LoopbackFixtures,
+) -> reqwest::ClientBuilder {
+    builder
+        .dns_resolver(std::sync::Arc::new(PublicResolver))
+        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+            if attempt.previous().len() >= 10 {
+                return attempt.error("too many redirects");
+            }
+            if !attempt.url().username().is_empty() || attempt.url().password().is_some() {
+                return attempt.stop();
+            }
+            if !fetch_permitted(attempt.url(), &fixtures) {
+                return attempt.error("navigation_denied");
+            }
+            attempt.follow()
+        }))
+}
+
 /// A loopback HTTP proxy that admits public destinations only.
 pub struct EgressProxy {
     address: SocketAddr,

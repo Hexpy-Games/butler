@@ -58,7 +58,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Imported sign-ins key on the browser policy's registrable site.
         "browser_import" => &["browser"],
         "operations" => &["context"],
-        "web_access" => &["context", "operations"],
+        "web_access" => &["browser", "context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
         "project_ledger" => &[],
         // butler-memory: Cognition coordinates writers, reads the profile and
