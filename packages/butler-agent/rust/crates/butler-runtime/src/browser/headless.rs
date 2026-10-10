@@ -13,10 +13,12 @@
 //! throwaway profile directory with it.
 mod act;
 mod browser;
+mod calls;
 mod capture;
 mod cdp;
 mod check;
 mod dialogs;
+pub mod downloads;
 mod events;
 mod frames;
 mod hidden;
@@ -74,6 +76,7 @@ pub struct Headless {
     in_flight: AtomicUsize,
     enabled: std::sync::atomic::AtomicBool,
     reports: check::SharedReports,
+    downloads: Arc<downloads::Downloads>,
 }
 
 fn refused(reason: &str) -> Value {
@@ -95,6 +98,7 @@ impl Headless {
             installer: Installer::new(config.install.clone()),
             enabled: std::sync::atomic::AtomicBool::new(config.enabled),
             reports: check::SharedReports::default(),
+            downloads: downloads::Downloads::new(&config.root),
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
@@ -109,6 +113,11 @@ impl Headless {
             }
         });
         headless
+    }
+
+    /// Where conversation downloads land and become outputs (the gateway).
+    pub fn set_download_port(&self, port: Arc<dyn downloads::DownloadPort>) {
+        self.downloads.set_port(port);
     }
 
     /// Whether new work may start here (Settings → Security).
@@ -282,9 +291,14 @@ impl Headless {
                 return Err(json!({"status":"unavailable","reason":reason}));
             }
         };
-        let browser = Browser::launch(&executable, &self.config.root, self.config.content)
-            .await
-            .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
+        let browser = Browser::launch(
+            &executable,
+            &self.config.root,
+            self.config.content,
+            self.downloads.clone(),
+        )
+        .await
+        .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
         *self.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(browser.clone());
         tokio::spawn(lifecycle::janitor(Arc::downgrade(self), browser.clone()));
         Ok(browser)
@@ -399,10 +413,10 @@ impl Headless {
             "tab.screenshot" => capture::screenshot(&page, args).await,
             "tab.zoom" => capture::zoom(&page, args).await,
             "tab.prepare" => act::prepare(&page, args).await,
-            "tab.act" => return act_call(&page, args, frame).await,
+            "tab.act" => return calls::act_call(&page, args, frame).await,
             _ => return refused("unsupported_op"),
         };
-        outcome.unwrap_or_else(|error| failed(&browser, &error))
+        outcome.unwrap_or_else(|error| calls::failed(&browser, &error))
     }
 
     /// Closes every tab of an archived or deleted conversation.
@@ -458,42 +472,4 @@ impl Headless {
             browser.stop().await;
         }
     }
-}
-
-fn failed(browser: &Browser, error: &str) -> Value {
-    if browser.alive.is_cancelled() || error == "browser_closed" {
-        return json!({"status":"unknown","reason":"browser_host_lost"});
-    }
-    eprintln!("WARN [browser] headless call failed: {error}");
-    json!({"status":"unknown","reason":"executor_error"})
-}
-
-async fn act_call(page: &page::Page, args: &Value, frame: &Value) -> Value {
-    let owner = page
-        .shared
-        .with_tab(&page.tab, |t| t.owner.clone())
-        .unwrap_or_default();
-    let busy = {
-        let state = page.shared.lock();
-        let owners: std::collections::HashSet<&String> = state
-            .tabs
-            .values()
-            .filter(|t| t.busy)
-            .map(|t| &t.owner)
-            .collect();
-        (owners.len() >= 2 && !owners.contains(&owner))
-            || state.tabs.get(&page.tab).is_some_and(|t| t.busy)
-    };
-    if busy {
-        return json!({"status":"not_dispatched","reason":"browser_busy"});
-    }
-    page.shared.with_tab(&page.tab, |t| {
-        t.busy = true;
-        t.cancelled = false;
-        t.call_id = frame["call_id"].as_str().map(str::to_owned);
-    });
-    let deadline = frame["deadline_ms"].as_u64().unwrap_or(30_000);
-    let result = act::act(page, args, deadline).await;
-    page.shared.with_tab(&page.tab, |t| t.busy = false);
-    result.unwrap_or_else(|_| json!({"status":"unknown","reason":"executor_error"}))
 }

@@ -93,13 +93,15 @@ pub(crate) async fn context(browser: &Browser, owner: &str) -> Result<String, St
         .as_str()
         .ok_or("browser_unavailable")?
         .to_owned();
+    // Conversation downloads land in a stage, then in the workspace (#745).
+    let behavior = if browser.downloads.available() {
+        json!({"behavior":"allowAndName","browserContextId":id,"downloadPath":browser.downloads.stage,"eventsEnabled":true})
+    } else {
+        json!({"behavior":"deny","browserContextId":id})
+    };
     let _ = browser
         .cdp
-        .send(
-            "Browser.setDownloadBehavior",
-            json!({"behavior":"deny","browserContextId":id}),
-            None,
-        )
+        .send("Browser.setDownloadBehavior", behavior, None)
         .await;
     browser
         .shared

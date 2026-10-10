@@ -32,6 +32,9 @@ fn apply(browser: &Arc<Browser>, event: Event) {
         "Target.detachedFromTarget" => detached(browser, &params),
         "Target.targetDestroyed" => destroyed(browser, params["targetId"].as_str().unwrap_or("")),
         "Target.targetInfoChanged" => info_changed(browser, &params["targetInfo"]),
+        "Browser.downloadWillBegin" | "Browser.downloadProgress" => {
+            browser.downloads.queue(&method, params);
+        }
         "Target.targetCrashed" => crashed(browser, params["targetId"].as_str().unwrap_or("")),
         "Fetch.requestPaused" => {
             if let Some(session) = session {

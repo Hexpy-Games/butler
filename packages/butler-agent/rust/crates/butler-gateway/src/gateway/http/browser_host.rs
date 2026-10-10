@@ -1,7 +1,7 @@
 //! Main-only, ephemeral output-check transport. No event log, files or polling.
 pub(super) mod agent_calls;
 mod backend;
-mod downloads;
+pub(super) mod downloads;
 mod fill;
 mod hand_back;
 mod previews;

@@ -141,6 +141,9 @@ pub(crate) fn browser_processes(marker: &str) -> Vec<String> {
         .expect("the scenario's browser process listing is readable")
 }
 
+/// The fixture's downloadable file.
+pub(crate) const REPORT: &str = "quarter,total\nQ3,42\n";
+
 /// An output with a script error, a wide block and a root-absolute image.
 const BROKEN: &str = r#"<!doctype html><meta charset="utf-8"><title>Broken fixture</title>
 <body style="margin:0"><h1>Broken page</h1><div style="width:1600px;height:40px;background:#c33"></div>
@@ -157,6 +160,7 @@ const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixt
 <p><a id="rebind" href="http://localhost.:{{GATEWAY_PORT}}/health">Loopback by name</a></p>
 <p><a id="private" href="http://10.0.0.1/">Private address</a></p>
 <p><a id="local" href="file:///etc/hosts">Local file</a></p>
+<p><a id="report" href="./report.csv" download="report.csv">Download report</a></p>
 </main>"#;
 const POPUP: &str = r#"<!doctype html><meta charset="utf-8"><title>Popup fixture</title><main><h1>Popup page</h1><button onclick="document.title='Pressed'">Popup button</button></main>"#;
 
@@ -190,6 +194,10 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
             (
                 "write_file",
                 json!({"path":"headless-site/popup.html","content":POPUP,"create_parents":true}),
+            ),
+            (
+                "write_file",
+                json!({"path":"headless-site/report.csv","content":REPORT,"create_parents":true}),
             ),
             (
                 "output_publish",

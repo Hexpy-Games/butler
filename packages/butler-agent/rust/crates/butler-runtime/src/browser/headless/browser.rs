@@ -22,6 +22,7 @@ pub(crate) struct Browser {
     pub alive: CancellationToken,
     /// Signals a change in the set of tabs (for expiry and the idle reap).
     pub changed: Notify,
+    pub downloads: Arc<super::downloads::Downloads>,
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
     profile: PathBuf,
@@ -91,6 +92,7 @@ impl Browser {
         executable: &Path,
         root: &Path,
         content: Option<ContentOrigin>,
+        downloads: Arc<super::downloads::Downloads>,
     ) -> Result<Arc<Self>, &'static str> {
         let (profile, log) = prepare(root).map_err(|_| "browser_unavailable")?;
         let proxy = EgressProxy::start(content)
@@ -109,10 +111,13 @@ impl Browser {
             proxy_url,
             alive: CancellationToken::new(),
             changed: Notify::new(),
+            downloads: downloads.clone(),
             process: Mutex::new(Some(process)),
             _proxy: proxy,
             profile,
         });
+        let _ = std::fs::create_dir_all(&downloads.stage);
+        downloads.attach(&browser);
         tokio::spawn(super::events::run(browser.clone(), events));
         if let Err(_error) = browser.attach_root().await {
             let reason = failure(&log);

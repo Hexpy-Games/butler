@@ -8,6 +8,7 @@
     reason = "test assertions"
 )]
 mod backend;
+mod downloads;
 mod guard;
 mod selfcheck;
 mod settings;
