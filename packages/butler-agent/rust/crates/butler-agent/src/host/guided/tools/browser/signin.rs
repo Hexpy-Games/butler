@@ -60,7 +60,16 @@ pub(super) async fn execute(
     };
     settle(owner, approval, status).await?;
     if result["status"] == "user_required" {
-        return hand_over(owner, invocation, call, occurrence, &client, &tab, &result).await;
+        return hand_over(
+            owner,
+            invocation,
+            call,
+            occurrence,
+            &client,
+            &tab,
+            (&result, site),
+        )
+        .await;
     }
     encoded(&page_data(result))
 }
@@ -73,10 +82,10 @@ async fn hand_over(
     occurrence: &str,
     client: &client::Client,
     tab: &Value,
-    result: &Value,
+    (result, site): (&Value, &str),
 ) -> Result<JsonDocument, ToolExecutionError> {
     let reason = result["reason"].as_str().unwrap_or("unknown_form");
-    let input = json!({"wait":{"reason":reason},"tab":tab,"always_confirm":true});
+    let input = json!({"wait":{"site":site,"reason":reason},"tab":tab,"always_confirm":true});
     let target = tab.as_str().unwrap_or("");
     match authority::gate(owner, call, occurrence, &input, target).await? {
         authority::Gate::Pending(mut pending) => {

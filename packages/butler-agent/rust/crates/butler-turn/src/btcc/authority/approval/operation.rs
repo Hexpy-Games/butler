@@ -17,6 +17,8 @@ pub struct ApprovalOperation {
     pub browser_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub browser_steps: Vec<BrowserApprovalStep>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sign_in_step: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +51,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             allow_conversation: Some(false),
             browser_mode: None,
             browser_steps: Vec::new(),
+            sign_in_step: None,
         };
     }
     let command = input["command"].as_str().map(str::to_owned);
@@ -99,6 +102,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         allow_conversation: None,
         browser_mode: None,
         browser_steps: Vec::new(),
+        sign_in_step: None,
     }
 }
 
@@ -163,6 +167,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         allow_conversation: Some(facts.input["always_confirm"] != true),
         browser_mode: facts.input["mode"].as_str().map(str::to_owned),
         browser_steps,
+        sign_in_step: None,
     }
 }
 
@@ -187,10 +192,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         );
         ("browser_sign_in", "change", vec![target])
     } else if facts.capability == "browser_sign_in" && input.get("wait").is_some() {
-        let targets = vec![
-            facts.target.to_owned(),
-            text(input.pointer("/wait/reason").unwrap_or(&Value::Null)),
-        ];
+        let targets = vec![text(input.pointer("/wait/site").unwrap_or(&Value::Null))];
         ("browser_sign_in_wait", "read_only", targets)
     } else {
         return None;
@@ -202,6 +204,8 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         command: None,
         allow_conversation: Some(false),
         browser_mode: (access == "change").then(|| "signed_in".into()),
+        sign_in_step: (tool == "browser_sign_in_wait")
+            .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
         browser_steps: Vec::new(),
     })
 }

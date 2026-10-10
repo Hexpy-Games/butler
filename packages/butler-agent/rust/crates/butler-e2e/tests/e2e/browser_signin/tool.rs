@@ -98,8 +98,9 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
     );
     assert_eq!(
         card["approval"]["operation"]["targets"],
-        json!(["t1", "mfa"])
+        json!(["fixture-shop.test"])
     );
+    assert_eq!(card["approval"]["operation"]["sign_in_step"], "mfa");
     // The wait holds while the user has the tab; their hand-back resumes it.
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(
