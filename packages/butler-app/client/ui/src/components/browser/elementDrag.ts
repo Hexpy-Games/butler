@@ -58,6 +58,9 @@ export function connectElementDrag() {
   }, true);
   window.butlerBrowser.onSelectionAction(async event => {
     try {
+      if (event.op === "failed") { notifyStatus(appCopy.browser.failed, { tone: "error" }); return; }
+      if (event.op === "copy-text") { notifyStatus(appCopy.conversation.messageActions.copied); return; }
+      if (event.op === "save-image") { notifyStatus(appCopy.browser.imagesSaved(event.elements.length)); return; }
       if (event.op === "scrap") { await scrapElements(event.elements); notifyStatus(appCopy.browser.scrapsSaved(event.elements.length)); }
       else await attachElements(useButlerStore.getState().activeChatId, event.elements);
     } catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); }
