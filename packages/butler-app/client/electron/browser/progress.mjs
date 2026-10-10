@@ -59,10 +59,11 @@ function outcomes(tab, previous, entry, batch, history) {
     const earlier = history.slice(0, -2).findLast(old => old.fingerprint === entry.fingerprint);
     notes.push(`The last batch cleared field ${lost.join(", ")}, which had a value before${earlier ? `; the page is back to its state at ${earlier.obs}` : ""}. Unless clearing was intended, this undid progress; use a different control instead.`);
   }
-  // A repeat matters only when its outcome is not progress: lost values or no change.
+  // A repeat matters only when its outcome is not progress: lost values, or no change
+  // the DOM can judge (keys and canvas input change pixels it cannot see).
   const unchanged = entry.fingerprint === previous.fingerprint;
   const key = signature(previous, batch), seen = tab.batchOutcomes ??= new Map();
-  if (key && (lost.length || unchanged) && seen.get(key)?.fingerprint === entry.fingerprint) {
+  if (key && (lost.length || unchanged && domOnly(previous, batch)) && seen.get(key)?.fingerprint === entry.fingerprint) {
     notes.push(`This batch already ran from the same page state and led to the same result (${seen.get(key).obs}). Repeating it will not change the outcome; change approach.`);
   }
   if (key) { seen.set(key, { obs: entry.obs, fingerprint: entry.fingerprint }); if (seen.size > 50) seen.delete(seen.keys().next().value); }

@@ -67,13 +67,15 @@ try {
     keep(act(r => [{ action: "click", ref: ref(r, "Noop") }])),
     keep(act(r => [{ action: "fill", ref: ref(r, "Place"), value: "Sta" }])),
     keep(act(r => [{ action: "click", ref: ref(r, "Directions") }])),
+    keep(act(() => [{ action: "press", value: "Control+Z" }])),
+    keep(act(() => [{ action: "press", value: "Control+Z" }])),
     keep(() => null),
   ]);
   await send("Use the page.");
   writeFileSync(join(evidence, "tool-results.json"), JSON.stringify(stub.results));
   writeFileSync(join(evidence, "observations.json"), JSON.stringify(seen, null, 1));
   assert.deepEqual(stub.results.filter(r => r && typeof r === "object" && "stubFailure" in r), []);
-  const [first, drawn, blocked, unblocked, modal, closed, typed, reset, noop, retyped, again] = seen;
+  const [first, drawn, blocked, unblocked, modal, closed, typed, reset, noop, retyped, again, , undoAgain] = seen;
   assert.ok(first && drawn && blocked && unblocked && modal && closed && typed && reset && noop && retyped && again, JSON.stringify(seen.map(s => s.obs)));
   for (const label of ["Rectangle", "Red", "HUD action", "Non-modal close"]) {
     assert.ok(line(first, label) && !line(first, label).includes("covered_by"), `${label} is not covered: ${line(first, label)}`);
@@ -96,5 +98,6 @@ try {
   assert.ok(again.notes.some(note => note.includes(`already ran from the same page state and led to the same result (${reset.obs})`)), JSON.stringify(again.notes));
   assert.ok(noop.notes.some(note => note.includes("changed no URL, field or control")), JSON.stringify(noop.notes));
   assert.deepEqual(first.notes, [], "a first observation has nothing to compare");
+  assert.deepEqual(undoAgain?.notes, [], "repeated keys may change pixels the DOM cannot see; no loop or no-change note");
   assert.ok(!drawn.notes.some(note => note.includes("changed no URL")), "canvas strokes are never judged by the DOM");
 } finally { writeFileSync(join(evidence, "tool-results-final.json"), JSON.stringify(stub.results)); await app.stop(); }
