@@ -56,6 +56,17 @@ async fn start(
     {
         return Err("invalid_port");
     }
+    // Subscribe before reading admission state so concurrent archive/delete
+    // still fences startup, including while the process becomes ready.
+    observe_lifetime(state).map_err(|_| "preview_unavailable")?;
+    if !state
+        .application
+        .preview_session_open(session.to_owned())
+        .await
+        .map_err(|_| "preview_unavailable")?
+    {
+        return Err("session_closed");
+    }
     let mut result = state.previews.start(session, agent, id, args).await?;
     let origin = format!("http://127.0.0.1:{}", super::super::content::port(state));
     let url = super::super::content::preview::url(state, &origin, id)
@@ -74,7 +85,11 @@ async fn start(
     Ok(result)
 }
 
-pub(in crate::gateway::http) fn observe_lifetime(state: &Arc<HttpState>) -> Result<(), HttpError> {
+fn observe_lifetime(state: &Arc<HttpState>) -> Result<(), HttpError> {
+    let mut started = state.preview_lifetime_started.lock();
+    if *started {
+        return Ok(());
+    }
     let weak = Arc::downgrade(state);
     let runtime = tokio::runtime::Handle::current();
     let events = state.application.subscribe_events(Arc::new(move |event| {
@@ -110,5 +125,6 @@ pub(in crate::gateway::http) fn observe_lifetime(state: &Arc<HttpState>) -> Resu
         state.previews.shutdown();
         drop(events);
     });
+    *started = true;
     Ok(())
 }

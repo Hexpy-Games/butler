@@ -17,7 +17,6 @@ use axum::{
     },
 };
 use futures_util::stream;
-pub(super) use previews::observe_lifetime;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},

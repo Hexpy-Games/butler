@@ -3,6 +3,11 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    /// Admission for a preview effect, including sessions closed before its
+    /// change-driven lifetime observer was installed.
+    fn preview_session_open(&self, _id: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn update_project(
         &self,
         id: String,

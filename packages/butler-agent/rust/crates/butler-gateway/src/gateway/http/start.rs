@@ -43,6 +43,7 @@ pub(in crate::gateway) fn serve(
             browser: super::browser_host::Hub::default(),
             headless,
             previews: butler_runtime::previews::Previews::default(),
+            preview_lifetime_started: parking_lot::Mutex::new(false),
             application,
             devices,
             security: security::GatewaySecurity::new(security::SecurityConfig {
@@ -68,8 +69,6 @@ pub(in crate::gateway) fn serve(
             output_data: config.output_data,
             signin_secrets: super::signin_secrets::SignInSecrets::new(),
         });
-        super::browser_host::observe_lifetime(&state)
-            .map_err(|_| std::io::Error::other("preview lifetime unavailable"))?;
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
