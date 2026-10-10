@@ -1,5 +1,8 @@
 // test-category: race
-/** The page never moves: hold on/off, waiting, takeover, pop-ups and pick mode keep the native view's bounds. */
+/**
+ * The page never moves on any tab: on Butler's tab hold on/off, waiting, takeover, pop-ups and pick mode; on your
+ * own tab and a signed-in tab pick mode and blocked/allowed pop-ups. Every tab keeps the native view's bounds.
+ */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,7 +31,9 @@ type Frame = { rect: Rect | null; tone: string | null; bands: number };
 let tab = "";
 const tabExpr = () => `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)})`;
 const card = (value: string) => waitBrowser(() => app.page.expression(`document.querySelector('[data-slot=page-card]')?.dataset.holder===${JSON.stringify(value)}`), `holder ${value}`);
-const tone = (value: string) => waitBrowser(() => app.page.expression(`(document.querySelector('[data-slot=page-band]')?.dataset.tone ?? 'idle')===${JSON.stringify(value)}`), `band ${value}`);
+// "none" is the empty reserved row; a baseline renderer had no idle band, so there idle reads as none.
+const tone = (value: string) => waitBrowser(() => app.page.expression(`(() => { const actual=document.querySelector('[data-slot=page-band]')?.dataset.tone ?? 'none';
+  return actual===${JSON.stringify(value)} || ${baseline && value === "idle"} && actual==='none'; })()`), `band ${value}`);
 const bandText = (text: string) => waitBrowser(() => app.page.expression(`[...document.querySelectorAll('[data-slot=page-band]')].some(n=>n.textContent.includes(${JSON.stringify(text)}))`), `band text ${text}`);
 const openPopup = (url: string) => app.main(`${tabExpr()}.view.webContents.executeJavaScript(${JSON.stringify(`setTimeout(()=>open(${JSON.stringify(url)}),0)`)})`);
 
@@ -58,7 +63,7 @@ async function startTrace() {
   })()`);
 }
 
-async function finishTrace(name: string) {
+async function finishTrace(name: string, expected: string[]) {
   const native = await app.main<Trace>("(()=>{clearInterval(globalThis.bandTimer);return globalThis.bandTrace})()");
   const frames = await app.page.expression<Frame[]>("(()=>{window.bandTracing=false;return window.bandFrames})()");
   const delta = (rects: Rect[]) => {
@@ -78,7 +83,7 @@ async function finishTrace(name: string) {
     assert.equal(summary.rendererFrames.max, 0, `${name}: page slot moved`);
     assert.equal(summary.detachedSamples, 0, `${name}: page detached`);
     assert.equal(summary.maxBands, 1, `${name}: one band per tab`);
-    for (const value of ["idle", "agent", "waiting", "user", "pick"]) assert.ok(tones.includes(value), `${name}: ${value} band shown`);
+    for (const value of expected) assert.ok(tones.includes(value), `${name}: ${value} band shown`);
     assert.ok(summary.nativeSamples.count > 100 && summary.rendererFrames.count > 100, `${name}: enough frames`);
   }
   return summary;
@@ -86,7 +91,8 @@ async function finishTrace(name: string) {
 
 async function closePopups() {
   await app.main(`(() => { const b=globalThis.browserAgentSubject;
-    for (const t of [...b.tabs.values()]) if (t.opener===${JSON.stringify(tab)}) { t.allowClose=true; if (t.popupWindow && !t.popupWindow.isDestroyed()) t.popupWindow.destroy(); else b.close(t.id); }
+    // Close as the pop-up window's own close button does (PopupWindowChrome "close" → win.close()).
+    for (const t of [...b.tabs.values()]) if (t.opener===${JSON.stringify(tab)}) { if (t.popupWindow && !t.popupWindow.isDestroyed()) t.popupWindow.close(); else b.close(t.id); }
   })()`);
   await waitBrowser(async () => !(await app.call<{ tabs: Array<{ id: string; popup?: unknown }> }>("state")).tabs.find(item => item.id === tab)?.popup, "pop-up closed");
 }
@@ -140,17 +146,53 @@ async function sequence(language: "ko" | "en", theme: "light" | "dark", width: n
   await app.click(copy.finish); await card("user"); await tone("user");
   await app.click(copy.giveBack); await card("none"); await tone("idle");
   await new Promise(done => setTimeout(done, 300));
-  return finishTrace(prefix);
+  return finishTrace(prefix, ["idle", "agent", "waiting", "user", "pick"]);
+}
+
+/** Your tab or a signed-in tab: the row starts empty; pick mode and pop-ups come and go in it. */
+async function plainSequence(kind: "mine" | "signed-in", id: string, language: "ko" | "en", theme: "light" | "dark", width: number) {
+  const copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US").browser;
+  const prefix = `${language}-${theme}-${width}-${kind}`;
+  tab = id;
+  await app.call("activate", { id: tab }); await nativeAligned(app);
+  await startTrace();
+  await tone("none");
+  assert.equal(await app.page.expression("document.querySelector('[data-slot=page-card-band]')?.childElementCount ?? -1"), baseline ? -1 : 0, "empty reserved row");
+  await app.shot(`${prefix}-1-empty`);
+  await app.call("pick", { id: tab, value: true }); await tone("pick"); await app.shot(`${prefix}-2-pick`);
+  await app.click(copy.finish); await tone("none");
+  await openPopup(`${app.url}#${kind}`);
+  await waitBrowser(() => app.main(`${tabExpr()}.blockedPopup?.reason==='no_gesture'`), `${kind} pop-up blocked`);
+  await tone("info"); await bandText(copy.popupBlocked); await app.shot(`${prefix}-3-popup-blocked`);
+  await app.click(copy.allow);
+  await waitBrowser(async () => Boolean((await app.call<{ tabs: Array<{ id: string; popup?: unknown }> }>("state")).tabs.find(item => item.id === tab)?.popup), `${kind} pop-up opened from the band`);
+  await tone("info"); await bandText(copy.showPopup);
+  // The pop-up window sits over the App here, so record the renderer (the band) rather than the composited window.
+  writeFileSync(join(evidence!, `${prefix}-4-popup-open-renderer.png`), await app.page.screenshot());
+  await closePopups(); await tone("none");
+  await new Promise(done => setTimeout(done, 300));
+  return finishTrace(prefix, ["none", "pick", "info"]);
 }
 
 const summaries: unknown[] = [];
 try {
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: app.url })]);
   await app.send("Open the browser fixture"); await app.delivered();
-  tab = (await app.call<{ tabs: Array<{ id: string; agent: boolean }> }>("state")).tabs.find(item => item.agent)!.id;
+  const agentTab = (await app.call<{ tabs: Array<{ id: string; agent: boolean }> }>("state")).tabs.find(item => item.agent)!.id;
+  // Your own tab and a conversation's signed-in tab, both on the fixture page.
+  const mine = await app.call<string>("create", { url: app.url });
+  const signedIn = await app.call<string>("create", { owner: "conversation:general", profile: "signed_in", url: app.url });
+  await waitBrowser(async () => (await app.call<{ tabs: Array<{ id: string; status: string; url: string }> }>("state")).tabs
+    .filter(item => item.id === mine || item.id === signedIn).every(item => item.status === "idle" && item.url), "your tab and the signed-in tab loaded");
+  const profiles = (await app.call<{ tabs: Array<{ id: string; owner: string; profile: string }> }>("state")).tabs;
+  assert.equal(profiles.find(item => item.id === mine)?.owner, "mine");
+  assert.equal(profiles.find(item => item.id === signedIn)?.profile, "signed_in");
   for (const language of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const) for (const width of [1440, 1100]) {
     if (only && !only.includes(`${language}-${theme}-${width}`)) continue;
+    tab = agentTab;
     summaries.push(await sequence(language, theme, width));
+    summaries.push(await plainSequence("mine", mine, language, theme, width));
+    summaries.push(await plainSequence("signed-in", signedIn, language, theme, width));
   }
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, baseline, summaries }, null, 2));
   console.log(JSON.stringify({ ok: true, baseline, summaries }));
