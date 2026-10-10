@@ -24,11 +24,12 @@ export function ArtifactPreview({
   );
 }
 
+/** A preview image; with `onClick` (open in a viewer) it shows the zoom-in cursor. */
 export function ArtifactPreviewImage({
   className,
   ...props
 }: DsBaseProps<ImgHTMLAttributes<HTMLImageElement>>) {
-  return <img className={cn(styles.image, className)} {...props} />;
+  return <img className={cn(styles.image, className)} data-openable={props.onClick ? "true" : undefined} {...props} />;
 }
 
 export function ArtifactPreviewFrame({

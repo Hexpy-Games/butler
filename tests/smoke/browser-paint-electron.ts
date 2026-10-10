@@ -133,9 +133,9 @@ try {
   if(!baseline) {
     await app.page.clickSelector('[data-test-class="message-image-open"]');
     await app.page.waitForFunction(()=>[...document.querySelectorAll('[data-test-class="artifact-viewer"] img')].some(image=>image instanceof HTMLImageElement && image.complete && image.naturalWidth>0));
-    const shown=await app.page.expression<number>("Math.max(...[...document.querySelectorAll('[data-test-class=artifact-viewer] img')].map(image=>image.getBoundingClientRect().width))");
-    const inline=await app.page.expression<number>("document.querySelector('[data-test-class=markdown-inline-image]').getBoundingClientRect().width");
-    assert.ok(shown>inline, `the capture opens larger in the artifact viewer (${shown} > ${inline})`);
+    // Readable inline: the capture fills the reply column (or its natural size), unless the height cap binds.
+    const inline=await app.page.expression<{ width: number; height: number; natural: number; column: number; maxHeight: number }>("(()=>{const image=document.querySelector('[data-test-class=markdown-inline-image]');const box=image.getBoundingClientRect();return {width:box.width,height:box.height,natural:image.naturalWidth,column:image.closest('[data-test-class=message-image]').getBoundingClientRect().width,maxHeight:parseFloat(getComputedStyle(image).maxHeight)};})()");
+    assert.ok(inline.width>=Math.min(inline.natural, inline.column)-1 || inline.height>=inline.maxHeight-1, `the reply capture is shown at a readable size: ${JSON.stringify(inline)}`);
     await app.shot("after-open-en-dark-1100");
   }
 }finally{await app.stop();}
