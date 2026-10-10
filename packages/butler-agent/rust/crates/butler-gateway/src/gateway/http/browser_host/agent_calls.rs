@@ -25,6 +25,8 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
+        // A post-batch observation first waits up to 2 s for the page to settle.
+        "tab.observe" if frame["args"]["settle"] == true => 8000,
         _ => 5000,
     };
     let id = uuid::Uuid::new_v4().to_string();
@@ -84,7 +86,14 @@ fn dispatch(
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
         {
-            return response(count, json!({"status":"not_dispatched","reason":reason})).map(Some);
+            let mut refused = json!({"status":"not_dispatched","reason":reason});
+            if reason == "not_your_tab" {
+                refused["your_tabs"] = json!(hub.tabs.owned(&session));
+                refused["recovery"] = json!(
+                    "No tab of this conversation has that id. Retry with one of your_tabs copied exactly (never shorten or retype an id), or call browser_tabs."
+                );
+            }
+            return response(count, refused).map(Some);
         }
         if matches!(
             op.as_str(),

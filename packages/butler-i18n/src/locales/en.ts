@@ -500,8 +500,9 @@ export const enUsCopy: AppCopy = {
     approvalRequest: {
       browserMode: { signed_out: "Without signing in", signed_in: "Signed in" },
       browserStep: (action, role, name, frame) => {
-        const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll" };
-        return `${actions[action] ?? action} the ‘${name}’ ${role} · ${frame}`;
+        const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
+        const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;
+        return [actions[action] ?? action, target].filter(Boolean).join(" ") + (frame ? ` · ${frame}` : "");
       },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "Read only" : "Change"}?`,
       editFiles: (count, workspace) =>

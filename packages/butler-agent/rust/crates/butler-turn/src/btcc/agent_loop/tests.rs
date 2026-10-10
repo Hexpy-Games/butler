@@ -427,6 +427,7 @@ fn position(events: &[String], exact: &str) -> usize {
 async fn response_payload_reaches_observers_history_and_next_round() {
     super::browser_context::tests::assert_per_tab_cycles();
     super::browser_context::tests::assert_multiple_acts();
+    super::browser_context::tests::assert_act_with_observation();
     let continuation = json!({"provider":"openai","statelessInput":[{"opaque":"retained"}]});
     let raw = json!({"vendor":{"unknown":[1,"kept"]}});
     let mut first = result("working", vec![call("owned", "read_file")], 0);

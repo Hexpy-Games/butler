@@ -57,6 +57,8 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-canvas-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/route"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-route-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/batch"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-batch-electron.ts
       - if: always()
         uses: actions/upload-artifact@v4
         with:

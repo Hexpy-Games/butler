@@ -494,9 +494,9 @@ export const koKrCopy: AppCopy = {
     approvalRequest: {
       browserMode: { signed_out: "로그인 없이", signed_in: "로그인 사용" },
       browserStep: (action, role, name, frame) => {
-        const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤" };
-        const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란" };
-        return `‘${name}’ ${roles[role] ?? role} ${actions[action] ?? action} · ${frame}`;
+        const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
+        const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란", focus: "현재 포커스에", document: "페이지에", wait: "" };
+        return [name ? `‘${name}’` : "", roles[role] ?? role, actions[action] ?? action].filter(Boolean).join(" ") + (frame ? ` · ${frame}` : "");
       },
       operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,

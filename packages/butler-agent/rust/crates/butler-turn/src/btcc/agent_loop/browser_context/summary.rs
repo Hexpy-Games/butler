@@ -47,11 +47,15 @@ pub(super) fn acted(call: &ModelRoundToolCall, output: &Value) -> String {
         .flatten()
         .take(completed)
     {
-        let label = format!(
-            "{} {}",
-            field(step, "action").as_str().unwrap_or("act"),
-            field(step, "ref").as_str().unwrap_or("point")
-        );
+        let action = field(step, "action").as_str().unwrap_or("act");
+        // Keyboard and wait steps have no target; their value identifies them.
+        let target = match action {
+            "press" | "type" | "wait" => field(step, "value")
+                .as_str()
+                .map(|value| value.chars().take(24).collect::<String>()),
+            _ => field(step, "ref").as_str().map(str::to_owned),
+        };
+        let label = format!("{action} {}", target.as_deref().unwrap_or("point"));
         if let Some((_, count)) = groups.last_mut().filter(|(last, _)| *last == label) {
             *count += 1;
         } else {

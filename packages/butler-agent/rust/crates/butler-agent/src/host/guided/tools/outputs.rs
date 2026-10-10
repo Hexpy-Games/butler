@@ -196,7 +196,11 @@ pub(super) async fn restore_budget(
         };
         if matches!(
             name,
-            "browser_observe" | "browser_screenshot" | "output_check" | "output_publish"
+            "browser_observe"
+                | "browser_act"
+                | "browser_screenshot"
+                | "output_check"
+                | "output_publish"
         ) && let Some(saved) = owner
             .journal
             .find_for_turn(owner.binding.turn_id.clone(), record.call_id.clone())
@@ -214,7 +218,7 @@ pub(super) async fn restore_budget(
             {
                 let size = (data.len() / 4 * 3)
                     .saturating_sub(data.bytes().rev().take_while(|b| *b == b'=').count());
-                if name == "browser_observe" {
+                if matches!(name, "browser_observe" | "browser_act") {
                     if let Some(tab) = value["tab"].as_str() {
                         browser_bytes.insert(tab.to_owned(), size);
                     }

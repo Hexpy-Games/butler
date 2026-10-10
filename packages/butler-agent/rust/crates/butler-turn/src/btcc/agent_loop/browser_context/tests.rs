@@ -110,3 +110,40 @@ pub(in crate::btcc::agent_loop) fn assert_multiple_acts() {
     supersede(&mut messages);
     assert_eq!(messages, once);
 }
+
+/// `browser_act {observe:true}` closes its source cycle and opens the next one.
+pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
+    let mut messages = Vec::new();
+    observe(&mut messages, "a", "a1");
+    observed_act(&mut messages, "a1", "a2");
+    observed_act(&mut messages, "a2", "a3");
+    supersede(&mut messages);
+    let first: Value = serde_json::from_str(&messages[0].content).unwrap();
+    assert_eq!(first["output"]["superseded_by"], "a3");
+    assert_eq!(first["output"]["acted"], "hover f0-e2 ×2 completed");
+    let middle: Value = serde_json::from_str(&messages[2].content).unwrap();
+    assert_eq!(middle["output"]["status"], "superseded");
+    assert_eq!(middle["output"]["obs"], "a2");
+    assert_eq!(middle["output"]["acted"], "hover f0-e2 ×2 completed");
+    let latest: Value = serde_json::from_str(&messages[4].content).unwrap();
+    assert!(!is_superseded(&messages[4].content));
+    assert_eq!(
+        latest["output"]["action"]["steps"][1]["status"],
+        "completed"
+    );
+    assert!(messages.iter().all(|m| !m.content.contains("still_file")));
+    let once = messages.clone();
+    supersede(&mut messages);
+    assert_eq!(messages, once);
+}
+fn observed_act(messages: &mut Vec<ModelRoundMessage>, source: &str, next: &str) {
+    call(messages, "a", source, 2, 2);
+    let steps =
+        json!([{"status":"completed","still_file":{"file_id":"desktop"}},{"status":"completed"}]);
+    let mut result = tool(
+        &json!({"schema":"butler.browser-observation.v1","tab":"a","obs":next,"status":"ok","still_file":{"file_id":"desktop"},
+            "untrusted_content":{"text":"Confirm"},"action":{"schema":"butler.browser-action.v1","status":"ok","steps":steps}}),
+    );
+    result.tool_call_id = messages.pop().unwrap().tool_call_id;
+    messages.push(result);
+}
