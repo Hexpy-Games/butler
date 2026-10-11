@@ -239,7 +239,11 @@ class UserBrowser {
     if (!this.areaVisible || input.type !== "keyDown") return false;
     if (this.selection.shortcut(input)) return true;
     if (!nativePage && !this.keyboardFocused) return false;
-    if (input.key === "Escape" && this.tabs.get(this.activeId)?.picking) { this.selection.mode(this.activeId, false); return true; }
+    const picking = this.tabs.get(this.activeId);
+    if (input.key === "Escape" && picking?.picking) { this.selection.mode(this.activeId, false); return true; }
+    if (picking?.picking && ["ArrowUp", "ArrowDown"].includes(input.key) && !input.meta && !input.control && !input.alt) {
+      this.selection.step(picking, input.key === "ArrowUp" ? 1 : -1); return true;
+    }
     const command = input.meta || input.control;
     const key = input.key.toLowerCase();
     if (command && key === "l") {

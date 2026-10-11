@@ -23,9 +23,16 @@ export function attachNativeWorlds(tab) {
   });
 }
 export function nativeFrameWorld(tab,frameId) {
-  const frame=tab.nativeFrames.get(tab.contextNames.get(frameId));
   // New/blank frames may have no preload IPC world. frameWorlds already owns
   // a CDP isolated context for them; evaluateWorld uses that same safe fallback.
+  return worldOf(tab,tab.nativeFrames.get(tab.contextNames.get(frameId)));
+}
+/** The preload world of a WebFrameMain once its preload reported ready; needs no debugger. */
+export function nativeWorldOf(tab,target) {
+  if(!target || target.isDestroyed()) return undefined;
+  return worldOf(tab,[...tab.nativeFrames.values()].find(frame=>frame===target || !frame.isDestroyed() && frame.processId===target.processId && frame.routingId===target.routingId));
+}
+function worldOf(tab,frame) {
   if(!frame || frame.isDestroyed() || frame.detached)return undefined;
   return {executeJavaScriptInIsolatedWorld:(_world,scripts)=>new Promise((resolve,reject)=>{
     const id=randomUUID(),timer=setTimeout(()=>{pending.delete(id);reject(new Error('frame_unavailable'))},5000);

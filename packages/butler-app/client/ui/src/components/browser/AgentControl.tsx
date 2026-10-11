@@ -47,7 +47,7 @@ export function AgentControl({ tab }: { tab?: BrowserTab }) {
   const popup = tab ? popupNotice(tab) : null;
   const popupText = popup && (popup.detail ? `${popup.label} · ${popup.detail}` : popup.label);
   if (tab?.picking) return <PageBand tone="pick" icon={<Pick size="sm" />} label={copy.pickMode}
-    detail={popupText ?? copy.dragToChat} hint={popupText ? copy.dragToChat : undefined}
+    detail={popupText ?? copy.dragToChat} hint={popupText ? copy.dragToChat : copy.pickKeys((window.butlerApp as { platform?: string } | undefined)?.platform === "darwin")}
     actions={<ButtonContainer size="xs">{popup?.action}<Button size="xs" variant="outline"
       onClick={() => void browserCall("pick", { id: tab.id, value: false })}>{copy.finish}</Button></ButtonContainer>} />;
   if (tab?.saveOffer) return <SaveSignInBand tab={tab} />;

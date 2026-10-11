@@ -30,17 +30,39 @@ case "click", "right", "double":
         send(right ? .rightMouseDown : .leftMouseDown, point, button, Int64(count))
         send(right ? .rightMouseUp : .leftMouseUp, point, button, Int64(count))
     }
-case "drag":
+case "drag", "altdrag":
     guard args.count == 6, let endX = Double(args[4]), let endY = Double(args[5]) else {
         fatalError("Drag requires destination screen x and y")
     }
-    send(.mouseMoved, point)
-    send(.leftMouseDown, point)
+    // altdrag holds Option (Alt) for the whole gesture, as a person does for a pick-mode area.
+    let flags: CGEventFlags = args[1] == "altdrag" ? .maskAlternate : []
+    func held(_ type: CGEventType, _ at: CGPoint) {
+        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: at, mouseButton: .left) else {
+            fatalError("Could not create native mouse event")
+        }
+        event.flags = flags
+        event.setIntegerValueField(.mouseEventClickState, value: 1)
+        event.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.035)
+    }
+    held(.mouseMoved, point)
+    held(.leftMouseDown, point)
     for step in 1...20 {
         let fraction = Double(step) / 20
-        send(.leftMouseDragged, CGPoint(x: x + (endX - x) * fraction, y: y + (endY - y) * fraction))
+        held(.leftMouseDragged, CGPoint(x: x + (endX - x) * fraction, y: y + (endY - y) * fraction))
     }
-    send(.leftMouseUp, CGPoint(x: endX, y: endY))
+    held(.leftMouseUp, CGPoint(x: endX, y: endY))
+case "key":
+    // Virtual key code in args[4] (126 up arrow, 125 down arrow, 53 escape); x/y are unused.
+    guard args.count == 5, let code = UInt16(args[4]),
+          let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true),
+          let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else {
+        fatalError("Key requires a virtual key code")
+    }
+    down.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.035)
+    up.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.035)
 case "wheel":
     guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
                               wheelCount: 1, wheel1: -220, wheel2: 0, wheel3: 0) else {
