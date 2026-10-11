@@ -120,17 +120,9 @@ impl Headless {
         self.downloads.set_port(port);
     }
 
-    /// Whether new work may start here (Settings → Security).
+    /// Whether operator configuration permits new work on this backend.
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::SeqCst)
-    }
-
-    /// Turns the backend on or off; off ends the browser and its tabs now.
-    pub async fn set_enabled(&self, enabled: bool) {
-        self.enabled.store(enabled, Ordering::SeqCst);
-        if !enabled {
-            self.shutdown().await;
-        }
     }
 
     fn browser(&self) -> Option<Arc<Browser>> {

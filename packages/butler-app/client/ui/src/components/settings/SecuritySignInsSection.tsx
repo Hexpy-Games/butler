@@ -25,7 +25,7 @@ export function SecuritySignInsSections() {
   </>;
 }
 
-/** Settings → Security → Sign-ins: saved sign-ins and Butler's per-site access. Passwords are never shown. */
+/** Settings → Browser → Sign-ins: saved sign-ins and Butler's per-site access. Passwords are never shown. */
 function SecuritySignInsSection({ signIns }: { signIns: ReturnType<typeof useSignIns> }) {
   const copy = appCopy.settings.signIns;
   const [adding, setAdding] = useState(false);

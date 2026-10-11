@@ -41,8 +41,8 @@ struct TypedGatewaySettings {
     content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
-    /// `headlessBrowser`: Butler's own headless browser on or off; absent
-    /// means on without the App and off with it.
+    /// `headlessBrowser`: Chrome fallback on or off; absent
+    /// means on, including when the App launched the Agent.
     headless_browser: Option<bool>,
 }
 

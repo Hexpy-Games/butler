@@ -10,10 +10,7 @@
 use butler_platform::app_browser::{self, AppElectron};
 use std::{
     path::{Path, PathBuf},
-    sync::{
-        Arc, Mutex, PoisonError,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex, PoisonError},
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
@@ -63,8 +60,6 @@ pub struct AppHost {
     starting: tokio::sync::Mutex<()>,
     attached: watch::Sender<Option<String>>,
     failed_at: Mutex<Option<Instant>>,
-    /// Whether an App Electron was there when last looked for.
-    installed: AtomicBool,
 }
 
 impl AppHost {
@@ -75,10 +70,7 @@ impl AppHost {
             starting: tokio::sync::Mutex::new(()),
             attached: watch::Sender::new(None),
             failed_at: Mutex::new(None),
-            installed: AtomicBool::new(false),
         });
-        let looking = host.clone();
-        tokio::spawn(async move { looking.usable().await });
         let weak = Arc::downgrade(&host);
         tokio::spawn(async move {
             shutdown.cancelled().await;
@@ -107,17 +99,10 @@ impl AppHost {
             return None;
         }
         let host = self.clone();
-        let electron = tokio::task::spawn_blocking(move || host.electron())
+        tokio::task::spawn_blocking(move || host.electron())
             .await
             .ok()
-            .flatten();
-        self.installed.store(electron.is_some(), Ordering::Relaxed);
-        electron
-    }
-
-    /// Whether an App Electron was there when last looked for (Settings).
-    pub fn installed(&self) -> bool {
-        self.installed.load(Ordering::Relaxed)
+            .flatten()
     }
 
     /// Whether an App Electron is there to start (and none failed lately).

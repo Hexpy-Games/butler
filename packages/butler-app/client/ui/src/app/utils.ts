@@ -1825,6 +1825,7 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
   if (section.includes("default-permission") || section.includes("access-mode") || section.includes("기본 권한")) return "general";
+  if (["browser", "브라우저", "sign-in", "signin", "signins", "로그인", "browser-import"].some(value => section.includes(value))) return "browser";
   if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||

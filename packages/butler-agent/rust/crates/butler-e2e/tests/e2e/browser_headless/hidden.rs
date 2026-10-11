@@ -52,20 +52,19 @@ async fn hidden_app_host_serves_and_hands_over_to_the_app() -> Result<(), Harnes
         hidden_app(),
         "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set"
     );
-    let s = setup("BROWSER-HIDDEN-HANDOVER")?.start().await?;
-    let admin = admin(&s);
-    let url = publish(&s).await?;
-    let marker = s.sandbox.data.to_string_lossy().into_owned();
-    let settings = admin
-        .send(reqwest::Method::GET, "/security", None, &[])
+    let s = setup("BROWSER-HIDDEN-HANDOVER")?
+        .env("BUTLER_BROWSER_HEADLESS", "")
+        .env("BUTLER_APP_BUNDLED_SUPERVISOR", "1")
+        .start()
         .await?;
-    assert_eq!(
-        settings.data()["headless_browser_app"],
-        true,
-        "{}",
-        settings.text
+    let admin = admin(&s);
+    let marker = s.sandbox.data.to_string_lossy().into_owned();
+    assert!(
+        browser_processes(&marker).is_empty(),
+        "no browser processes while idle"
     );
 
+    let url = publish(&s).await?;
     // No host attached: the first tab starts the App's Electron, no Chrome.
     let opened = open(&admin, "general", &url).await?;
     assert_eq!(opened["status"], "ok", "{opened}");
@@ -178,7 +177,10 @@ async fn idle_hidden_app_host_hands_over_at_once() -> Result<(), HarnessError> {
         hidden_app(),
         "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set"
     );
-    let s = setup("BROWSER-HIDDEN-IDLE-HANDOVER")?.start().await?;
+    let s = setup("BROWSER-HIDDEN-IDLE-HANDOVER")?
+        .env("BUTLER_BROWSER_HEADLESS", "off")
+        .start()
+        .await?;
     let admin = admin(&s);
     let url = publish(&s).await?;
     let opened = open(&admin, "general", &url).await?;

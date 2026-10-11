@@ -241,7 +241,7 @@ async function settingsShots() {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
     await app.page.reload();
     await app.click(locale === "ko" ? "설정" : "Settings");
-    await app.click(locale === "ko" ? "보안" : "Security");
+    await app.click(locale === "ko" ? "브라우저" : "Browser");
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=sign-in-row]'))"), "sign-in rows");
     await app.page.expression("document.querySelector('[data-test-class=sign-in-row]').scrollIntoView({block:'center'})");
     writeFileSync(join(evidence!, `settings-signins-${locale}-${theme}.png`), await app.page.screenshot());

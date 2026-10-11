@@ -8,7 +8,7 @@ import { listImportSources, pickImportFile, previewImport, runImport, type Impor
 
 const FILE = "file";
 
-/** Settings → Security → import bookmarks and passwords from another browser. Counts only, never values. */
+/** Settings → Browser → import bookmarks and passwords from another browser. Counts only, never values. */
 export function SecurityBrowserImportSection({ keychain, onImported }: { keychain: boolean; onImported: () => void }) {
   const copy = appCopy.settings.browserImport;
   const [sources, setSources] = useState<ImportSource[] | null>(null);

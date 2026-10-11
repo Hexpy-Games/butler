@@ -9,6 +9,7 @@ import { HooksSettings } from "./HooksSettings";
 import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
+import { BrowserSettings } from "./BrowserSettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { ServerSettings } from "./ServerSettings";
 import { SkillsSettings } from "./SkillsSettings";
@@ -38,6 +39,7 @@ export function SettingsDetailContent({
       {activeSection === "logs" && developerModeEnabled && (
         <DeveloperLogsSettings />
       )}
+      {activeSection === "browser" && <BrowserSettings />}
       {activeSection === "security" && <SecuritySettings />}
       {activeSection === "system" && <SystemEventsSettings />}
       {activeSection === "archives" && <ArchivesSettings />}
