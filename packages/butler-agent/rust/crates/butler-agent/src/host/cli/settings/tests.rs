@@ -10,6 +10,13 @@ fn config_paths_and_values_preserve_operator_rules() {
     config_update_keeps_unrelated_values_and_validation_checks_whole_object();
     assert!(config::SAFE_CONFIG_PATHS.contains(&"system.defaultModel"));
     assert!(!config::SAFE_CONFIG_PATHS.contains(&"system.apiKey"));
+    assert!(config::SAFE_CONFIG_PATHS.contains(&"webSearch.planning.model"));
+    assert!(config::SAFE_CONFIG_PATHS.contains(&"webSearch.planning.reasoningEffort"));
+    let good =
+        json!({"webSearch":{"planning":{"model":"openai/gpt-6-luna","reasoningEffort":"low"}}});
+    assert_eq!(config::validate(&good).errors, Vec::<String>::new());
+    let bad = json!({"webSearch":{"planning":{"model":" ","reasoningEffort":"invalid"}}});
+    assert_eq!(config::validate(&bad).errors.len(), 2);
     assert!(config::is_secret_path("provider.api-key"));
     assert!(config::is_secret_path("provider.refreshToken"));
     assert_eq!(config::parse_value("true"), json!(true));

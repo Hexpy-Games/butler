@@ -85,6 +85,9 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
         "Page.frameNavigated" | "Page.navigatedWithinDocument" => tab.changed(),
         "Page.frameStartedLoading" if main(&params["frameId"]) => tab.loading = true,
         "Page.frameStoppedLoading" if main(&params["frameId"]) => tab.loading = false,
+        "Page.domContentEventFired" if session == tab.session => {
+            tab.dom_ready.send_modify(|n| *n += 1);
+        }
         "Page.loadEventFired" if session == tab.session => {
             tab.loads.send_modify(|n| *n += 1);
         }

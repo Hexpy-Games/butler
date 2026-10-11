@@ -134,19 +134,14 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
                 structured
             };
             let results = filter_results(candidates, input);
-            Ok(SearchOutput {
-                results,
-                provider_overview: input
+            let duration_ms = u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX);
+            let mut output = SearchOutput::direct(self.id(), results, duration_ms);
+            output.provider_overview = input
                     .blocked_domains
                     .is_empty()
                     .then(|| bounded_overview(&answer))
-                    .flatten(),
-                duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX),
-                provider: self.id().to_owned(),
-                search_requests: 1,
-                search_warnings: Vec::new(),
-                failed_queries: Vec::new(),
-            })
+                    .flatten();
+            Ok(output)
         }
         .boxed()
     }

@@ -78,6 +78,7 @@ impl SearchProvider for OpenAIWebSearchProvider {
                 .then(|| overview_from_response(&payload))
                 .flatten();
             Ok(SearchOutput {
+                timings: Vec::new(),
                 results,
                 provider_overview,
                 duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX),

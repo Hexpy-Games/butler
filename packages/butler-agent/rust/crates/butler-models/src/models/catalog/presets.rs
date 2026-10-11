@@ -18,6 +18,25 @@ pub struct ModelPreset {
     pub effort: ReasoningEffort,
 }
 
+impl super::ModelCatalogSnapshot {
+    /// Lightweight query planning stays on the conversation's provider.
+    pub fn search_planning_preset(&self, provider_id: &str) -> Option<ModelPreset> {
+        let mut preset = if provider_id == "openai" {
+            ModelPreset {
+                model: "openai/gpt-6-luna".into(),
+                effort: ReasoningEffort::Low,
+            }
+        } else {
+            self.routine_preset(provider_id)?
+        };
+        let metadata = self.find_static_model_metadata(Some(&preset.model))?;
+        if metadata.reasoning_efforts.contains(&ReasoningEffort::Low) {
+            preset.effort = ReasoningEffort::Low;
+        }
+        Some(preset)
+    }
+}
+
 /// The presets one provider carries.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProviderPresets {
