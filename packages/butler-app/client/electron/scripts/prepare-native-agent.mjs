@@ -75,6 +75,12 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, binaryName));
+if (requestedPlatform === "linux") {
+  const helper = join(dirname(sourceBinary), "butler-sandbox");
+  accessSync(helper, constants.X_OK);
+  verifyLinuxDependencyClosure(helper, requestedArch);
+  copyFileSync(helper, join(binaryRoot, "butler-sandbox"));
+}
 run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
 const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
 if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
@@ -164,7 +170,7 @@ function buildNativeAgent() {
     buildEnv.RUSTFLAGS = `${buildEnv.RUSTFLAGS ?? ""} -C target-feature=+crt-static`.trim();
   }
   run("cargo", [
-    "build", "--release", "--locked", "-p", "butler-agent",
+    "build", "--release", "--locked", "-p", "butler-agent", "-p", "butler-platform", "--bin", "butler-agent", "--bin", "butler-sandbox",
     "--no-default-features", "--features", "static-ort",
   ], rustRoot, buildEnv);
   const targetRoot = process.env.CARGO_TARGET_DIR

@@ -175,7 +175,7 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
     let result = owner.submit_guided(input).unwrap().await.unwrap();
-    if command_sandbox::READ_ONLY_SANDBOX {
+    if command_sandbox::capabilities().read_only.is_enforced() {
         let output = result.expect("a host with a sandbox runs read-only commands");
         assert_ne!(output.summary.exit_code, Some(0));
     } else {

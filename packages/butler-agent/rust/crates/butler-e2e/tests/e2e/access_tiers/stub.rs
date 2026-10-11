@@ -8,12 +8,12 @@ use std::{
 };
 
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
     pub rounds: Mutex<HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
 }
 impl Script {
-    pub(super) fn requests_for(&self, prompt: &str) -> Vec<Value> {
+    pub(crate) fn requests_for(&self, prompt: &str) -> Vec<Value> {
         self.requests
             .lock()
             .expect("script lock")
@@ -26,7 +26,7 @@ impl Script {
             .collect()
     }
 }
-pub(super) async fn start()
+pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let script = Arc::new(Script::default());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -61,6 +61,6 @@ async fn reply(
     )
         .into_response()
 }
-pub(super) fn call(id: &str, name: &str, args: &Value) -> Value {
+pub(crate) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
 }

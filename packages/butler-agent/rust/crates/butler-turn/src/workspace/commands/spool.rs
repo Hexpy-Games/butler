@@ -160,6 +160,23 @@ impl SpoolPaths {
             self.discard().await;
             return Err(error);
         }
+        if butler_platform::command_sandbox::isolation_failure_exit(summary.exit_code) {
+            let mut prefix = Vec::new();
+            File::open(&self.stderr)
+                .await
+                .map_err(CommandError::io)?
+                .take(64)
+                .read_to_end(&mut prefix)
+                .await
+                .map_err(CommandError::io)?;
+            if butler_platform::command_sandbox::isolation_failure(summary.exit_code, &prefix) {
+                self.discard().await;
+                return Err(CommandError::new(
+                    CommandCode::CommandObservationIsolationUnavailable,
+                    "The command sandbox could not be fully enforced",
+                ));
+            }
+        }
         let result = self.write_payload(summary).await;
         if result.is_err() {
             self.discard().await;

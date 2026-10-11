@@ -29,7 +29,7 @@ const results = join(dir, "results.json");
 const module = pathToFileURL(resolve("packages/butler-app/client/electron/browser/reader-render.mjs")).href;
 const cases = {
   page: `${origin}/__o/page/`, missing: `${origin}/__o/missing/`, redirect: `${origin}/__o/redirect/`,
-  framed: `${origin}/__o/framed/`, loopback: `${origin}/private`, private: "http://10.0.0.1/",
+  framed: `${origin}/__o/framed/`, loopback: `${origin}/private`, private: "http://10.0.0.1/", // privacy-hygiene: allow-private-ip (LAN-denial fixture)
 };
 writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "reader-render-smoke", main: "main.mjs", type: "module" }));
 writeFileSync(join(dir, "main.mjs"), `import { app } from "electron";

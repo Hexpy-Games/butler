@@ -38,9 +38,10 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release-agent"
           cp "$BUTLER_NATIVE_AGENT_EXECUTABLE" "$RUNNER_TEMP/release-agent/butler-agent"
+          cp "$(dirname "$BUTLER_NATIVE_AGENT_EXECUTABLE")/butler-sandbox" "$RUNNER_TEMP/release-agent/butler-sandbox"
       - uses: actions/upload-artifact@v4
         with:
           name: release-agent-${{ inputs.platform }}
-          path: ${{ runner.temp }}/release-agent/butler-agent
+          path: ${{ runner.temp }}/release-agent/*
           if-no-files-found: error
           compression-level: 0

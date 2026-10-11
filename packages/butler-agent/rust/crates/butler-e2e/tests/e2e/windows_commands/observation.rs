@@ -197,7 +197,7 @@ async fn observation_ask_first_approves_exact_command_then_lists_downloads()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        !butler_platform::command_sandbox::READ_ONLY_SANDBOX,
+        !butler_platform::command_sandbox::approval_free_reads(),
         "host has read-only sandbox"
     );
     run(Access::AskAlways, None).await
@@ -207,7 +207,7 @@ async fn observation_ask_first_approves_exact_command_then_lists_downloads()
 async fn observation_full_access_lists_downloads_without_approval() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        !butler_platform::command_sandbox::READ_ONLY_SANDBOX,
+        !butler_platform::command_sandbox::approval_free_reads(),
         "host has read-only sandbox"
     );
     run(Access::FullAccess, None).await
@@ -218,7 +218,7 @@ async fn observation_data_uses_normal_approval_and_credentials_stay_refused()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        !butler_platform::command_sandbox::READ_ONLY_SANDBOX,
+        !butler_platform::command_sandbox::approval_free_reads(),
         "host has read-only sandbox"
     );
     for access in [Access::AskAlways, Access::FullAccess] {

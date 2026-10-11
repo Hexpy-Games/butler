@@ -125,7 +125,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
     if not hasattr(tarfile, "data_filter"):
         raise SystemExit("Python 3.12 or newer is required for safe archive extraction")
     entries: dict[str, tarfile.TarInfo] = {}
-    allowed_roots = {"butler-agent", "butler", "resources", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}
+    allowed_roots = {"butler-agent", "butler-sandbox", "butler", "resources", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}
     with tarfile.open(archive, "r:gz") as source:
         for member in source.getmembers():
             raw_name = member.name
@@ -140,7 +140,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
             name = "/".join(parts)
             if name in entries or member.islnk():
                 raise SystemExit("native archive contains a duplicate or hard-linked entry")
-            if name in {"butler-agent", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}:
+            if name in {"butler-agent", "butler-sandbox", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}:
                 valid_type = member.isfile()
             elif name == "butler":
                 valid_type = member.issym() and member.linkname == "butler-agent"
@@ -173,6 +173,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
         required = {"butler-agent", "butler", "resources", "native-agent-manifest.json"}
         if not required.issubset(entries):
             raise SystemExit("native archive is missing a required installation entry")
+        _validate_sandbox_entry(source, entries)
         for name in entries:
             parent = name.split("/")[:-1]
             while parent:
@@ -182,6 +183,27 @@ def _extract_archive(archive: Path, destination: Path) -> None:
                     raise SystemExit("native archive entry is nested beneath a non-directory")
                 parent.pop()
         source.extractall(destination, filter="data")
+        if "butler-sandbox" in entries:
+            # data_filter adds owner-write to regular files during extraction.
+            # Restore the validated immutable mode for the new Linux helper.
+            (destination / "butler-sandbox").chmod(0o555)
+
+
+def _validate_sandbox_entry(source: tarfile.TarFile, entries: dict[str, tarfile.TarInfo]) -> None:
+    with source.extractfile(entries["native-agent-manifest.json"]) as stream:
+        try:
+            manifest = json.load(stream)
+        except (OSError, ValueError) as error:
+            raise SystemExit("installed native manifest is invalid") from error
+    if not isinstance(manifest, dict):
+        raise SystemExit("installed native manifest is invalid")
+    helper = entries.get("butler-sandbox")
+    if manifest.get("platform") != "linux":
+        if helper is not None:
+            raise SystemExit("native archive contains an unsafe entry")
+        return
+    if helper is None or helper.mode != 0o555:
+        raise SystemExit("Linux archive is missing its immutable executable sandbox helper")
 
 
 def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> dict:
@@ -217,6 +239,11 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
             raise SystemExit("standalone installation layout invalid")
         packager.validate_resource_symlinks(resources)
         packager.verify_binary(binary, *target)
+        if target[0] == "linux":
+            helper = installation / "butler-sandbox"
+            packager.verify_binary(helper, *target)
+            if packager.sha256_file(helper) != manifest.get("sandboxSha256"):
+                raise SystemExit("standalone sandbox checksum mismatch")
         if (packager.sha256_file(binary) != manifest.get("binarySha256") or
                 packager.sha256_tree(resources) != manifest.get("resourcesSha256")):
             raise SystemExit("standalone installation checksum mismatch")
@@ -233,63 +260,7 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
             if verify.returncode != 0:
                 raise SystemExit(f"native binary signature check failed: {verify.stderr.strip()}")
         before = packager.sha256_tree(installation)
-        data = root / "data"
-        data.mkdir()
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("BUTLER_")}
-        environment.update({"HOME": str(root / "home"), "BUTLER_DATA": str(data)})
-        (root / "home").mkdir()
-        for command in (
-            ["version", "--json"],
-            ["doctor", "--check", "installation", "--json"],
-        ):
-            result = subprocess.run(
-                [str(launcher), "--data", str(data), *command], cwd=root,
-                env=environment, capture_output=True, text=True, timeout=30,
-            )
-            if result.returncode != 0:
-                raise SystemExit(f"native {command[0]} smoke failed: {result.stderr.strip()}")
-            value = json.loads(result.stdout)
-            if value.get("ok") is not True or not isinstance(value.get("data"), dict):
-                raise SystemExit(f"native {command[0]} response envelope invalid")
-            if command[0] == "version":
-                version_data = value["data"]
-                installation_data = version_data.get("installation")
-                runtime_data = version_data.get("runtime")
-                if not isinstance(installation_data, dict) or not isinstance(runtime_data, dict):
-                    raise SystemExit("native version provenance is missing")
-                if (version_data.get("version") != version
-                        or version_data.get("appVersion") != app_version
-                        or version_data.get("availability") != "installed_manifest"
-                        or runtime_data.get("kind") != "native"
-                        or runtime_data.get("source") != "installed_executable"
-                        or installation_data.get("schema") != packager.SCHEMA
-                        or (installation_data.get("platform"), installation_data.get("architecture")) != target
-                        or installation_data.get("binary") != "butler-agent"
-                        or installation_data.get("resources") != "resources"
-                        or installation_data.get("launcher") != "butler"
-                        or installation_data.get("binarySha256") != manifest["binarySha256"]
-                        or installation_data.get("resourcesSha256") != manifest["resourcesSha256"]):
-                    raise SystemExit("native version provenance mismatch")
-            else:
-                doctor_data = value["data"]
-                checks = doctor_data.get("checks")
-                if (doctor_data.get("schema") != "butler.native-doctor.v1"
-                        or doctor_data.get("status") != "healthy"
-                        or doctor_data.get("exitCode") != 0
-                        or not isinstance(checks, list)
-                        or len(checks) != 4):
-                    raise SystemExit("native doctor response is unhealthy or invalid")
-                check_results = {
-                    check.get("id"): check.get("status")
-                    for check in checks if isinstance(check, dict)
-                }
-                if check_results != {
-                    "executable": "pass",
-                    "resources": "pass",
-                    "version": "pass",
-                    "integrity": "pass",
-                }:
-                    raise SystemExit("native doctor installation checks did not all pass")
+        _smoke_installed_commands(root, installation, manifest, version, app_version, target)
         if packager.sha256_tree(installation) != before:
             raise SystemExit("native smoke changed its installed package")
         if packager.sha256_file(archive) != archive_digest:
@@ -299,6 +270,68 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
                 "archiveSha256": archive_digest,
                 "binarySha256": manifest["binarySha256"],
                 "installationSha256": before}
+
+
+def _smoke_installed_commands(root: Path, installation: Path, manifest: dict,
+                              version: str, app_version: str | None, target: tuple) -> None:
+    launcher = installation / "butler"
+    data = root / "data"
+    data.mkdir()
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("BUTLER_")}
+    environment.update({"HOME": str(root / "home"), "BUTLER_DATA": str(data)})
+    (root / "home").mkdir()
+    for command in (
+        ["version", "--json"],
+        ["doctor", "--check", "installation", "--json"],
+    ):
+        result = subprocess.run(
+            [str(launcher), "--data", str(data), *command], cwd=root,
+            env=environment, capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            raise SystemExit(f"native {command[0]} smoke failed: {result.stderr.strip()}")
+        value = json.loads(result.stdout)
+        if value.get("ok") is not True or not isinstance(value.get("data"), dict):
+            raise SystemExit(f"native {command[0]} response envelope invalid")
+        if command[0] == "version":
+            version_data = value["data"]
+            installation_data = version_data.get("installation")
+            runtime_data = version_data.get("runtime")
+            if not isinstance(installation_data, dict) or not isinstance(runtime_data, dict):
+                raise SystemExit("native version provenance is missing")
+            if (version_data.get("version") != version
+                    or version_data.get("appVersion") != app_version
+                    or version_data.get("availability") != "installed_manifest"
+                    or runtime_data.get("kind") != "native"
+                    or runtime_data.get("source") != "installed_executable"
+                    or installation_data.get("schema") != packager.SCHEMA
+                    or (installation_data.get("platform"), installation_data.get("architecture")) != target
+                    or installation_data.get("binary") != "butler-agent"
+                    or installation_data.get("resources") != "resources"
+                    or installation_data.get("launcher") != "butler"
+                    or installation_data.get("binarySha256") != manifest["binarySha256"]
+                    or installation_data.get("resourcesSha256") != manifest["resourcesSha256"]):
+                raise SystemExit("native version provenance mismatch")
+        else:
+            doctor_data = value["data"]
+            checks = doctor_data.get("checks")
+            if (doctor_data.get("schema") != "butler.native-doctor.v1"
+                    or doctor_data.get("status") != "healthy"
+                    or doctor_data.get("exitCode") != 0
+                    or not isinstance(checks, list)
+                    or len(checks) != 4):
+                raise SystemExit("native doctor response is unhealthy or invalid")
+            check_results = {
+                check.get("id"): check.get("status")
+                for check in checks if isinstance(check, dict)
+            }
+            if check_results != {
+                "executable": "pass",
+                "resources": "pass",
+                "version": "pass",
+                "integrity": "pass",
+            }:
+                raise SystemExit("native doctor installation checks did not all pass")
 
 
 def merge(inputs: list[Path], output: Path) -> dict:
