@@ -15,6 +15,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { ComposerFoldField } from "./ComposerFoldField";
 import { ReduceMotionField } from "./ReduceMotionField";
 import { ComposerDecorationSettings } from "./ComposerDecorationSettings";
+import { ConversationBackgroundSettings } from "./ConversationBackgroundSettings";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export const AppearanceSettings = memo(function AppearanceSettings() {
@@ -65,6 +66,10 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
         description={settingsCopy.pageSectionDescriptions.homeScreen}
       >
         <MainScreenThemeSettings />
+      </SettingsSection>
+      <SettingsSection id="conversation" kind="form" title={sections.conversation}
+        description={settingsCopy.pageSectionDescriptions.conversation}>
+        <ConversationBackgroundSettings />
       </SettingsSection>
       <SettingsSection
         id="message-box"

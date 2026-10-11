@@ -1,10 +1,14 @@
+import { useComposerWallpaperRect } from "./useComposerWallpaperRect";
+import type { WallpaperContentRect } from "@/butler-ds";
 import { useEffect } from "react";
 import type { RefObject } from "react";
 
 export function useReserveHeight(
   wrapRef: RefObject<HTMLDivElement | null>,
   onReserveChange: (height: number) => void,
+  onWallpaperRect?: (rect: WallpaperContentRect) => void,
 ) {
+  useComposerWallpaperRect(wrapRef, onWallpaperRect);
   useEffect(() => {
     const element = wrapRef.current;
     if (!element) return;
