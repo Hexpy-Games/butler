@@ -213,7 +213,7 @@ fn bundled(bundle: &str) -> Vec<(String, Result<WallpaperModule, Vec<String>>)> 
     entries
         .into_iter()
         .map(|entry| {
-            let module = parse(&entry.manifest).and_then(|module| {
+            let module = parse(&entry.manifest, true).and_then(|module| {
                 if module.id == entry.folder {
                     Ok(module)
                 } else {

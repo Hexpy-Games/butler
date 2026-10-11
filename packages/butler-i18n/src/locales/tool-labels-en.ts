@@ -1,4 +1,5 @@
 export const additionalToolLabels = {
+  browser_history_search: "Search browsing history",
   forget_explicit_memory: "Remove an instruction",
   project_artifacts: "Find project artifacts",
   search: "Search",

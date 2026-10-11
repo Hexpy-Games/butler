@@ -19,6 +19,18 @@
   max-width: min(280px, calc(100vw - 32px));
 }
 
+/* As wide as the anchor (Radix measures it); the viewport still caps it. */
+.content[data-popover-width="anchor"] {
+  width: var(--radix-popover-trigger-width);
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+}
+
+.content[data-popover-density="list"] {
+  gap: 0;
+  padding: var(--space-xs);
+}
+
 .content[data-menu-size] {
   gap: 0;
   padding: var(--space-1);
@@ -98,6 +110,13 @@
         var(--safe-area-bottom) - var(--space-2xl)
     );
     overflow: auto;
+  }
+
+  .content[data-popover-width="anchor"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    width: var(--radix-popover-trigger-width);
   }
 }
 

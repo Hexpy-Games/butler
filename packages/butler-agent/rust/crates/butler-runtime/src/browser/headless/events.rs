@@ -63,6 +63,7 @@ fn apply(browser: &Arc<Browser>, event: Event) {
         _ => {
             if let Some(session) = session {
                 tab_event(browser, &session, &method, &params);
+                super::history::event(browser, &session, &method, &params);
             }
         }
     }
@@ -152,6 +153,7 @@ fn destroyed(browser: &Arc<Browser>, target: &str) {
 
 /// A tab the page or the browser closed: its context may end with it.
 fn gone(browser: &Arc<Browser>, tab: super::state::Tab) {
+    browser.history.complete(&tab.id, &tab.url, &tab.title, "");
     browser.changed.notify_waiters();
     let browser = browser.clone();
     drop(tokio::spawn(async move {

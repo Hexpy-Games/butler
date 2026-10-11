@@ -1,7 +1,9 @@
+import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
+import { startPowerStateMonitor } from "./butler-platform/power.mjs";
 import {
   app,
   BrowserWindow,
@@ -139,6 +141,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
+let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
@@ -267,6 +270,10 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
+let powerStateMonitor = null;
+let powerStateMonitorStart = null;
+const sentPowerStateByWebContents = new WeakMap();
+const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
@@ -284,6 +291,39 @@ let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
   trayEnabled: !legacyDataBlocked,
 };
+
+function sendPowerState(state, window = mainWindow) {
+  const webContents = window?.webContents;
+  if (!window || window.isDestroyed() || !webContents || webContents.isDestroyed() ||
+      !readyPowerStateWebContents.has(webContents)) return;
+  const previous = sentPowerStateByWebContents.get(webContents);
+  if (previous?.onBattery === state.onBattery && previous?.constrained === state.constrained) return;
+  webContents.send("butler:power-state", state);
+  sentPowerStateByWebContents.set(webContents, state);
+}
+
+async function ensurePowerStateMonitor() {
+  if (!powerStateMonitorStart) {
+    powerStateMonitorStart = startPowerStateMonitor((state) => sendPowerState(state))
+      .then((monitor) => {
+        powerStateMonitor = monitor;
+        return monitor;
+      })
+      .catch(() => {
+        powerStateMonitorStart = null;
+        return null;
+      });
+  }
+  return await powerStateMonitorStart;
+}
+
+async function syncPowerStateToWindow(window) {
+  const monitor = await ensurePowerStateMonitor();
+  if (!monitor || powerStateMonitor !== monitor || window.isDestroyed() || window.webContents.isDestroyed()) return;
+  readyPowerStateWebContents.add(window.webContents);
+  sendPowerState(monitor.getState(), window);
+}
+
 const nativeNotificationState = {
   lastError: null,
   lastAttemptedAt: null,
@@ -318,6 +358,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   startupTimeoutMs: 120_000,
+  startupDeadline: () => storageCorrectionWatch?.deadline() ?? 0,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
   onIntentionalExit: handleIntentionalAgentExit,
@@ -579,7 +620,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
-  if (startupPending()) { failStartup(); return; }
+  if (startupPending()) { storageCorrectionWatch?.close(); storageCorrectionWatch = null; failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -2117,6 +2158,7 @@ async function createWindow() {
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
     userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
@@ -2171,6 +2213,12 @@ async function createWindow() {
     },
   });
   mainWindow = win;
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    if (!isMainFrame) return;
+    readyPowerStateWebContents.delete(win.webContents);
+    sentPowerStateByWebContents.delete(win.webContents);
+  });
+  win.webContents.on("did-finish-load", () => { void syncPowerStateToWindow(win); });
   const firstDataPaint = waitForStartupRenderer(win);
   userBrowser ??= installUserBrowser(app, () => mainWindow);
   win.on("hide", () => userBrowser.syncAll());
@@ -2771,6 +2819,7 @@ if (appSingleInstanceLock) {
         return;
       }
       void installDevtools().catch(() => undefined);
+      await ensurePowerStateMonitor();
       await createWindow();
       if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
         const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
@@ -2789,8 +2838,10 @@ app.on("window-all-closed", () => {
 app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
+    powerStateMonitor?.stop();
     quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
@@ -2949,6 +3000,7 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (!failStartup()) app.quit();
 }
 
@@ -2957,8 +3009,15 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") startupStage("service");
-  if (stage === "agent_ready") startupStage("screen");
+  if (stage === "agent_starting" && startupPending()) {
+    startupStage("service");
+    storageCorrectionWatch?.close();
+    storageCorrectionWatch = watchStorageCorrection(butlerDataRoot, (deadline) => startupStage("storage", deadline));
+  }
+  if (stage === "agent_ready") {
+    storageCorrectionWatch?.close(); storageCorrectionWatch = null;
+    startupStage("screen");
+  }
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();

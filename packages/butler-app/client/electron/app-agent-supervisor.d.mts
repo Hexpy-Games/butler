@@ -106,6 +106,7 @@ export function createBundledAgentSupervisor(input: {
   startupAttempts?: number;
   startupDelayMs?: number;
   startupTimeoutMs?: number | null;
+  startupDeadline?: () => number;
   killTimeoutMs?: number;
   probeTimeoutMs?: number;
   stdio?: string;

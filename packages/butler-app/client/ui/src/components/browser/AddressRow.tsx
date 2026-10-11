@@ -1,3 +1,4 @@
+import { AddressSuggestions } from "./AddressSuggestions";
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { AddressField, ArrowLeft, ArrowRight, BrowserToolbar, ButtonContainer, IconButton, Pick, RefreshCcw, Square, Tag } from "@/butler-ds";
@@ -23,7 +24,7 @@ export function AddressRow({ tab, enabled }: { tab?: BrowserTab; enabled: boolea
       <IconButton label={tab?.status === "loading" ? copy.stop : copy.reload} disabled={locked || !enabled || !tab}
         onClick={() => call(tab?.status === "loading" ? "stop" : "reload")}>{tab?.status === "loading" ? <Square size="md" /> : <RefreshCcw size="md" />}</IconButton>
     </ButtonContainer>}
-    address={<AddressField url={tab?.url} disabled={locked || !enabled || !tab} editing={editing}
+    address={<AddressSuggestions editing={editing} onChoose={url => { call("navigate", url); setEditing(false); }} field={suggest => <AddressField {...suggest} url={tab?.url} disabled={locked || !enabled || !tab} editing={editing}
       bookmarked={Boolean(bookmark)} onToggleBookmark={tab?.url ? () => {
         const save = bookmark ? deleteLibrary(bookmark.id) : saveLibrary({ id: crypto.randomUUID(), kind: "bookmark", title: tab.title || tab.url, url: tab.url, capturedAt: new Date().toISOString() });
         void save.catch(() => notifyStatus(copy.failed, { tone: "error" }));
@@ -31,6 +32,6 @@ export function AddressRow({ tab, enabled }: { tab?: BrowserTab; enabled: boolea
       onEditingChange={setEditing} onSubmit={(address) => call("navigate", address)}
       security={!tab?.url ? "internal" : tab.url.startsWith("https:") ? "secure" : "insecure"}
       labels={{ field: copy.address, placeholder: copy.addressPlaceholder, secure: copy.secure,
-        insecure: copy.notSecure, bookmarkAdd: copy.bookmarkAdd, bookmarked: copy.bookmarked }} />}
+        insecure: copy.notSecure, bookmarkAdd: copy.bookmarkAdd, bookmarked: copy.bookmarked }} />} />}
     actions={<ButtonContainer size="icon-sm">{tab?.preview && <Tag data-test-class="browser-preview-tag">{copy.preview}</Tag>}<IconButton label={copy.pick} disabled={locked || !tab?.url} aria-pressed={tab?.picking === true} onClick={() => call("pick", !tab?.picking)}><Pick size="md" /></IconButton><BookmarksMenu /><BrowserOptions tab={tab} /></ButtonContainer>} />;
 }

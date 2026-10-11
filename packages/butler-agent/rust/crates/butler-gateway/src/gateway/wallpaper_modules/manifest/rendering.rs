@@ -1,8 +1,9 @@
 //! Optional manifest fields (still engine 1) that shape how the engine draws
-//! a module: `overlay` (a cached `shader.frag` under an every-frame
-//! `overlay.frag`), `pixelRatio`, `imageDim`, `defaultImage` (an image in the
-//! module folder) and `sceneTone` (when a real-time scene is dark). The rules
-//! and messages follow the UI's `manifestOptions.ts`.
+//! a module: bundled-only `density: true` (a quarter-resolution first pass),
+//! `overlay` (a cached `shader.frag` under an every-frame `overlay.frag`),
+//! `pixelRatio`, `imageDim`, `defaultImage` (an image in the module folder),
+//! and `sceneTone` (when a real-time scene is dark). The rules and messages
+//! follow the UI's `manifestOptions.ts` where applicable.
 
 use serde_json::{Map, Value};
 
@@ -23,8 +24,16 @@ pub(super) struct Rendering {
 pub(super) fn rendering(
     raw: &Map<String, Value>,
     params: &[ParamSpec],
+    bundled: bool,
     errors: &mut Vec<String>,
 ) -> Rendering {
+    if let Some(density) = raw.get("density") {
+        if !bundled {
+            errors.push("density: is only available to bundled modules".into());
+        } else if density != &Value::Bool(true) {
+            errors.push("density: must be true when present".into());
+        }
+    }
     let overlay = match raw.get("overlay") {
         None => false,
         Some(Value::Bool(overlay)) => *overlay,

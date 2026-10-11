@@ -1719,6 +1719,7 @@ export function activeTitleForView(
   view: AppView,
   activeChat: ActiveChatView,
 ): { title: string; subtitle?: string } {
+  if (view.kind === "history") return { title: appCopy.browser.history.title };
   if (view.kind === "browser") return { title: appCopy.browser.title };
   if (view.kind === "library") return { title: appCopy.browser.library };
   if (view.kind === "settings") return { title: appCopy.settings.title };

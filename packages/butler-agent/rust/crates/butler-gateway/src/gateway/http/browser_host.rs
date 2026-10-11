@@ -114,6 +114,9 @@ pub(super) async fn route(
         (&Method::POST, "/internal/browser-host/stills") => {
             agent_calls::still(state, read_json(request).await?).await
         }
+        (&Method::POST, "/internal/browser-host/visits") => {
+            super::library::history::record(state, request).await
+        }
         (&Method::POST, "/internal/browser-host/events") => {
             agent_calls::events(state, read_json(request).await?).await
         }

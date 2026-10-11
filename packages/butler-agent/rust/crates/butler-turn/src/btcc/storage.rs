@@ -10,6 +10,8 @@ mod claims;
 mod common;
 mod context_compactions;
 mod context_documents;
+mod correction;
+pub use correction::{CorrectionOutcome, run_startup_correction};
 mod effects;
 mod error;
 mod hydration;

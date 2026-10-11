@@ -21,9 +21,19 @@ The App owns the URL, the security state, bookmarks and navigation
   bookmarked={bookmarked} onToggleBookmark={toggle} onSubmit={navigate} labels={copy.addressLabels} />
 ```
 
+## Suggestions
+While editing, `onInputChange` reports the typed text and `onInputKeyDown`
+runs before the built-in keys (prevent the default to take Enter or the
+first Escape). `listbox={{ id, expanded, activeOptionId }}` makes the input
+an ARIA combobox that controls a `SuggestionList`. Wrap the field in
+`PopoverAnchor` and open `PopoverContent width="anchor" density="list"` so
+the list is exactly as wide as the field.
+
 ## Accessibility
 At rest it is a button named “Address: <url>”; in edit mode the input is
-labelled, and the whole field carries the focus ring.
+labelled, and the whole field carries the focus ring. With `listbox` the
+input is a combobox (`aria-autocomplete="list"`, `aria-controls`,
+`aria-expanded`, `aria-activedescendant`); focus never leaves it.
 
 ## Responsive behavior
 It takes the remaining toolbar width; the text truncates at the end.

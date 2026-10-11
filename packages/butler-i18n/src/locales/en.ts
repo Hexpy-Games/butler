@@ -262,6 +262,7 @@ export const enUsCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
+    history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions" },
     tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
     back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab",
@@ -1261,9 +1262,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionAliases: {
       memory: ["instructions", "chat memory", "profile", "project memory", "reset", "free up space", "storage"],
-      general: ["basics", "general settings", "conversation", "default permission"],
+      general: ["basics", "general settings", "conversation", "smart groups", "sidebar", "default permission"],
       models: ["model settings", "workers", "backup models", "api keys"],
-      appearance: ["theme", "display", "design"],
+      appearance: ["theme", "display", "design", "message box", "composer"],
       server: ["connection", "project folder"],
       updates: ["upgrade", "new version"],
       mcp: ["tool servers", "external tools"],
@@ -1316,6 +1317,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       theme: "Theme",
       sidebar: "Sidebar",
       homeScreen: "Home screen",
+      messageBox: "Message box",
       profile: "Profile",
       responseStyle: "Response style",
       learning: "Profile building",
@@ -1353,6 +1355,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchBehavior: "How Butler reads pages and plans searches before running them.",
       sidebar: "How the sidebar organizes conversations.",
       homeScreen: "The background of the new chat screen.",
+      messageBox: "Applies to the input on new chats and conversation screens.",
       learning: "How much Butler picks up about you from your chats.",
     },
     memory: {
@@ -1635,7 +1638,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       reduceMotion: "When off, follows your system setting.",
       reduceMotionSystem: "On in your system settings",
       wallpaperStill: "Paused by Reduce motion",
-      composerDecoration: "Art behind your text. Follows wallpaper motion.",
+      composerDecoration: "Art behind your text.",
       composerCharacter: "A little friend sits above the message box.",
       themeFollowsWallpaper: "Set by the real-time wallpaper",
       contextLimit: (maxLabel) =>

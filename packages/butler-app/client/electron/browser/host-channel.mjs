@@ -1,3 +1,4 @@
+import { createVisitQueue } from "./history.mjs";
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
 import { closeReaderRenders, renderReader } from "./reader-render.mjs";
 
@@ -49,6 +50,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       const response = await request("/internal/browser-host");
       if (!response.ok) throw new Error("host_unavailable");
       await flushState();
+      await history.flush();
       let pending = "";
       const decoder = new TextDecoder();
       for await (const chunk of response.body) {
@@ -81,6 +83,10 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       return typeof value?.password === "string" ? { password: value.password } : unavailable;
     } catch { return unavailable; }
   }
+  const history = createVisitQueue(async visits => {
+    const response = await request("/internal/browser-host/visits", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visits }) });
+    if (!response.ok) throw new Error("history_unavailable");
+  });
   /** A saved card's or profile's values, once per token, for the exact origins
    * the token binds; never logged, never returned to Rust. */
   async function vault(token, origin, frameOrigins) {
@@ -94,6 +100,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     } catch { return unavailable; }
   }
   return {
+    history,
     credential,
     vault,
     start() { if (!running && enabled()) { running = true; void connect(); } },

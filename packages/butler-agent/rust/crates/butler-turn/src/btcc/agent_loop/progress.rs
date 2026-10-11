@@ -204,6 +204,7 @@ fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
                 | "browser_sign_in"
                 | "browser_pay_fill"
                 | "browser_traveler_fill"
+                | "browser_history_search"
                 | "library_search"
                 | "library_organize"
         )

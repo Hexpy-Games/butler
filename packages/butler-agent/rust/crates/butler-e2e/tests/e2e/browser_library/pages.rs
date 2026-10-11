@@ -49,9 +49,9 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
     let s = Setup::new("BROWSER-LIBRARY-FILTERS")?.start().await?;
     let total = 150;
     for n in 0..total {
-        ok(s.gw.post("/library", item(n)).await?);
+        ok(&s.gw.post("/library", item(n)).await?);
     }
-    let group = ok(s
+    let group = ok(&s
         .gw
         .post(
             "/library/groups",
@@ -63,27 +63,30 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         .to_owned();
     // Keep group metadata distinct from the words tested below.
     let evens: Vec<String> = (0..total)
-        .filter(|n| n % 2 == 0)
+        .filter(|n| n.is_multiple_of(2))
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch("/library/items", json!({"ids": evens, "group": group}))
         .await?);
     let thirds: Vec<String> = (0..total)
         .filter(|n| n % 3 != 2)
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch(
             "/library/items",
             json!({"ids": thirds, "addTags": ["Port"]}),
         )
         .await?);
     let fours: Vec<String> = (0..total)
-        .filter(|n| n % 4 == 0)
+        .filter(|n| n.is_multiple_of(4))
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch(
             "/library/items",
             json!({"ids": fours, "addTags": ["Night"]}),
@@ -118,7 +121,13 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         assert_eq!(pages, 3, "sort {sort}");
     }
     // Every filter at once, in every sort: group ∧ both tags ∧ site ∧ date range ∧ words.
-    let wanted = |n: usize| n.is_multiple_of(60) && (12..=140).contains(&n);
+    let wanted = |n: usize| {
+        n.is_multiple_of(2)
+            && n.is_multiple_of(3)
+            && n.is_multiple_of(4)
+            && n.is_multiple_of(5)
+            && (12..=140).contains(&n)
+    };
     for (sort, order) in &expected {
         let path = format!(
             "/library?kind=scrap&sort={sort}&group={group}&tags=port,NIGHT&site=alpha.example&since=2026-10-01T00:12:00Z&until=2026-10-01T02:20:00%2B00:00&q=harbor"

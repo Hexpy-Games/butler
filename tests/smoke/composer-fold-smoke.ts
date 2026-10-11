@@ -10,7 +10,7 @@ import { installComposerRenderProbe, readComposerRenderProbe, resetComposerRende
 import { settingsReady } from "./appearance-perf-support";
 
 const baseline = Bun.argv.includes("--baseline");
-const out = resolve(".tmp/composer-fold", baseline ? "before" : "after");
+const out = join(resolve(process.env.BUTLER_COMPOSER_FOLD_OUT ?? ".tmp/composer-fold"), baseline ? "before" : "after");
 mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve(baseline ? ".tmp/composer-fold/baseline-dist" : "packages/butler-app/client/ui/dist") });
 const browser = await launchSmokeBrowser();
@@ -49,7 +49,7 @@ async function appearance() {
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await settingsReady(page);
   await page.getByRole("button", { name: "모양", exact: true }).click();
-  await page.locator('[data-settings-section-id="home-screen"]').waitFor();
+  await page.locator(`[data-settings-section-id="${baseline ? "home-screen" : "message-box"}"]`).waitFor();
 }
 
 async function workspace() {

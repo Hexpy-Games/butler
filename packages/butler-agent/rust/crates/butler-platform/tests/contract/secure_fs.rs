@@ -8,7 +8,7 @@ use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
     append_private, create_private_dir_all, exchange_directories, file_mode, identity,
     is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder,
-    replace_private, restrict_directory, restrict_file, restrict_open_file, same_file,
+    replace_private, restrict_directory, restrict_file, restrict_open_file, same_metadata,
     set_file_mode, symlink, sync_directory,
 };
 
@@ -44,7 +44,7 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
     assert_eq!(is_owner_only(&after), OWNER_ONLY.then_some(true));
     // A replaced file is a new file, which readers can tell apart.
     if FILE_IDS {
-        assert!(!same_file(&before, &after));
+        assert!(!same_metadata(&before, &after));
     }
 
     let failed = replace_private(

@@ -150,7 +150,7 @@ try {
       await page.screenshot({ path: join(out, `appearance-${width}-${theme}-ko.png`), fullPage: true });
       assert(await toggle.isVisible(), "Motion row missing at viewport");
       const sections = await page.locator('[data-settings-section-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-settings-section-id")));
-      assert(JSON.stringify(sections) === JSON.stringify(["theme", "sidebar", "home-screen", "accessibility"]), "Appearance section order changed");
+      assert(JSON.stringify(sections) === JSON.stringify(["theme", "home-screen", "message-box", "accessibility"]), "Appearance section order changed");
       await toggle.scrollIntoViewIfNeeded();
       const fits = await toggle.evaluate((node) => {
         const section = node.closest('[data-settings-section-id="accessibility"]')!.getBoundingClientRect();

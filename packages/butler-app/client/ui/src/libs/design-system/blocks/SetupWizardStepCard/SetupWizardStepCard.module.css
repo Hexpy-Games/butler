@@ -10,7 +10,7 @@
 /* contentKey: the next step's content fades in; the frame and header stay. */
 .bodyEnter {
   animation: setup-step-enter var(--motion-base) var(--motion-ease-decelerate)
-    both;
+    backwards;
 }
 
 @keyframes setup-step-enter {
