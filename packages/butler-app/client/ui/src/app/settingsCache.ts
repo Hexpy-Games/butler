@@ -1,6 +1,6 @@
 import { DEFAULT_WEB_SEARCH_SETTINGS, EMPTY_SETTINGS } from "./constants.ts";
 import type { SettingsView } from "./types.ts";
-import { legacyWallpaperSetting, parseWallpaperSetting } from "./wallpaperSetting.ts";
+import { legacyWallpaperSetting, parseWallpaperSetting, parseConversationBackgroundSetting } from "./wallpaperSetting.ts";
 
 const APP_SETTINGS_CACHE_KEY = "butler:settings:v1";
 
@@ -48,7 +48,7 @@ function normalizeMainScreenTheme(
   value: unknown,
 ): SettingsView["main_screen_theme"] {
   if (value === "curtain") return "silk";
-  return value === "none" || value === "bloom" || value === "silk"
+  return value === "none" || value === "bloom" || value === "silk" || value === "riso"
     ? value
     : EMPTY_SETTINGS.main_screen_theme;
 }
@@ -110,6 +110,7 @@ export function settingsWithDefaults(
     wallpaper:
       parseWallpaperSetting(record.wallpaper) ??
       legacyWallpaperSetting(legacyTheme),
+    conversation_background: parseConversationBackgroundSetting(record.conversation_background) ?? EMPTY_SETTINGS.conversation_background,
     composer_decoration: {
       theme: isRecord(record.composer_decoration) && (record.composer_decoration.theme === "shoreline" || record.composer_decoration.theme === "cherry") ? record.composer_decoration.theme : "none",
       character: isRecord(record.composer_decoration) && typeof record.composer_decoration.character === "boolean" ? record.composer_decoration.character : true,

@@ -13,7 +13,7 @@ pub(super) fn ui_defaults() -> Value {
         "context_window_tokens":258_000, "worker_profiles":[], "max_simultaneous_workers":10,
         "access_mode":"ask_except_reads", "plan_mode_default":false, "follow_up_behavior":"queue",
         "multiline_send_behavior":"modifier_enter_send_enter_newline", "appearance_theme":"system", "reduce_motion":false, "collapse_message_box":true,
-        "main_screen_theme":"bloom", "main_screen_theme_preset":"monochrome",
+        "main_screen_theme":"riso", "main_screen_theme_preset":"monochrome",
         "main_screen_theme_custom_colors":["#32424d","#555d7c","#485c70","#6a7d9a","#53708d","#434d70"],
         "translucent_sidebar":true, "smart_grouping_enabled":true, "diagnostics_enabled":false,
         "desktop_notifications":{"enabled":true,"assistant_messages":true,"task_completions":true},
@@ -76,7 +76,8 @@ pub(super) fn main_theme(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("none") => "none",
         Some("silk" | "curtain") => "silk",
-        _ => "bloom",
+        Some("bloom") => "bloom",
+        _ => "riso",
     }
 }
 #[expect(

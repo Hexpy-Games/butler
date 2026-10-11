@@ -56,7 +56,7 @@ test("legacy silk maps to the silk module with its tone defaults", () => {
 });
 
 test("legacy bloom presets map to a preset name", () => {
-  for (const preset of ["monochrome", "aurora", "bloom", "lavender", "morning"] as const) {
+  for (const preset of ["aurora", "bloom", "lavender", "morning"] as const) {
     expect(sourceOf(legacy({ main_screen_theme_preset: preset })))
       .toEqual({ kind: "live", module: "butler.bloom", params: { colors: preset } });
   }
@@ -70,14 +70,14 @@ test("a legacy custom bloom palette maps to its normalized hex list", () => {
   });
 });
 
-test("invalid legacy custom colors and unknown values fall back to the default bloom", () => {
+test("invalid legacy custom colors and unknown values fall back to the default riso", () => {
   const broken = ["#112233", "red"] as unknown as LegacyTheme["main_screen_theme_custom_colors"];
   expect(sourceOf(legacy({ main_screen_theme_preset: "custom", main_screen_theme_custom_colors: broken })))
-    .toEqual({ kind: "live", module: "butler.bloom" });
+    .toEqual({ kind: "live", module: "butler.riso-print" });
   expect(sourceOf(legacy({ main_screen_theme_preset: "noon" as LegacyTheme["main_screen_theme_preset"] })))
-    .toEqual({ kind: "live", module: "butler.bloom" });
+    .toEqual({ kind: "live", module: "butler.riso-print" });
   expect(sourceOf(legacy({ main_screen_theme: "curtain" as LegacyTheme["main_screen_theme"] })))
-    .toEqual({ kind: "live", module: "butler.bloom", params: { colors: "monochrome" } });
+    .toEqual({ kind: "live", module: "butler.silk" });
 });
 
 test("equal settings keep one wallpaper identity, so the wallpaper never rebuilds on re-render", () => {

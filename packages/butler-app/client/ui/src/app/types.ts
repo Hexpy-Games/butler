@@ -586,7 +586,7 @@ export interface SettingsView {
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
   collapse_message_box: boolean;
-  main_screen_theme: "none" | "bloom" | "silk";
+  main_screen_theme: "none" | "bloom" | "silk" | "riso";
   main_screen_theme_preset:
     | "monochrome"
     | "aurora"
@@ -604,6 +604,7 @@ export interface SettingsView {
   ];
   /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
   wallpaper: WallpaperSetting;
+  conversation_background: { source: WallpaperSource; overlay: number };
   composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;

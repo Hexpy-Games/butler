@@ -37,6 +37,7 @@ mod cli_surface;
 mod composer_decoration;
 mod composer_fold;
 mod context_telemetry;
+mod conversation_background;
 mod credential_store;
 mod credentials;
 mod default_model;
