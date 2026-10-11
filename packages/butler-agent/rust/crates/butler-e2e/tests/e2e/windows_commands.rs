@@ -66,6 +66,9 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     std::fs::create_dir_all(&downloads)?;
     std::fs::write(downloads.join("보고서.txt"), "document")?;
     std::fs::write(downloads.join("사진.png"), "image")?;
+    let spaced = setup.sandbox.home.join("Directory with spaces");
+    std::fs::create_dir_all(&spaced)?;
+    std::fs::write(spaced.join("한국어 파일.txt"), "한국어 경로 출력")?;
     let home = setup.sandbox.home.display().to_string();
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
@@ -204,6 +207,31 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             "WIN-CMD",
             r#"cmd /c dir "%USERPROFILE%\Downloads""#,
             "보고서.txt",
+        ),
+        (
+            "WIN-CMD-OUTER",
+            r#"cmd /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-D",
+            r#"cmd.exe /d /c type "%USERPROFILE%\Directory with spaces\한국어 파일.txt""#,
+            "한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-D-OUTER",
+            r#"cmd.exe /d /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-S",
+            r#"cmd /s /c type "%USERPROFILE%\Directory with spaces\한국어 파일.txt""#,
+            "한국어 경로 출력",
+        ),
+        (
+            "WIN-CMD-S-OUTER",
+            r#"cmd /s /c "echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt"""#,
+            "한국어 출력\r\n한국어 경로 출력",
         ),
         (
             "WIN-NODE",

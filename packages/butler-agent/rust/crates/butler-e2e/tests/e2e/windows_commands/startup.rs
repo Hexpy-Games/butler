@@ -26,6 +26,21 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         environment.insert(name.into(), path.display().to_string());
     }
     tokio::task::spawn_blocking(move || {
+        let spaced = setup.sandbox.home.join("Directory with spaces");
+        std::fs::create_dir_all(&spaced).unwrap();
+        std::fs::write(spaced.join("한국어 파일.txt"), "한국어 경로 출력").unwrap();
+        for prefix in ["cmd /c", "cmd.exe /d /c", "cmd /s /c"] {
+            for outer_quotes in [false, true] {
+                let text = r#"echo 한국어 출력& type "%USERPROFILE%\Directory with spaces\한국어 파일.txt""#;
+                let text = if outer_quotes { format!("\"{text}\"") } else { text.into() };
+                let invocation = login_shell(&format!("{prefix} {text}"), ShellAccess::Full, &environment).unwrap();
+                let mut command = std::process::Command::new(&invocation.program);
+                add_arguments(&mut command, &invocation);
+                let output = command.env_clear().envs(&environment).current_dir(&setup.sandbox.home).output().unwrap();
+                assert!(output.status.success(), "{prefix} outer_quotes={outer_quotes}: {output:?}");
+                assert_eq!(String::from_utf8(output.stdout).unwrap(), "한국어 출력\r\n한국어 경로 출력");
+            }
+        }
         for (shell, script) in [
             ("cmd", "echo 안녕하세요"),
             ("powershell", "Write-Output '안녕하세요'; [Console]::Error.WriteLine('command_shell_phase phase=command_done utc_ticks=' + [DateTime]::UtcNow.Ticks)"),

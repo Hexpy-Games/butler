@@ -14,6 +14,10 @@ use butler_platform::command_sandbox::{
 
 use super::scratch;
 
+// Pin the Windows invocation plan on Linux too; native E2Es verify cmd parsing.
+#[path = "../../src/command_sandbox/windows/cmd.rs"]
+mod cmd;
+
 fn run(invocation: &Invocation) -> ExitStatus {
     Command::new(&invocation.program)
         .args(&invocation.arguments)
@@ -29,8 +33,10 @@ fn write_command(targets: &[&Path]) -> String {
         .join("; ")
 }
 
+// test-category: pure-logic
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
+    cmd_arguments_remain_verbatim();
     assert_eq!(READ_ONLY_SANDBOX, cfg!(target_os = "macos"));
     let directory = scratch("read-only");
     let target = directory.join("must-not-exist");
@@ -51,6 +57,38 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     let full = login_shell(&command, ShellAccess::Full, &environment).unwrap();
     assert!(run(&full).success());
     assert!(target.exists());
+}
+
+fn cmd_arguments_remain_verbatim() {
+    let environment = HashMap::from([("ComSpec".into(), Some("cmd.exe".into()))]);
+    for text in [
+        r#"cmd.exe /d /c "echo 한국어 출력""#,
+        r#"cmd /c dir "%USERPROFILE%\Downloads""#,
+        r#"cmd /s /c "echo 한국어 출력 & dir "%USERPROFILE%\Downloads"""#,
+        r#"cmd /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
+        r#"cmd /s /c echo 한국어 출력 & dir "C:\Directory with spaces""#,
+        r"cmd.exe /d /c echo 한국어 출력",
+        r#"cmd /c ""C:\Program Files\tool.exe" "한국어 인수"""#,
+        r#"cmd /s /c ""C:\Program Files\tool.exe" "%USERPROFILE%\Downloads"""#,
+    ] {
+        assert!(cmd::script(text).is_some(), "{text}");
+        let invocation = cmd::shell(text, &environment);
+        assert_eq!(invocation.program, "cmd.exe");
+        assert_eq!(
+            invocation.arguments,
+            ["/d", "/s", "/c", &format!("chcp 65001>nul & {text}")]
+        );
+        assert_eq!(
+            cmd::raw_argument(&invocation).as_deref(),
+            Some(format!("\"chcp 65001>nul & {text}\"").as_str())
+        );
+    }
+    let native = Invocation {
+        program: "node.exe".into(),
+        arguments: vec!["/d".into(), "/s".into(), "/c".into(), "quoted text".into()],
+    };
+    assert_eq!(cmd::raw_argument(&native), None);
+    assert_eq!(cmd::script("Write-Output '한국어 출력'"), None);
 }
 
 #[test]

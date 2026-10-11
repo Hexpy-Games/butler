@@ -4,7 +4,7 @@
 use std::process::{ExitStatus, Stdio};
 use std::time::{Duration, SystemTime};
 
-use butler_platform::process_control;
+use butler_platform::{command_sandbox, process_control};
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
@@ -203,8 +203,14 @@ fn step_command(
     cwd: Option<&std::path::Path>,
 ) -> Command {
     let mut command = Command::new(&step.executable);
+    command_sandbox::add_arguments(
+        command.as_std_mut(),
+        &command_sandbox::Invocation {
+            program: step.executable.clone(),
+            arguments: step.arguments.clone(),
+        },
+    );
     command
-        .args(&step.arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
