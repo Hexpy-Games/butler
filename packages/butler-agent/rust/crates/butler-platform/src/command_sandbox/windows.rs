@@ -83,13 +83,11 @@ pub(super) fn legacy_shell(
     let modules = default_modules(environment);
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
-    // PowerShell maintains its own provider location apart from the process CWD.
-    // Enter the admitted short spelling explicitly and stop before the
-    // user's script if the provider cannot enter it. Keep the private bootstrap
-    // variable out of the environment seen by the user's command.
-    let directory = "if ($env:BUTLER_COMMAND_CWD) { try { Set-Location -LiteralPath $env:BUTLER_COMMAND_CWD -ErrorAction Stop } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }; Remove-Item Env:BUTLER_COMMAND_CWD }; ";
+    // Keep the extended prefix when PowerShell expands the admitted short CWD.
+    // Its .NET file APIs must receive it too, independently of machine policy.
+    let paths = include_str!("windows/paths.ps1");
     let script = format!(
-        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{directory}{command}"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{paths}{command}"
     );
     let encoded = STANDARD.encode(
         script

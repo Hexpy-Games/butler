@@ -1,7 +1,7 @@
 //! Exact shell invocations with app-like environment and verified output.
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::command_sandbox::{
-    Invocation, ShellAccess, add_arguments, login_shell, tool_environment,
+    Invocation, ShellAccess, add_arguments, login_shell, tool_environment, working_directory,
 };
 use std::{collections::HashMap, time::Instant};
 
@@ -79,6 +79,21 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             timings.sort_by(f64::total_cmp);
             eprintln!("SHELL-STARTUP shell={shell} n=20 first_ms={first:.3} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} output_verified=20", timings[9], timings[18], timings[19]);
         }
+        let mut long_directory = spaced;
+        for _ in 0..6 {
+            long_directory.push("long-component-012345678901234567890123456789");
+        }
+        std::fs::create_dir_all(&long_directory).unwrap();
+        let script = "'한국어 내용' > 'unicode marker.txt'; Rename-Item -LiteralPath 'unicode marker.txt' -NewName 'renamed marker.txt' -ErrorAction Stop; $content=Get-Content -LiteralPath 'renamed marker.txt' -Raw -ErrorAction Stop; Remove-Item -LiteralPath 'renamed marker.txt' -ErrorAction Stop; [Console]::Write($content)";
+        let invocation = login_shell(script, ShellAccess::Full, &environment).unwrap();
+        let mut command = std::process::Command::new(&invocation.program);
+        command.env_clear().envs(&environment).current_dir(working_directory(&long_directory).unwrap());
+        add_arguments(&mut command, &invocation);
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "long-directory PowerShell: {output:?}");
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "한국어 내용\r\n");
+        assert!(!long_directory.join("unicode marker.txt").exists());
+        assert!(!long_directory.join("renamed marker.txt").exists());
     }).await.map_err(|error| HarnessError(error.to_string()))?;
     Ok(())
 }
