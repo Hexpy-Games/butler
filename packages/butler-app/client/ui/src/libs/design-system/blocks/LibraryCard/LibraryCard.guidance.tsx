@@ -37,7 +37,8 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Kind tags are one word: Element / 요소, View / 화면, Document / 문서. Meta is “source · date”.",
     "Pass crops as they are: every picture is whole; typical shapes span the slot, extreme strips and columns sit inset on the matte. Never pre-crop or pad them.",
+    "Tags: at most two then “+N”. Select label: “Select” / “선택”. Rename field label: “Name” / “이름”.",
   ],
-  accessibility: ["The media and title are one button named by the title; the ⋯ menu is a separate button.", "Images are decorative (the title names the item)."],
+  accessibility: ["The media and title are one button named by the title; the ⋯ menu is a separate button.", "Images are decorative (the title names the item).", "The selection circle is a checkbox (aria-checked) named by selectLabel; the rename field is named by editing.label."],
   tokens: ["--radius-control", "--muted", "--line-height-body", "--text-tertiary", "--browser-card-shadow"],
 };

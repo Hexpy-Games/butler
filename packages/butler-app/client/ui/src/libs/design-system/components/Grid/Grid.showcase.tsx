@@ -67,6 +67,18 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    // Library cards: two columns on a phone, three in the app, four on a wide page.
+    name: "Card columns: compact 2 · base 3 · wide 4",
+    widths: ["375", "app", "wide"],
+    render: (context) => (
+      <PageContainer gutter="none">
+        <Grid columns={{ compact: "2", base: "3", wide: "4" }} gap="md">
+          {[1, 2, 3, 4, 5, 6].map((index) => <Cell key={index}>{`${text(context).cell} ${index}`}</Cell>)}
+        </Grid>
+      </PageContainer>
+    ),
+  },
+  {
     // ProjectDocumentMarkdownContent frontmatter: label and value columns on one baseline.
     name: "Label / value rows",
     render: () => (

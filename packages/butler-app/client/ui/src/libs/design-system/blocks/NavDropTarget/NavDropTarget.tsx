@@ -1,5 +1,5 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import { useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { Stack, type LayoutElement } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -26,7 +26,24 @@ export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTML
   hint?: ReactNode;
   /** An `outside` payload cannot drop here: a dashed danger ring and label ("Can't drop here"). */
   invalid?: boolean;
+  /**
+   * Opens the row's screen when a drag rests on it (`drop` set) for `dwellMs` (default 600 ms), like a
+   * spring-loaded folder: the drag carries on into the opened screen. Called once per rest.
+   */
+  onDwell?: () => void;
+  dwellMs?: number;
   children: ReactNode;
+}
+
+/** Calls `onDwell` once after `active` has held for `ms`; leaving resets it. */
+export function useDropDwell(active: boolean, onDwell: (() => void) | undefined, ms = 600) {
+  const latest = useRef(onDwell);
+  latest.current = onDwell;
+  useEffect(() => {
+    if (!active || !latest.current) return;
+    const timer = setTimeout(() => latest.current?.(), ms);
+    return () => clearTimeout(timer);
+  }, [active, ms]);
 }
 
 /**
@@ -36,8 +53,9 @@ export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTML
  * `lib/dropZones`); the block owns how it looks and moves. Items must be
  * `CollapsibleList` rows inside a `NavDropScope`.
  */
-export function NavDropTarget({ drop, dragging = false, indicator, hint, invalid = false, className, children, ...props }: NavDropTargetProps) {
+export function NavDropTarget({ drop, dragging = false, indicator, hint, invalid = false, onDwell, dwellMs, className, children, ...props }: NavDropTargetProps) {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
+  useDropDwell(Boolean(drop) && !invalid, onDwell, dwellMs);
   const style = indicator
     ? ({ "--drop-row-top": `${indicator.top}px`, "--drop-row-height": `${indicator.height}px` } as CSSProperties)
     : undefined;

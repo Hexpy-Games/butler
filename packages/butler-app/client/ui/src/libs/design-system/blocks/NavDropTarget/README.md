@@ -86,3 +86,9 @@ shows the edge band.
 
 ## Tags
 navigation, sidebar, drag, drop, reorder
+
+## Dwell to open
+`onDwell` (with `dwellMs`, default 600 ms) is called once when a drag rests on the row, like a spring-loaded
+folder: the App opens that screen (the Library main screen for 서랍) and the drag carries on into it, so a pick can
+land on a group tile there. Leaving the row before the delay cancels it. `useDropDwell` is the same timer for
+other drop targets.

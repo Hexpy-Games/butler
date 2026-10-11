@@ -222,3 +222,24 @@
       scale(var(--motion-scale-menu));
   }
 }
+
+/* A filter trigger with chosen values: accent border and text, and a count badge before the chevron. */
+.trigger[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent-text);
+}
+
+.count {
+  display: grid;
+  min-width: var(--space-lg);
+  height: var(--space-lg);
+  flex: none;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+  place-items: center;
+}
