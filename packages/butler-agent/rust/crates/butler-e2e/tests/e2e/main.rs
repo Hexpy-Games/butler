@@ -1,4 +1,5 @@
 //! All current scenarios share one integration-test link.
+mod acceptance_payload;
 mod access;
 mod access_tiers;
 mod agent_context;

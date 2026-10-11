@@ -1,3 +1,4 @@
+import { linkMenuItems } from "./links.mjs";
 import { configureWebIdentity } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
@@ -161,7 +162,7 @@ class UserBrowser {
     attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
-      window: this.getWindow, shortcut: (input) => {
+      linkMenu: (url) => linkMenuItems(this, url, tab), window: this.getWindow, shortcut: (input) => {
         if (tab.popupWindow && input.type === "keyDown" && (input.meta || input.control) && input.key.toLowerCase() === "w") { tab.popupWindow.close(); return true; }
         return this.shortcut(input, true);
       },

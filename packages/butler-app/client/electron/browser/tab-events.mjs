@@ -1,4 +1,5 @@
-import { Menu, session } from "electron";
+import { session } from "electron";
+import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
 
 export function protectPartition(partition, browser) {
@@ -48,11 +49,14 @@ export function wireTab(tab, actions) {
     if (actions.shortcut(input)) event.preventDefault();
   });
   contents.on("context-menu", async (_event, params) => {
+    const win = tab.popupWindow ?? actions.window();
+    const point = menuPoint(contents, params, tab.view.getBounds());
     const release = actions.nativeCover();
     await actions.capture(tab);
     actions.detach(tab);
-    const template = [{ role: "copy", enabled: Boolean(params.selectionText) }, { role: "selectAll" }];
+    const template = [...await actions.linkMenu(params.linkURL), { role: "copy", enabled: Boolean(params.selectionText) }, { role: "selectAll" }];
     if (params.isEditable) template.unshift({ role: "paste" });
-    Menu.buildFromTemplate(template).popup({ window: actions.window(), callback: release });
+    try { await popupMenu(win, template, point, release); }
+    catch { release(); }
   });
 }
