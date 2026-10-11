@@ -44,7 +44,7 @@ async function renderEmptyState(title: string, run: (container: HTMLElement, sen
     useButlerStore.setState({ settings: { ...EMPTY_SETTINGS, main_screen_theme: "none" }, activeChatId: "draft:chat" });
     useComposerStore.setState({ text: "", contentParts: undefined, textAreaRef, appendDraftText: null, draftSessionId: "draft:chat" });
     await act(async () => root.render(
-      <EmptyState
+      <EmptyState onContentRect={() => undefined}
         activeChat={{ title, shortTitle: title, project: "" }}
         isSending={false}
         markTheme="light"
