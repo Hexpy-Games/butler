@@ -17,6 +17,9 @@ try {
   await app.call("activate", { id: tab }); await app.click("Browser"); await nativeAligned(app);
   const values = [];
   for (let n = 0; n < 3; n++) {
+    // Each round starts from a page state of its own: the same click from an
+    // unchanged state is refused as a no-progress repeat.
+    await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("document.getElementById('result').textContent='Ready';document.querySelector('input').value='Round ${n}'")`);
     await pointerAction(app, tab, "click"); await pointerAction(app, tab, "fill");
     const value = await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("document.querySelector('input').value")`);
     values.push(value); assert.equal(value, "Fixture note");

@@ -51,7 +51,7 @@ export function startSignInFixtures(password: string): SignInFixture {
       return page("Checkout", `<h1>주문서</h1><label>받는 분 <input name="to"></label>
         <iframe id="postcode" src="${url("postcode.map.daum.net", "/search")}"></iframe>
         <iframe id="pay" src="${url("js.tosspayments.com", "/widget")}"></iframe>
-        <iframe id="ad" src="${url("ads.fixture-ads.test", "/slot")}"></iframe>
+        <iframe id="ad" style="height:220px" src="${url("ads.fixture-ads.test", "/slot")}"></iframe>
         <form><label>Card number <input name="card" autocomplete="cc-number"></label><button type="submit">결제</button></form>`);
     }
     if (host === "www.fixture-shop.test" && path === "/hops") {
@@ -66,7 +66,9 @@ export function startSignInFixtures(password: string): SignInFixture {
     if (host === "js.tosspayments.com") return page("Pay", `<button>결제하기</button>`);
     if (host === "ads.fixture-ads.test") return page("Ad", `<a href="#" onclick="this.textContent='설치됨';return false">지금 설치</a>
       <label>광고 계정 비밀번호 <input name="pw" type="password"></label>
-      <label>쿠폰 <input name="coupon" onkeydown="if(event.key==='Enter')this.value+='!'"></label>`);
+      <label>쿠폰 <input name="coupon" onkeydown="if(event.key==='Enter')this.value+='!'"></label>
+      <div role="slider" aria-label="드래그 패드" aria-valuenow="0" tabindex="0" style="width:200px;height:30px;background:#ddd"
+        onmousedown="this.dataset.x=event.clientX" onmouseup="if(this.dataset.x)document.getElementById('drag').textContent='dragged '+Math.round(event.clientX-this.dataset.x)"></div><button id="drag">드래그 전</button>`);
     if (host === "bank.fixture-bank.test") {
       const keys = Array.from({ length: 12 }, (_, index) => `<img class="keypad-key" alt="" width="40" height="40" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-key="${index}">`).join("");
       return page("Bank", `<label>비밀번호 <input id="pin" type="password" readonly></label><div class="keypad">${keys}</div>`);
