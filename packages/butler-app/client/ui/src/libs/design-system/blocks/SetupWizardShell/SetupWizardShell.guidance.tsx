@@ -53,12 +53,14 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Titles are questions or instructions; buttons are the answers.",
     "A multi-screen focus flow uses anchor=\"top\" so every card shares one top edge (20% of the window, clamped), and stepKey so the 420px intro card morphs into the 520px step card.",
-    "\"설정 다시 실행\" passes intro=\"rerun\": only the card appears (220ms fade and 4px rise).",
+    "First install passes intro=\"full\" and puts SetupWizardMark in the welcome card: the backdrop writes the mark, which lands in that slot; the mark then stays still while Butler prepares.",
+    "\"설정 다시 실행\" passes intro=\"rerun\": the dried print shows still and only the card appears (220ms fade and 4px rise).",
   ],
   accessibility: [
     "The step progress is labelled (progressLabel) and announces the current step.",
     "After a card morph the new card owns focus: the step title going forward, the start action going back. Clicks during the morph are ignored.",
-    "Reduced motion swaps the cards and shows the re-run card at once.",
+    "Reduced motion swaps the cards and shows the re-run card at once; the ink intro becomes one still print and a 160ms card fade.",
+    "The ink intro can be skipped with any click or key; the card takes no input while the reveal runs.",
   ],
-  tokens: ["--titlebar-height", "--motion-deliberate", "--motion-ease-emphasized", "--motion-morph-rows", "--motion-stagger-row", "--motion-slow", "--motion-base", "--motion-exit-base", "--motion-exit-fast", "--motion-distance-sm", "--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
+  tokens: ["--titlebar-height", "--motion-deliberate", "--motion-ease-emphasized", "--motion-morph-rows", "--motion-stagger-row", "--motion-slow", "--motion-base", "--motion-exit-base", "--motion-exit-fast", "--motion-distance-sm", "--motion-stagger-intro", "--motion-intro-draw", "--motion-intro-print", "--butler-mark-ink", "--riso-paper", "--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
 };

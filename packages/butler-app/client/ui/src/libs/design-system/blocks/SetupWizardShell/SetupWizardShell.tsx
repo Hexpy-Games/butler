@@ -7,12 +7,15 @@ import { ScrollArea } from "../ScrollArea";
 import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
 import { SetupWizardStage, type SetupWizardIntro } from "./SetupWizardStage";
+import { useSetupIntro } from "./useSetupIntro";
 import styles from "./SetupWizardShell.module.css";
+import introStyles from "./SetupWizardIntro.module.css";
 import { dsClass } from "../../lib/internal";
 
 export { SetupWizardProgress, type SetupWizardProgressProps, type SetupWizardStep } from "./SetupWizardProgress";
 export { SetupWizardContent, SetupWizardList, type SetupWizardContentProps } from "./SetupWizardContent";
 export type { SetupWizardIntro } from "./SetupWizardStage";
+export { SetupWizardMark, type SetupWizardMarkProps } from "./SetupWizardMark";
 
 /**
  * The first-run backdrop is the riso print, whatever the user's wallpaper. The
@@ -50,7 +53,7 @@ interface SetupWizardShellProps
    * out and the new one rises in.
    */
   stepKey?: string;
-  /** Focus only: how the first card appears (`rerun`: the short re-run variant). */
+  /** Focus only: how the first card appears (`full`: the ink intro, `rerun`: the short re-run variant). */
   intro?: SetupWizardIntro;
 }
 
@@ -70,6 +73,7 @@ export function SetupWizardShell({
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
+  const { timeline, wash } = useSetupIntro(variant === "focus" ? intro : undefined);
 
   return (
     <main
@@ -80,7 +84,8 @@ export function SetupWizardShell({
       data-variant={variant}
       {...props}
     >
-      <Wallpaper source={SETUP_WALLPAPER} tone={tone} />
+      <Wallpaper intro={timeline} source={SETUP_WALLPAPER} tone={tone} />
+      {wash ? <div aria-hidden="true" className={introStyles.wash} data-test-class="setup-intro-wash" /> : null}
       <div
         aria-hidden="true"
         className={`${styles.dragLane} drag-region`}
@@ -105,7 +110,7 @@ export function SetupWizardShell({
             aria-label={regionLabel}
           >
             {stepKey === undefined && intro === undefined ? children
-              : <SetupWizardStage intro={intro} stepKey={stepKey ?? "card"}>{children}</SetupWizardStage>}
+              : <SetupWizardStage intro={intro} stepKey={stepKey ?? "card"} timeline={timeline}>{children}</SetupWizardStage>}
           </PageContainer>
         </ScrollArea>
       ) : (

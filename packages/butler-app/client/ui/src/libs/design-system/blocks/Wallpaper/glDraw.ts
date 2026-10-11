@@ -42,6 +42,8 @@ export interface WallpaperImageInput {
 function upload(gl: WebGL2RenderingContext, location: WebGLUniformLocation | null, uniform: WallpaperUniformValue) {
   if (uniform.type === "float") gl.uniform1f(location, uniform.value);
   else if (uniform.type === "int") gl.uniform1i(location, uniform.value);
+  else if (uniform.type === "vec2") gl.uniform2fv(location, uniform.value);
+  else if (uniform.type === "vec4") gl.uniform4fv(location, uniform.value);
   else gl.uniform3fv(location, uniform.value);
 }
 

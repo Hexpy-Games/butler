@@ -1451,7 +1451,7 @@ The first-run setup frame: step progress, a large title and centered content, or
 - Use for: A short onboarding of one or two screens with no stepper
 - Not for: A settings page → `SettingsShell`
 - Not for: A short task in the app → `DialogForm`
-- Tokens: `--titlebar-height`, `--motion-deliberate`, `--motion-ease-emphasized`, `--motion-morph-rows`, `--motion-stagger-row`, `--motion-slow`, `--motion-base`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-distance-sm`, `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`, `--space-lg`, `--color-surface-raised-opaque`
+- Tokens: `--titlebar-height`, `--motion-deliberate`, `--motion-ease-emphasized`, `--motion-morph-rows`, `--motion-stagger-row`, `--motion-slow`, `--motion-base`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-distance-sm`, `--motion-stagger-intro`, `--motion-intro-draw`, `--motion-intro-print`, `--butler-mark-ink`, `--riso-paper`, `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`, `--space-lg`, `--color-surface-raised-opaque`
 
 ### SetupWizardStepCard
 

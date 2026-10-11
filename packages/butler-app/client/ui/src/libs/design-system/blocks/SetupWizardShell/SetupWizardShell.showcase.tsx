@@ -3,9 +3,10 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { ShieldCheck } from "../../components/Icons";
+import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { SetupWizardStepAction, SetupWizardStepCard } from "../SetupWizardStepCard";
-import { SetupWizardContent, SetupWizardList, SetupWizardProgress, SetupWizardShell, type SetupWizardIntro } from "./SetupWizardShell";
+import { SetupWizardContent, SetupWizardList, SetupWizardMark, SetupWizardProgress, SetupWizardShell, type SetupWizardIntro } from "./SetupWizardShell";
 
 export const meta: ShowcaseMeta = {
   title: "SetupWizardShell",
@@ -89,8 +90,11 @@ function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; t
         </SetupWizardStepCard>
       ) : (
         <SetupWizardContent surface="solid">
-          <Typo.H3 as="h1" align="center">{welcome.title}</Typo.H3>
-          <Typo.Body align="center" tone="secondary">{welcome.body}</Typo.Body>
+          <Stack cross="center" gap="md">
+            <SetupWizardMark />
+            <Typo.H3 as="h1" align="center">{welcome.title}</Typo.H3>
+            <Typo.Body align="center" tone="secondary">{welcome.body}</Typo.Body>
+          </Stack>
           <Button id={`${id}-start`} size="lg" stretch onClick={() => setStep(true)}>{welcome.agree}</Button>
         </SetupWizardContent>
       )}
@@ -108,6 +112,8 @@ export const stories: ShowcaseStory[] = [
   { name: "Card morph (intro to step)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} tone="light" /> },
   { name: "Card morph (intro to step, dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} tone="dark" /> },
   { name: "Re-run entrance (intro=\"rerun\")", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="rerun" tone="light" /> },
+  { name: "Ink intro (intro=\"full\", first install)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} intro="full" tone="light" /> },
+  { name: "Ink intro (intro=\"full\", dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="full" tone="dark" /> },
   {
     name: "Step indicator (SetupWizardProgress)",
     widths: ["375", "app"],

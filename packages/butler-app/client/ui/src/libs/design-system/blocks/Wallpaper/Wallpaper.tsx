@@ -20,7 +20,7 @@ function moduleId(source: WallpaperSource): string {
 }
 
 function WallpaperCanvas(props: WallpaperProps & { transparent: boolean }) {
-  const { source, tone: explicitTone, scope = "viewport", registry: explicitRegistry, imageLoader, onError, dataTestClass, className, style, transparent } = props;
+  const { source, tone: explicitTone, scope = "viewport", registry: explicitRegistry, imageLoader, onError, dataTestClass, className, style, transparent, intro = null } = props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
@@ -32,6 +32,7 @@ function WallpaperCanvas(props: WallpaperProps & { transparent: boolean }) {
   const reportRef = useRef(report);
   const loader = useWallpaperImageLoader(imageLoader);
   const loaderRef = useRef(loader);
+  const introRef = useRef(intro);
   const tone = useWallpaperTone(canvasRef, explicitTone);
   // Content key: a new but equal source object never rebuilds anything.
   const sourceKey = wallpaperSourceKey(source);
@@ -55,7 +56,10 @@ function WallpaperCanvas(props: WallpaperProps & { transparent: boolean }) {
       overlay: overlayRef.current,
       driftLayers: baseRef.current && topRef.current ? { base: baseRef.current, top: topRef.current } : null,
       transparent,
+      intro: introRef.current,
     });
+    // No WebGL2: the intro plays its no-WebGL reveal in the shell.
+    if (!engine) introRef.current?.start("fallback");
     engineRef.current = engine;
     return () => {
       engine?.dispose();
@@ -66,6 +70,12 @@ function WallpaperCanvas(props: WallpaperProps & { transparent: boolean }) {
   useEffect(() => {
     engineRef.current?.setScene(resolveWallpaperScene(JSON.parse(sourceKey) as WallpaperSource, registry, tone));
   }, [sourceKey, registry, tone]);
+
+  useEffect(() => {
+    introRef.current = intro;
+    engineRef.current?.setIntro(intro);
+    if (!engineRef.current) intro?.start("fallback");
+  }, [intro]);
 
   useWallpaperEngineInputs(engineRef, props);
 
