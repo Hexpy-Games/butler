@@ -62,6 +62,8 @@ const NON_FULL: &[&str] = &[
     "list_wallpapers",
     "set_wallpaper",
     "save_wallpaper_module",
+    "library_search",
+    "library_organize",
     "read_mcp_resource",
     "list_skills",
     "load_skill",
@@ -78,6 +80,7 @@ const SCHEDULE_WRITES: &[&str] = &[
 ];
 const ASK_FIRST_WRITES: &[&str] = &[
     "output_publish",
+    "library_organize",
     "run_command",
     "set_wallpaper",
     "save_wallpaper_module",

@@ -56,6 +56,9 @@ pub(super) async fn execute(
     if call.name == ToolName::ReadProjectSource {
         return super::project_source::execute(owner, call).await;
     }
+    if super::library::supports(&call.name) {
+        return super::library::execute(owner, call).await;
+    }
     if super::wallpaper::supports(&call.name) {
         return super::wallpaper::execute(owner, invocation, call, call_id).await;
     }

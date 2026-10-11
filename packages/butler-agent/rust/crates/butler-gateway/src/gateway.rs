@@ -48,7 +48,7 @@ pub use application::{
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
     AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
-    AppLedgerSourceRequest, AppLibraryCommand, AppMemoryCommand, AppMemoryPort,
+    AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand, AppMemoryPort,
     AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort,
     AppModelFallbackFacts, AppModelMetadata, AppMonitorPage, AppMonitoringPort,
     AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand, AppPersonalizationEvent,
