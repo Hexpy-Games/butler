@@ -24,6 +24,10 @@ Prefer token-backed spacing and responsive composition. Check its showcase and u
 ## Width
 `PopoverContent width="narrow"` sets `min(280px, 100vw - 32px)` for compact
 readouts (the composer context and usage popover). The default is 18rem.
+`width="anchor"` makes the content exactly as wide as its `PopoverAnchor` (or
+trigger) at every viewport, capped by the viewport: a suggestion list under its
+field. `density="list"` drops the gap and uses a 4px inset for lists whose rows
+carry their own padding (`SuggestionList`).
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

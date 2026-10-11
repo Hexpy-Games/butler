@@ -95,13 +95,16 @@
 /* Images keep their natural size, capped by the column width and a bounded
    height; both sides stay auto, so the aspect ratio holds and nothing
    upscales. Inline-block keeps a small badge or icon in its sentence; a
-   capture alone in its paragraph fills the column. */
+   capture alone in its paragraph fills the column. The edge is an inset
+   outline, not a border, so it adds no size: a 640 px image renders at
+   640 px and a capped one at exactly the column width. */
 .markdown img {
   display: inline-block;
   max-width: 100%;
   max-height: min(calc(var(--adaptive-viewport-block-size) * 0.6), 640px);
   height: auto;
-  border: 1px solid var(--line);
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   object-fit: contain;

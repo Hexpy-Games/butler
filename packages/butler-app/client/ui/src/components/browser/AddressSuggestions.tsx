@@ -1,52 +1,56 @@
-import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { api } from "@/app/api";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import { libraryChanged } from "@/app/libraryEvents";
 import { deleteLibrary } from "./libraryStore";
 import { historyCommand, useHistoryVersion, type AddressSuggestion } from "./historyApi";
-import { NavRow, Popover, PopoverAnchor, PopoverContent, Stack, Typo } from "@/butler-ds";
+import { Popover, PopoverAnchor, PopoverContent, Stack, SuggestionList, SuggestionRow, type AddressFieldListbox } from "@/butler-ds";
 
-/** Compose around AddressField; capture its input without changing the DS. */
-export function AddressSuggestions({ editing, onChoose, children }: { editing: boolean; onChoose: (url: string) => void; children: ReactNode }) {
-  const [query, setQuery] = useState(""), [items, setItems] = useState<AddressSuggestion[]>([]), [index, setIndex] = useState(-1);
+const LIST_ID = "address-suggestions";
+const optionId = (index: number) => `address-suggestion-${index}`;
+
+/** What AddressField needs to drive the list: combobox wiring, the typed text and the keys. */
+export interface AddressSuggestionsField {
+  listbox: AddressFieldListbox;
+  onInputChange: (value: string) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+}
+
+/** History and bookmark suggestions under the address field, exactly as wide as the field. */
+export function AddressSuggestions({ editing, onChoose, field }: { editing: boolean; onChoose: (url: string) => void; field: (props: AddressSuggestionsField) => ReactNode }) {
+  const [query, setQuery] = useState(""), [items, setItems] = useState<AddressSuggestion[]>([]), [index, setIndex] = useState(-1), [dismissed, setDismissed] = useState(false);
   const version = useHistoryVersion(s => s.version), anchor = useRef<HTMLDivElement | null>(null);
   useEffect(() => { if (!editing) { setQuery(""); setItems([]); setIndex(-1); } }, [editing]);
   useEffect(() => {
-    let active = true; setItems([]); setIndex(-1);
+    let active = true; setItems([]); setIndex(-1); setDismissed(false);
     if (editing && query.trim()) void api<{ items: AddressSuggestion[] }>(`/browser-history/suggestions?${new URLSearchParams({ q: query })}`).then(page => { if (active) setItems(page.items); }, () => {});
     return () => { active = false; };
   }, [query, editing, version]);
+  const open = editing && items.length > 0 && !dismissed;
   async function remove(item: AddressSuggestion) {
     try { if (item.bookmarkId) await deleteLibrary(item.bookmarkId); await historyCommand("delete-url", { url: item.url }); libraryChanged(); }
     catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); }
   }
-  function keys(event: KeyboardEvent<HTMLElement>) {
-    if (!editing || !items.length) return;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault(); event.stopPropagation(); setIndex(previous => previous < 0 ? event.key === "ArrowDown" ? 0 : items.length - 1 : (previous + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length);
+  function keys(event: KeyboardEvent<HTMLInputElement>) {
+    if (!open) return;
+    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (step) {
+      event.preventDefault(); setIndex(previous => previous + step < -1 ? items.length - 1 : previous + step >= items.length ? -1 : previous + step);
     } else if (event.key === "Enter" && index >= 0) {
-      event.preventDefault(); event.stopPropagation(); onChoose(items[index]!.url);
+      event.preventDefault(); onChoose(items[index]!.url);
     } else if (event.key === "Delete" && event.shiftKey && index >= 0) {
-      event.preventDefault(); event.stopPropagation(); void remove(items[index]!);
-    } else if (event.key === "Escape") { setItems([]); }
+      event.preventDefault(); void remove(items[index]!);
+    } else if (event.key === "Escape") { event.preventDefault(); setDismissed(true); setIndex(-1); }
   }
-  useEffect(() => {
-    const input = anchor.current?.querySelector("input");
-    if (!input) return;
-    input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
-    input.setAttribute("aria-expanded", String(items.length > 0)); input.setAttribute("aria-controls", "address-suggestions");
-    if (index >= 0) input.setAttribute("aria-activedescendant", `address-suggestion-${index}`); else input.removeAttribute("aria-activedescendant");
-  }, [editing, items, index]);
-  return <Stack grow><Popover open={editing && items.length > 0}><PopoverAnchor asChild><div ref={anchor} onKeyDownCapture={keys}
-    onInputCapture={event => { if (event.target instanceof HTMLInputElement) setQuery(event.target.value); }}>{children}</div></PopoverAnchor>
-    <PopoverContent align="start" width="default" onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}
+  const listbox = { id: LIST_ID, expanded: open, activeOptionId: index >= 0 ? optionId(index) : undefined };
+  return <Stack grow><Popover open={open}><PopoverAnchor asChild><div ref={anchor}>{field({ listbox, onInputChange: setQuery, onInputKeyDown: keys })}</div></PopoverAnchor>
+    <PopoverContent align="start" width="anchor" density="list" onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}
       onInteractOutside={event => { if (anchor.current?.contains(event.target as Node)) event.preventDefault(); }}
       onPointerDownCapture={event => event.preventDefault()}>
-      <Stack id="address-suggestions" role="listbox" aria-label={appCopy.browser.history.suggestions} gap="xs">
-        {items.map((item, n) => <Stack id={`address-suggestion-${n}`} key={item.url} role="option" aria-selected={n === index}>
-          <NavRow active={n === index} label={item.title || item.url} meta={<Typo.Caption truncate tone="secondary">{item.url}</Typo.Caption>} onClick={() => onChoose(item.url)} />
-        </Stack>)}
-      </Stack>
+      <SuggestionList id={LIST_ID} label={appCopy.browser.history.suggestions}>
+        {items.map((item, n) => <SuggestionRow key={item.url} id={optionId(n)} title={item.title} url={item.url} iconSrc={item.favicon || undefined}
+          kind={item.bookmarkId ? "bookmark" : "history"} bookmarkLabel={appCopy.browser.bookmarked} query={query} active={n === index} onSelect={() => onChoose(item.url)} />)}
+      </SuggestionList>
     </PopoverContent></Popover></Stack>;
 }

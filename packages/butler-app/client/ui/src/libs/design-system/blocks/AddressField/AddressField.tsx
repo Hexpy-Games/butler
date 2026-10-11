@@ -26,6 +26,16 @@ const DEFAULT_LABELS: AddressFieldLabels = {
   bookmarkAdd: "Add bookmark", bookmarked: "Bookmarked",
 };
 
+/** The suggestion list the editing input controls (an ARIA combobox and its listbox). */
+export interface AddressFieldListbox {
+  /** Id of the listbox element. */
+  id: string;
+  /** The list is showing. */
+  expanded: boolean;
+  /** Id of the keyboard-highlighted option; focus stays in the input. */
+  activeOptionId?: string;
+}
+
 export interface AddressFieldProps extends DsPrivateStyleProps {
   /** The page URL; shown as the bold host and the muted path, edited in full. Empty shows the placeholder. */
   url?: string;
@@ -46,6 +56,22 @@ export interface AddressFieldProps extends DsPrivateStyleProps {
   editing?: boolean;
   onEditingChange?: (editing: boolean) => void;
   labels?: Partial<AddressFieldLabels>;
+  /** Makes the editing input a combobox for this list (address suggestions). */
+  listbox?: AddressFieldListbox;
+  /** The typed text while editing, on every change. */
+  onInputChange?: (value: string) => void;
+  /**
+   * Runs before the built-in keys; preventing the default skips them: a highlighted suggestion
+   * takes Enter, an open list takes the first Escape.
+   */
+  onInputKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
+}
+
+/** Input attributes that make the editing field an ARIA combobox for its suggestion list. */
+function comboboxAttributes(listbox: AddressFieldListbox | undefined) {
+  const expanded = listbox?.expanded ?? false;
+  return listbox ? { role: "combobox", "aria-autocomplete": "list" as const, "aria-controls": listbox.id,
+    "aria-expanded": expanded, "aria-activedescendant": expanded ? listbox.activeOptionId : undefined } : {};
 }
 
 /**
@@ -55,7 +81,7 @@ export interface AddressFieldProps extends DsPrivateStyleProps {
  */
 export function AddressField({
   url = "", title, icon, security = "secure", tags, bookmarked = false, onToggleBookmark, onSubmit, disabled = false,
-  editing: editingProp, onEditingChange, labels: labelOverrides, className,
+  editing: editingProp, onEditingChange, labels: labelOverrides, listbox, onInputChange, onInputKeyDown, className,
 }: AddressFieldProps) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides };
   const [ownEditing, setOwnEditing] = useState(false);
@@ -68,6 +94,8 @@ export function AddressField({
   const glyph = icon ?? (security === "insecure" ? <Warning size="md" /> : security === "internal" ? <Globe2 size="md" /> : <Lock size="md" />);
   const glyphLabel = security === "insecure" ? labels.insecure : security === "secure" && !icon ? labels.secure : undefined;
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    onInputKeyDown?.(event);
+    if (event.defaultPrevented) return;
     if (event.key === "Enter") {
       event.preventDefault();
       onSubmit?.(event.currentTarget.value.trim());
@@ -83,7 +111,8 @@ export function AddressField({
         aria-hidden={glyphLabel ? undefined : true}>{glyph}</span>
       {editing ? (
         <Input className={dsClass(styles.input)} aria-label={labels.field} placeholder={labels.placeholder} defaultValue={url} autoFocus
-          spellCheck={false} onFocus={(event) => event.currentTarget.select()} onKeyDown={onKeyDown} onBlur={() => setEditing(false)} />
+          spellCheck={false} onFocus={(event) => event.currentTarget.select()} onKeyDown={onKeyDown} onBlur={() => setEditing(false)}
+          onChange={onInputChange && ((event) => onInputChange(event.currentTarget.value))} {...comboboxAttributes(listbox)} />
       ) : (
         <Clickable className={dsClass(styles.display)} variant="text" disabled={disabled || !onSubmit}
           aria-label={`${labels.field}: ${url || labels.placeholder}`} onClick={onSubmit ? () => setEditing(true) : undefined}>
