@@ -22,6 +22,13 @@ func send(_ type: CGEventType, _ point: CGPoint, _ button: CGMouseButton = .left
 switch args[1] {
 case "move":
     send(.mouseMoved, point)
+case "down":
+    send(.mouseMoved, point)
+    send(.leftMouseDown, point)
+case "dragmove":
+    send(.leftMouseDragged, point)
+case "up":
+    send(.leftMouseUp, point)
 case "click", "right", "double":
     let right = args[1] == "right"
     let button: CGMouseButton = right ? .right : .left

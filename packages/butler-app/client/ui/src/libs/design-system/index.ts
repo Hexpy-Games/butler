@@ -158,6 +158,8 @@ export * from "./blocks/SelectionBar";
 export * from "./blocks/DragPreview";
 export * from "./blocks/ElementChip";
 export * from "./blocks/LibraryCard";
+export * from "./blocks/GroupTile";
+export * from "./blocks/TagField";
 export * from "./blocks/PopupWindowChrome";
 export * from "./blocks/StatusCapsule";
 export * from "./blocks/TabStrip";

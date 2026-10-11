@@ -180,3 +180,10 @@
     display: none;
   }
 }
+
+/* Back: the first thing at the title's start, pulled into the inset so the title moves only by the button. */
+.back {
+  display: inline-flex;
+  flex: none;
+  margin-inline-start: calc(-1 * var(--space-xs));
+}

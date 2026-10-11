@@ -16,11 +16,13 @@ const labels = {
     report: "Preparing report: Q3 release retro",
     task: "Migrate settings pages", activity: "Editing SettingsSection", progress: "2/4",
     attach: "Add context", stretch: "Stretched capsule fills its row",
+    chips: [["All", 14], ["Travel", 5], ["Recipes", 2], ["Gift ideas", 0]] as const, newGroup: "New group",
   },
   "ko-KR": {
     report: "보고서 준비 중: 3분기 릴리스 회고",
     task: "설정 페이지 이전", activity: "SettingsSection 편집 중", progress: "2/4",
     attach: "맥락 추가", stretch: "늘어난 캡슐은 행을 채웁니다",
+    chips: [["전체", 14], ["여행", 5], ["레시피", 2], ["선물 아이디어", 0]] as const, newGroup: "새 그룹",
   },
 } as const;
 
@@ -62,6 +64,19 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    // A row of group chips: the chosen one is pressed, a drag over one shows the drop ring.
+    name: "Chips: pressed, count, drop target",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Stack align="row" gap="xs" wrap>
+        {text(context).chips.map(([name, count], index) => (
+          <PillButton key={name} pressed={index === 1} drop={index === 2} count={count || undefined} onClick={() => undefined}>{name}</PillButton>
+        ))}
+        <PillButton icon={<Plus size="sm" />} onClick={() => undefined}>{text(context).newGroup}</PillButton>
+      </Stack>
+    ),
+  },
+  {
     name: "Stretch",
     render: (context) => <PillButton stretch icon={<Plus size="md" />}>{text(context).stretch}</PillButton>,
   },
@@ -76,8 +91,10 @@ export const stories: ShowcaseStory[] = [
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "disabled"],
-  variants: ["plain", "glass"],
+  variants: ["plain", "glass", "pressed chip", "drop target"],
   render: (context) => context.variant === "glass"
     ? <ProgressCapsule context={context} disabled={context.state === "disabled"} />
-    : <PillButton disabled={context.state === "disabled"} icon={<Plus size="md" />}>{text(context).attach}</PillButton>,
+    : context.variant === "plain"
+      ? <PillButton disabled={context.state === "disabled"} icon={<Plus size="md" />}>{text(context).attach}</PillButton>
+      : <PillButton disabled={context.state === "disabled"} pressed={context.variant === "pressed chip"} drop={context.variant === "drop target"} count={5}>{text(context).chips[1][0]}</PillButton>,
 };

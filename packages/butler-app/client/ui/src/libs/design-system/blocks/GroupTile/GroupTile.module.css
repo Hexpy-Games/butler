@@ -1,0 +1,212 @@
+/* Same frame as LibraryCard: 16:10 media, name and meta below, the menu at the end of the meta row. */
+.layout {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+}
+
+.open {
+  display: block;
+  min-width: 0;
+  grid-column: 1 / -1;
+  text-align: start;
+}
+
+.body {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  grid-column: 1 / -1;
+}
+
+.media {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  margin-bottom: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--muted);
+}
+
+/* 1: one cell; 2: side by side; 3: a tall one and two stacked; 4: 2×2. The gaps show the card. */
+.mosaic {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  gap: var(--border-width-strong);
+  background: var(--surface-raised);
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.mosaic[data-count="2"] {
+  grid-template: minmax(0, 1fr) / repeat(2, minmax(0, 1fr));
+}
+
+.mosaic[data-count="3"] {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+}
+
+.mosaic[data-count="3"] > :first-child {
+  grid-row: 1 / -1;
+}
+
+.mosaic[data-count="4"] {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+}
+
+.cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--muted);
+  place-items: center;
+}
+
+/* Every crop is whole (contain), like the card's picture. */
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.quote {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: var(--space-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-tight);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.document {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+}
+
+.document span {
+  height: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.document span:first-child {
+  width: 60%;
+  background: var(--text-tertiary);
+}
+
+.site {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  justify-items: center;
+}
+
+.favicon {
+  display: grid;
+  width: var(--tag-height-sm);
+  height: var(--tag-height-sm);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 var(--border-hairline) var(--line);
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-strong);
+  place-items: center;
+}
+
+.host {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  display: grid;
+  margin: auto;
+  gap: var(--space-xs);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  justify-items: center;
+}
+
+.more {
+  color: var(--text-secondary);
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-strong);
+}
+
+.name,
+.meta {
+  min-width: 0;
+  padding-inline-end: var(--control-height-md);
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.name svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.nameText,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+
+/* A drag over the tile: the card shows the accent ring and the hint names the group. */
+.layout[data-drop="true"] .media {
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--accent);
+}
+
+.hint {
+  position: absolute;
+  top: var(--space-sm);
+  left: 50%;
+  max-width: calc(100% - var(--space-lg));
+  overflow: hidden;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--neutral-white);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}

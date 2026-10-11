@@ -139,6 +139,8 @@ tool_names! {
     PreviewStart = "preview_start",
     PreviewStop = "preview_stop",
     OutputPublish = "output_publish",
+    LibrarySearch = "library_search",
+    LibraryOrganize = "library_organize",
 }
 
 impl std::fmt::Display for ToolName {

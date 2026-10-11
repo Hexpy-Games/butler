@@ -33,13 +33,13 @@ const labels = {
     actions: "Session actions", rename: "Rename", openIn: "Open folder in", vscode: "VS Code", terminal: "Terminal",
     archive: "Archive", remove: "Delete", newProject: "New project", scratch: "Start from scratch", existing: "Open a folder",
     view: "View", density: "Sidebar density", compact: "Compact", comfortable: "Comfortable", showArchived: "Show archived",
-    loading: "Looking for editors…",
+    loading: "Looking for editors…", tags: "Tags", tagged: [["jeju", true], ["cafés", "indeterminate"], ["family", false]] as const,
   },
   "ko-KR": {
     actions: "세션 작업", rename: "이름 바꾸기", openIn: "다음에서 폴더 열기", vscode: "VS Code", terminal: "터미널",
     archive: "보관", remove: "삭제", newProject: "새 프로젝트", scratch: "처음부터 시작", existing: "폴더 열기",
     view: "보기", density: "사이드바 밀도", compact: "촘촘하게", comfortable: "여유 있게", showArchived: "보관된 항목 보기",
-    loading: "편집기를 찾는 중…",
+    loading: "편집기를 찾는 중…", tags: "태그", tagged: [["제주", true], ["카페", "indeterminate"], ["가족", false]] as const,
   },
 } as const;
 
@@ -97,6 +97,19 @@ function ViewMenu({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+/** Bulk tags for three selected items: on all (✓), on some (−), on none. */
+function BulkTagMenu({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild><Button variant="outline" size="sm" text={copy.tags} /></DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {copy.tagged.map(([name, checked]) => <DropdownMenuCheckboxItem key={name} checked={checked}>{name}</DropdownMenuCheckboxItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Session actions", states: ["open", "disabled"], render: (context) => <SessionMenu context={context} /> },
   {
@@ -116,4 +129,5 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   { name: "Radio and checkbox items", render: (context) => <ViewMenu context={context} /> },
+  { name: "Checkbox items: all, some (indeterminate), none", render: (context) => <BulkTagMenu context={context} /> },
 ];

@@ -25,6 +25,8 @@ import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationN
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
+import { LibraryDialogHost } from "@/components/library/LibraryDialogHost";
+import { CardDragPreview } from "@/components/library/CardDragPreview";
 import { LibraryPage } from "@/components/browser/LibraryPage";
 import { useBrowserShell } from "@/components/browser/useBrowserShell";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
@@ -175,8 +177,8 @@ function useWorkspacePanels() {
   const isSettingsView = useButlerStore(selectIsSettingsView);
   const resize = usePanelResize({ leftOpen, setLeftOpen: (value) => setLeftOpen(value) });
   const browser = useBrowserShell(resize.shellRef, resize.leftPanelWidth);
-  const effectiveLeftOpen = leftOpen && !browser.autoCollapsed;
   const drawer = useAdaptiveDrawer(chromeEnvironment());
+  const effectiveLeftOpen = leftOpen && (drawer || !browser.autoCollapsed);
   const peek = useSidebarPeek(resize.shellRef, {
     enabled: !drawer && !effectiveLeftOpen && !isSettingsView,
     open: browser.peek, onOpenChange: browser.setPeek,
@@ -271,7 +273,7 @@ function AppWorkspaceControls({ panels }: { panels: WorkspacePanels }) {
       onDismiss={() => effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)} />
     <AdaptiveShellChrome>
       <WindowChromeLayer leftOpen={effectiveLeftOpen} onToggle={() => {
-        if (browser.autoCollapsed) browser.setPeek(!browser.peek);
+        if (browser.autoCollapsed && !drawer) browser.setPeek(!browser.peek);
         else setLeftOpen((value) => !value);
       }} />
     </AdaptiveShellChrome>
@@ -291,6 +293,8 @@ function AppWorkspaceDialogs() {
     {renameSession && <SessionRenameDialog />}
     <SessionObserverDialog />
     <ElementDragPreview />
+    <CardDragPreview />
+    <LibraryDialogHost />
     <AppToaster />
   </>;
 }

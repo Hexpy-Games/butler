@@ -13,6 +13,15 @@ full-width band of its page colour flush with the slot's edges, split by
 matte bars, which reads as a spill; it sits inset on the matte with a
 hairline frame instead. It stays hidden until its shape is known.
 
+## Organizing
+- `tags`: one line under the meta, the first `maxTags` (2) then “+N”; no tags, no line.
+- `onSelectedChange` + `selectLabel`: a selection checkbox on the media's top-end corner (on hover or focus,
+  always in `selectionMode`). In `selectionMode` a click on the card toggles selection; the click event is
+  passed so the App can read ⌘/Shift for ranges.
+- `editing`: the title row becomes a name field, all selected; Enter or leaving it commits, Escape cancels.
+- `dragging` dims the card while the App draws its drag; `onDragPointerDown` starts that drag.
+- The kind tag keeps a document preview's first line and a quote's first words clear.
+
 ## When to use this block
 Use it in 3- or 4-column `Grid`s on the library page and the new-tab page.
 

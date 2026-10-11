@@ -21,11 +21,13 @@ const labels = {
     title: "Token page review", project: "butler", branch: "ui/ds-viewer-complete", showLeft: "Show left panel",
     showRight: "Show right panel", menu: "Session actions", minimize: "Minimize window", maximize: "Maximize window", close: "Close window",
     browser: "Browser", conversation: "Office chair order", openConversation: "Open conversation", browserActive: "Butler is browsing",
+    nested: "Travel", back: "Back to Scraps",
   },
   "ko-KR": {
     title: "토큰 페이지 검토", project: "butler", branch: "ui/ds-viewer-complete", showLeft: "왼쪽 패널 보기",
     showRight: "오른쪽 패널 보기", menu: "세션 작업", minimize: "창 최소화", maximize: "창 최대화", close: "창 닫기",
     browser: "브라우저", conversation: "사무용 의자 주문", openConversation: "대화 열기", browserActive: "버틀러가 브라우저 사용 중",
+    nested: "여행", back: "스크랩으로 돌아가기",
   },
 } as const;
 
@@ -92,7 +94,18 @@ function ConversationLeading({ context, collapsed }: { context: ShowcaseRenderCo
   );
 }
 
+/** A nested screen (서랍 › 스크랩 › 여행): the back button goes up one level. */
+function NestedTitle({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  return (
+    <div className={styles.fixture}>
+      <TitlebarShell className={dsClass(styles.fixtureTitlebar)} dragRegion back={{ label: copy.back, onBack: () => undefined }} title={copy.nested} />
+    </div>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  { name: "Nested screen: back button", widths: ["375", "app", "wide"], render: (context) => <NestedTitle context={context} /> },
   { name: "Auto-sized leading control (sidebar open)", widths: ["375", "app", "wide"], render: (context) => <ConversationLeading context={context} collapsed={false} /> },
   { name: "Auto-sized leading control (sidebar collapsed)", widths: ["app", "wide"], render: (context) => <ConversationLeading context={context} collapsed /> },
   { name: "Collapsed sidebar (macOS)", widths: ["375", "app", "wide"], render: (context) => <Titlebar context={context} /> },

@@ -202,6 +202,8 @@ fn operation_tool_name(call: &super::contracts::ModelRoundToolCall) -> &str {
                 | "browser_close"
                 | "browser_wait_for_user"
                 | "browser_sign_in"
+                | "library_search"
+                | "library_organize"
         )
     {
         name

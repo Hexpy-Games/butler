@@ -25,6 +25,7 @@ export function installUserBrowser(app, getWindow) {
       case "selection-command": return browser.selection.command(input.op, input.id);
       case "selection-snapshot": return browser.selection.snapshot(input.id, input.item);
       case "state": return browser.snapshot();
+      case "focus-app": return win.webContents.focus();
       case "open": return browser.open();
       case "hide": return browser.hide();
       case "presentation": return browser.pointer.present(input);
