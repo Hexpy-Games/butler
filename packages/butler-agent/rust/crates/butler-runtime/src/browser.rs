@@ -2,13 +2,17 @@
 pub mod app_host;
 pub mod egress;
 pub mod headless;
+pub mod reader;
 pub use app_host::{AppHost, AppHostConfig, AppHostSource, HostCredentials};
-pub use egress::{ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guarded_client};
+pub use egress::{
+    ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guard_url, guarded_client,
+};
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, Rendered,
     downloads::{DownloadPort, PortFuture},
     reader as headless_reader,
 };
+pub use reader::{RenderFuture, RenderPort, render as reader_render, set_render_port};
 use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
 mod signed_in;

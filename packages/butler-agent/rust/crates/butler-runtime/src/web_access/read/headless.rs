@@ -1,6 +1,6 @@
-//! The reader's render step on Butler's own headless browser (#171), used
-//! when Lightpanda is not installed and the browser is on: the page renders
-//! behind the browser's navigation guard and egress proxy.
+//! The reader's render step (#171), used when Lightpanda is not installed
+//! and a browser serves renders: the App's browser (attached or the hidden
+//! App host) or Butler's headless browser, each behind its navigation guard.
 use std::time::Duration;
 
 use crate::web_access::WebAccessCode;
@@ -13,10 +13,10 @@ pub(super) async fn render(
     url: &url::Url,
     requested_url: &str,
 ) -> Result<Option<PageRead>, WebAccessError> {
-    let Some(browser) = crate::browser::headless_reader() else {
-        return Ok(None);
-    };
-    let Ok(rendered) = browser.render(url.as_str(), Duration::from_secs(20)).await else {
+    // The App's browser (attached or hidden) when there is one, else headless.
+    let Some(Ok(rendered)) =
+        crate::browser::reader_render(url.as_str(), Duration::from_secs(20)).await
+    else {
         return Ok(None);
     };
     let requested = requested_url.to_owned();
