@@ -6,7 +6,7 @@ pub(super) fn failed(browser: &Browser, error: &str) -> Value {
     if browser.alive.is_cancelled() || error == "browser_closed" {
         return json!({"status":"unknown","reason":"browser_host_lost"});
     }
-    eprintln!("WARN [browser] headless call failed: {error}");
+    eprintln!("WARN [browser] Background browser call failed: {error}");
     json!({"status":"unknown","reason":"executor_error"})
 }
 

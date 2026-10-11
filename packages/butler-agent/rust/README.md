@@ -199,11 +199,11 @@ Published catalog prices distinguish base input, reads, 5-minute writes and
 
 ### Browser backend configuration
 
-The browser uses the attached App, then the installed App's Electron without a
-window, then Chrome for Testing on App-less installs (or if Electron cannot
-start). A task stays on its selected backend. The windowless backend is enabled
-by default even when the App launched the agent; it downloads nothing and starts
-no browser processes until needed.
+The browser uses the attached App, then the Background browser
+(백그라운드 브라우저): the installed App's Electron, then Chrome for Testing
+if the App is absent or Electron cannot start. A task stays on its selected
+backend. The Background browser’s App engine is always available and starts on
+demand, even when the App launched the agent; it downloads nothing.
 
 The installed App engine is always available, independently of the Chrome
 fallback setting. For server/CLI installs, set `config.headlessBrowser` to `true` or `false` in
