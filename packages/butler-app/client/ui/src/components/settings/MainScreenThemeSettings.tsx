@@ -20,7 +20,6 @@ export const MainScreenThemeSettings = memo(function MainScreenThemeSettings() {
   const locale = useAppLocale();
   const system = useSystemReducedMotion();
   const reduced = useButlerStore((state) => state.settings.reduce_motion) || system;
-  const decorationTheme = useSettingsUIStore((state) => state.draft?.composer_decoration.theme ?? "none");
   const wallpaper = useSettingsUIStore((state) => state.draft?.wallpaper);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -71,7 +70,7 @@ export const MainScreenThemeSettings = memo(function MainScreenThemeSettings() {
           </Stack>
         }
       />
-      {source.kind === "none" && decorationTheme === "none" ? null : (
+      {source.kind !== "none" && (
         <SettingsSwitch
           settingId="main-screen-motion"
           label={copy.fields.wallpaperMotion}
@@ -81,7 +80,7 @@ export const MainScreenThemeSettings = memo(function MainScreenThemeSettings() {
           onChange={(on) => save({ motion: on ? "auto" : "paused" })}
         />
       )}
-      {(source.kind !== "none" || decorationTheme !== "none") && motion === "auto" && !reduced ? (
+      {source.kind !== "none" && motion === "auto" && !reduced ? (
         <SettingsSwitch
           settingId="main-screen-battery"
           label={copy.fields.wallpaperPauseOnBattery}

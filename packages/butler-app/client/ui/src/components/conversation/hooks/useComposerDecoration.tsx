@@ -8,17 +8,15 @@ import { ComposerDecoration, composerDecorationEdge } from "@/butler-ds";
 export function useComposerDecoration({ authority, question, plan }: ReturnType<typeof useComposerDecision>) {
   const replacesInput = Boolean(authority ? !authority.composingMessage
     : question ? question.panel.state !== "collapsed" : plan && !plan.editingInstruction);
-  const [theme, character, motion, pauseOnBattery] = useButlerStore(useShallow((state) => [
+  const [theme, character] = useButlerStore(useShallow((state) => [
     state.settings.composer_decoration.theme,
     state.settings.composer_decoration.character,
-    state.settings.wallpaper.motion,
-    state.settings.wallpaper.pauseOnBattery,
   ] as const));
   return useMemo(() => {
     if (theme === "none" || replacesInput) return {};
     return {
-      decoration: <ComposerDecoration scene={theme} motion={motion} pauseOnBattery={pauseOnBattery} />,
+      decoration: <ComposerDecoration scene={theme} motion="auto" pauseOnBattery />,
       edge: character ? composerDecorationEdge(theme) : undefined,
     };
-  }, [theme, character, motion, pauseOnBattery, replacesInput]);
+  }, [theme, character, replacesInput]);
 }
