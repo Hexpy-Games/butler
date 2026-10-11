@@ -19,6 +19,32 @@ async fn post(admin: &AdminClient, op: &str, body: Value) -> Result<Value, Harne
 }
 
 #[tokio::test]
+async fn detected_chromium_brands_use_local_state_profiles() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("BROWSER-IMPORT-BRANDS")?;
+    let roots = profile_roots(&setup.sandbox.home);
+    for (_, root) in &roots.chromium {
+        std::fs::create_dir_all(root.join("Custom"))?;
+        std::fs::write(
+            root.join("Local State"),
+            br#"{"profile":{"info_cache":{"Custom":{"name":"Fixture"}}}}"#,
+        )?;
+    }
+    let s = setup.start().await?;
+    let reply = admin(&s)
+        .send(Method::GET, "/security/browser-import/sources", None, &[])
+        .await?;
+    let sources = reply.data()["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), roots.chromium.len());
+    for (brand, _) in &roots.chromium {
+        assert!(sources.iter().any(
+            |source| source["key"] == format!("{brand}:Custom") && source["name"] == "Fixture"
+        ));
+    }
+    s.finish().await
+}
+
+#[tokio::test]
 async fn oneclick_profiles_folder_dedupe_and_exact_undo() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-IMPORT-ONECLICK")?.start().await?;
@@ -153,7 +179,8 @@ async fn firefox_wal_snapshot_and_profile_lock_retry() -> Result<(), HarnessErro
         1,
         "committed WAL while DB stays open"
     );
-    std::fs::write(dir.join(".parentlock"), "")?;
+    let lock_path = dir.join(".parentlock");
+    let lock = butler_platform::browser_transfer::fixture_profile_lock(&lock_path)?;
     let locked = a
         .send(
             Method::POST,
@@ -163,7 +190,11 @@ async fn firefox_wal_snapshot_and_profile_lock_retry() -> Result<(), HarnessErro
         )
         .await?;
     assert_eq!(locked.status, 422);
-    std::fs::remove_file(dir.join(".parentlock"))?;
+    drop(lock);
+    assert!(
+        lock_path.exists(),
+        "Firefox leaves its unlocked marker behind"
+    );
     assert_eq!(post(&a, "start", body).await?["existing"], 1);
     drop(db);
     s.finish().await

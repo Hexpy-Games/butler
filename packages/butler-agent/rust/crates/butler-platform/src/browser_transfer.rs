@@ -3,10 +3,13 @@ mod chromium;
 mod der;
 mod downloads;
 mod firefox;
+mod locks;
 mod nss;
 use crate::browser_profiles::{BookmarkFormat, BrowserProfile, ProfileAccess};
 use crate::secrets::SecretText;
 pub use downloads::DownloadWatch;
+#[cfg(feature = "test-support")]
+pub use locks::fixture_profile_lock;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use zeroize::Zeroizing;
@@ -56,6 +59,10 @@ pub struct Login {
 
 /// Translate filesystem failures without exposing paths.
 pub fn io_error(e: &std::io::Error) -> ImportError {
+    #[cfg(windows)]
+    if matches!(e.raw_os_error(), Some(32 | 33)) {
+        return ImportError::Locked;
+    }
     match e.kind() {
         std::io::ErrorKind::PermissionDenied => ImportError::PermissionDenied,
         std::io::ErrorKind::NotFound => ImportError::NotFound,
@@ -108,14 +115,11 @@ impl Snapshot {
     /// Copy the database and WAL; clean up on every exit.
     pub fn new(source: &Path, scratch: &Path) -> Result<Self, ImportError> {
         let dir = source.parent().ok_or(ImportError::NotFound)?;
-        for lock in [
-            dir.join(".parentlock"),
-            dir.join("parent.lock"),
-            dir.parent().unwrap_or(dir).join("SingletonLock"),
-        ] {
-            if std::fs::symlink_metadata(lock).is_ok() {
-                return Err(ImportError::Locked);
-            }
+        for lock in [dir.join(".parentlock"), dir.join("parent.lock")] {
+            locks::check(&lock)?;
+        }
+        if std::fs::symlink_metadata(dir.parent().unwrap_or(dir).join("SingletonLock")).is_ok() {
+            return Err(ImportError::Locked);
         }
         std::fs::create_dir_all(scratch).map_err(|e| io_error(&e))?;
         let name = source.file_name().ok_or(ImportError::Format)?;

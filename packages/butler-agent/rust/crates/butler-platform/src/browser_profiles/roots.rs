@@ -32,6 +32,8 @@ pub fn profile_roots(home: &Path) -> ProfileRoots {
                 local.join("BraveSoftware\\Brave-Browser\\User Data"),
             ),
             ("whale", local.join("Naver\\Naver Whale\\User Data")),
+            ("chromium", local.join("Chromium\\User Data")),
+            ("arc", local.join("Packages\\TheBrowserCompany.Arc_ttt1ap7aakyb4\\LocalCache\\Local\\Arc\\User Data")),
         ],
         firefox: home.join("AppData\\Roaming\\Mozilla\\Firefox\\Profiles"),
         safari: None,

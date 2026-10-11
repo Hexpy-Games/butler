@@ -168,24 +168,25 @@ fn entry_where(db: &Connection, column: &str, value: &str) -> Result<Option<Valu
 
 fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Result<Value> {
     if input.source == "manual"
-        && let Some(existing) = entry_where(db, "site", &input.site)? {
-            let id = existing["id"].as_str().unwrap_or_default();
-            db.execute(
-                "DELETE FROM browser_signin_identity WHERE entry_id=?1",
-                [id],
-            )
-            .map_err(sql)?;
-            db.execute(
-                "UPDATE browser_signin_entries SET username=?1,origins_json=?2 WHERE id=?3",
-                params![input.username, json!([input.origin]).to_string(), id],
-            )
-            .map_err(sql)?;
-            db.execute(
-                "INSERT INTO browser_signin_identity(origin,username,entry_id) VALUES(?1,?2,?3)",
-                params![input.origin, input.username, id],
-            )
-            .map_err(sql)?;
-            return Ok(json!({"id":id,"action":"replaced"}));
+        && let Some(existing) = entry_where(db, "site", &input.site)?
+    {
+        let id = existing["id"].as_str().unwrap_or_default();
+        db.execute(
+            "DELETE FROM browser_signin_identity WHERE entry_id=?1",
+            [id],
+        )
+        .map_err(sql)?;
+        db.execute(
+            "UPDATE browser_signin_entries SET username=?1,origins_json=?2 WHERE id=?3",
+            params![input.username, json!([input.origin]).to_string(), id],
+        )
+        .map_err(sql)?;
+        db.execute(
+            "INSERT INTO browser_signin_identity(origin,username,entry_id) VALUES(?1,?2,?3)",
+            params![input.origin, input.username, id],
+        )
+        .map_err(sql)?;
+        return Ok(json!({"id":id,"action":"replaced"}));
     }
     let existing: Option<String> = db
         .query_row(

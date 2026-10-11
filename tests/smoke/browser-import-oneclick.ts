@@ -19,6 +19,8 @@ mkdirSync(join(output, stage), { recursive: true });
 const server = await createNativeAppServer({ onboardingComplete: false, uiRoot: resolve(before ?? "packages/butler-app/client/ui/dist") });
 let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
 let mode: "success" | "permission" | "primary" = "success";
+let csvReady = false;
+let csvDeleted = false;
 const runs: unknown[] = [];
 const captures: string[] = [];
 const sources = [{ key: "chrome:work", browser: "chrome", name: "Work", passwords: "direct" },
@@ -42,8 +44,12 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     if (mode === "permission") return error("full_disk_access_required");
     if (mode === "primary" && !input.primary_password) return error("primary_password_required");
     await page.locator('[data-test-class="import-progress"]').waitFor(); await capture("progress");
-    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, passwords: 34, updated: 5, existing: 0 });
+    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, passwords: input.source.startsWith("safari:") ? 0 : 34, updated: 5, existing: 0, needs_csv: input.source.startsWith("safari:") });
   }
+  if (path === "/security/browser-import/export") return reply({ export_id: "fixture-export" });
+  if (path === "/security/browser-import/export/poll") return reply(csvReady ? { run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 0, passwords: 34, updated: 5, existing: 0, export_id: "fixture-export" } : { waiting: true });
+  if (path === "/security/browser-import/export/delete") { csvDeleted = true; return reply({ deleted: true }); }
+  if (path === "/security/browser-import/export/cancel") return reply({ cancelled: true });
   if (path === "/security/browser-import/folder") { mode = "success"; return reply({ selected: true, source: "chrome:work" }); }
   if (path === "/security/browser-import/undo") return reply({ bookmarks: 120, passwords: 34 });
   const headers = new Headers();
@@ -91,6 +97,15 @@ try {
     await capture("connect");
     const current = await server.api<{ onboarding: Record<string, unknown> }>("/settings");
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { ...current.onboarding, completed_at: new Date().toISOString() } }) });
+    await page.goto("app://butler/");
+    await page.getByRole("button", { name: copy.library.title, exact: true }).click();
+    const emptyBookmarks = page.locator('[data-library-kind="bookmark"]');
+    await emptyBookmarks.getByText(copy.library.noItems, { exact: true }).waitFor();
+    await capture("drawer-empty");
+    if (!before) {
+      await emptyBookmarks.getByRole("button", { name: copy.settings.pageSections.browserImport, exact: true }).click();
+      await page.locator('[data-settings-section-id="browser-import"]').waitFor();
+    }
     await page.goto("app://butler/?settings=browser");
     const section = page.locator('[data-settings-section-id="browser-import"]');
     await section.waitFor(); await section.scrollIntoViewIfNeeded();
@@ -116,6 +131,16 @@ try {
     await section.getByText(copy.settings.browserImport.result(120, 34, 5), { exact: true }).waitFor();
     assert.equal(await section.locator('input[type="password"]').count(), 0);
     mode = "success";
+    await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
+    csvReady = false; csvDeleted = false;
+    await section.locator('[data-import-source="safari:default"]').click();
+    await section.getByText(copy.settings.browserImport.waitingCsv, { exact: true }).waitFor();
+    await capture("csv-waiting");
+    csvReady = true;
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5), { exact: true }).waitFor();
+    await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).click();
+    await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).waitFor({ state: "detached" });
+    assert.equal(csvDeleted, true, "CSV deletion needs the owner's click");
     for (const width of [320, 390, 430]) { await page.setViewportSize({ width, height: 1000 }); await capture(`result-${width}`); }
   }
   assert.equal(server.stubModelCalls.length, 0);
