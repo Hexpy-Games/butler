@@ -39,5 +39,11 @@ pub fn sandbox_denial(stderr: &str) -> Option<(&'static str, &'static str)> {
 
 /// Recognizes a trampoline setup failure without confusing a shell's exit 125.
 pub fn isolation_failure(exit_code: Option<i32>, stderr: &[u8]) -> bool {
-    exit_code == Some(125) && stderr.starts_with(b"command_observation_isolation_unavailable:")
+    isolation_failure_exit(exit_code)
+        && stderr.starts_with(b"command_observation_isolation_unavailable:")
+}
+
+/// Whether this host can report a trampoline setup failure at this exit code.
+pub fn isolation_failure_exit(exit_code: Option<i32>) -> bool {
+    cfg!(target_os = "linux") && exit_code == Some(125)
 }

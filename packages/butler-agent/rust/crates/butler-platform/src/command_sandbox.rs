@@ -4,7 +4,7 @@
 //! trampoline. Unsupported hosts keep exact-action approval behavior.
 
 mod denial;
-pub use denial::{isolation_failure, sandbox_denial};
+pub use denial::{isolation_failure, isolation_failure_exit, sandbox_denial};
 mod environment;
 pub use environment::tool_environment;
 mod operators;

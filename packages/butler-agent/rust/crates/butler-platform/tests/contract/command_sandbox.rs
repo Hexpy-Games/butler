@@ -33,6 +33,20 @@ fn write_command(targets: &[&Path]) -> String {
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
     expected_host_sandbox_is_enforced();
+    assert_eq!(
+        butler_platform::command_sandbox::isolation_failure(
+            Some(125),
+            b"command_observation_isolation_unavailable: fixture",
+        ),
+        cfg!(target_os = "linux")
+    );
+    assert!(!butler_platform::command_sandbox::isolation_failure(
+        Some(125),
+        b"shell error"
+    ));
+    assert!(!butler_platform::command_sandbox::isolation_failure_exit(
+        None
+    ));
     let read_only = capabilities().read_only.is_enforced();
     let directory = scratch("read-only");
     let target = directory.join("must-not-exist");

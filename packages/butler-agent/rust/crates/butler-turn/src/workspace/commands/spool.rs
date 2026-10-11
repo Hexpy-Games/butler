@@ -160,7 +160,7 @@ impl SpoolPaths {
             self.discard().await;
             return Err(error);
         }
-        if summary.exit_code == Some(125) {
+        if butler_platform::command_sandbox::isolation_failure_exit(summary.exit_code) {
             let mut prefix = Vec::new();
             File::open(&self.stderr)
                 .await
