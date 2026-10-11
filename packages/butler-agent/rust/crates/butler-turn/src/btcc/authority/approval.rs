@@ -320,7 +320,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .unzip();
     AuthorityApproval {
         operation: None,
-        command_access: (!butler_platform::command_sandbox::READ_ONLY_SANDBOX
+        command_access: (!butler_platform::command_sandbox::approval_free_reads()
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
                 Some("read_only" | "validation")

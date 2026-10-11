@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type ComponentProps } from "react";
 import { AlertCircle, Button, Notice, SetupWizardStepCard, Stack } from "@/butler-ds";
-import { firstRunSteps, FIRST_RUN_STEPS } from "./FirstRunSteps";
+import { firstRunSteps, firstRunStepIds } from "./FirstRunSteps";
 import { MemoryModelStatus } from "./MemoryModelStatus";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
@@ -25,8 +25,8 @@ export function FirstRunStepCard({ flow, children, contentKey = flow.step, title
       backLabel={flow.copy.back}
       contentKey={bodyKey}
       titleId={titleId}
-      steps={flow.mode === "consent" ? undefined : firstRunSteps(flow.copy)}
-      activeIndex={FIRST_RUN_STEPS.indexOf(flow.step)}
+      steps={flow.mode === "consent" ? undefined : firstRunSteps(flow.copy, flow.mode)}
+      activeIndex={firstRunStepIds(flow.mode).indexOf(flow.step)}
     >
       {children}
       {flow.step === "connect" ? (

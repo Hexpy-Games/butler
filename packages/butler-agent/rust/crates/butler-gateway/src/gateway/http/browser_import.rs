@@ -2,6 +2,10 @@
 //! come from a detected profile or an HTML export; passwords only from the
 //! browser's own CSV export, straight into the keychain-backed sign-in store.
 //! Answers and the audit carry counts only, never a value.
+mod exports;
+mod oneclick;
+mod selection;
+mod sources;
 use super::{HttpError, HttpState, json, read_body_with_limit, signin_secrets, signins};
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use crate::gateway::{AppSignInCommand, AppSignInUpsert};
@@ -12,6 +16,7 @@ use butler_platform::browser_profiles::{
     BookmarkFormat, BrowserProfile, detect, read_safari_bookmarks,
 };
 use butler_runtime::browser_import::{self as import, Bookmark, ImportError, PasswordRow};
+pub(super) use exports::ImportSessions;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,16 +27,44 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
-    let body = if method == Method::POST {
-        let bytes = read_body_with_limit(request.into_body(), 16 * 1024).await?;
+    let mut body = if method == Method::POST {
+        let bytes = zeroize::Zeroizing::new(
+            read_body_with_limit(request.into_body(), 16 * 1024)
+                .await?
+                .to_vec(),
+        );
         serde_json::from_slice::<Value>(&bytes).map_err(|_| HttpError::invalid_json())?
     } else {
         Value::Null
     };
     let data = match (&method, path.as_str()) {
-        (&Method::GET, "/security/browser-import/sources") => sources().await?,
+        (&Method::GET, "/security/browser-import/sources") => sources::list(&state).await?,
         (&Method::POST, "/security/browser-import/preview") => run(&state, &body, false).await?,
         (&Method::POST, "/security/browser-import/run") => run(&state, &body, true).await?,
+        (&Method::POST, "/security/browser-import/start") => {
+            oneclick::start(&state, &mut body).await?
+        }
+        (&Method::POST, "/security/browser-import/undo") => oneclick::undo(&state, &body).await?,
+        (&Method::POST, "/security/browser-import/folder") => sources::pick(&state, &body).await?,
+        (&Method::POST, "/security/browser-import/disk-access") => {
+            blocking(butler_platform::browser_transfer::open_disk_access)
+                .await?
+                .map_err(native_error)?;
+            json!({"ok":true})
+        }
+        (&Method::POST, "/security/browser-import/export") => exports::begin(&state, &body).await?,
+        (&Method::POST, "/security/browser-import/export/poll") => {
+            exports::poll(&state, &body).await?
+        }
+        (&Method::POST, "/security/browser-import/export/file") => {
+            exports::file(&state, &body).await?
+        }
+        (&Method::POST, "/security/browser-import/export/delete") => {
+            exports::delete(&state, &body).await?
+        }
+        (&Method::POST, "/security/browser-import/export/cancel") => {
+            exports::cancel(&state, &body).await?
+        }
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     json(
@@ -45,12 +78,24 @@ pub(super) async fn route(
 
 fn failure(code: &str) -> HttpError {
     let message = match code {
-        "full_disk_access_required" => "Allow Full Disk Access, or choose an HTML export.",
+        "full_disk_access_required" => "Choose the browser folder or allow Full Disk Access.",
+        "browser_locked" => "Close the browser and retry.",
+        "primary_password_required" => "Enter the primary password.",
+        "incorrect_primary_password" => "Incorrect primary password.",
+        "password_csv_required" => "Export passwords to CSV.",
         "import_format" => "This file is not a browser export.",
         "import_too_large" => "This file is too large.",
         _ => "The file could not be read.",
     };
-    HttpError::public(422, code, message)
+    HttpError::public(
+        if code == "signin_unavailable" {
+            409
+        } else {
+            422
+        },
+        code,
+        message,
+    )
 }
 
 fn import_error(error: &ImportError) -> HttpError {
@@ -58,6 +103,8 @@ fn import_error(error: &ImportError) -> HttpError {
         ImportError::Format => "import_format",
         ImportError::TooLarge => "import_too_large",
         ImportError::Unreadable => "import_unreadable",
+        ImportError::PermissionDenied => "full_disk_access_required",
+        ImportError::Locked => "browser_locked",
     })
 }
 
@@ -67,15 +114,6 @@ async fn blocking<T: Send + 'static>(
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|_| HttpError::Internal)
-}
-
-async fn sources() -> Result<Value, HttpError> {
-    let profiles = blocking(detect).await?;
-    let sources: Vec<Value> = profiles
-        .iter()
-        .map(|profile| json!({"key": format!("{}:{}", profile.browser, profile.id), "browser": profile.browser, "name": profile.name}))
-        .collect();
-    Ok(json!({"sources": sources}))
 }
 
 /// A chosen export file: absolute, a regular file, within the size limit.
@@ -132,12 +170,13 @@ async fn bookmarks(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let saved = state
         .application
-        .signins(AppSignInCommand::ImportBookmarks(
-            items
+        .signins(AppSignInCommand::ImportBookmarks {
+            run_id: uuid::Uuid::new_v4().to_string(),
+            items: items
                 .iter()
                 .map(|item| import::library_item(item, &now))
                 .collect(),
-        ))
+        })
         .await?;
     let counts = json!({"bookmarks": items.len(), "imported": saved["imported"], "existing": saved["existing"]});
     summary(state, body, "bookmarks", &counts).await?;
@@ -153,7 +192,7 @@ fn read_bookmarks(
         let html = std::fs::read(&file).map_err(|_| failure("import_unreadable"))?;
         let html = String::from_utf8_lossy(&html);
         return import::netscape_html(&html)
-            .map(import::finish)
+            .and_then(import::finish)
             .map_err(|e| import_error(&e));
     }
     let profile: BrowserProfile = detect()
@@ -181,7 +220,7 @@ fn read_bookmarks(
             Err(_) => Err(ImportError::Unreadable),
         },
     };
-    items.map(import::finish).map_err(|e| import_error(&e))
+    items.and_then(import::finish).map_err(|e| import_error(&e))
 }
 
 async fn passwords(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<Value, HttpError> {
@@ -217,6 +256,7 @@ async fn passwords(state: &Arc<HttpState>, body: &Value, apply: bool) -> Result<
             origin: row.origin,
             username: row.username,
             source: "import".into(),
+            import_run: None,
         };
         match signins::store(state, input, row.password).await?["action"].as_str() {
             Some("inserted") => inserted += 1,
@@ -263,4 +303,19 @@ async fn summary(
         })
         .await?;
     Ok(())
+}
+
+fn native_error(error: butler_platform::browser_transfer::ImportError) -> HttpError {
+    use butler_platform::browser_transfer::ImportError as E;
+    failure(match error {
+        E::PermissionDenied => "full_disk_access_required",
+        E::NotFound => "import_not_found",
+        E::Locked => "browser_locked",
+        E::PrimaryPassword => "primary_password_required",
+        E::IncorrectPassword => "incorrect_primary_password",
+        E::CsvRequired => "password_csv_required",
+        E::TooLarge => "import_too_large",
+        E::Keychain => "source_keychain_failed",
+        E::Format => "import_format",
+    })
 }

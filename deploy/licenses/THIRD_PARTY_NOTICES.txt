@@ -2410,6 +2410,13 @@ License: https://github.com/oyvindln/adler2/blob/89a031a0f42eeff31c70dc598b398cb
 Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
 
 ===== COMPONENT =====
+aes 0.8.4
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/block-ciphers/blob/f2dbee516b4d0cf4cb4f3045d09e35b5fd80087b/aes/LICENSE-APACHE
+License: https://github.com/RustCrypto/block-ciphers/blob/f2dbee516b4d0cf4cb4f3045d09e35b5fd80087b/aes/LICENSE-MIT
+Copyright (c) 2018 Artyom Pavlov
+
+===== COMPONENT =====
 aes 0.9.3
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/block-ciphers/blob/c1534361e7549e29a16c3505f45a04c92d26b62a/aes/LICENSE-APACHE
@@ -2996,6 +3003,13 @@ License: https://github.com/RustCrypto/utils/blob/cbd0963c685df025c42bed31f78c50
 Copyright (c) 2018-2025 The RustCrypto Project Developers
 
 ===== COMPONENT =====
+block-padding 0.3.3
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/utils/blob/c1e32c58ca814c0b6265725002f4d853c3272bef/block-padding/LICENSE-APACHE
+License: https://github.com/RustCrypto/utils/blob/c1e32c58ca814c0b6265725002f4d853c3272bef/block-padding/LICENSE-MIT
+Copyright (c) 2018-2019 The RustCrypto Project Developers
+
+===== COMPONENT =====
 block-padding 0.4.2
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/utils/blob/6c8370f218505d3a767ace760ddef2c9b9466214/block-padding/LICENSE-APACHE
@@ -3092,6 +3106,14 @@ License: https://github.com/sagebind/castaway/blob/c6cb7e3086001a01d976d27c76fb5
 Copyright (c) 2021 Stephen M. Coakley
 
 ===== COMPONENT =====
+cbc 0.1.2
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/block-modes/blob/5781d3f8d8667426fedc21d74f45f92b371bce2c/cbc/LICENSE-APACHE
+License: https://github.com/RustCrypto/block-modes/blob/5781d3f8d8667426fedc21d74f45f92b371bce2c/cbc/LICENSE-MIT
+Copyright (c) 2018-2022 RustCrypto Developers
+Copyright (c) 2018 Artyom Pavlov
+
+===== COMPONENT =====
 cbc 0.2.1
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/block-modes/blob/2fce5053a789840aa401148b76e01f39fe37de6a/cbc/LICENSE-APACHE
@@ -3133,6 +3155,13 @@ MIT OR Apache-2.0
 License: https://github.com/chronotope/chrono/blob/170338250e836976a211e64728ec956e45e78a39/LICENSE.txt
 Apache 2.0 License [2]. Copyright (c) 2014--2026, Kang Seonghoon and
 Copyright (c) 2014, Kang Seonghoon.
+
+===== COMPONENT =====
+cipher 0.4.4
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/traits/blob/0af93f6076a76757c65cb2ef6f6abd9756440478/cipher/LICENSE-APACHE
+License: https://github.com/RustCrypto/traits/blob/0af93f6076a76757c65cb2ef6f6abd9756440478/cipher/LICENSE-MIT
+Copyright (c) 2016-2020 RustCrypto Developers
 
 ===== COMPONENT =====
 cipher 0.5.2
@@ -3662,6 +3691,14 @@ License: https://github.com/JelteF/derive_more/blob/f7bb41ac054c060caaf5ff3212e7
 Copyright (c) 2016 Jelte Fennema
 
 ===== COMPONENT =====
+des 0.8.1
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/block-ciphers/blob/7de364ede310f1ea7080c99ddf1138aeb47f9a69/des/LICENSE-APACHE
+License: https://github.com/RustCrypto/block-ciphers/blob/7de364ede310f1ea7080c99ddf1138aeb47f9a69/des/LICENSE-MIT
+Copyright 2017 Gulshan Singh
+Copyright (c) 2017 Gulshan Singh, Antoni Boucher, Artyom Pavlov
+
+===== COMPONENT =====
 digest 0.10.7
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/traits/blob/344389411fd9718a0742435152e933a9e71461ee/digest/LICENSE-APACHE
@@ -3689,6 +3726,12 @@ MIT OR Apache-2.0
 License: https://github.com/soc/dirs-rs/blob/00511bdc252f491a72ac89f6d6a2463406266fb2/LICENSE-APACHE
 License: https://github.com/soc/dirs-rs/blob/00511bdc252f491a72ac89f6d6a2463406266fb2/LICENSE-MIT
 Copyright (c) 2018-2019 dirs-rs contributors
+
+===== COMPONENT =====
+dispatch2 0.3.1
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/dispatch2/0.3.1
+
 
 ===== COMPONENT =====
 displaydoc 0.2.7
@@ -4490,6 +4533,14 @@ License: https://github.com/hannobraun/inotify-rs/blob/7f1a8001400b59e75345c47ab
 Copyright (c) Hanno Braun and contributors
 
 ===== COMPONENT =====
+inout 0.1.4
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/utils/blob/784ff3c76c907f80363ada7dc69c1d5831d4789f/inout/LICENSE-APACHE
+License: https://github.com/RustCrypto/utils/blob/784ff3c76c907f80363ada7dc69c1d5831d4789f/inout/LICENSE-MIT
+Copyright (c) 2022 The RustCrypto Project Developers
+Copyright (c) 2022 Artyom Pavlov
+
+===== COMPONENT =====
 inout 0.2.2
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/utils/blob/2d5eac49c253b19a064b33fc1f9ca7839732cb30/inout/LICENSE-APACHE
@@ -4668,6 +4719,15 @@ lancedb 0.27.2
 Apache-2.0
 License: https://github.com/lancedb/lancedb/blob/294e1bacb4347f4ddcc623626de5e9cbefb92886/LICENSE
 
+
+===== COMPONENT =====
+landlock 0.4.7
+MIT OR Apache-2.0
+License: https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/COPYRIGHT
+License: https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/LICENSE-APACHE
+License: https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/LICENSE-MIT
+Copyright 2020 Mickaël Salaün
+Copyright (c) 2020 Mickaël Salaün
 
 ===== COMPONENT =====
 lazy_static 1.5.0
@@ -5202,6 +5262,12 @@ License: https://github.com/seanmonstar/num_cpus/blob/342af76b486335e5a955c7314f
 Copyright (c) 2015-2025 Sean McArthur
 
 ===== COMPONENT =====
+objc2-app-kit 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-app-kit/0.3.2
+
+
+===== COMPONENT =====
 objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
@@ -5363,6 +5429,14 @@ License: https://github.com/vitiral/path_abs/blob/90b2546cbaece49381a2e24f191625
 License: https://github.com/vitiral/path_abs/blob/90b2546cbaece49381a2e24f1916259dd351b5c1/LICENSE-MIT
 Copyright 2018 Garrett Berg, vitiral@gmail.com
 Copyright (c) 2018 Garrett Berg, vitiral@gmail.com
+
+===== COMPONENT =====
+pbkdf2 0.12.2
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/password-hashes/blob/5af3bb038e73a9e9a1b95c7074f93ec78c66606d/pbkdf2/LICENSE-APACHE
+License: https://github.com/RustCrypto/password-hashes/blob/5af3bb038e73a9e9a1b95c7074f93ec78c66606d/pbkdf2/LICENSE-MIT
+Copyright (c) 2017 Artyom Pavlov
+Copyright (c) 2018-2023 The RustCrypto Project Developers
 
 ===== COMPONENT =====
 percent-encoding 2.3.2
@@ -5691,6 +5765,15 @@ Copyright 2019-2022 Jeff Parsons, and [contributors](https://github.com/jeffpars
 Copyright 2019 Jeffrey Parsons
 
 ===== COMPONENT =====
+raw-window-handle 0.6.2
+MIT OR Apache-2.0 OR Zlib
+License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-APACHE.md
+License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-MIT.md
+License: https://github.com/rust-windowing/raw-window-handle/blob/5fda8e8420b069368e9450e70c2869e32dcdffc1/LICENSE-ZLIB.md
+Copyright (c) 2019 Osspial
+Copyright (c) 2020 Osspial
+
+===== COMPONENT =====
 rawpointer 0.2.1
 MIT OR Apache-2.0
 License: https://github.com/bluss/rawpointer/blob/e4f5800e86acc8cb610430a3f361977480e2b0a6/LICENSE-APACHE
@@ -5784,6 +5867,12 @@ retry 2.2.0
 MIT
 License: https://github.com/jimmycuadra/retry/blob/f3c92f309a4155b71b5b2a4b8be159911deeb265/LICENSE
 Copyright (c) 2015-2020 Jimmy Cuadra and Sam Rijs
+
+===== COMPONENT =====
+rfd 0.15.4
+MIT
+License: https://github.com/PolyMeilex/rfd/blob/bac4bd3364f2befaabafa9f58ac77fd8925b2abf/LICENSE
+Copyright (c) 2022 Bartłomiej Maryńczak
 
 ===== COMPONENT =====
 ring 0.17.14
@@ -5973,6 +6062,13 @@ MIT OR Apache-2.0
 License: https://github.com/bluss/scopeguard/blob/bb988222848d39b0b9037b29da3a3a1eb05ebf4b/LICENSE-APACHE
 License: https://github.com/bluss/scopeguard/blob/bb988222848d39b0b9037b29da3a3a1eb05ebf4b/LICENSE-MIT
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
+
+===== COMPONENT =====
+seccompiler 0.5.0
+Apache-2.0 OR BSD-3-Clause
+License: https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-APACHE
+License: https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-BSD-3-Clause
+Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ===== COMPONENT =====
 secret-service 5.2.0
@@ -6969,6 +7065,13 @@ windows-sys 0.52.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-mit
+Copyright (c) Microsoft Corporation.
+
+===== COMPONENT =====
+windows-sys 0.59.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef838923626bf821e/crates/libs/sys/license-mit
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====

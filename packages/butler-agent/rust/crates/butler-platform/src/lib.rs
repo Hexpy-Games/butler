@@ -45,7 +45,7 @@
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! implements what the service needs to run and stop (process identity,
 //! Job Object containment, host facts); a capability it does not have yet
-//! has a flag (such as [`command_sandbox::READ_ONLY_SANDBOX`]) and reports
+//! has a probe (such as [`command_sandbox::capabilities`]) and reports
 //! `None` or a typed `Unsupported` error instead of pretending to succeed.
 
 // Production code reads slices and strings with checked accessors.
@@ -57,6 +57,7 @@ pub mod app_browser;
 pub mod app_update;
 pub mod browser_process;
 pub mod browser_profiles;
+pub mod browser_transfer;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;

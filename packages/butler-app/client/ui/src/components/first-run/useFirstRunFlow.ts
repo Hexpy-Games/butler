@@ -41,7 +41,7 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
 
 /** Navigation stays local; declining never changes durable onboarding. */
 function useConsentScreen(mode: FirstRunMode) {
-  const [screen, setScreen] = useState<"welcome" | "consent" | "connect">(mode === "consent" ? "consent" : "welcome");
+  const [screen, setScreen] = useState<"welcome" | "consent" | "import" | "connect">(mode === "consent" ? "consent" : "welcome");
   const [focusStart, setFocusStart] = useState(false);
   return {
     screen, setScreen, focusStart,
@@ -67,7 +67,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const { screen, setScreen, focusStart } = navigation;
   const [view, setView] = useState<ConnectView>({ kind: "list" });
   const copy = firstRunCopy[language];
-  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen("connect") });
+  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen(mode === "first-run" ? "import" : "connect") });
   const setup = useSetupReadiness();
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
@@ -104,6 +104,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
+    skipImport: () => setScreen("connect"),
     backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
     pick: (cardId: FirstRunProviderCardId) => pickProvider(cardId, commit, signIn, setView),

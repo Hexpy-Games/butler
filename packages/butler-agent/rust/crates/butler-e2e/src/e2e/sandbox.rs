@@ -116,6 +116,14 @@ fn prepare_installation(root: &Path) -> Result<(PathBuf, PathBuf, PathBuf), Harn
             binary.display()
         ))
     })?;
+    butler_platform::command_sandbox::copy_command_helper(
+        source
+            .parent()
+            .ok_or_else(|| harness_error("agent has no parent"))?,
+        binary
+            .parent()
+            .ok_or_else(|| harness_error("installed agent has no parent"))?,
+    )?;
     copy_tree(&resource_source(), &resources)?;
     fs::create_dir_all(resources.join("app-client/dist"))?;
     fs::write(

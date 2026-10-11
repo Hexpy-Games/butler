@@ -11,6 +11,7 @@ name = "butler-agent"
 path = "src/main.rs"
 
 [features]
+e2e-fixtures = ["butler_agent/e2e-fixtures"]
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler_agent/prebuilt-ort"]
 static-ort = ["butler_agent/static-ort"]
