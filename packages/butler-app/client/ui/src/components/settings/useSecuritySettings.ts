@@ -8,7 +8,6 @@ import {
   isHostOnlyError,
   setAllowedHosts,
   setContentHosts,
-  setHeadlessBrowser,
   setRemoteAccess,
 } from "./securityApi";
 
@@ -75,11 +74,6 @@ export function useSecuritySettings() {
       setView((current) => current && { ...current, remote_access_enabled: enabled });
       notifyStatus(appCopy.settings.saved, { id: TOAST_ID, tone: "ok" });
       await refresh();
-    }, appCopy.settings.errors.updateSettings),
-    toggleHeadlessBrowser: (enabled: boolean) => run("toggle", async () => {
-      await setHeadlessBrowser(enabled);
-      setView((current) => current && { ...current, headless_browser: enabled });
-      notifyStatus(appCopy.settings.saved, { id: TOAST_ID, tone: "ok" });
     }, appCopy.settings.errors.updateSettings),
     saveContentHosts: (hosts: string[]) => run("hosts", async () => {
       await setContentHosts(hosts);

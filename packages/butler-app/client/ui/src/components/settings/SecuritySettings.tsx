@@ -12,8 +12,6 @@ import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
 import { SecurityPairingSection } from "./SecurityPairingSection";
 import { SecurityDevicesSection } from "./SecurityDevicesSection";
 import { SecurityRemoteAccessFields } from "./SecurityRemoteAccessFields";
-import { SettingsSwitch } from "./SettingsSwitch";
-import { SecuritySignInsSections } from "./SecuritySignInsSection";
 import { useSecuritySettings } from "./useSecuritySettings";
 
 /**
@@ -72,19 +70,6 @@ export const SecuritySettings = memo(function SecuritySettings() {
         </>
       )}
       {securityAuthoritySections({ models, savedKeys, grants })}
-      {view?.headless_browser !== undefined && (
-        <SettingsSection id="headless-browser" kind="form" title={sections.headlessBrowser}>
-          <SettingsSwitch
-            settingId="headless-browser-enabled"
-            label={settingsCopy.security.headlessBrowser}
-            description={view.headless_browser_app ? settingsCopy.security.headlessBrowserAppDescription : settingsCopy.security.headlessBrowserDescription}
-            checked={view.headless_browser}
-            disabled={busy !== null}
-            onChange={(enabled) => void security.toggleHeadlessBrowser(enabled)}
-          />
-        </SettingsSection>
-      )}
-      {view && <SecuritySignInsSections />}
       {view && (
         <SettingsSection id="security-advanced" kind="form" title={settingsCopy.security.advanced}>
           <DisclosureRow

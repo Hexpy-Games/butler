@@ -1,81 +1,91 @@
-//! Settings → Security turns Butler's own browser on and off while running,
-//! and the choice survives a restart (`headlessBrowser` in the App settings).
+//! Headless configuration stays an operator setting, outside the App UI API.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, open, publish, selected, setup};
-use butler_e2e::e2e::{HarnessError, security::AdminClient};
+use super::support::{admin, browser_processes, call, publish, setup};
+use butler_e2e::e2e::HarnessError;
 use reqwest::Method;
 use serde_json::{Value, json};
 
-async fn toggle(admin: &AdminClient, enabled: bool) -> Result<(), HarnessError> {
-    let reply = admin
-        .send(
-            Method::PATCH,
-            "/settings",
-            Some(json!({"security":{"headless_browser":enabled}})),
-            &[],
-        )
-        .await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
-    let view = admin.send(Method::GET, "/security", None, &[]).await?;
-    assert_eq!(
-        view.body["data"]["headless_browser"], enabled,
-        "{}",
-        view.text
-    );
-    Ok(())
-}
-
 #[tokio::test]
-async fn settings_toggle_turns_the_headless_browser_on_and_off() -> Result<(), HarnessError> {
+async fn settings_rejects_the_removed_browser_toggle() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
     let s = setup("BROWSER-HEADLESS-SETTINGS")?
+        .env("BUTLER_BROWSER_APP", "off")
         .env("BUTLER_BROWSER_HEADLESS", "off")
         .start()
         .await?;
     let admin = admin(&s);
-    let url = publish(&s).await?;
-    let off = call(
-        &admin,
-        "general",
-        "tab.open",
-        &Value::Null,
-        json!({"url":url}),
-    )
-    .await?;
-    assert_eq!(off["reason"], "no_browser", "{off}");
-
-    toggle(&admin, true).await?;
-    let settings: Value =
-        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("gateways/app.json"))?)?;
-    assert_eq!(settings["config"]["headlessBrowser"], true, "{settings}");
-    let opened = open(&admin, "general", &url).await?;
-    assert_eq!(opened["status"], "ok", "{opened}");
-
-    toggle(&admin, false).await?;
-    let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+    let reply = admin
+        .send(
+            Method::PATCH,
+            "/settings",
+            Some(json!({"security":{"headless_browser":true}})),
+            &[],
+        )
+        .await?;
+    assert_eq!(reply.status, 400, "{}", reply.text);
+    let view = admin.send(Method::GET, "/security", None, &[]).await?;
     assert!(
-        listed["tabs"].as_array().is_none_or(Vec::is_empty),
-        "turning it off closes its tabs: {listed}"
+        view.data().get("headless_browser").is_none(),
+        "{}",
+        view.text
     );
-    let again = call(
+    assert!(
+        view.data().get("headless_browser_app").is_none(),
+        "{}",
+        view.text
+    );
+    let opened = call(
         &admin,
+        "general",
+        "tab.open",
+        &Value::Null,
+        json!({"url":"https://example.test"}),
+    )
+    .await?;
+    assert_eq!(opened["reason"], "no_browser", "{opened}");
+    assert!(browser_processes(&s.sandbox.data.to_string_lossy()).is_empty());
+    s.finish().await
+}
+
+#[tokio::test]
+async fn browser_config_and_environment_remain_operator_controls() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("BROWSER-HEADLESS-CONFIG")?
+        .env("BUTLER_BROWSER_HEADLESS", "")
+        .env("BUTLER_BROWSER_APP", "off")
+        .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/");
+    let path = setup.sandbox.data.join("gateways/app.json");
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    let settings = json!({"config":{"headlessBrowser":false}});
+    std::fs::write(&path, serde_json::to_vec(&settings)?)?;
+    let mut s = setup.start().await?;
+    let opened = call(
+        &admin(&s),
+        "general",
+        "tab.open",
+        &Value::Null,
+        json!({"url":"https://example.test"}),
+    )
+    .await?;
+    assert_eq!(opened["reason"], "no_browser", "{opened}");
+    s.agent.launch.set_env("BUTLER_BROWSER_HEADLESS", "on");
+    s.restart().await?;
+    let url = publish(&s).await?;
+    let opened = call(
+        &admin(&s),
         "general",
         "tab.open",
         &Value::Null,
         json!({"url":url}),
     )
     .await?;
-    assert_eq!(again["reason"], "no_browser", "{again}");
-    assert_eq!(
-        super::support::browser_processes(&s.sandbox.data.to_string_lossy()),
-        Vec::<String>::new(),
-        "turning it off ends the process tree"
-    );
+    assert_eq!(opened["reason"], "browser_download_failed", "{opened}");
+    let persisted: Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    assert_eq!(persisted["config"]["headlessBrowser"], false);
     s.finish().await
 }

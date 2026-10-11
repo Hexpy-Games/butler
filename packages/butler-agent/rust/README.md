@@ -196,3 +196,18 @@ Prompt-cache metrics retain total/read/write input tokens and the 1-hour write
 subset; prefix diagnostics also report the provider's 5-minute/1-hour split.
 Published catalog prices distinguish base input, reads, 5-minute writes and
 1-hour writes. Missing usage fields remain unknown rather than inferred hits.
+
+### Browser backend configuration
+
+The browser uses the attached App, then the installed App's Electron without a
+window, then Chrome for Testing on App-less installs (or if Electron cannot
+start). A task stays on its selected backend. The windowless backend is enabled
+by default even when the App launched the agent; it downloads nothing and starts
+no browser processes until needed.
+
+The installed App engine is always available, independently of the Chrome
+fallback setting. For server/CLI installs, set `config.headlessBrowser` to `true` or `false` in
+`$BUTLER_DATA/gateways/app.json` to control Chrome fallback.
+`BUTLER_BROWSER_HEADLESS=on|off` overrides that
+key, for example `BUTLER_BROWSER_HEADLESS=off butler start`. Restart the agent to
+apply a change. These controls are also described by `butler help config`.
