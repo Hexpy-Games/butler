@@ -52,7 +52,7 @@ pub(in crate::btcc::storage) fn load_acceptance(
         if continuation.contains_key("statelessInput") {
             return Err(delta::invalid());
         }
-        let entry = chain::reconstruct(connection, row, memo)?;
+        let entry = chain::reconstruct(connection, &row, memo)?;
         continuation.insert("statelessInput".into(), Value::Array(entry.items.clone()));
         Some(entry)
     } else {
@@ -273,6 +273,7 @@ fn prepare_payload(
     let base = memo.base(turn, checkpoint, revision).or(cold.as_ref());
     let serialized = item_strings(&items)?;
     let encoded = base
+        .filter(|base| base.chain_len < 10_000)
         .map(|base| delta::encode(&base.acceptance_id, &base.serialized, &serialized))
         .transpose()?
         .flatten();
@@ -282,9 +283,6 @@ fn prepare_payload(
     } else {
         1
     };
-    if chain_len > 10_000 {
-        return Err(delta::invalid());
-    }
     let state = u8::from(encoded.is_some());
     if state == 0 {
         normalized
@@ -339,15 +337,10 @@ fn previous_base(
         return Ok(None);
     }
     let row = Row::load(db, &id)?;
-    if state == 0
-        && json(&row.raw, StorageCode::ModelAcceptanceDeltaInvalid)?
-            .get("continuation")
-            .and_then(|v| v.get("statelessInput"))
-            .is_none_or(|v| !v.is_array())
-    {
-        return Ok(None);
+    if state == 0 {
+        return chain::full_entry(&row);
     }
-    chain::reconstruct(db, row, &mut ContinuationMemo::default()).map(Some)
+    chain::reconstruct(db, &row, &mut ContinuationMemo::default()).map(Some)
 }
 
 /// The route event of the accepted attempt.

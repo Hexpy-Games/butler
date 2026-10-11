@@ -48,13 +48,14 @@ impl Row {
 // Passthrough: provider items stay opaque, preserving exact serialized bytes.
 pub(super) fn reconstruct(
     db: &Connection,
-    target: Row,
+    target: &Row,
     memo: &mut ContinuationMemo,
 ) -> StorageResult<Entry> {
-    let mut current = Row::load(db, &target.acceptance_id)?;
+    let mut loaded = None;
     let mut pending: Vec<Delta> = Vec::new();
     let (items, cached, mut count, mut bytes, mut depth) = loop {
-        if !target.matches(&current) || pending.len() >= 10_000 {
+        let current = loaded.as_ref().unwrap_or(target);
+        if !target.matches(current) || pending.len() >= 10_000 {
             return Err(delta::invalid());
         }
         if !matches!(current.state, 0 | 1) {
@@ -78,14 +79,14 @@ pub(super) fn reconstruct(
             );
         }
         if current.state == 0 {
-            let items = full_items(&current)?;
+            let items = full_items(current)?.ok_or_else(delta::invalid)?;
             // JSON size plus Value/string/map allocation overhead, conservatively.
             let bytes = current.raw.len() * 3 + items.len() * 160;
             let count = items.len();
             break (Some(items), None, count, bytes, 1);
         }
         let delta = delta::parse(current.delta.as_deref())?;
-        current = Row::load(db, &delta.base)?;
+        loaded = Some(Row::load(db, &delta.base)?);
         pending.push(delta);
     };
     for delta in pending.iter().rev() {
@@ -111,10 +112,10 @@ pub(super) fn reconstruct(
         items = delta::apply_validated(items, &delta);
     }
     Ok(Entry {
-        turn_id: target.turn_id,
-        checkpoint_id: target.checkpoint_id,
+        turn_id: target.turn_id.clone(),
+        checkpoint_id: target.checkpoint_id.clone(),
         checkpoint_revision: target.checkpoint_revision,
-        acceptance_id: target.acceptance_id,
+        acceptance_id: target.acceptance_id.clone(),
         items,
         serialized,
         approx_bytes: bytes,
@@ -123,18 +124,34 @@ pub(super) fn reconstruct(
 }
 
 // Passthrough: decode a legacy base without changing provider key order.
-fn full_items(row: &Row) -> StorageResult<Vec<serde_json::Value>> {
+fn full_items(row: &Row) -> StorageResult<Option<Vec<serde_json::Value>>> {
     let mut value = json(
         &row.raw,
         super::super::StorageCode::ModelAcceptanceDeltaInvalid,
     )?;
-    value
+    Ok(value
         .get_mut("continuation")
         .and_then(serde_json::Value::as_object_mut)
         .and_then(|v| v.shift_remove("statelessInput"))
         .and_then(|v| match v {
             serde_json::Value::Array(items) => Some(items),
             _ => None,
-        })
-        .ok_or_else(delta::invalid)
+        }))
+}
+
+/// A cold Full base needs only one parse, including legacy rows without items.
+pub(super) fn full_entry(row: &Row) -> StorageResult<Option<Entry>> {
+    let Some(items) = full_items(row)? else {
+        return Ok(None);
+    };
+    Ok(Some(Entry {
+        turn_id: row.turn_id.clone(),
+        checkpoint_id: row.checkpoint_id.clone(),
+        checkpoint_revision: row.checkpoint_revision,
+        acceptance_id: row.acceptance_id.clone(),
+        approx_bytes: row.raw.len() * 3 + items.len() * 160,
+        serialized: memo::item_strings(&items)?,
+        items,
+        chain_len: 1,
+    }))
 }
