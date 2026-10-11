@@ -2,6 +2,7 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
+import { nativeContextMenuCopy } from "../native-context-menu.mjs";
 
 /** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
 const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";
@@ -268,6 +269,7 @@ export const koKrCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
+    contextMenu: nativeContextMenuCopy("ko-KR"),
     history: { erase: "지우기", title: "방문 기록", search: "방문 기록 검색", clear: "방문 기록 지우기", butlerOnly: "버틀러가 방문", empty: "방문 기록 없음", hour: "지난 1시간", today: "오늘", week: "지난 7일", all: "전체", suggestions: "주소 추천" },
     tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계",
     title: "브라우저", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", address: "주소", addressPlaceholder: "검색 또는 URL 입력", back: "뒤로", forward: "앞으로",

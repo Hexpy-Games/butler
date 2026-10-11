@@ -2158,7 +2158,7 @@ async function createWindow() {
   }
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
-    userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser ??= installUserBrowser(app, () => mainWindow, readDesktopLanguage);
     userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
@@ -2221,7 +2221,7 @@ async function createWindow() {
   });
   win.webContents.on("did-finish-load", () => { void syncPowerStateToWindow(win); });
   const firstDataPaint = waitForStartupRenderer(win);
-  userBrowser ??= installUserBrowser(app, () => mainWindow);
+  userBrowser ??= installUserBrowser(app, () => mainWindow, readDesktopLanguage);
   win.on("hide", () => userBrowser.syncAll());
   win.on("show", () => userBrowser.syncAll());
   win.on("closed", () => userBrowser.hide());

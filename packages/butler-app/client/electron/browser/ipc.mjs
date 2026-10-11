@@ -15,8 +15,8 @@ async function signOutSite(site) {
   return { removed: cookies.length };
 }
 
-export function installUserBrowser(app, getWindow) {
-  const browser = createUserBrowser(app, getWindow);
+export function installUserBrowser(app, getWindow, getLanguage) {
+  const browser = createUserBrowser(app, getWindow, getLanguage);
   installSignInOffers(browser);
   ipcMain.handle("butler-browser:call", (event, op, input = {}) => {
     const win = getWindow();

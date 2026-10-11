@@ -1,6 +1,7 @@
 import { session } from "electron";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
+import { nativeContextMenuCopy } from "../../../../butler-i18n/src/native-context-menu.mjs";
 
 export function protectPartition(partition, browser) {
   const profile = session.fromPartition(partition);
@@ -54,8 +55,11 @@ export function wireTab(tab, actions) {
     const release = actions.nativeCover();
     await actions.capture(tab);
     actions.detach(tab);
-    const template = [...await actions.linkMenu(params.linkURL), { role: "copy", enabled: Boolean(params.selectionText) }, { role: "selectAll" }];
-    if (params.isEditable) template.unshift({ role: "paste" });
+    const copy = nativeContextMenuCopy(await actions.language());
+    const template = [...await actions.linkMenu(params.linkURL),
+      { role: "copy", label: copy.copy, enabled: Boolean(params.selectionText) },
+      { role: "selectAll", label: copy.selectAll }];
+    if (params.isEditable) template.unshift({ role: "paste", label: copy.paste });
     try { await popupMenu(win, template, point, release); }
     catch { release(); }
   });

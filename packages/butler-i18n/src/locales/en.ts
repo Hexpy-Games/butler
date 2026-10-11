@@ -2,6 +2,7 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
+import { nativeContextMenuCopy } from "../native-context-menu.mjs";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
 const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";
@@ -262,6 +263,7 @@ export const enUsCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
+    contextMenu: nativeContextMenuCopy("en-US"),
     history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions" },
     tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",

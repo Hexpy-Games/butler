@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
 import { getAppCopy, getInterfaceProgressLabel } from "./index.ts";
 
+// test-category: pure-logic
+test("native browser context menu labels follow the App locale", () => {
+  const ko = getAppCopy("ko-KR").browser.contextMenu;
+  expect([ko.openInNewTab, ko.openInButler, ko.openInBrowser("Safari"), ko.copyLink, ko.copy, ko.selectAll, ko.paste])
+    .toEqual(["새 탭에서 열기", "버틀러에서 열기", "다음 브라우저로 열기: Safari", "링크 복사", "복사", "모두 선택", "붙여넣기"]);
+  const en = getAppCopy("en-US").browser.contextMenu;
+  expect([en.openInNewTab, en.openInButler, en.openInBrowser("Safari"), en.copyLink, en.copy, en.selectAll, en.paste])
+    .toEqual(["Open in new tab", "Open in Butler", "Open in Safari", "Copy link", "Copy", "Select All", "Paste"]);
+});
+
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(shape);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, shape(nested)]));
