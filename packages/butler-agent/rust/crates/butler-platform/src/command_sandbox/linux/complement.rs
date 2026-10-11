@@ -63,7 +63,7 @@ pub(super) fn apply(
     };
     grant_complement(rules, Path::new("/"), &blocked, &deny_execute, read)?;
     for root in allowed {
-        let real = root.canonicalize()?;
+        let real = resolved_path(root)?;
         // Disjoint workspaces already received exactly these grants above.
         // Only private-root overlap needs Seatbelt's workspace exception.
         if !private
@@ -85,8 +85,9 @@ pub(super) fn apply(
 
 fn aliases(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
     let mut result = paths.to_vec();
+    let mut resolved = HashMap::new();
     for path in paths {
-        let real = canonical_or_missing(path)?;
+        let real = canonical_or_missing(path, &mut resolved)?;
         if !result.contains(&real) {
             result.push(real);
         }
@@ -96,21 +97,42 @@ fn aliases(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
 
 // A missing credential root still needs its real ancestor chain denied, even
 // when HOME is a symlink. No broad grant may cover a subsequently created root.
-fn canonical_or_missing(path: &Path) -> Result<PathBuf, Error> {
-    match path.canonicalize() {
-        Ok(real) => Ok(real),
+fn canonical_or_missing(
+    path: &Path,
+    resolved: &mut HashMap<PathBuf, PathBuf>,
+) -> Result<PathBuf, Error> {
+    if let Some(real) = resolved.get(path) {
+        return Ok(real.clone());
+    }
+    let real = match resolved_path(path) {
+        Ok(real) => real,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             let parent = path.parent().ok_or("private root has no parent")?;
             let name = path.file_name().ok_or("private root has no name")?;
-            Ok(canonical_or_missing(parent)?.join(name))
+            canonical_or_missing(parent, resolved)?.join(name)
         }
-        Err(error) => Err(error.into()),
-    }
+        Err(error) => return Err(error.into()),
+    };
+    // Per-policy only: missing credential siblings share the same ancestor,
+    // but every command still observes current filesystem contents.
+    resolved.insert(path.to_path_buf(), real.clone());
+    Ok(real)
+}
+
+// Let the kernel resolve the complete path once, instead of userspace probing
+// every component with readlink. O_PATH follows aliases without reading data.
+// Keep the fd alive until procfs returns its physical path; on hosts without
+// procfs, retain the standard canonicalization behavior.
+fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
+    use nix::{fcntl::OFlag, sys::stat::Mode};
+    use std::os::fd::AsRawFd;
+    let fd = nix::fcntl::open(path, OFlag::O_PATH | OFlag::O_CLOEXEC, Mode::empty())?;
+    std::fs::read_link(format!("/proc/self/fd/{}", fd.as_raw_fd())).or_else(|_| path.canonicalize())
 }
 
 fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut secrets = Vec::new();
-    for entry in std::fs::read_dir(root.canonicalize()?)? {
+    for entry in std::fs::read_dir(resolved_path(root)?)? {
         let entry = entry?;
         if secret_name(&entry.file_name().to_string_lossy()) {
             secrets.push(entry.path());
