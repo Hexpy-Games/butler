@@ -1,3 +1,4 @@
+import { configureWebIdentity } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { checkScript } from "./page/check.mjs";
 
@@ -106,7 +107,7 @@ export async function checkOutput(args, policy) {
   try {
     // Native window creation and navigation must not monopolize one main tick.
     await new Promise(resolve => setTimeout(resolve, 0));
-    contents.debugger.attach("1.3");
+    await configureWebIdentity(contents);
     const started = performance.now();
     await contents.loadURL(args.url);
     const load_ms = Math.round(performance.now() - started);

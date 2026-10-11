@@ -114,7 +114,15 @@ impl Browser {
             browser_process::spawn(executable, &arguments(&profile, &proxy_url), &log)
                 .map_err(|_| "browser_unavailable")?;
         let incoming = process.incoming.take().ok_or("browser_unavailable")?;
-        let (cdp, events) = Cdp::start(incoming, process.outgoing.clone());
+        let (cdp, mut events) = Cdp::start(incoming, process.outgoing.clone());
+        let identity = tokio::time::timeout(
+            Duration::from_secs(15),
+            super::identity::read(&cdp, &mut events),
+        )
+        .await
+        .map_err(|_| "browser_identity_unavailable")?
+        .map_err(|_| "browser_identity_unavailable")?;
+        let _ = cdp.identity.set(identity);
         let browser = Arc::new(Self {
             cdp,
             shared: Shared::default(),

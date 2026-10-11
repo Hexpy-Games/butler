@@ -22,6 +22,7 @@ pub mod downloads;
 mod events;
 mod frames;
 mod hidden;
+mod identity;
 mod imaging;
 mod input;
 pub mod install;

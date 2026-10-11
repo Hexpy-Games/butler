@@ -1,3 +1,4 @@
+import { configureWebIdentity } from "./identity.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
 import { BrowserPointer } from "./pointer.mjs";
@@ -154,6 +155,7 @@ class UserBrowser {
     tab.view ??= new WebContentsView({ webPreferences: this.pagePreferences(tab) });
     tab.wired = true;
     tab.session = tab.view.webContents.session;
+    tab.identityReady = configureWebIdentity(tab.view.webContents, !supplied);
     attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
@@ -165,7 +167,7 @@ class UserBrowser {
     wireUserDialogs(this, tab);
     this.selection.watch(tab);
     if (tab.agent) wireAgentTab(this, tab);
-    if (tab.url && !tab.agent && !supplied) void tab.view.webContents.loadURL(tab.url).catch(() => {});
+    if (tab.url && !tab.agent && !supplied) void tab.identityReady.then(() => tab.view.webContents.loadURL(tab.url)).catch(() => {});
   }
   allowPopup(id) { return allowPopup(this, id); }
   create(input = {}, activateTab = true, popupSource) {
@@ -284,7 +286,7 @@ class UserBrowser {
       if (url) {
         tab.status = "loading"; tab.url = url;
         if (tab.owner === "mine") this.restore.changed();
-        void contents.loadURL(url).catch(() => {});
+        void tab.identityReady.then(() => contents.loadURL(url)).catch(() => {});
       }
     } else if (op === "reload") { tab.status = "loading"; contents.reload(); }
     else if (op === "stop") contents.stop();
