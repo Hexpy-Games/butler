@@ -1,5 +1,6 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { WallpaperEvent } from "./drift";
+import type { WallpaperIntroTimeline } from "./intro/introTimeline";
 import type { WallpaperRegistry } from "./registry";
 import type {
   WallpaperContentRect,
@@ -48,6 +49,12 @@ export interface WallpaperProps extends DsPrivateStyleProps {
    * modules and images behind reading content. 0 or omitted: none.
    */
   paperOverlay?: number;
+  /**
+   * The first-run ink intro (`createWallpaperIntroTimeline`): it holds this canvas from the first frame, plays the
+   * reveal on the shared clock and keeps the dried print still until the timeline hands off, when the source
+   * (the riso print) dissolves in from it. Without WebGL2 the timeline starts as `fallback`.
+   */
+  intro?: WallpaperIntroTimeline | null;
   /**
    * Modules for `source.module` and image filters; defaults to the nearest `WallpaperRegistryProvider`'s,
    * else the built-ins. A new registry re-resolves: a module's new shader crossfades in.

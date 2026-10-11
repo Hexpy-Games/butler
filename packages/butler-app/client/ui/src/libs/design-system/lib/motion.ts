@@ -22,6 +22,7 @@ export type MotionDurationName =
   | "morph-rows"
   | "intro-drop"
   | "intro-draw"
+  | "intro-print"
   | "intro-bloom"
   | "intro-total";
 
@@ -54,6 +55,7 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   "morph-rows": 150,
   "intro-drop": 350,
   "intro-draw": 850,
+  "intro-print": 400,
   "intro-bloom": 1450,
   "intro-total": 2900,
 };

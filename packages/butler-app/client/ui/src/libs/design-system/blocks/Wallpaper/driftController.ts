@@ -10,8 +10,12 @@ export type { DriftDeps, DriftFrame } from "./driftCore";
 export type DriftColumn = readonly [number, number, number, number];
 
 export interface DriftController {
-  /** A print scene shows: the first keyframes, then the first-paint focus event. Again while active: a refresh. */
-  activate(): void;
+  /**
+   * A print scene shows: the first keyframes, then the first-paint focus event. Again while active: a refresh.
+   * `seeded`: the base layer already holds a frame (the dried print of the first-run intro) and the first segment
+   * dissolves from it into the print, with no focus event.
+   */
+  activate(seeded?: boolean): void;
   /** Another scene (or none) shows: timers stop and the layers hide. */
   deactivate(): void;
   active(): boolean;
@@ -52,12 +56,13 @@ export function createDriftController(deps: DriftDeps): DriftController {
   };
 
   return {
-    activate() {
+    activate(seeded = false) {
       if (core.mode !== "off") return refresh();
       Object.assign(core, { mode: "static", flow: 0, layerFlow: [0, 0], seg: null, boosts: [], dirty: false });
       if (core.hidden) { core.dirty = true; return; }
+      if (seeded && core.host !== "still") return core.settle(now());
       start();
-      live.beat("focus");
+      if (!seeded) live.beat("focus");
     },
     deactivate() {
       if (core.mode === "off") return;

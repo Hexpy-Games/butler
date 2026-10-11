@@ -3,7 +3,8 @@ import type { WallpaperDrawFrame } from "./glDraw";
 import { linkWallpaperModule } from "./glModule";
 import { createWallpaperResources } from "./glResources";
 import { drawWallpaperScene, type WallpaperDrawScene } from "./glScene";
-import { wallpaperParamUniforms } from "./glsl";
+import { wallpaperParamUniforms, type WallpaperUniformValue } from "./glsl";
+import { drawWallpaperIntro } from "./intro/introDraw";
 import { BLOOM_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
 import type { WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
@@ -38,6 +39,8 @@ export interface WallpaperRenderer {
   usesDayPhase(): boolean;
   usesContentRect(): boolean;
   draw(frame: WallpaperDrawFrame): void;
+  /** One frame of the first-run ink intro (its own cached programs, the scene tone); false when it could not draw. */
+  drawIntro(frame: WallpaperDrawFrame, uniforms: WallpaperUniformValue[]): boolean;
   /** Rebuilds every GPU resource after `webglcontextrestored`; images must be uploaded again. */
   restore(): void;
   /** Frees every GPU object and loses the context (`WEBGL_lose_context`); the canvas cannot host a renderer again. */
@@ -98,6 +101,7 @@ export function createWallpaperRenderer(
       : null;
   };
 
+  const fit = ({ width, height }: WallpaperDrawFrame) => { if (canvas.width !== width) canvas.width = width; if (canvas.height !== height) canvas.height = height; };
   const uses = (flag: "usesDayPhase" | "usesContentRect") => Boolean(active && (active.compiled[flag] || active.overlay?.[flag] || active.density?.[flag]));
 
   return {
@@ -119,13 +123,18 @@ export function createWallpaperRenderer(
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {
       if (!active && !transparent) return;
-      if (canvas.width !== frame.width) canvas.width = frame.width;
-      if (canvas.height !== frame.height) canvas.height = frame.height;
+      fit(frame);
       if (transparent) clearTransparent(gl, frame);
       if (active) {
         drawWallpaperScene(gl, resources, active, frame);
         signalWallpaperPaint(canvas, active.module.manifest.id, active.dark ? "dark" : "light");
       }
+    },
+    drawIntro(frame, uniforms) {
+      fit(frame);
+      const drawn = drawWallpaperIntro(gl, resources, frame, uniforms);
+      if (drawn && scene) signalWallpaperPaint(canvas, scene.module.manifest.id, scene.dark ? "dark" : "light");
+      return drawn;
     },
     restore() {
       resources = createWallpaperResources(gl);

@@ -2,6 +2,8 @@
 // Everything from colGate() to the end of risoPrint() is the approved v9 print.frag verbatim
 // (spec-riso-dynamic-wallpaper appendix); only the interface is the engine's: main() binds the prototype's
 // uniforms from engine uniforms and the paper/ink editions of riso-core.js, and the output is fragColor.
+// The first-run ink intro compiles this same pass with RISO_INTRO defined: its mark adds to the diffused ink
+// (introInk) and its key ink lands over the print (introKey); without RISO_INTRO both hooks are absent.
 vec2 uRes, uCss; float uPr, uMis, uGain, uNight, uBleed; vec3 uPaper, uA, uB, uC; vec4 uCol;
 #define uDen u_density
 
@@ -21,6 +23,9 @@ void risoPrint(){
   vec3 h=.25*(den(p+vec2(22.,9.))+den(p+vec2(-9.,22.))+den(p+vec2(-22.,-9.))+den(p+vec2(9.,-22.)));
   float fib=.55*hash(floor(p*.5)+3.)+.45*hash(floor(p*vec2(.22,.9))+11.);   // paper fibres carry the bleed
   vec3 wash=uBleed*smoothstep(.02,.6,max(h,d))*(.45+.55*fib);
+#ifdef RISO_INTRO
+  d=introInk(p,d);
+#endif
   float mo=.6+3.*uMis; vec2 mA=vec2(1.6,-1.)*mo,mB=vec2(-1.3,1.2)*mo;
   vec3 cov=vec3(dotC(p+mA,.2618,6.5,d.x),dotC(p+mB,1.309,6.5,d.y),dotC(p,.7854,6.5,d.z));
   cov*=smoothstep(0.,.12,hash(floor(p*.75)+7.)+.06);           // starvation specks
@@ -31,17 +36,24 @@ void risoPrint(){
   if(uNight<.5){vec3 k=cov*.9;col=paper*mix(vec3(1),uA,k.x)*mix(vec3(1),uB,k.y)*mix(vec3(1),uC,k.z);}
   else{vec3 M=mix(vec3(1),uA,cov.x)*mix(vec3(1),uB,cov.y)*mix(vec3(1),uC,cov.z);
     float Un=1.-(1.-cov.x)*(1.-cov.y)*(1.-cov.z);col=mix(paper,M*.86,Un*.9);}
+#ifdef RISO_INTRO
+  col=introKey(p,col);
+#endif
   fragColor=vec4(col,1.);
 }
 
 // Interface: two editions of one print (riso-core.js STOCK). Day paper = the lower stop of the light --conversation-bg
 // (250 250 248, token --riso-paper-day); night stock 25 28 36 (--riso-paper-night); inks per edition (--riso-ink-*).
-void main(){
-  bool night=p_paper==1;
+void risoBind(bool night){
   uRes=u_resolution; uCss=u_css; uPr=u_pixelRatio; uMis=u_lift; uGain=u_pulse; uNight=night?1.:0.; uBleed=.16; uCol=u_col;
   uPaper=(night?vec3(25.,28.,36.):vec3(250.,250.,248.))/255.;
   uA=(night?vec3(96.,140.,255.):vec3(0.,120.,191.))/255.;
   uB=(night?vec3(255.,112.,190.):vec3(255.,72.,176.))/255.;
   uC=(night?vec3(150.,96.,236.):vec3(96.,56.,156.))/255.;
+}
+#ifndef RISO_INTRO
+void main(){
+  risoBind(p_paper==1);
   risoPrint();
 }
+#endif

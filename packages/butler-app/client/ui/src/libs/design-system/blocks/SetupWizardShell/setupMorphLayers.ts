@@ -65,6 +65,21 @@ export function copyFrame(frame: HTMLElement): HTMLElement {
   return copy;
 }
 
+/** The surface alone on one card rect (the intro fades it in with the card), scaled from `origin` (surface px). */
+export function placeSurface(surface: HTMLElement, box: SetupMorphBox, origin: { x: number; y: number }) {
+  const values = [box.top, box.left, box.width, box.height, box.left, box.width, box.height];
+  SURFACE_VARS.forEach((name, index) => surface.style.setProperty(name, `${values[index]!.toFixed(2)}px`));
+  surface.style.transformOrigin = `${origin.x.toFixed(2)}px ${origin.y.toFixed(2)}px`;
+  surface.hidden = false;
+}
+
+/** Hides the intro surface again. */
+export function hideSurface(surface: HTMLElement) {
+  surface.hidden = true;
+  surface.style.removeProperty("transform-origin");
+  for (const name of SURFACE_VARS) surface.style.removeProperty(name);
+}
+
 /** At rest no surface or clip remains. */
 export function clearLayers(surface: HTMLElement, big: HTMLElement) {
   surface.hidden = true;
