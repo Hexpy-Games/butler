@@ -3,14 +3,14 @@ import type { redesignApp } from "./browser-redesign-app";
 
 export type ControlApp = Awaited<ReturnType<typeof redesignApp>>;
 /** Real gateway prepare/act frames and native receipts, no raw eval tool or real model. */
-export async function pointerAction(app: ControlApp, tab: string, action: string, batch = false) {
+export async function pointerAction(app: ControlApp, tab: string, action: string, batch = false, value = "Fixture note") {
   // Listing flushes the native hand-back projection before an agent action.
   await app.internal("tabs.list");
   const observation = await app.internal("tab.observe", tab);
   assert.equal(observation.status, "ok", JSON.stringify(observation));
   const target = observation.nodes.find((node: { role: string; name: string }) => action === "fill" ? node.role === "textbox" : node.role === "button" && node.name === "Confirm");
   assert.ok(target, JSON.stringify(observation.nodes));
-  const steps = [{ action, ref: target.ref, ...(action === "fill" ? { value: "Fixture note" } : action === "scroll" ? { value: 150 } : {}) }];
+  const steps = [{ action, ref: target.ref, ...(action === "fill" ? { value } : action === "scroll" ? { value: 150 } : {}) }];
   if (batch) steps.push({ action: "click", ref: target.ref });
   const args = { observation: observation.obs, steps };
   const prepared = await app.internal("tab.prepare", tab, args); assert.equal(prepared.status, "ok", JSON.stringify({ action, batch, prepared }));
