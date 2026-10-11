@@ -237,3 +237,39 @@ pub(super) async fn publish_readiness(
     .await
     .map_err(io)?
 }
+
+/// Build process context and open canonical stores before serving requests.
+pub(super) async fn open_runtime(
+    config: &crate::host::ServiceConfiguration,
+    user_home: &std::path::Path,
+    unclean_previous_exit: bool,
+    stop: &super::StopSignal,
+    correction: crate::host::runtime::startup_trace::CorrectionSender,
+    app_endpoint: &Arc<crate::host::app::gateway_lifecycle::ActiveAppEndpoint>,
+) -> Result<Arc<AgentRuntime>, BtccError> {
+    use crate::host::{ProcessEnvironment, RuntimePaths};
+    let os_release = butler_platform::instance::os_release().map_err(io)?;
+    let environment = ProcessEnvironment::capture(&config.data_root, user_home, &os_release);
+    let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
+        app_endpoint.clone(),
+    )?);
+    Ok(Arc::new(
+        AgentRuntime::open(
+            RuntimePaths {
+                data_root: config.data_root.clone(),
+                installation_root: config.installation.root().to_path_buf(),
+                executable_path: config.installation.executable().to_path_buf(),
+                resource_root: config.installation.resources().to_path_buf(),
+                workspace_root: config.data_root.clone(),
+                unclean_previous_exit,
+            },
+            config.app.db_path.clone(),
+            config.installation.clone(),
+            environment,
+            &process_locale(),
+            worker_profiles,
+            (app_endpoint.clone(), stop.cancellation(), correction),
+        )
+        .await?,
+    ))
+}
