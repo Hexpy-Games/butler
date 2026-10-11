@@ -49,9 +49,9 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
     let s = Setup::new("BROWSER-LIBRARY-FILTERS")?.start().await?;
     let total = 150;
     for n in 0..total {
-        ok(s.gw.post("/library", item(n)).await?);
+        ok(&s.gw.post("/library", item(n)).await?);
     }
-    let group = ok(s
+    let group = ok(&s
         .gw
         .post(
             "/library/groups",
@@ -63,27 +63,30 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         .to_owned();
     // Keep group metadata distinct from the words tested below.
     let evens: Vec<String> = (0..total)
-        .filter(|n| n % 2 == 0)
+        .filter(|n| n.is_multiple_of(2))
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch("/library/items", json!({"ids": evens, "group": group}))
         .await?);
     let thirds: Vec<String> = (0..total)
         .filter(|n| n % 3 != 2)
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch(
             "/library/items",
             json!({"ids": thirds, "addTags": ["Port"]}),
         )
         .await?);
     let fours: Vec<String> = (0..total)
-        .filter(|n| n % 4 == 0)
+        .filter(|n| n.is_multiple_of(4))
         .map(|n| format!("s{n:03}"))
         .collect();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch(
             "/library/items",
             json!({"ids": fours, "addTags": ["Night"]}),

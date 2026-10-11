@@ -66,7 +66,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_dirs" | "diagnostics" => &[],
         // SQLite synchronization, the credential fallback file and install pointers
         // consume the durable filesystem facade.
-        "sqlite" | "secrets" | "install_link" => &["secure_fs"],
+        "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" => &["process_control"],

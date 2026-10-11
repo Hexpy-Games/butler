@@ -126,7 +126,10 @@ wire_codes! {
         LegacyTurnCutoverCasConflict = "legacy_turn_cutover_cas_conflict",
         LegacyTurnQuarantineCasConflict = "legacy_turn_quarantine_cas_conflict",
         ModelAcceptanceClaim = "model_acceptance_claim",
+        ModelAcceptanceFormatUnknown = "model_acceptance_format_unknown",
         ModelAcceptanceJson = "model_acceptance_json",
+        ModelAcceptanceReclaimed = "model_acceptance_reclaimed",
+        ModelAcceptanceTurnSettled = "model_acceptance_turn_settled",
         ModelCheckpointMissing = "model_checkpoint_missing",
         ModelCheckpointStale = "model_checkpoint_stale",
         ModelClaimLost = "model_claim_lost",
@@ -212,6 +215,7 @@ wire_codes! {
         SqliteThreadPanicked = "sqlite_thread_panicked",
         SqliteThreadSpawnFailed = "sqlite_thread_spawn_failed",
         SqliteTransactionOpenAtClose = "sqlite_transaction_open_at_close",
+        SqliteWalSyncFailed = "sqlite_wal_sync_failed",
         StateClaimAdoptionRaced = "state_claim_adoption_raced",
         StateClaimInactive = "state_claim_inactive",
         StateClaimLive = "state_claim_live",
@@ -220,6 +224,9 @@ wire_codes! {
         StopCasLost = "stop_cas_lost",
         StopFinalMissing = "stop_final_missing",
         StopMessageMissing = "stop_message_missing",
+        StorageCorrectionCopyFailed = "storage_correction_copy_failed",
+        StorageCorrectionOpenFailed = "storage_correction_open_failed",
+        StorageCorrectionVerifyFailed = "storage_correction_verify_failed",
         SubsessionChildRoleInvalid = "subsession_child_role_invalid",
         SubsessionOutboxInvalid = "subsession_outbox_invalid",
         SubsessionOutboxRouteInvalid = "subsession_outbox_route_invalid",
@@ -244,7 +251,6 @@ wire_codes! {
         WakeTriggerConflict = "wake_trigger_conflict",
         WorkScopeProjectProjectionIncomplete = "work_scope_project_projection_incomplete",
         WorkScopeTurnBindingAmbiguous = "work_scope_turn_binding_ambiguous",
-        SqliteWalSyncFailed = "sqlite_wal_sync_failed",
     }
 }
 
