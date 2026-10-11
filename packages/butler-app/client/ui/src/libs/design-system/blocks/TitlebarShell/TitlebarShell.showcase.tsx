@@ -104,10 +104,11 @@ function NestedTitle({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+// The first story is the Blocks gallery card, so it keeps the leading control of the default titlebar.
 export const stories: ShowcaseStory[] = [
-  { name: "Nested screen: back button", widths: ["375", "app", "wide"], render: (context) => <NestedTitle context={context} /> },
   { name: "Auto-sized leading control (sidebar open)", widths: ["375", "app", "wide"], render: (context) => <ConversationLeading context={context} collapsed={false} /> },
   { name: "Auto-sized leading control (sidebar collapsed)", widths: ["app", "wide"], render: (context) => <ConversationLeading context={context} collapsed /> },
   { name: "Collapsed sidebar (macOS)", widths: ["375", "app", "wide"], render: (context) => <Titlebar context={context} /> },
   { name: "Windows controls", widths: ["app", "wide"], render: (context) => <Titlebar context={context} windows /> },
+  { name: "Nested screen: back button", widths: ["375", "app", "wide"], render: (context) => <NestedTitle context={context} /> },
 ];

@@ -19,13 +19,10 @@ mod stop_signal;
 pub(crate) use startup::STARTUP_TIMEOUT;
 mod storage_health;
 mod support;
-use crate::host::{
-    AgentRuntime, ProcessEnvironment, ResolvedInstallation, RuntimePaths, ServiceConfiguration,
-    SystemIdentity,
-};
+use crate::host::{AgentRuntime, ResolvedInstallation, ServiceConfiguration, SystemIdentity};
 use poll::{PollOwners, PollShutdown, poll_service};
 use stop_signal::{START_CANCELLED, StopSignal};
-use support::{close_runtime, close_serving, failure, holds_foreground_lease, io, process_locale};
+use support::{close_runtime, close_serving, failure, holds_foreground_lease, io};
 
 /// The product binary's sole entrypoint; domains remain crate-private.
 ///
@@ -84,15 +81,17 @@ async fn run(
         error
     })?;
     let (ready, initialized) = tokio::sync::oneshot::channel();
+    let (correction, timing) =
+        tokio::sync::watch::channel(crate::host::runtime::startup_trace::Correction::Pending);
     let service = Box::pin(run_until_stopped(
         installation,
         explicit_data,
         foreground_lease,
         logs,
         &stop,
-        ready,
+        (ready, correction.clone()),
     ));
-    let result = startup::until_ready(service, initialized, &stop).await;
+    let result = startup::until_ready(service, initialized, timing, &stop).await;
     let result = stop.settle(result, |line| logs.problem(line));
     let code = result
         .as_ref()
@@ -117,8 +116,12 @@ async fn run_until_stopped(
     foreground_lease: Option<bool>,
     logs: ServiceLogMode,
     stop: &StopSignal,
-    ready: tokio::sync::oneshot::Sender<()>,
+    readiness: (
+        tokio::sync::oneshot::Sender<()>,
+        crate::host::runtime::startup_trace::CorrectionSender,
+    ),
 ) -> Result<String, BtccError> {
+    let (ready, correction) = readiness;
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
@@ -145,31 +148,16 @@ async fn run_until_stopped(
     );
     stop.check_startup()?;
     repair_cli_launcher(&config, logs);
-    let os_release = butler_platform::instance::os_release().map_err(io)?;
-    let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
     let app_endpoint = Arc::new(ActiveAppEndpoint::new());
-    let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
-        app_endpoint.clone(),
-    )?);
-    let runtime = Arc::new(
-        AgentRuntime::open(
-            RuntimePaths {
-                data_root: config.data_root.clone(),
-                installation_root: config.installation.root().to_path_buf(),
-                executable_path: config.installation.executable().to_path_buf(),
-                resource_root: config.installation.resources().to_path_buf(),
-                workspace_root: config.data_root.clone(),
-                unclean_previous_exit: instance.unclean_previous_exit(),
-            },
-            config.app.db_path.clone(),
-            config.installation.clone(),
-            environment,
-            &process_locale(),
-            worker_profiles,
-            (app_endpoint.clone(), stop.cancellation()),
-        )
-        .await?,
-    );
+    let runtime = support::open_runtime(
+        &config,
+        &user_home,
+        instance.unclean_previous_exit(),
+        stop,
+        correction,
+        &app_endpoint,
+    )
+    .await?;
     if stop.requested() {
         let _ = close_runtime(runtime).await;
         return Err(StopSignal::cancelled_startup());

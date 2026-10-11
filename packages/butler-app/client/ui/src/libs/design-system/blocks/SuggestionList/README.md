@@ -1,0 +1,28 @@
+# SuggestionList
+
+## What is this component
+The listbox under a combobox field. `SuggestionList` is the list; `SuggestionRow` is one option on one line: favicon (or a kind glyph), title, the muted host and path, typed terms in bold, and a star for bookmarks.
+
+## When to use this component
+Use it for address suggestions under `AddressField` (history and bookmarks), or any field that suggests pages as you type.
+
+## Where to use this component
+Inside `PopoverContent width="anchor" density="list"`, anchored to the field with `PopoverAnchor`, so the list is exactly as wide as the field.
+
+## Why to use this component
+Mainstream browsers show suggestions as dense single-line rows with the site icon and the match emphasized; this keeps that clarity and the combobox semantics in one place.
+
+## How to use this component
+Give the field `listbox={{ id, expanded, activeOptionId }}`, `onInputChange` and `onInputKeyDown`. Render one `SuggestionRow` per result with a stable `id`, `active` for the keyboard highlight, `query` for bold matches and `onSelect`.
+
+## Who can use this component
+Product containers that own the suggestion data and navigation (AddressSuggestions).
+
+## Best practice
+Keep focus in the field: rows prevent pointer-down focus; arrows move `active`; Enter chooses; the first Escape closes the list (prevent the default so the field stays in edit mode).
+
+## Wrong use cases
+Do not use it for a fixed set of values (use `Select`) or a filtered picker with groups (use `FilteredSelectPopover`).
+
+## Tags
+browser, address, suggestions, autocomplete, combobox, listbox, history, bookmark, favicon

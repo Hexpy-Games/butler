@@ -98,17 +98,19 @@ async fn browser_history_records_searches_dedupes_and_deletes() -> Result<(), Ha
             .status,
         200
     );
-    assert!(
+    assert_eq!(
         items(&s, "/browser-history?q=청자").await?["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[Value]
     );
-    assert!(
+    assert_eq!(
         items(&s, "/browser-history/suggestions?q=청자").await?["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[Value]
     );
     assert_eq!(
         s.gw.post(
@@ -119,11 +121,12 @@ async fn browser_history_records_searches_dedupes_and_deletes() -> Result<(), Ha
         .status,
         200
     );
-    assert!(
+    assert_eq!(
         items(&s, "/browser-history").await?["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[Value]
     );
     s.finish().await
 }

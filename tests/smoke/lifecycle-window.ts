@@ -10,7 +10,8 @@ const directory = resolve("packages/butler-app/client/ui/lifecycle-assets");
 const copy = JSON.parse(readFileSync(join(directory, "copy.json"), "utf8"));
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs(), executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 let cases = 0;
-mkdirSync(".tmp/lifecycle/static", { recursive: true });
+const screenshotDirectory = process.env.BUTLER_LIFECYCLE_OUTPUT ?? ".tmp/lifecycle/static";
+mkdirSync(screenshotDirectory, { recursive: true });
 try {
   const page = await browser.newPage({ viewport: { width: 296, height: 264 } });
   const errors: string[] = [];
@@ -20,7 +21,7 @@ try {
     Object.assign(window, { butlerLifecycle: { state: async () => ({ ...Object.fromEntries(new URLSearchParams(location.search)), copy }), onState() {}, painted() {} } });
   }, copy);
   for (const kind of ["startup", "quit"]) {
-    const states = kind === "startup" ? ["prepare", "service", "screen", "upgrade", "data", "slow", "error"]
+    const states = kind === "startup" ? ["prepare", "service", "storage", "screen", "upgrade", "data", "slow", "error"]
       : ["saving", "search", "storage", "connections", "services", "finishing", "timeout", "failed"];
     for (const theme of ["light", "dark"]) for (const locale of ["ko", "en"]) for (const forceQuit of [false, true]) for (const state of states) {
       const stage = state === "slow" || state === "error" ? "service" : state === "timeout" || state === "failed" ? "storage" : state;
@@ -28,6 +29,12 @@ try {
       await page.goto(`${pathToFileURL(join(directory, "lifecycle.html"))}?${query}`);
       await page.locator("html[data-painted=true]").waitFor();
       await page.evaluate((forceQuit) => (window as unknown as { lifecycleState(state: unknown): void }).lifecycleState({ forceQuit }), forceQuit);
+      await page.evaluate(async () => { await document.fonts.ready; });
+      if (!["error", "failed"].includes(state)) {
+        await page.locator("[data-slot=title]").waitFor({ state: "visible" });
+        await page.locator("[data-slot=line]").waitFor({ state: "visible" });
+        assert.equal(await page.locator("[data-slot=line]").textContent(), copy[locale][kind].stage[stage]);
+      }
       const height = await page.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height));
       await page.setViewportSize({ width: 296, height });
       await page.evaluate(async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); });
@@ -62,8 +69,8 @@ try {
         if (element.slot === "caption") assert.equal(element.size, 12);
       }
       if (!forceQuit) assert.ok(!audit.elements.some((e) => e.text === copy[locale].action.forceQuit));
-      if (!forceQuit && locale === "ko" && ["service", "saving", "error", "failed"].includes(state)) {
-        await page.screenshot({ path: `.tmp/lifecycle/static/${kind}-${state}-${theme}.png` });
+      if (!forceQuit && ["service", "storage", "saving", "error", "failed"].includes(state)) {
+        await page.screenshot({ path: `${screenshotDirectory}/${kind}-${state}-${theme}-${locale}.png` });
       }
       cases++;
     }

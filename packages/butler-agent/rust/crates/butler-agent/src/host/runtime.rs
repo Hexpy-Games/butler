@@ -19,7 +19,7 @@ pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
-use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
+use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
     SystemIdentity, SystemPromptClock,
@@ -67,9 +67,9 @@ impl AgentRuntime {
         environment: ProcessEnvironment,
         locale: &str,
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
-        app: (Arc<ActiveAppEndpoint>, &tokio_util::sync::CancellationToken),
+        app: startup_trace::AppStartup<'_>,
     ) -> Result<Self, BtccError> {
-        let (app_endpoint, stop) = app;
+        let (app_endpoint, stop, correction) = app;
         let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
@@ -102,8 +102,8 @@ impl AgentRuntime {
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         startup.phase("skills");
-        stores::check_startup(stop)?;
-        let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let stores =
+            RuntimeStores::open(&paths.data_root, collation.clone(), stop, correction).await?;
         startup.phase("canonical_stores");
         let response_language =
             defaults::initialize(&paths, &app_database_path, &installation).await?;
