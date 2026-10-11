@@ -29,9 +29,13 @@ export async function zoomTab(tab, args) {
   const shot = await captureBrowserDetail(tab.view.webContents, { format: "jpeg", quality: 80,
     clip: { ...css, x: css.x + page.x, y: css.y + page.y, scale }, fromSurface: true, captureBeyondViewport: false });
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
-  // The surface may carry a device pixel ratio; bound the bitmap actually returned.
-  const image = nativeImage.createFromBuffer(Buffer.from(shot?.data ?? "", "base64"));
-  if (image.isEmpty()) return { status: "refused", reason: "image_unavailable" };
+  // A Retina or scaled display renders the surface at its device pixel ratio.
+  // The close-up is the region at `scale` CSS pixels per CSS pixel on every
+  // platform (as headless renders it), so a denser bitmap is scaled down to it.
+  const captured = nativeImage.createFromBuffer(Buffer.from(shot?.data ?? "", "base64"));
+  if (captured.isEmpty()) return { status: "refused", reason: "image_unavailable" };
+  const target = { width: Math.round(css.width * scale), height: Math.round(css.height * scale) };
+  const image = captured.getSize().width > target.width ? captured.resize({ ...target, quality: "best" }) : captured;
   const fitted = fitJpeg(image, MAX_SIDE);
   if (!fitted) return { status: "refused", reason: "image_too_large" };
   const { jpeg, width: imageWidth, height: imageHeight } = fitted;
