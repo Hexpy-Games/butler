@@ -92,20 +92,6 @@ pub(super) fn hand_over(state: &HttpState, hub: &mut Inner) {
     }
 }
 
-/// Settings → Security turned the browser without the App off: the hidden
-/// host is ended now, like the headless browser.
-pub(in crate::gateway::http) async fn turn_off(state: &HttpState) {
-    if let Ok(mut hub) = state.browser.0.lock()
-        && hub.hidden
-    {
-        hub.detach();
-        state.browser.2.notify_waiters();
-    }
-    if let Some(app_host) = &state.app_host {
-        app_host.stop().await;
-    }
-}
-
 /// What the hidden host cannot do without a user at the App: a hand-over to
 /// the user, and signed-in browsing (the App's own profile).
 pub(super) fn refusal(state: &HttpState, frame: &Value, op: &str) -> Option<Value> {
@@ -124,16 +110,13 @@ pub(super) fn refusal(state: &HttpState, frame: &Value, op: &str) -> Option<Valu
 }
 
 /// Starts the hidden host for a new tab (or an output check, `frame`
-/// `None`) while no host is attached and the browser without the App is
-/// on, unless the turn already runs on the headless browser. Without it,
-/// the headless browser serves.
+/// `None`) while no host is attached, unless the turn already runs on
+/// Chrome. The App's engine is available independently of the operator's
+/// Chrome fallback setting.
 pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
     let (Some(app_host), Some(headless)) = (state.app_host.clone(), state.headless.as_ref()) else {
         return;
     };
-    if !headless.enabled() {
-        return;
-    }
     if let Some(frame) = frame {
         let session = frame["session"].as_str().unwrap_or("");
         let signed_in =

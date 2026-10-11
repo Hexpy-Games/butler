@@ -1,10 +1,9 @@
-//! Butler's own headless browser (P4): the browser tools' backend while no
-//! App is attached. On by default where no App runs this Agent (CLI and
-//! server installs); with the App it is opt-in (`headlessBrowser: true` in
-//! the App gateway settings), since the App's browser serves those calls.
-//!
-//! Where the App is installed, its own Electron serves first, run without a
-//! window (the same switch); Chrome for Testing only serves without it.
+//! Browser backend while no App is attached. Enabled by default, including
+//! when the App launched the Agent. The installed App's Electron runs on
+//! demand without a window; Chrome for Testing serves App-less installs.
+//! `BUTLER_BROWSER_HEADLESS=on|off` overrides `headlessBrowser` in the App
+//! gateway config for Chrome fallback. The installed App engine is always
+//! available. Neither backend starts until a browser call needs it.
 //! `BUTLER_BROWSER_APP`: `off`, or an Electron executable to run instead
 //! of the installed App's (with `BUTLER_BROWSER_APP_DIR`, the App directory a
 //! development Electron loads).
@@ -27,8 +26,7 @@ pub(super) fn headless_browser(
     let enabled = match env_value("BUTLER_BROWSER_HEADLESS").as_deref() {
         Some("on") => true,
         Some("off") => false,
-        _ => configured
-            .unwrap_or_else(|| env_value("BUTLER_APP_BUNDLED_SUPERVISOR").as_deref() != Some("1")),
+        _ => configured.unwrap_or(true),
     };
     Some(HeadlessBrowserConfig {
         enabled,

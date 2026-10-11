@@ -42,13 +42,6 @@ struct SecurityView {
     /// Extra host names the gateway answers (tunnels, reverse proxies).
     allowed_hosts: Vec<String>,
     content_hosts: Vec<String>,
-    /// Butler's own browser while no App is attached; absent where this
-    /// gateway has none.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    headless_browser: Option<bool>,
-    /// That browser is the installed App's own, run without a window.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    headless_browser_app: Option<bool>,
     /// Compatibility with the existing UI: always null; no token metadata.
     connection_code: Option<ConnectionCodeView>,
 }
@@ -75,7 +68,6 @@ pub(super) struct SecurityPatch {
     /// Replaces the list.
     allowed_hosts: Option<Vec<String>>,
     content_hosts: Option<Vec<String>>,
-    headless_browser: Option<bool>,
 }
 
 /// The `security` object `GET`/`PATCH /settings` answer local clients.
@@ -196,8 +188,6 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
             .collect(),
         allowed_hosts: remote.exposure.allowed_hosts,
         content_hosts: remote.exposure.content_hosts,
-        headless_browser: state.headless.as_ref().map(|h| h.enabled()),
-        headless_browser_app: state.app_host.as_ref().map(|h| h.installed()),
         connection_code,
     })
 }
@@ -270,19 +260,6 @@ pub(super) fn parse_patch(value: Value) -> Result<SecurityPatch, HttpError> {
 /// Persists the patched exposure, then binds or unbinds and answers the
 /// new names, with no restart.
 pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Result<(), HttpError> {
-    if let Some(enabled) = patch.headless_browser {
-        let headless = state
-            .headless
-            .clone()
-            .ok_or_else(|| invalid_security("No built-in browser on this host."))?;
-        if let Some(store) = &state.security_store {
-            store.save_headless_browser(enabled).await?;
-        }
-        if !enabled {
-            super::browser_host::hidden::turn_off(state).await;
-        }
-        headless.set_enabled(enabled).await;
-    }
     if patch.remote_access_enabled.is_none()
         && patch.allowed_hosts.is_none()
         && patch.content_hosts.is_none()

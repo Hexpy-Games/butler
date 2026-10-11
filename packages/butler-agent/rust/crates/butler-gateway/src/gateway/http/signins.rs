@@ -1,4 +1,4 @@
-//! Settings → Security → Sign-ins (host only: local client with the admin
+//! Settings → Browser → Sign-ins (host only: local client with the admin
 //! credential). Passwords go straight to the OS credential store; no route
 //! ever answers one.
 //!

@@ -17,7 +17,7 @@ assert.ok(executable, "explicit Electron 44 executable required");
 const electronRoot = resolve("packages/butler-app/client/electron");
 const stub = browserStub();
 const gateway = await createNativeAppServer({ stubToolCall: stub.handler, env: {
-  BUTLER_BROWSER_HEADLESS: "on", BUTLER_BROWSER_APP: executable, BUTLER_BROWSER_APP_DIR: electronRoot,
+  BUTLER_BROWSER_HEADLESS: "", BUTLER_APP_BUNDLED_SUPERVISOR: "1", BUTLER_BROWSER_APP: executable, BUTLER_BROWSER_APP_DIR: electronRoot,
   // Chrome for Testing cannot come into it: nowhere to download from.
   BUTLER_BROWSER_DOWNLOAD_BASE: "http://127.0.0.1:9/",
 } });
@@ -43,6 +43,7 @@ async function turn(text: string) {
   }, "delivered turn");
 }
 try {
+  assert.equal(hostProcesses().length, 0, "zero hidden hosts before browser work");
   await gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", access_mode: "full_access" }) });
   stub.set([
     () => ({ name: "write_file", arguments: { path: "hidden-site/index.html", create_parents: true,

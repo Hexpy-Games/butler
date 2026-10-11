@@ -12,6 +12,7 @@ use butler_e2e::e2e::{
     scenario::{Access, Scenario, Setup},
     security::AdminClient,
 };
+use butler_platform::secure_fs::Canonical as _;
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
@@ -40,7 +41,7 @@ pub(crate) fn electron() -> (PathBuf, PathBuf) {
         .expect("BUTLER_E2E_ELECTRON names the in-worktree Electron executable");
     let app = butler_e2e::e2e::binary::workspace_root()
         .join("../../butler-app/client/electron")
-        .canonicalize()
+        .canonical()
         .expect("the in-worktree App directory");
     (executable, app)
 }

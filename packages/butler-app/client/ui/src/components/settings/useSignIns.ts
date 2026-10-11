@@ -4,7 +4,7 @@ import { confirmAction } from "@/app/confirmation.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import * as signIns from "./signInsApi";
 
-/** Settings → Security → Sign-ins: rows, availability and the row actions. */
+/** Settings → Browser → Sign-ins: rows, availability and the row actions. */
 export function useSignIns() {
   const [view, setView] = useState<signIns.SignInsView | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");

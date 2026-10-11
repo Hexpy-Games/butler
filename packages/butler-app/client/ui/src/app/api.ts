@@ -1006,7 +1006,7 @@ const CODED_SETTINGS_METHODS = new Set([
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
 
-/** Settings → Security → Sign-ins and browser import: main adds the admin credential. */
+/** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
 function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
   const payload = () => parseBody(body);
   if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
