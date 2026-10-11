@@ -1,0 +1,10 @@
+{
+  "id": "butler.riso-print",
+  "name": {"en": "Riso Print", "ko": "리소 프린트"},
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "drift",
+  "density": true,
+  "image": "none",
+  "params": []
+}

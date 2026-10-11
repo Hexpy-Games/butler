@@ -1,6 +1,4 @@
 .screen {
-  --setup-wizard-anchor-offset: 12vh;
-
   position: relative;
   display: grid;
   min-height: var(--adaptive-viewport-block-size);
@@ -145,21 +143,38 @@
   row-gap: var(--space-lg);
 }
 
-/* anchor="top": intro and step cards share one top edge below the titlebar,
-   so a taller or shorter step never moves the card's header. */
+/* anchor="top": intro and step cards share one top edge, so a taller or
+   shorter step never moves the card's header. The edge sits at 20% of the
+   window: never under the titlebar (header + 16px on a phone), and at most
+   240px, reached at a 1200px window. */
 .screen[data-anchor="top"] .focusScrollContent {
   align-content: start;
-  padding-top: max(
+  padding-top: clamp(
     calc(var(--titlebar-height) + var(--space-lg)),
-    var(--setup-wizard-anchor-offset)
+    calc(var(--adaptive-viewport-block-size) * 0.2),
+    240px
   );
 }
 
 /* stepKey: the old card (an inert copy) and the new card share one grid
-   cell; only opacity and transform move, never the width. */
+   cell. The morph surface paints under both (isolated stacking). */
 .stage {
+  position: relative;
   display: grid;
   width: 100%;
+  isolation: isolate;
+}
+
+/* While the card morphs, the surface carries the card paint and the stage
+   takes no pointer input. */
+.stage[data-morph] {
+  pointer-events: none;
+}
+
+.stage[data-morph] .content {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .stageGhosts,
@@ -188,7 +203,14 @@
 
 .stageEnter {
   animation: setup-wizard-stage-enter var(--motion-base)
-    var(--motion-ease-decelerate) both;
+    var(--motion-ease-decelerate) backwards;
+}
+
+/* intro="rerun": the card appears with a 4px rise; reduced motion shows it
+   at once (the stage never applies this class then). */
+.stageRerun {
+  animation: setup-wizard-stage-enter var(--motion-slow)
+    var(--motion-ease-decelerate) backwards;
 }
 
 @keyframes setup-wizard-stage-exit {

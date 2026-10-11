@@ -22,6 +22,7 @@ pub mod downloads;
 mod events;
 mod frames;
 mod hidden;
+pub mod history;
 mod identity;
 mod imaging;
 mod input;
@@ -78,6 +79,7 @@ pub struct Headless {
     enabled: std::sync::atomic::AtomicBool,
     reports: check::SharedReports,
     downloads: Arc<downloads::Downloads>,
+    history: Arc<history::History>,
 }
 
 fn refused(reason: &str) -> Value {
@@ -100,6 +102,7 @@ impl Headless {
             enabled: std::sync::atomic::AtomicBool::new(config.enabled),
             reports: check::SharedReports::default(),
             downloads: downloads::Downloads::new(&config.root),
+            history: Arc::default(),
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
@@ -114,6 +117,16 @@ impl Headless {
             }
         });
         headless
+    }
+
+    /// Hook for private browsing; it suppresses both commits and metadata.
+    pub fn set_history_private(&self, private: bool) {
+        self.history.set_private(private);
+    }
+
+    /// Sends visible conversation visits to the App storage owner.
+    pub fn set_history_port(&self, port: Arc<dyn history::HistoryPort>) {
+        self.history.set_port(port);
     }
 
     /// Where conversation downloads land and become outputs (the gateway).
