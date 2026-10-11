@@ -251,7 +251,7 @@ pub(super) async fn execute(
     if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
         return project::execute(owner, call).await;
     }
-    if let Some(result) = workspace_tool(owner, &invocation, call, call_id).await {
+    if let Some(result) = domain_tool(owner, &invocation, call, call_id).await {
         return result;
     }
     let args = Value::Object(call.arguments.clone());
@@ -262,7 +262,6 @@ pub(super) async fn execute(
         return read_tool_artifact(owner, &call.name, args).await;
     }
     let result = match call.name.as_str() {
-        "library_search" | "library_organize" => return super::library::execute(owner, call).await,
         "list_conversation_sessions" => owner
             .conversation_tools
             .list(owner.binding.memory.clone(), args)
@@ -385,12 +384,15 @@ pub(super) fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError>
     })
 }
 
-async fn workspace_tool(
+async fn domain_tool(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if super::library::supports(&call.name) {
+        return Some(super::library::execute(owner, call).await);
+    }
     match call.name.as_str() {
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),

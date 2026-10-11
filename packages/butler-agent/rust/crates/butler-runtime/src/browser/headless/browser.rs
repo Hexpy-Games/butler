@@ -24,6 +24,7 @@ pub(crate) struct Browser {
     pub alive: CancellationToken,
     /// Signals a change in the set of tabs (for expiry and the idle reap).
     pub changed: Notify,
+    pub history: Arc<super::history::History>,
     pub downloads: Arc<super::downloads::Downloads>,
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
@@ -96,6 +97,7 @@ impl Browser {
         root: &Path,
         content: Option<ContentOrigin>,
         downloads: Arc<super::downloads::Downloads>,
+        history: Arc<super::history::History>,
     ) -> Result<Arc<Self>, &'static str> {
         let (profile, log) = prepare(root).map_err(|_| "browser_unavailable")?;
         let proxy = EgressProxy::start(content)
@@ -124,6 +126,7 @@ impl Browser {
             alive: CancellationToken::new(),
             changed: Notify::new(),
             downloads: downloads.clone(),
+            history,
             process: Mutex::new(Some(process)),
             _proxy: proxy,
             _preview_proxy: preview_proxy,
