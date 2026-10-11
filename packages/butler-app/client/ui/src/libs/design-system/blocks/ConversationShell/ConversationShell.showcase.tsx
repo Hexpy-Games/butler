@@ -13,7 +13,7 @@ import styles from "./ConversationShell.showcase.module.css";
 export const meta: ShowcaseMeta = {
   title: "ConversationShell",
   category: "Conversation & Activity",
-  tags: ["conversation", "chat", "scroll", "layout", "background", "wallpaper"],
+  tags: ["conversation", "chat", "scroll", "layout"],
   status: "stable",
 };
 

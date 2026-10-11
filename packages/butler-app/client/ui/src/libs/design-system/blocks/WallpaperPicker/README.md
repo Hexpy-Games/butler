@@ -76,7 +76,8 @@ Commit the generated PNGs, input hashes and `builtinPosters.ts` together.
   Re-picking any tile restores what it had earlier in the session.
   `imageDefaults` (e.g. `{ dim: 0 }`) replaces those starting options for a
   first pick, where the caller dims on its own (the conversation's overlay);
-  a remembered value still wins.
+  a remembered value still wins. A fresh upload is selected by the caller,
+  so the caller applies the same defaults there.
 - `extraControls` renders the caller's own controls after the selected
   tile's options, inside the picker (e.g. the conversation's 배경 불투명도
   slider, the value in its label). The caller decides for which values it

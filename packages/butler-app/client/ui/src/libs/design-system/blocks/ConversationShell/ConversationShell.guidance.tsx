@@ -45,12 +45,12 @@ function Framed({ children = <Thread /> }: { children?: ReactNode }) {
 }
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The conversation column: scroll container, readable message width, composer reserve, the jump-to-latest button and an optional background layer.",
+  purpose: "The conversation column: scroll container, readable message width, composer reserve and the jump-to-latest button.",
   whenToUse: ["The message timeline of a conversation or an observer transcript"],
   whenNotToUse: [
     { when: "A generic scrolling region", use: "ScrollArea" },
     { when: "One message", use: "MessageRow" },
-    { when: "A wallpaper behind the new chat only", use: "PromptSuggestionList wallpaper" },
+    { when: "A wallpaper behind the new chat only (its wallpaper prop)", use: "PromptSuggestionList" },
   ],
   recipes: [
     { name: "Conversation with a jump-to-latest button", description: "composerReserve keeps the last message clear of the floating composer.", render: () => <Framed /> },
