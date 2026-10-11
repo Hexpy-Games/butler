@@ -27,6 +27,14 @@ struct Policy {
 }
 
 fn helper() -> std::io::Result<PathBuf> {
+    static HELPER: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    HELPER
+        .get_or_init(|| locate_helper().ok())
+        .clone()
+        .ok_or_else(|| std::io::Error::other("no sandbox helper path"))
+}
+
+fn locate_helper() -> std::io::Result<PathBuf> {
     #[cfg(feature = "test-support")]
     if let Some(path) = std::env::var_os("NEXTEST_BIN_EXE_butler-sandbox")
         .or_else(|| std::env::var_os("NEXTEST_BIN_EXE_butler_sandbox"))

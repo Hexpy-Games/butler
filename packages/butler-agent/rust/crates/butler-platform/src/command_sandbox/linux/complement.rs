@@ -1,6 +1,7 @@
 //! Landlock cannot subtract paths. Grant siblings along denied ancestor chains,
 //! traversing only those chains, never the workspace tree.
 use std::collections::{HashMap, HashSet};
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use landlock::{AccessFs, BitFlags, PathBeneath, PathFd, RulesetCreated, RulesetCreatedAttr};
@@ -56,18 +57,11 @@ pub(super) fn apply(
     // Withhold execution on interop entry points even if a project lives on
     // a Windows mount. Read permissions there remain unchanged.
     let deny_execute = if wsl {
-        vec![PathBuf::from("/mnt"), PathBuf::from("/init")]
+        aliases(&[PathBuf::from("/mnt"), PathBuf::from("/init")])?
     } else {
         Vec::new()
     };
-    grant_complement(
-        rules,
-        Path::new("/"),
-        &blocked,
-        &deny_execute,
-        read,
-        &mut HashSet::new(),
-    )?;
+    grant_complement(rules, Path::new("/"), &blocked, &deny_execute, read)?;
     for root in allowed {
         let real = root.canonicalize()?;
         // Disjoint workspaces already received exactly these grants above.
@@ -84,14 +78,7 @@ pub(super) fn apply(
             .cloned()
             .collect();
         excluded.extend(project_secrets(root)?);
-        grant_complement(
-            rules,
-            &real,
-            &excluded,
-            &deny_execute,
-            read,
-            &mut HashSet::new(),
-        )?;
+        grant_complement(rules, &real, &excluded, &deny_execute, read)?;
     }
     grant(rules, Path::new("/dev/null"), AccessFs::WriteFile.into())
 }
@@ -160,12 +147,12 @@ fn grant_complement(
     denied: &[PathBuf],
     deny_execute: &[PathBuf],
     rights: BitFlags<AccessFs>,
-    visited: &mut HashSet<PathBuf>,
 ) -> Result<(), Error> {
-    // Callers supply resolved paths. Resolve symlink children before adding a
-    // rule, since Landlock follows O_PATH and must not re-grant a secret alias.
-    let real = path.to_path_buf();
-    if !visited.insert(real.clone()) || denied.iter().any(|root| real.starts_with(root)) {
+    // Walk the physical tree. Rules on its directories/files already cover
+    // accesses through aliases; adding symlink rules would duplicate grants
+    // and could accidentally re-grant a denied target.
+    let real = path;
+    if denied.iter().any(|root| real.starts_with(root)) {
         return Ok(());
     }
     let rights = if deny_execute.iter().any(|root| real.starts_with(root)) {
@@ -177,32 +164,67 @@ fn grant_complement(
         return Ok(());
     }
     let mut child_rights = rights;
-    if !denied.iter().any(|root| root.starts_with(&real)) {
+    if !denied.iter().any(|root| root.starts_with(real)) {
         if !rights.contains(AccessFs::Execute)
-            || !deny_execute.iter().any(|root| root.starts_with(&real))
+            || !deny_execute.iter().any(|root| root.starts_with(real))
         {
-            return grant(rules, &real, rights);
+            return grant(rules, real, rights);
         }
         // Read access is unrestricted here; split only the execution grants.
-        grant(rules, &real, rights & !AccessFs::Execute)?;
+        grant(rules, real, rights & !AccessFs::Execute)?;
         child_rights = AccessFs::Execute.into();
     }
     // No parent read grant: that would recursively re-allow its denied child.
-    for entry in std::fs::read_dir(&real)? {
+    let split = split_children(real, denied, deny_execute);
+    let parent = PathFd::new(real)?;
+    for entry in std::fs::read_dir(real)? {
         let entry = entry?;
-        let path = if entry.file_type()?.is_symlink() {
-            match entry.path().canonicalize() {
-                Ok(path) => path,
-                // Dangling symlinks are unreadable; propagate all other errors.
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error.into()),
-            }
+        if entry.file_type()?.is_symlink() {
+            continue;
+        }
+        let name = entry.file_name();
+        if split.contains(&name) {
+            grant_complement(rules, &entry.path(), denied, deny_execute, child_rights)?;
         } else {
-            entry.path()
-        };
-        grant_complement(rules, &path, denied, deny_execute, child_rights, visited)?;
+            grant_child(rules, &parent, &name, child_rights)?;
+        }
     }
     Ok(())
+}
+
+// The resolved parent stays open across its siblings, avoiding repeated walks
+// from /. Never follow a last-component alias that appeared after read_dir.
+fn grant_child(
+    rules: &mut RulesetCreated,
+    parent: &PathFd,
+    name: &OsStr,
+    rights: BitFlags<AccessFs>,
+) -> Result<(), Error> {
+    use nix::{fcntl::OFlag, sys::stat::Mode};
+    let fd = nix::fcntl::openat(
+        parent,
+        name,
+        OFlag::O_PATH | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW,
+        Mode::empty(),
+    )?;
+    rules.add_rule(PathBeneath::new(fd, rights))?;
+    Ok(())
+}
+
+// Select exceptional branches once per directory. Ordinary siblings cannot
+// contain a denied descendant; aliases receive their physical target's rights.
+fn split_children(parent: &Path, denied: &[PathBuf], execute: &[PathBuf]) -> HashSet<OsString> {
+    denied
+        .iter()
+        .chain(execute)
+        .filter_map(|root| {
+            root.strip_prefix(parent)
+                .ok()?
+                .components()
+                .next()
+                .map(|component| component.as_os_str().to_os_string())
+        })
+        .collect()
 }
 
 fn grant(rules: &mut RulesetCreated, path: &Path, rights: BitFlags<AccessFs>) -> Result<(), Error> {

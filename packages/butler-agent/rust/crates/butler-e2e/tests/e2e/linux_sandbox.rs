@@ -54,6 +54,7 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
     std::fs::write(cwd.join("visible.txt"), "visible-content")?;
     std::fs::write(cwd.join(".ENV.local"), "fixture-project-secret")?;
     butler_platform::secure_fs::symlink(&home.join(".ssh/id_test"), &cwd.join("credential-alias"))?;
+    butler_platform::secure_fs::symlink(&cwd.join("visible.txt"), &cwd.join("public-alias"))?;
     let environment = HashMap::from([("HOME".into(), home.display().to_string())]);
     let invoke = |command: &str| {
         command_sandbox::login_shell_contained(
@@ -69,6 +70,9 @@ async fn kernel_boundaries_secrets_network_and_unicode() -> Result<(), HarnessEr
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("visible.txt") && text.contains("visible-content"));
     assert!(text.contains("프로젝트 ✓/깊은 경로"));
+    let alias = run(invoke("cat public-alias"), &cwd, home);
+    assert!(alias.status.success(), "{alias:?}");
+    assert_eq!(alias.stdout, b"visible-content");
     let output = run(invoke("echo x > denied.txt"), &cwd, home);
     assert!(!output.status.success());
     assert!(!cwd.join("denied.txt").exists());
