@@ -124,7 +124,7 @@ jobs:
       - name: Use the shared native Agent
         if: inputs.shared-agents == true
         run: |
-          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent" "$RUNNER_TEMP/shared-agent/butler-sandbox"
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
       - name: Package the App

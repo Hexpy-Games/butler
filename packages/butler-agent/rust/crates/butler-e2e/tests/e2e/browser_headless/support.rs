@@ -221,7 +221,7 @@ const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixt
 <button id="ask" onclick="document.querySelector('#answer').textContent=confirm('Proceed?')?'Accepted':'Declined'">Ask</button><p id="answer">No answer</p>
 <button id="popup" onclick="window.open('./popup.html','_blank')">Open popup</button>
 <p><a id="rebind" href="http://localhost.:{{GATEWAY_PORT}}/health">Loopback by name</a></p>
-<p><a id="private" href="http://10.0.0.1/">Private address</a></p>
+<p><a id="private" href="http://10.0.0.1/">Private address</a></p><!-- privacy-hygiene: allow-private-ip (LAN-denial fixture) -->
 <p><a id="local" href="file:///etc/hosts">Local file</a></p>
 <p><a id="report" href="./report.csv" download="report.csv">Download report</a></p>
 </main>"#;

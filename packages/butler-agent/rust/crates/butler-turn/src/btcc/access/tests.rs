@@ -239,7 +239,7 @@ fn access_boundary_matches_the_owner_table() {
         (
             serde_json::json!({}),
             CommandObservation {
-                sandboxed: butler_platform::command_sandbox::READ_ONLY_SANDBOX,
+                sandboxed: butler_platform::command_sandbox::approval_free_reads(),
             },
         ),
         (

@@ -38,7 +38,7 @@ pub(super) async fn guard_denials(
         "file:///etc/hosts",
         "http://127.0.0.1:9/",
         "http://169.254.169.254/",
-        "http://10.0.0.1/",
+        "http://10.0.0.1/", // privacy-hygiene: allow-private-ip (LAN-denial fixture)
     ] {
         let reply = admin
             .send(

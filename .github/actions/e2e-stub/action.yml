@@ -115,7 +115,10 @@ runs:
       shell: bash
       env:
         AGENT_BINARY: ${{ inputs.agent-binary }}
-      run: chmod +x "$AGENT_BINARY"
+      run: |
+        chmod +x "$AGENT_BINARY"
+        helper="$(dirname "$AGENT_BINARY")/butler-sandbox"
+        if [ "${{ runner.os }}" = Linux ]; then chmod +x "$helper"; fi
 
     - name: Run the stub tier
       if: inputs.idle-only != 'true'

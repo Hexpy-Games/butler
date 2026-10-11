@@ -140,7 +140,7 @@ impl CapabilityKind {
             ReadFile | ListFiles | GrepFiles => Self::FileRead,
             RunCommand => match arguments.get("state_effect").and_then(Value::as_str) {
                 None | Some("read_only" | "validation") => Self::CommandObservation {
-                    sandboxed: butler_platform::command_sandbox::READ_ONLY_SANDBOX,
+                    sandboxed: butler_platform::command_sandbox::approval_free_reads(),
                 },
                 Some("remote_observation") => Self::Network,
                 Some("mutation") => Self::CommandMutation {

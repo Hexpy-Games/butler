@@ -45,11 +45,11 @@ pub(super) async fn execute(
         None
     };
     let mut approved_scope = scope.clone();
-    if needs_approval && !butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+    if needs_approval && !butler_platform::command_sandbox::approval_free_reads() {
         approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
     }
     if !needs_approval && owner.binding.access_mode.reviews_effects() {
-        if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+        if butler_platform::command_sandbox::approval_free_reads() {
             approved_scope.contained_reads = true;
         } else {
             approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
