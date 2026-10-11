@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+mod cmd;
 mod cwd;
 pub(super) use cwd::working_directory;
 
@@ -24,40 +25,40 @@ pub(super) fn path_script(command: &str) -> &str {
 /// strips the first and the last quote of the line and runs what is between.
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     use std::os::windows::process::CommandExt;
-    match invocation.arguments.as_slice() {
-        [d, s, c, text] if is_cmd(&invocation.program) && [d, s, c] == ["/d", "/s", "/c"] => {
-            command.args([d, s, c]).raw_arg(format!("\"{text}\""));
-        }
-        arguments => {
-            command.args(arguments);
+    if let Some(text) = cmd::raw_argument(invocation) {
+        command.args(["/d", "/s", "/c"]).raw_arg(text);
+    } else {
+        command.args(&invocation.arguments);
+        let powershell = std::path::Path::new(&invocation.program)
+            .file_stem()
+            .is_some_and(|name| {
+                name.eq_ignore_ascii_case("powershell") || name.eq_ignore_ascii_case("pwsh")
+            });
+        if powershell
+            && invocation.arguments.len() == 9
+            && invocation.arguments.iter().take(8).map(String::as_str).eq([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-OutputFormat",
+                "Text",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+            ])
+            && let Some(directory) = command.get_current_dir().map(std::path::Path::to_path_buf)
+        {
+            command.env("BUTLER_COMMAND_CWD", directory);
         }
     }
-}
-
-fn is_cmd(program: &str) -> bool {
-    std::path::Path::new(program)
-        .file_stem()
-        .is_some_and(|name| name.eq_ignore_ascii_case("cmd"))
 }
 
 pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
-    let program = environment
+    let environment = environment
         .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
-        .map(|(_, value)| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("cmd.exe")
-        .to_owned();
-    Invocation {
-        program,
-        arguments: vec![
-            "/d".into(),
-            "/s".into(),
-            "/c".into(),
-            format!("chcp 65001>nul & {command}"),
-        ],
-    }
+        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .collect();
+    legacy_shell(command, false, &environment)
 }
 
 pub(super) fn legacy_shell(
@@ -65,6 +66,9 @@ pub(super) fn legacy_shell(
     _pipefail: bool,
     environment: &HashMap<String, Option<String>>,
 ) -> Invocation {
+    if cmd::script(command).is_some() {
+        return cmd::shell(command, environment);
+    }
     let program = environment
         .get("BUTLER_POWERSHELL")
         .and_then(Option::as_deref)
@@ -76,11 +80,14 @@ pub(super) fn legacy_shell(
     // EncodedCommand preserves nested quotes and multi-line scripts without
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
-    let modules = default_modules(environment);
+    let modules = default_modules();
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
+    // Enter the admitted short CWD with process-local .NET path compatibility.
+    // Long folders retain an extended provider root and real parent traversal.
+    let paths = include_str!("windows/paths.ps1");
     let script = format!(
-        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{command}"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{paths}{command}"
     );
     let encoded = STANDARD.encode(
         script
@@ -119,16 +126,10 @@ fn phase_marker(phase: &str) -> String {
     )
 }
 
-fn default_modules(environment: &HashMap<String, Option<String>>) -> &'static str {
-    if environment.iter().any(|(key, value)| {
-        key.eq_ignore_ascii_case("PSModulePath")
-            && value.as_deref().is_some_and(|path| !path.trim().is_empty())
-    }) {
-        return "";
-    }
-    // A normally launched App has no inherited PowerShell console module path.
-    // Load the trusted built-ins directly instead of scanning every module for
-    // their first command. Keep normal discovery for requested custom modules.
+fn default_modules() -> &'static str {
+    // Load trusted built-ins before changing provider location or path policy.
+    // Initialize them while the normal filesystem drives are still active.
+    // Preserve PSModulePath for explicitly requested custom modules.
     "Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1\"; Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1\"; "
 }
 

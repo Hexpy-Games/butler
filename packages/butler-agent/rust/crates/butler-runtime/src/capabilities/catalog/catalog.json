@@ -223,14 +223,14 @@
       "definition": {
         "type": "function",
         "name": "run_command",
-        "description": "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+        "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "command": {
               "type": "string",
-              "description": "Non-interactive command; prefer cross-platform executables, explicit arguments, and focused output."
+              "description": "Non-interactive shell text: POSIX shell syntax on macOS/Linux; Windows PowerShell 5.1 on Windows. Use cmd /c explicitly for cmd syntax. Prefer explicit arguments and focused output."
             },
             "summary": {
               "type": "string",
@@ -8129,14 +8129,14 @@
     "run_command": {
       "type": "function",
       "name": "run_command",
-      "description": "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+      "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "command": {
             "type": "string",
-            "description": "Non-interactive command; prefer cross-platform executables, explicit arguments, and focused output."
+            "description": "Non-interactive shell text: POSIX shell syntax on macOS/Linux; Windows PowerShell 5.1 on Windows. Use cmd /c explicitly for cmd syntax. Prefer explicit arguments and focused output."
           },
           "summary": {
             "type": "string",

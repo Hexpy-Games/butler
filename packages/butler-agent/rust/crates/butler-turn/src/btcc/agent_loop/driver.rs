@@ -80,6 +80,7 @@ struct Reply {
 
 /// Runs the model/tool loop for one admitted turn until it answers or suspends.
 pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, AgentLoopError> {
+    let timing = super::command_timing::CommandTiming::new("loop_preparation");
     let mut prepared = match input.policy.prepare(GuidedInvocation::from(&input)).await {
         Ok(prepared) => prepared,
         Err(error) => {
@@ -87,6 +88,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             return Err(propagated(error));
         }
     };
+    timing.mark("policy_prepared");
     let mut state = match restore_state(&mut input, &mut prepared) {
         Ok(state) => state,
         Err(error) => {
@@ -105,6 +107,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             return Err(propagated(error));
         }
     };
+    timing.mark("context_begun");
     loop {
         let step = match run_iteration(&input, &mut state, &prepared, context.as_ref()).await {
             Err(AgentLoopError::Propagate(error))

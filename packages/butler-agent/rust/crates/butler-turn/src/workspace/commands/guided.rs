@@ -186,7 +186,6 @@ async fn prepare_command(
         ));
     }
     let mut command = Command::new(&invocation.program);
-    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     command
         .current_dir(&process_cwd)
         .env_clear()
@@ -195,6 +194,7 @@ async fn prepare_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     process_control::isolate_group(command.as_std_mut());
     Ok((cwd, command))
 }
