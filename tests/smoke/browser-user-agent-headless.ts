@@ -23,7 +23,7 @@ try {
   for (const context of ["page", "worker", "iframe"]) {
     const { js, headers } = reports[context]; assert.doesNotMatch(js.ua, /Butler\/|Electron\/|HeadlessChrome/u);
     assert.equal(headers["user-agent"], js.ua); assert.equal(headers["accept-language"]?.split(",")[0].split(";")[0], js.language); assert.deepEqual(js.data, reports.page.js.data);
-    if (headers["sec-ch-ua"]) assert.equal(headers["sec-ch-ua"], js.data.brands.map((b: any) => `${JSON.stringify(b.brand)};v=${JSON.stringify(b.version)}`).join(", "));
+    assert.equal(headers["sec-ch-ua"], js.data.brands.map((b: any) => `${JSON.stringify(b.brand)};v=${JSON.stringify(b.version)}`).join(", "));
   }
   const data = reports.page.js.data, headers = reports.page.headers;
   assert.equal(headers["sec-ch-ua-mobile"], "?0");
