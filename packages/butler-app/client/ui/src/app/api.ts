@@ -52,6 +52,7 @@ export interface AppUpdateState {
 
 interface ButlerAppBridge {
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
+  history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
   organizeLibrary?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
   listLibrary?: (input: Record<string, string>) => Promise<unknown>;
   saveLibrary?: (item: unknown) => Promise<unknown>;
@@ -286,6 +287,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
 async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: ApiOptions = {}): Promise<T> {
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
+  if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));

@@ -6,6 +6,7 @@ import { libraryParent, libraryTitle } from "@/components/library/libraryNav";
 
 /** The screen one level up from a nested one (Library levels, a schedule's detail); top-level screens have none. */
 export function parentView(view: AppView): AppView | null {
+  if (view.kind === "history") return view.from === "settings" ? { kind: "settings", section: "browser" } : { kind: "browser" };
   if (view.kind === "library") return libraryParent(view);
   if (view.kind === "automation-detail") return { kind: "automations" };
   return null;
@@ -13,6 +14,8 @@ export function parentView(view: AppView): AppView | null {
 
 /** The title a view shows in the titlebar when it is nested (the generic titles stay with activeTitleForView). */
 export function nestedTitle(view: AppView): string | null {
+  if (view.kind === "history") return appCopy.browser.history.title;
+  if (view.kind === "browser") return appCopy.browser.title;
   if (view.kind === "library") return libraryTitle(view);
   if (view.kind === "automations") return appCopy.automations.title;
   return null;

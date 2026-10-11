@@ -1725,6 +1725,7 @@ export type LibraryView = { kind: "library"; section?: LibraryKind; group?: stri
 
 export type AppView =
   | { kind: "browser" }
+  | { kind: "history"; from?: "browser" | "settings" }
   | LibraryView
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }

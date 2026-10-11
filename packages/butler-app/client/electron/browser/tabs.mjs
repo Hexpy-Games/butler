@@ -1,3 +1,5 @@
+import { wireHistory } from "./history.mjs";
+import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
 import { BrowserPointer } from "./pointer.mjs";
@@ -162,6 +164,7 @@ class UserBrowser {
         return this.shortcut(input, true);
       },
       popup: (source, details) => popupHandler(this, source, details) });
+    wireHistory(this, tab);
     wireUserDialogs(this, tab);
     this.selection.watch(tab);
     if (tab.agent) wireAgentTab(this, tab);
@@ -212,6 +215,7 @@ class UserBrowser {
   close(id) {
     const tab = this.tabs.get(id);
     if (!tab || tab.closing) return;
+    tab.flushHistory?.();
     tab.closing = true;
     clearOffer(tab);
     this.downloads.cancelTab(id);
@@ -238,6 +242,7 @@ class UserBrowser {
     this.publish();
   }
   shortcut(input, nativePage = false) {
+    if (isHistoryShortcut(input)) { this.getWindow()?.webContents.focus(); this.getWindow()?.webContents.send("butler-browser:history"); return true; }
     if (!this.areaVisible || input.type !== "keyDown") return false;
     if (this.selection.shortcut(input)) return true;
     if (!nativePage && !this.keyboardFocused) return false;
