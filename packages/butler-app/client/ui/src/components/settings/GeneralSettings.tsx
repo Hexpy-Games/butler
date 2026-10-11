@@ -21,6 +21,7 @@ export const GeneralSettings = memo(function GeneralSettings() {
     language: state.draft.language, timezone: state.draft.timezone,
     desktop_notifications: state.draft.desktop_notifications,
     desktop_tray_enabled: state.draft.desktop_tray_enabled,
+    smart_grouping_enabled: state.draft.smart_grouping_enabled,
   })));
   const webSearch = useSettingsUIStore(useShallow((state) => state.draft?.web_search ?? DEFAULT_WEB_SEARCH_SETTINGS));
   const searchDraft = useMemo(() => ({ web_search: webSearch }), [webSearch]);
@@ -44,6 +45,20 @@ export const GeneralSettings = memo(function GeneralSettings() {
       {languageRegionSection(draft, timezones, update, setSettings)}
       <SettingsSection id="conversation-input" kind="form" title={sections.conversationInput}>
         <ConversationInputFields />
+      </SettingsSection>
+      <SettingsSection
+        id="sidebar"
+        kind="form"
+        title={sections.sidebar}
+        description={sectionDescriptions.sidebar}
+      >
+        <SettingsSwitch
+          settingId="smart-groups"
+          label={appCopy.interfaceDetails.smartGroups}
+          description={appCopy.interfaceDetails.smartGroupsDescription}
+          checked={draft.smart_grouping_enabled}
+          onChange={(value) => update({ smart_grouping_enabled: value }, setSettings)}
+        />
       </SettingsSection>
       <SettingsSection id="default-permission" kind="form" title={sections.defaultPermission}>
         <DefaultPermissionFields />

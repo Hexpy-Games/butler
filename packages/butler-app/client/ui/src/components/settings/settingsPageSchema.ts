@@ -30,6 +30,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send", "plan-mode-default"] },
+    { id: "sidebar", kind: "form", fields: ["smart-groups"] },
     { id: "default-permission", kind: "form", fields: ["access-mode"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
@@ -39,8 +40,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
-    { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery", "collapse-message-box", "composer-decoration", "composer-character"] },
+    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
+    { id: "message-box", kind: "form", fields: ["collapse-message-box", "composer-decoration", "composer-character"] },
     { id: "accessibility", kind: "form", fields: ["reduce-motion"] },
   ],
   personalization: [

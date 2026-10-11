@@ -12,7 +12,7 @@ import { getAppCopy } from "../../packages/butler-i18n/src";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
 
 let copy = getAppCopy("ko-KR");
-const screenshots = resolve(".tmp/settings-bugs");
+const screenshots = resolve(process.env.BUTLER_SETTINGS_BUGS_OUT ?? ".tmp/settings-bugs");
 mkdirSync(screenshots, { recursive: true });
 const matrix = [[375, "light", "ko"], [375, "dark", "ko"], [1280, "light", "ko"], [1280, "dark", "ko"], [1280, "light", "en"]] as const;
 // As in the crash smoke, each matrix group owns its gateway and driver process.
@@ -100,6 +100,24 @@ async function paletteChecks(page: Page, prefix: string) {
     const dialog = await search(page, query);
     await dialog.getByRole("option").filter({ hasText: copy.settings.sections.skills }).waitFor();
     await page.keyboard.press("Escape");
+  }
+  const composerAlias = copy.settings.sectionAliases.appearance.find((alias) => /composer|컴포저/iu.test(alias));
+  assert(composerAlias, "appearance composer alias is localized");
+  for (const [query, id] of [[copy.interfaceDetails.smartGroups, "general"], [composerAlias, "appearance"]] as const) {
+    const dialog = await search(page, query);
+    const result = dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) });
+    await result.waitFor();
+    await result.click();
+    if (id === "general" && page.viewportSize()!.width < 640) {
+      await page.getByRole("button", { name: copy.settings.sections.general, exact: true }).click();
+    }
+    await page.locator('[data-test-class~="settings-detail-title"]').filter({ hasText: copy.settings.sections[id] }).waitFor();
+    if (id === "general") {
+      const sections = await page.locator("[data-settings-section-id]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-settings-section-id")));
+      const order = ["conversation-input", "sidebar", "default-permission"].map((section) => sections.indexOf(section));
+      assert(order.every((index) => index >= 0) && order[0]! < order[1]! && order[1]! < order[2]!, "smart groups follows conversation input and precedes default permission");
+    }
+    await page.getByRole("button", { name: copy.settings.back, exact: true }).click();
   }
   let dialog = await search(page, "");
   // #537: merged main declares fifteen sections, including Hooks and Server. Assert every entry.

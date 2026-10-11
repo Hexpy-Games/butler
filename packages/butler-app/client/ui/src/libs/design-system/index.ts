@@ -152,6 +152,8 @@ export * from "./blocks/BrowserPane";
 export * from "./blocks/PageCard";
 export * from "./blocks/PageBand";
 export * from "./blocks/AddressField";
+export * from "./blocks/SuggestionList";
+export * from "./blocks/HistoryRow";
 export * from "./blocks/AgentPointer";
 export * from "./blocks/PickOutline";
 export * from "./blocks/SelectionBar";
