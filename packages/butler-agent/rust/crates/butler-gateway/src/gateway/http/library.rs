@@ -1,61 +1,80 @@
 //! Explicit saved-item commands over the existing authenticated App routes.
+mod input;
+use super::subsessions::decode_component;
 use super::*;
-use crate::gateway::AppLibraryCommand;
+use crate::gateway::AppLibraryCommand as C;
 use serde_json::{Value, json};
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
-    let path = request.uri().path().to_owned();
     let method = request.method().clone();
-    let value = match method {
-        Method::GET if path.ends_with("/snapshot") => {
-            let id = path
-                .trim_start_matches("/library/")
-                .trim_end_matches("/snapshot");
-            state
-                .application
-                .library(AppLibraryCommand::Snapshot { id: id.to_owned() })
-                .await?
-        }
-        Method::GET => {
-            let args = query(request.uri());
-            let kind = args.get("kind").cloned().unwrap_or_else(|| "scrap".into());
-            let command = if let Some(url) = args.get("url") {
-                AppLibraryCommand::Bookmark { url: url.clone() }
-            } else {
-                AppLibraryCommand::Page {
-                    kind,
-                    cursor: args.get("cursor").cloned().unwrap_or_default(),
-                    search: args.get("q").cloned().unwrap_or_default(),
-                }
-            };
-            state.application.library(command).await?
-        }
-        Method::POST => {
-            let bytes = read_body_with_limit(request.into_body(), 10 * 1024 * 1024).await?;
-            let value: Value =
-                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-            if !valid(&value) {
-                return Err(HttpError::public(
-                    400,
-                    "invalid_library_item",
-                    "Invalid saved item.",
-                ));
+    let path = request.uri().path().to_owned();
+    let args = query(request.uri());
+    let parts = path
+        .trim_start_matches("/library")
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            decode_component(part).map_err(|_| {
+                HttpError::public(400, "invalid_library_request", "Invalid path.")
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
+    let command = match (&method, parts.as_slice()) {
+        (&Method::GET, []) => match args.get("url") {
+            Some(url) => C::Bookmark { url: url.clone() },
+            None => C::Page(input::page(&args)?),
+        },
+        (&Method::POST, []) => C::Save(input::item(body(request, 10 * 1024 * 1024).await?)?),
+        (&Method::GET, ["search"]) => C::Search(input::search(&args)?),
+        (&Method::POST, ["organize"]) => C::Change(input::change(&body(request, LIMIT).await?, true)?),
+        (&Method::PATCH, ["items"]) => C::Change(input::change(&body(request, LIMIT).await?, false)?),
+        (&Method::GET, ["groups"]) => C::Groups {
+            kind: input::grouped_kind(args.get("kind"))?,
+        },
+        (&Method::POST, ["groups"]) => {
+            let value = body(request, LIMIT).await?;
+            C::CreateGroup {
+                kind: input::grouped_kind(value["kind"].as_str().map(str::to_owned).as_ref())?,
+                name: input::group_name(&value["name"])?,
             }
-            state
-                .application
-                .library(AppLibraryCommand::Save(value))
-                .await?
         }
-        Method::DELETE => {
-            state
-                .application
-                .library(AppLibraryCommand::Delete {
-                    id: path.trim_start_matches("/library/").to_owned(),
-                })
-                .await?
+        (&Method::PATCH, ["groups", id]) => {
+            let value = body(request, LIMIT).await?;
+            C::UpdateGroup {
+                id: (*id).to_owned(),
+                name: (!value["name"].is_null())
+                    .then(|| input::group_name(&value["name"]))
+                    .transpose()?,
+                position: input::position(&value["position"])?,
+            }
         }
+        (&Method::DELETE, ["groups", id]) => C::DeleteGroup {
+            id: (*id).to_owned(),
+        },
+        (&Method::GET, ["tags"]) => C::Tags,
+        (&Method::PATCH, ["tags"]) => {
+            let value = body(request, LIMIT).await?;
+            C::RenameTag {
+                from: input::tag(&value["from"])?,
+                to: input::tag(&value["to"])?,
+            }
+        }
+        (&Method::DELETE, ["tags", name]) => C::DeleteTag {
+            name: (*name).to_owned(),
+        },
+        (&Method::GET, ["facets"]) => C::Facets {
+            kind: input::kind(args.get("kind"))?,
+            group: args.get("group").cloned(),
+        },
+        (&Method::GET, [id, "snapshot"]) => C::Snapshot {
+            id: (*id).to_owned(),
+        },
+        (&Method::DELETE, [id]) => C::Delete {
+            id: (*id).to_owned(),
+        },
         _ => {
             return Err(HttpError::public(
                 405,
@@ -64,54 +83,15 @@ pub(super) async fn route(
             ));
         }
     };
+    let value = state.application.library(command).await?;
     json(
         StatusCode::OK,
         json!({"protocol_version":APP_PROTOCOL_VERSION,"data":value}),
     )
 }
-fn valid(value: &Value) -> bool {
-    let base = value["capturedAt"]
-        .as_str()
-        .is_some_and(|s| chrono::DateTime::parse_from_rfc3339(s).is_ok())
-        && ["id", "title", "url", "capturedAt"]
-            .iter()
-            .all(|key| value[*key].is_string())
-        && value["id"]
-            .as_str()
-            .is_some_and(|s| !s.is_empty() && s.len() <= 128)
-        && value["title"].as_str().is_some_and(|s| s.len() <= 2000)
-        && value["url"].as_str().is_some_and(|s| {
-            url::Url::parse(s).is_ok_and(|u| {
-                matches!(u.scheme(), "http" | "https")
-                    && u.username().is_empty()
-                    && u.password().is_none()
-            })
-        });
-    base && match value["kind"].as_str() {
-        Some("scrap") => {
-            value["text"].is_string()
-                && value["crop"]
-                    .as_str()
-                    .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
-                && valid_snapshot(&value["snapshot"])
-        }
-        Some("bookmark") => {
-            value["folder"].is_null() || value["folder"].as_str().is_some_and(|s| s.len() <= 200)
-        }
-        _ => false,
-    }
+/// Body bytes of every organize command.
+const LIMIT: usize = 1024 * 1024;
+async fn body(request: Request<Body>, limit: usize) -> Result<Value, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), limit).await?;
+    serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())
 }
-/// A scrap's optional HTML copy of the picked part: its size, and the document when it is being saved.
-fn valid_snapshot(snapshot: &Value) -> bool {
-    snapshot.is_null()
-        || (["width", "height"].iter().all(|key| {
-            snapshot[*key]
-                .as_f64()
-                .is_some_and(|n| (1.0..=20_000.0).contains(&n))
-        }) && (snapshot["html"].is_null()
-            || snapshot["html"].as_str().is_some_and(|html| {
-                html.len() <= SNAPSHOT_LIMIT && html.starts_with("<!doctype html>")
-            })))
-}
-/// Bytes of one scrap's HTML copy; larger copies stay image-only on the client.
-const SNAPSHOT_LIMIT: usize = 6 * 1024 * 1024;
