@@ -201,14 +201,14 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
     })
 }
 
-/// Saved card and traveler fills: the merchant origin (with the amount when
+/// Saved card and autofill fills: the merchant origin (with the amount when
 /// the page shows one), the item by nickname and last four, and any payment
 /// window origin; the hand-back wait names the site and the step. One exact
 /// card each, never a standing conversation permission.
 fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
     if !matches!(
         facts.capability,
-        "browser_pay_fill" | "browser_traveler_fill"
+        "browser_pay_fill" | "browser_autofill_fill"
     ) {
         return None;
     }

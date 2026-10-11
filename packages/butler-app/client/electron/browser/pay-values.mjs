@@ -1,16 +1,17 @@
-/** Which scanned targets a saved card or traveler profile fills, and the text
+/** Which scanned targets a saved card or autofill profile fills, and the text
  * each one gets. Values pass through main only for the duration of one fill. */
 
 const CARD = { number: "number", expiry: "expiry", exp_month: "exp_month", exp_year: "exp_year", cvc: "cvc", name: "name", pin_short: "pin2", birth: "owner_id" };
-const TRAVELER = { full_name: "full_name", surname: "surname", given_name: "given_name", birth: "birth_date", gender: "gender",
-  nationality: "nationality", passport_number: "passport_number", passport_expiry: "passport_expiry", rrn: "rrn", phone: "phone", email: "email" };
+const AUTOFILL = Object.fromEntries(["full_name", "family_name", "given_name", "name_latin", "name_latin_surname", "name_latin_given",
+  "birth_date", "gender", "nationality", "passport_number", "passport_expiry", "issuing_country", "rrn", "phone", "email", "organization",
+  "country", "postal_code", "region", "city", "address_line1", "address_line2"].map(field => [field, field]));
 /** Kinds whose value may be split across consecutive short fields. */
 const SPLIT = new Set(["number", "rrn", "phone"]);
 
 /** The vault field a target takes in this fill, if any. */
 export function fieldOf(kind, target) {
   if (kind === "card") return target.card || target.kind === "number" || target.kind === "cvc" ? CARD[target.kind] ?? null : null;
-  return target.card && ["birth", "full_name", "phone", "email"].includes(target.kind) ? null : TRAVELER[target.kind] ?? null;
+  return AUTOFILL[target.kind] ?? null;
 }
 
 /** Steps in document order: the first target of each field, plus split groups. */
@@ -21,6 +22,7 @@ export function plan(kind, frames) {
     for (const target of frame.targets) {
       const field = fieldOf(kind, target);
       if (!field) { group = null; continue; }
+      if (kind === "profile") { steps.push({ frame, field, target, parts: [target], ...(field === "gender" && target.type === "radio" ? { radios: [target] } : {}) }); continue; }
       const split = SPLIT.has(field) && target.max > 0 && target.max <= 7;
       if (split && group?.field === field && group.frame === frame) { group.parts.push(target); continue; }
       if (seen.has(field) && !(field === "gender" && target.tag === "radio")) { group = null; continue; }
@@ -90,22 +92,19 @@ export function texts(step, values, meta) {
     case "cvc": case "pin2": case "owner_id": case "passport_number": return values[field] ? [values[field]] : null;
     case "birth_date": return values.birth_date ? [dateText(values.birth_date, target)] : null;
     case "passport_expiry": return details.passport_expiry ? [dateText(details.passport_expiry, target)] : null;
-    case "full_name": case "surname": case "given_name": case "email": {
-      const key = { full_name: "name", surname: "name_latin_surname", given_name: "name_latin_given", email: "email" }[field];
-      return details[key] ? [details[key]] : null;
-    }
+    case "full_name": return details.name ? [details.name] : null;
     case "gender": {
       const pattern = GENDER[details.gender];
       if (!pattern) return null;
       if (step.radios) { const radio = step.radios.find(item => item.value.split(/\s+/u).some(word => pattern.test(word))); return radio ? [radio] : null; }
       return [optionFor(target, v => pattern.test(String(v).trim()))];
     }
-    case "nationality": {
-      const code = details.nationality;
+    case "nationality": case "country": case "issuing_country": {
+      const code = details[field];
       if (!code) return null;
       if (target.tag !== "select") return [code];
       return [optionFor(target, v => String(v).trim().toUpperCase() === code || (COUNTRY[code]?.test(String(v).trim()) ?? false))];
     }
-    default: return null;
+    default: return details[field] ? [details[field]] : null;
   }
 }

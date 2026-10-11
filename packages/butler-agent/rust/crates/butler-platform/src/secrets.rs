@@ -24,6 +24,10 @@ use zeroize::Zeroizing;
 use crate::secure_fs;
 
 mod file;
+#[cfg(feature = "test-support")]
+mod test_seed;
+#[cfg(feature = "test-support")]
+pub use test_seed::seed_system_secret_for_test_apps;
 #[cfg(target_os = "macos")]
 mod keychain;
 #[cfg(target_os = "macos")]

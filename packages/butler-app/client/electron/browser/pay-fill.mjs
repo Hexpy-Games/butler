@@ -4,7 +4,7 @@ import { vaultKind } from "./page/perception.mjs";
 import { vaultChoose, vaultFocus, vaultMark, vaultScan } from "./page/vault.mjs";
 import { fieldOf, plan, texts } from "./pay-values.mjs";
 
-/** Saved card and traveler fills (`pay.inspect`, `pay.fill`, `traveler.fill`).
+/** Saved card and autofill fills (`pay.inspect`, `pay.fill`, `autofill.fill`).
  * Main checks the top-level origin and every frame origin against the token's
  * binding, pulls the values once with the single-use token, types them with
  * native text input (selects and dates are set in Butler's world), marks the
@@ -18,7 +18,7 @@ async function scan(tab, args) {
   const frames = [];
   for (const frame of await frameWorlds(tab)) {
     let result;
-    try { result = await evaluateWorld(frame, source(vaultScan, { sectionRef: args.section_ref ?? null, markers: tab.policy?.secure_keypads ?? [] })); }
+    try { result = await evaluateWorld(frame, source(vaultScan, { sectionRef: args.section_ref ?? null, markers: tab.policy?.secure_keypads ?? [], targets: args.kind === "profile" ? args.targets : undefined })); }
     catch { continue; }
     if (result?.section === "missing") continue;
     if (result) frames.push({ ...result, world: frame });
@@ -44,11 +44,14 @@ function handOver(browser, tab, controlTab, reason, extra = {}) {
 
 /** `pay.inspect`: origins, field kinds, the amount shown and any step only the user can do. */
 export async function inspectPay(browser, tab, args, controlTab) {
-  const kind = args.kind === "traveler" ? "traveler" : "card";
+  const kind = args.kind === "profile" ? "profile" : "card";
   const top = originOf(tab.view.webContents.getURL());
   const frames = await scan(tab, args);
   if (args.section_ref && !frames.length) return { status: "not_dispatched", reason: "section_missing", tab: tab.id,
-    recovery: "section_ref is not in the latest observation. Observe and pass a ref inside the passenger's block." };
+    recovery: "section_ref is not in the latest observation. Observe and pass current form field refs." };
+  if (kind === "profile" && (!Array.isArray(args.targets) || !args.targets.length
+    || frames.reduce((n, frame) => n + frame.targets.length, 0) !== args.targets.length))
+    return { status: "not_dispatched", reason: "target_missing", recovery: "Observe and pass current form field refs." };
   const relevant = frames.filter(frame => frame.targets.some(target => fieldOf(kind, target)));
   const human = humanStep(frames);
   const amount = frames[0]?.amount ?? frames.find(frame => frame.amount)?.amount ?? null;
@@ -57,7 +60,7 @@ export async function inspectPay(browser, tab, args, controlTab) {
     if (human) return handOver(browser, tab, controlTab, human, { merchant_origin: merchantOrigin(browser, tab, top), filled: [] });
     return { status: "no_fields", tab: tab.id, url: tab.url,
       recovery: kind === "card" ? "No card fields are visible. Observe and reach the step where the page asks for the card (choose card payment or the card company), then call again."
-        : "No traveler fields are visible. Observe and reach the passenger details step, then call again." };
+        : "No profile targets are visible. Observe and pass current form field refs." };
   }
   return { status: "ok", tab: tab.id, url: tab.url, top_origin: top, merchant_origin: merchantOrigin(browser, tab, top),
     frame_origins: [...new Set(relevant.map(frame => frame.origin))], fields, amount, human_step: human };
@@ -96,9 +99,9 @@ async function put(tab, step, list) {
   return true;
 }
 
-/** `pay.fill` / `traveler.fill`: one fill under the token's exact origins. */
+/** `pay.fill` / `autofill.fill`: one fill under the token's exact origins. */
 export async function fillPay(browser, tab, args, controlTab) {
-  const kind = args.kind === "traveler" ? "traveler" : "card";
+  const kind = args.kind === "profile" ? "profile" : "card";
   const contents = tab.view.webContents;
   if (tab.holder !== "agent") return { status: "not_dispatched", reason: "user_control", tab: tab.id };
   const top = originOf(contents.getURL());
@@ -106,6 +109,7 @@ export async function fillPay(browser, tab, args, controlTab) {
   const bound = new Set([top, ...(Array.isArray(args.frame_origins) ? args.frame_origins : [])]);
   const frames = (await scan(tab, args)).filter(frame => bound.has(frame.origin));
   const steps = plan(kind, frames);
+  if (kind === "profile" && steps.length !== args.targets?.length) return { status: "not_dispatched", reason: "target_missing", tab: tab.id };
   const human = humanStep(frames);
   if (!steps.length) return human ? handOver(browser, tab, controlTab, human, { filled: [] }) : { status: "no_fields", tab: tab.id, url: contents.getURL() };
   const used = [...new Set(steps.map(step => step.frame.origin))];

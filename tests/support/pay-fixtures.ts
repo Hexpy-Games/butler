@@ -1,3 +1,4 @@
+import { autofillFixture } from "./autofill-fixtures";
 /** Offline payment fixtures served by Host header: a checkout with cc-* fields,
  * a PG-style cross-origin iframe with split Korean card fields, a PG pop-up
  * window, a security-keypad PIN, a 3-D Secure challenge frame and a
@@ -26,6 +27,8 @@ export function startPayFixtures(card: Card): PayFixture {
   const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
     const host = (request.headers.get("host") ?? "").split(":")[0];
     const path = new URL(request.url).pathname;
+    const profile = autofillFixture(request, path, verdicts);
+    if (profile) return profile;
     if (request.method === "POST") {
       const form = new URLSearchParams(await request.text());
       const ok = (name: string, expected: string) => (form.get(name) ?? "").replace(/\s/gu, "") === expected.replace(/\s/gu, "");
@@ -43,8 +46,8 @@ export function startPayFixtures(card: Card): PayFixture {
     }
     if (host === "www.fixture-shop.test" && path === "/checkout-cc") return page("Checkout", ccForm("/paid", "59,800원"));
     if (host === "files.fixture-shop.test" && path === "/checkout-cc") return page("Checkout", ccForm("/steal", "59,800원"));
-    if (host === "www.fixture-shop.test" && path === "/checkout-pg") return page("Checkout", `<h1>승차권 결제</h1><p>결제금액 32,000원</p><iframe id="pg" src="${url("js.tosspayments.com", "/card")}"></iframe>`);
-    if (host === "www.fixture-shop.test" && path === "/checkout-keypad") return page("Checkout", `<h1>항공권 결제</h1><p>총 결제금액 412,300원</p><iframe id="pg" src="${url("js.tosspayments.com", "/keypad")}"></iframe>`);
+    if (host === "www.fixture-shop.test" && path === "/checkout-pg") return page("Checkout", `<h1>주문 결제</h1><p>결제금액 32,000원</p><iframe id="pg" src="${url("js.tosspayments.com", "/card")}"></iframe>`);
+    if (host === "www.fixture-shop.test" && path === "/checkout-keypad") return page("Checkout", `<h1>주문 결제</h1><p>총 결제금액 412,300원</p><iframe id="pg" src="${url("js.tosspayments.com", "/keypad")}"></iframe>`);
     if (host === "www.fixture-shop.test" && path === "/checkout-3ds") return page("Checkout", `<h1>카드 인증</h1><iframe id="acs" src="${url("acs.fixture-bank.test", "/challenge")}"></iframe>`);
     if (host === "www.fixture-shop.test" && path === "/checkout-popup") return page("Checkout", `<h1>주문 결제</h1><p>총 결제금액 18,000원</p>
       <button id="open" onclick="window.open('${url("stdpay.inicis.com", "/pay")}', 'pg', 'width=480,height=640')">결제창 열기</button>`);

@@ -113,7 +113,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "traveler.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -177,7 +177,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "signin.fill") return fillSignIn(browser, tab, args, controlTab);
   if (op === "pay.inspect") return inspectPay(browser, tab, args, controlTab);
-  if (op === "pay.fill" || op === "traveler.fill") return fillPay(browser, tab, args, controlTab);
+  if (op === "pay.fill" || op === "autofill.fill") return fillPay(browser, tab, args, controlTab);
   if (op === "tab.act") {
     if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };

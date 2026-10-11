@@ -38,7 +38,7 @@ fn waits_on(request: &Value, tab: &Value) -> bool {
     let hand_off = match request["executable"].as_str() {
         Some("browser_wait_for_user") => true,
         Some("browser_sign_in") => approval["operation"]["tool"] == "browser_sign_in_wait",
-        Some("browser_pay_fill" | "browser_traveler_fill") => {
+        Some("browser_pay_fill" | "browser_autofill_fill") => {
             approval["operation"]["tool"] == "browser_pay_wait"
         }
         _ => false,

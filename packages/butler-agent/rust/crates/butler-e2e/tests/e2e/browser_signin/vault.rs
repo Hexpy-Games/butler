@@ -1,10 +1,12 @@
-//! Payment vault and traveler profiles: Settings keeps only masked metadata
+//! Payment vault and autofill profiles: Settings keeps only masked metadata
 //! (numbers live in the OS credential store), a fill token is single use and
 //! bound to the exact top-level and payment frame origins, purchase sites let
 //! a merchant skip the final card, and a canary card number never appears in
 //! results, events, logs or the data folder. The keychain checks are opt-in
 //! like the sign-in fill (`BUTLER_PLATFORM_SYSTEM_SECRETS=1`).
 mod fill;
+mod migration;
+mod profile_tool;
 mod tool;
 
 use super::host::{admin, attach, call, snapshot};

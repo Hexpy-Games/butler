@@ -88,7 +88,7 @@ pub use application::{
     project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
 };
 pub use application::{
-    AppCardInput, AppSignInCommand, AppSignInUpsert, AppTravelerInput, AppVaultCommand,
+    AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
     GatewaySignIns,
 };
 pub use application::{

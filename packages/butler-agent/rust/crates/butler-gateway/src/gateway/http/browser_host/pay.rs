@@ -1,4 +1,4 @@
-//! Payment and traveler fills: Rust checks the tab, the saved item and the
+//! Payment and autofill fills: Rust checks the tab, the saved item and the
 //! origins main inspected, mints a single-use 10 s token bound to the exact
 //! top-level origin and payment frame origins, and sends only the token.
 //! Main pulls the values once over the authenticated vault route and types
@@ -36,6 +36,18 @@ const FIELD_KINDS: &[&str] = &[
     "name",
     "pin2",
     "owner_id",
+    "family_name",
+    "name_latin",
+    "name_latin_surname",
+    "name_latin_given",
+    "organization",
+    "country",
+    "postal_code",
+    "region",
+    "city",
+    "address_line1",
+    "address_line2",
+    "issuing_country",
     "full_name",
     "surname",
     "given_name",
@@ -110,7 +122,7 @@ pub(super) async fn lookup(state: &Arc<HttpState>, tab: &Value) -> Result<Value,
         .application
         .vault(AppVaultCommand::ForSite { site: site.clone() })
         .await?;
-    Ok(json!({"status":"ok","site":site,"cards":list["cards"],"travelers":list["travelers"]}))
+    Ok(json!({"status":"ok","site":site,"cards":list["cards"],"profiles":list["profiles"]}))
 }
 
 fn expired(card: &Value) -> bool {
@@ -133,7 +145,7 @@ fn meta(kind: &str, item: &Value) -> Value {
     }
 }
 
-/// Prepares a `pay.fill` / `traveler.fill` frame: re-checks the item and the
+/// Prepares a `pay.fill` / `autofill.fill` frame: re-checks the item and the
 /// tab's origin, then mints the token. `Some` is the refusal to answer.
 pub(super) async fn prepare(
     state: &Arc<HttpState>,
@@ -143,7 +155,7 @@ pub(super) async fn prepare(
     let kind = if frame["op"] == "pay.fill" {
         "card"
     } else {
-        "traveler"
+        "profile"
     };
     if !signin_secrets::available(state).await {
         return Ok(Some(refused(
@@ -195,7 +207,7 @@ pub(super) async fn prepare(
     }
     frame["args"] = json!({
         "kind": kind, "item_id": id, "fill_token": token, "top_origin": top, "frame_origins": frames,
-        "meta": meta(kind, &item), "section_ref": args["section_ref"], "policy": args["policy"],
+        "meta": meta(kind, &item), "targets": args["targets"], "section_ref": args["section_ref"], "policy": args["policy"],
     });
     Ok(None)
 }
@@ -251,7 +263,7 @@ pub(super) async fn finish(
     let kind = if sent["args"]["kind"] == "card" {
         "card"
     } else {
-        "traveler"
+        "profile"
     };
     state
         .application
@@ -308,7 +320,7 @@ pub(super) async fn secrets(
     let fields = if fill.kind == "card" {
         vault::secret::CARD_FIELDS
     } else {
-        vault::secret::TRAVELER_FIELDS
+        vault::secret::AUTOFILL_FIELDS
     };
     let text = VaultSecret::parse(&stored, fields).to_text();
     let mut response = Response::new(Body::from(text.expose().as_bytes().to_vec()));
@@ -324,9 +336,9 @@ pub(super) async fn secrets(
 }
 
 /// Vault ops Rust answers or prepares before native dispatch.
-pub(super) const VAULT_OPS: &[&str] = &["pay.lookup", "pay.fill", "traveler.fill"];
+pub(super) const VAULT_OPS: &[&str] = &["pay.lookup", "pay.fill", "autofill.fill"];
 
-/// `pay.lookup` answers here; `pay.fill` / `traveler.fill` mint their token first.
+/// `pay.lookup` answers here; `pay.fill` / `autofill.fill` mint their token first.
 pub(super) async fn admit(
     state: &Arc<HttpState>,
     frame: &mut Value,
@@ -339,7 +351,7 @@ pub(super) async fn admit(
     prepare(state, frame, tab).await
 }
 
-/// After native dispatch: a fill's result (sign-in, card, traveler) is shaped and audited, and a
+/// After native dispatch: a fill's result (sign-in, card, autofill) is shaped and audited, and a
 /// prepared batch learns whether its merchant site skips the final card.
 pub(super) async fn finish_call(
     state: &Arc<HttpState>,
@@ -350,7 +362,7 @@ pub(super) async fn finish_call(
 ) -> Result<(), HttpError> {
     if op == "signin.fill" {
         *result = super::fill::finish(state, sent, session, result).await?;
-    } else if matches!(op, "pay.fill" | "traveler.fill") {
+    } else if matches!(op, "pay.fill" | "autofill.fill") {
         *result = finish(state, sent, session, result).await?;
     } else if op == "tab.prepare" && result["status"] == "ok" {
         let tab = {

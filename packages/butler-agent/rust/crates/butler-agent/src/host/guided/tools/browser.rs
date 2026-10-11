@@ -33,7 +33,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_wait_for_user"
             | "browser_sign_in"
             | "browser_pay_fill"
-            | "browser_traveler_fill"
+            | "browser_autofill_fill"
     )
 }
 pub(super) async fn execute(

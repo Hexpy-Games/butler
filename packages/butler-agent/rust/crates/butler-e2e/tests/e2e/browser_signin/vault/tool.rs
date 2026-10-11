@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 
-const ASK: &str = "Pay for the train ticket with my travel card";
+const ASK: &str = "Fill my everyday card in the form";
 const TOP: &str = "https://www.fixture-shop.test";
 const PAY: &str = "https://js.tosspayments.com";
 
@@ -29,7 +29,7 @@ async fn pay_fill_asks_on_the_phone_hands_3ds_to_the_user_and_resumes() -> Resul
     );
     let s = vault_scenario("BROWSER-VAULT-TOOL", Some(cassette()?)).await?;
     let admin = admin(&s);
-    let card = json!({"nickname": "Travel card", "number": CARD, "exp_month": 12, "exp_year": 2030, "cvc": "737"});
+    let card = json!({"nickname": "Everyday card", "number": CARD, "exp_month": 12, "exp_year": 2030, "cvc": "737"});
     let added = admin
         .send(Method::POST, "/security/vault/cards", Some(card), &[])
         .await?;
@@ -64,7 +64,11 @@ async fn pay_fill_asks_on_the_phone_hands_3ds_to_the_user_and_resumes() -> Resul
     assert_eq!(operation["tool"], "browser_pay_fill", "{card}");
     assert_eq!(
         operation["targets"],
-        json!([format!("{TOP} · 59,800원"), "Travel card · •••• 5556", PAY]),
+        json!([
+            format!("{TOP} · 59,800원"),
+            "Everyday card · •••• 5556",
+            PAY
+        ]),
         "{card}"
     );
     assert_eq!(
@@ -197,7 +201,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ("tool_describe", json!({"ids":["native:browser_pay_fill"]})),
         (
             "tool_call",
-            json!({"id":"native:browser_pay_fill","arguments":{"tab":"t1","card_ref":"Travel card"}}),
+            json!({"id":"native:browser_pay_fill","arguments":{"tab":"t1","card_ref":"Everyday card"}}),
         ),
     ];
     let mut round = Vec::new();

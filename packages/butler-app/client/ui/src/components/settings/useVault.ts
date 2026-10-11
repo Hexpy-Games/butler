@@ -4,7 +4,7 @@ import { confirmAction } from "@/app/confirmation.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import * as vault from "./vaultApi";
 
-/** Settings → Browser → Payment methods, Traveler details and purchase sites. */
+/** Settings → Browser → Payment methods, Profile details and purchase sites. */
 export function useVault() {
   const [view, setView] = useState<vault.VaultView | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");

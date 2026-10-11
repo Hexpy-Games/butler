@@ -1,5 +1,5 @@
 //! Vault rows. Callers own the enclosing transaction; values never include secrets.
-use super::{AppCardInput, AppTravelerInput, AppVaultCommand};
+use super::{AppCardInput, AppProfileInput, AppVaultCommand};
 use crate::gateway::application::AppStorageError;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -10,7 +10,7 @@ fn sql(error: rusqlite::Error) -> AppStorageError {
 }
 
 const CARD_COLUMNS: &str = "id,nickname,brand,last4,exp_month,exp_year,holder_name,billing_json,extras_json,created_at,last_used_at";
-const TRAVELER_COLUMNS: &str = "id,nickname,details_json,extras_json,created_at,last_used_at";
+const AUTOFILL_COLUMNS: &str = "id,nickname,details_json,extras_json,created_at,last_used_at";
 
 fn parsed(text: &str, fallback: Value) -> Value {
     serde_json::from_str(text).unwrap_or(fallback)
@@ -28,7 +28,7 @@ fn card_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     }))
 }
 
-fn traveler_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+fn autofill_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     Ok(json!({
         "id": row.get::<_, String>(0)?, "nickname": row.get::<_, String>(1)?,
         "details": parsed(&row.get::<_, String>(2)?, json!({})),
@@ -43,7 +43,7 @@ fn table(kind: &str) -> (&'static str, &'static str, RowFn) {
     if kind == "card" {
         ("browser_payment_cards", CARD_COLUMNS, card_row)
     } else {
-        ("browser_traveler_profiles", TRAVELER_COLUMNS, traveler_row)
+        ("browser_autofill_profiles", AUTOFILL_COLUMNS, autofill_row)
     }
 }
 
@@ -128,7 +128,7 @@ pub(super) fn read(db: &Connection, command: AppVaultCommand) -> Result<Value> {
 
 fn list(db: &Connection) -> Result<Value> {
     let mut view = json!({});
-    for (kind, key) in [("card", "cards"), ("traveler", "travelers")] {
+    for (kind, key) in [("card", "cards"), ("profile", "profiles")] {
         let mut rows = items(db, kind)?;
         for row in &mut rows {
             let id = row["id"].as_str().unwrap_or("").to_owned();
@@ -159,23 +159,32 @@ fn for_site(db: &Connection, site: &str) -> Result<Value> {
             "holder_name": card["holder_name"], "extras": card["extras"], "allowed": allowed}),
         );
     }
-    let mut travelers = Vec::new();
-    for traveler in items(db, "traveler")? {
-        let id = traveler["id"].as_str().unwrap_or("");
-        let mut fields: Vec<String> = traveler["details"]
+    let mut profiles = Vec::new();
+    for autofill in items(db, "profile")? {
+        let id = autofill["id"].as_str().unwrap_or("");
+        let mut fields: Vec<String> = autofill["details"]
             .as_object()
-            .map(|details| details.keys().cloned().collect())
+            .map(|details| {
+                details
+                    .keys()
+                    .map(|key| {
+                        if key == "name" {
+                            "full_name".to_owned()
+                        } else {
+                            key.clone()
+                        }
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         fields.extend(
-            serde_json::from_value::<Vec<String>>(traveler["extras"].clone()).unwrap_or_default(),
+            serde_json::from_value::<Vec<String>>(autofill["extras"].clone()).unwrap_or_default(),
         );
-        let allowed = sites(db, "traveler", id)?.iter().any(|s| s == site);
-        travelers.push(
-            json!({"id": id, "nickname": traveler["nickname"], "details": traveler["details"],
-            "fields": fields, "allowed": allowed}),
-        );
+        let allowed = sites(db, "profile", id)?.iter().any(|s| s == site);
+        profiles.push(json!({"id": id, "nickname": autofill["nickname"],
+            "fields": fields, "allowed": allowed}));
     }
-    Ok(json!({"cards": cards, "travelers": travelers}))
+    Ok(json!({"cards": cards, "profiles": profiles}))
 }
 
 pub(super) fn write(
@@ -190,12 +199,12 @@ pub(super) fn write(
             Ok(json!({"id": id}))
         }
         AppVaultCommand::UpdateCard { id, input } => upsert_card(db, Some(&id), &id, &input, now),
-        AppVaultCommand::InsertTraveler(input) => {
-            upsert_traveler(db, None, id, &input, now)?;
+        AppVaultCommand::InsertProfile(input) => {
+            upsert_autofill(db, None, id, &input, now)?;
             Ok(json!({"id": id}))
         }
-        AppVaultCommand::UpdateTraveler { id, input } => {
-            upsert_traveler(db, Some(&id), &id, &input, now)
+        AppVaultCommand::UpdateProfile { id, input } => {
+            upsert_autofill(db, Some(&id), &id, &input, now)
         }
         AppVaultCommand::Delete { kind, id } => {
             let (name, _, _) = table(kind);
@@ -303,22 +312,22 @@ fn upsert_card(
     Ok(json!({"changed": changed > 0}))
 }
 
-fn upsert_traveler(
+fn upsert_autofill(
     db: &Connection,
     existing: Option<&str>,
     id: &str,
-    input: &AppTravelerInput,
+    input: &AppProfileInput,
     now: &str,
 ) -> Result<Value> {
     let (details, extras) = (input.details.to_string(), json!(input.extras).to_string());
     let changed = if existing.is_some() {
         db.execute(
-            "UPDATE browser_traveler_profiles SET nickname=?2,details_json=?3,extras_json=?4 WHERE id=?1",
+            "UPDATE browser_autofill_profiles SET nickname=?2,details_json=?3,extras_json=?4 WHERE id=?1",
             params![id, input.nickname, details, extras],
         )
     } else {
         db.execute(
-            "INSERT INTO browser_traveler_profiles(id,nickname,details_json,extras_json,created_at) VALUES(?1,?2,?3,?4,?5)",
+            "INSERT INTO browser_autofill_profiles(id,nickname,details_json,extras_json,created_at) VALUES(?1,?2,?3,?4,?5)",
             params![id, input.nickname, details, extras, now],
         )
     }

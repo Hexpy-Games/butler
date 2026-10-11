@@ -1,5 +1,5 @@
 // test-category: security
-/** Saved card and traveler fills in the real App with offline fixtures; stub only, no model calls.
+/** Saved card and autofill fills in the real App with offline fixtures; stub only, no model calls.
  * Main types the values with native text input into cc-* fields, a PG-style
  * cross-origin iframe with split Korean card fields and a PG pop-up; a keypad
  * and a 3-D Secure frame hand the tab to the user; a look-alike origin and a
@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, sy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
+import { PROFILE, SIGNUP_FIELDS, ID_FIELDS } from "../support/autofill-fixtures";
 import { hostResolverRules, publicResolverPatch, startPayFixtures } from "../support/pay-fixtures";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
@@ -27,7 +28,7 @@ if (keychains) {
   symlinkSync(keychains, join(agentHome, "Library/Keychains"));
 }
 const app = await browserAgentApp(evidence, () => null, undefined,
-  keychains ? { env: { HOME: agentHome!, BUTLER_USER_AUTH: "deny" }, config: { secrets: { store: "system" } } } : {});
+  keychains ? { env: { HOME: agentHome!, BUTLER_USER_AUTH: "deny" }, config: { secrets: { store: "system" } } } : {}).catch(error => { fixtures.stop(); if (agentHome) rmSync(agentHome, { recursive: true, force: true }); throw error; });
 type Tab = { id: string; owner: string; holder: string; url: string; opener?: string; payStep?: string };
 const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})`;
 const subject = "globalThis.browserAgentSubject";
@@ -63,7 +64,10 @@ try {
   await app.main(publicResolverPatch(module));
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: "light", access_mode: "full_access" }) });
   await app.call("open");
-  if (keychains) await fillFlows();
+  if (keychains) {
+    if (process.env.BUTLER_SMOKE_VAULT_SCOPE === "profile") await profileFlows();
+    else await fillFlows();
+  }
   else {
     const tab = await open("/checkout-cc");
     assert.equal((await internal("pay.lookup", tab)).reason, "vault_unavailable", "file store only: module off");
@@ -72,7 +76,7 @@ try {
     await settingsShots();
   }
   writeFileSync(join(evidence, "calls.json"), JSON.stringify(results, null, 2));
-  for (const text of [JSON.stringify(results), app.gateway.diagnostics()]) assert.ok(!text.includes(CANARY), "canary leaked");
+  for (const text of [JSON.stringify(results), app.gateway.diagnostics()]) for (const canary of [CANARY, PROFILE.passport_number, PROFILE.birth_date]) assert.ok(!text.includes(canary), "canary leaked");
   scan(app.gateway.butlerData);
   console.log("canary absent");
 } finally {
@@ -84,7 +88,7 @@ assert.ok(!readFileSync(join(evidence, "electron.log"), "utf8").includes(CANARY)
 assert.ok(!readFileSync(join(evidence, "agent.log"), "utf8").includes(CANARY), "canary in the Agent log");
 
 async function fillFlows() {
-  const added = await security("POST", "/security/vault/cards", { nickname: "Travel card", number: CARD.number.replace(/(\d{4})/gu, "$1 ").trim(),
+  const added = await security("POST", "/security/vault/cards", { nickname: "Everyday card", number: CARD.number.replace(/(\d{4})/gu, "$1 ").trim(),
     exp_month: Number(CARD.month), exp_year: Number(CARD.year), cvc: CARD.cvc, holder_name: CARD.name, pin2: CARD.pin2, owner_id: CARD.owner });
   assert.equal(added.status, 200, JSON.stringify(added.body));
   const id = added.body.data.id as string;
@@ -95,6 +99,7 @@ async function fillFlows() {
     await pgFrameFlow(id);
     await handOffFlows(id);
     await popupFlow(id);
+    await profileFlows();
     // Settings with a saved card: masked number, allowed sites, reveal denied by the harness.
     await settingsShots();
   } finally { await security("DELETE", `/security/vault/cards/${id}`); }
@@ -200,13 +205,13 @@ async function popupFlow(id: string) {
 }
 
 /** The observation image is black over every field Butler filled. */
-async function maskedPixels(observed: Record<string, any>, name: string) {
+async function maskedPixels(observed: Record<string, any>, name: string, count = 4) {
   const data = observed.image?.data as string; assert.ok(data, "observation image");
   writeFileSync(join(evidence!, `${name}-observation.jpg`), Buffer.from(data, "base64"));
   const geometry = observed.image_geometry as { width: number; height: number; cssWidth: number; cssHeight: number };
   const points = (observed.nodes as Array<{ vault?: boolean; rect: { x: number; y: number; width: number; height: number } }>).filter(node => node.vault)
     .map(node => [(node.rect.x + node.rect.width / 2) * geometry.width / geometry.cssWidth, (node.rect.y + node.rect.height / 2) * geometry.height / geometry.cssHeight]);
-  assert.equal(points.length, 4, "four filled fields");
+  assert.equal(points.length, count, "all filled fields");
   const dark = await app.main<boolean[]>(`(()=>{const {nativeImage}=${module}('electron');const image=nativeImage.createFromBuffer(Buffer.from(${JSON.stringify(data)},"base64"));const width=image.getSize().width,bitmap=image.toBitmap();
     return ${JSON.stringify(points)}.map(([x,y])=>{const n=(Math.round(y)*width+Math.round(x))*4;return bitmap[n]<48&&bitmap[n+1]<48&&bitmap[n+2]<48})})()`);
   assert.ok(dark.every(Boolean), `masked: ${JSON.stringify(dark)}`);
@@ -228,6 +233,71 @@ function scan(root: string) {
   for (const name of readdirSync(root)) {
     const path = join(root, name);
     if (statSync(path).isDirectory()) scan(path);
-    else assert.ok(!readFileSync(path).includes(CANARY), `canary in ${path}`);
+    else for (const canary of [CANARY, PROFILE.passport_number, PROFILE.birth_date]) assert.ok(!readFileSync(path).includes(canary), `canary in ${path}`);
   }
 }
+
+async function profileFlows() {
+  const added = await security("POST", "/security/vault/profiles", PROFILE);
+  assert.equal(added.status, 200);
+  const id = added.body.data.id as string;
+  let family = "";
+  try {
+    const second = await security("POST", "/security/vault/profiles", { nickname: "Family", name: "Family Person" });
+    assert.equal(second.status, 200); family = second.body.data.id;
+    const listed = await security("GET", "/security/vault");
+    assert.equal(listed.body.data.profiles.length, 2, "multiple profiles");
+    for (const [path, fields] of [["/signup", SIGNUP_FIELDS], ["/identity", ID_FIELDS]] as const) {
+      const tab = await open(path);
+      const looked = await internal("pay.lookup", tab);
+      assert.ok(!JSON.stringify(looked).includes(PROFILE.email), "lookup never returns profile values");
+      const observed = await internal("tab.observe", tab, { include_image: false });
+      const targets = fields.map(field => {
+        const node = observed.nodes.find((item: { name: string }) => item.name === field);
+        assert.ok(node, `ref for ${field}`); return { ref: node.ref, field };
+      });
+      const inspected = await internal("pay.inspect", tab, { kind: "profile", targets });
+      assert.equal(inspected.status, "ok", JSON.stringify(inspected));
+      const filled = await internal("autofill.fill", tab, { item_id: id, targets, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+      assert.equal(filled.status, "filled", JSON.stringify(filled));
+      assert.deepEqual([...filled.filled].sort(), [...fields].sort());
+      assert.deepEqual(filled.missing, []);
+      const hidden = await internal("tab.observe", tab, { include_image: true });
+      assert.equal(String(hidden.text).match(/filled from saved item \(hidden\)/gu)?.length, fields.length);
+      assert.ok(!JSON.stringify(hidden).includes(PROFILE.passport_number));
+      await maskedPixels(hidden, path.slice(1), fields.length);
+      await app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("document.forms[0].submit()")`);
+      await waitBrowser(async () => fixtures.verdicts.includes(`${path}/submit:ok`), "complete profile form verdict");
+      await close(tab);
+    }
+    const denied = await security("POST", `/security/vault/profiles/${id}/reveal`, { locale: "ko" });
+    assert.equal(denied.status, 403, "passport reveal needs OS authentication");
+    await profileShots();
+  } finally {
+    if (family) await security("DELETE", `/security/vault/profiles/${family}`);
+    await security("DELETE", `/security/vault/profiles/${id}`);
+  }
+  console.log("profile: signup/address and identity forms complete; values hidden/masked; reveal denied; two profiles");
+}
+
+async function profileShots() {
+  await app.main(`${winExpression()}.setContentSize(1440,1200)`);
+  for (const theme of ["light", "dark"]) {
+    await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
+    await app.page.reload(); await app.click("설정"); await app.click("브라우저");
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-row]'))"), "profile section");
+    await app.page.expression("document.querySelector('[data-test-class=vault-profile-row]').scrollIntoView({block:'center'})");
+    writeFileSync(join(evidence!, `settings-profile-ko-${theme}.png`), await app.page.screenshot());
+    await app.click("Self");
+    await app.page.clickText("수정", '[role="menuitem"]');
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-form]'))"), "profile edit form");
+    assert.equal(await app.page.expression("document.querySelector('[data-test-class=vault-profile-id]').getAttribute('aria-expanded')"), "false");
+    await app.page.expression("document.querySelector('[data-test-class=vault-profile-form]').scrollIntoView({block:'center'})");
+    writeFileSync(join(evidence!, `settings-profile-edit-ko-${theme}.png`), await app.page.screenshot());
+    await app.click("신분증");
+    await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=vault-profile-form]').getAnimations({subtree:true}).every(a=>a.playState!=='running' || a.effect?.getComputedTiming().iterations===Infinity)"), "ID section expanded");
+    writeFileSync(join(evidence!, `settings-profile-id-ko-${theme}.png`), await app.page.screenshot());
+    await app.click("취소");
+  }
+}
+function winExpression() { return `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`; }

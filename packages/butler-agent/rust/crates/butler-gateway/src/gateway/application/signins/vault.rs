@@ -1,4 +1,4 @@
-//! Payment cards, traveler profiles, their per-site fill allowances, the fill
+//! Payment cards, autofill profiles, their per-site fill allowances, the fill
 //! audit and the purchase sites, in the App database. No secret is ever
 //! stored here: numbers, CVCs and identity numbers live only in the OS
 //! credential store; rows hold what the Settings list and the model may see.
@@ -22,9 +22,9 @@ pub struct AppCardInput {
     pub extras: Vec<String>,
 }
 
-/// A traveler profile's non-secret details, as saved.
+/// A autofill profile's non-secret details, as saved.
 #[derive(Clone, Debug)]
-pub struct AppTravelerInput {
+pub struct AppProfileInput {
     pub nickname: String,
     pub details: Value,
     /// Which secrets are stored (`birth_date`, `passport_number`, `rrn`).
@@ -32,7 +32,7 @@ pub struct AppTravelerInput {
 }
 
 /// Explicit vault commands over the App SQLite owner lane. `kind` is `card`
-/// or `traveler`.
+/// or `autofill`.
 pub enum AppVaultCommand {
     /// Settings: cards, profiles (with allowed sites and recent uses) and purchase sites.
     List,
@@ -50,10 +50,10 @@ pub enum AppVaultCommand {
         id: String,
         input: AppCardInput,
     },
-    InsertTraveler(AppTravelerInput),
-    UpdateTraveler {
+    InsertProfile(AppProfileInput),
+    UpdateProfile {
         id: String,
-        input: AppTravelerInput,
+        input: AppProfileInput,
     },
     /// Removes the item and its site allowances (audit rows stay; they hold no values).
     Delete {
