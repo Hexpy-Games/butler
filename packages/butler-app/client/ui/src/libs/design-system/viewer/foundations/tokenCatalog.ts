@@ -70,6 +70,7 @@ const RULES: Array<[TokenCategory, string, RegExp]> = [
   ["z-index", "Layers", /^--z-/u],
   ["motion", "Durations", /^--motion-(instant|menu|fast|base|slow|deliberate|palette|pointer-glide|enter-[\w-]+|exit-[\w-]+)$/u],
   ["motion", "Easings", /^--motion-ease-/u],
+  ["motion", "Sequences", /^--motion-(stagger|morph|intro)-/u],
   ["motion", "Distances and scales", /^--motion-(distance|scale)-/u],
   ["motion", "Loops", /^--(spinner|pulse|shimmer)-|^--motion-agent-edge$/u],
   ["motion", "Panels and drag", /^--(adaptive-panel-(duration|easing)|drop-clip-margin)$/u],

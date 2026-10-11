@@ -91,6 +91,15 @@ describe("motion lint rules", () => {
       .toEqual([]);
   });
 
+  test("only the setup card morph may transition its surface edges and clip", () => {
+    const morph = "libs/design-system/blocks/SetupWizardShell/SetupWizardMorph.module.css";
+    const css = ".a { transition: left var(--motion-deliberate) var(--motion-ease-emphasized), width var(--motion-deliberate) var(--motion-ease-emphasized), height var(--motion-deliberate) var(--motion-ease-emphasized); } .b { transition: clip-path var(--motion-deliberate) var(--motion-ease-emphasized); }";
+    expect(lintMotionCss(morph, css)).toEqual([]);
+    expect(rules(lintMotionCss(DS, css))).toEqual(["transition-property", "transition-property", "transition-property", "transition-property"]);
+    expect(rules(lintMotionCss(morph, ".a { transition: top var(--motion-deliberate) var(--motion-ease-emphasized); }"))).toEqual(["transition-property"]);
+    expect(rules(lintMotionCss("libs/design-system/blocks/SetupWizardShell/SetupWizardShell.module.css", css))).toHaveLength(4);
+  });
+
   test("keyframes may only animate allowlisted properties", () => {
     expect(lintMotionCss(DS, "@keyframes a { from { opacity: 0; transform: scale(0.97); } }")).toEqual([]);
     expect(rules(lintMotionCss(DS, "@keyframes a { from { width: 0; } to { width: 10px; } }")))
