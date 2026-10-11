@@ -164,7 +164,7 @@ try {
   }
   const options = await page.locator('[data-slot="wallpaper-picker"] [role="radiogroup"]').first().getByRole("radio").count();
   const ordered = await page.locator('[data-slot="wallpaper-picker"] [role="radiogroup"]').first().getByRole("radio").evaluateAll((rows) => rows.map((row) => row.closest("[data-option]")?.getAttribute("data-option")));
-  const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
+  const expected = ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
   assert(JSON.stringify(ordered) === JSON.stringify(expected), "Wallpaper count/order changed");
   assert(await toggle.getAttribute("aria-checked") === "true", "Latest motion setting was lost");
   assert(appearanceMs.every((ms) => ms < 150), `Appearance exceeded 150ms: ${appearanceMs}`);
