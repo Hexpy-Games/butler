@@ -164,7 +164,7 @@ export class BrowserPointer {
       target: pointer.target ? { ...point(pointer.target), width: pointer.target.width * scale, height: pointer.target.height * scale } : undefined,
       width: bounds.width, height: bounds.height,
       hover: tab.picking && tab.pickHover ? { ...point(tab.pickHover.rect), width: tab.pickHover.rect.width * scale, height: tab.pickHover.rect.height * scale } : undefined,
-      hoverLabel: tab.pickHover ? `${tab.pickHover.tag} · ${Math.round(tab.pickHover.rect.width)} × ${Math.round(tab.pickHover.rect.height)}` : undefined,
+      hoverLabel: tab.picking ? tab.pickHover?.label : undefined,
       picks: (tab.selections ?? []).map(item => ({ id: item.id, rect: { ...point(item.rect), width: item.rect.width * scale, height: item.rect.height * scale } })), ...this.presentation };
     const serialized = JSON.stringify(frame);
     if (serialized !== this.lastFrame) { this.lastFrame = serialized; this.view.webContents.send("butler-browser:overlay", frame); }

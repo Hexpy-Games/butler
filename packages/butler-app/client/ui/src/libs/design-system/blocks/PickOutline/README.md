@@ -15,7 +15,9 @@ and while a kept selection stays on the tab (`picks` only).
 ## Container vs Presenter
 Pure presenter with no App store, like `AgentPointer`: the overlay renderer
 hit-tests the page and passes rects in layer pixels (page CSS pixels × page
-scale), the hover tag text and the picks in order. It always draws with the
+scale), the hover tag text and the picks in order. The tag names the level
+and its size, and ends with the arrows that can still change the level
+(`dialog · 468 × 267 · ↑↓`); during an area drag it is the size alone. It always draws with the
 light inks, since it sits on web pages rather than Butler's chrome.
 
 ## Usage
