@@ -156,16 +156,20 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         !browser_processes(&marker).is_empty(),
         "the browser runs until the reap"
     );
-    // Polled once a second: the tree lives through the 60 s grace, then ends.
-    let mut seconds = 0;
-    while !browser_processes(&marker).is_empty() {
-        seconds += 1;
-        assert!(seconds <= 90, "{:?}", browser_processes(&marker));
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
+    // Process inspection also takes time; enforce the grace in wall time.
+    let mut polls = 0;
+    tokio::time::timeout(Duration::from_secs(90), async {
+        while !browser_processes(&marker).is_empty() {
+            polls += 1;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+    .await
+    .expect("the browser process tree ends within 90 s");
     assert!(
-        seconds >= 50,
-        "reaped after {seconds} polls, before the 60 s grace"
+        started.elapsed() >= Duration::from_secs(50),
+        "reaped after {:?}, before the 60 s grace",
+        started.elapsed()
     );
     let elapsed_ms = started.elapsed().as_millis();
     let root = super::support::state_root(&s.sandbox.data);
@@ -185,7 +189,7 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         std::fs::create_dir_all(&dir)?;
         std::fs::write(
             std::path::Path::new(&dir).join("idle-reap.json"),
-            json!({"elapsed_ms":elapsed_ms,"polls":seconds,"processes":browser_processes(&marker),"profiles":profiles,"no_writes_for_seconds":10}).to_string(),
+            json!({"elapsed_ms":elapsed_ms,"polls":polls,"processes":browser_processes(&marker),"profiles":profiles,"no_writes_for_seconds":10}).to_string(),
         )?;
     }
     Ok(())
