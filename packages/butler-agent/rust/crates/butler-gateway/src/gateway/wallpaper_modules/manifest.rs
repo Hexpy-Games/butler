@@ -1,7 +1,7 @@
 //! `wallpaper.json` contract v1 (engine: 1): the checks of the UI's
-//! `validateWallpaperManifest`, so built-in and user modules are accepted by
-//! the same rules on both sides. Errors read like the UI's (`field: rule`).
-//! The optional drawing fields are checked in [`rendering`].
+//! `validateWallpaperManifest`, with bundled-only rendering fields. Errors
+//! read like the UI's (`field: rule`). Optional drawing fields are checked in
+//! [`rendering`].
 
 // Spelled out so `build.rs`, which compiles this file to check the bundled
 // manifests, finds it too.
@@ -81,13 +81,14 @@ impl WallpaperModule {
 }
 
 /// Parses `wallpaper.json` text; every contract error is reported.
-pub(crate) fn parse(text: &str) -> Result<WallpaperModule, Vec<String>> {
+/// Drift and density passes are reserved for bundled modules.
+pub(crate) fn parse(text: &str, bundled: bool) -> Result<WallpaperModule, Vec<String>> {
     let manifest = serde_json::from_str(text)
         .map_err(|error| vec![format!("manifest: invalid JSON ({error})")])?;
-    validate(manifest)
+    validate(manifest, bundled)
 }
 
-pub(crate) fn validate(manifest: Value) -> Result<WallpaperModule, Vec<String>> {
+pub(crate) fn validate(manifest: Value, bundled: bool) -> Result<WallpaperModule, Vec<String>> {
     let Some(raw) = manifest.as_object() else {
         return Err(vec!["manifest: must be an object".into()]);
     };
@@ -107,8 +108,15 @@ pub(crate) fn validate(manifest: Value) -> Result<WallpaperModule, Vec<String>> 
     if raw.get("engine").and_then(Value::as_u64) != Some(1) {
         errors.push("engine: must be 1".into());
     }
-    if !matches!(text(raw, "motion"), Some("static" | "animated")) {
-        errors.push("motion: must be static or animated".into());
+    let motion = text(raw, "motion");
+    let ordinary_motion = matches!(motion, Some("static" | "animated"));
+    if !(ordinary_motion || (bundled && motion == Some("drift"))) {
+        let allowed = if bundled {
+            "static, animated or drift"
+        } else {
+            "static or animated"
+        };
+        errors.push(format!("motion: must be {allowed}"));
     }
     let image = match text(raw, "image") {
         Some("none") => Some(ImageInput::None),
@@ -127,7 +135,7 @@ pub(crate) fn validate(manifest: Value) -> Result<WallpaperModule, Vec<String>> 
         errors.push("timePeriod: must be seconds in (0, 5000*PI]".into());
     }
     let params = params(raw.get("params"), &mut errors);
-    let rendering = rendering::rendering(raw, &params, &mut errors);
+    let rendering = rendering::rendering(raw, &params, bundled, &mut errors);
     match (id, image, errors.is_empty()) {
         (Some(id), Some(image), true) => Ok(WallpaperModule {
             id: id.to_owned(),

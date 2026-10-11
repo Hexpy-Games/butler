@@ -201,7 +201,7 @@ pub(crate) fn check(
     let module = manifest.and_then(|bytes| {
         let text = std::str::from_utf8(bytes)
             .map_err(|_| vec![format!("{MANIFEST}: must be UTF-8 text")])
-            .and_then(manifest::parse);
+            .and_then(|text| manifest::parse(text, false));
         text.map_err(|found| errors.extend(found)).ok()
     });
     let mut overlay = None;
