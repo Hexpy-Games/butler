@@ -65,6 +65,20 @@ impl TokenizerOwner {
         Ok(tokens)
     }
 
+    /// Compact JSON components are separated by literal newlines. A JSON
+    /// component ends in a non-whitespace scalar/closing delimiter, and the
+    /// o200k punctuation piece may consume trailing newlines but cannot cross
+    /// them into the next component. Token IDs therefore concatenate exactly.
+    /// Restarting block offsets per component lets unchanged image payloads
+    /// reuse their blocks even when preceding history grows or is superseded.
+    pub(super) fn encode_json_components(&self, text: &str) -> Result<Vec<u32>, ModelCatalogError> {
+        let mut tokens = Vec::new();
+        for component in text.split_inclusive('\n') {
+            tokens.extend(self.encode_ordinary(component)?);
+        }
+        Ok(tokens)
+    }
+
     pub(super) fn count_ordinary(&self, text: &str) -> Result<usize, ModelCatalogError> {
         // Marker-looking user/tool strings remain ordinary text, matching
         // js-tiktoken encode(text, [], []). Counting needs no transcript copy.
