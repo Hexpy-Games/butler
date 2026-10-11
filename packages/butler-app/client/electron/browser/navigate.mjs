@@ -27,7 +27,8 @@ export function dispatchUpload(tab, path, click) {
     const timer = setTimeout(() => { tab.pendingUpload = null; resolve({ status: "unknown", reason: "no_file_chooser" }); }, 5000);
     tab.pendingUpload = { path, done: value => { clearTimeout(timer); tab.pendingUpload = null; resolve(value); } };
   });
-  click();
+  // A click that fails to send leaves no chooser; the timeout answers it.
+  Promise.resolve(click()).catch(() => {});
   return result;
 }
 

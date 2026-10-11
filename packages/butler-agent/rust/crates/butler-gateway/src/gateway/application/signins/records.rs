@@ -67,13 +67,12 @@ fn record(db: &Connection, command: AppSignInCommand, now: &str) -> Result<Value
         AppSignInCommand::Grant {
             session,
             site,
-            frame_site,
             source,
         } => {
             db.execute(
-                "INSERT OR IGNORE INTO browser_site_grants(session_id,site,frame_site,source,created_at) \
-                 VALUES(?1,?2,?3,?4,?5)",
-                params![session, site, frame_site, source, now],
+                "INSERT OR IGNORE INTO browser_site_grants(session_id,site,source,created_at) \
+                 VALUES(?1,?2,?3,?4)",
+                params![session, site, source, now],
             )
             .map_err(sql)?;
             Ok(json!({"granted": true}))
@@ -187,10 +186,7 @@ fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Resu
 
 fn revoke(db: &Connection, site: &str, now: &str) -> Result<Value> {
     let revoked = db
-        .execute(
-            "DELETE FROM browser_site_grants WHERE site=?1 OR frame_site=?1",
-            [site],
-        )
+        .execute("DELETE FROM browser_site_grants WHERE site=?1", [site])
         .map_err(sql)?;
     db.execute(
         "INSERT INTO browser_site_access(site,all_conversations,updated_at) VALUES(?1,0,?2) \
@@ -227,23 +223,15 @@ fn grants(db: &Connection, session: &str, turn: Option<&str>) -> Result<Value> {
         }
     }
     let mut sites = Vec::<String>::new();
-    let mut frames = Vec::<String>::new();
     let mut statement = db
-        .prepare("SELECT site,frame_site FROM browser_site_grants WHERE session_id=?1")
+        .prepare("SELECT site FROM browser_site_grants WHERE session_id=?1")
         .map_err(sql)?;
     for owner in &sessions {
-        let rows = statement
-            .query_map([owner], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(sql)?;
-        for row in rows {
-            let (site, frame) = row.map_err(sql)?;
-            if frame.is_empty() {
-                sites.push(site);
-            } else {
-                frames.push(butler_runtime::browser::frame_key(&site, &frame));
-            }
+        for site in statement
+            .query_map([owner], |row| row.get::<_, String>(0))
+            .map_err(sql)?
+        {
+            sites.push(site.map_err(sql)?);
         }
     }
     let mut standing = db
@@ -257,9 +245,7 @@ fn grants(db: &Connection, session: &str, turn: Option<&str>) -> Result<Value> {
     }
     sites.sort();
     sites.dedup();
-    frames.sort();
-    frames.dedup();
-    Ok(json!({"sites": sites, "frames": frames, "inherited": sessions.len() > 1}))
+    Ok(json!({"sites": sites, "inherited": sessions.len() > 1}))
 }
 
 fn list(db: &Connection) -> Result<Value> {
@@ -285,7 +271,7 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
     let entry = entry_where(db, "site", site)?;
     let conversations: i64 = db
         .query_row(
-            "SELECT COUNT(DISTINCT session_id) FROM browser_site_grants WHERE site=?1 AND frame_site=''",
+            "SELECT COUNT(DISTINCT session_id) FROM browser_site_grants WHERE site=?1",
             [site],
             |row| row.get(0),
         )

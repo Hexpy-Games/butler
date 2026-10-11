@@ -28,7 +28,7 @@ export interface L1Metrics {
 export interface TaskMetrics {
   task: string; arm: string; run: number; success: boolean;
   wrongElementEvents: number; stepAccuracy: number | null;
-  refusals: { reason: "point_mismatch" | "blocked_by" | "transparent_overlay" | "frame_not_granted"; recovered: boolean }[];
+  refusals: { reason: "point_mismatch" | "blocked_by" | "transparent_overlay"; recovered: boolean }[];
   cost: { steps: number; modelCalls: number; toolCalls: number; images: number; inputTokens: number; outputTokens: number; providerSendBytes: number; costPerSuccess: number | null };
   latency: { wallMs: number; modelMs: number; executorMs: number; observeP95Ms: number };
   trace: { observationHash: string; imagePhash: string | null; resolvedTargets: string[] };

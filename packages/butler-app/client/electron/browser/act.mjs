@@ -7,6 +7,7 @@ import { parseChord, resolveFocus, dispatchKey } from "./keyboard.mjs";
 import { NAVIGATION, navigationTarget, dispatchNavigation, dispatchUpload } from "./navigate.mjs";
 import { recordBatch, repeatRefusal, rememberRefusal, resentRefusal } from "./progress.mjs";
 import { canvasBefore, canvasEffect } from "./canvas-effect.mjs";
+import { insertText, mouseSender } from "./frame-input.mjs";
 
 const POINTER = ["click", "fill", "select", "scroll", "hover", "drag", "upload"];
 const ACTIONS = [...POINTER, "press", "type", "wait", ...NAVIGATION];
@@ -103,13 +104,12 @@ function wheelDelta(value) {
   return parts.length === 2 ? { deltaX: -parts[0], deltaY: -parts[1] } : { deltaX: 0, deltaY: -parts[0] };
 }
 async function dispatch(tab, args, step, target) {
-  const contents = tab.view.webContents;
   tab.dispatching = true;
   try {
     tab.onPointer?.(step, target);
     if (step.action === "wait") { await new Promise(resolve => setTimeout(resolve, Number(step.value))); return { status: "completed", hit: target.hit }; }
-    if (step.action === "press") { dispatchKey(tab, parseChord(step.value)); await new Promise(resolve => setTimeout(resolve, 0)); return { status: "completed", hit: target.hit }; }
-    if (step.action === "type") { tab.expectedInputs = []; await contents.insertText(step.value); return { status: "completed", hit: target.hit }; }
+    if (step.action === "press") { await dispatchKey(tab, parseChord(step.value), target); await new Promise(resolve => setTimeout(resolve, 0)); return { status: "completed", hit: target.hit }; }
+    if (step.action === "type") { tab.expectedInputs = []; await insertText(tab, target, step.value); return { status: "completed", hit: target.hit }; }
     if (NAVIGATION.includes(step.action)) { dispatchNavigation(tab, step.action); return { status: "completed", hit: target.hit }; }
     const modifiers = (step.modifiers ?? []).map(name => MODIFIERS[name]);
     if (step.action === "drag") return await dispatchDrag(tab, target, modifiers);
@@ -117,20 +117,21 @@ async function dispatch(tab, args, step, target) {
     const point = { x: Math.round(target.x * scale), y: Math.round(target.y * scale) };
     tab.expectedInputs = ["mouseMove", "mouseDown", "mouseUp", "mouseWheel"].map(type => ({ type, ...point }));
     if (step.action === "select") return await selectStep(tab, args.observation, step);
-    const click = () => {
+    const send = mouseSender(tab, target);
+    const click = async () => {
       const button = step.button ?? "left";
       for (let count = 1; count <= (step.click_count ?? 1); count++) {
-        contents.sendInputEvent({ type: "mouseDown", ...point, button, clickCount: count, modifiers });
-        contents.sendInputEvent({ type: "mouseUp", ...point, button, clickCount: count, modifiers });
+        await send({ type: "mouseDown", ...point, button, clickCount: count, modifiers });
+        await send({ type: "mouseUp", ...point, button, clickCount: count, modifiers });
       }
     };
-    contents.sendInputEvent({ type: "mouseMove", ...point });
+    await send({ type: "mouseMove", ...point });
     if (step.action === "upload") return { ...await dispatchUpload(tab, step.value, click), hit: target.hit };
-    if (step.action === "scroll") contents.sendInputEvent({ type: "mouseWheel", ...point, ...wheelDelta(step.value), modifiers, canScroll: true });
-    if (["click", "fill"].includes(step.action)) click();
+    if (step.action === "scroll") await send({ type: "mouseWheel", ...point, ...wheelDelta(step.value), modifiers, canScroll: true });
+    if (["click", "fill"].includes(step.action)) await click();
     if (step.action === "fill") {
       await selectTextStep(tab, args.observation, step);
-      await contents.insertText(String(step.value ?? ""));
+      await insertText(tab, target, String(step.value ?? ""));
     }
     // Yield so user input, ownership changes and navigation fence the next step.
     await new Promise(resolve => setTimeout(resolve, 0));

@@ -14,16 +14,12 @@ const UNGATED: &[&str] = &["tab.wait", "tab.waiting", "tab.cancel", "tab.selecti
 /// Ops that only read the page; allowed on an identity page on the way back.
 const READS: &[&str] = &["tab.observe", "tab.zoom", "tab.screenshot"];
 
-pub(super) struct Grants {
-    pub sites: Vec<String>,
-    pub frames: Vec<String>,
-}
-
-pub(super) async fn grants(
+/// The signed-in sites a conversation's turn may use.
+pub(super) async fn granted_sites(
     state: &Arc<HttpState>,
     session: &str,
     turn: Option<&str>,
-) -> Result<Grants, HttpError> {
+) -> Result<Vec<String>, HttpError> {
     let value = state
         .application
         .signins(AppSignInCommand::Grants {
@@ -31,13 +27,7 @@ pub(super) async fn grants(
             turn: turn.map(str::to_owned),
         })
         .await?;
-    let list = |key: &str| -> Vec<String> {
-        serde_json::from_value(value[key].clone()).unwrap_or_default()
-    };
-    Ok(Grants {
-        sites: list("sites"),
-        frames: list("frames"),
-    })
+    Ok(serde_json::from_value(value["sites"].clone()).unwrap_or_default())
 }
 
 pub(super) fn content_origin(state: &HttpState) -> String {
@@ -63,13 +53,12 @@ pub(super) async fn admit(
         }
         let url = frame["args"]["url"].as_str().unwrap_or("").to_owned();
         let site = site_of(&url).ok_or_else(|| error(400, "navigation_denied"))?;
-        let grants = grants(state, session, turn.as_deref()).await?;
-        if signed_in_place(&url, &grants.sites) != SignedInPlace::Granted {
+        let sites = granted_sites(state, session, turn.as_deref()).await?;
+        if signed_in_place(&url, &sites) != SignedInPlace::Granted {
             return Ok(Some(grant_required(&site)));
         }
         frame["args"]["profile"] = json!("signed_in");
-        frame["args"]["policy"] =
-            signed_in_policy(&content_origin(state), &grants.sites, &grants.frames);
+        frame["args"]["policy"] = signed_in_policy(&content_origin(state), &sites);
         return Ok(None);
     }
     let tab = {
@@ -83,8 +72,8 @@ pub(super) async fn admit(
         return Ok(None);
     }
     let url = tab["url"].as_str().unwrap_or("");
-    let grants = grants(state, session, turn.as_deref()).await?;
-    let place = signed_in_place(url, &grants.sites);
+    let sites = granted_sites(state, session, turn.as_deref()).await?;
+    let place = signed_in_place(url, &sites);
     let refused = match place {
         SignedInPlace::Granted => false,
         SignedInPlace::Identity => !READS.contains(&op),
@@ -96,18 +85,12 @@ pub(super) async fn admit(
             _ => json!({"status":"not_dispatched","reason":"navigation_denied"}),
         }));
     }
-    frame["args"]["policy"] =
-        signed_in_policy(&content_origin(state), &grants.sites, &grants.frames);
+    frame["args"]["policy"] = signed_in_policy(&content_origin(state), &sites);
     Ok(None)
 }
 
-/// Normalizes a frame grant request to its registrable site and turns a
-/// result that fails the signed-in re-check into a policy violation.
+/// Turns a result that fails the signed-in re-check into a policy violation.
 pub(super) fn recheck(frame: &Value, result: &mut Value) {
-    if result["reason"] == "frame_grant_required" {
-        let host = result["frame_site"].as_str().unwrap_or("");
-        result["frame_site"] = json!(site_of_host(host));
-    }
     if !result_permitted(frame, result) {
         result["url"] = json!("about:blank#policy");
     }
@@ -120,8 +103,6 @@ pub(super) fn result_permitted(frame: &Value, result: &Value) -> bool {
         return true;
     }
     let sites: Vec<String> = serde_json::from_value(policy["sites"].clone()).unwrap_or_default();
-    let grants: Vec<String> =
-        serde_json::from_value(policy["frame_grants"].clone()).unwrap_or_default();
     let Some(url) = result["url"].as_str() else {
         return true;
     };
@@ -131,19 +112,17 @@ pub(super) fn result_permitted(frame: &Value, result: &Value) -> bool {
     let top = site_of(url).unwrap_or_default();
     result["frames"]
         .as_array()
-        .is_none_or(|frames| frames_consistent(frames, &top, &sites, &grants))
+        .is_none_or(|frames| frames_consistent(frames, &top, &sites))
 }
 
-/// Records a conversation grant the user approved on a card (`signin.grant`).
+/// Records a conversation site grant the user approved on a card (`signin.grant`).
 pub(super) async fn grant(
     state: &Arc<HttpState>,
     session: &str,
     args: &Value,
 ) -> Result<Value, HttpError> {
-    let valid = |raw: &str| site_of_host(raw).is_some_and(|site| site == raw && raw.contains('.'));
     let site = args["site"].as_str().unwrap_or("");
-    let frame_site = args["frame_site"].as_str().unwrap_or("");
-    if !valid(site) || !(frame_site.is_empty() || valid(frame_site)) {
+    if !site_of_host(site).is_some_and(|registrable| registrable == site && site.contains('.')) {
         return Err(error(400, "invalid_site"));
     }
     state
@@ -151,7 +130,6 @@ pub(super) async fn grant(
         .signins(AppSignInCommand::Grant {
             session: session.into(),
             site: site.into(),
-            frame_site: frame_site.into(),
             source: "approval".into(),
         })
         .await?;
@@ -174,7 +152,6 @@ pub(super) async fn record_handovers(
             .signins(AppSignInCommand::Grant {
                 session,
                 site,
-                frame_site: String::new(),
                 source: "handover".into(),
             })
             .await?;
