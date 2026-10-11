@@ -275,6 +275,36 @@ export function pickPage(args) {
     return boxes;
   }
 
+  /** A pick's element by identity; a replaced document has a new token, so old numbers resolve to nothing. */
+  function elementOf(identity) {
+    const split = String(identity).lastIndexOf(":");
+    return identity.slice(0, split) === state.token ? state.refs.get(Number(identity.slice(split + 1)))?.deref() ?? null : null;
+  }
+  /** The iframe element of window.frames[index] (light DOM, open shadow roots, same-origin frames). */
+  function frameOwner(index) {
+    const target = window.frames[index];
+    const find = root => {
+      for (const el of root.querySelectorAll("*")) {
+        if (el.matches("iframe,frame") && el.contentWindow === target) return el;
+        const inner = (el.shadowRoot && find(el.shadowRoot)) || (el.matches("iframe,frame") && childDocument(el) && find(childDocument(el)));
+        if (inner) return inner;
+      }
+      return null;
+    };
+    return target ? find(document) : null;
+  }
+  /** What identifies an element across a framework re-render; empty when nothing distinguishes it. */
+  function signature(el) {
+    const attrs = ["id", "role", "aria-label", "alt", "src", "href", "name", "title"].map(name => el.getAttribute(name) ?? "");
+    const text = String(el.innerText ?? el.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 300);
+    return text || attrs.some(Boolean) ? JSON.stringify([el.localName, ...attrs, text]) : "";
+  }
+  function remember(el) {
+    const ancestors = [];
+    for (let a = parent(el); a && ancestors.length < 6; a = parent(a)) ancestors.push(new WeakRef(a));
+    (state.sigs ??= new Map()).set(idOf(el), { text: signature(el), ancestors });
+  }
+
   if (args.op === "ladder") {
     const result = analyze(document, args.x, args.y);
     return { index: result.index, descend: result.descend,
@@ -284,6 +314,7 @@ export function pickPage(args) {
     const el = state.refs.get(args.id)?.deref();
     const b = el?.isConnected ? visible(el) : null;
     if (!b) return null;
+    remember(el);
     const crop = boxPaints(el) ? b : contentBox(el, b), masks = [], frames = [];
     fieldsIn(el, { x: 0, y: 0 }, crop, masks, frames);
     const mapped = toTop(el, [b, crop, ...masks]);
@@ -294,26 +325,66 @@ export function pickPage(args) {
       identity: `${state.token}:${idOf(el)}`, frames: frames.map(frame => ({ path: frame.path, offset: { x: frame.offset.x + origin.x, y: frame.offset.y + origin.y },
         clip: toTop(el, [frame.clip])[0] })).filter(frame => !empty(frame.clip)) };
   }
-  if (args.op === "anchor") {
-    // A replaced document has a new token: its element numbers name other elements.
-    const split = String(args.identity).lastIndexOf(":");
-    const el = args.identity.slice(0, split) === state.token ? state.refs.get(Number(args.identity.slice(split + 1)))?.deref() : null;
-    if (!el?.isConnected) return { gone: true };
-    const b = visible(el), mapped = b && toTop(el, [b]);
-    return { gone: false, rect: mapped && !empty(mapped[0]) ? out(mapped[0]) : null };
+  if (args.op === "rects") {
+    // Where each pick's element is now. A re-rendered element (same signature, one candidate) takes over the pick.
+    const picks = {};
+    for (const identity of args.identities) {
+      let el = elementOf(identity);
+      const sig = el && state.sigs?.get(idOf(el));
+      if (el && !el.isConnected) {
+        const root = sig?.ancestors.map(ref => ref.deref()).find(a => a?.isConnected) ?? document;
+        const taken = new Set(args.identities.map(elementOf).filter(Boolean));
+        const found = sig?.text ? [...root.querySelectorAll(el.localName)].filter(c => !taken.has(c) && signature(c) === sig.text) : [];
+        el = found.length === 1 ? found[0] : null;
+        if (el) remember(el);
+      }
+      if (!el) { picks[identity] = { gone: true }; continue; }
+      const b = visible(el), mapped = b && toTop(el, [b]);
+      picks[identity] = { identity: `${state.token}:${idOf(el)}`, rect: mapped && !empty(mapped[0]) ? out(mapped[0]) : null };
+    }
+    return { picks, scroll: { x: window.scrollX, y: window.scrollY } };
+  }
+  if (args.op === "watch") {
+    // Resolves (once, rAF-throttled) when a pick, a frame holding picks or the viewport may have moved.
+    // Nothing runs while the page is static: only scroll/resize/mutation/resize-observer callbacks wake it.
+    const w = state.watch ??= {};
+    w.resolve?.({ superseded: true });
+    const els = args.identities.map(elementOf), owners = args.frames.map(frameOwner);
+    const measure = () => JSON.stringify([window.scrollX, window.scrollY, innerWidth, innerHeight,
+      ...[...els, ...owners].map(el => { const b = el?.isConnected ? visible(el) : null; return b ? [b.left, b.top, b.right, b.bottom].map(Math.round) : el ? "x" : "-"; })]);
+    const baseline = measure();
+    if (!w.installed) {
+      w.wake = () => {
+        if (!w.resolve || w.frame) return;
+        w.frame = requestAnimationFrame(() => { w.frame = 0; if (w.resolve && w.measure() !== w.baseline) w.resolve({ changed: true }); });
+      };
+      w.leave = () => w.resolve?.({ gone: true });
+      addEventListener("scroll", w.wake, { capture: true, passive: true });
+      addEventListener("resize", w.wake, { passive: true });
+      addEventListener("pagehide", w.leave);
+      w.mutations = new MutationObserver(w.wake);
+      w.mutations.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+      w.sizes = new ResizeObserver(w.wake);
+      w.installed = true;
+    }
+    w.sizes.disconnect();
+    for (const el of [...els, ...owners]) if (el?.isConnected) w.sizes.observe(el);
+    w.measure = measure; w.baseline = baseline;
+    return new Promise(resolve => { w.resolve = value => { w.resolve = null; resolve(value); }; });
+  }
+  if (args.op === "unwatch") {
+    const w = state.watch;
+    if (w?.installed) {
+      removeEventListener("scroll", w.wake, { capture: true }); removeEventListener("resize", w.wake); removeEventListener("pagehide", w.leave);
+      w.mutations.disconnect(); w.sizes.disconnect(); if (w.frame) cancelAnimationFrame(w.frame);
+    }
+    w?.resolve?.({ stopped: true });
+    state.watch = null;
+    return true;
   }
   if (args.op === "frame") {
     // Where window.frames[index] sits now in this document (light DOM, open shadow roots, same-origin frames).
-    const target = window.frames[args.index];
-    const find = root => {
-      for (const el of root.querySelectorAll("*")) {
-        if (el.matches("iframe,frame") && el.contentWindow === target) return el;
-        const inner = (el.shadowRoot && find(el.shadowRoot)) || (el.matches("iframe,frame") && childDocument(el) && find(childDocument(el)));
-        if (inner) return inner;
-      }
-      return null;
-    };
-    const owner = target && find(document);
+    const owner = frameOwner(args.index);
     if (!owner) return null;
     const info = frameInfo(owner), origin = topOffset(owner.ownerDocument), clip = toTop(owner, [info.clip])[0];
     return empty(clip) ? null : { offset: { x: info.offset.x + origin.x, y: info.offset.y + origin.y }, clip };
@@ -381,7 +452,7 @@ export function pickPage(args) {
       last = piece.last;
     }
     const contains = found.map(el => ({ tag: nameOf(el), title: titleOf(el, textOf(el)) }));
-    return { text: text.trim(), title: contains.find(item => /^(h[1-6]|heading)$/u.test(item.tag))?.title ?? text.trim().split("\n")[0] ?? "", contains, masks: masks.map(out), frames };
+    return { text: text.trim(), title: contains.find(item => /^(h[1-6]|heading)$/u.test(item.tag))?.title ?? text.trim().split("\n")[0] ?? "", contains, masks: masks.map(out), frames, scroll: { x: window.scrollX, y: window.scrollY } };
   }
   return null;
 }

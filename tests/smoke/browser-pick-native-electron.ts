@@ -114,6 +114,21 @@ try {
   assert.ok((await cropFits(1)).ok, "area crop");
   await app.shot("5-two-picks", true);
 
+  // A real wheel scrolls the page under the picks: both outlines follow, with no navigation.
+  const rects = () => app.main<Array<{ y: number }>>(`${subject()}.selections.map(p=>p.rect)`);
+  const scrollY = () => app.main<number>(`${subject()}.view.webContents.executeJavaScript("scrollY")`);
+  const resting = await rects();
+  await input("wheel", await point("#para"));
+  await waitBrowser(async () => { const s = await scrollY(), now = await rects(); return s > 0 && Math.abs(now[1]!.y - (resting[1]!.y - s)) <= 1 && now[0]!.y < resting[0]!.y; },
+    "area and framed card outlines follow the page scroll");
+  const drawn = await overlayRead<number[]>(app, "[...document.querySelectorAll('[data-pick-outline=picked]')].map(n=>Math.round(n.getBoundingClientRect().y))");
+  const scale = await app.main<number>(`${subject()}.bounds.scale ?? 1`);
+  assert.ok(drawn.includes(Math.round((await rects())[1]!.y * scale)), `overlay outline at the scrolled area: ${JSON.stringify(drawn)}`);
+  steps.push({ scrolled: await scrollY(), resting, followed: await rects() });
+  await app.shot("5b-scrolled-follow", true);
+  await app.main(`${subject()}.view.webContents.executeJavaScript("scrollTo(0,0)")`);
+  await waitBrowser(async () => Math.abs((await rects())[1]!.y - resting[1]!.y) <= 1, "outlines return with the page");
+
   // A plain drag from a kept pick still carries every pick into the composer.
   await input("drag", await point("#strong"), { ...await app.page.expression<Point>("(()=>{const r=document.querySelector('[data-test-class=\"composer-card\"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()") });
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "two chips in the composer");
