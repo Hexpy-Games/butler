@@ -232,7 +232,7 @@ function verifyWindowsDependencyClosure(binary) {
   const imports = run("dumpbin", ["/imports", binary], rustRoot);
   const systemDlls = new Set([
     "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll",
-    "combase.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
+    "combase.dll", "credui.dll", "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
     "kernel32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll",
     "ole32.dll", "oleaut32.dll", "pdh.dll", "powrprof.dll", "propsys.dll", "psapi.dll",
     "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
