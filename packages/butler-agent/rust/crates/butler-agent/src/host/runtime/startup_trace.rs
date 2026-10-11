@@ -32,3 +32,19 @@ impl Trace {
         self.previous = now;
     }
 }
+
+/// In-process correction timing survives removal of the external progress sidecar.
+#[derive(Clone, Copy)]
+pub(crate) enum Correction {
+    Pending,
+    Running(Instant),
+    Finished(Instant),
+}
+
+pub(crate) type CorrectionSender = tokio::sync::watch::Sender<Correction>;
+
+pub(crate) type AppStartup<'a> = (
+    std::sync::Arc<crate::host::app::gateway_lifecycle::ActiveAppEndpoint>,
+    &'a tokio_util::sync::CancellationToken,
+    CorrectionSender,
+);

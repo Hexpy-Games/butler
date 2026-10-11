@@ -86,9 +86,9 @@ async fn agent_searches_then_files_and_tags_library_items() -> Result<(), Harnes
         ("o1", "Osaka food"),
         ("t1", "Tax form"),
     ] {
-        ok(s.gw.post("/library", scrap(id, title)).await?);
+        ok(&s.gw.post("/library", scrap(id, title)).await?);
     }
-    ok(s.gw.post("/library", json!({"id":"x","kind":"bookmark","title":"Docs","url":url,"capturedAt":"2026-10-09T00:00:00Z"})).await?);
+    ok(&s.gw.post("/library", json!({"id":"x","kind":"bookmark","title":"Docs","url":url,"capturedAt":"2026-10-09T00:00:00Z"})).await?);
     let (_, turn) = s.turn("general", ASK).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}\n{}", s.agent.logs());
 
