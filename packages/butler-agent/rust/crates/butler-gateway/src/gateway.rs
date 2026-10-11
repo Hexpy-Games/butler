@@ -39,6 +39,9 @@ pub use crate::gateway::inbound_queue::{
     InboundSettlementListener, QueuedInboundEvent,
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
+pub use application::settings::{
+    DiagnosticsSettingsReader, diagnostics_enabled_readonly, stored_ui_language_readonly,
+};
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
@@ -104,10 +107,7 @@ pub(crate) use application::{
 };
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
-pub use application::{
-    app_session_hint, diagnostics_enabled_readonly, normalize_committed_turn_event,
-    stored_ui_language_readonly,
-};
+pub use application::{app_session_hint, normalize_committed_turn_event};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;

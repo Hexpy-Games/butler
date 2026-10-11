@@ -66,20 +66,19 @@ mod session_relocation;
 mod session_titles;
 mod session_views;
 mod sessions;
-mod settings;
+pub(super) mod settings;
 mod setup;
 mod subsession_events;
 mod task_graphs;
 pub use task_graphs::{
     project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
 };
-mod turn_dispatch;
-pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
 pub(super) mod storage;
 mod transcript_export;
 mod turn_cancellation;
+mod turn_dispatch;
 mod updates;
 mod user_work;
 mod wallpapers;
