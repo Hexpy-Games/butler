@@ -1,26 +1,34 @@
 import { Component, createRef, type ReactNode } from "react";
 import { prefersReducedMotion } from "../../lib/motion";
+import type { WallpaperIntroTimeline } from "../Wallpaper/intro/introTimeline";
+import { runSetupIntro, type SetupIntroPhase, type SetupIntroRun } from "./setupIntro";
 import { copyFrame } from "./setupMorphLayers";
 import { canMorph, startSetupMorph, type SetupWizardMorph } from "./setupWizardMorph";
 import morphStyles from "./SetupWizardMorph.module.css";
 import styles from "./SetupWizardShell.module.css";
+import introStyles from "./SetupWizardIntro.module.css";
 
 /**
- * How the first card appears. `rerun`: the short re-run variant, the card
- * fades in with a 4px rise over --motion-slow (at once under reduced motion).
- * The full first-install intro (the ink scene) plugs in here as `full`.
+ * How the first card appears. `full`: the first-install ink intro (the
+ * backdrop writes the mark, which lands in the SetupWizardMark slot of the
+ * card, then the card and its lines arrive). `rerun`: the short re-run
+ * variant, the dried print still and the card fading in with a 4px rise over
+ * --motion-slow (at once under reduced motion).
  */
-export type SetupWizardIntro = "none" | "rerun";
+export type SetupWizardIntro = "none" | "rerun" | "full";
 
 interface SetupWizardStageProps {
   stepKey: string;
   intro?: SetupWizardIntro;
+  /** The ink intro clock the backdrop shares (intro `full` or `rerun`). */
+  timeline?: WallpaperIntroTimeline | null;
   children: ReactNode;
 }
 
 interface SetupWizardStageState {
   /** The step whose card is rising in; null once nothing is moving. */
   enteringKey: string | null;
+  introPhase: SetupIntroPhase;
 }
 
 /** Longest exit before the snapshot is dropped even without `animationend`. */
@@ -36,7 +44,8 @@ const EXIT_FALLBACK_MS = 400;
  * rendered again.
  */
 export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWizardStageState> {
-  state: SetupWizardStageState = { enteringKey: null };
+  state: SetupWizardStageState = { enteringKey: null, introPhase: this.props.intro === "full" && this.props.timeline ? "pending" : null };
+  private intro: SetupIntroRun | null = null;
   private readonly root = createRef<HTMLDivElement>();
   private readonly frame = createRef<HTMLDivElement>();
   private readonly ghosts = createRef<HTMLDivElement>();
@@ -54,11 +63,19 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     return node ? copyFrame(node) : null;
   }
 
-  componentDidUpdate(_previous: SetupWizardStageProps, _state: SetupWizardStageState, snapshot: HTMLElement | null) {
+  componentDidMount() {
+    const { timeline, intro } = this.props, stage = this.root.current, surface = this.surface.current;
+    if (!timeline || !stage || !surface) return;
+    this.intro = runSetupIntro({ stage, surface, timeline, frame: () => this.frame.current, rerun: intro === "rerun", onPhase: (introPhase) => this.setState({ introPhase }) });
+  }
+
+  componentDidUpdate(previous: SetupWizardStageProps, _state: SetupWizardStageState, snapshot: HTMLElement | null) {
     const ghosts = this.ghosts.current;
-    if (!snapshot || !ghosts) return;
+    const changed = previous.stepKey !== this.props.stepKey;
+    if (!snapshot || !ghosts) return changed ? this.intro?.stepChanged(null, null) : undefined;
     for (const element of [snapshot, ...snapshot.querySelectorAll("[id]")]) element.removeAttribute("id");
     if (this.startMorph(ghosts, snapshot)) return;
+    this.intro?.stepChanged(null, null);
     snapshot.className = `${styles.stageFrame} ${styles.stageExit}`;
     snapshot.setAttribute("data-stage", "exit");
     const drop = () => {
@@ -77,6 +94,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
   componentWillUnmount() {
     clearTimeout(this.exitTimer);
     this.morph?.finish();
+    this.intro?.dispose();
   }
 
   /** The intro ↔ step card morph; false when the cards share a width (plain swap). */
@@ -89,12 +107,15 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     const morph = startSetupMorph(root, surface, snapshot, frame, () => {
       snapshot.remove();
       if (this.morph === morph) this.morph = null;
+      this.intro?.measure();
     });
     if (!morph) {
       snapshot.remove();
       return false;
     }
     this.morph = morph;
+    // The print beat: the ink keep-out moves from the old card to the new one, then the intro hands off.
+    this.intro?.stepChanged(morph.from, morph.to);
     return true;
   }
 
@@ -104,7 +125,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     const entering = this.state.enteringKey === stepKey;
     const motion = entering ? styles.stageEnter : this.rerunKey !== null ? styles.stageRerun : undefined;
     return (
-      <div className={styles.stage} data-test-class="setup-wizard-stage" ref={this.root}>
+      <div className={`${styles.stage} ${introStyles.stage}`} data-intro={this.state.introPhase ?? undefined} data-test-class="setup-wizard-stage" ref={this.root}>
         <div aria-hidden="true" className={morphStyles.surface} data-test-class="setup-wizard-morph-surface" hidden ref={this.surface} />
         <div aria-hidden="true" className={styles.stageGhosts} inert ref={this.ghosts} />
         <div

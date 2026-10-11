@@ -88,6 +88,16 @@ buffer serves rest and events: DPR ≤ 1.5 within 2.4MP (touch: 1.2MP).
   theme (`--riso-paper`: the lower stop of the light `--conversation-bg`, or
   the night stock).
 
+`intro` (a `createWallpaperIntroTimeline` clock, set by SetupWizardShell
+`intro="full"`) plays the first-run ink intro on the same canvas: its own
+density pass and the riso `print.frag` compiled with `RISO_INTRO` (the mark),
+one context, frame 0 links the programs before the clock starts. The reveal
+runs up to 60 fps (DPR ≤ 1.5 within 1.6MP, touch 1.0MP), then the dried print
+holds on the drift base layer with no work. The timeline's hand-off gives the
+canvas back: a drift module dissolves in from that frame over its first
+segment. Reduced motion, software GL or a re-run draws the dried print once;
+no WebGL2 starts the timeline as `fallback`.
+
 `paperOverlay` (0–0.95) lays one uniform layer of the theme's paper over any
 wallpaper (live module or image), for surfaces that read over it. The riso
 print needs none.
