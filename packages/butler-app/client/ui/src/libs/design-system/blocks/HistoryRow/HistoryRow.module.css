@@ -1,0 +1,154 @@
+/* A day of visits: a quiet heading, then rows with no gaps. */
+.group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.heading {
+  margin: 0;
+  padding-inline: var(--space-sm);
+}
+
+.rows {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+/* One line: the Clickable spans the row (a subgrid), the trail sits over
+   its last column so the time never moves and the whole row opens. */
+.row {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: var(--radius-control);
+}
+
+.row > .main {
+  display: grid;
+  min-height: var(--control-height-lg);
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding-inline: var(--space-sm);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-tight);
+}
+
+.row[data-selected] > .main {
+  background: var(--selection);
+}
+
+.lead {
+  display: flex;
+  min-width: 0;
+  grid-column: 1;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline-end: var(--space-md);
+}
+
+.text {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.title {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+}
+
+.host {
+  min-width: 6ch;
+  flex: 0 10 auto;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+}
+
+/* Selection mode: a 14px check box in place of nothing; the row is the
+   checkbox, so the box is decorative. */
+.check {
+  display: inline-grid;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--primary-foreground);
+}
+
+.row[data-selected] .check {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.trail {
+  display: inline-flex;
+  z-index: 1;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  justify-content: end;
+  gap: var(--space-xs);
+  margin-inline-end: var(--space-sm);
+  pointer-events: none;
+}
+
+.time {
+  white-space: nowrap;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  pointer-events: auto;
+}
+
+/* With a fine pointer the actions take the time column on hover or keyboard
+   focus; touch keeps both visible. */
+@media (hover: hover) and (pointer: fine) {
+  .trail {
+    display: inline-grid;
+    justify-items: end;
+  }
+
+  .time,
+  .actions {
+    grid-area: 1 / 1;
+  }
+
+  .actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-fast) var(--motion-ease-standard);
+  }
+
+  .row[data-has-actions]:is(:hover, :focus-within) .actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .row[data-has-actions]:is(:hover, :focus-within) .time {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions {
+    transition: none;
+  }
+}
