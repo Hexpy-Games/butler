@@ -54,6 +54,7 @@ interface ButlerAppBridge {
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   listLibrary?: (input: Record<string, string>) => Promise<unknown>;
   saveLibrary?: (item: unknown) => Promise<unknown>;
+  librarySnapshot?: (id: string) => Promise<unknown>;
   deleteLibrary?: (id: string) => Promise<unknown>;
   setUpdateProgress?: (value: number | "indeterminate" | null) => Promise<void>;
   recordUiCrash?: (input: unknown) => Promise<unknown>;
@@ -286,6 +287,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   const url = new URL(path, window.location.origin);
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
   if (url.pathname === "/library" && method === "POST") return callBridge<T>(bridge,"saveLibrary",parseBody(options.body));
+  if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
   const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
   if (graph) return await callBridge<T>(bridge, graph.method, graph.input);

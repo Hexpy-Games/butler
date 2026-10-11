@@ -5,6 +5,7 @@ import type {
   ImgHTMLAttributes,
   ReactNode,
 } from "react";
+import { dsStyle } from "../../lib/internal";
 import { cn } from "../../lib/utils";
 import styles from "./ArtifactPreview.module.css";
 
@@ -32,11 +33,27 @@ export function ArtifactPreviewImage({
   return <img className={cn(styles.image, className)} data-openable={props.onClick ? "true" : undefined} {...props} />;
 }
 
+export interface ArtifactPreviewFrameProps extends DsBaseProps<IframeHTMLAttributes<HTMLIFrameElement>> {
+  /**
+   * CSS pixel size of content that must show at its own size (a scrap's clipped part, a fixed-size page part).
+   * The frame takes exactly this size; ArtifactPreview scrolls when it is larger than the preview.
+   */
+  intrinsicSize?: { width: number; height: number };
+}
+
 export function ArtifactPreviewFrame({
   className,
+  intrinsicSize,
   ...props
-}: DsBaseProps<IframeHTMLAttributes<HTMLIFrameElement>>) {
-  return <iframe className={cn(styles.frame, className)} {...props} />;
+}: ArtifactPreviewFrameProps) {
+  return (
+    <iframe
+      className={cn(styles.frame, className)}
+      data-intrinsic={intrinsicSize ? "" : undefined}
+      style={intrinsicSize ? dsStyle({ width: `${intrinsicSize.width}px`, height: `${intrinsicSize.height}px` }) : undefined}
+      {...props}
+    />
+  );
 }
 
 export function ArtifactPreviewPre({

@@ -246,7 +246,7 @@ export interface BrowserCopy {
   dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
   attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
   viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
-  element: string; viewKind: string; document: string; attach: string; openSource: string; remove: string; archivedClosed: (count: number) => string;
+  element: string; viewKind: string; document: string; attach: string; openSource: string; openSourcePage: string; remove: string; archivedClosed: (count: number) => string;
   pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
   stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
   enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { Box, Button, EmptyLine, Grid, Input, PageContainer, ScrollArea, Section, Stack } from "@/butler-ds";
-import { LibraryItemCard } from "./LibraryItemCard";
+import { LibraryItemCard, openLibraryItem } from "./LibraryItemCard";
+import { ScrapViewer } from "./ScrapViewer";
 import { LibraryAttachDialog } from "./LibraryAttachDialog";
 import { useLibraryPage, type LibraryItem, type LibraryKind } from "./libraryStore";
 function LibrarySection({ kind, query, onAttach }: { kind: LibraryKind; query: string; onAttach: (item: LibraryItem) => void }) {
@@ -23,5 +24,6 @@ export function LibraryPage() {
     <Input value={text} onChange={event => setText(event.target.value)} aria-label={appCopy.browser.librarySearch} placeholder={appCopy.browser.librarySearch} />
     {(["scrap", "document", "bookmark", "output"] as const).map(kind => <LibrarySection key={kind} kind={kind} query={query} onAttach={setAttachment} />)}
     <LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} />
+    <ScrapViewer onSource={item => void openLibraryItem(item, true)} />
   </Stack></Box></PageContainer></ScrollArea>;
 }

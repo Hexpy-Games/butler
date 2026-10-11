@@ -9,6 +9,15 @@ pub(super) async fn route(
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
     let value = match method {
+        Method::GET if path.ends_with("/snapshot") => {
+            let id = path
+                .trim_start_matches("/library/")
+                .trim_end_matches("/snapshot");
+            state
+                .application
+                .library(AppLibraryCommand::Snapshot { id: id.to_owned() })
+                .await?
+        }
         Method::GET => {
             let args = query(request.uri());
             let kind = args.get("kind").cloned().unwrap_or_else(|| "scrap".into());
@@ -84,6 +93,7 @@ fn valid(value: &Value) -> bool {
                 && value["crop"]
                     .as_str()
                     .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
+                && valid_snapshot(&value["snapshot"])
         }
         Some("bookmark") => {
             value["folder"].is_null() || value["folder"].as_str().is_some_and(|s| s.len() <= 200)
@@ -91,3 +101,17 @@ fn valid(value: &Value) -> bool {
         _ => false,
     }
 }
+/// A scrap's optional HTML copy of the picked part: its size, and the document when it is being saved.
+fn valid_snapshot(snapshot: &Value) -> bool {
+    snapshot.is_null()
+        || (["width", "height"].iter().all(|key| {
+            snapshot[*key]
+                .as_f64()
+                .is_some_and(|n| (1.0..=20_000.0).contains(&n))
+        }) && (snapshot["html"].is_null()
+            || snapshot["html"].as_str().is_some_and(|html| {
+                html.len() <= SNAPSHOT_LIMIT && html.starts_with("<!doctype html>")
+            })))
+}
+/// Bytes of one scrap's HTML copy; larger copies stay image-only on the client.
+const SNAPSHOT_LIMIT: usize = 6 * 1024 * 1024;

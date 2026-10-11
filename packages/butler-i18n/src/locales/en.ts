@@ -276,7 +276,7 @@ export const enUsCopy: AppCopy = {
     scraps: "Scraps", documents: "Documents", outputs: "Outputs", loadMore: "More", emptyLibrary: "No items", bookmarkFolder: "Folder",
     movedTo: (title) => `Moved the tab to ‘${title}’`, library: "Library", librarySearch: "Search the library", recentScraps: "Recent scraps",
     viewAll: "View all", scrapped: "Scrapped", scrapsSaved: (count) => `Saved ${count} scraps`, view: "View", all: "All", elements: "Elements",
-    views: "Views", element: "Element", viewKind: "View", document: "Document", attach: "Attach to chat", openSource: "Open source", remove: "Delete",
+    views: "Views", element: "Element", viewKind: "View", document: "Document", attach: "Attach to chat", openSource: "Open source", openSourcePage: "Open source page", remove: "Delete",
     archivedClosed: (count) => `Closed ${count} conversation tabs`, pageSays: "Page message", authNeeded: "Sign-in required", username: "Username",
     password: "Password", signIn: "Sign in", ok: "OK", cancel: "Cancel", leaveTitle: "Leave this page?", stay: "Stay", leave: "Leave",
     viewInBrowser: "View in Browser", toolOpen: "Open page", toolAct: "Browser action", toolSelection: "Read the selection", sectionTitle: "Browser",

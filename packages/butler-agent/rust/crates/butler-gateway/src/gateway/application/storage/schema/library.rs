@@ -7,6 +7,7 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         CREATE INDEX IF NOT EXISTS browser_library_kind_time ON browser_library(kind,created_at DESC,id DESC);
         CREATE UNIQUE INDEX IF NOT EXISTS browser_bookmark_url ON browser_library(url) WHERE kind='bookmark';
         CREATE VIRTUAL TABLE IF NOT EXISTS browser_library_fts USING fts5(terms);
+        CREATE TABLE IF NOT EXISTS browser_library_snapshot(id TEXT PRIMARY KEY,html TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS browser_library_migration(version INTEGER PRIMARY KEY);").map_err(AppStorageError::sqlite)
 }
 /// Runs once on the storage owner thread, in bounded primary-key pages.

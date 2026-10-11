@@ -23,6 +23,7 @@ export function installUserBrowser(app, getWindow) {
     switch (op) {
       case "pick": return browser.selection.mode(input.id, input.value);
       case "selection-command": return browser.selection.command(input.op, input.id);
+      case "selection-snapshot": return browser.selection.snapshot(input.id, input.item);
       case "state": return browser.snapshot();
       case "open": return browser.open();
       case "hide": return browser.hide();

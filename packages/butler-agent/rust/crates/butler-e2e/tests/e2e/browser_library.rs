@@ -121,3 +121,61 @@ async fn library_pages_are_complete_in_latest_first_order() -> Result<(), Harnes
     );
     s.finish().await
 }
+#[tokio::test]
+async fn scrap_snapshots_stay_out_of_pages_and_leave_with_their_scrap() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let mut s = Setup::new("BROWSER-LIBRARY-SNAPSHOT")?.start().await?;
+    let html = format!(
+        "<!doctype html><html><body><div>{}</div></body></html>",
+        "clipped part ".repeat(20_000)
+    );
+    let mut item = scrap("copy", "Clipped card");
+    item["snapshot"] = json!({"html": html, "width": 320.5, "height": 140});
+    let reply = s.gw.post("/library", item.clone()).await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let listed = page(&s, "/library?kind=scrap").await?;
+    assert_eq!(
+        listed["items"][0]["snapshot"],
+        json!({"width": 320.5, "height": 140})
+    );
+    assert!(listed.to_string().len() < 4096, "pages carry no HTML copy");
+    s.agent.terminate().await?;
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(
+        page(&s, "/library/copy/snapshot").await?["html"],
+        json!(html)
+    );
+    // A size without a document keeps the stored copy; a scrap without a size drops it.
+    item["snapshot"] = json!({"width": 320.5, "height": 140});
+    assert_eq!(s.gw.post("/library", item.clone()).await?.status, 200);
+    assert_eq!(
+        page(&s, "/library/copy/snapshot").await?["html"],
+        json!(html)
+    );
+    for bad in [
+        json!({"html": "<script>alert(1)</script>", "width": 10, "height": 10}),
+        json!({"html": format!("<!doctype html>{}", "x".repeat(6 * 1024 * 1024)), "width": 10, "height": 10}),
+        json!({"html": "<!doctype html>", "width": 0, "height": 10}),
+    ] {
+        item["snapshot"] = bad;
+        assert_eq!(s.gw.post("/library", item.clone()).await?.status, 400);
+    }
+    assert_eq!(
+        page(&s, "/library/copy/snapshot").await?["html"],
+        json!(html)
+    );
+    assert_eq!(s.gw.delete("/library/copy").await?.status, 200);
+    assert_eq!(
+        page(&s, "/library/copy/snapshot").await?["html"],
+        Value::Null
+    );
+    let mut plain = scrap("plain", "Image only");
+    plain["snapshot"] = Value::Null;
+    assert_eq!(s.gw.post("/library", plain).await?.status, 200);
+    assert_eq!(
+        page(&s, "/library/plain/snapshot").await?["html"],
+        Value::Null
+    );
+    s.finish().await
+}

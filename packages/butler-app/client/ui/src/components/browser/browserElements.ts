@@ -11,6 +11,8 @@ export interface PickedElement {
   crop: string; capturedAt: string; rect: { x: number; y: number; width: number; height: number };
   ref?: string; observation?: string;
 }
+/** A scrap's HTML copy of exactly the picked part; only its size is listed with the scrap. */
+export interface ScrapSnapshot { html?: string; width: number; height: number }
 export const useElementDraft = create<{ session: string; items: ElementAttachment[] }>(() => ({ session: "", items: [] }));
 
 export async function restoreElementDraft(session: string) {
@@ -66,8 +68,18 @@ export function clearElementDraft(session: string, submitted: ElementAttachment[
     await persist(session, (draft?.element_attachments ?? []).filter(item => !submitted.some(old => old.id === item.id)));
   });
 }
+/** The live pick's HTML copy, taken now while its page is open; null keeps the scrap image-only. */
+async function snapshotOf(element: PickedElement): Promise<ScrapSnapshot | null> {
+  try {
+    const copy = await window.butlerBrowser?.call("selection-snapshot", { id: element.tab, item: element.id }) as ScrapSnapshot | null | undefined;
+    return copy?.html ? { html: copy.html, width: copy.width, height: copy.height } : null;
+  } catch { return null; }
+}
 export async function scrapElements(elements: PickedElement[]) {
-  for (const element of elements) await api("/library", { method: "POST", body: JSON.stringify({ ...element, kind: "scrap" }) });
+  for (const element of elements) {
+    const snapshot = await snapshotOf(element);
+    await api("/library", { method: "POST", body: JSON.stringify({ ...element, kind: "scrap", ...(snapshot ? { snapshot } : {}) }) });
+  }
   libraryChanged();
 }
 
