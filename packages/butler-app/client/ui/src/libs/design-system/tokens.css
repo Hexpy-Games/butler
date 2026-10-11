@@ -111,6 +111,35 @@
   --motion-ease-linear: linear;
   --motion-ease-enter: var(--motion-ease-standard);
   --motion-ease-exit: var(--motion-ease-accelerate);
+  /* First-run intro. Draw: a pen stroke that starts and lands softly (the
+     mark's ring). Settle: a critically damped spring (omega*T 8.6, no
+     overshoot) for plates sliding into register; the emphasized curve is its
+     fallback. Out-cubic: the ink bloom and flow clock (GL timelines only). */
+  --motion-ease-draw: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-ease-settle: linear(
+    0,
+    0.0698,
+    0.2129,
+    0.3696,
+    0.5129,
+    0.6331,
+    0.7287,
+    0.8023,
+    0.8576,
+    0.8984,
+    0.9281,
+    0.9494,
+    0.9646,
+    0.9754,
+    0.9829,
+    0.9882,
+    0.9919,
+    0.9944,
+    0.9962,
+    0.9974,
+    1
+  );
+  --motion-ease-out-cubic: cubic-bezier(0.33, 1, 0.68, 1);
   /* Travel and scale are tokens so reduced motion can zero them globally and
      every token-driven animation becomes a pure opacity fade. */
   --motion-distance-xs: 2px;
@@ -145,6 +174,18 @@
      both to 0 (a static edge, a pointer that jumps). */
   --motion-agent-edge: 14s;
   --motion-pointer-glide: 400ms;
+  /* Sequences. Rows of a setup card arrive 30ms apart once the morphing card
+     is 94% there (150ms on the emphasized curve); intro text lines 70ms
+     apart. The intro segments are the first-run ink scene's timeline: the
+     drop, the pen drawing the ring, the ink bloom, and the whole reveal until
+     the GL loop stops. */
+  --motion-stagger-row: 30ms;
+  --motion-stagger-intro: 70ms;
+  --motion-morph-rows: 150ms;
+  --motion-intro-drop: 350ms;
+  --motion-intro-draw: 850ms;
+  --motion-intro-bloom: 1450ms;
+  --motion-intro-total: 2900ms;
   /* Skeleton heights for a text line and a heading line. */
   --skeleton-height-line: 0.75rem;
   --skeleton-height-title: 1.125rem;
