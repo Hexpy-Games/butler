@@ -1,5 +1,5 @@
 /** Offline sign-in fixtures served by Host header: a shop with a login, MFA,
- * a cookie-echo account page, a checkout with postcode/pay/unknown frames and
+ * a cookie-echo account page, a checkout with postcode/pay/cross-site frames and
  * card fields, hop pages to an ungranted site, a same-site look-alike login and
  * a security-keypad bank page. No real accounts; nothing leaves 127.0.0.1. */
 export const HOSTS = ["login.fixture-shop.test", "www.fixture-shop.test", "files.fixture-shop.test", "www.fixture-evil.test",
@@ -64,7 +64,9 @@ export function startSignInFixtures(password: string): SignInFixture {
     if (host === "www.fixture-shop.test" && path === "/refresh") return page("Refresh", `<meta http-equiv="refresh" content="0;url=${url("www.fixture-evil.test", "/collect")}">`);
     if (host === "postcode.map.daum.net") return page("Postcode", `<input aria-label="도로명 주소" name="q"><button>주소 검색</button>`);
     if (host === "js.tosspayments.com") return page("Pay", `<button>결제하기</button>`);
-    if (host === "ads.fixture-ads.test") return page("Ad", `<a href="#">지금 설치</a>`);
+    if (host === "ads.fixture-ads.test") return page("Ad", `<a href="#" onclick="this.textContent='설치됨';return false">지금 설치</a>
+      <label>광고 계정 비밀번호 <input name="pw" type="password"></label>
+      <label>쿠폰 <input name="coupon" onkeydown="if(event.key==='Enter')this.value+='!'"></label>`);
     if (host === "bank.fixture-bank.test") {
       const keys = Array.from({ length: 12 }, (_, index) => `<img class="keypad-key" alt="" width="40" height="40" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-key="${index}">`).join("");
       return page("Bank", `<label>비밀번호 <input id="pin" type="password" readonly></label><div class="keypad">${keys}</div>`);

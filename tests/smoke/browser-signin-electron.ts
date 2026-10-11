@@ -1,7 +1,7 @@
 // test-category: security
 /** P2b signed-in sites in the real App with offline fixtures; stub only, no model calls.
- * Main enforces what Rust decides: grants via a drag, hops refused, frame classes,
- * takeover-only fields, keypads, and (keychain opt-in) the fill with a canary. */
+ * Main enforces what Rust decides: grants via a drag, hops refused, open cross-site
+ * frames with payment classed, takeover-only fields, keypads, and (keychain opt-in) the fill with a canary. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -91,15 +91,17 @@ try {
   assert.equal((await internal("tab.observe", mine, { include_image: false })).reason, "signed_in_grant_required", "revoked site asks again");
   console.log("hop control: granted site navigates; revoke fences and asks again");
 
-  // Checkout: the postcode utility frame acts under the shop's grant; the pay widget
-  // needs a card on every act; card fields and unknown frames stay closed.
+  // Checkout (decision 37): the postcode utility frame and the cross-site ad frame
+  // act with no card; the pay widget needs a card on every act; card and password
+  // fields are takeover-only in any frame.
   await app.call("control", { id: mine, holder: "agent" });
   await app.main(`${contents(mine)}.loadURL(${JSON.stringify(shop("/checkout"))})`);
-  await waitBrowser(async () => { const r = await internal("tab.observe", mine, { include_image: false }); return r.status === "ok" && String(r.text).includes("주소 검색"); }, "checkout frames");
-  const checkout = await internal("tab.observe", mine, { include_image: false });
+  await waitBrowser(async () => { const r = await internal("tab.observe", mine, { include_image: false }); return r.status === "ok" && ["주소 검색", "지금 설치"].every(label => String(r.text).includes(label)); }, "checkout frames");
+  const checkout = await internal("tab.observe", mine, { include_image: true });
   const text = String(checkout.text);
-  assert.ok(text.includes("unavailable"), "unknown frame closed");
-  assert.ok(!text.includes("지금 설치"), "unknown frame content never observed");
+  const adFrame = (checkout.frames as Array<{ id: string; url: string; class?: string }>).find(frame => frame.url.includes("fixture-ads.test"))!;
+  assert.equal(adFrame.class, "cross_site", JSON.stringify(checkout.frames));
+  assert.ok(!text.includes("unavailable"), "no frame is closed");
   const postcode = refOf(text, /button "주소 검색" \[([^\]]+)\]/u);
   const pay = refOf(text, /button "결제하기" \[([^\]]+)\]/u);
   const card = refOf(text, /textbox "Card number" \[([^\]]+)\]/u);
@@ -110,15 +112,36 @@ try {
   assert.equal(widget.status, "ok", JSON.stringify(widget)); assert.ok(widget.steps[0].frame_payment || /tosspayments/u.test(widget.steps[0].hit.frame), "pay widget act is always confirmed");
   const secure = await prepare(card, "fill");
   assert.equal(secure.reason, "secure_field", JSON.stringify(secure)); assert.match(String(secure.recovery), /browser_wait_for_user/u);
-  console.log("frames: utility acts, payment confirmed, card takeover-only, unknown closed");
-  // An unknown frame opens only after this conversation's frame grant (the card's effect).
-  const adFrame = (checkout.frames as Array<{ id: string; url: string }>).find(frame => frame.url.includes("fixture-ads.test"))!.id;
-  const asked = await internal("tab.observe", mine, { include_image: false, frame: adFrame });
-  assert.deepEqual([asked.reason, asked.site, asked.frame_site], ["frame_grant_required", "fixture-shop.test", "fixture-ads.test"], JSON.stringify(asked));
-  await internal("signin.grant", "", { site: "fixture-shop.test", frame_site: "fixture-ads.test" });
-  const opened = await internal("tab.observe", mine, { include_image: false });
-  assert.ok(String(opened.text).includes("지금 설치"), "granted frame is observed");
-  console.log("frame grant: unknown frame opens only after the grant");
+  const framePassword = await prepare(refOf(text, /textbox "광고 계정 비밀번호" \[([^\]]+)\]/u), "fill");
+  assert.equal(framePassword.reason, "secure_field", `password in a cross-site frame is takeover-only: ${JSON.stringify(framePassword)}`);
+  // The cross-site frame needs no grant or card: Rust asks only for payment, upload or payment submit.
+  const noCard = (step: Record<string, any>) => !step.frame_payment && !step.upload && !(step.payment && step.submit) && !/stripe|paypal|toss|inicis|nicepay|kakaopay|naverpay/u.test(String(step.hit?.frame));
+  const install = refOf(text, /link "지금 설치" \[([^\]]+)\]/u);
+  const byRef = await prepare(install);
+  assert.equal(byRef.status, "ok", JSON.stringify(byRef)); assert.ok(noCard(byRef.steps[0]), JSON.stringify(byRef.steps[0]));
+  assert.equal(byRef.steps[0].hit.frame, "ads.fixture-ads.test", JSON.stringify(byRef.steps[0]));
+  const byPoint = await internal("tab.prepare", mine, { observation: checkout.obs, steps: [{ action: "click", point: await adPoint(mine, checkout, install), expect: "link 지금 설치" }] });
+  assert.equal(byPoint.status, "ok", `a point into the cross-site frame is open: ${JSON.stringify(byPoint)}`); assert.ok(noCard(byPoint.steps[0]), JSON.stringify(byPoint.steps[0]));
+  const acted = await internal("tab.act", mine, { observation: checkout.obs, steps: [{ action: "click", ref: install }], prepared_steps: byRef.steps });
+  assert.equal(acted.status, "ok", JSON.stringify(acted)); assert.equal(acted.steps[0].status, "completed", JSON.stringify(acted));
+  await waitBrowser(async () => String((await internal("tab.observe", mine, { include_image: false })).text).includes("설치됨"), "click inside the cross-site frame");
+  console.log("frames: cross-site frame read and clicked (ref and point) with no card; utility acts; payment confirmed; card and frame password takeover-only");
+  // Signed-out conversation tabs: points, fills and keys reach the cross-origin frame too.
+  const out = await internal("tab.open", undefined, { url: shop("/checkout") });
+  assert.equal(out.status, "ok", JSON.stringify(out));
+  await waitBrowser(async () => String((await internal("tab.observe", out.tab, { include_image: false })).text).includes("지금 설치"), "signed-out checkout frames");
+  const outside = await internal("tab.observe", out.tab, { include_image: true });
+  const outsideRef = refOf(String(outside.text), /link "지금 설치" \[([^\]]+)\]/u);
+  const outsideSteps = [{ action: "click", point: await adPoint(out.tab, outside, outsideRef), expect: "link 지금 설치" },
+    { action: "fill", ref: refOf(String(outside.text), /textbox "쿠폰" \[([^\]]+)\]/u), value: "AD-1" }, { action: "press", value: "Enter" }];
+  const outsidePrepared = await internal("tab.prepare", out.tab, { observation: outside.obs, steps: outsideSteps });
+  assert.equal(outsidePrepared.status, "ok", `signed-out frame steps are open: ${JSON.stringify(outsidePrepared)}`);
+  for (const step of outsidePrepared.steps) assert.ok(noCard(step), JSON.stringify(step));
+  const outsideActed = await internal("tab.act", out.tab, { observation: outside.obs, steps: outsideSteps, prepared_steps: outsidePrepared.steps });
+  assert.equal(outsideActed.status, "ok", JSON.stringify(outsideActed));
+  await waitBrowser(async () => { const text = String((await internal("tab.observe", out.tab, { include_image: false })).text); return text.includes("설치됨") && text.includes('value="AD-1!"'); }, "point, fill and key inside the signed-out cross-origin frame");
+  await internal("tab.close", out.tab);
+  console.log("frames: signed-out tab clicks, fills and presses keys in the cross-origin frame with no card");
 
   // A security keypad answers user_required on every act.
   await internal("signin.grant", "", { site: "fixture-bank.test" });
@@ -148,6 +171,14 @@ try {
   if (agentHome) rmSync(agentHome, { recursive: true, force: true });
 }
 assert.ok(!readFileSync(join(evidence, "electron.log"), "utf8").includes(CANARY), "canary in the App log");
+
+/** The screenshot point of an observed node inside the checkout's ad frame. */
+async function adPoint(tab: string, observation: Record<string, any>, ref: string) {
+  const node = (observation.nodes as Array<{ ref: string; rect: { x: number; y: number; width: number; height: number } }>).find(item => item.ref === ref)!;
+  const origin = await page<{ x: number; y: number }>(tab, "(()=>{const f=document.querySelector('#ad'),r=f.getBoundingClientRect();return {x:r.x+f.clientLeft,y:r.y+f.clientTop}})()");
+  const geometry = observation.image_geometry as { width: number; height: number; cssWidth: number; cssHeight: number };
+  return [Math.round((origin.x + node.rect.x + node.rect.width / 2) * geometry.width / geometry.cssWidth), Math.round((origin.y + node.rect.y + node.rect.height / 2) * geometry.height / geometry.cssHeight)];
+}
 
 async function fillFlow() {
   const added = await security("POST", "/security/signins", { origin: fixtures.url("login.fixture-shop.test", "").replace(/\/$/u, ""), username: "owner@fixture.test", password: CANARY });

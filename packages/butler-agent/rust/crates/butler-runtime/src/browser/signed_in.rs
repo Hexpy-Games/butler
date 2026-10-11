@@ -24,17 +24,19 @@ pub const UTILITY_FRAME_HOSTS: &[&str] = &[
     "t1.kakaocdn.net",
 ];
 
-/// How a frame inside a signed-in tab is treated (decision 25).
+/// How a frame inside a signed-in tab is treated (decision 37). Every class
+/// is observable; only payment widgets keep a gate (field-level gates for
+/// credentials and keypads apply in any frame).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameClass {
-    /// Same site as a granted site, or a frame grant.
+    /// Same site as a granted site.
     Granted,
-    /// Release-maintained utility frame; acts under the parent grant.
+    /// Release-maintained utility frame (address search).
     Utility,
     /// Payment widget: labels only, a card for every act.
     Payment,
-    /// Anything else: unavailable until the user grants it for this conversation.
-    Unknown,
+    /// Any other embedded site: open like the page, its content untrusted data.
+    CrossSite,
 }
 
 impl FrameClass {
@@ -43,7 +45,7 @@ impl FrameClass {
             Self::Granted => "granted",
             Self::Utility => "utility",
             Self::Payment => "payment",
-            Self::Unknown => "unknown",
+            Self::CrossSite => "cross_site",
         }
     }
 }
@@ -110,7 +112,7 @@ pub fn signed_in_place(raw: &str, sites: &[String]) -> SignedInPlace {
 }
 
 /// Classifies a frame URL inside a signed-in tab whose page is on `top_site`.
-pub fn frame_class(raw: &str, top_site: &str, sites: &[String], frames: &[String]) -> FrameClass {
+pub fn frame_class(raw: &str, top_site: &str, sites: &[String]) -> FrameClass {
     if matches!(raw, "about:blank" | "about:srcdoc" | "") {
         return FrameClass::Granted;
     }
@@ -118,35 +120,29 @@ pub fn frame_class(raw: &str, top_site: &str, sites: &[String], frames: &[String
         .ok()
         .and_then(|url| url.host_str().map(str::to_ascii_lowercase));
     let Some(host) = host else {
-        return FrameClass::Unknown;
+        return FrameClass::CrossSite;
     };
     let site = site_of_host(&host).unwrap_or_default();
     if super::payment_host(&host) {
         return FrameClass::Payment;
     }
-    if site == top_site || sites.contains(&site) || frames.contains(&frame_key(top_site, &site)) {
+    if site == top_site || sites.contains(&site) {
         return FrameClass::Granted;
     }
     if UTILITY_FRAME_HOSTS.contains(&host.as_str()) {
         return FrameClass::Utility;
     }
-    FrameClass::Unknown
-}
-
-/// The stored key of a frame grant: `<site>:<frame site>`.
-pub fn frame_key(site: &str, frame_site: &str) -> String {
-    format!("{site}:{frame_site}")
+    FrameClass::CrossSite
 }
 
 /// The policy main enforces on a signed-in conversation tab. Rust decides;
 /// main only applies it and reports frames back for re-checking.
-pub fn signed_in_policy(content_origin: &str, sites: &[String], frames: &[String]) -> Value {
+pub fn signed_in_policy(content_origin: &str, sites: &[String]) -> Value {
     json!({
         "mode": "signed_in",
         "content_origin": content_origin,
         "secure_keypads": super::SECURE_KEYPAD_MARKERS,
         "sites": sites,
-        "frame_grants": frames,
         "idp_pages": IDP_PAGES.iter().map(|(host, paths)| json!({"host": host, "site": site_of_host(host), "paths": paths})).collect::<Vec<_>>(),
         "utility_hosts": UTILITY_FRAME_HOSTS,
         "payment_sites": super::PAYMENT_SITES,
@@ -156,21 +152,17 @@ pub fn signed_in_policy(content_origin: &str, sites: &[String], frames: &[String
 }
 
 /// Rust's re-check of the frames main reported for a signed-in observation:
-/// an unknown frame must never carry page content, and every class must match.
-pub fn frames_consistent(
-    frames: &[Value],
-    top_site: &str,
-    sites: &[String],
-    grants: &[String],
-) -> bool {
+/// every class must match, so a payment widget is never observed as anything
+/// but labels.
+pub fn frames_consistent(frames: &[Value], top_site: &str, sites: &[String]) -> bool {
     frames.iter().all(|frame| {
         let url = frame["url"].as_str().unwrap_or("");
-        let class = frame_class(url, top_site, sites, grants);
+        let class = frame_class(url, top_site, sites);
         match frame["class"].as_str() {
             Some(reported) => {
                 reported == class.as_str() || (reported == "main" && frame["id"] == "f0")
             }
-            None => class != FrameClass::Unknown,
+            None => class != FrameClass::Payment,
         }
     })
 }
