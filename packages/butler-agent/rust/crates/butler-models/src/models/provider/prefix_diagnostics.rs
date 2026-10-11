@@ -225,7 +225,7 @@ impl Prepared {
                 std::str::from_utf8(&self.prefix).map_err(|error| failure(error.to_string()))?;
             self.tokens = catalog
                 .tokenizer
-                .encode_ordinary(text)
+                .encode_json_components(text)
                 .map_err(|error| failure(error.to_string()))?
                 .into();
             self.metadata["prefixTokens"] = self.tokens.len().into();
