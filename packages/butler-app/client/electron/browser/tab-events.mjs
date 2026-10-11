@@ -51,8 +51,10 @@ export function wireTab(tab, actions) {
     const release = actions.nativeCover();
     await actions.capture(tab);
     actions.detach(tab);
-    const template = [{ role: "copy", enabled: Boolean(params.selectionText) }, { role: "selectAll" }];
+    const template = [...await actions.linkMenu(params.linkURL), { role: "copy", enabled: Boolean(params.selectionText) }, { role: "selectAll" }];
     if (params.isEditable) template.unshift({ role: "paste" });
-    Menu.buildFromTemplate(template).popup({ window: actions.window(), callback: release });
+    const bounds = tab.view.getBounds();
+    Menu.buildFromTemplate(template).popup({ window: tab.popupWindow ?? actions.window(),
+      x: Math.round(bounds.x + params.x), y: Math.round(bounds.y + params.y), callback: release });
   });
 }
