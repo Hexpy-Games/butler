@@ -15,7 +15,7 @@ fn ids(page: &Value) -> Vec<String> {
         .collect()
 }
 async fn group(gw: &Gateway, kind: &str, name: &str) -> Result<String, HarnessError> {
-    let created = ok(gw
+    let created = ok(&gw
         .post("/library/groups", json!({"kind": kind, "name": name}))
         .await?);
     assert_eq!(created["name"], name);
@@ -23,7 +23,7 @@ async fn group(gw: &Gateway, kind: &str, name: &str) -> Result<String, HarnessEr
     Ok(created["id"].as_str().unwrap().to_owned())
 }
 async fn change(gw: &Gateway, body: Value) -> Result<Value, HarnessError> {
-    Ok(ok(gw.patch("/library/items", body).await?))
+    Ok(ok(&gw.patch("/library/items", body).await?))
 }
 async fn error(
     gw: &Gateway,
@@ -50,10 +50,10 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         ("b", "Osaka food"),
         ("c", "Tax form"),
     ] {
-        ok(s.gw.post("/library", scrap(id, title)).await?);
+        ok(&s.gw.post("/library", scrap(id, title)).await?);
     }
     let mark = json!({"id":"x","kind":"bookmark","title":"Docs","url":"https://docs.example.com/","capturedAt":"2026-10-09T00:00:00Z"});
-    let bookmark = ok(s.gw.post("/library", mark).await?)["id"]
+    let bookmark = ok(&s.gw.post("/library", mark).await?)["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -94,12 +94,12 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         .0,
         400
     );
-    let moved = ok(s
+    let moved = ok(&s
         .gw
         .patch(&format!("/library/groups/{work}"), json!({"position": 0}))
         .await?);
     assert_eq!(moved["position"], 0);
-    let renamed = ok(s
+    let renamed = ok(&s
         .gw
         .patch(
             &format!("/library/groups/{travel}"),
@@ -209,7 +209,7 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         ids(&page(&s, "/library?kind=scrap&q=food&tags=seoul").await?),
         ["b"]
     );
-    let renamed = ok(s
+    let renamed = ok(&s
         .gw
         .patch("/library/tags", json!({"from":"seoul","to":"서울"}))
         .await?);
@@ -217,7 +217,7 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         renamed,
         json!({"tag":{"name":"서울","count":3},"merged":false})
     );
-    let merged = ok(s
+    let merged = ok(&s
         .gw
         .patch("/library/tags", json!({"from":"Food","to":"서울"}))
         .await?);
@@ -269,7 +269,7 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
     );
     assert_eq!(ids(&page(&s, "/library?kind=scrap&q=kyoto").await?), ["a"]);
     assert_eq!(ids(&page(&s, "/library?kind=scrap&q=japan").await?), ["a"]);
-    let resaved = ok(s
+    let resaved = ok(&s
         .gw
         .post("/library", scrap("a", "Kyoto temples, updated"))
         .await?);
@@ -301,9 +301,9 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         page(&s, &format!("/library/facets?kind=scrap&group={work}")).await?["total"],
         1
     );
-    ok(s.gw.delete("/library/tags/%EC%84%9C%EC%9A%B8").await?);
+    ok(&s.gw.delete("/library/tags/%EC%84%9C%EC%9A%B8").await?);
     assert_eq!(page(&s, "/library/tags").await?["tags"], json!([]));
-    ok(s.gw.delete(&format!("/library/groups/{work}")).await?);
+    ok(&s.gw.delete(&format!("/library/groups/{work}")).await?);
     let overview = page(&s, "/library/groups?kind=scrap").await?;
     assert_eq!(
         overview["groups"]
@@ -322,7 +322,7 @@ async fn groups_tags_and_renames_organize_the_library() -> Result<(), HarnessErr
         page(&s, "/library?kind=scrap&q=Seoul").await?["items"],
         json!([])
     );
-    ok(s.gw.delete("/library/a").await?);
+    ok(&s.gw.delete("/library/a").await?);
     assert_eq!(
         page(&s, "/library/groups?kind=scrap").await?["groups"][0]["count"],
         0
@@ -337,7 +337,7 @@ async fn site_facets_include_every_saved_source() -> Result<(), HarnessError> {
     for n in 0..55 {
         let mut item = scrap(&format!("site-{n}"), "Saved source");
         item["site"] = json!(format!("site{n:02}.example"));
-        ok(s.gw.post("/library", item).await?);
+        ok(&s.gw.post("/library", item).await?);
     }
     let facets = page(&s, "/library/facets?kind=scrap").await?;
     let sites = facets["sites"].as_array().unwrap();

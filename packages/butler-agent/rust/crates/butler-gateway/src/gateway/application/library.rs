@@ -14,6 +14,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 /// Explicit user (and agent tool) commands over App-owned Library records.
 pub enum AppLibraryCommand {
+    /// Browsing visits share the existing App-owned browser command lane.
+    History(crate::gateway::AppHistoryCommand),
     Page(AppLibraryQuery),
     /// Compact items across kinds for the agent's `library_search`.
     Search(AppLibraryQuery),
@@ -61,6 +63,7 @@ impl AppApplication {
     pub(super) fn library_owned(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
         use AppLibraryCommand as C;
         match command {
+            C::History(command) => self.history_owned(command),
             C::Page(q) => self.library_read(move |db| query::page(db, &q)),
             C::Search(q) => self.library_read(move |db| query::search(db, &q)),
             C::Bookmark { url } => self.library_read(move |db| lookup(db, &url)),

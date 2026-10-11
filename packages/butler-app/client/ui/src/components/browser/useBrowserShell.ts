@@ -1,3 +1,4 @@
+import { openHistory } from "./historyApi";
 import { useEffect, useState, type RefObject } from "react";
 import { useButlerStore } from "@/app/store";
 import { useSidebarAutoCollapse } from "@/butler-ds";
@@ -16,11 +17,13 @@ export function useBrowserShell(root: RefObject<HTMLElement | null>, sidebarWidt
   useEffect(() => { setPeek(false); }, [session, view, autoCollapsed]);
   useEffect(() => {
     connectBrowser();
-    return useButlerStore.subscribe((state, previous) => {
+    const unsubscribeHistory = window.butlerBrowser?.onHistory?.(() => openHistory());
+    const unsubscribeStore = useButlerStore.subscribe((state, previous) => {
       if (state.rightOpen && !previous.rightOpen && state.view.kind === "session") {
         useBrowserShellState.getState().setOpen(state.activeChatId, false);
       }
     });
+    return () => { unsubscribeHistory?.(); unsubscribeStore(); };
   }, []);
   useEffect(() => {
     if (!paneOpen) return;

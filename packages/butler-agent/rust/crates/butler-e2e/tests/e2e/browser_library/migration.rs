@@ -109,7 +109,7 @@ async fn bookmark_folders_become_groups_once_and_resaves_keep_organization()
     assert_eq!(page(&s, "/library/groups?kind=bookmark").await?, groups);
 
     // After the migration a folder names its group (created last when missing).
-    let saved = ok(s
+    let saved = ok(&s
         .gw
         .post("/library", bookmark("r1", Some("Reading")))
         .await?);
@@ -119,7 +119,7 @@ async fn bookmark_folders_become_groups_once_and_resaves_keep_organization()
         (Some("Reading"), Some(2))
     );
     assert_eq!(saved["group"], reading["id"]);
-    let moved = ok(s
+    let moved = ok(&s
         .gw
         .post("/library", bookmark("n1", Some("personal")))
         .await?);
@@ -127,13 +127,14 @@ async fn bookmark_folders_become_groups_once_and_resaves_keep_organization()
 
     // A re-save without folder (the address-bar star) keeps group, tags and the user's title.
     let id = saved["id"].as_str().unwrap();
-    ok(s.gw
+    ok(&s
+        .gw
         .patch(
             "/library/items",
             json!({"ids":[id],"addTags":["Later"],"title":"My reading"}),
         )
         .await?);
-    let again = ok(s.gw.post("/library", bookmark("r1", None)).await?);
+    let again = ok(&s.gw.post("/library", bookmark("r1", None)).await?);
     assert_eq!(
         (
             &again["group"],
@@ -148,7 +149,7 @@ async fn bookmark_folders_become_groups_once_and_resaves_keep_organization()
             &json!("Page r1 again")
         )
     );
-    let cleared = ok(s.gw.post("/library", bookmark("r1", Some(""))).await?);
+    let cleared = ok(&s.gw.post("/library", bookmark("r1", Some(""))).await?);
     assert_eq!(
         (&cleared["group"], cleared.get("folder")),
         (&Value::Null, None)

@@ -1,3 +1,4 @@
+import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
@@ -140,6 +141,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
+let storageCorrectionWatch = null;
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const uiCrashStore = createUiCrashStore(butlerDataRoot, () => appInfoView().version);
 const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
@@ -356,6 +358,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   startupTimeoutMs: 120_000,
+  startupDeadline: () => storageCorrectionWatch?.deadline() ?? 0,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
   onIntentionalExit: handleIntentionalAgentExit,
@@ -617,7 +620,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
-  if (startupPending()) { failStartup(); return; }
+  if (startupPending()) { storageCorrectionWatch?.close(); storageCorrectionWatch = null; failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -2155,6 +2158,7 @@ async function createWindow() {
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
     userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
@@ -2833,6 +2837,7 @@ app.on("window-all-closed", () => {
 app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
     powerStateMonitor?.stop();
@@ -2994,6 +2999,7 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (!failStartup()) app.quit();
 }
 
@@ -3002,8 +3008,15 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") startupStage("service");
-  if (stage === "agent_ready") startupStage("screen");
+  if (stage === "agent_starting" && startupPending()) {
+    startupStage("service");
+    storageCorrectionWatch?.close();
+    storageCorrectionWatch = watchStorageCorrection(butlerDataRoot, (deadline) => startupStage("storage", deadline));
+  }
+  if (stage === "agent_ready") {
+    storageCorrectionWatch?.close(); storageCorrectionWatch = null;
+    startupStage("screen");
+  }
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();

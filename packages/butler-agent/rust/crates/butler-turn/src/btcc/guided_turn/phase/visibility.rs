@@ -62,6 +62,7 @@ const NON_FULL: &[&str] = &[
     "list_wallpapers",
     "set_wallpaper",
     "save_wallpaper_module",
+    "browser_history_search",
     "library_search",
     "library_organize",
     "read_mcp_resource",
