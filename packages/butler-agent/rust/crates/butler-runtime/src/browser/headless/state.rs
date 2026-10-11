@@ -122,6 +122,7 @@ pub(crate) struct Tab {
     pub diagnostics: Option<super::hidden::Diagnostics>,
     /// The registered preview this tab shows (its own context and proxy).
     pub preview: Option<String>,
+    pub history_transition: Option<String>,
 }
 
 impl Tab {
@@ -162,6 +163,7 @@ impl Tab {
             hidden: None,
             diagnostics: None,
             preview: None,
+            history_transition: Some("generated".into()),
         }
     }
 

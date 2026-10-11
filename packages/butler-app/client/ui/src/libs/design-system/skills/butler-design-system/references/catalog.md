@@ -237,6 +237,7 @@
 | A view menu with radio and checkbox items | `DropdownMenu` |  |
 | A visible divider | `Separator` | `Space` |
 | A visible row menu | `OverflowActionMenu` | `ContextMenu` |
+| A wallpaper behind the new chat only (its wallpaper prop) | `PromptSuggestionList` | `ConversationShell` |
 | A wallpaper behind the new-chat prompt | `PromptSuggestionList` | `ManagementPage` |
 | A warning about the composer | `Notice` | `ComposerAdjunctPanel` |
 | A whole row or card should be clickable | `Clickable` | `Button` |
@@ -1901,6 +1902,7 @@ The conversation column: scroll container, readable message width, composer rese
 - Use for: The message timeline of a conversation or an observer transcript
 - Not for: A generic scrolling region → `ScrollArea`
 - Not for: One message → `MessageRow`
+- Not for: A wallpaper behind the new chat only (its wallpaper prop) → `PromptSuggestionList`
 - Tokens: `--composer-reserve`, `--page-max-width-reading`, `--conversation-bg`
 
 ### DisclosureRow

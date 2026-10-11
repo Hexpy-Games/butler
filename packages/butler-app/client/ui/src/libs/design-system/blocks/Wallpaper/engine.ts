@@ -119,10 +119,15 @@ export function createWallpaperEngine(canvas: HTMLCanvasElement, options: Wallpa
     },
     setMotion: (motion, pauseOnBattery) => update({ motion, pauseOnBattery }),
     setContentRect(rect) {
+      const appeared = (contentRect === null) !== (rect === null);
       contentRect = rect;
       box = readWallpaperCanvasBox(canvas); // A layout change may have moved the canvas too.
-      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame.
-      if (!intro.active() && renderer.usesContentRect() && wallpaperFrameMode(state) !== "animate") redraw();
+      // Only modules that read u_contentRect redraw; an animating one picks it up on its next capped frame. A drifting
+      // print picks a moved rect up at its next keyframe (a scrolling rail never redraws it); one appearing or going redraws.
+      // The first-run intro reads its card from its timeline.
+      if (intro.active() || !renderer.usesContentRect() || wallpaperFrameMode(state) === "animate") return;
+      if (!drift.owns()) redraw();
+      else if (appeared) drift.refresh();
     },
     setContentRect2: (rect) => drift.setContentRect2(rect),
     setColumnRect(rect) {

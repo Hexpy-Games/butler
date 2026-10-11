@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WallpaperContentRect } from "../Wallpaper";
 
 interface Box {
@@ -64,4 +64,21 @@ export function usePromptContentRect(header: Element | null, rail: Element | nul
     };
   }, [header, rail, grid]);
   return rect;
+}
+
+/**
+ * Hands the measured rect to an external wallpaper: each new value once, and
+ * `undefined` when the list unmounts (its text is gone). A new callback
+ * function never reports again.
+ */
+export function useContentRectReport(rect: WallpaperContentRect | undefined, report: ((rect: WallpaperContentRect | undefined) => void) | undefined) {
+  const reportRef = useRef(report);
+  useEffect(() => {
+    reportRef.current = report;
+  });
+  const reporting = report !== undefined;
+  useEffect(() => {
+    if (reporting) reportRef.current?.(rect);
+  }, [reporting, rect]);
+  useEffect(() => () => reportRef.current?.(undefined), []);
 }

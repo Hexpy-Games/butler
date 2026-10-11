@@ -331,6 +331,7 @@ impl GuidedTools {
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
+                    | ToolName::BrowserHistorySearch
                     | ToolName::LibrarySearch
                     | ToolName::LibraryOrganize
             )
