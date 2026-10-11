@@ -330,7 +330,7 @@ export const enUsCopy: AppCopy = {
     manageTagsBody: "Rename, merge or delete. Items stay.", noTags: "No tags", merge: "Merge",
     mergeNote: (from, fromCount, to, toCount) => `Merges “${from}” (${fromCount}) into “${to}” (${toCount}).`, deleteTag: "Delete tag",
     tagExists: "That tag exists.", groupExists: "That name is taken.", sites: "Sites", date: "Date", anyDate: "Any time",
-    dates: { today: "Today", week: "Last 7 days", month: "Last 30 days", year: "This year" }, sort: "Sort",
+    dates: { today: "Today", week: "Last 7 days", month: "Last 30 days", year: "This year" }, since: "From", until: "To", sort: "Sort",
     sorts: { new: "Newest", old: "Oldest", name: "Name", site: "Site" }, filterChip: (label, value) => `${label}: ${value}`,
     selected: (count) => `${count} selected`, select: "Select", clearSelection: "Clear selection", added: (count, group) => `Added ${count} to “${group}”`,
     undo: "Undo", dropAdd: (group) => `Add to “${group}”`, dropScrap: (group) => `Scrap to “${group}”`, savedScraps: (count) => `Saved ${count} scrap${count === 1 ? "" : "s"}`,

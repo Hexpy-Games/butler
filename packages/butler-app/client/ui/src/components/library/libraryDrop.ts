@@ -25,7 +25,7 @@ let before: AppView | undefined;
 /** A pick rested on 서랍: open the Library main screen so it can land on a group tile; the drag carries on. */
 export function beginDwell() {
   const store = useButlerStore.getState();
-  if (store.view.kind === "library") return;
+  if (store.view.kind === "library" && !store.view.section && !store.view.item) return;
   before = store.view;
   store.setView({ kind: "library" });
 }

@@ -56,9 +56,6 @@ pub(super) async fn execute(
     if call.name == ToolName::ReadProjectSource {
         return super::project_source::execute(owner, call).await;
     }
-    if super::library::supports(&call.name) {
-        return super::library::execute(owner, call).await;
-    }
     if super::wallpaper::supports(&call.name) {
         return super::wallpaper::execute(owner, invocation, call, call_id).await;
     }
@@ -262,16 +259,10 @@ pub(super) async fn execute(
         ToolName::parse(call.name.as_str()),
         Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) {
-        let result = if call.name == ToolName::ReadToolOutputArtifact {
-            owner.tool_artifacts.read_output(args).await
-        } else {
-            owner.tool_artifacts.read_evidence(args).await
-        };
-        return result.map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
-        });
+        return read_tool_artifact(owner, &call.name, args).await;
     }
     let result = match call.name.as_str() {
+        "library_search" | "library_organize" => return super::library::execute(owner, call).await,
         "list_conversation_sessions" => owner
             .conversation_tools
             .list(owner.binding.memory.clone(), args)
@@ -313,6 +304,21 @@ pub(super) async fn execute(
         }
     };
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
+}
+
+async fn read_tool_artifact(
+    owner: &GuidedTools,
+    name: &str,
+    args: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = if name == ToolName::ReadToolOutputArtifact {
+        owner.tool_artifacts.read_output(args).await
+    } else {
+        owner.tool_artifacts.read_evidence(args).await
+    };
+    result.map_err(|error| {
+        ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
+    })
 }
 
 async fn file_capability(

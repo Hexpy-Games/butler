@@ -270,7 +270,7 @@ export interface LibraryCopy {
   name: string; tags: string; addTag: string; createTag: (name: string) => string; removeTag: (name: string) => string; manageTags: string;
   manageTagsBody: string; noTags: string; merge: string; mergeNote: (from: string, fromCount: number, to: string, toCount: number) => string;
   deleteTag: string; tagExists: string; groupExists: string; sites: string; date: string; anyDate: string;
-  dates: { today: string; week: string; month: string; year: string }; sort: string; sorts: { new: string; old: string; name: string; site: string };
+  dates: { today: string; week: string; month: string; year: string }; since: string; until: string; sort: string; sorts: { new: string; old: string; name: string; site: string };
   filterChip: (label: string, value: string) => string; selected: (count: number) => string; select: string; clearSelection: string;
   added: (count: number, group: string) => string; undo: string; dropAdd: (group: string) => string; dropScrap: (group: string) => string;
   savedScraps: (count: number) => string; addToGroup: string; leaveUngrouped: string; back: (title: string) => string; mixedKinds: string;

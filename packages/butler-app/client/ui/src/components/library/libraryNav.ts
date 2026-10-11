@@ -5,7 +5,7 @@ import type { LibraryKind, LibraryView } from "@/app/types";
 import type { LibraryItem } from "../browser/libraryStore";
 
 /** Names the titlebar shows for the Library's nested levels (a group, the item in the detail panel). */
-export const useLibraryNames = create<{ groups: Record<string, { name: string; kind: LibraryKind }>; item?: LibraryItem }>(() => ({ groups: {} }));
+export const useLibraryNames = create<{ groups: Record<string, { name: string; kind: LibraryKind; position: number }>; item?: LibraryItem }>(() => ({ groups: {} }));
 
 export const kindTitle = (kind: LibraryKind) => appCopy.library.kinds[kind];
 
@@ -16,7 +16,7 @@ export function libraryTitle(view: LibraryView): string {
     if (view.group === "none") return view.section === "bookmark" ? appCopy.library.groups.bookmark.ungrouped : appCopy.library.groups.scrap.ungrouped;
     return useLibraryNames.getState().groups[view.group]?.name ?? kindTitle(view.section);
   }
-  if (view.section) return kindTitle(view.section);
+  if (view.section) return `${appCopy.library.title} › ${kindTitle(view.section)}`;
   return appCopy.library.title;
 }
 

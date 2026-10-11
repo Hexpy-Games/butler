@@ -172,7 +172,8 @@ pub(super) fn item(value: Value) -> Result<Value, HttpError> {
         || value["group"]
             .as_str()
             .is_some_and(|id| !id.is_empty() && id.len() <= 128))
-        && (value.get("tags").is_none() || value["tags"].is_array() && tags(&value["tags"]).is_ok());
+        && (value.get("tags").is_none()
+            || value["tags"].is_array() && tags(&value["tags"]).is_ok());
     if organized && valid(&value) {
         Ok(value)
     } else {

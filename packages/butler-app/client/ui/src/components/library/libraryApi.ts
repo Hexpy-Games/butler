@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api";
 import { libraryChanged, useLibraryVersion } from "@/app/libraryEvents";
+import { useLibraryNames } from "./libraryNav";
 import type { LibraryKind } from "@/app/types";
 import type { LibraryItem } from "../browser/libraryStore";
 
@@ -14,7 +15,7 @@ export interface LibraryFacets { total: number; ungrouped: number | null; tags: 
 export type LibrarySort = "new" | "old" | "name" | "site";
 export type DatePreset = "today" | "week" | "month" | "year";
 /** What a list shows: the kind, a group ("none" = ungrouped) and the filters, all AND. */
-export interface LibraryQuery { kind: LibraryKind; group?: string; q?: string; tags?: readonly string[]; site?: string; date?: DatePreset; sort?: LibrarySort }
+export interface LibraryQuery { kind: LibraryKind; group?: string; q?: string; tags?: readonly string[]; site?: string; date?: DatePreset; since?: string; until?: string; sort?: LibrarySort }
 
 export function sinceFor(date: DatePreset | undefined, now = new Date()): string | undefined {
   if (!date) return undefined;
@@ -32,8 +33,9 @@ export function queryString(query: LibraryQuery, cursor = "") {
   if (query.q?.trim()) params.set("q", query.q.trim());
   if (query.tags?.length) params.set("tags", query.tags.join(","));
   if (query.site) params.set("site", query.site);
-  const since = sinceFor(query.date);
+  const since = query.since ?? sinceFor(query.date);
   if (since) params.set("since", since);
+  if (query.until) params.set("until", query.until);
   if (query.sort && query.sort !== "new") params.set("sort", query.sort);
   if (cursor) params.set("cursor", cursor);
   return params.toString();
@@ -51,22 +53,31 @@ function useLibraryRead<T>(path: string | null, empty: T) {
       () => { if (active) setState((prior) => ({ ...prior, failed: true, loading: false })); });
     return () => { active = false; };
   }, [path, version]);
-  return { ...state.data as T, data: state.data, failed: state.failed, loading: state.loading || state.path !== path };
+  const data = state.path === path ? state.data : empty;
+  return { ...data as T, data, failed: state.failed, loading: Boolean(path) && !state.failed && (state.loading || state.path !== path) };
 }
 
-export const useLibraryGroups = (kind: GroupKind | null) =>
-  useLibraryRead<LibraryGroups>(kind ? `/library/groups?kind=${kind}` : null, { groups: [], ungrouped: 0, total: 0 });
-export const useLibraryFacets = (kind: LibraryKind, group?: string) =>
-  useLibraryRead<LibraryFacets>(`/library/facets?${new URLSearchParams({ kind, ...(group ? { group } : {}) })}`, { total: 0, ungrouped: null, tags: [], sites: [] });
+export function useLibraryGroups(kind: GroupKind | null) {
+  const read = useLibraryRead<LibraryGroups>(kind ? `/library/groups?kind=${kind}` : null, { groups: [], ungrouped: 0, total: 0 });
+  useEffect(() => {
+    if (!kind || read.loading || read.failed) return;
+    useLibraryNames.setState((prior) => ({ groups: { ...Object.fromEntries(Object.entries(prior.groups).filter(([, group]) => group.kind !== kind)),
+      ...Object.fromEntries(read.groups.map((group) => [group.id, { name: group.name, kind, position: group.position }])) } }));
+  }, [kind, read.loading, read.failed, read.groups]);
+  return read;
+}
+export const useLibraryFacets = (kind: LibraryKind, group?: string, enabled = true) =>
+  useLibraryRead<LibraryFacets>(enabled ? `/library/facets?${new URLSearchParams({ kind, ...(group ? { group } : {}) })}` : null, { total: 0, ungrouped: null, tags: [], sites: [] });
 export const useLibraryTags = () => useLibraryRead<{ tags: TagCount[] }>("/library/tags", { tags: [] });
 
 /** Keyset pages of one query; a newer query never shows an older answer. */
 export function useLibraryItems(query: LibraryQuery, enabled = true) {
   const version = useLibraryVersion((s) => s.version);
-  const key = queryString(query);
+  const key = `${queryString(query)}:${version}`;
   const [page, setPage] = useState<{ key: string; items: LibraryItem[]; next: string | null }>({ key: "", items: [], next: null });
-  const [cursor, setCursor] = useState(""), [loading, setLoading] = useState(false), [failed, setFailed] = useState(false);
-  useEffect(() => { setCursor(""); }, [key, version]);
+  const [position, setPosition] = useState({ key: "", cursor: "" });
+  const cursor = position.key === key ? position.cursor : "";
+  const [loading, setLoading] = useState(false), [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!enabled) return;
     let active = true; setLoading(true); setFailed(false);
@@ -76,11 +87,10 @@ export function useLibraryItems(query: LibraryQuery, enabled = true) {
     }, () => { if (active) setFailed(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
     // The query is fully described by `key`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, cursor, version, enabled]);
-  const more = useCallback(() => { if (!loading && page.next) setCursor(page.next); }, [loading, page.next]);
+  const more = useCallback(() => { if (!loading && page.next) setPosition({ key, cursor: page.next }); }, [loading, page.next, key]);
   const items = page.key === key ? page.items : [];
-  return { items, next: page.key === key ? page.next : null, loading: loading || page.key !== key, failed, more };
+  return { items, next: page.key === key ? page.next : null, loading: !failed && (loading || page.key !== key), failed, more };
 }
 
 async function send<T>(path: string, method: string, body?: unknown) {
@@ -88,7 +98,11 @@ async function send<T>(path: string, method: string, body?: unknown) {
   libraryChanged();
   return result;
 }
-export const createGroup = (kind: GroupKind, name: string) => send<LibraryGroup>("/library/groups", "POST", { kind, name });
+export async function createGroup(kind: GroupKind, name: string) {
+  const group = await send<LibraryGroup>("/library/groups", "POST", { kind, name });
+  useLibraryNames.setState((prior) => ({ groups: { ...prior.groups, [group.id]: { name: group.name, kind, position: group.position } } }));
+  return group;
+}
 export const renameGroup = (id: string, name: string) => send<LibraryGroup>(`/library/groups/${encodeURIComponent(id)}`, "PATCH", { name });
 export const moveGroup = (id: string, position: number) => send<LibraryGroup>(`/library/groups/${encodeURIComponent(id)}`, "PATCH", { position });
 export const deleteGroup = (id: string) => send(`/library/groups/${encodeURIComponent(id)}`, "DELETE");

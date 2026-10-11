@@ -14,7 +14,11 @@ async fn all(s: &Scenario, path: &str) -> Result<(Vec<Value>, usize), HarnessErr
         if !cursor.is_empty() {
             url.query_pairs_mut().append_pair("cursor", &cursor);
         }
-        let reply = page(s, &format!("{}?{}", url.path(), url.query().unwrap_or_default())).await?;
+        let reply = page(
+            s,
+            &format!("{}?{}", url.path(), url.query().unwrap_or_default()),
+        )
+        .await?;
         let batch = reply["items"].as_array().unwrap();
         assert!(batch.len() <= 60);
         items.extend(batch.iter().cloned());
@@ -26,7 +30,10 @@ async fn all(s: &Scenario, path: &str) -> Result<(Vec<Value>, usize), HarnessErr
     }
 }
 fn ids(items: &[Value]) -> Vec<String> {
-    items.iter().map(|item| item["id"].as_str().unwrap().to_owned()).collect()
+    items
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_owned())
+        .collect()
 }
 /// Scrap `n`: three sites, one capture per minute, names out of capture order.
 fn item(n: usize) -> Value {
@@ -44,17 +51,50 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
     for n in 0..total {
         ok(s.gw.post("/library", item(n)).await?);
     }
-    let group = ok(s.gw.post("/library/groups", json!({"kind":"scrap","name":"Harbor"})).await?)["id"].as_str().unwrap().to_owned();
-    let evens: Vec<String> = (0..total).filter(|n| n % 2 == 0).map(|n| format!("s{n:03}")).collect();
-    ok(s.gw.patch("/library/items", json!({"ids": evens, "group": group})).await?);
-    let thirds: Vec<String> = (0..total).filter(|n| n % 3 != 2).map(|n| format!("s{n:03}")).collect();
-    ok(s.gw.patch("/library/items", json!({"ids": thirds, "addTags": ["Port"]})).await?);
-    let fours: Vec<String> = (0..total).filter(|n| n % 4 == 0).map(|n| format!("s{n:03}")).collect();
-    ok(s.gw.patch("/library/items", json!({"ids": fours, "addTags": ["Night"]})).await?);
+    let group = ok(s
+        .gw
+        .post(
+            "/library/groups",
+            json!({"kind":"scrap","name":"Collection"}),
+        )
+        .await?)["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Keep group metadata distinct from the words tested below.
+    let evens: Vec<String> = (0..total)
+        .filter(|n| n % 2 == 0)
+        .map(|n| format!("s{n:03}"))
+        .collect();
+    ok(s.gw
+        .patch("/library/items", json!({"ids": evens, "group": group}))
+        .await?);
+    let thirds: Vec<String> = (0..total)
+        .filter(|n| n % 3 != 2)
+        .map(|n| format!("s{n:03}"))
+        .collect();
+    ok(s.gw
+        .patch(
+            "/library/items",
+            json!({"ids": thirds, "addTags": ["Port"]}),
+        )
+        .await?);
+    let fours: Vec<String> = (0..total)
+        .filter(|n| n % 4 == 0)
+        .map(|n| format!("s{n:03}"))
+        .collect();
+    ok(s.gw
+        .patch(
+            "/library/items",
+            json!({"ids": fours, "addTags": ["Night"]}),
+        )
+        .await?);
     let items: Vec<Value> = (0..total).map(item).collect();
     let key = |item: &Value| item["title"].as_str().unwrap().to_lowercase();
     let text = |item: &Value, field: &str| item[field].as_str().unwrap().to_owned();
-    let newest = |a: &&Value, b: &&Value| (text(b, "capturedAt"), text(b, "id")).cmp(&(text(a, "capturedAt"), text(a, "id")));
+    let newest = |a: &&Value, b: &&Value| {
+        (text(b, "capturedAt"), text(b, "id")).cmp(&(text(a, "capturedAt"), text(a, "id")))
+    };
     let mut expected: Vec<(&str, Vec<&Value>)> = Vec::new();
     let mut by = items.iter().collect::<Vec<_>>();
     by.sort_by(newest);
@@ -67,24 +107,45 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
     expected.push(("site", by.clone()));
     for (sort, order) in &expected {
         let (listed, pages) = all(&s, &format!("/library?kind=scrap&sort={sort}")).await?;
-        assert_eq!(ids(&listed), order.iter().map(|i| i["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>(), "sort {sort}");
+        assert_eq!(
+            ids(&listed),
+            order
+                .iter()
+                .map(|i| i["id"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            "sort {sort}"
+        );
         assert_eq!(pages, 3, "sort {sort}");
     }
     // Every filter at once, in every sort: group ∧ both tags ∧ site ∧ date range ∧ words.
-    let wanted = |n: usize| n % 2 == 0 && n % 3 == 0 && n % 4 == 0 && n % 5 == 0 && (12..=140).contains(&n);
+    let wanted =
+        |n: usize| n % 2 == 0 && n % 3 == 0 && n % 4 == 0 && n % 5 == 0 && (12..=140).contains(&n);
     for (sort, order) in &expected {
-        let path = format!("/library?kind=scrap&sort={sort}&group={group}&tags=port,NIGHT&site=alpha.example&since=2026-10-01T00:12:00Z&until=2026-10-01T02:20:00%2B00:00&q=harbor");
+        let path = format!(
+            "/library?kind=scrap&sort={sort}&group={group}&tags=port,NIGHT&site=alpha.example&since=2026-10-01T00:12:00Z&until=2026-10-01T02:20:00%2B00:00&q=harbor"
+        );
         let (listed, _) = all(&s, &path).await?;
-        let want: Vec<String> = order.iter().map(|i| i["id"].as_str().unwrap().to_owned()).filter(|id| wanted(id[1..].parse().unwrap())).collect();
+        let want: Vec<String> = order
+            .iter()
+            .map(|i| i["id"].as_str().unwrap().to_owned())
+            .filter(|id| wanted(id[1..].parse().unwrap()))
+            .collect();
         assert_eq!(ids(&listed), want, "filtered sort {sort}");
         assert_eq!(want.len(), 2);
     }
     let (ungrouped, _) = all(&s, "/library?kind=scrap&group=none&tags=Port").await?;
-    assert_eq!(ungrouped.len(), (0..total).filter(|n| n % 2 == 1 && n % 3 != 2).count());
+    assert_eq!(
+        ungrouped.len(),
+        (0..total).filter(|n| n % 2 == 1 && n % 3 != 2).count()
+    );
     let (sited, pages) = all(&s, "/library?kind=scrap&site=beta.example&sort=old").await?;
     assert_eq!((sited.len(), pages), (50, 1));
     for bad in ["sort=size", "since=yesterday", "kind=file"] {
-        assert_eq!(s.gw.get(&format!("/library?{bad}")).await?.status, 400, "{bad}");
+        assert_eq!(
+            s.gw.get(&format!("/library?{bad}")).await?.status,
+            400,
+            "{bad}"
+        );
     }
     s.finish().await
 }
@@ -117,20 +178,45 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
     let mut s = Setup::new("BROWSER-LIBRARY-SCALE")?.start().await?;
     s.agent.terminate().await?;
     let data = s.sandbox.data.clone();
-    tokio::task::spawn_blocking(move || seed(&data)).await.unwrap();
+    tokio::task::spawn_blocking(move || seed(&data))
+        .await
+        .unwrap();
     let started = Instant::now();
     s.gw = s.agent.start_again().await?;
-    eprintln!("LIBRARY-SCALE migrate_and_start items=20000 elapsed_ms={}", started.elapsed().as_millis());
+    eprintln!(
+        "LIBRARY-SCALE migrate_and_start items=20000 elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
     let groups = page(&s, "/library/groups?kind=bookmark").await?;
     assert_eq!(groups["groups"].as_array().unwrap().len(), 50);
     assert_eq!(groups["total"], 10_000);
-    let folder = groups["groups"].as_array().unwrap().iter().find(|g| g["name"] == "Folder 7").unwrap()["id"].as_str().unwrap().to_owned();
+    let folder = groups["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["name"] == "Folder 7")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let checks: Vec<(&str, String, usize)> = vec![
         ("page_new", "/library?kind=scrap".into(), 10_000),
         ("page_name", "/library?kind=scrap&sort=name".into(), 10_000),
-        ("page_site", "/library?kind=bookmark&sort=site".into(), 10_000),
-        ("group", format!("/library?kind=bookmark&group={folder}"), 200),
-        ("tag_common", "/library?kind=scrap&tags=common".into(), 5_000),
+        (
+            "page_site",
+            "/library?kind=bookmark&sort=site".into(),
+            10_000,
+        ),
+        (
+            "group",
+            format!("/library?kind=bookmark&group={folder}"),
+            200,
+        ),
+        (
+            "tag_common",
+            "/library?kind=scrap&tags=common".into(),
+            5_000,
+        ),
         ("tag_rare", "/library?kind=scrap&tags=rare".into(), 20),
         ("site", "/library?kind=scrap&site=site3.example".into(), 250),
         ("words", "/library?kind=scrap&q=lighthouse".into(), 100),
@@ -141,15 +227,29 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
         let elapsed = started.elapsed().as_micros();
         let (items, pages) = all(&s, &path).await?;
         assert_eq!(items.len(), count, "{name}");
-        let unique = items.iter().map(|item| item["id"].as_str().unwrap()).collect::<std::collections::HashSet<_>>();
+        let unique = items
+            .iter()
+            .map(|item| item["id"].as_str().unwrap())
+            .collect::<std::collections::HashSet<_>>();
         assert_eq!(unique.len(), count, "{name}: no repeats across pages");
         if name == "page_new" {
             assert_eq!(first["items"][0]["id"], "scale-s9999");
         }
-        assert_eq!(first["items"].as_array().unwrap().len(), items.len().min(60), "{name}");
-        eprintln!("LIBRARY-SCALE {name} first_page_us={elapsed} items={} pages={pages}", items.len());
+        assert_eq!(
+            first["items"].as_array().unwrap().len(),
+            items.len().min(60),
+            "{name}"
+        );
+        eprintln!(
+            "LIBRARY-SCALE {name} first_page_us={elapsed} items={} pages={pages}",
+            items.len()
+        );
     }
-    for (name, path) in [("groups", "/library/groups?kind=bookmark"), ("facets", "/library/facets?kind=scrap"), ("tags", "/library/tags")] {
+    for (name, path) in [
+        ("groups", "/library/groups?kind=bookmark"),
+        ("facets", "/library/facets?kind=scrap"),
+        ("tags", "/library/tags"),
+    ] {
         let started = Instant::now();
         let reply = page(&s, path).await?;
         eprintln!("LIBRARY-SCALE {name} us={}", started.elapsed().as_micros());
@@ -157,7 +257,13 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
             assert_eq!(reply["tags"][0], json!({"name":"Common","count":10_000}));
         }
         if name == "facets" {
-            assert_eq!((reply["total"].as_i64(), reply["sites"].as_array().unwrap().len()), (Some(10_000), 40));
+            assert_eq!(
+                (
+                    reply["total"].as_i64(),
+                    reply["sites"].as_array().unwrap().len()
+                ),
+                (Some(10_000), 40)
+            );
         }
     }
     s.finish().await

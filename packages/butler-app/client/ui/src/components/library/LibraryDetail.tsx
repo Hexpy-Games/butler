@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import type { LibraryView } from "@/app/types";
@@ -22,6 +22,8 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
   const [html, setHtml] = useState<{ id: string; html: string | null }>();
   const groups = useLibraryGroups("scrap");
   const tags = useLibraryTags();
+  const naming = useRef(false);
+  const itemId = item?.id;
   const [name, setName] = useState(item?.title ?? "");
   useEffect(() => { setName(item?.title ?? ""); }, [item?.id, item?.title]);
   useEffect(() => {
@@ -29,21 +31,25 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
     let active = true;
     void librarySnapshot(item.id).then((value) => { if (active) setHtml({ id: item.id, html: value }); }, () => { if (active) setHtml({ id: item.id, html: null }); });
     return () => { active = false; };
-  }, [item, view]);
+    // Metadata edits do not reload the saved HTML.
+  }, [itemId]);
   if (!item) return null;
   const loaded = html?.id === item.id ? html : undefined;
-  const update = (patch: Partial<LibraryItem>) => useLibraryNames.setState({ item: { ...item, ...patch } });
   const setGroup = (value: string) => {
-    if (value === NEW) { useLibraryDialogs.setState({ createGroup: { kind: "scrap", then: (group) => { update({ group: group.id }); void fileItems([item], group.id); } } }); return; }
+    if (value === NEW) { useLibraryDialogs.setState({ createGroup: { kind: "scrap", then: (group) => { void fileItems([item], group.id); } } }); return; }
     const group = value === "none" ? null : value;
-    update({ group }); void fileItems([item], group);
+    void fileItems([item], group);
   };
   const setTags = (next: string[]) => {
     const now = item.tags ?? [];
-    update({ tags: next });
     void tagItems([item], next.filter((t) => !now.includes(t)), now.filter((t) => !next.includes(t)));
   };
-  const commitName = () => { const title = name.trim(); if (title !== item.title) { update({ title: title || item.autoTitle || item.title }); void renameItem(item, title); } };
+  const commitName = () => {
+    const title = name.trim();
+    if (title === item.title || naming.current) return;
+    naming.current = true;
+    void renameItem(item, title).finally(() => { naming.current = false; setName(useLibraryNames.getState().item?.title ?? item.title); });
+  };
   const remove = () => void deleteLibrary(item.id).then(() => openLibrary(libraryParent(view) ?? {}), () => notifyStatus(copy.failed, { tone: "error" }));
   return (
     <ScrollArea fill dataTestClass="library-detail"><PageContainer width="full" gutter="xl"><Box paddingY="xl">

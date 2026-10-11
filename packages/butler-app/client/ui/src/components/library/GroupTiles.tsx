@@ -1,11 +1,12 @@
 import { appCopy } from "@/app/copy";
-import { FolderOpen, GroupTile, GroupTileMore, OverflowActionMenu, PencilLine, X, type GroupTilePreview } from "@/butler-ds";
+import { Box, FolderOpen, GroupTile, GroupTileMore, OverflowActionMenu, PencilLine, X, type GroupTilePreview } from "@/butler-ds";
 import type { LibraryItem } from "../browser/libraryStore";
 import { useElementDrag } from "../browser/elementDrag";
 import { useCardDrag } from "./libraryCardDrag";
 import { safeHost } from "./libraryActions";
 import type { GroupKind, LibraryGroup } from "./libraryApi";
 import { useLibraryDialogs } from "./libraryDialogs";
+import { startGroupDrag } from "./libraryGroupDrag";
 import { openLibrary } from "./libraryNav";
 
 export function preview(item: LibraryItem): GroupTilePreview {
@@ -31,14 +32,14 @@ export function GroupTiles({ kind, groups, limit }: { kind: GroupKind; groups: L
     {shown.map((group) => {
       const meta = [words.count(group.count), group.recent[0] ? new Date(group.updatedAt).toLocaleDateString(document.documentElement.lang) : ""].filter(Boolean).join(" · ");
       return (
-        <GroupTile key={group.id} dropId={group.id} name={group.name} meta={meta} label={copy.tileLabel(group.name, meta)} emptyLabel={copy.empty}
+        <Box key={group.id} onPointerDown={(event) => startGroupDrag(event, group)}><GroupTile dropId={group.id} name={group.name} meta={meta} label={copy.tileLabel(group.name, meta)} emptyLabel={copy.empty}
           previews={group.recent.map(preview)} drop={drop === group.id} dropHint={kind === "scrap" && useElementDrag.getState().tab ? copy.dropScrap(group.name) : copy.dropAdd(group.name)}
           onOpen={() => openLibrary({ section: kind, group: group.id })}
           menu={<OverflowActionMenu label={appCopy.browser.more} items={[
             { icon: <FolderOpen size="sm" />, label: copy.open, onSelect: () => openLibrary({ section: kind, group: group.id }) },
             { icon: <PencilLine size="sm" />, label: copy.rename, onSelect: () => useLibraryDialogs.setState({ renameGroup: group }) },
             { icon: <X size="sm" />, label: words.ungroup, variant: "destructive", onSelect: () => useLibraryDialogs.setState({ ungroup: group }) },
-          ]} />} />
+          ]} />} /></Box>
       );
     })}
     {over ? <GroupTileMore count={groups.length - shown.length} label={words.more(groups.length - shown.length)} meta={copy.viewAll} onOpen={() => openLibrary({ section: kind })} /> : null}

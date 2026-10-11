@@ -14,7 +14,7 @@ export async function fileItems(items: LibraryItem[], group: string | null) {
   const target = group ? useLibraryNames.getState().groups[group] : undefined;
   if (target && moving.some((item) => item.kind !== target.kind)) { failed({ code: "library_group_kind_mismatch" }); return; }
   try {
-    await patchItems({ ids: moving.map((item) => item.id), group });
+    syncDetail((await patchItems({ ids: moving.map((item) => item.id), group })).items);
     if (!group) return;
     notifyStatus(appCopy.library.added(moving.length, name), {
       action: { label: appCopy.library.undo, onClick: () => void undo(moving) },
@@ -30,12 +30,12 @@ async function undo(items: LibraryItem[]) {
 
 export async function renameItem(item: LibraryItem, title: string) {
   if (title === item.title) return;
-  try { await patchItems({ ids: [item.id], title }); } catch (error) { failed(error); }
+  try { syncDetail((await patchItems({ ids: [item.id], title })).items); } catch (error) { failed(error); }
 }
 
 export async function tagItems(items: LibraryItem[], addTags: string[], removeTags: string[]) {
   if (!addTags.length && !removeTags.length) return;
-  try { await patchItems({ ids: items.map((item) => item.id), addTags, removeTags }); } catch (error) { failed(error); }
+  try { syncDetail((await patchItems({ ids: items.map((item) => item.id), addTags, removeTags })).items); } catch (error) { failed(error); }
 }
 
 /** One line of meta: source and saved date. */
@@ -44,3 +44,9 @@ export function itemMeta(item: LibraryItem) {
   return [host, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
 }
 export function safeHost(url: string) { try { return new URL(url).host; } catch { return url; } }
+
+function syncDetail(items: LibraryItem[]) {
+  const id = useLibraryNames.getState().item?.id;
+  const item = items.find((item) => item.id === id);
+  if (item) useLibraryNames.setState({ item });
+}

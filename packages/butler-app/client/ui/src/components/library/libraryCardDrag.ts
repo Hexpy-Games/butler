@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { create } from "zustand";
+import { suppressDragClick } from "./libraryDragClick";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import { attachLibrary, type LibraryItem } from "../browser/libraryStore";
@@ -28,18 +29,20 @@ export function startCardDrag(event: ReactPointerEvent, items: () => LibraryItem
   const stop = (drop: boolean) => {
     window.removeEventListener("pointermove", move, true);
     window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", cancel, true);
     window.removeEventListener("keydown", key, true);
     const { items: dragged, target } = useCardDrag.getState();
     useCardDrag.setState({ items: [], x: undefined, y: undefined, target: undefined });
     if (!dragging) return;
     // The click that ends a drag must not open the card.
-    window.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+    if (drop) suppressDragClick();
     if (drop && target) void dropOn(target, dragged);
   };
-  const up = () => stop(true);
+  const up = () => stop(true), cancel = () => stop(false);
   const key = (e: KeyboardEvent) => { if (e.key === "Escape") stop(false); };
   window.addEventListener("pointermove", move, true);
   window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", cancel, true);
   window.addEventListener("keydown", key, true);
 }
 

@@ -25,13 +25,12 @@ function MainSection({ kind, columns, view, onAttach }: { kind: LibraryKind; col
   const grouped = hasGroups(kind) && !filtered;
   const groups = useLibraryGroups(grouped && hasGroups(kind) ? kind : null);
   const facets = useLibraryFacets(kind);
-  const page = useLibraryItems({ kind, group: grouped ? "none" : undefined, q: filters.q, tags: filters.tags, date: filters.date, sort: filters.sort });
+  const page = useLibraryItems({ kind, group: grouped ? "none" : undefined, q: filters.q, tags: filters.tags, site: filters.site, date: filters.date, since: filters.since, until: filters.until, sort: filters.sort });
   const row = page.items.slice(0, columns);
   const total = filtered ? page.items.length : facets.total;
   const limit = columns === 2 ? 4 : columns;
   const loose = grouped ? groups.ungrouped : total;
   const empty = !page.loading && !row.length && !(grouped && groups.groups.length);
-  if (filtered && empty) return null;
   const words = hasGroups(kind) ? copy.groups[kind] : undefined;
   return (
     <Section data-library-kind={kind} title={<>{copy.kinds[kind]} <Typo.Caption tone="tertiary">{filtered && page.next ? `${total}+` : total}</Typo.Caption></>}

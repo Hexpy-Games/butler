@@ -330,7 +330,7 @@ export const koKrCopy: AppCopy = {
     manageTagsBody: "이름을 바꾸거나 합치거나 지웁니다. 항목은 그대로 남습니다.", noTags: "태그 없음", merge: "합치기",
     mergeNote: (from, fromCount, to, toCount) => `‘${from}’ ${fromCount}개와 ‘${to}’ ${toCount}개를 합칩니다.`, deleteTag: "태그 삭제",
     tagExists: "같은 태그가 있습니다.", groupExists: "같은 이름이 있습니다.", sites: "사이트", date: "기간", anyDate: "전체 기간",
-    dates: { today: "오늘", week: "지난 7일", month: "지난 30일", year: "올해" }, sort: "정렬",
+    dates: { today: "오늘", week: "지난 7일", month: "지난 30일", year: "올해" }, since: "시작", until: "끝", sort: "정렬",
     sorts: { new: "최근 저장순", old: "오래된 순", name: "이름순", site: "사이트순" }, filterChip: (label, value) => `${label}: ${value}`,
     selected: (count) => `${count}개 선택됨`, select: "선택", clearSelection: "선택 해제", added: (count, group) => `${count}개를 ‘${group}’에 넣음`,
     undo: "실행 취소", dropAdd: (group) => `‘${group}’에 넣기`, dropScrap: (group) => `‘${group}’에 스크랩`, savedScraps: (count) => `스크랩 ${count}개 저장함`,

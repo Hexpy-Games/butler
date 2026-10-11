@@ -63,7 +63,7 @@ try {
   await app.click("Add bookmark");
   const emptyTab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out" });
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-library-card]'))"), "folder editor on new tab");
-  await app.page.clickSelector('[data-library-card] button[aria-label="More"]'); await app.page.clickText("Folder", "[role=menuitem]"); await fill('[aria-label="Folder"]', "Work"); await app.page.clickText("OK", "[role=dialog] button");
+  await app.page.clickSelector('[data-library-card] button[aria-label="More"]'); await app.page.clickText("Move to folder…", "[role=menuitem]"); await app.page.clickSelector('[role=dialog] [role=combobox]'); await app.page.clickText("New folder", "[role=option]"); await fill('[aria-label="Folder name"]', "Work"); await app.page.clickText("Move", "[role=dialog] button");
   await waitBrowser(async () => (await app.gateway.api<{ items: Array<{ folder: string }> }>("/library?kind=bookmark")).items[0]?.folder === "Work", "folder saved");
   await app.call("close", { id: emptyTab });
   const notes=[];
@@ -85,7 +85,7 @@ try {
     const fresh = await app.call<string>("create", { owner:"conversation:general", profile:"signed_out" });
     await waitBrowser(() => app.page.expression("document.querySelector('[data-library-card]')!==null"), "new tab bookmark grid"); await app.shot(`${language}-${theme}-${width}-new-tab`);
     assert.equal(await app.page.expression("document.querySelectorAll('[data-test-class=bookmark-folder]').length > 0 && [...document.querySelectorAll('[data-test-class=bookmark-folder]')].some(n=>n.textContent==='Work')"), true, "folder is grouped above its grid");
-    await app.page.clickSelector(`[data-library-card] button[aria-label="${ko?"더 보기":"More"}"]`); await app.page.clickText(ko?"폴더":"Folder", "[role=menuitem]"); await app.shot(`${language}-${theme}-${width}-folder`); await app.page.press("Escape"); await app.call("close", { id: fresh });
+    await app.page.clickSelector(`[data-library-card] button[aria-label="${ko?"더 보기":"More"}"]`); await app.page.clickText(ko?"폴더로 이동…":"Move to folder…", "[role=menuitem]"); await app.shot(`${language}-${theme}-${width}-folder`); await app.page.press("Escape"); await app.call("close", { id: fresh });
     notes.push({ language, theme, width });
   }
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok:true, elapsedMs:Date.now()-started, notes, destination:destination.session.id }, null, 2));

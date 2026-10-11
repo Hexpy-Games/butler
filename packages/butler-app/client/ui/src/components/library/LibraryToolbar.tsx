@@ -16,18 +16,19 @@ export function LibraryToolbar({ view }: { view: LibraryView }) {
     ...filters.tags.map((tag) => ({ key: `t:${tag}`, label: copy.filterChip(copy.tags, tag), clear: () => setFilters({ tags: filters.tags.filter((t) => t !== tag) }) })),
     ...(filters.site ? [{ key: "s", label: copy.filterChip(copy.sites, filters.site), clear: () => setFilters({ site: undefined }) }] : []),
     ...(filters.date ? [{ key: "d", label: copy.filterChip(copy.date, copy.dates[filters.date]), clear: () => setFilters({ date: undefined }) }] : []),
+    ...(filters.since || filters.until ? [{ key: "range", label: copy.filterChip(copy.date, [filters.since, filters.until].map((date) => date ? new Date(date).toLocaleDateString(document.documentElement.lang) : "…").join(" – ")), clear: () => setFilters({ since: undefined, until: undefined }) }] : []),
   ];
   return (
     <Stack gap="md" data-test-class="library-toolbar">
       <Input value={filters.text} onChange={(event) => typeSearch(event.target.value)} aria-label={copy.search} placeholder={copy.search} />
-      <Inline gap="sm" cross="center" justify="between">
+      <Inline gap="sm" wrap cross="center" justify="between">
         <SegmentedControl ariaLabel={copy.kindLabel} value={kind}
           options={KINDS.map((value) => ({ value, label: copy.kinds[value] }))}
           onValueChange={(value) => openLibrary(value === "all" ? {} : { section: value as LibraryKind })} />
         <LibraryFilterMenus kind={view.section} group={view.group} />
       </Inline>
       {chips.length ? (
-        <Inline gap="xs" cross="center" data-test-class="library-filter-chips">
+        <Inline gap="xs" wrap cross="center" data-test-class="library-filter-chips">
           {chips.map((chip) => <Tag key={chip.key} onRemove={chip.clear} removeLabel={copy.clearFilters}>{chip.label}</Tag>)}
           <Button size="xs" variant="ghost" onClick={clearFilters}>{copy.clearAll}</Button>
         </Inline>

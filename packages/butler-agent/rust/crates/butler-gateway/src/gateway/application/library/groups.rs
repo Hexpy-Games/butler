@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Items shown with each group.
-const RECENT: usize = 4;
+const RECENT: i64 = 4;
 
 /// `{groups, ungrouped, total}` of `kind`, groups in their order. One count
 /// pass over the kind's group index plus one bounded read per group.
@@ -57,7 +57,7 @@ fn group(db: &Connection, id: &str, count: i64) -> Result<Value, AppStorageError
         .prepare_cached("SELECT payload FROM browser_library WHERE kind=?1 AND group_id=?2 ORDER BY created_at DESC,id DESC LIMIT ?3")
         .map_err(sql)?;
     let recent = statement
-        .query_map(params![kind, id, RECENT as i64], |r| r.get::<_, String>(0))
+        .query_map(params![kind, id, RECENT], |r| r.get::<_, String>(0))
         .map_err(sql)?
         .map(|row| row.map_err(sql).and_then(|text| item::parse(&text)))
         .collect::<Result<Vec<_>, _>>()?;
@@ -65,8 +65,10 @@ fn group(db: &Connection, id: &str, count: i64) -> Result<Value, AppStorageError
         .first()
         .and_then(|item| item["capturedAt"].as_str())
         .map_or(created, str::to_owned);
-    Ok(json!({"id": id, "kind": kind, "name": name, "position": position,
-        "count": count, "updatedAt": updated, "recent": recent}))
+    Ok(
+        json!({"id": id, "kind": kind, "name": name, "position": position,
+        "count": count, "updatedAt": updated, "recent": recent}),
+    )
 }
 
 /// Group `id` with its current count.
@@ -83,7 +85,12 @@ pub(super) fn one(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
 }
 
 /// Fails when another group of `kind` already has `name` (case-insensitively).
-fn unique(db: &Connection, kind: &str, name: &str, own: Option<&str>) -> Result<(), AppStorageError> {
+fn unique(
+    db: &Connection,
+    kind: &str,
+    name: &str,
+    own: Option<&str>,
+) -> Result<(), AppStorageError> {
     match item::find_group(db, kind, name)? {
         Some(id) if Some(id.as_str()) != own => Err(failure(
             AppStorageCode::LibraryGroupExists,
@@ -165,7 +172,13 @@ fn renumber(db: &Connection, order: &[String]) -> Result<(), AppStorageError> {
         .map_err(sql)?;
     for (position, id) in order.iter().enumerate() {
         statement
-            .execute(params![id, position as i64])
+            .execute(params![
+                id,
+                i64::try_from(position).map_err(|_| failure(
+                    AppStorageCode::InvalidLibraryRequest,
+                    "Too many groups."
+                ))?
+            ])
             .map_err(sql)?;
     }
     Ok(())

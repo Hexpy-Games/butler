@@ -12,11 +12,26 @@ fn cassette(bookmark: &str) -> Result<Cassette, HarnessError> {
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
     let calls = [
-        ("tool_search", json!({"query":"library organize tag group","limit":10})),
-        ("tool_describe", json!({"ids":["native:library_search","native:library_organize"]})),
-        ("tool_call", json!({"id":"native:library_search","arguments":{"query":"kyoto","kind":"scrap"}})),
-        ("tool_call", json!({"id":"native:library_organize","arguments":{"ids":["k1",bookmark],"group":"여행"}})),
-        ("tool_call", json!({"id":"native:library_organize","arguments":{"ids":["k1","o1"],"group":"여행","add_tags":["일본"]}})),
+        (
+            "tool_search",
+            json!({"query":"library organize tag group","limit":10}),
+        ),
+        (
+            "tool_describe",
+            json!({"ids":["native:library_search","native:library_organize"]}),
+        ),
+        (
+            "tool_call",
+            json!({"id":"native:library_search","arguments":{"query":"kyoto","kind":"scrap"}}),
+        ),
+        (
+            "tool_call",
+            json!({"id":"native:library_organize","arguments":{"ids":["k1",bookmark],"group":"여행"}}),
+        ),
+        (
+            "tool_call",
+            json!({"id":"native:library_organize","arguments":{"ids":["k1","o1"],"group":"여행","add_tags":["일본"]}}),
+        ),
     ];
     let mut round = Vec::new();
     for (index, (name, args)) in calls.into_iter().enumerate() {
@@ -47,7 +62,10 @@ fn outputs(requests: &[Value]) -> Vec<Value> {
         .unwrap()
         .iter()
         .filter(|item| item["type"] == "function_call_output")
-        .map(|item| serde_json::from_str(item["output"].as_str().unwrap()).unwrap_or(Value::Null))
+        .map(|item| {
+            let result: Value = serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
+            result.get("output").cloned().unwrap_or(result)
+        })
         .collect()
 }
 
@@ -63,7 +81,11 @@ async fn agent_searches_then_files_and_tags_library_items() -> Result<(), Harnes
         .stub_cassette(cassette(&bookmark)?)
         .start()
         .await?;
-    for (id, title) in [("k1", "Kyoto temples"), ("o1", "Osaka food"), ("t1", "Tax form")] {
+    for (id, title) in [
+        ("k1", "Kyoto temples"),
+        ("o1", "Osaka food"),
+        ("t1", "Tax form"),
+    ] {
         ok(s.gw.post("/library", scrap(id, title)).await?);
     }
     ok(s.gw.post("/library", json!({"id":"x","kind":"bookmark","title":"Docs","url":url,"capturedAt":"2026-10-09T00:00:00Z"})).await?);
@@ -73,22 +95,50 @@ async fn agent_searches_then_files_and_tags_library_items() -> Result<(), Harnes
     let results = outputs(&s.provider()?.requests());
     assert_eq!(results.len(), 5, "{results:?}");
     let found = &results[2];
-    let found_ids = found["items"].as_array().unwrap_or_else(|| panic!("{found}")).iter().map(|i| i["id"].as_str().unwrap()).collect::<Vec<_>>();
+    let found_ids = found["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{found}"))
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
     assert_eq!(found_ids, ["k1"], "{found}");
     assert_eq!(found["items"][0]["kind"], "scrap");
-    assert_eq!(results[3]["error"]["code"], "library_group_kind_mismatch", "{}", results[3]);
-    assert!(results[3]["error"]["message"].as_str().unwrap().contains("once per kind"));
+    assert_eq!(
+        results[3]["error"]["code"], "library_group_kind_mismatch",
+        "{}",
+        results[3]
+    );
+    assert!(
+        results[3]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("once per kind")
+    );
     let filed = &results[4];
-    assert_eq!((filed["ok"].as_bool(), filed["group"]["name"].as_str(), filed["group"]["created"].as_bool()), (Some(true), Some("여행"), Some(true)), "{filed}");
+    assert_eq!(
+        (
+            filed["ok"].as_bool(),
+            filed["group"]["name"].as_str(),
+            filed["group"]["created"].as_bool()
+        ),
+        (Some(true), Some("여행"), Some(true)),
+        "{filed}"
+    );
     assert_eq!(filed["items"][0]["group"], "여행");
     assert_eq!(filed["items"][0]["tags"], json!(["일본"]));
 
     let groups = page(&s, "/library/groups?kind=scrap").await?;
     assert_eq!(groups["groups"][0]["name"], "여행");
     assert_eq!(groups["groups"][0]["count"], 2);
-    assert_eq!(groups["ungrouped"], 1, "the failed mixed-kind call changed nothing");
+    assert_eq!(
+        groups["ungrouped"], 1,
+        "the failed mixed-kind call changed nothing"
+    );
     let tagged = page(&s, "/library?kind=scrap&tags=일본").await?;
     assert_eq!(tagged["items"].as_array().unwrap().len(), 2);
-    assert_eq!(page(&s, "/library?kind=bookmark").await?["items"][0]["group"], Value::Null);
+    assert_eq!(
+        page(&s, "/library?kind=bookmark").await?["items"][0]["group"],
+        Value::Null
+    );
     s.finish().await
 }

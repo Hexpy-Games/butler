@@ -43,8 +43,11 @@ pub(super) fn recover(
         let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
         library::create_folder_groups(&tx)?;
         recover_terms(&tx)?;
-        tx.execute("INSERT INTO browser_library_migration(version) VALUES(2)", [])
-            .map_err(AppStorageError::sqlite)?;
+        tx.execute(
+            "INSERT INTO browser_library_migration(version) VALUES(2)",
+            [],
+        )
+        .map_err(AppStorageError::sqlite)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
     }
     Ok(())

@@ -27,7 +27,10 @@ export function conversationAt(hit: Element | null): Extract<Target, { kind: "co
 function targetAt(x: number, y: number): Target | undefined {
   const hit = document.elementFromPoint(x, y);
   if (hit?.closest('[data-test-class="library-entry"]')) return { kind: "library" };
-  return groupAt(hit, "scrap") ?? conversationAt(hit);
+  const target = groupAt(hit, "scrap") ?? conversationAt(hit);
+  if (target) return target;
+  const view = useButlerStore.getState().view;
+  if (view.kind === "library" && !view.section && !view.item && hit?.closest('[data-test-class="library-page"]') && !hit.closest('[data-group-tile], [data-group-chip]')) return { kind: "library" };
 }
 function move(x: number, y: number) { useElementDrag.setState({ target: targetAt(x, y), x, y }); }
 async function drop() {

@@ -11,16 +11,7 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let args = query(request.uri());
-    let parts = path
-        .trim_start_matches("/library")
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            decode_component(part).map_err(|_| {
-                HttpError::public(400, "invalid_library_request", "Invalid path.")
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let parts = components(&path)?;
     let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
     let command = match (&method, parts.as_slice()) {
         (&Method::GET, []) => match args.get("url") {
@@ -29,8 +20,12 @@ pub(super) async fn route(
         },
         (&Method::POST, []) => C::Save(input::item(body(request, 10 * 1024 * 1024).await?)?),
         (&Method::GET, ["search"]) => C::Search(input::search(&args)?),
-        (&Method::POST, ["organize"]) => C::Change(input::change(&body(request, LIMIT).await?, true)?),
-        (&Method::PATCH, ["items"]) => C::Change(input::change(&body(request, LIMIT).await?, false)?),
+        (&Method::POST, ["organize"]) => {
+            C::Change(input::change(&body(request, LIMIT).await?, true)?)
+        }
+        (&Method::PATCH, ["items"]) => {
+            C::Change(input::change(&body(request, LIMIT).await?, false)?)
+        }
         (&Method::GET, ["groups"]) => C::Groups {
             kind: input::grouped_kind(args.get("kind"))?,
         },
@@ -94,4 +89,15 @@ const LIMIT: usize = 1024 * 1024;
 async fn body(request: Request<Body>, limit: usize) -> Result<Value, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), limit).await?;
     serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())
+}
+
+fn components(path: &str) -> Result<Vec<String>, HttpError> {
+    path.trim_start_matches("/library")
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            decode_component(part)
+                .map_err(|_| HttpError::public(400, "invalid_library_request", "Invalid path."))
+        })
+        .collect()
 }

@@ -108,11 +108,9 @@ pub(super) fn add_tag(db: &Connection, item_id: &str, name: &str) -> Result<(), 
     db.prepare_cached("INSERT OR IGNORE INTO browser_library_tag(norm,name) VALUES(?1,?2)")
         .and_then(|mut s| s.execute(params![norm, name.trim()]))
         .map_err(sql)?;
-    db.prepare_cached(
-        "INSERT OR IGNORE INTO browser_library_item_tag(item_id,norm) VALUES(?1,?2)",
-    )
-    .and_then(|mut s| s.execute(params![item_id, norm]))
-    .map_err(sql)?;
+    db.prepare_cached("INSERT OR IGNORE INTO browser_library_item_tag(item_id,norm) VALUES(?1,?2)")
+        .and_then(|mut s| s.execute(params![item_id, norm]))
+        .map_err(sql)?;
     Ok(())
 }
 /// Removes tag `name` from `item_id`; the tag goes when no item has it.

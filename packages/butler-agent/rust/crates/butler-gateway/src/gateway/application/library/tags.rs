@@ -5,9 +5,6 @@ use super::item::{self, failure, sql};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
-/// Sites listed in facets.
-const SITES: i64 = 50;
-
 /// Every tag with its item count: most used first, then by name.
 pub(super) fn list(db: &Connection) -> Result<Value, AppStorageError> {
     let tags = counted(
@@ -84,11 +81,8 @@ pub(super) fn rename(db: &Connection, from: &str, to: &str) -> Result<Value, App
             .map_err(sql)?;
         }
         db.execute("INSERT OR IGNORE INTO browser_library_item_tag(item_id,norm) SELECT item_id,?2 FROM browser_library_item_tag WHERE norm=?1", params![old, new]).map_err(sql)?;
-        db.execute(
-            "DELETE FROM browser_library_item_tag WHERE norm=?1",
-            [&old],
-        )
-        .map_err(sql)?;
+        db.execute("DELETE FROM browser_library_item_tag WHERE norm=?1", [&old])
+            .map_err(sql)?;
         db.execute("DELETE FROM browser_library_tag WHERE norm=?1", [&old])
             .map_err(sql)?;
     }
@@ -142,12 +136,14 @@ pub(super) fn facets(
     };
     let tags = counted(
         db,
-        &format!("SELECT g.name,COUNT(*) FROM browser_library l JOIN browser_library_item_tag t ON t.item_id=l.id JOIN browser_library_tag g ON g.norm=t.norm WHERE {scope} GROUP BY t.norm ORDER BY 2 DESC,g.name"),
+        &format!(
+            "SELECT g.name,COUNT(*) FROM browser_library l JOIN browser_library_item_tag t ON t.item_id=l.id JOIN browser_library_tag g ON g.norm=t.norm WHERE {scope} GROUP BY t.norm ORDER BY 2 DESC,g.name"
+        ),
         &args,
     )?;
     let sites = counted(
         db,
-        &format!("SELECT l.site,COUNT(*) FROM browser_library l WHERE {scope} AND l.site<>'' GROUP BY l.site ORDER BY 2 DESC,l.site LIMIT {SITES}"),
+        &format!("SELECT l.site,COUNT(*) FROM browser_library l WHERE {scope} AND l.site<>'' GROUP BY l.site ORDER BY 2 DESC,l.site"),
         &args,
     )?
     .into_iter()

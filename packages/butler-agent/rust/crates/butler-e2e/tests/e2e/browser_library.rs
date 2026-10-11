@@ -1,5 +1,10 @@
 //! S6: persistent Library, Script15 KO/EN/JA search and one idle-write observation.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "test assertions")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test assertions"
+)]
 mod agent;
 mod migration;
 mod organize;

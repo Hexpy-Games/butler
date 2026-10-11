@@ -71,9 +71,9 @@ impl AppApplication {
             C::CreateGroup { kind, name } => {
                 self.library_write(move |db| groups::create(db, &kind, &name))
             }
-            C::UpdateGroup { id, name, position } => self.library_write(move |db| {
-                groups::update(db, &id, name.as_deref(), position)
-            }),
+            C::UpdateGroup { id, name, position } => {
+                self.library_write(move |db| groups::update(db, &id, name.as_deref(), position))
+            }
             C::DeleteGroup { id } => self.library_write(move |db| groups::delete(db, &id)),
             C::Change(change) => self.library_write(move |db| organize::apply(db, &change)),
             C::Tags => self.library_read(tags::list),
@@ -171,7 +171,11 @@ fn snapshot(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
     Ok(json!({ "html": html }))
 }
 /// Stores, keeps or drops a scrap's HTML copy with its row (same transaction).
-fn save_snapshot(db: &Connection, item: &Value, html: Option<Value>) -> Result<(), AppStorageError> {
+fn save_snapshot(
+    db: &Connection,
+    item: &Value,
+    html: Option<Value>,
+) -> Result<(), AppStorageError> {
     let id = item["id"].as_str().unwrap_or_default();
     match html {
         Some(Value::String(html)) => db.execute(
