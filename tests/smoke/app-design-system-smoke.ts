@@ -413,7 +413,35 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   const detailUrl = new URL(page.url());
   assert(detailUrl.searchParams.get("page") === "blocks/DashboardHeader", `${label}: Open details did not deep-link the item page`);
 
+  await assertTitlebarSlots(page, baseUrl, label);
   await assertItemGuidanceAndStates(page, baseUrl, label);
+}
+
+// Every TitlebarShell story, with a leading control or a back button: the control
+// centers on the title line and the bar does not overflow.
+async function assertTitlebarSlots(page: Page, baseUrl: string, label: string): Promise<void> {
+  await openViewerPage(page, baseUrl, "blocks/TitlebarShell");
+  await page.locator('[data-ds-detail="TitlebarShell"] [data-slot="titlebar-back"]').first().waitFor({ state: "attached" });
+  const bars = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-ds-detail="TitlebarShell"] [data-ds-fixture-canvas] header')].map((header) => {
+      const centerY = (element: Element | null) => {
+        const rect = element?.getBoundingClientRect();
+        return rect ? rect.top + rect.height / 2 : Number.NaN;
+      };
+      const title = header.querySelector('[data-slot="titlebar-title"]');
+      const start = header.querySelector('[data-slot="titlebar-back"], [data-slot="titlebar-leading"]');
+      return {
+        back: Boolean(header.querySelector('[data-slot="titlebar-back"]')),
+        offset: start ? Math.abs(centerY(start) - centerY(title)) : 0,
+        overflow: header.scrollWidth - header.clientWidth,
+      };
+    }),
+  );
+  assert(bars.some((bar) => bar.back), `${label}: TitlebarShell has no back-button story`);
+  for (const bar of bars) {
+    assert(bar.offset <= 2, `${label}: TitlebarShell ${bar.back ? "back" : "leading"}/title alignment is off by ${bar.offset}px`);
+    assert(bar.overflow <= 1, `${label}: TitlebarShell overflows by ${bar.overflow}px`);
+  }
 }
 
 async function assertItemGuidanceAndStates(page: Page, baseUrl: string, label: string): Promise<void> {
