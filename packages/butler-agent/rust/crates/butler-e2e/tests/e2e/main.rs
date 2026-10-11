@@ -18,6 +18,7 @@ mod browser_batch;
 mod browser_delegation;
 mod browser_downloads;
 mod browser_headless;
+mod browser_history;
 mod browser_journey;
 mod browser_jspaint;
 mod browser_library;

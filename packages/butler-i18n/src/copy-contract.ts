@@ -229,6 +229,7 @@ interface ConversationCopy {
 }
 
 export interface BrowserCopy {
+  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;

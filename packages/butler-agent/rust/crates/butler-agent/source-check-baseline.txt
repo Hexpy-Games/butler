@@ -31,7 +31,7 @@ src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/tools.rs	GuidedTools::new	97
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	285
+src/host/guided/tools/dispatch.rs	execute	284
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
 src/host/guided/tools/execute.rs	execute	137
