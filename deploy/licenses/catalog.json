@@ -5,8 +5,8 @@
     "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
     "deploy/licenses/inputs.mjs": "8b8f71b92ff873d77dade2f90fbea05395cfdc3151c900607774de31796a7657",
     "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
-    "packages/butler-agent/rust/Cargo.lock": "5952f4320b4a3ac07ef3b1ff5d7507500068dfcf611945938334cc56fcb0e195",
-    "packages/butler-agent/rust/Cargo.toml": "84e021c080b775ab00c9967a4ec8c75c8c46fced4a9eab1b8d30d4fab2d4ef61",
+    "packages/butler-agent/rust/Cargo.lock": "c969a97f1e7789a7113dc63d62c9d362198e06bed8457e3463658afd6f271cb5",
+    "packages/butler-agent/rust/Cargo.toml": "f81b30ac8ea1b36a41ccef733fd0b13bc11bde940148ec055dfa6b3a77bb8f00",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "ba2918e2519ba5f268c39525cac8ff244864d03a28fd78ef173e9b26c7da245a",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -19,7 +19,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "03b414dc5ef889248322932afad72105f28e6bd4d26b103da4b591f359e5607f",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "fb21557f9a7b5ff6ef61da067493062bb5d2c5227d376a24dbd44eb728e1543c",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "981c39eae0e26a39b034c3edb8e4ae5f9ecee881aee92f0f2419f60bf09a4ba2",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
@@ -19544,6 +19544,36 @@
       "copyright": []
     },
     {
+      "id": "rust:landlock@0.4.7",
+      "name": "landlock",
+      "version": "0.4.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/landlock-lsm/rust-landlock/tree/62fec0f1521e4ab7f697752c1f324b725fe643d5",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "779951f48fee980e71c6bb48815f343929ec5e99cfda7e741856eb4e25c2624c",
+        "f131d296671699b211e4ac41a9d83247df24ae11af314802c7aff1e392736fd4",
+        "d11fe3f1df9c3fd6fd020091899fcfccd0a949e0a32b461b4c68915f770e31a9"
+      ],
+      "files": [
+        "COPYRIGHT",
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/COPYRIGHT",
+        "https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/LICENSE-APACHE",
+        "https://github.com/landlock-lsm/rust-landlock/blob/62fec0f1521e4ab7f697752c1f324b725fe643d5/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2020 Mickaël Salaün",
+        "Copyright (c) 2020 Mickaël Salaün"
+      ]
+    },
+    {
       "id": "rust:lazy_static@1.5.0",
       "name": "lazy_static",
       "version": "1.5.0",
@@ -24506,6 +24536,32 @@
       ],
       "copyright": [
         "Copyright (c) 2016-2019 Ulrik Sverdrup \"bluss\" and scopeguard developers"
+      ]
+    },
+    {
+      "id": "rust:seccompiler@0.5.0",
+      "name": "seccompiler",
+      "version": "0.5.0",
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "source": "https://github.com/rust-vmm/seccompiler/tree/c3cf77d65815037931ae5bc2fca010713defdc8c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "051a73a9b3811f17c6b6ba5659d0258cee303a47af0e79ec4b05e6566e021750"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-BSD-3-Clause"
+      ],
+      "links": [
+        "https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-APACHE",
+        "https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-BSD-3-Clause"
+      ],
+      "copyright": [
+        "Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved."
       ]
     },
     {

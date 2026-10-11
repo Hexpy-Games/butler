@@ -72,6 +72,7 @@ mod installed_preview;
 mod legacy_import;
 mod lifecycle;
 mod lifecycle_intent;
+mod linux_sandbox;
 mod live;
 mod long_paths;
 mod mcp;

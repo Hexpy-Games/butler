@@ -5,8 +5,6 @@ use std::path::Path;
 
 use super::{Invocation, ProtectError, Protection, SandboxError};
 
-pub(super) const ENFORCED: bool = false;
-
 pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {
     drop(invocation);
     Err(SandboxError::ReadOnlyUnavailable)

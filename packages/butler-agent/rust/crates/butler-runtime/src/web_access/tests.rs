@@ -330,7 +330,7 @@ async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
     // and localhost names are refused before any request is made.
     for denied in [
         "http://127.0.0.1:1/",
-        "http://10.0.0.1/",
+        "http://10.0.0.1/", // privacy-hygiene: allow-private-ip (LAN-denial fixture)
         "http://169.254.169.254/latest",
         "http://localhost./",
         "http://intranet.localhost/",

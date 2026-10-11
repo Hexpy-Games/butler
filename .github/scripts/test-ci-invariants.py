@@ -34,6 +34,10 @@ spec = importlib.util.spec_from_file_location('windows_tests', ROOT / 'test-wind
 windows_tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows_tests)
 WindowsSafety = windows_tests.WindowsSafety
+spec = importlib.util.spec_from_file_location('native_archive_tests', ROOT / 'test-native-archive-safety.py')
+native_archive_tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(native_archive_tests)
+NativeArchiveSafety = native_archive_tests.NativeArchiveSafety
 
 
 class ArchivedLibtest(unittest.TestCase):
@@ -71,12 +75,13 @@ class ArtifactTrust(unittest.TestCase):
         run = dict(id=1, status='completed', conclusion='success', event='pull_request',
                    head_sha='b' * 40, head_repository={'full_name': 'owner/repo'})
         artifacts = [dict(name=f'agent-{kind}-linux-x64', expired=False) for kind in ['payload', 'provenance']]
-        for mismatch in [None, 'sha', 'version', 'digest']:
+        for mismatch in [None, 'sha', 'version', 'digest', 'sandbox_digest']:
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 binary = root / 'fixture'
                 binary.write_bytes(b'complete binary')
-                metadata = dict(expected, binary='butler-agent', sha256=provenance.digest(binary))
+                metadata = dict(expected, binary='butler-agent', sha256=provenance.digest(binary),
+                                sandbox_sha256=hashlib.sha256(b'complete sandbox').hexdigest())
                 if mismatch in ['sha', 'version']:
                     metadata[mismatch] = 'different'
                 def download(args, **kwargs):
@@ -85,17 +90,20 @@ class ArtifactTrust(unittest.TestCase):
                     (directory / 'provenance.json').write_text(json.dumps(metadata))
                     if args[args.index('--name') + 1].startswith('agent-payload-'):
                         (directory / 'butler-agent').write_bytes(b'corrupt' if mismatch == 'digest' else binary.read_bytes())
+                        (directory / 'butler-sandbox').write_bytes(b'corrupt' if mismatch == 'sandbox_digest' else b'complete sandbox')
                 with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo', GITHUB_ENV=str(root / 'env')), \
                      patch.object(provenance, 'output', side_effect=[json.dumps({'workflow_runs': [run]}), json.dumps({'artifacts': artifacts})]), \
                      patch.object(provenance.subprocess, 'run', side_effect=download) as transfer, \
                      patch.object(provenance, 'verify_version') as version, contextlib.redirect_stdout(io.StringIO()):
-                    if mismatch == 'digest':
+                    if mismatch in ['digest', 'sandbox_digest']:
                         with self.assertRaisesRegex(ValueError, 'digest'):
                             provenance.reuse(root / 'result', expected)
                     else:
                         self.assertEqual(provenance.reuse(root / 'result', expected), mismatch is None)
                     self.assertEqual(transfer.call_count, 1 if mismatch in ['sha', 'version'] else 2)
                     self.assertEqual(version.call_count, int(mismatch is None))
+                    if mismatch is None:
+                        self.assertEqual((root / 'result/butler-sandbox').read_bytes(), b'complete sandbox')
 
     # test-category: security
     def test_exact_identity_and_digest_required(self):
@@ -106,6 +114,7 @@ class ArtifactTrust(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             (directory / 'butler-agent').write_text('#!/bin/sh\necho "butler 0.1.0-preview.99 (fixture)"\n')
+            (directory / 'butler-sandbox').write_bytes(b'complete sandbox')
             provenance.record(directory, expected)
             self.assertTrue(provenance.verify(directory, expected))
             for key in expected:
