@@ -1,8 +1,11 @@
 //! Tab creation and the idle lifecycle of the headless browser process.
-use super::{Headless, browser::Browser, state, targets};
+use super::{Headless, INSTALL_WAIT, browser::Browser, install::Progress, state, targets};
 use serde_json::{Value, json};
 use std::{
-    sync::{Arc, atomic::Ordering},
+    sync::{
+        Arc, PoisonError,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -143,5 +146,72 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
                 return;
             },
         }
+    }
+}
+
+/// One call counted as in flight until it returns or its caller drops it
+/// (a gateway deadline), so an abandoned call never keeps the browser alive.
+pub(super) struct InFlight<'a>(&'a AtomicUsize);
+
+impl<'a> InFlight<'a> {
+    pub(super) fn enter(count: &'a AtomicUsize) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(count)
+    }
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl Headless {
+    pub(super) async fn ready(self: &Arc<Self>) -> Result<Arc<Browser>, Value> {
+        if let Some(browser) = self.browser() {
+            return Ok(browser);
+        }
+        // A started launch completes and registers its browser (and its
+        // reap) even when the caller is gone, e.g. past a gateway deadline:
+        // an abandoned launch would leave a browser running untracked.
+        let headless = self.clone();
+        tokio::spawn(async move { headless.start().await })
+            .await
+            .unwrap_or_else(|_| Err(json!({"status":"unavailable","reason":"browser_unavailable"})))
+    }
+
+    async fn start(self: &Arc<Self>) -> Result<Arc<Browser>, Value> {
+        let _start = self.starting.lock().await;
+        if let Some(browser) = self.browser() {
+            return Ok(browser);
+        }
+        let executable = match self.installer.executable_within(INSTALL_WAIT).await {
+            Progress::Ready(path) => path,
+            Progress::Running { received, total } => {
+                return Err(
+                    json!({"status":"unavailable","reason":"browser_installing","progress":{"received":received,"total":total},
+                    "recovery":"The browser is being installed for its first use. Retry browser_open shortly; nothing was opened."}),
+                );
+            }
+            Progress::Failed(reason) => {
+                return Err(json!({"status":"unavailable","reason":reason}));
+            }
+        };
+        let browser = Browser::launch(
+            &executable,
+            &self.config.root,
+            self.config.content,
+            self.downloads.clone(),
+        )
+        .await
+        .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
+        if !self.enabled() {
+            // Turned off while it started.
+            browser.stop().await;
+            return Err(json!({"status":"unavailable","reason":"no_browser"}));
+        }
+        *self.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(browser.clone());
+        tokio::spawn(janitor(Arc::downgrade(self), browser.clone()));
+        Ok(browser)
     }
 }
