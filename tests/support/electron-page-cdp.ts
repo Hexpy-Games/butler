@@ -5,7 +5,7 @@ export interface ElectronPage {
   evaluate<T>(fn: () => T): Promise<Awaited<T>>;
   expression<T>(expression: string): Promise<T>;
   frameExpression<T>(origin: string, expression: string): Promise<T>;
-  press(key: "Escape" | "Enter" | "Home" | "End" | "ArrowRight"): Promise<void>;
+  press(key: "Escape" | "Enter" | "Home" | "End" | "ArrowRight" | "ArrowDown" | "ArrowUp" | "Shift+Delete"): Promise<void>;
   insertText(text: string): Promise<void>;
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
@@ -115,9 +115,11 @@ async function connect(url: string): Promise<ElectronPage> {
       await send("Input.dispatchMouseEvent",{type:"mouseReleased",...to,button:"left",buttons:0,clickCount:1});
     },
     press: async key => {
-      const windowsVirtualKeyCode = { Escape: 27, Enter: 13, Home: 36, End: 35, ArrowRight: 39 }[key];
-      await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: key, windowsVirtualKeyCode });
-      await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode });
+      const shifted = key === "Shift+Delete";
+      const actual = shifted ? "Delete" : key;
+      const windowsVirtualKeyCode = { Escape: 27, Enter: 13, Home: 36, End: 35, ArrowRight: 39, ArrowDown: 40, ArrowUp: 38, Delete: 46 }[actual];
+      await send("Input.dispatchKeyEvent", { type: "keyDown", key: actual, code: actual, windowsVirtualKeyCode, modifiers: shifted ? 8 : 0 });
+      await send("Input.dispatchKeyEvent", { type: "keyUp", key: actual, code: actual, windowsVirtualKeyCode, modifiers: shifted ? 8 : 0 });
     },
     insertText: async text => { await send("Input.insertText", { text }); },
     frameExpression: (origin, text) => {

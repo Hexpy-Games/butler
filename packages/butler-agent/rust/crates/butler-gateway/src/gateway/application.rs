@@ -77,7 +77,7 @@ mod turn_dispatch;
 pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
-mod storage;
+pub(super) mod storage;
 mod transcript_export;
 mod turn_cancellation;
 mod updates;

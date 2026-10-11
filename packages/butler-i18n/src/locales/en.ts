@@ -262,6 +262,7 @@ export const enUsCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
+    history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions" },
     tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
     back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab",

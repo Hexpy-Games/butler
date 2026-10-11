@@ -27,6 +27,7 @@ import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.t
 import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
 import { LibraryDialogHost } from "@/components/library/LibraryDialogHost";
 import { CardDragPreview } from "@/components/library/CardDragPreview";
+import { HistoryPage } from "@/components/browser/HistoryPage";
 import { LibraryPage } from "@/components/browser/LibraryPage";
 import { useBrowserShell } from "@/components/browser/useBrowserShell";
 import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
@@ -231,6 +232,8 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
       <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} /></AdaptiveShellTitle>
       {view.kind === "browser" && window.butlerBrowser ? (
         <Stack fill gap="none"><LiveConnectionNotice /><BrowserArea /></Stack>
+      ) : view.kind === "history" ? (
+        <AdaptiveShellCard><LiveConnectionNotice /><HistoryPage /></AdaptiveShellCard>
       ) : view.kind === "library" ? (
         <AdaptiveShellCard><LiveConnectionNotice /><LibraryPage /></AdaptiveShellCard>
       ) : view.kind === "automations" || view.kind === "automation-detail" ? (

@@ -2155,6 +2155,7 @@ async function createWindow() {
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
     userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {

@@ -611,6 +611,10 @@ const butlerApp = Object.freeze({
     if (!allowed || !["GET", "POST", "PATCH", "DELETE"].includes(method)) throw new Error("Invalid Library request.");
     return requestJson(route.pathname + route.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   },
+  history: ({ path, method = "GET", body }) => {
+    if (!/^\/browser-history(?:\/(?:search|suggestions|delete|delete-url|clear))?(?:\?|$)/u.test(path)) throw new Error("invalid_history_route");
+    return requestJson(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
   listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -1454,6 +1458,10 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     const listener = (_event, point) => handler(point);
     ipcRenderer.on("butler-browser:pointer", listener);
     return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
+  onHistory: (handler) => {
+    const listener = () => handler(); ipcRenderer.on("butler-browser:history", listener);
+    return () => ipcRenderer.removeListener("butler-browser:history", listener);
   },
   onAddress: (handler) => {
     const listener = () => handler();

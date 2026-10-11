@@ -1,4 +1,5 @@
 export const additionalToolLabels = {
+  browser_history_search: "방문 기록 검색",
   forget_explicit_memory: "지침 삭제",
   project_artifacts: "프로젝트 결과물 찾기",
   search: "검색",

@@ -268,6 +268,7 @@ export const koKrCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
+    history: { erase: "지우기", title: "방문 기록", search: "방문 기록 검색", clear: "방문 기록 지우기", butlerOnly: "버틀러가 방문", empty: "방문 기록 없음", hour: "지난 1시간", today: "오늘", week: "지난 7일", all: "전체", suggestions: "주소 추천" },
     tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계",
     title: "브라우저", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", address: "주소", addressPlaceholder: "검색 또는 URL 입력", back: "뒤로", forward: "앞으로",
     reload: "새로고침", stop: "중지", loading: "로딩 중", crashed: "탭이 중단됨", empty: "새 탭을 열어보세요", updateRequired: "버틀러 업데이트 필요", restartRequired: "버틀러 재시작 필요",

@@ -214,8 +214,8 @@ async fn route_for_client(
     client: Client,
 ) -> Result<Response, HttpError> {
     let uri = request.uri().clone();
-    if uri.path() == "/library" || uri.path().starts_with("/library/") {
-        return library::route(state, request).await;
+    if let Some(result) = library::dispatch(request.uri().path()) {
+        return result.route(state, request).await;
     }
     if uri.path().starts_with("/internal/browser") {
         return browser_host::route(state, request, &client).await;

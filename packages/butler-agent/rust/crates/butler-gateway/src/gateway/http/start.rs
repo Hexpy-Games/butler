@@ -90,6 +90,9 @@ fn browser_ports(state: &Arc<HttpState>) {
         Arc::downgrade(state),
     )));
     if let Some(headless) = &state.headless {
+        headless.set_history_port(Arc::new(super::library::history::HeadlessHistory(
+            Arc::downgrade(state),
+        )));
         headless.set_download_port(Arc::new(super::browser_host::downloads::HeadlessDownloads(
             Arc::downgrade(state),
         )));
