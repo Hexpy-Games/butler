@@ -173,13 +173,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
     let input = facts.input;
     let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
     let (tool, access, targets) = if let Some(grant) = input.get("grant") {
-        let frame = text(&grant["frame_site"]);
-        if frame.is_empty() {
-            ("browser_site_access", "change", vec![text(&grant["site"])])
-        } else {
-            let target = format!("{} · {frame}", text(&grant["site"]));
-            ("browser_frame_access", "change", vec![target])
-        }
+        ("browser_site_access", "change", vec![text(&grant["site"])])
     } else if let Some(sign_in) = input.get("sign_in") {
         let target = format!(
             "{} · {}",

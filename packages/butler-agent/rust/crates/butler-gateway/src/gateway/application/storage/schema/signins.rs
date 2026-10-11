@@ -1,5 +1,6 @@
 //! Sign-in module tables (no secrets), conversation site grants, schedule
-//! grant sources and import summaries. Additive `IF NOT EXISTS` only.
+//! grant sources and import summaries. Additive `IF NOT EXISTS`, plus the
+//! idempotent removal of retired frame grants.
 use rusqlite::Connection;
 
 use super::super::AppStorageError;
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS browser_site_grants (
   PRIMARY KEY (session_id, site, frame_site)
 );
 CREATE INDEX IF NOT EXISTS browser_site_grants_site_idx ON browser_site_grants(site);
+-- Embedded frames need no grant since decision 37; drop retired frame grants.
+DELETE FROM browser_site_grants WHERE frame_site<>'';
 CREATE TABLE IF NOT EXISTS browser_site_access (
   site TEXT PRIMARY KEY,
   all_conversations INTEGER NOT NULL DEFAULT 0,

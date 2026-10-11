@@ -27,13 +27,6 @@ pub(crate) fn current(page: &Page, obs: &Value) -> Option<Arc<Observation>> {
         .flatten()
 }
 
-fn same_origin(a: &str, b: &str) -> bool {
-    match (url::Url::parse(a), url::Url::parse(b)) {
-        (Ok(a), Ok(b)) => a.origin() == b.origin(),
-        _ => false,
-    }
-}
-
 async fn blocker(page: &Page, observation: &Observation, node: &Value) -> Value {
     let covered = node["coveredBy"].clone();
     let Some(frame) = observation.frame_of(&js_string(&node["ref"])) else {
@@ -322,12 +315,7 @@ pub(crate) async fn resolve_point(
         return Ok(reason("point_outside_viewport"));
     }
     let css = (px * g.css_width / g.width, py * g.css_height / g.height);
-    let main_url = observation
-        .frames
-        .first()
-        .map_or_else(String::new, |f| f.url.clone());
     for index in (0..observation.frames.len()).rev() {
-        let frame = &observation.frames[index];
         let Ok(origin) = page
             .frame_point(&observation.frames, index, (0.0, 0.0))
             .await
@@ -342,9 +330,6 @@ pub(crate) async fn resolve_point(
         {
             continue;
         }
-        if frame.parent.is_some() && !same_origin(&frame.url, &main_url) {
-            return Ok(reason("frame_not_granted"));
-        }
         return framed_hit(page, &observation, index, (point, expect), css, origin).await;
     }
     Ok(point_refusal(
@@ -356,7 +341,7 @@ pub(crate) async fn resolve_point(
     ))
 }
 
-/// The element that receives keyboard input now; the same frame rule as points.
+/// The element that receives keyboard input now, in whichever frame holds focus.
 pub(crate) async fn resolve_focus(
     page: &Page,
     obs: &Value,
@@ -379,9 +364,6 @@ pub(crate) async fn resolve_focus(
         };
         if result.is_null() {
             continue;
-        }
-        if frame.parent.is_some() && !same_origin(&frame.url, &main_url) {
-            return Ok(json!({"reason":"frame_not_granted","hit":result["hit"]}));
         }
         if !result["reason"].is_null() {
             return Ok(result);

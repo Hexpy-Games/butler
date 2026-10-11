@@ -4,20 +4,15 @@ import { accessibleName, nameObservation } from "./accessibility.mjs";
 import { contentRegions } from "./layout.mjs";
 import { observationImage } from "./capture.mjs";
 import { noteProgress } from "./progress.mjs";
-import { frameClass, signedInPolicy, topSite } from "./signed-in.mjs";
+import { frameClass, signedInPolicy } from "./signed-in.mjs";
+import { routeTarget } from "./frame-input.mjs";
 
 const TAKEOVER = "Takeover only: ask the user to complete this field in the tab, then call browser_wait_for_user with reason secure_field (secure_keypad for a keypad).";
-/** Decision 25 on signed-in tabs: unknown frames stay closed, payment frames show labels only. */
-function signedInFrame(tab, frame, index, args) {
+/** Decision 37 on signed-in tabs: every frame is observed; payment frames show labels only. */
+function signedInClass(tab, frame) {
+  if (!frame.parent) return "main";
   const policy = signedInPolicy(tab);
-  if (!policy || !frame.parent) return { cls: frame.parent ? undefined : "main" };
-  const cls = frameClass(frame.url, tab.url, policy);
-  if (cls !== "unknown") return { cls };
-  let host = "";
-  try { host = new URL(frame.url).hostname; } catch { /* opaque frame */ }
-  if (args.frame === `f${index}`) return { refused: { status: "not_dispatched", reason: "frame_grant_required", site: topSite(tab.url, policy), frame_site: host,
-    recovery: "This frame belongs to another site; the user must allow acting inside it for this conversation. The call asks them." } };
-  return { cls, line: `frame f${index} ${JSON.stringify(host)} unavailable (another site; observe with frame="f${index}" to ask the user)` };
+  return policy ? frameClass(frame.url, tab.url, policy) : undefined;
 }
 
 function editableFields(nodes) {
@@ -109,12 +104,10 @@ async function observeOnce(tab, args) {
   let scriptMs = 0, gridSampleMs = 0, below = 0, interactive = 0, payment = false;
   const addons = [];
   for (const { index, frame } of selected) {
-    const signed = signedInFrame(tab, frame, index, args);
-    if (signed.refused) return signed.refused;
-    classes.set(frame, signed.cls);
-    if (signed.line) { text.push(signed.line); continue; }
+    const cls = signedInClass(tab, frame);
+    classes.set(frame, cls);
     const result = await evaluateWorld(frame, perceptionSource({ obs, epoch, scope: args.scope, secureKeypads: tab.policy?.secure_keypads ?? args.policy?.secure_keypads ?? [], prefix: `f${index}-` }));
-    if (signed.cls === "payment") labelsOnly(result);
+    if (cls === "payment") labelsOnly(result);
     await nameObservation(tab, frame, result);
     if (result.layout_regions.length) {
       const origin = await framePoint(frame, { x: 0, y: 0 });
@@ -174,7 +167,7 @@ export async function resolveStep(tab, obs, step, scroll = false) {
     if (resolved.rect) { resolved.rect.x += point.x - resolved.x; resolved.rect.y += point.y - resolved.y; }
     resolved.x=point.x;resolved.y=point.y;
   }
-  return { ...resolved, frame_payment: Boolean(frame.parent) && tab.observation.paymentFrames.has(frame), payment: resolved.payment || tab.observation.payment, addons: resolved.addons ?? [] };
+  return routeTarget({ ...resolved, frame_payment: Boolean(frame.parent) && tab.observation.paymentFrames.has(frame), payment: resolved.payment || tab.observation.payment, addons: resolved.addons ?? [] }, frame);
 }
 /** Payment widgets show labels only: no field values reach the model. */
 function labelsOnly(result) {

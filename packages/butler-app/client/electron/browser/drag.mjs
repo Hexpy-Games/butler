@@ -1,4 +1,5 @@
 import { resolveStep } from "./observe.mjs";
+import { mouseSender } from "./frame-input.mjs";
 
 export async function dragTarget(tab, observation, step, source, scroll = false) {
   if (step.target_ref) {
@@ -17,15 +18,15 @@ export async function dragTarget(tab, observation, step, source, scroll = false)
 /** Native drag input shares the existing expected-input and overlay pointer path.
  * A point drag may pass through ordered path vertices with the button held. */
 export async function dispatchDrag(tab, source, modifiers = []) {
-  const contents = tab.view.webContents, scale = tab.bounds?.scale ?? 1;
+  const contents = tab.view.webContents, scale = tab.bounds?.scale ?? 1, send = mouseSender(tab, source, source.destination);
   const point = target => ({ x: Math.round(target.x * scale), y: Math.round(target.y * scale) });
   const start = point(source), vertices = [...(source.path ?? []).map(point), point(source.destination)];
   let current = start;
   const epoch = tab.epoch, owner = tab.owner;
   const expected = at => { tab.expectedInputs = ["mouseMove", "mouseDown", "mouseUp"].map(type => ({ type, ...at })); };
   expected(start);
-  contents.sendInputEvent({ type: "mouseMove", ...start, modifiers });
-  contents.sendInputEvent({ type: "mouseDown", ...start, button: "left", clickCount: 1, modifiers });
+  await send({ type: "mouseMove", ...start, modifiers });
+  await send({ type: "mouseDown", ...start, button: "left", clickCount: 1, modifiers });
   try {
     let from = start;
     for (const end of vertices) {
@@ -37,7 +38,7 @@ export async function dispatchDrag(tab, source, modifiers = []) {
         tab.onPointer?.({ action: "drag" }, { x: x / scale, y: y / scale, rect: source.destination.rect });
         expected({ x, y });
         current = { x, y };
-        contents.sendInputEvent({ type: "mouseMove", x, y, button: "left", modifiers: ["leftButtonDown", ...modifiers] });
+        await send({ type: "mouseMove", x, y, button: "left", modifiers: ["leftButtonDown", ...modifiers] });
         // A zero-delay yield lets Chromium coalesce a whole stroke into one move.
         // Wait for an input frame so canvas apps receive the held-button path.
         await new Promise(done => setTimeout(done, 20));
@@ -46,6 +47,6 @@ export async function dispatchDrag(tab, source, modifiers = []) {
     }
     return { status: "completed", hit: source.hit, destination: source.destination.hit };
   } finally {
-    if (!contents.isDestroyed()) { expected(current); contents.sendInputEvent({ type: "mouseUp", ...current, button: "left", clickCount: 1, modifiers }); }
+    if (!contents.isDestroyed()) { expected(current); await send({ type: "mouseUp", ...current, button: "left", clickCount: 1, modifiers }); }
   }
 }

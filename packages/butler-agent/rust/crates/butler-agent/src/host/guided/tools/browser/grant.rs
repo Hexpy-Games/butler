@@ -1,5 +1,5 @@
-//! Signed-in site and frame grants: Rust refuses an ungranted call, the user
-//! answers one exact card, and the grant then holds for this conversation.
+//! Signed-in site grants: Rust refuses an ungranted call, the user answers
+//! one exact card, and the grant then holds for this conversation.
 use super::super::GuidedTools;
 use super::{authority, client, settle};
 use butler_turn::btcc::{ModelRoundToolCall, ToolExecutionError};
@@ -8,13 +8,11 @@ use tokio_util::sync::CancellationToken;
 
 /// The grant a refusal asks for, if any.
 fn needed(result: &Value) -> Option<Value> {
-    let frame = match result["reason"].as_str() {
-        Some("signed_in_grant_required") => "",
-        Some("frame_grant_required") => result["frame_site"].as_str().unwrap_or(""),
-        _ => return None,
-    };
+    if result["reason"] != "signed_in_grant_required" {
+        return None;
+    }
     let site = result["site"].as_str().filter(|site| !site.is_empty())?;
-    Some(json!({"site": site, "frame_site": frame}))
+    Some(json!({"site": site}))
 }
 
 /// Calls `op`; an ungranted site raises the grant card, and an allowed grant
@@ -33,12 +31,7 @@ pub(super) async fn call(
         return Ok(result);
     };
     let site = grant["site"].as_str().unwrap_or("").to_owned();
-    let frame = grant["frame_site"].as_str().unwrap_or("").to_owned();
-    let target = if frame.is_empty() {
-        butler_runtime::browser::signed_in_scope(&site)
-    } else {
-        format!("browser:frame:{site}:{frame}")
-    };
+    let target = butler_runtime::browser::signed_in_scope(&site);
     let input = json!({"grant": grant, "tab": tab, "mode": "signed_in", "always_confirm": true});
     match authority::gate(owner, tool, occurrence, &input, &target).await? {
         authority::Gate::Pending(mut pending) => {

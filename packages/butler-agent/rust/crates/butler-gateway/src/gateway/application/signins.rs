@@ -47,7 +47,7 @@ pub enum AppSignInCommand {
     Revoke {
         site: String,
     },
-    /// Sites and frame grants a conversation's turn may use.
+    /// Signed-in sites a conversation's turn may use.
     Grants {
         session: String,
         turn: Option<String>,
@@ -55,7 +55,6 @@ pub enum AppSignInCommand {
     Grant {
         session: String,
         site: String,
-        frame_site: String,
         source: String,
     },
     Audit {

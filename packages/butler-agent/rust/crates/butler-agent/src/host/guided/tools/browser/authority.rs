@@ -81,8 +81,7 @@ fn action_key(occurrence: &str, input: &Value) -> String {
     }
     if let Some(grant) = input.get("grant") {
         let site = grant["site"].as_str().unwrap_or("");
-        let frame = grant["frame_site"].as_str().unwrap_or("");
-        return format!("{occurrence}:grant:{site}:{frame}");
+        return format!("{occurrence}:grant:{site}");
     }
     if input.get("sign_in").is_some() {
         return format!("{occurrence}:sign_in");

@@ -1,16 +1,7 @@
 import { accessibleName } from "./accessibility.mjs";
 import { evaluateWorld, framePoint, hitFrame } from "./frame-worlds.mjs";
 import { pointHit } from "./page/point.mjs";
-import { frameClass, signedInPolicy, topSite } from "./signed-in.mjs";
-
-/** Points into other-site frames: signed-in tabs follow decision 25, signed-out tabs keep same-origin only. */
-function frameRefusal(tab, frame, main) {
-  if (!frame.parent) return null;
-  const policy = signedInPolicy(tab);
-  if (!policy) return new URL(frame.url).origin !== new URL(main.url).origin ? { reason: "frame_not_granted" } : null;
-  if (frameClass(frame.url, tab.url, policy) !== "unknown") return null;
-  return { reason: "frame_grant_required", site: topSite(tab.url, policy), frame_site: new URL(frame.url).hostname };
-}
+import { routeTarget } from "./frame-input.mjs";
 
 export async function resolvePoint(tab, obs, point, expect) {
   const observation = tab.observation, image = observation?.imageGeometry;
@@ -25,8 +16,6 @@ export async function resolvePoint(tab, obs, point, expect) {
     if (!origin) continue;
     const local = { x: css.x - origin.x, y: css.y - origin.y };
     if (!await hitFrame(frame, local)) continue;
-    const refused = frameRefusal(tab, frame, observation.main);
-    if (refused) return refused;
     const result = await evaluateWorld(frame, `(${pointHit.toString()})(${JSON.stringify({ ...local, expect })})`);
     if (result.reason) return pointRefusal(observation, point, expect, result, origin);
     if (observation.nodes.find(node => node.ref === result.hit.ref)?.name_source === "accessibility") {
@@ -34,8 +23,8 @@ export async function resolvePoint(tab, obs, point, expect) {
       if (name) result.hit.name = name;
       if (!expect.toLowerCase().trim().split(/\s+/u).slice(1).every(word => result.hit.name.toLowerCase().includes(word))) return pointRefusal(observation, point, expect, { reason: "point_mismatch", hit: result.hit }, origin);
     }
-    return { ...result, ...css, rect: { ...result.rect, x: result.rect.x + origin.x, y: result.rect.y + origin.y },
-      payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame) };
+    return routeTarget({ ...result, ...css, rect: { ...result.rect, x: result.rect.x + origin.x, y: result.rect.y + origin.y },
+      payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame) }, frame);
   }
   return pointRefusal(observation, point, expect, { reason: "blocked_by" }, { x: 0, y: 0 });
 }

@@ -1,5 +1,6 @@
 import { evaluateWorld } from "./frame-worlds.mjs";
 import { focusTarget } from "./page/focus.mjs";
+import { remoteKey, routeTarget } from "./frame-input.mjs";
 
 const NAMED = new Map(Object.entries({
   enter: "Enter", return: "Enter", tab: "Tab", escape: "Escape", esc: "Escape", backspace: "Backspace", delete: "Delete", del: "Delete",
@@ -28,7 +29,7 @@ export function parseChord(value) {
   return { keyCode, modifiers, char: modifiers.some(m => m !== "shift") ? undefined : modifiers.includes("shift") ? keyCode.toUpperCase() : key };
 }
 
-/** The element that receives keyboard input now; the same frame-grant rule as points. */
+/** The element that receives keyboard input now, in whichever frame holds focus. */
 export async function resolveFocus(tab, obs, key) {
   const observation = tab.observation;
   if (!observation || observation.obs !== obs || observation.epoch !== tab.epoch) return { reason: "stale_ref" };
@@ -36,16 +37,16 @@ export async function resolveFocus(tab, obs, key) {
   for (const frame of observation.frames) {
     const result = await evaluateWorld(frame, `(${focusTarget.toString()})(${JSON.stringify({ key })})`).catch(() => null);
     if (!result) continue;
-    if (frame.parent && new URL(frame.url).origin !== new URL(observation.main.url).origin) return { reason: "frame_not_granted", hit: result.hit };
     if (result.reason) return result;
-    return { ...result, keyboard: true, payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame), addons: [] };
+    return routeTarget({ ...result, keyboard: true, payment: result.payment || observation.payment, frame_payment: Boolean(frame.parent) && observation.paymentFrames.has(frame), addons: [] }, frame);
   }
   return { keyboard: true, hit: { role: "document", name: "", frame: new URL(observation.main.url).hostname }, payment: false, upload: false, submit: false, addons: [] };
 }
 
-export async function dispatchKey(tab, chord) {
+export async function dispatchKey(tab, chord, target) {
   const contents = tab.view.webContents;
   tab.expectedInputs = ["rawKeyDown", "keyDown", "char", "keyUp"].map(type => ({ type }));
+  if (await remoteKey(target, chord)) return;
   contents.sendInputEvent({ type: "keyDown", keyCode: chord.keyCode, modifiers: chord.modifiers });
   if (chord.char) contents.sendInputEvent({ type: "char", keyCode: chord.char, modifiers: chord.modifiers });
   contents.sendInputEvent({ type: "keyUp", keyCode: chord.keyCode, modifiers: chord.modifiers });

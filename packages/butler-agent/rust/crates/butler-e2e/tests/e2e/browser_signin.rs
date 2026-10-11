@@ -166,7 +166,7 @@ async fn signed_in_tabs_follow_conversation_site_grants() -> Result<(), HarnessE
 }
 
 /// Ungranted hops are refused before dispatch; identity pages are read-only;
-/// a frame main misclassifies closes the page.
+/// cross-site frames are open; a payment frame main misclassifies closes the page.
 async fn hops_and_frames(
     admin: &butler_e2e::e2e::security::AdminClient,
     host: &host::Host,
@@ -216,22 +216,39 @@ async fn hops_and_frames(
     );
     assert_eq!(act["site"], "google.com");
 
-    // Unknown cross-site frames may load but must be reported closed; a
-    // misclassified frame fails Rust's re-check and the page is closed.
+    // Cross-site frames are open without a grant (decision 37); only the
+    // payment widget keeps its class. A payment frame reported as anything
+    // else fails Rust's re-check and the page is closed.
     snapshot(
         admin,
         json!([tab("t1", "conversation:general", SHOP, "agent")]),
     )
     .await?;
     let ads = "https://ads.fixture-ads.test/slot";
-    *frames.lock().unwrap() = json!([{"id":"f0","url":SHOP,"class":"main"},{"id":"f1","url":ads,"class":"unknown"},
-        {"id":"f2","url":"https://postcode.map.daum.net/search","class":"utility"},{"id":"f3","url":"https://js.tosspayments.com/w","class":"payment"}]);
+    let pay = "https://js.tosspayments.com/w";
+    *frames.lock().unwrap() = json!([{"id":"f0","url":SHOP,"class":"main"},{"id":"f1","url":ads,"class":"cross_site"},
+        {"id":"f2","url":"https://postcode.map.daum.net/search","class":"utility"},{"id":"f3","url":pay,"class":"payment"}]);
+    let open = call(admin, "general", "tab.observe", "t1", json!({})).await?;
     assert_eq!(
-        call(admin, "general", "tab.observe", "t1", json!({})).await?["status"],
-        "ok"
+        open["status"], "ok",
+        "cross-site frame needs no grant: {open}"
+    );
+    let act = call(
+        admin,
+        "general",
+        "tab.prepare",
+        "t1",
+        json!({"steps":[{"action":"click","ref":"f1-e1"}]}),
+    )
+    .await?;
+    assert_eq!(act["status"], "ok", "acting there asks nothing: {act}");
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(
+        host.last("use.revoked").is_none(),
+        "an open cross-site frame keeps the page"
     );
     *frames.lock().unwrap() =
-        json!([{"id":"f0","url":SHOP,"class":"main"},{"id":"f1","url":ads,"class":"granted"}]);
+        json!([{"id":"f0","url":SHOP,"class":"main"},{"id":"f3","url":pay,"class":"cross_site"}]);
     let result = call(admin, "general", "tab.observe", "t1", json!({})).await?;
     assert_eq!(result["reason"], "navigation_denied", "{result}");
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;

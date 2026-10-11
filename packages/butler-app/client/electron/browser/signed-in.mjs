@@ -22,22 +22,21 @@ export function signedInPlace(raw, policy) {
   return identityPage(raw, policy) ? "identity" : "denied";
 }
 
-export function topSite(raw, policy) {
+function topSite(raw, policy) {
   const host = hostOf(raw);
   return (policy.sites ?? []).find(site => inSite(host, site))
     ?? (policy.idp_pages ?? []).find(page => page.host === host)?.site ?? host;
 }
 
-/** Decision 25 frame classes; unknown frames stay closed until granted for this conversation. */
+/** Decision 37 frame classes: every frame is open to the agent; payment frames show labels only. */
 export function frameClass(raw, topUrl, policy) {
   if (/^about:(blank|srcdoc)$/u.test(raw ?? "") || !raw) return "granted";
   const host = hostOf(raw), top = topSite(topUrl, policy);
-  if (!host) return "unknown";
+  if (!host) return "cross_site";
   if ((policy.payment_sites ?? []).some(site => inSite(host, site))) return "payment";
   if (inSite(host, top) || (policy.sites ?? []).some(site => inSite(host, site))) return "granted";
-  if ((policy.frame_grants ?? []).some(key => { const at = key.indexOf(":"); return key.slice(0, at) === top && inSite(host, key.slice(at + 1)); })) return "granted";
   if ((policy.utility_hosts ?? []).includes(host)) return "utility";
-  return "unknown";
+  return "cross_site";
 }
 
 /** Rust sends the live policy with every signed-in call; a revoked grant fences at once. */
