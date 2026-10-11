@@ -13,6 +13,7 @@ impl GuidedCommand {
         args: &Map<String, Value>,
         scope: &CommandScope<'_>,
     ) -> Result<Option<JsonDocument>, BtccError> {
+        let timing = super::timing::CommandTiming::new("path_guard");
         let root = active_root(scope)?;
         let requested = args.get("cwd").and_then(Value::as_str).map(str::to_owned);
         let command = args
@@ -23,10 +24,14 @@ impl GuidedCommand {
         let data = scope.butler_data.to_path_buf();
         let installation = scope.installation_root.map(Path::to_path_buf);
         let home = self.host_environment.get("HOME").map(PathBuf::from);
+        timing.mark("before_job");
         let rejected = self.jobs.run(move || {
+            let timing = super::timing::CommandTiming::new("guard_work");
             let cwd = Commands::guarded_directory(&root, requested.as_deref())?;
+            timing.mark("cwd_done");
             let denied = sensitive(&command)
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
+            timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
                 "ok":false,"command":command,"cwd":cwd.to_string_lossy(),"exit_code":1,
                 "timed_out":false,"stdout":"","stderr":denied["message"],

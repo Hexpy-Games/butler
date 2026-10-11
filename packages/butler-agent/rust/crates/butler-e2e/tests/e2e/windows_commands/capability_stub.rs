@@ -120,6 +120,12 @@ async fn reply(
     if step == 4 {
         let output = outputs.last().expect("tool result").clone();
         let elapsed = script.sent.lock().unwrap().unwrap().elapsed();
+        eprintln!(
+            "command_provider_timing event=result_delivered refused={} elapsed_us={} utc_us={}",
+            case.refused,
+            elapsed.as_micros(),
+            utc_us()
+        );
         *script.result.lock().unwrap() = Some((output, elapsed));
     }
     if step == 5 {
@@ -141,6 +147,11 @@ async fn reply(
         ),
         3 => {
             *script.sent.lock().unwrap() = Some(Instant::now());
+            eprintln!(
+                "command_provider_timing event=sent refused={} utc_us={}",
+                case.refused,
+                utc_us()
+            );
             call("operation", case.tool, &case.args)
         }
         4 if !delegated && !work => message("파일 확인 완료"),
@@ -208,4 +219,11 @@ fn parent(step: usize) -> Value {
 fn message(text: &str) -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed",
         "content":[{"type":"output_text","text":text,"annotations":[]}]})
+}
+
+fn utc_us() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros()
 }

@@ -11,7 +11,7 @@ src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
-src/host/guided/command.rs	GuidedCommand::execute_observation	168
+src/host/guided/command.rs	GuidedCommand::execute_observation	166
 src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
@@ -33,7 +33,7 @@ src/host/guided/tools/discovery/invoke.rs	run_mcp	115
 src/host/guided/tools/dispatch.rs	execute	284
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	137
+src/host/guided/tools/execute.rs	execute	123
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
