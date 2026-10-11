@@ -8,7 +8,9 @@ use axum::{
 
 use super::{HttpError, subsessions::decode_component};
 
-pub(super) const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+/// `font-src data:`: a scrap's HTML copy opens in a sandboxed `srcdoc` frame,
+/// which inherits this policy, and carries its web fonts as data: URLs.
+pub(super) const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 fn mime(path: &str) -> Option<&'static str> {
     match Path::new(path).extension().and_then(|value| value.to_str()) {

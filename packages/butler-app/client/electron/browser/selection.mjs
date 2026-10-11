@@ -4,6 +4,7 @@ import { savePickedImages, copyPickedText } from "./selection-actions.mjs";
 import { isPickShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { nativeWorldOf } from "./native-worlds.mjs";
 import { pickPage } from "./pick-page.mjs";
+import { SNAPSHOT_SOURCE, snapshotPick } from "./snapshot.mjs";
 
 /** DOM content is read in isolated worlds (pick-page.mjs), never inserted into the page. */
 const PAGE = pickPage.toString();
@@ -30,9 +31,9 @@ const GENERIC = new Set(["div", "span"]);
 /** One opaque neutral pixel (BGRA): a filled field's box in a crop. */
 const MASK = Buffer.from([0xd9, 0xd9, 0xd9, 0xff]);
 
-/** Runs pick-page in the main frame's pick world, or a subframe's preload world by window.frames path. */
-async function runIn(tab, path, args, wait = false) {
-  const code = `(${PAGE})(${JSON.stringify({ ...args, token: randomUUID() })})`;
+/** Runs pick-page (or snapshot-page) in the main frame's pick world, or a subframe's preload world by window.frames path. */
+async function runIn(tab, path, args, wait = false, source = PAGE) {
+  const code = `(${source})(${JSON.stringify({ ...args, token: randomUUID() })})`;
   if (!path.length) return tab.view.webContents.executeJavaScriptInIsolatedWorld(MAIN_WORLD, [{ code }]);
   let frame = tab.view.webContents.mainFrame;
   for (const index of path) frame = frame?.frames[index];
@@ -451,6 +452,13 @@ export class BrowserSelection {
       ...(phase === "start" ? { elements: this.result(tab, tab.owner.slice(13)).untrusted_content.elements } : {}),
     });
     if (phase === "end" || phase === "cancel") this.browser.sync(tab);
+  }
+  /** The scrap copy of one kept pick (null keeps the scrap image-only). */
+  async snapshot(id, itemId) {
+    const tab = this.browser.tabs.get(id), item = tab?.selections?.find(entry => entry.id === itemId);
+    if (!item || !tab.view || tab.view.webContents.isDestroyed()) return null;
+    const area = this.areas.has(item) ? item.rect : null;
+    return snapshotPick({ tab, item, frame: area ? TOP : this.anchors.get(item), area, run: (path, args) => runIn(tab, path, args, false, SNAPSHOT_SOURCE) }).catch(() => null);
   }
   async command(op, id) {
     const tab = this.browser.tabs.get(id);

@@ -272,7 +272,7 @@ export const koKrCopy: AppCopy = {
     scraps: "스크랩", documents: "문서", outputs: "결과물", loadMore: "더 보기", emptyLibrary: "항목 없음", bookmarkFolder: "폴더",
     movedTo: (title) => `탭을 ‘${title}’로 옮김`, library: "서랍", librarySearch: "서랍 검색", recentScraps: "최근 스크랩", viewAll: "모두 보기", scrapped: "스크랩함",
     scrapsSaved: (count) => `스크랩 ${count}개 저장함`, view: "보기", all: "전체", elements: "요소", views: "화면", element: "요소", viewKind: "화면", document: "문서",
-    attach: "대화에 첨부", openSource: "원본 열기", remove: "삭제", archivedClosed: (count) => `대화 탭 ${count}개 닫음`, pageSays: "페이지 메시지", authNeeded: "로그인 필요",
+    attach: "대화에 첨부", openSource: "원본 열기", openSourcePage: "원본 페이지 열기", remove: "삭제", archivedClosed: (count) => `대화 탭 ${count}개 닫음`, pageSays: "페이지 메시지", authNeeded: "로그인 필요",
     username: "사용자 이름", password: "비밀번호", signIn: "로그인", ok: "확인", cancel: "취소", leaveTitle: "이 페이지를 나갈까요?", stay: "머무르기", leave: "나가기",
     viewInBrowser: "브라우저에서 보기", toolOpen: "페이지 열기", toolAct: "브라우저 조작", toolSelection: "선택한 요소 읽기", sectionTitle: "브라우저", enabled: "브라우저 사용",
     enabledHelp: "끄면 모든 탭이 닫혀요.", shareSignIn: "대화에서 내 로그인 사용", shareSignInHelp: "허용한 사이트에서만, 대화마다 물어봐요.", signIns: "로그인",

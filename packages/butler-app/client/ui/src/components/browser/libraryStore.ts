@@ -6,12 +6,16 @@ import { notifyStatus } from "@/app/notifications";
 import { useButlerStore } from "@/app/store";
 import type { ElementFileRef } from "../../../../shared/browser-element";
 import { messageFileUrl } from "../conversation/messageMedia";
-import { attachElements, attachLibraryReference, type PickedElement } from "./browserElements";
+import { attachElements, attachLibraryReference, type PickedElement, type ScrapSnapshot } from "./browserElements";
 export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
-export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string };
+export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot };
 type Page = { items: LibraryItem[]; next_cursor?: string | null };
 export async function saveLibrary(item: LibraryItem) {
   const saved = await api<LibraryItem>("/library", { method: "POST", body: JSON.stringify(item) }); libraryChanged(); return saved;
+}
+/** A scrap's stored HTML copy (null when it has none). */
+export async function librarySnapshot(id: string) {
+  return (await api<{ html: string | null }>(`/library/${encodeURIComponent(id)}/snapshot`)).html;
 }
 export async function deleteLibrary(id: string) { await api(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }); libraryChanged(); }
 /** Keyset pages; late searches cannot replace the latest query. No polling. */

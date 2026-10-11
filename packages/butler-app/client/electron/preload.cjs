@@ -591,6 +591,7 @@ const butlerApp = Object.freeze({
   listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   get serverUrl() {

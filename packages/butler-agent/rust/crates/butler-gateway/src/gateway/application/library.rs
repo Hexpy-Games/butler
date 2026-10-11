@@ -20,6 +20,10 @@ pub enum AppLibraryCommand {
     Delete {
         id: String,
     },
+    /// A scrap's HTML copy, kept apart from the listed payload.
+    Snapshot {
+        id: String,
+    },
 }
 impl AppApplication {
     pub(super) fn library_owned(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
@@ -32,6 +36,7 @@ impl AppApplication {
             AppLibraryCommand::Bookmark { url } => self.library_lookup(url),
             AppLibraryCommand::Save(item) => self.library_save(item),
             AppLibraryCommand::Delete { id } => self.library_delete(id),
+            AppLibraryCommand::Snapshot { id } => self.library_snapshot(id),
         }
     }
     pub(super) fn library_lookup(&self, url: String) -> ApplicationFuture<Value> {
@@ -89,8 +94,14 @@ impl AppApplication {
                             json!(format!("bookmark-{:x}", Sha256::digest(url.as_bytes())));
                         item["url"] = json!(url);
                     }
+                    // Listing pages read payloads only: a scrap's HTML copy lives in its own row.
+                    let html = item
+                        .get_mut("snapshot")
+                        .and_then(Value::as_object_mut)
+                        .and_then(|snapshot| snapshot.remove("html"));
                     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                     save(&tx, &item)?;
+                    save_snapshot(&tx, &item, html)?;
                     tx.commit().map_err(AppStorageError::sqlite)?;
                     Ok(item)
                 })
@@ -104,9 +115,50 @@ impl AppApplication {
             this.storage.execute(move |db| {
                 let tx=db.savepoint().map_err(AppStorageError::sqlite)?;
                 tx.execute("DELETE FROM browser_library_fts WHERE rowid=(SELECT rowid FROM browser_library WHERE id=?1)",[&id]).map_err(AppStorageError::sqlite)?;
+                tx.execute("DELETE FROM browser_library_snapshot WHERE id=?1",[&id]).map_err(AppStorageError::sqlite)?;
                 tx.execute("DELETE FROM browser_library WHERE id=?1",[id]).map_err(AppStorageError::sqlite)?;
                 tx.commit().map_err(AppStorageError::sqlite)?; Ok(json!({"ok":true}))
             }).await.map_err(app_error)
         })
     }
+    pub(super) fn library_snapshot(&self, id: String) -> ApplicationFuture<Value> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.storage
+                .read(move |db| {
+                    let html = db
+                        .query_row(
+                            "SELECT html FROM browser_library_snapshot WHERE id=?1",
+                            [id],
+                            |row| row.get::<_, String>(0),
+                        )
+                        .optional()
+                        .map_err(AppStorageError::sqlite)?;
+                    Ok(json!({ "html": html }))
+                })
+                .await
+                .map_err(app_error)
+        })
+    }
+}
+/// Stores, keeps or drops a scrap's HTML copy with its row (same transaction).
+fn save_snapshot(
+    db: &rusqlite::Connection,
+    item: &Value,
+    html: Option<Value>,
+) -> Result<(), AppStorageError> {
+    let id = item["id"].as_str().unwrap_or_default();
+    match html {
+        Some(Value::String(html)) => db.execute(
+            "INSERT INTO browser_library_snapshot(id,html) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET html=excluded.html",
+            params![id, html],
+        ),
+        _ if item["snapshot"].is_null() => db.execute(
+            "DELETE FROM browser_library_snapshot WHERE id=?1",
+            [id],
+        ),
+        _ => Ok(0),
+    }
+    .map(|_| ())
+    .map_err(AppStorageError::sqlite)
 }

@@ -6,6 +6,7 @@ import { notifyStatus } from "@/app/notifications";
 import { saveLibrary, useLibraryPage, type LibraryItem } from "./libraryStore";
 import { LibraryItemCard, openLibraryItem } from "./LibraryItemCard";
 import { LibraryAttachDialog } from "./LibraryAttachDialog";
+import { ScrapViewer } from "./ScrapViewer";
 function BookmarkFolder({ item, onClose }: { item?: LibraryItem; onClose: () => void }) {
   const [folder, setFolder] = useState(item?.folder ?? "");
   return <Dialog open={Boolean(item)} onOpenChange={open => { if (!open) onClose(); }}><DialogContent>
@@ -48,5 +49,6 @@ export function NewTabPage() {
     {!scraps.loading && !scraps.items.length && <EmptyLine message={scraps.failed ? appCopy.browser.failed : appCopy.browser.emptyLibrary} />}
   </Section><LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} />
     <BookmarkFolder key={folder?.id ?? "none"} item={folder} onClose={() => setFolder(undefined)} />
+    <ScrapViewer onSource={item => void openLibraryItem(item, true)} />
   </Stack></Box></PageContainer></ScrollArea>;
 }
