@@ -17,16 +17,17 @@ import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { composerImagePolicy } from "./composerImagePolicy";
 import { runtimeModels } from "@/app/utils.ts";
 import { useReserveHeight } from "./hooks/useReserveHeight";
-import { ComposerCard } from "@/butler-ds";
+import { ComposerCard, type WallpaperContentRect } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
 import { useComposerDecoration } from "./hooks/useComposerDecoration";
 import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
+  onWallpaperRect?: (rect: WallpaperContentRect) => void;
   scope?: ComposerDraftScope;
   onReserveChange: (height: number) => void;
   large: boolean;
 }
-export function Composer({ large, onReserveChange, scope }: ComposerProps) {
+export function Composer({ large, onReserveChange, scope, onWallpaperRect }: ComposerProps) {
   const session = useComposerSession(scope);
   const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
   useComposerDraftSession(scope?.draftKey ?? session.activeChatId);
@@ -102,7 +103,7 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
   });
   const decision = useComposerDecision(isComposing, !scope);
   const decoration = useComposerDecoration(decision);
-  useReserveHeight(wrapRef, onReserveChange);
+  useReserveHeight(wrapRef, onReserveChange, onWallpaperRect);
   useComposerStoreBridge({
     accessMenuOpen,
     contextPopoverOpen,

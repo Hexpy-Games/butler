@@ -63,7 +63,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
-        | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics" => &[],
+        | "secure_fs" | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs"
+        | "diagnostics" => &[],
         // SQLite synchronization, the credential fallback file and install pointers
         // consume the durable filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],

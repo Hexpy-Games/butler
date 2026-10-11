@@ -5,7 +5,8 @@ import { contrastRatio, flatten, parseColor, type Rgba } from "../../packages/bu
 export async function settleFirstRun(page: Page) {
   await page.waitForFunction(() => {
     const root = document.querySelector("[data-first-run-screen]");
-    return root && root.getAnimations({ subtree: true }).every((animation) =>
+    return root && !root.querySelector('[data-intro="pending"], [data-intro="play"], [data-morph="run"]')
+      && root.getAnimations({ subtree: true }).every((animation) =>
       animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== "running");
   });
   await page.evaluate(() => document.fonts.ready);

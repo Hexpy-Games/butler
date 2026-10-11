@@ -29,6 +29,9 @@ try {
   await app.send("Browse and confirm the fixture"); await app.delivered();
   const state = await app.call<{ tabs: Array<{ id: string; agent: boolean }> }>("state");
   tab = state.tabs.find((item) => item.agent)!.id; assert.ok(tab);
+  // Each pointer presentation must make real progress, including repeated clicks.
+  // Keep the production no-progress guard intact across the entire visual matrix.
+  await app.main(`${subject()}.view.webContents.executeJavaScript("document.querySelector('input').value='Presentation ready';document.getElementById('confirm').onclick=()=>{const result=document.getElementById('result');result.dataset.count=String(Number(result.dataset.count||0)+1);result.textContent='Confirmed '+result.dataset.count;document.querySelector('input').value=result.textContent};true")`);
   const mine = await app.call<string>("create", { url: app.url });
   await app.settings("en", "light", 1440); await app.call("activate", { id: tab }); await app.click("Browser");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
@@ -82,7 +85,7 @@ try {
     await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=page-band-actions] button').dataset.variant === 'default'"), "busy takeover emphasis");
     await app.shot(`${prefix}-agent-busy`); await release();
     for (const [name, action, batch] of [["click", "click", false], ["type", "fill", false], ["scroll", "scroll", false], ["batch", "click", true]] as const) {
-      await pointerAction(app, tab, action, batch); await app.shot(`${prefix}-agent-${name}`);
+      await pointerAction(app, tab, action, batch, `Fixture note ${prefix}`); await app.shot(`${prefix}-agent-${name}`);
       const mode = await app.main(`${overlay}.executeJavaScript("document.querySelector('[data-slot=agent-pointer]')?.dataset.mode")`);
       assert.equal(mode, name); notes.push({ prefix, mode });
     }

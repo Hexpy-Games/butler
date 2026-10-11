@@ -621,6 +621,7 @@ const butlerApp = Object.freeze({
   librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
+  setupWindowReady: () => ipcRenderer.invoke("butler:setup-window-ready"),
   get serverUrl() {
     return cachedServerUrl;
   },

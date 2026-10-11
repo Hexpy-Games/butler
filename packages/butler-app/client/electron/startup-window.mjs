@@ -16,6 +16,15 @@ let actions = {};
 let readyResolve;
 const rendererReady = new Promise((resolve) => { readyResolve = resolve; });
 let rendererId;
+const setupWindows = new WeakMap();
+
+ipcMain.handle("butler:setup-window-ready", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || event.senderFrame !== event.sender.mainFrame || !setupWindows.has(win)) {
+    throw new Error("setup_window_unavailable");
+  }
+  return setupWindows.get(win);
+});
 
 function publish() { surface?.update(state); displayedAt = performance.now(); }
 function clearStageTimers() { clearTimeout(timeout); clearTimeout(slow); clearTimeout(dwell); }
@@ -42,6 +51,9 @@ export function failStartup() {
 }
 export function configureStartupActions(next) { actions = next; }
 export function waitForStartupRenderer(win) {
+  const painted = new Promise((resolve) => win.once("ready-to-show", resolve));
+  const shown = new Promise((resolve) => win.once("show", resolve));
+  setupWindows.set(win, Promise.all([painted, shown]).then(() => undefined));
   rendererId = win.webContents.id;
   win.webContents.setBackgroundThrottling(false);
   const failWhileStarting = () => { if (surface) failStartup(); };
