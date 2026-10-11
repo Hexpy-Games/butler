@@ -7,6 +7,8 @@ mod locks;
 mod nss;
 use crate::browser_profiles::{BookmarkFormat, BrowserProfile, ProfileAccess};
 use crate::secrets::SecretText;
+#[cfg(feature = "test-support")]
+pub use chromium::fixture_storage_absent;
 pub use downloads::DownloadWatch;
 #[cfg(feature = "test-support")]
 pub use locks::fixture_profile_lock;

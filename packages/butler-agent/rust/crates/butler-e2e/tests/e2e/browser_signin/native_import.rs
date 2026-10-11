@@ -7,10 +7,7 @@ use butler_e2e::e2e::{
     HarnessError,
     scenario::{Scenario, Setup},
 };
-use butler_platform::{
-    browser_profiles::profile_roots,
-    secrets::{SecretKey, SecretStore},
-};
+use butler_platform::browser_profiles::profile_roots;
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -100,15 +97,6 @@ async fn firefox_nss_with_and_without_primary_password() -> Result<(), HarnessEr
     s.finish().await
 }
 
-struct SourceKey {
-    store: SecretStore,
-    key: SecretKey,
-}
-impl Drop for SourceKey {
-    fn drop(&mut self) {
-        let _ = self.store.delete(&self.key);
-    }
-}
 #[tokio::test]
 async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -117,14 +105,12 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
         "isolated system-store test opt-in required"
     );
     let service = format!("com.hexpy.butler.e2e.import.{}", uuid::Uuid::new_v4());
-    let store = SecretStore::system().unwrap();
-    let key = SecretKey::new(&service, "Chrome").unwrap();
-    let source_key = SourceKey { store, key };
     let setup = Setup::new("BROWSER-IMPORT-CHROMIUM-MAC")?
         .env("BUTLER_SECRET_STORE", "")
         .env("BUTLER_BROWSER_IMPORT_TEST_SEED", "1")
         .env("BUTLER_BROWSER_IMPORT_TEST_SERVICE", &service);
     super::fill::link_keychains(&setup.sandbox.home)?;
+    std::fs::write(setup.sandbox.root.join("source-keychain-fixture"), &service)?;
     let roots = profile_roots(&setup.sandbox.home);
     let root = &roots
         .chromium
@@ -151,7 +137,6 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
         .await?;
     let mode = &sources.data()["sources"][0]["passwords"];
     if mode != "direct" {
-        drop(source_key);
         return s.finish().await;
     }
     let run = a
@@ -180,7 +165,7 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
     assert_eq!(undo.data()["passwords"], 1);
     super::canary_absent(&s.sandbox.data, CANARY, &s.agent.logs());
     drop(cleanup);
-    drop(source_key);
+    assert!(butler_platform::browser_transfer::fixture_storage_absent(&service).unwrap());
     s.finish().await
 }
 

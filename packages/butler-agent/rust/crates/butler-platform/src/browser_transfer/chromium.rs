@@ -26,7 +26,10 @@ fn storage_key(browser: &str) -> Result<Zeroizing<Vec<u8>>, ImportError> {
     // The fixture is created by the importing executable, retaining default
     // Keychain access controls without an unattended cross-binary consent.
     #[cfg(feature = "test-support")]
-    if fixture.is_some() && std::env::var("BUTLER_BROWSER_IMPORT_TEST_SEED").as_deref() == Ok("1") {
+    let seeded =
+        fixture.is_some() && std::env::var("BUTLER_BROWSER_IMPORT_TEST_SEED").as_deref() == Ok("1");
+    #[cfg(feature = "test-support")]
+    if seeded {
         security_framework::passwords::set_generic_password(
             service,
             account,
@@ -34,9 +37,40 @@ fn storage_key(browser: &str) -> Result<Zeroizing<Vec<u8>>, ImportError> {
         )
         .map_err(|_| ImportError::Keychain)?;
     }
-    security_framework::passwords::get_generic_password(service, account)
+    let key = security_framework::passwords::get_generic_password(service, account)
         .map(Zeroizing::new)
-        .map_err(|_| ImportError::Keychain)
+        .map_err(|_| ImportError::Keychain);
+    #[cfg(feature = "test-support")]
+    if seeded {
+        security_framework::passwords::delete_generic_password(service, account)
+            .map_err(|_| ImportError::Keychain)?;
+    }
+    key
+}
+
+/// A fixture-only, metadata-only absence check; it never reads a password.
+#[cfg(feature = "test-support")]
+pub fn fixture_storage_absent(service: &str) -> Result<bool, ImportError> {
+    if !service.starts_with("com.hexpy.butler.e2e.import.") {
+        return Err(ImportError::Format);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use security_framework::item::{ItemClass, ItemSearchOptions};
+        match ItemSearchOptions::new()
+            .class(ItemClass::generic_password())
+            .service(service)
+            .account("Chrome")
+            .load_refs(true)
+            .search()
+        {
+            Ok(items) => Ok(items.is_empty()),
+            Err(error) if error.code() == -25300 => Ok(true),
+            Err(_) => Err(ImportError::Keychain),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    Ok(true)
 }
 
 #[cfg(target_os = "macos")]
