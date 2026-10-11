@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 mod agent;
 mod commands;
+mod indexing;
 mod scale;
 use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
 use reqwest::Method;

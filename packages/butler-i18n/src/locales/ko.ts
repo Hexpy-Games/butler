@@ -2153,7 +2153,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     browserImport: {
       chooseItems: "항목 고르기",
       importing: "가져오는 중…",
-      result: (bookmarks, passwords, updated) => `북마크 ${bookmarks}개 · 비밀번호 ${passwords}개 추가${updated ? `, ${updated}개 갱신` : ""}`,
+      history: "방문 기록",
+      result: (bookmarks, passwords, updated, history = 0) => `북마크 ${bookmarks}개 · 방문 기록 ${history}개 · 비밀번호 ${passwords}개 추가${updated ? `, ${updated}개 갱신` : ""}`,
       undo: "되돌리기", more: "더 가져오기", undone: "추가한 항목을 되돌렸어요",
       pickFolder: "브라우저 폴더 선택", diskAccess: "전체 디스크 접근 설정",
       restartAfterAccess: "권한을 허용한 뒤 버틀러를 다시 시작하세요",

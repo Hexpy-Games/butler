@@ -2,7 +2,7 @@
 use super::{
     HttpError, HttpState, blocking, failure, import, signin_secrets, signins, sources, unique,
 };
-use crate::gateway::{AppSignInCommand, AppSignInUpsert};
+use crate::gateway::{AppHistoryCommand, AppLibraryCommand, AppSignInCommand, AppSignInUpsert};
 use butler_platform::secrets::SecretText;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -39,16 +39,33 @@ pub(super) async fn start(state: &Arc<HttpState>, body: &mut Value) -> Result<Va
         .join(format!("browser-import-{}", uuid::Uuid::new_v4()));
     let selection = super::selection::Selection {
         profile,
-        bookmarks: wants_bookmarks,
-        passwords: wants_passwords,
+        items: super::selection::Items {
+            bookmarks: wants_bookmarks,
+            passwords: wants_passwords,
+            history: body["history"].as_bool().unwrap_or(false),
+        },
         csv,
         request,
         primary,
         scratch,
     };
-    let (bookmarks, passwords) = blocking(move || selection.read()).await??;
+    let super::selection::SelectedData {
+        bookmarks,
+        passwords,
+        mut history,
+    } = blocking(move || selection.read()).await??;
     let run = uuid::Uuid::new_v4().to_string();
     let mut counts = save(state, &run, bookmarks, passwords).await?;
+    for visit in &mut history {
+        visit["source"] = json!(format!("imported:{run}"));
+    }
+    let recorded = state
+        .application
+        .library(AppLibraryCommand::History(AppHistoryCommand::Record(
+            history,
+        )))
+        .await?;
+    counts["history"] = recorded["recorded"].clone();
     counts["run_id"] = json!(run);
     counts["needs_csv"] = json!(csv);
     audit(state, &source, &counts).await?;
@@ -120,7 +137,7 @@ pub(super) async fn audit(
             )
         })
         .unwrap_or("file");
-    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"]}) }).await?;
+    state.application.signins(AppSignInCommand::ImportSummary { source:source.into(), kind:"browser".into(), counts:json!({"bookmarks":counts["bookmarks"],"passwords":counts["passwords"],"updated":counts["updated"],"existing":counts["existing"],"history":counts["history"]}) }).await?;
     Ok(())
 }
 
@@ -158,7 +175,13 @@ pub(super) async fn undo(state: &Arc<HttpState>, body: &Value) -> Result<Value, 
             }
         }
     }
-    let counts = json!({"bookmarks":bookmarks,"passwords":passwords,"updated":0});
+    let history = state
+        .application
+        .library(AppLibraryCommand::History(AppHistoryCommand::UndoImport(
+            run.into(),
+        )))
+        .await?;
+    let counts = json!({"bookmarks":bookmarks,"passwords":passwords,"history":history["deleted"],"updated":0});
     audit(state, "file", &counts).await?;
     Ok(counts)
 }

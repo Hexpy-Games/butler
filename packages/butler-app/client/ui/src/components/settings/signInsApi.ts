@@ -55,8 +55,8 @@ export async function signOutSite(site: string) {
   await (globalThis as { butlerBrowser?: BrowserBridge }).butlerBrowser?.call?.("signout", { site });
 }
 
-export interface BrowserImportCounts { run_id: string; bookmarks: number; passwords: number; updated: number; existing: number; needs_csv?: boolean; export_id?: string; waiting?: boolean; error?: string }
-export interface BrowserImportInput { source: string; bookmarks: boolean; passwords: boolean; primary_password?: string; bookmarks_path?: string; passwords_path?: string }
+export interface BrowserImportCounts { run_id: string; bookmarks: number; history?: number; passwords: number; updated: number; existing: number; needs_csv?: boolean; export_id?: string; waiting?: boolean; error?: string }
+export interface BrowserImportInput { source: string; bookmarks: boolean; history?: boolean; passwords: boolean; primary_password?: string; bookmarks_path?: string; passwords_path?: string }
 const importAction = <T>(op: string, body: unknown) => api<T>(`/security/browser-import/${op}`, { method: "POST", body: JSON.stringify(body) });
 export const startBrowserImport = (input: BrowserImportInput) => importAction<BrowserImportCounts>("start", input);
 export const undoBrowserImport = (run_id: string) => importAction("undo", { run_id });
