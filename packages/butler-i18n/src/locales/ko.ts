@@ -1267,9 +1267,9 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionAliases: {
       memory: ["지침", "대화 기억", "프로필", "프로젝트 기억", "초기화", "공간 정리", "저장 공간"],
-      general: ["기본", "일반 설정", "대화", "기본 권한"],
+      general: ["기본", "일반 설정", "대화", "스마트 그룹", "사이드바", "기본 권한"],
       models: ["모델 설정", "Worker", "예비 모델", "API 키"],
-      appearance: ["테마", "화면 설정", "디자인"],
+      appearance: ["테마", "화면 설정", "디자인", "입력창", "컴포저"],
       server: ["연결", "프로젝트 폴더"],
       updates: ["업그레이드", "새 버전"],
       mcp: ["도구 서버", "외부 도구"],
@@ -1322,6 +1322,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       theme: "테마",
       sidebar: "사이드바",
       homeScreen: "홈 화면",
+      messageBox: "입력창",
       profile: "프로필",
       responseStyle: "응답 스타일",
       learning: "알아가기",
@@ -1356,6 +1357,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       searchBehavior: "버틀러가 검색 전에 페이지를 읽고 계획하는 방식입니다.",
       sidebar: "사이드바가 대화를 정리하는 방식입니다.",
       homeScreen: "새 채팅 첫 화면의 배경입니다.",
+      messageBox: "새 채팅과 대화 화면의 입력창에 함께 적용됩니다.",
       learning: "버틀러가 대화하면서 사용자를 알아가는 범위입니다.",
     },
     memory: {
@@ -1637,7 +1639,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       reduceMotion: "끄면 시스템 설정을 따릅니다.",
       reduceMotionSystem: "시스템 설정에서 켜져 있습니다",
       wallpaperStill: "동작 줄이기가 켜져 있어 멈춰 있습니다",
-      composerDecoration: "글자 뒤에 그림을 깝니다. 움직임은 월페이퍼 설정을 따릅니다.",
+      composerDecoration: "글자 뒤에 그림을 깝니다.",
       composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
       contextLimit: (maxLabel) =>
