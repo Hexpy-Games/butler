@@ -39,7 +39,7 @@ test("top-level fields follow the contract", () => {
   expect(errorsOf(manifest({ version: "1.0" }))).toEqual(["version: must be semver"]);
   expect(errorsOf(manifest({ version: "1.2.3-beta.1" }))).toEqual([]);
   expect(errorsOf(manifest({ engine: 2 }))).toEqual(["engine: must be 1"]);
-  expect(errorsOf(manifest({ motion: "looping" }))).toEqual(["motion: must be static or animated"]);
+  expect(errorsOf(manifest({ motion: "looping" }))).toEqual(["motion: must be static, animated or drift"]);
   expect(errorsOf(manifest({ image: "maybe" }))).toEqual(["image: must be none, optional or required"]);
   expect(errorsOf("nope")).toEqual(["manifest: must be an object"]);
 });
@@ -188,4 +188,19 @@ test("a param may be hidden (internal); hidden must be a boolean", () => {
   const result = validateWallpaperManifest(manifest({ params: [{ ...param, hidden: true }] }));
   expect(result.ok && result.manifest.params[0]?.hidden).toBe(true);
   expect(errorsOf(manifest({ params: [{ ...param, hidden: "yes" }] }))).toEqual(["params[0].hidden: must be a boolean"]);
+});
+
+test("a print module: motion drift needs density, density needs image none and no overlay, and its density.frag", () => {
+  const fragment = "void main(){fragColor=texture(u_density,gl_FragCoord.xy/u_resolution);}";
+  const density = "void main(){fragColor=vec4(u_flow);}";
+  const print = manifest({ motion: "drift", density: true });
+  expect(errorsOf(print)).toEqual([]);
+  expect(defineWallpaperModule({ manifest: print, fragment, density }).density).toBe(density);
+  expect(errorsOf(manifest({ motion: "drift" }))).toEqual(["motion: drift needs density: true"]);
+  expect(errorsOf(manifest({ density: "yes" }))).toEqual(["density: must be a boolean"]);
+  expect(errorsOf(manifest({ image: "optional", density: true }))).toEqual(["density: needs image none"]);
+  expect(errorsOf(manifest({ density: true, overlay: true }))).toEqual(["density: not with overlay"]);
+  expect(() => defineWallpaperModule({ manifest: print, fragment })).toThrow("density.frag: required by density: true");
+  expect(() => defineWallpaperModule({ manifest: manifest(), fragment, density })).toThrow("density.frag: set density: true in wallpaper.json");
+  expect(() => defineWallpaperModule({ manifest: print, fragment, density: `uniform float u_flow;\n${density}` })).toThrow("density.frag: u_flow is an engine uniform");
 });

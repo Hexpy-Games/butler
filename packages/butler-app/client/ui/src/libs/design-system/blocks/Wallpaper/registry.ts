@@ -1,6 +1,6 @@
 import { wallpaperDefaultImageAsset } from "./imageCache";
 import { WALLPAPER_DIM_SKIP, wallpaperImageDefaultDim, wallpaperImageUnit } from "./imageMath";
-import { BLOOM_WALLPAPER, BUILTIN_WALLPAPER_MODULES, WALLPAPER_IMAGE_MODULE } from "./modules";
+import { BUILTIN_WALLPAPER_MODULES, RISO_PRINT_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
 import { wallpaperTransitionKey } from "./keys";
 import { resolveWallpaperValues } from "./values";
 
@@ -28,8 +28,11 @@ export function createWallpaperRegistry(modules: readonly WallpaperModule[]): Wa
 }
 
 export const BUILTIN_WALLPAPERS = createWallpaperRegistry(BUILTIN_WALLPAPER_MODULES);
-/** Shown for unknown modules and when a module fails to compile. */
-export const DEFAULT_WALLPAPER_MODULE_ID = BLOOM_WALLPAPER.manifest.id;
+/**
+ * The default wallpaper (the riso print): shown for unknown modules and images that fail to load. A module that
+ * fails to compile falls back to Bloom instead (`renderer.ts`), which needs no second pass.
+ */
+export const DEFAULT_WALLPAPER_MODULE_ID = RISO_PRINT_WALLPAPER.manifest.id;
 
 /** Image options with dim and blur clamped to 0..1. */
 export interface WallpaperImageScene {
@@ -56,7 +59,7 @@ export interface WallpaperScene {
 }
 
 export function defaultWallpaperModule(registry: WallpaperRegistry): WallpaperModule {
-  return registry.get(DEFAULT_WALLPAPER_MODULE_ID) ?? BLOOM_WALLPAPER;
+  return registry.get(DEFAULT_WALLPAPER_MODULE_ID) ?? RISO_PRINT_WALLPAPER;
 }
 
 function unknownModule(id: string): WallpaperError {

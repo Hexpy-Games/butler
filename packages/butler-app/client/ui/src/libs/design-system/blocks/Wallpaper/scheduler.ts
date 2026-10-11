@@ -1,4 +1,6 @@
 // Pure scheduling decisions of the wallpaper engine (contract v1 policy).
+import { wallpaperDriftFrameMode, type WallpaperDriftFrameMode } from "./driftScheduler";
+import type { WallpaperWindowBlur } from "./hostSignals";
 import type { WallpaperModuleMotion, WallpaperMotion, WallpaperPixelRatioMode } from "./types";
 
 /** Frame cap of animated modules. */
@@ -30,6 +32,8 @@ const POLICIES: Record<WallpaperModuleMotion, WallpaperRenderPolicy> = {
   animated: { maxFps: WALLPAPER_ANIMATED_FPS, maxPixelRatio: 1, maxPixels: 1_400_000 },
   // Rendered once per change, so a static frame can afford paper-fiber detail.
   static: { maxFps: 0, maxPixelRatio: 2, maxPixels: 4_000_000 },
+  // One buffer for rest keyframes and event frames (the drift policy caps touch devices lower).
+  drift: { maxFps: 0, maxPixelRatio: 1.5, maxPixels: 2_400_000 },
 };
 
 /** The largest pixel ratio of `pixelRatio: "device"` modules (e.g. 1-device-pixel grain), which take no pixel budget. */
@@ -67,7 +71,7 @@ export interface WallpaperScheduleState {
   moduleMotion: WallpaperModuleMotion;
   motion: WallpaperMotion;
   reducedMotion: boolean;
-  /** Minimized, fully occluded or a background tab. Window focus is deliberately not a signal. */
+  /** Minimized, fully occluded or a background tab. Window focus slows only drift modules (`windowBlur`). */
   documentHidden: boolean;
   intersecting: boolean;
   pauseOnBattery: boolean;
@@ -77,14 +81,20 @@ export interface WallpaperScheduleState {
   contextLost: boolean;
   /** The context renders in software: animated modules hold still frames (each frame would be read back on the main thread). */
   softwareRendering?: boolean;
+  windowBlur: WallpaperWindowBlur;
+  constrained: boolean;
 }
 
-/** `idle`: draw nothing. `still`: hold one frame, redraw on change. `animate`: capped loop. */
-export type WallpaperFrameMode = "idle" | "still" | "animate";
+/**
+ * `idle`: draw nothing. `still`: hold one frame, redraw on change. `animate`: capped loop. Drift modules:
+ * `drift` (crossfading keyframes, no 20 fps cap) or `paused` (held on the current mix).
+ */
+export type WallpaperFrameMode = "idle" | "still" | "animate" | WallpaperDriftFrameMode;
 
 export function wallpaperFrameMode(state: WallpaperScheduleState): WallpaperFrameMode {
+  if (state.moduleMotion === "drift") return wallpaperDriftFrameMode(state);
   if (state.documentHidden || !state.intersecting || state.contextLost) return "idle";
-  const paused = state.moduleMotion === "static" ||
+  const paused = state.moduleMotion !== "animated" ||
     state.motion === "paused" ||
     state.reducedMotion ||
     state.degraded ||
@@ -123,11 +133,11 @@ export interface FrameWatchdog {
 
 export const HEALTHY_WATCHDOG: FrameWatchdog = { slowStreak: 0, degraded: false, retries: 0 };
 
-/** Feeds one animated frame's render time; a sustained run of slow renders degrades until `retryFrameWatchdog`. */
-export function stepFrameWatchdog(watchdog: FrameWatchdog, renderMs: number): FrameWatchdog {
+/** Feeds one frame's render time; `slowFrames` slow renders in a row degrade until `retryFrameWatchdog`. */
+export function stepFrameWatchdog(watchdog: FrameWatchdog, renderMs: number, slowFrames = WALLPAPER_WATCHDOG_SLOW_FRAMES): FrameWatchdog {
   if (watchdog.degraded) return watchdog;
   const slowStreak = renderMs > WALLPAPER_WATCHDOG_SLOW_RENDER_MS ? watchdog.slowStreak + 1 : 0;
-  return { ...watchdog, slowStreak, degraded: slowStreak >= WALLPAPER_WATCHDOG_SLOW_FRAMES };
+  return { ...watchdog, slowStreak, degraded: slowStreak >= slowFrames };
 }
 
 /** How long a degraded watchdog stays quiet before `retryFrameWatchdog`. */

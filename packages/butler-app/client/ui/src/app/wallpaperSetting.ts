@@ -28,12 +28,14 @@ function customColors(colors: readonly unknown[] | null | undefined): string[] |
 
 /** The source the legacy `main_screen_theme*` keys describe (plan migration rule, as the gateway derives it). */
 export function legacyWallpaperSource(settings: LegacyMainScreenTheme): WallpaperSource {
-  if (settings.main_screen_theme === "none") return { kind: "none" };
-  if (settings.main_screen_theme === "silk") return { kind: "live", module: "butler.silk" };
+  const theme: string = settings.main_screen_theme;
+  if (theme === "none") return { kind: "none" };
+  if (theme === "silk" || theme === "curtain") return { kind: "live", module: "butler.silk" };
   const preset = settings.main_screen_theme_preset;
+  if (preset === "monochrome") return { kind: "live", module: "butler.riso-print" };
   if (BLOOM_PRESETS.has(preset)) return { kind: "live", module: "butler.bloom", params: { colors: preset } };
   const colors = preset === "custom" ? customColors(settings.main_screen_theme_custom_colors) : null;
-  return colors ? { kind: "live", module: "butler.bloom", params: { colors } } : { kind: "live", module: "butler.bloom" };
+  return colors ? { kind: "live", module: "butler.bloom", params: { colors } } : { kind: "live", module: "butler.riso-print" };
 }
 
 /** The legacy keys as a wallpaper setting, with the default motion preferences. */
@@ -89,4 +91,13 @@ export function parseWallpaperSetting(value: unknown): WallpaperSetting | null {
     motion: value.motion === "paused" ? "paused" : "auto",
     pauseOnBattery: value.pauseOnBattery === true,
   };
+}
+
+/** Conversation preferences share source parsing, with their own paper overlay. */
+export function parseConversationBackgroundSetting(value: unknown): SettingsView["conversation_background"] | null {
+  if (!isRecord(value)) return null;
+  const source = parseWallpaperSource(value.source);
+  const overlay = value.overlay ?? 70;
+  if (!source || typeof overlay !== "number" || !Number.isInteger(overlay) || overlay < 0 || overlay > 95 || overlay % 5 !== 0) return null;
+  return { source, overlay };
 }

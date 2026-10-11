@@ -81,6 +81,16 @@ function encode(image, max = 1024) {
   return { image: { mime_type: "image/jpeg", data: fitted.jpeg.toString("base64"), width: fitted.width, height: fitted.height } };
 }
 
+/** Paints every secure field (saved-item fills included) black on a page capture. */
+export async function maskSecure(tab, image) {
+  const marks = await secureBoxes(tab);
+  if (!marks.length) return image;
+  const viewport = await tab.view.webContents.executeJavaScriptInIsolatedWorld(9001, [{ code: "({width:innerWidth,height:innerHeight})" }]);
+  const size = image.getSize(), scale = tab.bounds?.scale ?? 1;
+  const sx = size.width / (viewport.width * scale), sy = size.height / (viewport.height * scale);
+  return markedImage(image, marks.map(mark => ({ ...mark, rect: { x: mark.rect.x * sx, y: mark.rect.y * sy, width: mark.rect.width * sx, height: mark.rect.height * sy } })));
+}
+
 export async function observationImage(tab) {
   const epoch = tab.epoch;
   const image = await tab.view.webContents.capturePage(undefined, { stayHidden: true });

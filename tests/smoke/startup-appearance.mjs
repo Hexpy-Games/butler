@@ -1,3 +1,4 @@
+// test-category: pure-logic
 /** Indexed canonical settings: theme setting -> current scene tone -> OS. */
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -10,6 +11,7 @@ import { createPowerStateMonitor } from "../../packages/butler-app/client/electr
 
 const root = process.env.BUTLER_DATA;
 assert.ok(root && !relative(tmpdir(), root).startsWith(".."), "isolated BUTLER_DATA inside TMPDIR");
+assert.deepEqual(readStartupAppearance(join(root, "missing")).source, { kind: "live", module: "butler.riso-print" });
 mkdirSync(join(root, "app-server"), { recursive: true });
 const manifest = JSON.parse(readFileSync(resolve("packages/butler-app/client/ui/lifecycle-assets/manifest.json"), "utf8"));
 const path = join(root, "app-server/butler-client.sqlite");
@@ -63,6 +65,17 @@ try {
   }
   const write = db.prepare("INSERT OR REPLACE INTO app_settings VALUES ('settings', ?)");
   const times = [];
+  for (const [setting, expected] of [
+    [{}, { kind: "live", module: "butler.riso-print" }],
+    [{ main_screen_theme: "bloom", main_screen_theme_preset: "monochrome" }, { kind: "live", module: "butler.riso-print" }],
+    [{ main_screen_theme: "none" }, { kind: "none" }],
+    [{ main_screen_theme: "silk" }, { kind: "live", module: "butler.silk" }],
+    [{ wallpaper: { source: { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }, origin: "chosen" } }, { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }],
+    [{ wallpaper: { source: { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } }, origin: "legacy" } }, { kind: "live", module: "butler.riso-print" }],
+  ]) {
+    write.run(JSON.stringify(setting));
+    assert.deepEqual(readStartupAppearance(root).source, expected);
+  }
   for (const kind of ["live", "image", "none"]) for (const setting of ["light", "dark", "auto"]) for (const dark of [false, true]) for (const hour of [0, 12, 23]) {
     const module = { module: "butler.shoreline", params: { realtime: true } };
     const source = kind === "live" ? { kind, ...module } : kind === "image" ? { kind, asset: "wp_" + "a".repeat(32), filter: module } : { kind };

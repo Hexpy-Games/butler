@@ -26,10 +26,14 @@ pub(super) fn authorize(
         "browser_close",
         "browser_wait_for_user",
         "browser_sign_in",
+        "browser_pay_fill",
+        "browser_traveler_fill",
     ] {
         if catalog.tool(name).is_some()
-            && (!matches!(name, "browser_act" | "browser_sign_in")
-                || policy.access_mode != AccessMode::ReadOnly)
+            && (!matches!(
+                name,
+                "browser_act" | "browser_sign_in" | "browser_pay_fill" | "browser_traveler_fill"
+            ) || policy.access_mode != AccessMode::ReadOnly)
         {
             names.insert(name.into());
         }

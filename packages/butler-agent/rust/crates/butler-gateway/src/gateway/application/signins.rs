@@ -1,9 +1,11 @@
 //! Sign-in entries, site grants and fill audit in the App database. No secret
 //! is ever stored here: passwords live only in the OS credential store.
 mod records;
+mod vault;
 use super::{AppApplication, app_error};
 use crate::gateway::ApplicationFuture;
 use serde_json::Value;
+pub use vault::{AppCardInput, AppTravelerInput, AppVaultCommand};
 
 /// One saved sign-in to add, or to merge from an import.
 #[derive(Clone, Debug)]
@@ -79,9 +81,14 @@ pub enum AppSignInCommand {
     },
 }
 
-/// Sign-in entries, site grants and audit rows (never secrets).
+/// Sign-in entries, site grants and audit rows, and the payment and traveler
+/// vault's metadata, allowances and audit rows (never secrets).
 pub trait GatewaySignIns: Send + Sync {
     fn signins(&self, command: AppSignInCommand) -> ApplicationFuture<Value> {
+        let _ = command;
+        Box::pin(async { Err(super::GatewayApplicationError::internal()) })
+    }
+    fn vault(&self, command: AppVaultCommand) -> ApplicationFuture<Value> {
         let _ = command;
         Box::pin(async { Err(super::GatewayApplicationError::internal()) })
     }
@@ -90,6 +97,9 @@ pub trait GatewaySignIns: Send + Sync {
 impl GatewaySignIns for AppApplication {
     fn signins(&self, command: AppSignInCommand) -> ApplicationFuture<Value> {
         self.signins_owned(command)
+    }
+    fn vault(&self, command: AppVaultCommand) -> ApplicationFuture<Value> {
+        self.vault_owned(command)
     }
 }
 

@@ -9,6 +9,6 @@ export function canOpenHandoffTab(): boolean {
 export async function openHandoffTab(sessionId: string): Promise<void> {
   const snapshot = await browserCall("state") as BrowserSnapshot | undefined;
   const tabs = snapshot?.tabs.filter(tab => tab.owner === `conversation:${sessionId}`) ?? [];
-  const tab = tabs.find(item => item.signinStep) ?? tabs.find(item => item.waiting);
+  const tab = tabs.find(item => item.signinStep || item.payStep) ?? tabs.find(item => item.waiting);
   await openConversationBrowser(sessionId, tab?.id);
 }

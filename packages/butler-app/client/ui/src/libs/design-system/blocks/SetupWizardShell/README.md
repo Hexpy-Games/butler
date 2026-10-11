@@ -48,10 +48,29 @@ uses it. `title` still names the region for assistive tech.
   the new card rises in). Under reduced motion the card swaps at once. Keep
   one key for all steps that share a card; the step card's `contentKey` fades
   its body between steps.
-- `intro="rerun"` is the short re-run variant ("설정 다시 실행"): the first card
-  appears with opacity and a 4px rise over `--motion-slow`, decelerating; under
-  reduced motion it is there at once. The first-install ink intro joins this
-  prop as `full`, drawn on the shell's wallpaper layer.
+- `intro="full"` is the first-install ink intro (intro spec Concept A rev 5),
+  drawn on the shell wallpaper itself (one canvas): a purple drop blooms into
+  the three riso plates, a pen writes the ring clockwise from 12 o'clock with
+  the ink as its supply, the bow tie registers, and the printed mark glides
+  into the `SetupWizardMark` slot of the welcome card (measured from the real
+  card at every height). The DOM mark takes over at 2250ms, the card surface
+  fades in around it and the lines follow 70ms apart (settled about 2.95s).
+  A click or a key skips to the end; a hidden window pauses the print and the
+  card together; reduced motion or software GL draws the dried print once and
+  fades the card in (`--motion-base`); without WebGL2 a still ink wash stands
+  in while the SVG ring draws (`--motion-intro-draw`) and the bow tie prints
+  (`--motion-intro-print`). After the reveal nothing runs (0 frames); a fine
+  pointer stirs the dried ink briefly. The first step change shifts the print
+  with the card (600ms beat), then hands the canvas to the riso print, which
+  dissolves in from the intro's last frame over its first 8s segment; the
+  card stays the print's keep-out until the shell closes.
+- `intro="rerun"` is the short re-run variant ("설정 다시 실행"): the dried print
+  is drawn once (no reveal) and the first card appears with opacity and a 4px
+  rise over `--motion-slow`, decelerating; under reduced motion it is there at
+  once.
+- `SetupWizardMark` is the plain Butler logo for the 64px slot of the welcome
+  card: it stays still while Butler prepares (the preparation row shows the
+  progress; no working mark on the intro).
 - `SetupWizardProgress` (the wizard stepper) is exported for step headers;
   `SetupWizardStepCard` renders it from its `steps`.
 

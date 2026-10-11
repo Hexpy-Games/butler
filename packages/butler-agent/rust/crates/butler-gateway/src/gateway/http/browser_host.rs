@@ -5,6 +5,7 @@ pub(super) mod downloads;
 mod fill;
 mod hand_back;
 pub(super) mod hidden;
+mod pay;
 mod previews;
 pub(super) mod reader;
 mod report;
@@ -42,6 +43,7 @@ struct Inner {
     /// Session → (turn, backend) its newest turn's tabs open on.
     pins: HashMap<String, (String, backend::Backend)>,
     fills: HashMap<String, fill::Fill>,
+    vault_fills: HashMap<String, pay::VaultFill>,
     /// The attached host is the hidden App host (no window, no user there).
     hidden: bool,
     /// The App asked for the channel while the hidden host was busy.
@@ -61,6 +63,7 @@ impl Inner {
         self.uses.clear();
         self.turns.clear();
         self.fills.clear();
+        self.vault_fills.clear();
     }
 }
 struct HostStream {
@@ -122,6 +125,12 @@ pub(super) async fn route(
                 .trim_start_matches("/internal/browser-host/credentials/")
                 .to_owned();
             fill::credentials(state, &token, &read_json(request).await?).await
+        }
+        (&Method::POST, p) if p.starts_with("/internal/browser-host/vault/") => {
+            let token = p
+                .trim_start_matches("/internal/browser-host/vault/")
+                .to_owned();
+            pay::secrets(state, &token, &read_json(request).await?).await
         }
         (&Method::POST, p)
             if p.starts_with("/internal/browser-host/results/")

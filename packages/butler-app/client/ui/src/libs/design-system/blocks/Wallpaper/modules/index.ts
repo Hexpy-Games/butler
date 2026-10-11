@@ -25,6 +25,9 @@ import daisiesPhoto from "./butler.photo-daisies/photo.jpg";
 import daisiesFragment from "./butler.photo-daisies/shader.frag?raw";
 import daisiesManifest from "./butler.photo-daisies/wallpaper.json";
 import risoFragment from "./butler.riso-flow/shader.frag?raw";
+import risoPrintDensity from "./butler.riso-print/density.frag?raw";
+import risoPrintFragment from "./butler.riso-print/print.frag?raw";
+import risoPrintManifest from "./butler.riso-print/wallpaper.json";
 import risoManifest from "./butler.riso-flow/wallpaper.json";
 import shorelineFragment from "./butler.shoreline/shader.frag?raw";
 import shorelineManifest from "./butler.shoreline/wallpaper.json";
@@ -35,6 +38,12 @@ import stipplePhoto from "./butler.stipple/photo.jpg";
 import stippleFragment from "./butler.stipple/shader.frag?raw";
 import stippleManifest from "./butler.stipple/wallpaper.json";
 
+/**
+ * The default wallpaper: a riso print (v9) that drifts slowly and moves more on events. A quarter-resolution
+ * density pass shapes soft ink masses around the content; the print pass screens them in three inks on
+ * theme-following paper.
+ */
+export const RISO_PRINT_WALLPAPER = defineWallpaperModule({ manifest: risoPrintManifest, fragment: risoPrintFragment, density: risoPrintDensity });
 export const BLOOM_WALLPAPER = defineWallpaperModule({ manifest: bloomManifest, fragment: bloomFragment });
 export const SILK_WALLPAPER = defineWallpaperModule({ manifest: silkManifest, fragment: silkFragment });
 
@@ -92,6 +101,7 @@ export const WALLPAPER_IMAGE_MODULE = defineWallpaperModule({ manifest: imageMan
  * then decorations (registered so `live` sources resolve, never listed by pickers).
  */
 export const BUILTIN_WALLPAPER_MODULES = [
+  RISO_PRINT_WALLPAPER,
   BLOOM_WALLPAPER,
   SILK_WALLPAPER,
   RISO_FLOW_WALLPAPER,

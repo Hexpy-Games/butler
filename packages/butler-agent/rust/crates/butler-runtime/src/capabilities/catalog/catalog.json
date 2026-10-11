@@ -6175,6 +6175,79 @@
       "durable": false
     },
     {
+      "name": "browser_pay_fill",
+      "definition": {
+        "type": "function",
+        "name": "browser_pay_fill",
+        "description": "Fill the page's card payment fields (card number, expiry, CVC, holder name, and the PIN numbers or owner birth date when a form asks) from the user's saved card; you never see the values, only nicknames and the last four numbers. Pass card_ref (the nickname or last four) when the user named a card; without it the only saved card is used, or the saved options come back. The user approves each fill unless they allowed the card on this site. Steps only the user can do (secure keypad, card app or ISP authentication, OTP, 3-D Secure) hand the tab to the user and resume on hand-back. Observe afterwards; pressing the page's pay button is a separate browser_act.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string"
+            },
+            "card_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "control",
+      "tags": [
+        "browser",
+        "web",
+        "tabs"
+      ],
+      "durable": false
+    },
+    {
+      "name": "browser_traveler_fill",
+      "definition": {
+        "type": "function",
+        "name": "browser_traveler_fill",
+        "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string"
+            },
+            "traveler_ref": {
+              "type": "string"
+            },
+            "section_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "control",
+      "tags": [
+        "browser",
+        "web",
+        "tabs"
+      ],
+      "durable": false
+    },
+    {
       "name": "browser_screenshot",
       "definition": {
         "type": "function",
@@ -11316,6 +11389,57 @@
         "additionalProperties": false,
         "properties": {
           "tab": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tab"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "browser_pay_fill": {
+      "type": "function",
+      "name": "browser_pay_fill",
+      "description": "Fill the page's card payment fields (card number, expiry, CVC, holder name, and the PIN numbers or owner birth date when a form asks) from the user's saved card; you never see the values, only nicknames and the last four numbers. Pass card_ref (the nickname or last four) when the user named a card; without it the only saved card is used, or the saved options come back. The user approves each fill unless they allowed the card on this site. Steps only the user can do (secure keypad, card app or ISP authentication, OTP, 3-D Secure) hand the tab to the user and resume on hand-back. Observe afterwards; pressing the page's pay button is a separate browser_act.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tab": {
+            "type": "string"
+          },
+          "card_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tab"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "browser_traveler_fill": {
+      "type": "function",
+      "name": "browser_traveler_fill",
+      "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tab": {
+            "type": "string"
+          },
+          "traveler_ref": {
+            "type": "string"
+          },
+          "section_ref": {
             "type": "string"
           }
         },

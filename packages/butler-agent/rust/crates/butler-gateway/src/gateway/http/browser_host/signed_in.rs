@@ -75,7 +75,7 @@ pub(super) async fn admit(
     let sites = granted_sites(state, session, turn.as_deref()).await?;
     let place = signed_in_place(url, &sites);
     let refused = match place {
-        SignedInPlace::Granted => false,
+        SignedInPlace::Granted | SignedInPlace::Payment => false,
         SignedInPlace::Identity => !READS.contains(&op),
         SignedInPlace::Denied => true,
     };

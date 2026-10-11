@@ -26,6 +26,7 @@ const UPDATE_KEYS: &[&str] = &[
     "main_screen_theme_custom_colors",
     "wallpaper",
     "composer_decoration",
+    "conversation_background",
     "translucent_sidebar",
     "diagnostics_enabled",
     "desktop_notifications",

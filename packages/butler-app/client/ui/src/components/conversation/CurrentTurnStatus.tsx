@@ -43,7 +43,7 @@ export function CurrentTurnStatus({
   const handoffTool = useButlerStore((store) => selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool);
   const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
     : handoffTool === "browser_sign_in_wait" ? appCopy.interfaceStatus.signInWaiting
-      : handoffTool === "browser_wait_for_user" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
+      : handoffTool === "browser_wait_for_user" || handoffTool === "browser_pay_wait" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
   const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
     (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??

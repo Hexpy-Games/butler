@@ -142,13 +142,15 @@ export function semantic(element, discoverPointer = true) {
   if (!clickable && role !== "image" && !/^(img|h[1-6])$/u.test(tag)) return { clickable: false };
   const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(id => element.getRootNode().getElementById?.(id) ? visibleLabel(element.getRootNode().getElementById(id)) : "").join(" ");
   const keypad = secureKeypad(element) || readonlyKeypad(element);
-  const secure = keypad || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
+  // A field Butler filled from a saved card or profile stays hidden: no value, masked in screenshots.
+  const vault = Boolean(globalThis.__butlerVaultFilled?.has(element));
+  const secure = vault || keypad || ["number", "cvc", "passport_number", "rrn"].includes(vaultKind(element)) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   name ||= globalThis.__butlerObservation?.accessibleNames?.get(element) ?? "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}${classHint(element)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
-  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, keypad, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
+  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, keypad, vault, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
 }
 /** Words from an unlabeled control's class names (e.g. "car" in "car car-disabled"),
  * a hint for what the icon is; state words and hash-like tokens are left out. */
@@ -314,4 +316,46 @@ export function layoutRegions(elements) {
       contains_fields: Boolean(element.querySelector('input,select,textarea,canvas,[contenteditable="true"]')) });
   }
   return regions;
+}
+
+/** What a form control asks for, for saved card and traveler fills: a card
+ * field (number, expiry, CVC, holder name, the PIN's first numbers, the owner
+ * birth date) or a traveler field. Self-contained: it also runs in the fill
+ * world. Context-dependent kinds stay generic (`birth`, `pin_short`). */
+export function vaultKind(element) {
+  if (!element || !/^(input|select)$/u.test(element.localName ?? "")) return null;
+  const type = (element.getAttribute("type") ?? "text").toLowerCase();
+  if (/^(hidden|submit|button|checkbox|radio|file|image|reset|range|color|search)$/u.test(type)) return null;
+  const auto = (element.getAttribute("autocomplete") ?? "").toLowerCase().split(/\s+/u).at(-1);
+  const byAuto = { "cc-number": "number", "cc-csc": "cvc", "cc-exp": "expiry", "cc-exp-month": "exp_month", "cc-exp-year": "exp_year",
+    "cc-name": "name", "cc-given-name": "name", "cc-family-name": "name", bday: "birth", "bday-year": "birth", "bday-month": "birth", "bday-day": "birth",
+    "given-name": "given_name", "family-name": "surname", name: "full_name", sex: "gender", tel: "phone", email: "email", country: "nationality", "country-name": "nationality" };
+  if (byAuto[auto]) return byAuto[auto];
+  const label = `${element.id} ${element.getAttribute("name") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("aria-label") ?? ""} ${element.labels?.[0]?.textContent ?? ""}`.toLowerCase();
+  const max = element.maxLength > 0 ? element.maxLength : 0;
+  if (/card.?(number|num|no)|cardno|ccnum|cc.?number|카드.?번호/u.test(label)) return "number";
+  if (/(^|[^a-z])(cvc|cvv|csc|cvn)\d?([^a-z]|$)|security.?code|card.?code|보안.?코드/u.test(label)) return "cvc";
+  if (/exp\w*.?(month|mm)([^a-z]|$)|(card|cc).?month|유효.?기간.?\(?월/u.test(label)) return "exp_month";
+  if (/exp\w*.?(year|yy)([^a-z]|$)|(card|cc).?year|유효.?기간.?\(?(년|연)/u.test(label)) return "exp_year";
+  if (/passport.{0,12}(exp|valid|until)|여권.{0,6}(만료|유효)/u.test(label)) return "passport_expiry";
+  if (/expir|exp.?date|valid.?thru|유효.?기간|mm.?\/.?yy/u.test(label)) return "expiry";
+  if (/passport|여권.?번호/u.test(label)) return "passport_number";
+  if (/주민.?(등록)?.?번호|jumin|resident.?(registration|number)|(^|[^a-z])(ssn|rrn)([^a-z]|$)/u.test(label) && max !== 6) return "rrn";
+  if (/birth|생년월일|생일|dob([^a-z]|$)|주민.?번호.?앞/u.test(label)) return "birth";
+  if (/(card.?)?(pwd|passwd|password|pin)([^a-z]|$)|비밀.?번호/u.test(label) && (max === 2 || /앞.?2|2.?자리|first.?two/u.test(label))) return "pin_short";
+  if (/card.?holder|holder.?name|name.?on.?card|카드.?소유자|명의자/u.test(label)) return "name";
+  if (/surname|last.?name|family.?name|영문.?성([^명]|$)|성\(영문\)/u.test(label)) return "surname";
+  if (/given.?name|first.?name|영문.?이름/u.test(label)) return "given_name";
+  if (/gender|(^|[^a-z])sex([^a-z]|$)|성별/u.test(label)) return "gender";
+  if (/nationality|citizenship|국적/u.test(label)) return "nationality";
+  if (/full.?name|passenger.?name|성명|탑승객.?(명|이름)|(^|\s)(이름|name)(\s|$)/u.test(label)) return "full_name";
+  if (type === "email" || /e-?mail|이메일/u.test(label)) return "email";
+  if (type === "tel" || /phone|mobile|휴대.?폰|전화.?번호|연락처/u.test(label)) return "phone";
+  return null;
+}
+
+/** Whether a control sits in a card payment form (its form, else its document). */
+export function paymentForm(element) {
+  const root = element?.closest?.("form") ?? element?.ownerDocument;
+  return Boolean(root && [...root.querySelectorAll("input")].some(input => ["number", "cvc"].includes(vaultKind(input))));
 }
