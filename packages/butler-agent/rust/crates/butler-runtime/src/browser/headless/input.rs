@@ -378,6 +378,8 @@ pub(crate) async fn upload(page: &Page, x: f64, y: f64, step: &Value) -> Value {
 
 pub(crate) async fn navigate_history(page: &Page, action: &str) -> Result<(), String> {
     if action == "reload" {
+        page.shared
+            .with_tab(&page.tab, |t| t.history_transition = Some("reload".into()));
         return page.send("Page.reload", json!({})).await.map(|_| ());
     }
     let history = page.send("Page.getNavigationHistory", json!({})).await?;
@@ -387,6 +389,9 @@ pub(crate) async fn navigate_history(page: &Page, action: &str) -> Result<(), St
         .ok()
         .and_then(|i| history["entries"].get(i).cloned())
         .ok_or("no_history")?;
+    page.shared.with_tab(&page.tab, |t| {
+        t.history_transition = Some("forward_back".into());
+    });
     page.send(
         "Page.navigateToHistoryEntry",
         json!({"entryId":entry["id"]}),

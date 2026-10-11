@@ -22,7 +22,8 @@ export function SetupWizardContent({
     <Box surface={surface === "solid" ? "raised-opaque" : undefined}
       elevation={surface === "solid" ? "card" : undefined} border={surface === "solid" ? "hairline" : undefined}
       radius={surface === "solid" ? "panel" : undefined} padding={surface === "solid" ? "lg" : undefined}
-      className={dsClass(styles.content)} data-width={width} data-test-class="setup-wizard-content">
+      className={dsClass(styles.content)} data-width={width} data-test-class="setup-wizard-content"
+      data-setup-card={surface === "solid" ? "" : undefined}>
       {body}
     </Box>
   );

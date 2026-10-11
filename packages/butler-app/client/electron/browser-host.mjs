@@ -56,6 +56,7 @@ async function serve() {
     enabled: () => browser.enabled(),
     onClosed: quit,
   });
+  browser.history = host.history;
   browser.onState = () => host.changed();
   browser.downloadRequest = async input => {
     const response = await request("/internal/browser-host/downloads", { method: "POST",

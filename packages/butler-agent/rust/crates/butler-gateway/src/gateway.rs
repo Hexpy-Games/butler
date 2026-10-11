@@ -5,6 +5,7 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
