@@ -43,7 +43,9 @@ pub(super) async fn open_tab(
         targets::close(browser, &id).await;
         return Ok(json!({"status":"unknown","reason":"navigation_failed"}));
     }
-    let Some(mut loads) = browser.shared.with_tab(&id, |t| t.loads.subscribe()) else {
+    // The result returns once the document is parsed; images and late scripts
+    // finish while the model reads it, and the next observation settles them.
+    let Some(mut parsed) = browser.shared.with_tab(&id, |t| t.parsed.subscribe()) else {
         return Ok(json!({"status":"unknown","reason":"navigation_failed"}));
     };
     let navigated = browser
@@ -57,7 +59,7 @@ pub(super) async fn open_tab(
         targets::close(browser, &id).await;
         return Ok(json!({"status":"unknown","reason":"navigation_failed"}));
     }
-    let _ = tokio::time::timeout(budget, loads.changed()).await;
+    let _ = tokio::time::timeout(budget, parsed.changed()).await;
     let info = browser
         .cdp
         .send("Target.getTargetInfo", json!({"targetId":target}), None)

@@ -63,9 +63,18 @@ function changed(tab) {
   return tab.holder !== "agent" ? { status: "not_dispatched", reason: "user_control" }
     : { status: "not_dispatched", reason: "page_changed", recovery: "The page navigated while it was observed. Observe again; no action was taken." };
 }
-// Resolves after the main document has had no DOM mutation for quietMs, or at maxMs.
+// An attribute that keeps changing for MOTION_MS is background motion (a
+// carousel, ticker or looping animation) that never settles; it no longer
+// restarts the quiet window. Every other change still does.
+const MOTION_MS = 600;
+// Resolves after the main document has had no DOM change other than background
+// motion for quietMs, or at maxMs.
 const quiet = (quietMs, maxMs) => `new Promise(done=>{let timer;const end=()=>{observer.disconnect();clearTimeout(cap);done(true)};
-  const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(end,${quietMs})});
+  const since=new Map(),moving=r=>{if(r.type!=="attributes")return false;const now=performance.now();let names=since.get(r.target);
+    if(!names)since.set(r.target,names=new Map());if(!names.has(r.attributeName)){names.set(r.attributeName,now);return false}
+    return now-names.get(r.attributeName)>=${MOTION_MS}};
+  const observer=new MutationObserver(records=>{let changed=false;for(const r of records)changed=!moving(r)||changed;
+    if(changed){clearTimeout(timer);timer=setTimeout(end,${quietMs})}});
   observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
   timer=setTimeout(end,${quietMs});const cap=setTimeout(end,${maxMs})})`;
 // A request still open after this long is a stream or long poll, not a result.
@@ -87,7 +96,8 @@ async function settle(tab, maxMs = 5000) {
 }
 /** Retries an observation that a load-time navigation interrupted. */
 export async function observeTab(tab, args = {}) {
-  if (args.settle === true) await settle(tab);
+  // A tab still loading (opened at its parsed document) settles first.
+  if (args.settle === true || tab.view.webContents.isLoading()) await settle(tab);
   for (let attempt = 0; ; attempt++) {
     const result = await observeOnce(tab, args);
     if (result.reason !== "page_changed" || attempt === 2) return result;
@@ -133,7 +143,7 @@ async function observeOnce(tab, args) {
   // This observation is already the newest one, so name it: earlier ids are stale.
   if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
     recovery: `The page was observed as ${obs}, which replaced every earlier observation id, but no screenshot could be made. Observe again; look "never" returns a text-only observation.` };
-  const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields, thumb: tab.observation.thumb });
+  const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields, thumb: tab.observation.thumb, view: [tab.url, ...text].join("\n") });
   const pointText = await graphicalPoints(tab.observation);
   const observedText = [full, pointText].filter(Boolean).join("\n");
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);

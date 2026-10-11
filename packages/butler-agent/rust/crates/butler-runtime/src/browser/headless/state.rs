@@ -100,6 +100,8 @@ pub(crate) struct Tab {
     pub dialog: Option<Dialog>,
     pub dialogs: watch::Sender<u64>,
     pub loads: watch::Sender<u64>,
+    /// Counts the main document's DOMContentLoaded events.
+    pub parsed: watch::Sender<u64>,
     pub pending_batch: Option<Vec<Value>>,
     pub observation: Option<Arc<Observation>>,
     pub observation_seq: u64,
@@ -145,6 +147,7 @@ impl Tab {
             dialog: None,
             dialogs: watch::channel(0).0,
             loads: watch::channel(0).0,
+            parsed: watch::channel(0).0,
             pending_batch: None,
             observation: None,
             observation_seq: 0,

@@ -1,7 +1,8 @@
 // What the last batch did to the page, stated plainly so the model can change
 // approach: fields it cleared (and the earlier state that brought back), a batch
-// that repeats an earlier one with the same outcome, no effect at all, or new
-// options right after typing. Notes carry refs and ids, never page text.
+// that repeats an earlier one with the same outcome, no effect at all, a
+// return to a view already seen, or new options right after typing. Notes
+// carry refs and ids, never page text.
 // A batch whose outcome was no progress is not run again from the same state.
 const HISTORY = 12;
 const GRID = 8;
@@ -12,6 +13,8 @@ function snapshot(current) {
   const actionable = current.nodes.filter(node => node.actionable);
   return {
     obs: current.obs,
+    // The page as the model reads it: URL, controls, fields and reading text.
+    view: current.view ?? "",
     fingerprint: [current.url, ...current.fields.map(field => `${fieldKey(field)}=${field.value}`),
       ...actionable.map(node => `${node.role} ${node.name}`).sort()].join("\n"),
     thumb: current.thumb,
@@ -42,10 +45,11 @@ export function recordBatch(tab, args, steps) {
  * extending them would replay the same outcome first. */
 export function repeatRefusal(tab, args, prepared) {
   const state = tab.progressHistory?.at(-1);
-  if (!state || state.obs !== args.observation || !tab.noProgress?.size) return null;
+  if (!state || state.obs !== args.observation || !tab.noProgress?.size && !tab.loops?.size) return null;
   const identities = args.steps.map((step, index) => identity(step, prepared[index]?.hit));
   for (let length = 1; length <= identities.length; length++) {
-    const last = tab.noProgress.get([state.fingerprint, ...identities.slice(0, length)].join("\n"));
+    const last = tab.noProgress?.get([state.fingerprint, ...identities.slice(0, length)].join("\n"))
+      ?? tab.loops?.get([state.view, ...identities.slice(0, length)].join("\n"));
     if (!last) continue;
     const scope = length === identities.length ? "This same batch" : `The first ${length} step${length === 1 ? "" : "s"} of this batch`;
     return { status: "refused", reason: "repeated_no_progress", previous_result: last.obs, step_index: 0,
@@ -121,6 +125,26 @@ function remember(tab, previous, entry, batch, what) {
   if (seen.size > 50) seen.delete(seen.keys().next().value);
 }
 
+// Each completed batch is a transition between views. Returning to a view
+// already seen is noted; a transition that again leads back to a seen view is
+// a loop, and repeating it from that same view is refused.
+function revisit(tab, previous, entry, batch, history) {
+  if (!entry.view || entry.view === previous.view || !batch.steps.every(step => step.completed)) return null;
+  const key = [previous.view, ...batch.steps.map(step => step.identity)].join("\n");
+  const transitions = tab.transitions ??= new Map();
+  const repeated = transitions.get(key) === entry.view;
+  transitions.set(key, entry.view);
+  if (transitions.size > 50) transitions.delete(transitions.keys().next().value);
+  const earlier = history.slice(0, -2).findLast(old => old.view === entry.view);
+  if (!earlier) return null;
+  if (repeated) {
+    const loops = tab.loops ??= new Map();
+    loops.set(key, { obs: entry.obs, what: `returned again to the view of ${earlier.obs}` });
+    if (loops.size > 50) loops.delete(loops.keys().next().value);
+  }
+  return `The page is back to the view it showed at ${earlier.obs}; nothing new appeared. Use a different control or approach instead of moving between views already seen.`;
+}
+
 function outcomes(tab, previous, entry, batch, history) {
   const notes = [];
   const lost = cleared(previous, entry, batch);
@@ -133,6 +157,8 @@ function outcomes(tab, previous, entry, batch, history) {
     notes.push("The last batch changed nothing visible: no URL, field, control or pixel changed. Try a different control or approach instead of repeating it.");
     remember(tab, previous, entry, batch, "changed nothing visible");
   }
+  const back = lost.length ? null : revisit(tab, previous, entry, batch, history);
+  if (back) notes.push(back);
   const options = suggestions(previous, entry, batch);
   if (options) notes.push(options);
   return notes;

@@ -126,23 +126,21 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
         acts,
     } = history(messages);
     for (tab, cycles) in &tabs {
-        let Some(latest) = cycles.last() else {
-            continue;
-        };
         let mut budget = STALE_FULL_BUDGET_BYTES;
-        for cycle in cycles.iter().rev().skip(1) {
+        for (cycle, next) in cycles.iter().zip(cycles.iter().skip(1)).rev() {
             let Some(message) = messages.get_mut(cycle.obs_index) else {
                 continue;
             };
+            // A stub never changes once written: rewriting it would move the
+            // provider prefix to this point on every later round.
             if is_superseded(&message.content) {
-                replace_observation(message, cycle, tab, &latest.obs_id);
                 continue;
             }
             if message.content.len() <= budget {
                 budget -= message.content.len();
                 continue;
             }
-            replace_observation(message, cycle, tab, &latest.obs_id);
+            replace_observation(message, cycle, tab, &next.obs_id);
             message.image_attachments.clear();
         }
     }
@@ -166,20 +164,15 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
     zoom::supersede(messages);
 }
 
-fn replace_observation(message: &mut ModelRoundMessage, cycle: &Cycle, tab: &str, latest: &str) {
-    let mut value = if is_superseded(&message.content) {
-        serde_json::from_str::<Value>(&message.content).unwrap_or_default()
-    } else {
-        json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
-            "obs":cycle.obs_id,"status":"superseded","acted":cycle.acted.join("; ")}})
-    };
-    if let Some(output) = value.get_mut("output").and_then(Value::as_object_mut) {
-        output.insert("tab".into(), json!(tab));
-        output.insert("superseded_by".into(), json!(latest));
-        output.insert("recovery".into(), json!(
-            "This is replaced history, not a tool failure or lost observation. Use the latest observation identified by superseded_by. Call browser_observe again if fresh state is needed; continue the unfinished page interaction."));
-    }
-    message.content = value.to_string().into();
+/// `superseded_by` names the observation that replaced this one (the next
+/// cycle of the tab), so the stub is final when written.
+fn replace_observation(message: &mut ModelRoundMessage, cycle: &Cycle, tab: &str, next: &str) {
+    message.content = json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
+        "obs":cycle.obs_id,"status":"superseded","acted":cycle.acted.join("; "),
+        "tab":tab,"superseded_by":next,
+        "recovery":"This is replaced history, not a tool failure or lost observation. Use the newest observation of this tab. Call browser_observe again if fresh state is needed; continue the unfinished page interaction."}})
+    .to_string()
+    .into();
 }
 
 fn attach_act(
