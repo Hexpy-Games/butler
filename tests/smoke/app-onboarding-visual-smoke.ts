@@ -14,7 +14,7 @@ const screenshots: string[] = [];
 try {
   // Reuse the context for sandboxed single-process Chromium.
   const page = await browser.newPage({ reducedMotion: "reduce" });
-  for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
+  for (const width of [390, 1440]) for (const theme of ["light", "dark"]) {
     let asked = false;
     const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist"), onboardingComplete: false,
       stubToolCall: request => {
@@ -48,7 +48,7 @@ try {
       assert.equal(await page.locator('[data-test-class="titlebar-title"]').innerText(), "일반");
       // A mobile navigation selection closes its drawer; show it for this capture.
       if (!(await general.isVisible())) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
-      if (width === 375) await page.getByRole("button", { name: "사이드바 숨기기", exact: true }).last().click();
+      if (width === 390) await page.getByRole("button", { name: "사이드바 숨기기", exact: true }).last().click();
       await page.locator('[data-slot="composer-compact-preview"]').click();
       const editor = page.locator('[contenteditable="true"]');
       await editor.fill("안녕 "); await editor.press("End");
@@ -80,7 +80,7 @@ try {
       }
       assert.equal(waitingStatusCount, 1);
       await capture("question");
-      if (width === 375) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
+      if (width === 390) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
       const row = await general.boundingBox();
       assert(row && row.x >= 0 && row.x + row.width <= width, "sidebar General row is inside the viewport");
       await capture("sidebar");
