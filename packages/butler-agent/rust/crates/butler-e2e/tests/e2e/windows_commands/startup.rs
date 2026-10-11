@@ -35,15 +35,16 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
                 let text = if outer_quotes { format!("\"{text}\"") } else { text.into() };
                 let invocation = login_shell(&format!("{prefix} {text}"), ShellAccess::Full, &environment).unwrap();
                 let mut command = std::process::Command::new(&invocation.program);
+                command.env_clear().envs(&environment).current_dir(&setup.sandbox.home);
                 add_arguments(&mut command, &invocation);
-                let output = command.env_clear().envs(&environment).current_dir(&setup.sandbox.home).output().unwrap();
+                let output = command.output().unwrap();
                 assert!(output.status.success(), "{prefix} outer_quotes={outer_quotes}: {output:?}");
                 assert_eq!(String::from_utf8(output.stdout).unwrap(), "한국어 출력\r\n한국어 경로 출력");
             }
         }
         for (shell, script) in [
             ("cmd", "echo 안녕하세요"),
-            ("powershell", "Write-Output '안녕하세요'; [Console]::Error.WriteLine('command_shell_phase phase=command_done utc_ticks=' + [DateTime]::UtcNow.Ticks)"),
+            ("powershell", "if (Test-Path Env:BUTLER_COMMAND_CWD) { throw 'Private cwd bootstrap variable leaked' }; Write-Output '안녕하세요'; [Console]::Error.WriteLine('command_shell_phase phase=command_done utc_ticks=' + [DateTime]::UtcNow.Ticks)"),
         ] {
             let invocation = if shell == "cmd" {
                 Invocation {
@@ -57,8 +58,8 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             let mut timings = Vec::new();
             for sample in 0..20 {
                 let mut command = std::process::Command::new(&invocation.program);
-                add_arguments(&mut command, &invocation);
                 command.env_clear().envs(&environment).current_dir(&setup.sandbox.home);
+                add_arguments(&mut command, &invocation);
                 let start_utc_us = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros();
                 let started = Instant::now();

@@ -176,12 +176,21 @@ async fn spawn_steps(
     input: &StructuredCommandInput,
     steps: &[CommandStep],
 ) -> Result<(Vec<Child>, Vec<u32>, Vec<Pipes>), SpawnFailure> {
+    let directory = match input.cwd.clone() {
+        Some(directory) => Some(
+            tokio::task::spawn_blocking(move || command_sandbox::working_directory(&directory))
+                .await
+                .map_err(|error| SpawnFailure::Spawn(std::io::Error::other(error)))?
+                .map_err(SpawnFailure::Spawn)?,
+        ),
+        None => None,
+    };
     let environment = environment(input);
     let mut children = Vec::with_capacity(steps.len());
     let mut pids = Vec::with_capacity(steps.len());
     let mut stdio = Vec::with_capacity(steps.len());
     for step in steps {
-        let mut command = step_command(step, &environment, input.cwd.as_deref());
+        let mut command = step_command(step, &environment, directory.as_deref());
         match spawn_piped(host, &mut command).await {
             Ok((child, pid, pipes)) => {
                 pids.push(pid);
@@ -203,13 +212,6 @@ fn step_command(
     cwd: Option<&std::path::Path>,
 ) -> Command {
     let mut command = Command::new(&step.executable);
-    command_sandbox::add_arguments(
-        command.as_std_mut(),
-        &command_sandbox::Invocation {
-            program: step.executable.clone(),
-            arguments: step.arguments.clone(),
-        },
-    );
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -220,6 +222,13 @@ fn step_command(
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
+    command_sandbox::add_arguments(
+        command.as_std_mut(),
+        &command_sandbox::Invocation {
+            program: step.executable.clone(),
+            arguments: step.arguments.clone(),
+        },
+    );
     process_control::isolate_group(command.as_std_mut());
     command
 }

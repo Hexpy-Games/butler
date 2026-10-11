@@ -129,6 +129,8 @@ pub fn login_shell_contained(
 /// one pair of quotes: `cmd` does not undo the `\"` escaping that
 /// `Command::arg` applies, so a command containing quotes would reach it
 /// mangled.
+/// Configure the environment and working directory first; PowerShell also
+/// restores its provider location to that same admitted directory.
 pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     shell::add_arguments(command, invocation);
 }

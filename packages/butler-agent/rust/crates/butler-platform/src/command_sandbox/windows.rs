@@ -29,6 +29,27 @@ pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &In
         command.args(["/d", "/s", "/c"]).raw_arg(text);
     } else {
         command.args(&invocation.arguments);
+        let powershell = std::path::Path::new(&invocation.program)
+            .file_stem()
+            .is_some_and(|name| {
+                name.eq_ignore_ascii_case("powershell") || name.eq_ignore_ascii_case("pwsh")
+            });
+        if powershell
+            && invocation.arguments.len() == 9
+            && invocation.arguments.iter().take(8).map(String::as_str).eq([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-OutputFormat",
+                "Text",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+            ])
+            && let Some(directory) = command.get_current_dir().map(std::path::Path::to_path_buf)
+        {
+            command.env("BUTLER_COMMAND_CWD", directory);
+        }
     }
 }
 
@@ -62,8 +83,13 @@ pub(super) fn legacy_shell(
     let modules = default_modules(environment);
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
+    // PowerShell maintains its own provider location apart from the process CWD.
+    // Enter the admitted short spelling explicitly and stop before the
+    // user's script if the provider cannot enter it. Keep the private bootstrap
+    // variable out of the environment seen by the user's command.
+    let directory = "if ($env:BUTLER_COMMAND_CWD) { try { Set-Location -LiteralPath $env:BUTLER_COMMAND_CWD -ErrorAction Stop } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }; Remove-Item Env:BUTLER_COMMAND_CWD }; ";
     let script = format!(
-        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{command}"
+        "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{directory}{command}"
     );
     let encoded = STANDARD.encode(
         script
