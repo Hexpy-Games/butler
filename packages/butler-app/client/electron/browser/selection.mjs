@@ -231,7 +231,10 @@ export class BrowserSelection {
       this.down = start;
       void this.hit(tab, input).then(item => {
         start.item = item; start.ready = true;
-        this.settle(tab, start);
+        // A drag that began before the hit resolved: nothing pickable under the press means an area.
+        if (start.moved && start.area === undefined) start.area = !item;
+        if (start.area) this.areaDrag(tab, start);
+        else this.settle(tab, start);
       }).catch(() => this.browser.pointer.inputFailed());
     } else if (this.down && ["mouseMove", "mouseUp"].includes(input.type)) {
       const start = this.down;
@@ -239,20 +242,20 @@ export class BrowserSelection {
       if (!start.moved && Math.hypot(input.x - start.x, input.y - start.y) > 6) {
         start.moved = true;
         // ⌥/Alt-drag, or a drag from where nothing is pickable, draws an area instead of carrying a pick out.
-        start.area = start.alt || (!start.onPick && (start.ready ? !start.item : !tab.pickHover));
+        start.area = start.alt || (start.onPick ? false : start.ready ? !start.item : undefined);
       }
       start.ended = input.type === "mouseUp";
-      if (start.area) {
-        const rect = start.moved ? this.band(tab, start, input) : null;
-        if (start.ended) {
-          this.down = null; this.clearHover(tab); this.browser.pointer.sync(tab);
-          if (rect) void this.area(tab, rect).catch(() => this.browser.pointer.inputFailed());
-        }
-        return true;
-      }
-      this.settle(tab, start);
+      if (start.area) this.areaDrag(tab, start);
+      else if (start.area === false || !start.moved) this.settle(tab, start);
     }
     return true;
+  }
+  areaDrag(tab, start) {
+    if (this.down !== start) return;
+    const rect = this.band(tab, start, start.input);
+    if (!start.ended) return;
+    this.down = null; this.clearHover(tab); this.browser.pointer.sync(tab);
+    void this.area(tab, rect).catch(() => this.browser.pointer.inputFailed());
   }
   settle(tab, start) {
     if (this.down !== start || start.area) return;

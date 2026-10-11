@@ -68,6 +68,7 @@ const at = (frames, el, fx = 0.5, fy = 0.5, dx = 0, dy = 0) => ({ frames, el, fx
 export const cases = [
   { id: "modal-padding", page: "modal", at: at([], q("#dlg"), 0, 0, 8, 8), target: { frames: [], el: q("#dlg") }, steps: 0 },
   { id: "modal-backdrop", page: "modal", at: { x: 30, y: 30 }, target: { frames: [], el: q("#dlg") }, steps: 0 },
+  { id: "modal-backdrop-text", page: "modal", at: at([], q("main h1"), 0.05, 0.5), target: { frames: [], el: q("#dlg") }, steps: 0 },
   { id: "modal-text-up", page: "modal", at: at([], q("#dlg-text")), target: { frames: [], el: q("#dlg") }, steps: 3, secret: ["me@example.com", "hunter2"], masks: ["#email", "#pw"] },
   { id: "modal-text", page: "modal", at: at([], q("#dlg-text")), target: { frames: [], el: q("#dlg-text") }, steps: 0 },
   { id: "portal-backdrop", page: "portal", at: { x: 30, y: 30 }, target: { frames: [], el: q("#pdlg") }, steps: 0, secret: ["private note"], masks: ["#note"] },

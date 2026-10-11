@@ -25,7 +25,7 @@ export async function hoverPick(app: App, tab: string, selector: string) {
 }
 export async function emptyPick(app: App) {
   await waitBrowser(() => overlayRead(app, "Boolean(document.querySelector('[data-slot=selection-bar]'))"), "bar before first pick");
-  assert.equal(await overlayRead(app, "[...document.querySelectorAll('[data-slot=selection-bar] button[aria-disabled=true]')].filter(n=>n.getBoundingClientRect().width>0).length"), 2);
+  assert.equal(await overlayRead(app, "[...document.querySelectorAll('[data-slot=selection-bar] button[aria-disabled=true]')].filter(n=>n.getBoundingClientRect().width>0).length"), 4, "Add to chat, Save image, Copy text and Scrap wait for a pick");
   assert.equal(await overlayRead(app, "document.querySelectorAll('[data-pick-badge]').length"), 0);
 }
 export async function pickBadges(app: App, count: number) {

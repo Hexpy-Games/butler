@@ -35,6 +35,8 @@ async function point(selector: string, frame?: string, fx = 0.5, fy = 0.5): Prom
 }
 async function input(action: string, from: Point, to?: Point | number) {
   const facts = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
+  // Raising the window focuses the App renderer; pick mode keeps keys in the overlay it focused on entry.
+  if (action === "key") await app.main(`${browser}.pointer.view.webContents.focus()`);
   const args = [driver, String(facts.pid), action, String(facts.x + from.x), String(facts.y + from.y)];
   if (typeof to === "number") args.push(String(to));
   else if (to) args.push(String(facts.x + to.x), String(facts.y + to.y));
@@ -65,6 +67,10 @@ try {
   await waitBrowser(() => app.main(`${subject()}.view.webContents.getTitle()==='Role dialog'`), "modal fixture loaded");
   await app.main(`${subject()}.view.webContents.sendInputEvent({type:'keyDown',keyCode:'S',modifiers:['meta','shift']})`);
   await waitBrowser(() => app.main(`${subject()}.picking && ${browser}.pointer.ready`), "shortcut pick overlay");
+  // Evidence: every overlay mouse input and the hover tag it produced.
+  await app.main(`(()=>{const p=${browser}.pointer,mouse=p.mouse.bind(p);globalThis.pickTrace=[];
+    const s=${browser}.selection,probe=s.probe.bind(s);s.probe=(...a)=>probe(...a).then(l=>{if(!l.levels.length)pickTrace.push({empty:a[1]});return l},e=>{pickTrace.push({probeError:String(e?.stack??e),at:a[1]});throw e});
+    p.mouse=raw=>{const r=mouse(raw);setTimeout(()=>pickTrace.push({type:raw.type,x:raw.x,y:raw.y,modifiers:raw.modifiers,label:${subject()}.pickHover?.label??null}),60);return r};})()`);
   const steps: unknown[] = [];
 
   // A paragraph inside the modal is the default; ↑ (real key) widens to the whole dialog; a click picks it.
@@ -115,7 +121,7 @@ try {
   await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, steps, dialogCrop, picks: await app.main(`${subject()}.selections.map(({crop,...p})=>p)`) }, null, 2));
 } catch (error) {
-  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app.lastMain(), label: await label().catch(() => null),
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app.lastMain(), label: await label().catch(() => null), trace: await app.main("globalThis.pickTrace").catch(() => null),
     state: await app.call("state").catch(() => null) }, null, 2));
   await app.shot("failure", true).catch(() => {}); throw error;
 } finally { server.stop(true); await app.stop(); }
