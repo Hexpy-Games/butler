@@ -14,7 +14,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
     );
     let setup = Setup::new("SHELL-STARTUP")?;
     let mut environment = tool_environment(&std::env::vars().collect::<HashMap<_, _>>());
-    environment.remove("PSModulePath");
+    let inherited_module_path = environment.remove("PSModulePath");
     for (name, path) in [
         ("HOME", setup.sandbox.home.clone()),
         ("USERPROFILE", setup.sandbox.home.clone()),
@@ -79,7 +79,10 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             timings.sort_by(f64::total_cmp);
             eprintln!("SHELL-STARTUP shell={shell} n=20 first_ms={first:.3} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} output_verified=20", timings[9], timings[18], timings[19]);
         }
-        let mut long_directory = spaced;
+        if let Some(path) = inherited_module_path {
+            environment.insert("PSModulePath".into(), path);
+        }
+        let mut long_directory = spaced.join("한국어 Directory");
         for _ in 0..6 {
             long_directory.push("long-component-012345678901234567890123456789");
         }
@@ -87,7 +90,10 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         std::fs::write(long_directory.parent().unwrap().join("parent marker.txt"), "parent marker").unwrap();
         let script = r"try {
             if ((Get-Content -LiteralPath '..\parent marker.txt' -Raw -ErrorAction Stop) -cne 'parent marker') { throw 'Parent directory changed' }
-            '한국어 내용' > 'unicode marker.txt'
+            echo exact-output > plain.txt
+            if ((Get-Content -LiteralPath 'plain.txt' -Raw -ErrorAction Stop).TrimEnd() -cne 'exact-output') { throw 'Plain redirection changed' }
+            Remove-Item -LiteralPath 'plain.txt' -ErrorAction Stop
+            echo '한국어 내용' > 'unicode marker.txt'
             Rename-Item -LiteralPath 'unicode marker.txt' -NewName 'renamed marker.txt' -ErrorAction Stop
             $content = Get-Content -LiteralPath 'renamed marker.txt' -Raw -ErrorAction Stop
             if ([IO.File]::ReadAllText('renamed marker.txt') -cne $content) { throw 'Process directory changed' }
@@ -96,6 +102,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         } catch {
             [Console]::Error.WriteLine('probe_location=' + (Get-Location).ProviderPath)
             [Console]::Error.WriteLine('probe_parent=' + $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath('..\parent marker.txt'))
+            [Console]::Error.WriteLine($_.Exception.ToString())
             throw
         }";
         let invocation = login_shell(script, ShellAccess::Full, &environment).unwrap();
@@ -107,6 +114,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         assert_eq!(String::from_utf8(output.stdout).unwrap(), "한국어 내용\r\n");
         assert!(!long_directory.join("unicode marker.txt").exists());
         assert!(!long_directory.join("renamed marker.txt").exists());
+        assert!(!long_directory.join("plain.txt").exists());
     }).await.map_err(|error| HarnessError(error.to_string()))?;
     Ok(())
 }

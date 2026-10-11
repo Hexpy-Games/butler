@@ -80,7 +80,7 @@ pub(super) fn legacy_shell(
     // EncodedCommand preserves nested quotes and multi-line scripts without
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
-    let modules = default_modules(environment);
+    let modules = default_modules();
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
     // Enter the admitted short CWD with process-local .NET path compatibility.
@@ -126,16 +126,10 @@ fn phase_marker(phase: &str) -> String {
     )
 }
 
-fn default_modules(environment: &HashMap<String, Option<String>>) -> &'static str {
-    if environment.iter().any(|(key, value)| {
-        key.eq_ignore_ascii_case("PSModulePath")
-            && value.as_deref().is_some_and(|path| !path.trim().is_empty())
-    }) {
-        return "";
-    }
-    // A normally launched App has no inherited PowerShell console module path.
-    // Load the trusted built-ins directly instead of scanning every module for
-    // their first command. Keep normal discovery for requested custom modules.
+fn default_modules() -> &'static str {
+    // Load trusted built-ins before changing provider location or path policy.
+    // Initialize them while the normal filesystem drives are still active.
+    // Preserve PSModulePath for explicitly requested custom modules.
     "Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1\"; Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1\"; "
 }
 
