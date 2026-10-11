@@ -40,7 +40,7 @@ try {
   assert.deepEqual(powerMessages.at(-1), { channel: "butler:power-state", payload: { onBattery: true, constrained: false } }, "battery transition emits once");
   powerMonitor.emit("thermal-state-change", { state: "fair" });
   powerMonitor.emit("thermal-state-change", { state: "fair" });
-  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: true, constrained: true }, "thermal pressure constrains wallpaper");
+  assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: true, constrained: false }, "fair thermal state does not constrain wallpaper");
   powerMonitor.emit("speed-limit-change", { limit: 80 });
   assert.equal(powerMessages.length, initialPowerMessages + 2, "same derived state does not emit a duplicate");
   powerMonitor.emit("on-ac");
@@ -55,6 +55,17 @@ try {
   powerMonitor.emit("speed-limit-change", { limit: 100 });
   assert.deepEqual(powerMessages.at(-1)?.payload, { onBattery: false, constrained: false });
   assert.equal(powerMessages.length, initialPowerMessages + 6, "one IPC message per derived state change");
+  const fairMonitor = new EventEmitter();
+  fairMonitor.isOnBatteryPower = () => false;
+  fairMonitor.getCurrentThermalState = () => "serious";
+  const fairState = createPowerStateMonitor(fairMonitor);
+  try {
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: true });
+    fairMonitor.emit("thermal-state-change", { state: "fair" });
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: false }, "fair is accepted without constraining wallpaper");
+    fairMonitor.emit("thermal-state-change", { state: "unknown" });
+    assert.deepEqual(fairState.getState(), { onBattery: false, constrained: false }, "unknown thermal state does not constrain wallpaper");
+  } finally { fairState.stop(); }
   db.exec("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value_json TEXT NOT NULL)");
   if (process.argv.includes("--owner-scale")) {
     db.exec("CREATE TABLE chats(id INTEGER PRIMARY KEY, payload BLOB); CREATE TABLE events(id INTEGER PRIMARY KEY, chat_id INTEGER)");

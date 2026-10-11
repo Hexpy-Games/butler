@@ -7,8 +7,11 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
+
+const QUIET_PERIOD: Duration = Duration::from_millis(100);
+const QUIET_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) struct Watch {
     databases: Vec<(butler_platform::sqlite::Connection, u64)>,
@@ -18,6 +21,12 @@ pub(crate) struct Watch {
     _watcher: RecommendedWatcher,
 }
 impl Watch {
+    pub(crate) async fn open_after_quiet(data: &Path) -> Result<Self, HarnessError> {
+        let mut watch = Self::open(data)?;
+        watch.wait_until_quiet().await?;
+        Ok(watch)
+    }
+
     pub(crate) fn open(data: &Path) -> Result<Self, HarnessError> {
         let mut databases = Vec::new();
         for name in [
@@ -69,6 +78,48 @@ impl Watch {
             _watcher: watcher,
         })
     }
+
+    async fn wait_until_quiet(&mut self) -> Result<(), HarnessError> {
+        let deadline = std::time::Instant::now() + QUIET_TIMEOUT;
+        loop {
+            if std::time::Instant::now() >= deadline {
+                return Err(HarnessError(
+                    "timed out waiting for a quiet idle-watch baseline".into(),
+                ));
+            }
+            tokio::time::sleep(QUIET_PERIOD).await;
+            let changed = {
+                let mut changes = self.changes.lock().unwrap();
+                let changed = !changes.is_empty();
+                changes.clear();
+                changed
+            };
+            if changed {
+                continue;
+            }
+
+            let before = snapshot(&self.data)?;
+            let versions: Vec<_> = self
+                .databases
+                .iter_mut()
+                .map(|(db, _)| data_version(db))
+                .collect();
+            let changes = self.changes.lock().unwrap();
+            if changes.is_empty() {
+                if std::time::Instant::now() >= deadline {
+                    return Err(HarnessError(
+                        "timed out waiting for a quiet idle-watch baseline".into(),
+                    ));
+                }
+                self.before = before;
+                for ((_, version), next) in self.databases.iter_mut().zip(versions) {
+                    *version = next;
+                }
+                return Ok(());
+            }
+        }
+    }
+
     pub(crate) fn assert_unchanged(&mut self) {
         let changes = self.changes.lock().unwrap();
         eprintln!(
