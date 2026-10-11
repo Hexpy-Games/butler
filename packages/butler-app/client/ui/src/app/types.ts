@@ -646,6 +646,8 @@ export interface SecurityView {
   content_hosts?: string[];
   /** Butler's own browser while no App is attached; absent where the host has none. */
   headless_browser?: boolean;
+  /** The browser without the App is the installed App's own, run without a window. */
+  headless_browser_app?: boolean;
 }
 
 export interface ModelFallbackSettingsView {

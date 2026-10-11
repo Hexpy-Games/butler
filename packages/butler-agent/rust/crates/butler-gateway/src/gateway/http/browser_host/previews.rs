@@ -25,11 +25,8 @@ pub(super) async fn call(state: Arc<HttpState>, frame: Value) -> Result<Response
         Some("preview.start") => start(&state, session, agent, id, args).await,
         Some("preview.stop") => {
             let result = state.previews.stop(session, agent, id).await;
-            if result.is_ok()
-                && let Ok(hub) = state.browser.0.lock()
-                && let Some(host) = &hub.host
-            {
-                let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"preview.closed","session":session,"args":{"preview_id":id}}));
+            if result.is_ok() {
+                close_on_host(&state, session, id).await;
             }
             if result.is_ok()
                 && let Some(headless) = &state.headless
@@ -44,6 +41,32 @@ pub(super) async fn call(state: Arc<HttpState>, frame: Value) -> Result<Response
         StatusCode::OK,
         result.unwrap_or_else(|reason| json!({"status":"not_dispatched","reason":reason})),
     )
+}
+/// Closes the stopped preview's tabs on the attached host and waits for its
+/// answer, sent after the tab change it published.
+async fn close_on_host(state: &Arc<HttpState>, session: &str, id: &str) {
+    let call = uuid::Uuid::new_v4().to_string();
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    {
+        let Ok(mut hub) = state.browser.0.lock() else {
+            return;
+        };
+        let frame =
+            json!({"id":call,"op":"preview.closed","session":session,"args":{"preview_id":id}});
+        if hub
+            .host
+            .as_ref()
+            .is_none_or(|host| host.try_send(frame).is_err())
+        {
+            return;
+        }
+        hub.pending.insert(call.clone(), sender);
+    }
+    let _pending = super::PendingCall {
+        state: state.clone(),
+        id: call,
+    };
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), receiver).await;
 }
 async fn start(
     state: &Arc<HttpState>,

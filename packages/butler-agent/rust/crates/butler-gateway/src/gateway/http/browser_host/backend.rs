@@ -1,4 +1,5 @@
-//! Which browser serves a call: the attached App, or Butler's own headless
+//! Which browser serves a call: the attached App (or the hidden App host,
+//! started for it when the App is installed), or Butler's own headless
 //! browser when no App is attached. A tab stays on the backend that opened
 //! it, and a conversation's turn keeps the backend it started with, so a
 //! task never switches browsers midway.
@@ -88,6 +89,9 @@ pub(super) async fn route(
             return response(0, json!({"status":"ok"})).map(Ok);
         }
     }
+    if op == "tab.open" {
+        super::hidden::ensure(state, Some(&frame)).await;
+    }
     let backend = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         select(state, &mut hub, &frame)
@@ -96,6 +100,9 @@ pub(super) async fn route(
         return headless_call(state.clone(), frame, op, session, count)
             .await
             .map(Ok);
+    }
+    if let Some(refused) = super::hidden::refusal(state, &frame, op) {
+        return response(count, refused).map(Ok);
     }
     Ok(Err(frame))
 }

@@ -1,6 +1,8 @@
 //! Ephemeral browser ownership and network policy; authority is durable in BTCC.
+pub mod app_host;
 pub mod egress;
 pub mod headless;
+pub use app_host::{AppHost, AppHostConfig, AppHostSource, HostCredentials};
 pub use egress::{ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guarded_client};
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, Rendered,
@@ -103,6 +105,9 @@ impl TabRegistry {
         ids
     }
     /// Whether the App reported this tab, whoever owns it.
+    pub fn is_empty(&self) -> bool {
+        self.tabs.is_empty()
+    }
     pub fn contains(&self, id: &str) -> bool {
         self.tabs.contains_key(id)
     }

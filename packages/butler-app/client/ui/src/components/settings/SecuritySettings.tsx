@@ -77,7 +77,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           <SettingsSwitch
             settingId="headless-browser-enabled"
             label={settingsCopy.security.headlessBrowser}
-            description={settingsCopy.security.headlessBrowserDescription}
+            description={view.headless_browser_app ? settingsCopy.security.headlessBrowserAppDescription : settingsCopy.security.headlessBrowserDescription}
             checked={view.headless_browser}
             disabled={busy !== null}
             onChange={(enabled) => void security.toggleHeadlessBrowser(enabled)}

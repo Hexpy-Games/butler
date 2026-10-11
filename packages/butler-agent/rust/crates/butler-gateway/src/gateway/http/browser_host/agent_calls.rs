@@ -354,6 +354,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
             .map_err(|_| error(400, "invalid_snapshot"))?;
         (changed, handovers)
     };
+    state.browser.2.notify_waiters();
     super::signed_in::record_handovers(&state, handovers).await?;
     super::hand_back::resume_waits(&state, &handed_back).await?;
     super::super::json(StatusCode::OK, json!({"ok":true}))

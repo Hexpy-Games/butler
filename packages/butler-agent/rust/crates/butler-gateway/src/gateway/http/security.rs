@@ -234,6 +234,16 @@ impl GatewaySecurity {
         }
     }
 
+    /// The local admin credential, when one is configured.
+    pub(super) fn admin(&self) -> Option<Arc<str>> {
+        self.admin.clone()
+    }
+
+    /// The loopback listener's port.
+    pub(super) fn port(&self) -> u16 {
+        self.local_addr.port()
+    }
+
     /// The current token (the connection code), when there is one.
     pub(super) fn token(&self) -> Option<Arc<str>> {
         self.keyed.read().token.clone()

@@ -81,6 +81,8 @@ const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 struct HttpState {
     browser: browser_host::Hub,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
+    /// The installed App's Electron as a windowless browser host.
+    app_host: Option<Arc<butler_runtime::browser::AppHost>>,
     previews: butler_runtime::previews::Previews,
     preview_lifetime_started: parking_lot::Mutex<bool>,
     devices: security::DeviceRegistry,

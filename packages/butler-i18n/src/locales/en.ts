@@ -1735,6 +1735,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       remoteAccessDescription: "Devices on your network enter the connection code to connect.",
       headlessBrowser: "Browse when the app is closed",
       headlessBrowserDescription: "Butler uses its own browser. About 100 MB downloads on first use.",
+      headlessBrowserAppDescription: "Uses the app's browser without a window.",
       addresses: "Addresses",
       noAddresses: "No network address",
       copyAddress: "Copy address",

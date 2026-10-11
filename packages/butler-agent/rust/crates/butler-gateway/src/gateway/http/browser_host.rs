@@ -4,6 +4,7 @@ mod backend;
 pub(super) mod downloads;
 mod fill;
 mod hand_back;
+pub(super) mod hidden;
 mod previews;
 mod report;
 pub(super) mod signed_in;
@@ -26,8 +27,10 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 
+/// The attached host's state, the still-upload lock, and a signal on
+/// changes of the attached host's tabs and calls (the hidden host's reap).
 #[derive(Default)]
-pub(super) struct Hub(Mutex<Inner>, tokio::sync::Mutex<()>);
+pub(super) struct Hub(Mutex<Inner>, tokio::sync::Mutex<()>, tokio::sync::Notify);
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
@@ -38,21 +41,39 @@ struct Inner {
     /// Session → (turn, backend) its newest turn's tabs open on.
     pins: HashMap<String, (String, backend::Backend)>,
     fills: HashMap<String, fill::Fill>,
+    /// The attached host is the hidden App host (no window, no user there).
+    hidden: bool,
+    /// The App asked for the channel while the hidden host was busy.
+    app_waiting: bool,
+    /// Counts attaches; a stream's end clears only its own attach.
+    generation: u64,
+}
+impl Inner {
+    /// Forgets the attached host and everything it served.
+    fn detach(&mut self) {
+        self.host = None;
+        self.hidden = false;
+        self.app_waiting = false;
+        self.generation += 1;
+        self.pending.clear();
+        self.tabs.clear();
+        self.uses.clear();
+        self.turns.clear();
+        self.fills.clear();
+    }
 }
 struct HostStream {
     state: Arc<HttpState>,
     receiver: mpsc::Receiver<Value>,
+    generation: u64,
     _subscription: Box<dyn crate::gateway::EventSubscription>,
 }
 impl Drop for HostStream {
     fn drop(&mut self) {
-        if let Ok(mut hub) = self.state.browser.0.lock() {
-            hub.host = None;
-            hub.pending.clear();
-            hub.tabs.clear();
-            hub.uses.clear();
-            hub.turns.clear();
-            hub.fills.clear();
+        if let Ok(mut hub) = self.state.browser.0.lock()
+            && hub.generation == self.generation
+        {
+            hidden::detached(&self.state, &mut hub);
         }
     }
 }
@@ -78,7 +99,10 @@ pub(super) async fn route(
     }
     let path = request.uri().path().to_owned();
     match (request.method(), path.as_str()) {
-        (&Method::GET, "/internal/browser-host") => attach(state, client.keys.live_streams()),
+        (&Method::GET, "/internal/browser-host") => {
+            let launch = hidden::launch_of(request.headers());
+            attach(state, client.keys.live_streams(), launch.as_deref())
+        }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
         }
@@ -117,14 +141,20 @@ pub(super) async fn route(
 fn attach(
     state: Arc<HttpState>,
     rotated: tokio_util::sync::CancellationToken,
+    launch: Option<&str>,
 ) -> Result<Response, HttpError> {
     let (sender, receiver) = mpsc::channel(8);
-    {
+    let generation = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        if hub.host.is_some() {
-            return Err(error(409, "browser_host_exists"));
-        }
+        hidden::admit(&state, &mut hub, launch)?;
         hub.host = Some(sender);
+        hub.hidden = launch.is_some();
+        hub.app_waiting = false;
+        hub.generation += 1;
+        hub.generation
+    };
+    if launch.is_some() {
+        hidden::watch(&state, generation);
     }
     let weak = Arc::downgrade(&state);
     // Committed events are published on the SQLite owner thread, not Tokio.
@@ -165,6 +195,7 @@ fn attach(
         HostStream {
             state,
             receiver,
+            generation,
             _subscription: subscription,
         },
         move |mut host| {
@@ -198,6 +229,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     let view = super::content::check_view(&state, &args).await?;
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
+    hidden::ensure(&state, None).await;
     let attached = state
         .browser
         .0
@@ -286,7 +318,9 @@ impl Drop for PendingCall {
     fn drop(&mut self) {
         if let Ok(mut hub) = self.state.browser.0.lock() {
             usage::release(&mut hub, &self.id);
+            hidden::hand_over(&self.state, &mut hub);
         }
+        self.state.browser.2.notify_waiters();
     }
 }
 
