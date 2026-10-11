@@ -24,7 +24,7 @@ function AccessChooser() {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "A non-modal glass layer anchored to a control, for choosers and small panels.",
-  whenToUse: ["A chooser opened from a composer control", "A searchable select (with FilteredSelectPopover)"],
+  whenToUse: ["A chooser opened from a composer control", "A searchable select (with FilteredSelectPopover)", "A suggestion list as wide as its field (width=\"anchor\" with SuggestionList)"],
   whenNotToUse: [
     { when: "A plain list of actions", use: "DropdownMenu" },
     { when: "A task that needs focus and a backdrop", use: "Dialog" },
@@ -37,7 +37,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A tooltip with buttons in it cannot be reached by keyboard.", render: () => <Tooltip label="Choose access"><Button variant="outline" text="Access" /></Tooltip> },
     },
   ],
-  content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short.", "width=\"narrow\" (min(280px, 100vw - 32px)) fits compact readouts such as context and usage."],
+  content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short.", "width=\"narrow\" (min(280px, 100vw - 32px)) fits compact readouts such as context and usage.", "width=\"anchor\" matches the PopoverAnchor width; pair it with density=\"list\" for row lists such as address suggestions."],
   accessibility: ["Focus stays on the trigger unless content needs it; Escape and outside click close it."],
   tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-enter-overlay", "--motion-scale-menu", "--z-popover"],
 };

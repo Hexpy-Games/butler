@@ -1,4 +1,5 @@
 mod authority;
+mod correction_schema;
 mod monitoring;
 mod startup_indexes;
 mod subsession;
@@ -46,6 +47,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     ensure_turn_columns(&transaction)?;
     authority::permission_indexes(&transaction)?;
     ensure_model_columns(&transaction)?;
+    correction_schema::ensure(&transaction)?;
     ensure_guided_tool_result_delivery_columns(&transaction)?;
     migrate_guided_work_checkpoint_constraints(&transaction)?;
     migrate_guided_work_review_constraints(&transaction)?;
@@ -116,6 +118,18 @@ fn ensure_model_columns(db: &Connection) -> rusqlite::Result<()> {
             "INTEGER NOT NULL DEFAULT 0",
         )?;
     }
+    ensure_column(
+        db,
+        "btcc_model_round_acceptances",
+        "payload_state",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        db,
+        "btcc_model_round_acceptances",
+        "continuation_delta_json",
+        "TEXT",
+    )?;
     if table_exists(db, "btcc_model_route_events")? {
         ensure_column(db, "btcc_model_route_events", "failure_disposition", "TEXT")?;
     }

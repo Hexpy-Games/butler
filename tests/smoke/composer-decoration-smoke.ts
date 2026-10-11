@@ -25,7 +25,8 @@ let longReply = false;
 const LAST_MESSAGE = "Last complete message. This text must remain above the character and input.";
 let longReplyText: string;
 const LONG_MESSAGE = Array.from({ length: 60 }, (_, i) => `Complete transcript paragraph ${i + 1}.`).join("\n\n") + `\n\n${LAST_MESSAGE}`;
-const out = resolve(`.tmp/composer-decoration/${before ? "before" : baseline ? "baseline" : decorationTheme}`);
+const out = join(resolve(process.env.BUTLER_COMPOSER_DECORATION_OUT ?? ".tmp/composer-decoration"),
+  before ? "before" : baseline ? "baseline" : decorationTheme);
 mkdirSync(out, { recursive: true });
 let toolMode: "question" | "authority" | undefined;
 let toolPrompt: string | undefined;
@@ -44,6 +45,27 @@ const server = await createNativeAppServer({ uiRoot: resolve(before || baseline 
 const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await installDecorationProbe(page);
+await page.addInitScript(() => {
+  // This smoke asserts live frame scheduling; headless SwiftShader otherwise holds still by policy.
+  const observer = new MutationObserver(() => {
+    if (!document.documentElement) return;
+    document.documentElement.dataset.wallpaperSoftwareFallback = "off";
+    observer.disconnect();
+  });
+  if (document.documentElement) {
+    document.documentElement.dataset.wallpaperSoftwareFallback = "off";
+  } else {
+    observer.observe(document, { childList: true });
+  }
+  let charging = true;
+  const battery = new EventTarget();
+  Object.defineProperty(battery, "charging", { get: () => charging });
+  Object.defineProperty(navigator, "getBattery", { configurable: true, value: () => Promise.resolve(battery) });
+  (window as any).__setBatteryCharging = (next: boolean) => {
+    charging = next;
+    battery.dispatchEvent(new Event("chargingchange"));
+  };
+});
 await server.signIn(page);
 const scene = '[data-test-class~="composer-decoration-scene"]';
 const editor = '[contenteditable="true"]';
@@ -70,6 +92,9 @@ async function settings(page: Page, language: "en" | "ko") {
   const palette = page.getByRole("dialog", { name: copy.commandPalette.label });
   await palette.getByRole("combobox").fill(copy.settings.sections.appearance);
   await palette.getByRole("option").filter({ hasText: copy.settings.sections.appearance }).click();
+  const messageBox = page.locator(`[data-settings-section-id="${before || baseline ? "home-screen" : "message-box"}"]`);
+  await messageBox.waitFor();
+  assert.equal(await messageBox.locator('[data-setting-id="composer-decoration"]').count(), 1);
   return copy;
 }
 async function openEditor(page: Page) {
@@ -84,6 +109,46 @@ async function firstFrame(page: Page) {
     return canvas && canvas.width > 0 && canvas.height > 0 && canvas.style.visibility !== "hidden";
   }, scene);
   assert((await readDecorationProbe(page)).draws > 0, "actual first draw observed");
+}
+async function returnToComposer(page: Page, copy: ReturnType<typeof getAppCopy>) {
+  await page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true }).click();
+  const back = page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true });
+  if (await back.count()) await back.click();
+  await openEditor(page);
+}
+async function verifyAppMotionAndBattery(page: Page, language: "en" | "ko", copy: ReturnType<typeof getAppCopy>) {
+  await settings(page, language);
+  const reduced = page.getByRole("switch", { name: copy.settings.fields.reduceMotion, exact: true });
+  const savedOn = page.waitForResponse(response => new URL(response.url()).pathname === "/settings" && response.request().method() === "PATCH");
+  await reduced.click();
+  assert.equal((await savedOn).status(), 200);
+  await returnToComposer(page, copy);
+  await page.waitForTimeout(250);
+  await resetDecorationProbe(page);
+  await page.waitForTimeout(500);
+  assert.equal((await readDecorationProbe(page)).draws, 0, "app reduce motion freezes scene");
+
+  await settings(page, language);
+  const savedOff = page.waitForResponse(response => new URL(response.url()).pathname === "/settings" && response.request().method() === "PATCH");
+  await page.getByRole("switch", { name: copy.settings.fields.reduceMotion, exact: true }).click();
+  assert.equal((await savedOff).status(), 200);
+  await returnToComposer(page, copy);
+  await page.waitForTimeout(250);
+  await resetDecorationProbe(page);
+  await page.waitForTimeout(500);
+  assert((await readDecorationProbe(page)).draws > 0, "scene resumes when app reduce motion is off");
+
+  assert.equal(await page.evaluate(() => typeof (window as any).__setBatteryCharging), "function");
+  await page.evaluate(() => (window as any).__setBatteryCharging(false));
+  await page.waitForTimeout(100);
+  await resetDecorationProbe(page);
+  await page.waitForTimeout(500);
+  assert.equal((await readDecorationProbe(page)).draws, 0, "pauseOnBattery freezes scene");
+  await page.evaluate(() => (window as any).__setBatteryCharging(true));
+  await page.waitForTimeout(100);
+  await resetDecorationProbe(page);
+  await page.waitForTimeout(500);
+  assert((await readDecorationProbe(page)).draws > 0, "scene resumes when charging");
 }
 function diskSnapshot(root: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -237,7 +302,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
   const key = `${width}-${theme}-${language}`;
   console.error(`Composer decoration ${before ? "before" : baseline ? "baseline" : decorationTheme}: ${key}`);
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme,
-    wallpaper: { source: { kind: "none" }, motion: "auto", pauseOnBattery: true },
+    reduce_motion: false, wallpaper: { source: { kind: "none" }, motion: baseline ? "auto" : "paused", pauseOnBattery: true },
     composer_decoration: { theme: "none", character: true } }) });
   await page.setViewportSize({ width, height: 900 });
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "no-preference" });
@@ -278,13 +343,13 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
       await group.getByRole("radio", { name, exact: true }).waitFor();
       assert.equal(await group.getByRole("radio", { name, exact: true }).getAttribute("aria-checked"), "true");
     }
-    await page.waitForFunction(() => document.querySelector('[data-setting-id="main-screen-motion"]'));
+    if (!baseline) {
+      assert.equal(await page.locator('[data-setting-id="main-screen-motion"]').count(), 0, "Home motion is hidden when wallpaper is none");
+      assert.equal(await page.locator('[data-setting-id="main-screen-battery"]').count(), 0, "Home battery switch is hidden when wallpaper is none");
+    }
     await capture(page, `${key}-settings-${decorationTheme}`);
-    await page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true }).click();
-    // On mobile, Back first returns to settings navigation.
-    const back = page.getByRole("button", { name: copy.settings.back, exact: true }).filter({ visible: true });
-    if (await back.count()) await back.click();
-    await openEditor(page); await firstFrame(page);
+    await returnToComposer(page, copy);
+    await firstFrame(page);
     await page.locator(editor).fill("Character geometry probe ".repeat(5));
     await capture(page, `${key}-plain-${decorationTheme}`);
     const geometry = await characterGeometry(page);
@@ -300,6 +365,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
     const headBox = await page.locator(`[data-character="${characterKind}"]`).first().boundingBox();
     assert(lastBox && headBox && lastBox.y + lastBox.height <= headBox.y, "last message above character");
     await capture(page, `${key}-conversation-${decorationTheme}`);
+    if (!baseline) await verifyAppMotionAndBattery(page, language, copy);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.waitForTimeout(300); await resetDecorationProbe(page); await page.waitForTimeout(500);
     assert.equal((await readDecorationProbe(page)).draws, 0, "reduced motion freezes scene");

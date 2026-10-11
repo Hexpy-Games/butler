@@ -43,3 +43,16 @@ pub fn storage_scan_delay(path: &Path) -> std::time::Duration {
 pub fn storage_error_is_corruption(error: &StorageError) -> bool {
     verdict::corruption(error)
 }
+
+/// Stamp a verified replacement without a redundant full startup scan.
+pub(in crate::btcc::storage) fn stamp_verified(path: &Path) -> StorageResult<()> {
+    verdict::verified(path)
+}
+
+pub(in crate::btcc::storage) fn verify_correction(
+    db: &Connection,
+    started: std::time::Instant,
+) -> StorageResult<()> {
+    validate::correction(db)?;
+    validate::activated::validate_connection(db, false, started).map(|_| ())
+}

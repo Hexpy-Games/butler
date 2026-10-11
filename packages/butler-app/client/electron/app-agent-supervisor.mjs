@@ -121,6 +121,7 @@ export function createBundledAgentSupervisor({
   startupAttempts = 60,
   startupDelayMs = 150,
   startupTimeoutMs = null,
+  startupDeadline = () => 0,
   // SIGTERM → SIGKILL grace, the same as the CLI/MCP controllers: an Agent
   // still draining an announced stop exits 0 by itself at 6 s (#244).
   killTimeoutMs = AGENT_STOP_KILL_TIMEOUT_MS,
@@ -851,22 +852,23 @@ export function createBundledAgentSupervisor({
 
   function createStartupWindow() {
     const usesDeadline = Number.isFinite(startupTimeoutMs) && startupTimeoutMs > 0;
-    const deadline = usesDeadline ? nowMs() + startupTimeoutMs : null;
+    const initialDeadline = usesDeadline ? nowMs() + startupTimeoutMs : null;
+    const deadline = () => Math.max(initialDeadline ?? 0, startupDeadline());
     let attempts = 0;
     return {
       attempts: () => attempts,
       canAttempt: () =>
-        attempts === 0 || (usesDeadline ? nowMs() < deadline : attempts < startupAttempts),
+        attempts === 0 || (usesDeadline ? nowMs() < deadline() : attempts < startupAttempts),
       recordAttempt: () => {
         attempts += 1;
       },
       waitBeforeRetry: async () => {
         const canRetry = usesDeadline
-          ? nowMs() < deadline
+          ? nowMs() < deadline()
           : attempts < startupAttempts;
         if (!canRetry) return;
         const delay = usesDeadline
-          ? Math.min(startupDelayMs, Math.max(0, deadline - nowMs()))
+          ? Math.min(startupDelayMs, Math.max(0, deadline() - nowMs()))
           : startupDelayMs;
         if (delay > 0) await sleepMs(delay);
       },

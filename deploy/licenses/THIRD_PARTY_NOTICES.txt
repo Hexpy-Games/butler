@@ -1004,6 +1004,7 @@ lowlight 3.3.0
 MIT
 License: https://www.npmjs.com/package/lowlight/v/3.3.0
 Copyright (c) Titus Wormer <tituswormer@gmail.com>
+Copyright (c) 2006, Ivan Sagalaev.
 
 ===== COMPONENT =====
 markdown-table 3.0.4
@@ -1281,6 +1282,7 @@ parse-entities 4.0.2
 MIT
 License: https://www.npmjs.com/package/parse-entities/v/4.0.2
 Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
+Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====
 pretendard 1.3.9

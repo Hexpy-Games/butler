@@ -118,7 +118,10 @@ json_stringify
 legacy_turn_cutover_cas_conflict
 legacy_turn_quarantine_cas_conflict
 model_acceptance_claim
+model_acceptance_format_unknown
 model_acceptance_json
+model_acceptance_reclaimed
+model_acceptance_turn_settled
 model_checkpoint_missing
 model_checkpoint_stale
 model_claim_lost
@@ -204,6 +207,7 @@ sqlite_thread_missing
 sqlite_thread_panicked
 sqlite_thread_spawn_failed
 sqlite_transaction_open_at_close
+sqlite_wal_sync_failed
 state_claim_adoption_raced
 state_claim_inactive
 state_claim_live
@@ -212,6 +216,9 @@ state_claim_stale_turn
 stop_cas_lost
 stop_final_missing
 stop_message_missing
+storage_correction_copy_failed
+storage_correction_open_failed
+storage_correction_verify_failed
 subsession_child_role_invalid
 subsession_outbox_invalid
 subsession_outbox_route_invalid
@@ -236,4 +243,3 @@ wake_request_conflict
 wake_trigger_conflict
 work_scope_project_projection_incomplete
 work_scope_turn_binding_ambiguous
-sqlite_wal_sync_failed
