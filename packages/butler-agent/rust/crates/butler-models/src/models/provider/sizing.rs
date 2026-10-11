@@ -1,4 +1,6 @@
-//! Return pressure and exact stateless bytes from a single serialization.
+//! Measure text/image pressure separately from the complete stateless wire bytes.
+use std::borrow::Cow;
+
 use crate::models::{ModelCatalog, ModelCatalogSnapshot, TokenEstimateInput};
 use butler_turn::btcc::{BtccError, ContextMeasurement, ModelRoundMessage};
 
@@ -12,18 +14,19 @@ pub(super) fn measure(
     messages: &[ModelRoundMessage],
     cache: &Cache,
 ) -> Result<ContextMeasurement, BtccError> {
+    let items = if model.starts_with("openai/") {
+        super::serialize::bounded_items(messages)
+    } else {
+        Vec::new()
+    };
     let bytes = if model.starts_with("openai/") {
-        cache
-            .0
-            .lock()
-            .array_json(&super::serialize::bounded_items(messages))
-            .map_err(|source| {
-                BtccError::relayed(
-                    "context_serialization_failed",
-                    "Context serialization failed.",
-                )
-                .with_source(source)
-            })?
+        cache.0.lock().array_json(&items).map_err(|source| {
+            BtccError::relayed(
+                "context_serialization_failed",
+                "Context serialization failed.",
+            )
+            .with_source(source)
+        })?
     } else {
         let value = serde_json::to_value(messages).map_err(|source| {
             BtccError::relayed(
@@ -40,8 +43,27 @@ pub(super) fn measure(
             .with_source(source)
         })?
     };
+    let (token_input, images) = if model.starts_with("openai/") {
+        let (text, count) = crate::models::request_admission::image_token_projection(
+            &serde_json::Value::Array(items),
+        )
+        .map_err(|source| {
+            BtccError::relayed(
+                "context_serialization_failed",
+                "Context serialization failed.",
+            )
+            .with_source(source)
+        })?;
+        (Cow::Owned(text), count)
+    } else {
+        (Cow::Borrowed(bytes.as_str()), 0)
+    };
     let tokens = catalog
-        .estimate_tokens(snapshot, TokenEstimateInput::Text(&bytes), Some(model))
+        .estimate_tokens(
+            snapshot,
+            TokenEstimateInput::Text(&token_input),
+            Some(model),
+        )
         .map_err(|source| {
             butler_turn::btcc::BtccError::relayed(
                 "context_tokenization_failed",
@@ -49,7 +71,8 @@ pub(super) fn measure(
             )
             .with_source(source)
         })?
-        .tokens;
+        .tokens
+        + f64::from(images) * crate::models::request_admission::IMAGE_TOKEN_ALLOWANCE;
     Ok(butler_turn::btcc::ContextMeasurement {
         pressure_bytes: tokens * 2.0,
         stateless_bytes: model.starts_with("openai/").then_some(bytes.len()),

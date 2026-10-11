@@ -17,6 +17,7 @@ mod anthropic_schema;
 mod continuation;
 mod prompt;
 mod serialization;
+mod sizing;
 mod transport;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
