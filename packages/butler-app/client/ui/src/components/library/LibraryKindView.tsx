@@ -1,3 +1,4 @@
+import { useButlerStore } from "@/app/store";
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
 import type { LibraryView } from "@/app/types";
@@ -42,6 +43,7 @@ export function LibraryKindView({ view, onAttach }: { view: LibraryView; onAttac
     <Grid columns={CARD_COLUMNS} gap="md">{page.items.map((item) => <LibraryItemCard key={item.id} item={item} view={view} onAttach={() => onAttach(item)}
       selection={{ mode: items.length > 0, selected: selected.includes(item.id), onSelect: (on, event) => select(item, on, event.shiftKey), dragItems: () => items }} />)}</Grid>
     {!page.loading && !page.items.length ? <EmptyLine message={page.failed ? copy.failed : copy.noItems} /> : null}
+    {!page.loading && !page.failed && !page.items.length && kind === "bookmark" ? <Button size="sm" variant="ghost" onClick={() => useButlerStore.getState().openSettings("browser-import")}>{appCopy.settings.pageSections.browserImport}</Button> : null}
     {page.next ? <Button variant="ghost" disabled={page.loading} onClick={page.more}>{appCopy.browser.loadMore}</Button> : null}
   </Stack>;
 }

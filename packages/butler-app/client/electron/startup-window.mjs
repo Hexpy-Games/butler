@@ -51,8 +51,8 @@ export function failStartup() {
 }
 export function configureStartupActions(next) { actions = next; }
 export function waitForStartupRenderer(win) {
-  const painted = new Promise((resolve) => win.once("ready-to-show", resolve));
-  const shown = new Promise((resolve) => win.once("show", resolve));
+  const painted = new Promise((resolve) => win.once("ready-to-show", () => { startupTiming("setup_window_painted"); resolve(); }));
+  const shown = new Promise((resolve) => win.once("show", () => { startupTiming("setup_window_shown"); resolve(); }));
   setupWindows.set(win, Promise.all([painted, shown]).then(() => undefined));
   rendererId = win.webContents.id;
   win.webContents.setBackgroundThrottling(false);

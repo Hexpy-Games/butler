@@ -5,7 +5,6 @@ use rusqlite::{Connection, OptionalExtension};
 pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS browser_library(id TEXT PRIMARY KEY,kind TEXT NOT NULL,title TEXT NOT NULL,url TEXT NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS browser_library_kind_time ON browser_library(kind,created_at DESC,id DESC);
-        CREATE UNIQUE INDEX IF NOT EXISTS browser_bookmark_url ON browser_library(url) WHERE kind='bookmark';
         CREATE VIRTUAL TABLE IF NOT EXISTS browser_library_fts USING fts5(terms);
         CREATE TABLE IF NOT EXISTS browser_library_snapshot(id TEXT PRIMARY KEY,html TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS browser_library_migration(version INTEGER PRIMARY KEY);
@@ -48,6 +47,16 @@ pub(super) fn recover(
             [],
         )
         .map_err(AppStorageError::sqlite)?;
+        tx.commit().map_err(AppStorageError::sqlite)?;
+    }
+    if !migrated(db, 3)? {
+        // v3: the same URL may belong to several folders. Migrate once on
+        // the storage owner thread, after legacy folders have their group IDs.
+        let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+        tx.execute_batch("DROP INDEX IF EXISTS browser_bookmark_url;
+            CREATE UNIQUE INDEX browser_bookmark_folder_url ON browser_library(COALESCE(group_id,''),url) WHERE kind='bookmark';
+            INSERT INTO browser_library_migration(version) VALUES(3);")
+            .map_err(AppStorageError::sqlite)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
     }
     Ok(())

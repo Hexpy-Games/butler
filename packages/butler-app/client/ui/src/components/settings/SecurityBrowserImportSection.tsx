@@ -1,87 +1,82 @@
-import { useEffect, useState } from "react";
-import { apiErrorCode } from "@/app/api.ts";
-import { appCopy } from "@/app/copy.ts";
-import { notifyError, notifyStatus } from "@/app/notifications.ts";
-import { Button, ButtonContainer, SettingsField, SettingsSection, Stack, Tooltip, Typo } from "@/butler-ds";
-import { SettingsSelect } from "./SettingsSelect";
-import { listImportSources, pickImportFile, previewImport, runImport, type ImportRequest, type ImportSource } from "./signInsApi";
+import { useId, useState } from "react";
+import { appCopy } from "@/app/copy";
+import { Button, ButtonContainer, CheckIcon, ChoiceCard, DisclosureRow, FileText, Globe2, IconSlot, Input, SettingsSection, Spinner, Square, Stack, Tooltip, Typo } from "@/butler-ds";
+import { openImportDiskAccess } from "./signInsApi";
+import { useBrowserImport } from "./useBrowserImport";
 
-const FILE = "file";
+const BRANDS: Record<string, string> = { chrome: "Chrome", chromium: "Chromium", edge: "Edge", brave: "Brave", arc: "Arc", whale: "Whale", firefox: "Firefox", zen: "Zen", safari: "Safari" };
+// Whale's official icon: https://shared-whale.pstatic.net/favicon/icon.png (Naver trademark).
 
-/** Settings → Browser → import bookmarks and passwords from another browser. Counts only, never values. */
-export function SecurityBrowserImportSection({ keychain, onImported }: { keychain: boolean; onImported: () => void }) {
+/** Settings → Browser, shared by the optional first-run step. Passwords stay out of view state. */
+export function SecurityBrowserImportSection({ keychain, onImported, showTitle = true }: { keychain: boolean; onImported: () => void; showTitle?: boolean }) {
   const copy = appCopy.settings.browserImport;
-  const [sources, setSources] = useState<ImportSource[] | null>(null);
-  const [source, setSource] = useState(FILE);
-  const [bookmarks, setBookmarks] = useState<{ request: ImportRequest; text: string } | null>(null);
-  const [passwords, setPasswords] = useState<{ request: ImportRequest; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let live = true;
-    void listImportSources().then(view => { if (live) { setSources(view.sources); if (view.sources[0]) setSource(view.sources[0].key); } })
-      .catch(() => { if (live) setSources([]); });
-    return () => { live = false; };
-  }, []);
-
-  async function step<T>(work: () => Promise<T>): Promise<T | null> {
-    setBusy(true);
-    try { return await work(); } catch (error) {
-      notifyError(error, apiErrorCode(error) === "full_disk_access_required" ? copy.fullDiskAccess : copy.failed);
-      return null;
-    } finally { setBusy(false); }
+  const flow = useBrowserImport(onImported);
+  const [expanded, setExpanded] = useState(false);
+  const primaryId = useId();
+  const [diskHint, setDiskHint] = useState(false);
+  const blocked = flow.busy || !!flow.exportId || (!flow.bookmarks && !flow.passwords) || (flow.passwords && !keychain);
+  const permission = flow.error === "full_disk_access_required";
+  const needsPrimary = flow.error === "primary_password_required" || flow.error === "incorrect_primary_password";
+  function submitPrimary() {
+    const input = document.getElementById(primaryId) as HTMLInputElement | null;
+    const value = input?.value ?? "";
+    if (input) input.value = "";
+    void flow.run(flow.selected, value);
   }
-  async function previewBookmarks() {
-    let request: ImportRequest = { kind: "bookmarks", source };
-    if (source === FILE) {
-      const file = await pickImportFile("bookmarks");
-      if (!file) return;
-      request = { kind: "bookmarks", path: file.path };
-    }
-    const counts = await step(() => previewImport(request));
-    if (counts) setBookmarks({ request, text: copy.bookmarkCount(counts.bookmarks ?? 0, counts.folders ?? 0) });
-  }
-  async function previewPasswords() {
-    const file = await pickImportFile("passwords");
-    if (!file) return;
-    const request: ImportRequest = { kind: "passwords", path: file.path };
-    const counts = await step(() => previewImport(request));
-    if (counts) setPasswords({ request, text: copy.passwordCount(counts.passwords ?? 0, counts.sites ?? 0) });
-  }
-  async function run(kind: "bookmarks" | "passwords") {
-    const preview = kind === "bookmarks" ? bookmarks : passwords;
-    if (!preview) return;
-    const counts = await step(() => runImport(preview.request));
-    if (!counts) return;
-    const skipped = (counts.existing ?? 0) + (counts.skipped ?? 0) + (counts.invalid ?? 0);
-    notifyStatus(copy.imported((counts.imported ?? 0) + (counts.updated ?? 0), skipped), { tone: "ok" });
-    if (kind === "passwords") notifyStatus(copy.deleteCsv, { tone: "muted" });
-    if (kind === "bookmarks") setBookmarks(null); else { setPasswords(null); onImported(); }
-  }
-
-  const options = [...(sources ?? []).map(item => ({ value: item.key, label: `${item.browser[0]!.toUpperCase()}${item.browser.slice(1)} · ${item.name}` })),
-    { value: FILE, label: copy.htmlFile }];
   return (
-    <SettingsSection id="browser-import" kind="form" title={appCopy.settings.pageSections.browserImport}
-      state={sources === null ? "loading" : "ready"}>
-      <SettingsSelect settingId="browser-import-bookmarks" label={copy.bookmarks} value={source}
-        onChange={(value) => { setSource(value); setBookmarks(null); }} options={options}
-        action={(
+    <SettingsSection id="browser-import" kind="form" title={showTitle ? appCopy.settings.pageSections.browserImport : undefined} state={flow.sources === null ? "loading" : "ready"}>
+      <Stack gap="sm" data-test-class="browser-import-flow">
+        {!flow.result ? <>
+          <DisclosureRow title={copy.chooseItems} open={expanded} onToggle={() => setExpanded(value => !value)}>
+            <ButtonContainer size="sm">
+              <Button size="sm" variant="ghost" role="checkbox" aria-checked={flow.bookmarks} disabled={flow.busy} iconStart={flow.bookmarks ? <CheckIcon size="sm" /> : <Square size="sm" />} onClick={() => flow.setBookmarks(!flow.bookmarks)}>{copy.bookmarks}</Button>
+              <Tooltip label={keychain ? copy.passwords : copy.needsKeychain}>
+                <Button size="sm" variant="ghost" role="checkbox" aria-checked={flow.passwords} disabled={flow.busy} iconStart={flow.passwords ? <CheckIcon size="sm" /> : <Square size="sm" />} onClick={() => flow.setPasswords(!flow.passwords)}>{copy.passwords}</Button>
+              </Tooltip>
+            </ButtonContainer>
+          </DisclosureRow>
+          {flow.sources?.map(source => <Tooltip key={source.key} label={!keychain && flow.passwords ? copy.needsKeychain : copy.run}>
+            <ChoiceCard icon={!BRANDS[source.browser] ? <Globe2 size="lg" /> : <IconSlot size="lg"><img src={`/browser-icons/${source.browser}.${source.browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" /></IconSlot>} title={BRANDS[source.browser] ?? source.browser} description={source.name}
+              meta={source.permission === "denied" ? copy.pickFolder : copy.run} data-import-source={source.key}
+              state={flow.busy && flow.selected === source.key ? "loading" : blocked ? "disabled" : "default"}
+              onClick={() => void flow.run(source.key)} />
+          </Tooltip>)}
+          {!flow.sources?.length ? <Typo.Caption tone="secondary">{copy.noSources}</Typo.Caption> : null}
           <ButtonContainer size="sm">
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void previewBookmarks()}>{source === FILE ? copy.chooseFile : copy.preview}</Button>
-            <Button size="sm" disabled={busy || !bookmarks} onClick={() => void run("bookmarks")}>{copy.run}</Button>
-          </ButtonContainer>
-        )} />
-      {bookmarks && <Typo.Caption tone="secondary" data-test-class="import-bookmarks-preview">{bookmarks.text}</Typo.Caption>}
-      <SettingsField settingId="browser-import-passwords" label={copy.passwords} description={copy.csvFile}
-        control={(
-          <Stack align="row" gap="sm" cross="center" wrap>
-            <Tooltip label={keychain ? copy.chooseFile : copy.needsKeychain}>
-              <Button size="sm" variant="outline" disabled={busy || !keychain} onClick={() => void previewPasswords()}>{copy.chooseFile}</Button>
+            <Tooltip label={!keychain && flow.passwords ? copy.needsKeychain : copy.chooseFile}>
+              <Button size="sm" variant="ghost" iconStart={<FileText size="sm" />} disabled={blocked} onClick={() => void flow.run("file")}>{copy.chooseFile}</Button>
             </Tooltip>
-            <Button size="sm" disabled={busy || !passwords || !keychain} onClick={() => void run("passwords")}>{copy.run}</Button>
-          </Stack>
-        )} />
-      {passwords && <Typo.Caption tone="secondary" data-test-class="import-passwords-preview">{passwords.text}</Typo.Caption>}
+          </ButtonContainer>
+        </> : null}
+        {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status" data-test-class="import-progress"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
+        {flow.result ? <Stack gap="sm" role="status" data-test-class="import-result">
+          <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated)}</Typo.Text>
+          <ButtonContainer size="sm">
+            <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button>
+            <Button size="sm" variant="ghost" disabled={flow.busy} onClick={() => void flow.more()}>{copy.more}</Button>
+            {flow.result.needs_csv && !flow.exportId && !flow.result.export_id ? <Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.resumeExport()}>{copy.exportPasswords}</Button> : null}
+            {flow.result.export_id ? <Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.removeCsv()}>{copy.deleteCsv}</Button> : null}
+          </ButtonContainer>
+        </Stack> : null}
+        {flow.exportId ? <Stack gap="sm" role="status"><Typo.Caption>{copy.waitingCsv}</Typo.Caption>
+          <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={() => void flow.selectCsv()}>{copy.chooseFile}</Button><Button size="sm" variant="ghost" onClick={() => void flow.cancel()}>{copy.cancel}</Button></ButtonContainer>
+        </Stack> : null}
+        {permission ? <Stack gap="sm" data-test-class="import-permission" role="alert">
+          <Typo.Caption>{copy.fullDiskAccess}</Typo.Caption>
+          <ButtonContainer size="sm">
+            <Button size="sm" disabled={flow.busy} onClick={() => void flow.folder()}>{copy.pickFolder}</Button>
+            <Button size="sm" variant="ghost" disabled={flow.busy} onClick={() => void openImportDiskAccess().then(() => setDiskHint(true))}>{copy.diskAccess}</Button>
+          </ButtonContainer>
+          {diskHint ? <Typo.Caption tone="secondary">{copy.restartAfterAccess}</Typo.Caption> : null}
+        </Stack> : needsPrimary ? <Stack gap="sm" role="alert">
+          <Typo.Caption>{flow.error === "incorrect_primary_password" ? copy.wrongPrimaryPassword : copy.primaryPassword}</Typo.Caption>
+          <Input id={primaryId} type="password" autoComplete="off" aria-label={copy.primaryPassword} onKeyDown={event => { if (event.key === "Enter") submitPrimary(); }} />
+          <ButtonContainer size="sm"><Button size="sm" disabled={flow.busy} onClick={submitPrimary}>{copy.run}</Button></ButtonContainer>
+        </Stack> : flow.error ? <Stack gap="sm" role="alert">
+          <Typo.Caption>{flow.error === "browser_locked" ? copy.closeBrowser : copy.failed}</Typo.Caption>
+          <ButtonContainer size="sm"><Button size="sm" variant="outline" disabled={flow.busy} onClick={() => void flow.run(flow.selected)}>{copy.retry}</Button></ButtonContainer>
+        </Stack> : null}
+      </Stack>
     </SettingsSection>
   );
 }

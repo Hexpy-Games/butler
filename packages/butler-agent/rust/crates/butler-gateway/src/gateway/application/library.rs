@@ -9,7 +9,7 @@ use super::{AppApplication, AppStorageError, app_error};
 use crate::gateway::ApplicationFuture;
 pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
-pub(super) use records::{create_folder_groups, document, output, save};
+pub(super) use records::{bookmark_in_folder, create_folder_groups, document, output, save};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 /// Explicit user (and agent tool) commands over App-owned Library records.
@@ -144,7 +144,7 @@ fn save_item(db: &Connection, mut item: Value) -> Result<Value, AppStorageError>
     save_snapshot(db, &item, html)?;
     Ok(saved)
 }
-fn delete(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
+pub(super) fn delete(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
     let sql = AppStorageError::sqlite;
     db.execute("DELETE FROM browser_library_fts WHERE rowid=(SELECT rowid FROM browser_library WHERE id=?1)",[id]).map_err(sql)?;
     db.execute("DELETE FROM browser_library_snapshot WHERE id=?1", [id])

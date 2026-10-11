@@ -1845,6 +1845,24 @@ export interface AppCopy {
     };
     /** Settings → Security → import from another browser (counts only). */
     browserImport: {
+      chooseItems: string;
+      importing: string;
+      result: (bookmarks: number, passwords: number, updated: number) => string;
+      undo: string;
+      more: string;
+      undone: string;
+      pickFolder: string;
+      diskAccess: string;
+      restartAfterAccess: string;
+      closeBrowser: string;
+      retry: string;
+      primaryPassword: string;
+      wrongPrimaryPassword: string;
+      exportPasswords: string;
+      waitingCsv: string;
+      cancel: string;
+      skip: string;
+      continue: string;
       source: string;
       noSources: string;
       bookmarks: string;

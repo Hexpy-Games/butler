@@ -1,4 +1,5 @@
 //! Sign-in rows. Callers own the enclosing transaction; values never include secrets.
+mod imports;
 use super::{AppSignInCommand, AppSignInUpsert};
 use crate::gateway::application::AppStorageError;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -12,6 +13,7 @@ fn sql(error: rusqlite::Error) -> AppStorageError {
 pub(super) fn read(db: &Connection, command: AppSignInCommand) -> Result<Value> {
     match command {
         AppSignInCommand::List => list(db),
+        AppSignInCommand::ImportAdditions { run_id } => imports::additions(db, &run_id),
         AppSignInCommand::Lookup { site } => Ok(json!({"entry": entry_where(db, "site", &site)?})),
         AppSignInCommand::Entry { id } => Ok(json!({"entry": entry_where(db, "id", &id)?})),
         AppSignInCommand::Grants { session, turn } => grants(db, &session, turn.as_deref()),
@@ -28,6 +30,16 @@ pub(super) fn write(
     match command {
         AppSignInCommand::Upsert(input) => upsert(db, &input, now, id),
         AppSignInCommand::Forget { id } | AppSignInCommand::Delete { id } => {
+            db.execute(
+                "DELETE FROM browser_signin_identity WHERE entry_id=?1",
+                [&id],
+            )
+            .map_err(sql)?;
+            db.execute(
+                "DELETE FROM browser_import_additions WHERE kind='passwords' AND entry_id=?1",
+                [&id],
+            )
+            .map_err(sql)?;
             let removed = db
                 .execute("DELETE FROM browser_signin_entries WHERE id=?1", [&id])
                 .map_err(sql)?;
@@ -52,7 +64,13 @@ pub(super) fn write(
             Ok(json!({"changed": true}))
         }
         AppSignInCommand::Revoke { site } => revoke(db, &site, now),
-        AppSignInCommand::ImportBookmarks(items) => import_bookmarks(db, &items),
+        AppSignInCommand::ImportBookmarks { items, run_id } => {
+            imports::bookmarks(db, &items, &run_id)
+        }
+        AppSignInCommand::UndoBookmark { run_id, id } => imports::undo_bookmark(db, &run_id, &id),
+        AppSignInCommand::ForgetAddition { run_id, kind, id } => {
+            imports::forget(db, &run_id, &kind, &id)
+        }
         AppSignInCommand::List
         | AppSignInCommand::Lookup { .. }
         | AppSignInCommand::Entry { .. }
@@ -149,39 +167,49 @@ fn entry_where(db: &Connection, column: &str, value: &str) -> Result<Option<Valu
 }
 
 fn upsert(db: &Connection, input: &AppSignInUpsert, now: &str, id: &str) -> Result<Value> {
-    if let Some(existing) = entry_where(db, "site", &input.site)? {
-        let same = existing["username"] == input.username.as_str();
-        if !same && input.source == "import" {
-            return Ok(json!({"id": existing["id"], "action": "skipped"}));
-        }
-        let mut origins: Vec<String> = if same {
-            serde_json::from_value(existing["origins"].clone()).unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        if !origins.contains(&input.origin) {
-            origins.push(input.origin.clone());
-        }
-        origins.truncate(8);
+    if input.source == "manual"
+        && let Some(existing) = entry_where(db, "site", &input.site)?
+    {
+        let id = existing["id"].as_str().unwrap_or_default();
         db.execute(
-            "UPDATE browser_signin_entries SET origins_json=?1,username=?2 WHERE id=?3",
-            params![
-                json!(origins).to_string(),
-                input.username,
-                existing["id"].as_str()
-            ],
+            "DELETE FROM browser_signin_identity WHERE entry_id=?1",
+            [id],
         )
         .map_err(sql)?;
-        let action = if same { "updated" } else { "replaced" };
-        return Ok(json!({"id": existing["id"], "action": action}));
+        db.execute(
+            "UPDATE browser_signin_entries SET username=?1,origins_json=?2 WHERE id=?3",
+            params![input.username, json!([input.origin]).to_string(), id],
+        )
+        .map_err(sql)?;
+        db.execute(
+            "INSERT INTO browser_signin_identity(origin,username,entry_id) VALUES(?1,?2,?3)",
+            params![input.origin, input.username, id],
+        )
+        .map_err(sql)?;
+        return Ok(json!({"id":id,"action":"replaced"}));
     }
+    let existing: Option<String> = db
+        .query_row(
+            "SELECT entry_id FROM browser_signin_identity WHERE origin=?1 AND username=?2",
+            params![input.origin, input.username],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(sql)?;
+    if let Some(id) = existing {
+        return Ok(json!({"id":id,"action":"updated"}));
+    }
+    db.execute("INSERT INTO browser_signin_entries(id,site,origins_json,username,policy,created_at,source) VALUES(?1,?2,?3,?4,'ask',?5,?6)",
+        params![id,input.site,json!([input.origin]).to_string(),input.username,now,input.source]).map_err(sql)?;
     db.execute(
-        "INSERT INTO browser_signin_entries(id,site,origins_json,username,policy,created_at,source) \
-         VALUES(?1,?2,?3,?4,'ask',?5,?6)",
-        params![id, input.site, json!([input.origin]).to_string(), input.username, now, input.source],
+        "INSERT INTO browser_signin_identity(origin,username,entry_id) VALUES(?1,?2,?3)",
+        params![input.origin, input.username, id],
     )
     .map_err(sql)?;
-    Ok(json!({"id": id, "action": "inserted"}))
+    if let Some(run) = &input.import_run {
+        imports::track(db, run, "passwords", id)?;
+    }
+    Ok(json!({"id":id,"action":"inserted"}))
 }
 
 fn revoke(db: &Connection, site: &str, now: &str) -> Result<Value> {
@@ -252,7 +280,7 @@ fn list(db: &Connection) -> Result<Value> {
     let mut statement = db
         .prepare(
             "SELECT site FROM browser_signin_entries UNION SELECT site FROM browser_site_grants \
-             UNION SELECT site FROM browser_site_access WHERE all_conversations=1 ORDER BY 1 LIMIT 500",
+             UNION SELECT site FROM browser_site_access WHERE all_conversations=1 ORDER BY 1",
         )
         .map_err(sql)?;
     let sites = statement
@@ -262,7 +290,22 @@ fn list(db: &Connection) -> Result<Value> {
         .map_err(sql)?;
     let mut rows = Vec::with_capacity(sites.len());
     for site in sites {
-        rows.push(site_row(db, &site)?);
+        let base = site_row(db, &site)?;
+        let mut entries = db.prepare(&format!("SELECT {ENTRY_COLUMNS} FROM browser_signin_entries WHERE site=?1 ORDER BY created_at,id")).map_err(sql)?;
+        let entries = entries
+            .query_map([&site], entry_row)
+            .map_err(sql)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql)?;
+        if entries.is_empty() {
+            rows.push(base);
+            continue;
+        }
+        for entry in entries {
+            let mut row = base.clone();
+            row["entry"] = entry;
+            rows.push(row);
+        }
     }
     Ok(json!({"sites": rows}))
 }
@@ -304,27 +347,4 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
     Ok(
         json!({"site": site, "entry": entry, "conversations": conversations, "all_conversations": all, "uses": uses}),
     )
-}
-
-fn import_bookmarks(db: &Connection, items: &[Value]) -> Result<Value> {
-    let (mut imported, mut existing) = (0_u64, 0_u64);
-    for item in items {
-        let id = item["id"].as_str().unwrap_or_default();
-        let saved = db
-            .query_row(
-                "SELECT 1 FROM browser_library WHERE id=?1",
-                [id],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(sql)?
-            .is_some();
-        if saved {
-            existing += 1;
-            continue;
-        }
-        crate::gateway::application::library::save(db, item)?;
-        imported += 1;
-    }
-    Ok(json!({"imported": imported, "existing": existing}))
 }

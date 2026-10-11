@@ -1,178 +1,254 @@
-//! Other browsers' profiles on this computer, for importing bookmarks: where
-//! each browser keeps them on this operating system, and reading Safari's
-//! binary property list. Reads only; nothing here writes a browser's files.
-
+//! Browser profile discovery and access probes. Never modifies source profiles.
+mod roots;
+pub use roots::profile_roots;
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// How a profile's bookmarks are stored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Bookmark storage format.
 pub enum BookmarkFormat {
-    /// Chromium's `Bookmarks` JSON (Chrome, Edge, Brave, Whale).
+    /// Chromium JSON.
     Chromium,
-    /// Firefox's `places.sqlite`.
+    /// Firefox SQLite.
     Firefox,
-    /// Safari's `Bookmarks.plist`.
+    /// Safari plist.
     Safari,
 }
-
-/// One browser profile that has bookmarks.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BrowserProfile {
-    /// `chrome`, `edge`, `brave`, `whale`, `firefox` or `safari`.
-    pub browser: &'static str,
-    /// The profile's directory name (a stable id within the browser).
-    pub id: String,
-    /// The name the browser shows for the profile.
-    pub name: String,
-    /// The bookmarks file.
-    pub bookmarks: PathBuf,
-    /// Its format.
-    pub format: BookmarkFormat,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Result of probing source access.
+pub enum ProfileAccess {
+    /// Readable.
+    Ready,
+    /// OS denied access, including silent EPERM.
+    PermissionDenied,
+    /// Not installed or absent.
+    NotFound,
 }
-
-/// Where each browser keeps its profiles under a home directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// A detected profile; paths stay in the native process.
+pub struct BrowserProfile {
+    /// Browser brand identifier.
+    pub browser: &'static str,
+    /// Stable profile identifier.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Bookmark file.
+    pub bookmarks: PathBuf,
+    /// Bookmark representation.
+    pub format: BookmarkFormat,
+    /// Observed source access.
+    pub access: ProfileAccess,
+}
 #[derive(Clone, Debug)]
+/// Platform browser data locations.
 pub struct ProfileRoots {
-    /// Chromium-family user-data folders by browser.
+    /// Chromium user-data directories.
     pub chromium: Vec<(&'static str, PathBuf)>,
-    /// Firefox's profiles folder.
+    /// Firefox profiles directory.
     pub firefox: PathBuf,
-    /// Safari's bookmarks file (macOS only).
+    /// Safari bookmark file when supported.
     pub safari: Option<PathBuf>,
 }
 
-/// This operating system's browser locations under `home`.
-#[cfg(target_os = "macos")]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let base = home.join("Library").join("Application Support");
-    ProfileRoots {
-        chromium: vec![
-            ("chrome", base.join("Google/Chrome")),
-            ("edge", base.join("Microsoft Edge")),
-            ("brave", base.join("BraveSoftware/Brave-Browser")),
-            ("whale", base.join("Naver/Whale")),
-        ],
-        firefox: base.join("Firefox/Profiles"),
-        safari: Some(home.join("Library/Safari/Bookmarks.plist")),
+/// EPERM and EACCES remain distinct from a missing installation.
+pub fn probe(path: &Path) -> ProfileAccess {
+    #[cfg(feature = "test-support")]
+    if let Some(denied) = std::env::var_os("BUTLER_BROWSER_IMPORT_DENIED_FIXTURE") {
+        let denied = PathBuf::from(denied);
+        if crate::user_dirs::non_empty_home_dir().is_some_and(|home| denied.starts_with(home))
+            && path.starts_with(denied)
+        {
+            return ProfileAccess::PermissionDenied;
+        }
     }
-}
-
-/// This operating system's browser locations under `home`.
-#[cfg(windows)]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let local = home.join("AppData").join("Local");
-    ProfileRoots {
-        chromium: vec![
-            ("chrome", local.join("Google\\Chrome\\User Data")),
-            ("edge", local.join("Microsoft\\Edge\\User Data")),
-            (
-                "brave",
-                local.join("BraveSoftware\\Brave-Browser\\User Data"),
-            ),
-            ("whale", local.join("Naver\\Naver Whale\\User Data")),
-        ],
-        firefox: home.join("AppData\\Roaming\\Mozilla\\Firefox\\Profiles"),
-        safari: None,
-    }
-}
-
-/// This operating system's browser locations under `home`.
-#[cfg(all(unix, not(target_os = "macos")))]
-pub fn profile_roots(home: &Path) -> ProfileRoots {
-    let config = home.join(".config");
-    ProfileRoots {
-        chromium: vec![
-            ("chrome", config.join("google-chrome")),
-            ("edge", config.join("microsoft-edge")),
-            ("brave", config.join("BraveSoftware/Brave-Browser")),
-            ("whale", config.join("naver-whale")),
-        ],
-        firefox: home.join(".mozilla/firefox"),
-        safari: None,
-    }
-}
-
-/// The installed browsers' profiles under the user's home that have bookmarks.
-pub fn detect() -> Vec<BrowserProfile> {
-    let Some(home) = crate::user_dirs::non_empty_home_dir() else {
-        return Vec::new();
+    let result = if path.is_dir() {
+        std::fs::read_dir(path).map(|_| ())
+    } else {
+        std::fs::File::open(path).map(|_| ())
     };
-    let roots = profile_roots(&home);
+    match result {
+        Ok(()) => ProfileAccess::Ready,
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => ProfileAccess::PermissionDenied,
+        Err(_) => ProfileAccess::NotFound,
+    }
+}
+
+/// Installed profiles under the current home.
+pub fn detect() -> Vec<BrowserProfile> {
+    crate::user_dirs::non_empty_home_dir()
+        .map(|home| detect_at(&home))
+        .unwrap_or_default()
+}
+
+/// Also used by fixture callers; every path is rooted in the supplied home.
+pub fn detect_at(home: &Path) -> Vec<BrowserProfile> {
+    let roots = profile_roots(home);
     let mut profiles = Vec::new();
     for (browser, root) in &roots.chromium {
         profiles.extend(chromium_profiles(browser, root));
     }
-    profiles.extend(firefox_profiles(&roots.firefox));
-    if let Some(path) = roots.safari.filter(|path| path.exists()) {
-        profiles.push(BrowserProfile {
-            browser: "safari",
-            id: "default".into(),
-            name: "Safari".into(),
-            bookmarks: path,
-            format: BookmarkFormat::Safari,
-        });
+    profiles.extend(firefox_profiles("firefox", &roots.firefox));
+    profiles.extend(firefox_profiles("zen", &zen_root(home)));
+    if let Some(path) = roots.safari {
+        let access = probe(&path);
+        if access != ProfileAccess::NotFound {
+            profiles.push(BrowserProfile {
+                browser: "safari",
+                id: "default".into(),
+                name: "Safari".into(),
+                bookmarks: path,
+                format: BookmarkFormat::Safari,
+                access,
+            });
+        }
     }
     profiles
 }
 
+fn blocked(browser: &'static str, root: &Path, format: BookmarkFormat) -> BrowserProfile {
+    BrowserProfile {
+        browser,
+        id: "blocked".into(),
+        name: browser.into(),
+        bookmarks: root.to_path_buf(),
+        format,
+        access: ProfileAccess::PermissionDenied,
+    }
+}
+
 fn chromium_profiles(browser: &'static str, root: &Path) -> Vec<BrowserProfile> {
-    let names = std::fs::read(root.join("Local State"))
+    let state = root.join("Local State");
+    if probe(&state) == ProfileAccess::PermissionDenied
+        || probe(root) == ProfileAccess::PermissionDenied
+    {
+        return vec![blocked(browser, root, BookmarkFormat::Chromium)];
+    }
+    let names = std::fs::read(state)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
-    let Ok(entries) = std::fs::read_dir(root) else {
+    let Some(cache) = names
+        .as_ref()
+        .and_then(|v| v.pointer("/profile/info_cache"))
+        .and_then(serde_json::Value::as_object)
+    else {
         return Vec::new();
     };
-    let mut profiles: Vec<BrowserProfile> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let id = entry.file_name().to_string_lossy().into_owned();
-            let bookmarks = entry.path().join("Bookmarks");
-            if !(id == "Default" || id.starts_with("Profile ")) || !bookmarks.is_file() {
-                return None;
-            }
-            let name = names
-                .as_ref()
-                .and_then(|state| state.pointer(&format!("/profile/info_cache/{id}/name")))
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or(&id)
-                .to_owned();
-            Some(BrowserProfile {
-                browser,
-                id,
-                name,
-                bookmarks,
-                format: BookmarkFormat::Chromium,
-            })
-        })
-        .collect();
+    let mut profiles = Vec::new();
+    for (id, info) in cache {
+        if !safe_relative(id) {
+            continue;
+        }
+        let bookmarks = root.join(id).join("Bookmarks");
+        profiles.push(BrowserProfile {
+            browser,
+            id: id.clone(),
+            name: info["name"].as_str().unwrap_or(id).into(),
+            access: profile_access(&root.join(id), &bookmarks),
+            bookmarks,
+            format: BookmarkFormat::Chromium,
+        });
+    }
     profiles.sort_by(|a, b| a.id.cmp(&b.id));
     profiles
 }
 
-fn firefox_profiles(root: &Path) -> Vec<BrowserProfile> {
-    let Ok(entries) = std::fs::read_dir(root) else {
+fn profile_access(dir: &Path, file: &Path) -> ProfileAccess {
+    if probe(dir) == ProfileAccess::PermissionDenied
+        || probe(file) == ProfileAccess::PermissionDenied
+    {
+        ProfileAccess::PermissionDenied
+    } else {
+        ProfileAccess::Ready
+    }
+}
+
+fn safe_relative(value: &str) -> bool {
+    !value.is_empty()
+        && Path::new(value)
+            .components()
+            .all(|p| matches!(p, std::path::Component::Normal(_)))
+}
+
+fn firefox_profiles(browser: &'static str, root: &Path) -> Vec<BrowserProfile> {
+    let base = if root.file_name().is_some_and(|n| n == "Profiles") {
+        root.parent().unwrap_or(root)
+    } else {
+        root
+    };
+    let ini = base.join("profiles.ini");
+    if probe(&ini) == ProfileAccess::PermissionDenied
+        || probe(base) == ProfileAccess::PermissionDenied
+    {
+        return vec![blocked(browser, base, BookmarkFormat::Firefox)];
+    }
+    let Ok(text) = std::fs::read_to_string(&ini) else {
         return Vec::new();
     };
-    let mut profiles: Vec<BrowserProfile> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let id = entry.file_name().to_string_lossy().into_owned();
-            let bookmarks = entry.path().join("places.sqlite");
-            bookmarks.is_file().then(|| BrowserProfile {
-                browser: "firefox",
-                name: id
-                    .split_once('.')
-                    .map_or(id.as_str(), |(_, name)| name)
-                    .to_owned(),
-                id,
-                bookmarks,
-                format: BookmarkFormat::Firefox,
-            })
-        })
-        .collect();
+    let mut profiles = Vec::new();
+    for section in text.split('[').filter(|s| s.starts_with("Profile")) {
+        let values: std::collections::HashMap<_, _> = section
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .collect();
+        let Some(path) = values.get("Path") else {
+            continue;
+        };
+        let dir = if values.get("IsRelative") == Some(&"0") {
+            PathBuf::from(path)
+        } else {
+            if !safe_relative(path) {
+                continue;
+            }
+            base.join(path)
+        };
+        let id = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let bookmarks = dir.join("places.sqlite");
+        profiles.push(BrowserProfile {
+            browser,
+            name: values.get("Name").unwrap_or(&id.as_str()).to_string(),
+            id,
+            access: profile_access(&dir, &bookmarks),
+            bookmarks,
+            format: BookmarkFormat::Firefox,
+        });
+    }
     profiles.sort_by(|a, b| a.id.cmp(&b.id));
     profiles
+}
+
+#[cfg(target_os = "macos")]
+fn zen_root(home: &Path) -> PathBuf {
+    home.join("Library/Application Support/zen/Profiles")
+}
+#[cfg(windows)]
+fn zen_root(home: &Path) -> PathBuf {
+    home.join("AppData/Roaming/zen/Profiles")
+}
+#[cfg(all(unix, not(target_os = "macos")))]
+fn zen_root(home: &Path) -> PathBuf {
+    home.join(".zen")
+}
+
+/// A folder explicitly chosen by the owner is used for this run only.
+pub fn from_folder(mut profile: BrowserProfile, folder: &Path) -> io::Result<BrowserProfile> {
+    let file = match profile.format {
+        BookmarkFormat::Chromium => "Bookmarks",
+        BookmarkFormat::Firefox => "places.sqlite",
+        BookmarkFormat::Safari => "Bookmarks.plist",
+    };
+    let mut path = folder.join(file);
+    if profile.format == BookmarkFormat::Chromium && !path.is_file() {
+        path = folder.join(&profile.id).join(file);
+    }
+    std::fs::read_dir(path.parent().unwrap_or(folder))?;
+    profile.bookmarks = path;
+    profile.access = ProfileAccess::Ready;
+    Ok(profile)
 }
 
 /// Safari's bookmarks as an XML property list. Reading them needs Full Disk
@@ -198,4 +274,21 @@ pub fn read_safari_bookmarks(path: &Path) -> io::Result<String> {
 #[cfg(not(target_os = "macos"))]
 pub fn read_safari_bookmarks(_path: &Path) -> io::Result<String> {
     Err(io::Error::from(io::ErrorKind::Unsupported))
+}
+
+/// Enumerate profiles inside a native-picked browser root, or accept one profile.
+pub fn picked_profiles(profile: BrowserProfile, folder: &Path) -> io::Result<Vec<BrowserProfile>> {
+    if profile.format == BookmarkFormat::Chromium && folder.join("Local State").is_file() {
+        let found = chromium_profiles(profile.browser, folder);
+        if !found.is_empty() {
+            return Ok(found);
+        }
+    }
+    if profile.format == BookmarkFormat::Firefox && folder.join("profiles.ini").is_file() {
+        let found = firefox_profiles(profile.browser, folder);
+        if !found.is_empty() {
+            return Ok(found);
+        }
+    }
+    from_folder(profile, folder).map(|p| vec![p])
 }

@@ -16,6 +16,14 @@ sysinfo = { workspace = true, features = ["disk"] }
 tokio-util.workspace = true
 base64.workspace = true
 roxmltree = "0.20"
+sha1.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+notify.workspace = true
+aes = { version = "0.8", features = ["zeroize"] }
+cbc = { version = "0.1", features = ["alloc", "zeroize"] }
+des = { version = "0.8", features = ["zeroize"] }
+pbkdf2 = "0.12"
 rusqlite.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
@@ -31,6 +39,7 @@ landlock = "=0.4.7"
 seccompiler = "=0.5.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+rfd = "0.15"
 memmap2 = "=0.9.11"
 dunce.workspace = true
 libproc.workspace = true
@@ -41,6 +50,7 @@ zip.workspace = true
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+rfd = "0.15"
 dunce.workspace = true
 winsafe.workspace = true
 iana-time-zone.workspace = true

@@ -4,6 +4,31 @@ use super::AppStorageError;
 use super::item::{self, sql};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
+
+/// Import identity uses the Library's existing normalized folder identity.
+pub(in crate::gateway::application) fn bookmark_in_folder(
+    db: &Connection,
+    url: &str,
+    folder: &str,
+) -> Result<bool, AppStorageError> {
+    let group = if folder.trim().is_empty() {
+        None
+    } else {
+        let Some(group) = item::find_group(db, "bookmark", folder)? else {
+            return Ok(false);
+        };
+        Some(group)
+    };
+    db.query_row(
+        "SELECT 1 FROM browser_library WHERE kind='bookmark' AND url=?1 AND group_id IS ?2 LIMIT 1",
+        params![url, group],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|found| found.is_some())
+    .map_err(sql)
+}
+
 /// Inserts or replaces a saved item and returns it as stored.
 ///
 /// Saving an existing item again keeps its group, tags and user title unless
