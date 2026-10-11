@@ -68,6 +68,10 @@ export function connectBrowser() {
       const requested = state.tabs.find((tab) => tab.id === state.focusRequest);
       const session = requested && publicBrowserOwner(requested.owner, navigation);
       const current = useButlerStore.getState();
+      if (requested?.owner === "mine") {
+        current.setView({ kind: "browser" });
+        void browserCall("activate", { id: requested.id });
+      }
       if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
@@ -118,5 +122,13 @@ export async function openConversationBrowser(session: string, requestedTab?: st
 export async function focusBrowserTab(id: string, sessionId: string, fallback: string) {
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
-  else window.open(fallback, "_blank", "noopener");
+  else void openLink(fallback);
+}
+
+/** Desktop links share the main-process opener; remote clients keep web navigation. */
+export async function openLink(url: string) {
+  if (window.butlerBrowser && /^https?:/iu.test(url)) {
+    connectBrowser();
+    await browserCall("open-link", { url });
+  } else window.open(url, "_blank", "noopener,noreferrer");
 }

@@ -7,10 +7,15 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# The harness never links product crates: the system under test is the built
-# `butler-agent` executable, driven through gateway HTTP, CLI and the data dir.
+# The harness never imports product crates. Only the dev-only round-store
+# companion executable links the actual provider serializer and TurnStore.
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
+butler-core = { path = "../butler-core" }
+butler-models = { path = "../butler-models" }
+butler-turn = { path = "../butler-turn", features = ["test-support"] }
+tokio-util.workspace = true
+url.workspace = true
 butler-platform = { path = "../butler-platform", features = ["test-support"] }
 axum.workspace = true
 base64.workspace = true
