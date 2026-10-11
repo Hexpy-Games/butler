@@ -44,8 +44,7 @@ export function wireAgentTab(browser, tab) {
 }
 export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
-  if (contents.debugger.isAttached()) return;
-  contents.debugger.attach("1.3");
+  if (tab.debuggerReady) return;
   wireDialogs(browser,tab);
   tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
   contents.debugger.on("message",(_event,method,value,sessionId)=>{
@@ -56,14 +55,13 @@ export function connectDebugger(browser, tab) {
         const {frameTree}=await contents.debugger.sendCommand("Page.getFrameTree",{},value.sessionId);
         tab.frameSessions.set(frameTree.frame.id,value.sessionId);
         await contents.debugger.sendCommand("Runtime.enable",{},value.sessionId);
-        await contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true},value.sessionId);
       })();
       tab.frameAttachPromises.set(value.sessionId,ready);void ready.catch(()=>{});
     }
     if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
   });
-  tab.debuggerReady=Promise.all([contents.debugger.sendCommand("Runtime.enable"),contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true})]);
-  void contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true}).catch(()=>{});
+  tab.debuggerReady=tab.identityReady.then(() => contents.debugger.sendCommand("Runtime.enable"));
+  void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
 export function emulation(tab) {
   if (!tab.agent || !tab.view || !tab.loaded) return;
@@ -199,7 +197,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.view.webContents.loadURL(args.url); }
+  try { await tab.identityReady; await tab.view.webContents.loadURL(args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

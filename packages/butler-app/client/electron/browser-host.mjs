@@ -24,6 +24,9 @@ if (!profile || !url || !token || !admin || !launch) {
   // A throwaway profile: no keychain item, nothing for a password store.
   app.commandLine.appendSwitch("use-mock-keychain");
   app.commandLine.appendSwitch("password-store", "basic");
+  // The host never shows a window, so Chromium would run every page it serves
+  // as a background renderer; under load those starve for tens of seconds.
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
   hideFromDock(app);
   handOffUserLaunches(app);
   // Agent tabs come and go; the channel alone decides the host's lifetime.
