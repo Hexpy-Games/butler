@@ -36,7 +36,7 @@ pub(super) async fn vault_scenario(
         .env("BUTLER_SECRET_STORE", "")
         .env("BUTLER_USER_AUTH", "deny")
         .data_folder_token();
-    super::fill::link_keychains(&setup.sandbox.home)?;
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     if let Some(cassette) = cassette {
         setup = setup.stub_cassette(cassette);
     }

@@ -1,17 +1,33 @@
 //! Existing metadata, allowances and keychain entries survive the profile rename.
 use super::{admin, attach, call, snapshot, tab, vault_scenario};
 use butler_e2e::e2e::HarnessError;
-use butler_platform::secrets::{SecretKey, SecretStore};
+use butler_platform::secrets::{
+    SecretKey, delete_system_secret_for_test, system_secret_present_for_test,
+};
 use reqwest::Method;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
-struct Keys(SecretStore, Vec<SecretKey>);
+struct Keys(std::path::PathBuf, Vec<SecretKey>);
+impl Keys {
+    fn cleanup(&mut self) -> Result<(), HarnessError> {
+        let mut failed = false;
+        for key in self.1.drain(..) {
+            failed |= delete_system_secret_for_test(&self.0, &key).is_err();
+        }
+        if failed {
+            return Err(butler_e2e::e2e::harness_error(
+                "test keychain cleanup failed",
+            ));
+        }
+        Ok(())
+    }
+}
 impl Drop for Keys {
     fn drop(&mut self) {
-        for key in &self.1 {
-            let _ = self.0.delete(key);
+        if self.cleanup().is_err() {
+            eprintln!("test keychain cleanup failed");
         }
     }
 }
@@ -56,8 +72,9 @@ async fn autofill_migrates_metadata_sites_and_secrets_once() -> Result<(), Harne
         &format!("com.hexpy.butler.autofill.{}", &hash[..12]),
         id,
     ))?;
-    let keys = Keys(secret(SecretStore::system())?, vec![old, new]);
+    let mut keys = Keys(s.sandbox.home.clone(), vec![old, new]);
     butler_platform::secrets::seed_system_secret_for_test_apps(
+        &keys.0,
         &keys.1[0],
         r#"{"birth_date":"1990-01-01","passport_number":"P12345678"}"#,
         &[&s.sandbox.binary, &std::env::current_exe()?],
@@ -68,10 +85,15 @@ async fn autofill_migrates_metadata_sites_and_secrets_once() -> Result<(), Harne
         .send(Method::GET, "/security/vault", None, &[])
         .await?;
     assert_eq!(view.status, 200, "{}", view.text);
+    assert_eq!(
+        view.data()["available"],
+        true,
+        "a real test keychain is available"
+    );
     assert_eq!(view.data()["profiles"][0]["id"], id);
     assert_eq!(view.data()["profiles"][0]["sites"], json!(["example.test"]));
     assert!(
-        secret(keys.0.get(&keys.1[0]))?.is_none(),
+        !system_secret_present_for_test(&keys.0, &keys.1[0])?,
         "legacy secret removed"
     );
     verify_copy(&s, &admin, id).await?;
@@ -89,7 +111,8 @@ async fn autofill_migrates_metadata_sites_and_secrets_once() -> Result<(), Harne
         .send(Method::GET, "/security/vault", None, &[])
         .await?;
     assert_eq!(again.data()["profiles"].as_array().unwrap().len(), 1);
-    assert!(secret(keys.0.get(&keys.1[0]))?.is_none());
+    assert!(!system_secret_present_for_test(&keys.0, &keys.1[0])?);
+    keys.cleanup()?;
     drop(keys);
     s.finish().await
 }
