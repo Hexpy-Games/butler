@@ -33,7 +33,7 @@ fn write_command(targets: &[&Path]) -> String {
         .join("; ")
 }
 
-// test-category: pure-logic
+// test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
     cmd_arguments_remain_verbatim();
