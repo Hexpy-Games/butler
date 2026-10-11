@@ -50,6 +50,11 @@ export interface AppUpdateState {
   request_id: string | null;
 }
 
+export interface PowerState {
+  onBattery: boolean;
+  constrained: boolean;
+}
+
 interface ButlerAppBridge {
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   listLibrary?: (input: Record<string, string>) => Promise<unknown>;
@@ -62,6 +67,7 @@ interface ButlerAppBridge {
   getAppUpdateState?: () => Promise<AppUpdateState>;
   chooseAppUpdate?: (input: { request_id: string | null; action: "now" | "defer" }) => Promise<{ ok: boolean }>;
   onAppUpdateState?: (handler: (state: AppUpdateState) => void) => () => void;
+  onPowerState?: (handler: (state: PowerState) => void) => () => void;
   startupIssue?: "legacy-data" | null;
   recoverLegacyData?: (action: "open-folder" | "restart") => Promise<{ ok: boolean }>;
   protocolVersion?: string;
