@@ -95,27 +95,28 @@ try {
   steps.push({ backdrop: "toggled dialog" });
 
   // Cross-site iframe: the framed heading, ↑ to its card, click; the filled field is masked.
-  await loadPage("mix", "Pick mix");
+  // A new document clears the picks of the old one (no stale outlines over the new page).
+  await loadPage("mix", "Pick mix"); await picks(0); await app.shot("4a-navigated-clear", true);
   const framed = await point("#fh", "cross");
   await input("move", framed); await hovered(/^h3 · /u, "framed heading hovered across sites");
   await input("key", framed, 126); await hovered(/^div · \d+ × \d+ · ↑↓$/u, "↑ widens to the framed card");
   await app.shot("4-frame-card", true);
-  await input("click", framed); await picks(2);
-  const card = await app.main<{ text: string; title: string }>(`${subject()}.selections[1]`);
+  await input("click", framed); await picks(1);
+  const card = await app.main<{ text: string; title: string }>(`${subject()}.selections[0]`);
   assert.equal(card.title, "Framed card"); assert.ok(!card.text.includes("framed secret"));
-  assert.ok((await cropFits(1)).ok, "framed card crop");
+  assert.ok((await cropFits(0)).ok, "framed card crop");
 
   // ⌥-drag draws an area over part of a paragraph: the crop is the rectangle and its text the covered run.
   const from = await point("#strong", undefined, 0, 0.5), to = await point("#link", undefined, 1, 0.5);
-  await input("altdrag", { x: from.x - 2, y: from.y - 10 }, { x: to.x + 2, y: to.y + 10 }); await picks(3);
-  const area = await app.main<{ tag: string; text: string }>(`${subject()}.selections[2]`);
+  await input("altdrag", { x: from.x - 2, y: from.y - 10 }, { x: to.x + 2, y: to.y + 10 }); await picks(2);
+  const area = await app.main<{ tag: string; text: string }>(`${subject()}.selections[1]`);
   assert.equal(area.tag, "area"); assert.equal(area.text, "bold words sit beside a link");
-  assert.ok((await cropFits(2)).ok, "area crop");
-  await app.shot("5-three-picks", true);
+  assert.ok((await cropFits(1)).ok, "area crop");
+  await app.shot("5-two-picks", true);
 
   // A plain drag from a kept pick still carries every pick into the composer.
   await input("drag", await point("#strong"), { ...await app.page.expression<Point>("(()=>{const r=document.querySelector('[data-test-class=\"composer-card\"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()") });
-  await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===3"), "three chips in the composer");
+  await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "two chips in the composer");
   await app.shot("6-composer-chips");
   await input("key", framed, 53);
   await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");

@@ -32,6 +32,16 @@ async function runIn(tab, path, args) {
   const world = frame && nativeWorldOf(tab, frame);
   return world ? world.executeJavaScriptInIsolatedWorld(FRAME_WORLD, [{ code }]).catch(() => null) : null;
 }
+/** A frame's current placement, resolving each window.frames step in its parent's world. */
+async function frameAt(tab, path) {
+  let frame = TOP;
+  for (let step = 0; step < path.length; step++) {
+    const box = await runIn(tab, path.slice(0, step), { op: "frame", index: path[step] }).catch(() => null);
+    if (!box) return null;
+    frame = nested(frame, { path: [path[step]], offset: box.offset, clip: box.clip });
+  }
+  return frame;
+}
 /** Filled fields never reach a crop. A frame that cannot be read is masked whole. */
 async function frameMasks(tab, base, frames) {
   const masks = [];
@@ -55,7 +65,46 @@ function maskImage(image, rect, masks) {
 }
 
 export class BrowserSelection {
-  constructor(browser) { this.browser = browser; }
+  constructor(browser) {
+    this.browser = browser;
+    // The frame each element pick lives in; areas have none and never outlive their view.
+    this.anchors = new WeakMap();
+  }
+  /** Picks follow their document: a new document clears them, an in-page change re-anchors them. */
+  watch(tab) {
+    const contents = tab.view.webContents;
+    contents.on("did-navigate", () => this.navigated(tab, false));
+    contents.on("did-navigate-in-page", () => this.navigated(tab, true));
+    contents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => { if (!isMainFrame) this.navigated(tab, true); });
+  }
+  navigated(tab, sameDocument) {
+    this.clearHover(tab); this.preferred = null;
+    if (!tab.selections?.length) return;
+    if (!sameDocument) {
+      tab.selections = []; this.browser.publish(); this.browser.pointer.sync(tab); return;
+    }
+    tab.reanchoring = (tab.reanchoring ?? Promise.resolve()).then(() => this.reanchor(tab)).catch(() => this.browser.pointer.inputFailed());
+    return tab.reanchoring;
+  }
+  /** Moves each element pick's outline to where its element now is; drops picks whose element is gone. */
+  async reanchor(tab) {
+    const gone = new Set();
+    for (const item of [...tab.selections ?? []]) {
+      const stored = this.anchors.get(item);
+      // A cross-origin frame can move with its parent's layout: place it again from its owners.
+      const frame = stored?.path.length ? await frameAt(tab, stored.path) : stored;
+      if (frame) this.anchors.set(item, frame);
+      const found = frame && await runIn(tab, frame.path, { op: "anchor", identity: item.identity }).catch(() => null);
+      if (!found || found.gone) { gone.add(item); continue; }
+      const rect = found.rect && place(found.rect, frame);
+      if (!rect) continue;
+      const dx = rect.x - item.rect.x, dy = rect.y - item.rect.y;
+      item.cropRect = { ...item.cropRect, x: item.cropRect.x + dx, y: item.cropRect.y + dy };
+      item.rect = rect;
+    }
+    if (gone.size) tab.selections = (tab.selections ?? []).filter(item => !gone.has(item));
+    this.browser.publish(); this.browser.pointer.sync(tab);
+  }
   shortcut(input) {
     if (!isPickShortcut(input)) return false;
     this.mode(this.browser.activeId, true); return true;
@@ -177,7 +226,9 @@ export class BrowserSelection {
     const masks = [...data.masks.map(mask => place(mask, level.frame)).filter(Boolean), ...await frameMasks(tab, level.frame, data.frames)];
     const crop = await this.crop(tab, cropRect, masks);
     if (!crop || !this.browser.tabs.has(tab.id) || tab.epoch !== epoch || tab.url !== url) return null;
-    return this.picked(tab, url, { title: data.title, text: data.text, tag: data.tag, rect, cropRect, identity: data.identity, crop });
+    const item = this.picked(tab, url, { title: data.title, text: data.text, tag: data.tag, rect, cropRect, identity: data.identity, crop });
+    this.anchors.set(item, level.frame);
+    return item;
   }
   /** Drag-rectangle capture: the crop, its text and the elements wholly inside it. */
   async area(tab, cssRect) {

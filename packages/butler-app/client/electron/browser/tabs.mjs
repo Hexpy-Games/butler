@@ -162,6 +162,7 @@ class UserBrowser {
       },
       popup: (source, details) => popupHandler(this, source, details) });
     wireUserDialogs(this, tab);
+    this.selection.watch(tab);
     if (tab.agent) wireAgentTab(this, tab);
     if (tab.url && !tab.agent && !supplied) void tab.view.webContents.loadURL(tab.url).catch(() => {});
   }

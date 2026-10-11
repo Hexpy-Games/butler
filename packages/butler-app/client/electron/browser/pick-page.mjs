@@ -294,6 +294,30 @@ export function pickPage(args) {
       identity: `${state.token}:${idOf(el)}`, frames: frames.map(frame => ({ path: frame.path, offset: { x: frame.offset.x + origin.x, y: frame.offset.y + origin.y },
         clip: toTop(el, [frame.clip])[0] })).filter(frame => !empty(frame.clip)) };
   }
+  if (args.op === "anchor") {
+    // A replaced document has a new token: its element numbers name other elements.
+    const split = String(args.identity).lastIndexOf(":");
+    const el = args.identity.slice(0, split) === state.token ? state.refs.get(Number(args.identity.slice(split + 1)))?.deref() : null;
+    if (!el?.isConnected) return { gone: true };
+    const b = visible(el), mapped = b && toTop(el, [b]);
+    return { gone: false, rect: mapped && !empty(mapped[0]) ? out(mapped[0]) : null };
+  }
+  if (args.op === "frame") {
+    // Where window.frames[index] sits now in this document (light DOM, open shadow roots, same-origin frames).
+    const target = window.frames[args.index];
+    const find = root => {
+      for (const el of root.querySelectorAll("*")) {
+        if (el.matches("iframe,frame") && el.contentWindow === target) return el;
+        const inner = (el.shadowRoot && find(el.shadowRoot)) || (el.matches("iframe,frame") && childDocument(el) && find(childDocument(el)));
+        if (inner) return inner;
+      }
+      return null;
+    };
+    const owner = target && find(document);
+    if (!owner) return null;
+    const info = frameInfo(owner), origin = topOffset(owner.ownerDocument), clip = toTop(owner, [info.clip])[0];
+    return empty(clip) ? null : { offset: { x: info.offset.x + origin.x, y: info.offset.y + origin.y }, clip };
+  }
   if (args.op === "masks") {
     const masks = [], frames = [];
     fieldsIn(document, { x: 0, y: 0 }, viewport(document), masks, frames);

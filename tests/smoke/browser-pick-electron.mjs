@@ -41,6 +41,7 @@ app.whenReady().then(async () => {
   const browser = { tabs: new Map([[tab.id, tab]]), activeId: tab.id, publish() {}, sync() {}, getWindow: () => win,
     pointer: { acceptInput: () => true, sync() {}, inputFailed() {}, view: null } };
   const selection = new BrowserSelection(browser);
+  selection.watch?.(tab);
   const fresh = typeof selection.hoverAt === "function";
   const dpr = screen.getPrimaryDisplay().scaleFactor;
   const contents = view.webContents;
@@ -153,10 +154,39 @@ app.whenReady().then(async () => {
     if (item?.crop) writeFileSync(join(evidence, `${test.id}.jpg`), Buffer.from(item.crop.split(",")[1], "base64"));
     areaRows.push(row);
   }
-  writeFileSync(join(evidence, fresh ? "pick-after.json" : "pick-before.json"), JSON.stringify({ dpr, rows, areaRows }, null, 2));
+  // Picks follow their document: in-page changes re-anchor or drop them, a new document clears them.
+  const navRows = [];
+  if (selection.watch) {
+    const until = async (check) => { for (let i = 0; i < 60 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 50)); return check(); };
+    const pickAt = async (frames, el) => {
+      const point = await pointOf({ frames, el, fx: 0.5, fy: 0.5, dx: 0, dy: 0 });
+      const item = await selection.hit(tab, point); tab.selections = [...tab.selections, item]; return item;
+    };
+    await load("list");
+    const item = await pickAt([], "document.querySelector(\"#ls2\")"), before = { ...item.rect };
+    await selection.area(tab, { x: 30, y: 30, width: 120, height: 40 });
+    await contents.executeJavaScript("document.querySelector('ul').insertAdjacentHTML('beforebegin','<div style=\"height:50px\"></div>');history.pushState({},'','#moved')");
+    navRows.push({ id: "nav-in-page-reanchor", ok: await until(() => tab.selections.length === 1 && Math.abs(tab.selections[0].rect.y - before.y - 50) <= 1),
+      detail: { count: tab.selections.length, before: before.y, after: tab.selections[0]?.rect.y } });
+    await contents.executeJavaScript("document.querySelector('#li2').remove();history.pushState({},'','#gone')");
+    navRows.push({ id: "nav-in-page-removed", ok: await until(() => tab.selections.length === 0), detail: { count: tab.selections.length } });
+    await pickAt([], "document.querySelector(\"#ls3\")");
+    await contents.loadURL(`${origin}/text`);
+    navRows.push({ id: "nav-new-document", ok: await until(() => tab.selections.length === 0), detail: { count: tab.selections.length } });
+    await load("frames");
+    const main = await pickAt([], "document.querySelector(\"h1\")");
+    const framed = await pickAt(["cross"], "document.querySelector(\"#fc\")"), framedY = framed.rect.y, mainY = main.rect.y;
+    await contents.executeJavaScript("document.querySelector('iframe').insertAdjacentHTML('beforebegin','<div style=\"height:40px\"></div>');history.pushState({},'','#shifted')");
+    navRows.push({ id: "nav-frame-reanchor", ok: await until(() => tab.selections.length === 2 && Math.abs(framed.rect.y - framedY - 40) <= 1 && main.rect.y === mainY),
+      detail: { count: tab.selections.length, before: framedY, after: framed.rect.y } });
+    await contents.executeJavaScript(`document.querySelector('iframe[name="cross"]').src='http://cross.test:${server.address().port}/text'`);
+    navRows.push({ id: "nav-frame-document", ok: await until(() => tab.selections.length === 1 && tab.selections[0] === main), detail: { count: tab.selections.length } });
+  }
+  writeFileSync(join(evidence, fresh ? "pick-after.json" : "pick-before.json"), JSON.stringify({ dpr, rows, areaRows, navRows }, null, 2));
+  for (const row of navRows) console.log(`${row.ok ? "ok  " : "FAIL"} ${row.id.padEnd(20)} ${JSON.stringify(row.detail)}`);
   for (const row of [...rows, ...areaRows]) console.log(`${row.ok ? "ok  " : "FAIL"} ${row.id.padEnd(20)} ${row.leaf ?? row.defaultLevel ?? ""} steps=${row.steps ?? "-"} ${row.ok ? "" : JSON.stringify({ hovered: row.hovered, picked: row.picked, crop: row.crop, secrets: row.secretsKept, masked: row.masked, textOk: row.textOk, withinOk: row.withinOk, text: row.text, ladder: row.ladder })}`);
   server.close(); win.destroy();
-  const failed = [...rows, ...areaRows].filter(row => !row.ok).map(row => row.id);
+  const failed = [...rows, ...areaRows, ...navRows].filter(row => !row.ok).map(row => row.id);
   if (!reportOnly) assert.deepEqual(failed, [], "every fixture is pickable");
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });
