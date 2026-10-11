@@ -127,6 +127,7 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
     let setup = Setup::new("BROWSER-IMPORT-CHROMIUM-MAC")?
         .env("BUTLER_SECRET_STORE", "")
         .env("BUTLER_BROWSER_IMPORT_TEST_SERVICE", &service);
+    super::fill::link_keychains(&setup.sandbox.home)?;
     let roots = profile_roots(&setup.sandbox.home);
     let root = &roots
         .chromium

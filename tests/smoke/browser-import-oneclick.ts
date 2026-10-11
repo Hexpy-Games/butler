@@ -43,8 +43,9 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     const input = JSON.parse(raw.toString()); runs.push({ source: input.source, bookmarks: input.bookmarks, passwords: input.passwords });
     if (mode === "permission") return error("full_disk_access_required");
     if (mode === "primary" && !input.primary_password) return error("primary_password_required");
-    await page.locator('[data-test-class="import-progress"]').waitFor(); await capture("progress");
-    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, passwords: input.source.startsWith("safari:") ? 0 : 34, updated: 5, existing: 0, needs_csv: input.source.startsWith("safari:") });
+    await page.locator('[data-test-class="import-progress"]').waitFor();
+    await page.locator('[data-test-class="import-progress"]').scrollIntoViewIfNeeded(); await capture("progress");
+    return reply({ run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 120, passwords: input.source.startsWith("safari:") ? 0 : 34, updated: input.source.startsWith("safari:") ? 0 : 5, existing: 0, needs_csv: input.source.startsWith("safari:") });
   }
   if (path === "/security/browser-import/export") return reply({ export_id: "fixture-export" });
   if (path === "/security/browser-import/export/poll") return reply(csvReady ? { run_id: "00000000-0000-4000-8000-000000000001", bookmarks: 0, passwords: 34, updated: 5, existing: 0, export_id: "fixture-export" } : { waiting: true });
@@ -112,7 +113,9 @@ try {
     }
     await page.goto("app://butler/?settings=browser");
     const section = page.locator('[data-settings-section-id="browser-import"]');
-    await section.waitFor(); await section.scrollIntoViewIfNeeded();
+    await section.waitFor();
+    if (!before) await section.locator("[data-import-source]").nth(3).waitFor();
+    await section.scrollIntoViewIfNeeded();
     await capture("sources");
     if (before) continue;
     assert.equal(await section.locator("[data-import-source]").count(), 4);
@@ -125,7 +128,8 @@ try {
     await section.getByText(copy.settings.browserImport.undone).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
     mode = "permission"; await section.locator('[data-import-source="chrome:work"]').click();
-    await section.locator('[data-test-class="import-permission"]').waitFor(); await capture("permission");
+    await section.locator('[data-test-class="import-permission"]').waitFor();
+    await section.locator('[data-test-class="import-permission"]').scrollIntoViewIfNeeded(); await capture("permission");
     await section.getByRole("button", { name: copy.settings.browserImport.pickFolder, exact: true }).click();
     await section.getByText(copy.settings.browserImport.result(120, 34, 5), { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
