@@ -1,0 +1,7 @@
+/* The favicon fills its slot without stretching; glyph fallbacks keep the slot color. */
+.slot img {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  object-fit: contain;
+}

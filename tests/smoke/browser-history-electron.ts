@@ -16,6 +16,11 @@ try {
   app = await browserAgentApp(evidence, () => null);
   const a = app;
   const rows = () => a.gateway.api<Page>("/browser-history");
+  // Row actions take the time column on hover; move the real pointer there first.
+  const hoverRow = async (index: number) => {
+    const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const box=document.querySelectorAll('[data-row-id]')[${index}].getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2}})()`);
+    await a.page.movePointer(point.x, point.y);
+  };
   const fill = (selector: string, value: string) => a.page.expression(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   const ready = async (title: string) => waitBrowser(() => a.main(`globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId)?.title===${JSON.stringify(title)}`), title);
   await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light" }) });
@@ -46,15 +51,18 @@ try {
   await a.call("activate", { id: tab });
   // The existing browser menu is the public history entry.
   await a.click("More"); await a.page.clickText("History", "[role=menuitem]");
-  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-history-id]').length===5"), "history page loaded");
+  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "history page loaded");
   await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
-  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-history-id]').length===1"), "Butler filter applied");
+  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===1"), "Butler filter applied");
   await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
-  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-history-id]').length===5"), "all visits restored");
-  await a.page.clickSelector('[data-history-id] button[aria-label^="Select:"]');
+  await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===5"), "all visits restored");
+  assert.equal(await a.page.expression("document.querySelectorAll('[data-row-id] [role=checkbox]').length"), 0, "check boxes only in selection mode");
+  await a.page.clickText("Select", "button");
+  await a.page.clickSelector("[data-row-id] [role=checkbox]");
   const lastId = (await rows()).items.at(-1)!.id;
-  await a.page.clickSelector(`[data-history-id="${lastId}"] button[aria-label^="Select:"]`);
-  await a.page.clickText("Delete · 2", "button");
+  await a.page.clickSelector(`[data-row-id="${lastId}"] [role=checkbox]`);
+  assert.equal(await a.page.expression("document.querySelectorAll('[data-row-id] [role=checkbox][aria-checked=true]').length"), 2);
+  await a.page.clickText("Delete", "button");
   await waitBrowser(async () => (await rows()).items.length === 3, "multi-selected deletion committed");
   await a.call("navigate", { id: tab, value: fixture.url.href }); await ready("History Alpha");
   await waitBrowser(async () => (await rows()).items.length === 4, "a new visit to a deleted URL is recorded");
@@ -64,8 +72,12 @@ try {
     await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme }) });
     await a.main(`${a.win}.setContentSize(1440,900)`); await a.page.reload(); await shellReady(a, language);
     await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'y'})");
-    await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-history-id]').length===4"), "history shortcut from App chrome");
+    await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-row-id]').length===4"), "history shortcut from App chrome");
     await a.shot(`${language}-${theme}-1440-history`);
+    await hoverRow(1); await a.shot(`${language}-${theme}-1440-history-hover`, true);
+    await a.page.clickText(ko ? "선택" : "Select", "button"); await a.page.clickSelector("[data-row-id] [role=checkbox]");
+    await a.shot(`${language}-${theme}-1440-history-select`);
+    await a.page.clickText(ko ? "취소" : "Cancel", "button");
     await a.page.clickText(ko ? "방문 기록 지우기" : "Clear browsing history", "button");
     await a.shot(`${language}-${theme}-1440-clear-dialog`); await a.page.press("Escape");
     const back = ko ? "브라우저로 돌아가기" : "Back to Browser";
@@ -103,12 +115,12 @@ try {
   await a.page.press("ArrowDown"); await a.page.press("Enter");
   await waitBrowser(() => a.main(`globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId)?.url===${JSON.stringify(chosen)}`), "Enter navigates to selected history suggestion");
   await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'y'})");
-  await waitBrowser(() => a.page.expression("Boolean(document.querySelector('[data-history-id]'))"), "history reopened");
+  await waitBrowser(() => a.page.expression("Boolean(document.querySelector('[data-row-id]'))"), "history reopened");
   const prior = (await rows()).items.length;
-  await a.page.clickSelector('[data-history-id] button[aria-label^="Delete:"]');
+  await hoverRow(0); await a.page.clickSelector('[data-row-id] button[aria-label^="Delete:"]');
   await waitBrowser(async () => (await rows()).items.length === prior - 1, "single-row delete committed");
   const tabsBefore = await a.main<number>("globalThis.browserAgentSubject.tabs.size");
-  await a.page.clickText("History Beta", "[data-history-id] [role=button]");
+  await a.page.clickSelector('[data-row-id] [role=button][aria-label^="History Beta,"]');
   await waitBrowser(() => a.main(`globalThis.browserAgentSubject.tabs.size===${tabsBefore + 1}`), "history opens a new tab");
   await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'y'})");
   await waitBrowser(() => a.page.expression("Boolean(document.querySelector('[data-test-class=history-page]'))"), "history ready for clear");
