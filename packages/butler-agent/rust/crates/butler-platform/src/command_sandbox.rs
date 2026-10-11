@@ -1,11 +1,10 @@
 //! The shells commands run in and the sandboxes that bound what they can do.
 //!
-//! macOS enforces read-only commands and write-protected roots with the
-//! seatbelt (`sandbox-exec`). Linux and Windows have no sandbox yet: they
-//! refuse read-only commands ([`SandboxError::ReadOnlyUnavailable`]) and
-//! report write protection as [`Protection::Unavailable`]. Linux gets a
-//! Landlock wrapper in a later stage.
+//! macOS uses Seatbelt; Linux uses a single-threaded Landlock/seccomp
+//! trampoline. Unsupported hosts keep exact-action approval behavior.
 
+mod denial;
+pub use denial::{isolation_failure, sandbox_denial};
 mod environment;
 pub use environment::tool_environment;
 mod operators;
@@ -21,9 +20,9 @@ use std::path::Path;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as sandbox;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod unsandboxed;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use unsandboxed as sandbox;
 
 #[cfg(unix)]
@@ -35,12 +34,39 @@ mod windows;
 #[cfg(windows)]
 use windows as shell;
 
-/// Whether this host runs [`ShellAccess::ReadOnly`] commands in a sandbox
-/// (otherwise [`login_shell`] refuses them).
-pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
+#[cfg(feature = "test-support")]
+mod test_support;
+#[cfg(feature = "test-support")]
+pub use test_support::{UnixSocketProbe, linux_test_host};
 
-/// Whether [`protect_writes`] enforces its root on this host.
-pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
+mod host_capabilities;
+pub use host_capabilities::{Level, SandboxCapabilities, capabilities};
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux as sandbox;
+
+/// Whether contained observations can run without exact-action approval.
+pub fn approval_free_reads() -> bool {
+    capabilities().approval_free_reads()
+}
+
+/// Entry point of the single-threaded trampoline, never called by the agent.
+#[cfg(target_os = "linux")]
+pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
+    linux::trampoline()
+}
+
+/// Copies the command helper next to a relocated agent (e.g. isolated E2E installs).
+pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    std::fs::copy(
+        source.join("butler-sandbox"),
+        destination.join("butler-sandbox"),
+    )?;
+    let _ = (source, destination);
+    Ok(())
+}
 
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
 /// runs them in `cmd.exe`, whose syntax differs.

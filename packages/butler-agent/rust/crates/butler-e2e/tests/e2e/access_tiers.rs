@@ -1,6 +1,6 @@
 //! PERM-01: project reads, exact approvals, real-path sensitivity and normal-chat isolation.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -445,7 +445,7 @@ async fn guarded_commands(
                 .all(|v| !v.contains("SECRET_IN_") && !v.contains("outside-marker"))
         );
     }
-    if butler_platform::command_sandbox::READ_ONLY_SANDBOX {
+    if butler_platform::command_sandbox::approval_free_reads() {
         let prompt = "Search project keys.";
         script.rounds.lock().unwrap().insert(prompt.into(), vec![call("grep-command", "run_command",
             &json!({"command":"grep -r KEY .","summary":"Search keys","state_effect":"read_only"}))]);

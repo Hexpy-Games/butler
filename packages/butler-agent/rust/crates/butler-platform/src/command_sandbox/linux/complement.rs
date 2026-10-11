@@ -1,0 +1,218 @@
+//! Landlock cannot subtract paths. Grant siblings along denied ancestor chains,
+//! traversing only those chains, never the workspace tree.
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use landlock::{AccessFs, BitFlags, PathBeneath, PathFd, RulesetCreated, RulesetCreatedAttr};
+
+use super::Error;
+
+// Matches the current macOS login_shell_contained credential roots exactly.
+const PRIVATE: &[&str] = &[
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".kube",
+    ".docker",
+    ".netrc",
+    ".git-credentials",
+    "Library/Keychains",
+    ".butler-e2e-auth",
+];
+
+pub(super) fn private_roots(
+    environment: &HashMap<String, String>,
+    denied: &[&Path],
+    allowed: &[&Path],
+) -> Vec<PathBuf> {
+    let mut roots: Vec<_> = denied.iter().map(|path| path.to_path_buf()).collect();
+    if !allowed.is_empty()
+        && let Some(home) = environment.get("HOME")
+    {
+        roots.extend(PRIVATE.iter().map(|name| Path::new(home).join(name)));
+    }
+    roots
+}
+
+pub(super) fn apply(
+    rules: &mut RulesetCreated,
+    denied: &[PathBuf],
+    allowed: &[PathBuf],
+) -> Result<(), Error> {
+    let private = aliases(denied)?;
+    let mut blocked = private.clone();
+    for root in allowed {
+        blocked.extend(project_secrets(root)?);
+    }
+    // READ_DIR grants recurse too: permit directory names, while withholding
+    // READ_FILE/EXECUTE prevents access to denied contents. Landlock cannot
+    // hide directory entries without also preventing ordinary parent listings.
+    grant(rules, Path::new("/"), AccessFs::ReadDir.into())?;
+    let read = AccessFs::ReadFile | AccessFs::Execute;
+    let wsl = Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+        || std::fs::read_to_string("/proc/sys/kernel/osrelease")?
+            .to_ascii_lowercase()
+            .contains("microsoft");
+    // Withhold execution on interop entry points even if a project lives on
+    // a Windows mount. Read permissions there remain unchanged.
+    let deny_execute = if wsl {
+        vec![PathBuf::from("/mnt"), PathBuf::from("/init")]
+    } else {
+        Vec::new()
+    };
+    grant_complement(
+        rules,
+        Path::new("/"),
+        &blocked,
+        &deny_execute,
+        read,
+        &mut HashSet::new(),
+    )?;
+    for root in allowed {
+        let real = root.canonicalize()?;
+        // Disjoint workspaces already received exactly these grants above.
+        // Only private-root overlap needs Seatbelt's workspace exception.
+        if !private
+            .iter()
+            .any(|path| real.starts_with(path) || path.starts_with(&real))
+        {
+            continue;
+        }
+        let mut excluded: Vec<_> = private
+            .iter()
+            .filter(|path| !real.starts_with(path) && !path.starts_with(&real))
+            .cloned()
+            .collect();
+        excluded.extend(project_secrets(root)?);
+        grant_complement(
+            rules,
+            &real,
+            &excluded,
+            &deny_execute,
+            read,
+            &mut HashSet::new(),
+        )?;
+    }
+    grant(rules, Path::new("/dev/null"), AccessFs::WriteFile.into())
+}
+
+fn aliases(paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
+    let mut result = paths.to_vec();
+    for path in paths {
+        let real = canonical_or_missing(path)?;
+        if !result.contains(&real) {
+            result.push(real);
+        }
+    }
+    Ok(result)
+}
+
+// A missing credential root still needs its real ancestor chain denied, even
+// when HOME is a symlink. No broad grant may cover a subsequently created root.
+fn canonical_or_missing(path: &Path) -> Result<PathBuf, Error> {
+    match path.canonicalize() {
+        Ok(real) => Ok(real),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = path.parent().ok_or("private root has no parent")?;
+            let name = path.file_name().ok_or("private root has no name")?;
+            Ok(canonical_or_missing(parent)?.join(name))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let mut secrets = Vec::new();
+    for entry in std::fs::read_dir(root.canonicalize()?)? {
+        let entry = entry?;
+        if secret_name(&entry.file_name().to_string_lossy()) {
+            secrets.push(entry.path());
+        }
+    }
+    // Do not deny a public external target merely because a secret-named
+    // symlink points to it: Seatbelt does not deny that target either. The
+    // lexical guard covers secret-named symlinks, which Landlock cannot carve
+    // out independently of their target.
+    Ok(secrets)
+}
+
+fn secret_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        ".git"
+            | ".ssh"
+            | ".gnupg"
+            | ".project-ledger"
+            | "chatgpt-oauth.json"
+            | "credentials.json"
+            | "secrets.json"
+            | "id_rsa"
+            | "id_ed25519"
+    ) || name.starts_with(".env")
+        || name.ends_with(".pem")
+        || name.ends_with(".key")
+}
+
+fn grant_complement(
+    rules: &mut RulesetCreated,
+    path: &Path,
+    denied: &[PathBuf],
+    deny_execute: &[PathBuf],
+    rights: BitFlags<AccessFs>,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<(), Error> {
+    // Callers supply resolved paths. Resolve symlink children before adding a
+    // rule, since Landlock follows O_PATH and must not re-grant a secret alias.
+    let real = path.to_path_buf();
+    if !visited.insert(real.clone()) || denied.iter().any(|root| real.starts_with(root)) {
+        return Ok(());
+    }
+    let rights = if deny_execute.iter().any(|root| real.starts_with(root)) {
+        rights & !AccessFs::Execute
+    } else {
+        rights
+    };
+    if rights.is_empty() {
+        return Ok(());
+    }
+    let mut child_rights = rights;
+    if !denied.iter().any(|root| root.starts_with(&real)) {
+        if !rights.contains(AccessFs::Execute)
+            || !deny_execute.iter().any(|root| root.starts_with(&real))
+        {
+            return grant(rules, &real, rights);
+        }
+        // Read access is unrestricted here; split only the execution grants.
+        grant(rules, &real, rights & !AccessFs::Execute)?;
+        child_rights = AccessFs::Execute.into();
+    }
+    // No parent read grant: that would recursively re-allow its denied child.
+    for entry in std::fs::read_dir(&real)? {
+        let entry = entry?;
+        let path = if entry.file_type()?.is_symlink() {
+            match entry.path().canonicalize() {
+                Ok(path) => path,
+                // Dangling symlinks are unreadable; propagate all other errors.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            }
+        } else {
+            entry.path()
+        };
+        grant_complement(rules, &path, denied, deny_execute, child_rights, visited)?;
+    }
+    Ok(())
+}
+
+fn grant(rules: &mut RulesetCreated, path: &Path, rights: BitFlags<AccessFs>) -> Result<(), Error> {
+    let rights = if rights.contains(AccessFs::ReadDir) && !path.is_dir() {
+        rights & !AccessFs::ReadDir
+    } else {
+        rights
+    };
+    if !rights.is_empty() {
+        rules.add_rule(PathBeneath::new(PathFd::new(path)?, rights))?;
+    }
+    Ok(())
+}

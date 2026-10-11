@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 # Quotes paths inside macOS sandbox profiles.
 serde_json.workspace = true
+serde.workspace = true
 tokio-util.workspace = true
 base64.workspace = true
 roxmltree = "0.20"
@@ -24,13 +25,16 @@ tokio = { workspace = true, features = ["io-std"] }
 nix.workspace = true
 rustix.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "=0.4.7"
+seccompiler = "=0.5.0"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 memmap2 = "=0.9.11"
 dunce.workspace = true
 libproc.workspace = true
 sysinfo.workspace = true
 zip.workspace = true
-serde.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the

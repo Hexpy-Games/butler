@@ -30,6 +30,8 @@ jobs:
     if: ${{ !inputs.performance-only && inputs.e2e && inputs.platform == 'darwin-arm64' }}
     name: Offline browser fixtures
     runs-on: ${{ inputs.runner }}
+    env:
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +83,8 @@ jobs:
   workspace:
     if: ${{ !inputs.performance-only && inputs.workspace }}
     runs-on: ${{ inputs.runner }}
+    env:
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -102,6 +106,8 @@ jobs:
     if: ${{ !inputs.performance-only && inputs.e2e && inputs.e2e-shards != '[]' }}
     name: E2E (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
+    env:
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -146,6 +152,8 @@ jobs:
     if: inputs.performance-only && inputs.perf-shards != '[]'
     name: Performance (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
+    env:
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false

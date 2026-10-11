@@ -5,6 +5,9 @@ fn main() -> std::process::ExitCode {
         eprintln!("process_name_unavailable: {error}");
         return std::process::ExitCode::FAILURE;
     }
+    // Probe before the Tokio runtime: the one-time Linux helper launch is
+    // blocking I/O, while admission on runtime workers uses only cached facts.
+    let _ = butler_platform::command_sandbox::capabilities();
     butler_agent::run(
         std::env::args_os().skip(1).collect(),
         butler_agent::BuildInfo {

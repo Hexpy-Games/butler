@@ -4,8 +4,6 @@ use std::path::Path;
 
 use super::{Invocation, ProtectError, Protection, SandboxError};
 
-pub(super) const ENFORCED: bool = true;
-
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxError> {

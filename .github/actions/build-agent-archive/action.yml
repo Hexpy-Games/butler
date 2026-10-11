@@ -93,10 +93,10 @@ runs:
         if [[ "$BUILD_VERSION_REF" == release/* ]]; then export GITHUB_REF_NAME="v${BUILD_VERSION_REF#release/}"; fi
         case "$ORT_MODE" in
           static-ort)
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features static-ort
             ;;
           prebuilt-ort)
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features prebuilt-ort
             ;;
           *)
             printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2

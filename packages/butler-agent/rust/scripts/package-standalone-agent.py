@@ -70,6 +70,13 @@ def main() -> int:
         binary = stage / "butler-agent"
         shutil.copyfile(binary_source, binary)
         binary.chmod(0o555)
+        if platform == "linux":
+            helper = binary_source.parent / "butler-sandbox"
+            if helper.is_symlink() or not helper.is_file():
+                raise SystemExit("Linux payload is missing butler-sandbox")
+            verify_binary(helper, platform, architecture)
+            shutil.copyfile(helper, stage / "butler-sandbox")
+            (stage / "butler-sandbox").chmod(0o555)
         renderer_notices = resources_source / "app-client/dist/THIRD_PARTY_NOTICES.txt.gz"
         expected = subprocess.check_output(["node", "--input-type=module", "-e",
             f"import {{generate}} from '{Path(__file__).resolve().parents[4]}/deploy/licenses/generate.mjs'; process.stdout.write(generate());"])

@@ -8,8 +8,8 @@ use std::path::Path;
 use std::process::{Command, ExitStatus};
 
 use butler_platform::command_sandbox::{
-    Invocation, Protection, READ_ONLY_SANDBOX, SandboxError, ShellAccess, WRITE_PROTECTION,
-    legacy_shell, login_shell, protect_writes,
+    Invocation, Protection, SandboxError, ShellAccess, capabilities, legacy_shell, login_shell,
+    protect_writes,
 };
 
 use super::scratch;
@@ -29,20 +29,24 @@ fn write_command(targets: &[&Path]) -> String {
         .join("; ")
 }
 
+// test-category: security
 #[test]
 fn read_only_commands_run_sandboxed_or_are_refused() {
-    assert_eq!(READ_ONLY_SANDBOX, cfg!(target_os = "macos"));
+    expected_host_sandbox_is_enforced();
+    let read_only = capabilities().read_only.is_enforced();
     let directory = scratch("read-only");
     let target = directory.join("must-not-exist");
     let command = write_command(&[&target]);
     let environment = HashMap::new();
     let sandboxed = login_shell(&command, ShellAccess::ReadOnly, &environment);
-    if !READ_ONLY_SANDBOX {
+    if !read_only {
         assert!(matches!(sandboxed, Err(SandboxError::ReadOnlyUnavailable)));
         return;
     }
     let sandboxed = sandboxed.unwrap();
-    assert_eq!(sandboxed.program, "/usr/bin/sandbox-exec");
+    if cfg!(target_os = "macos") {
+        assert_eq!(sandboxed.program, "/usr/bin/sandbox-exec");
+    }
     assert!(!run(&sandboxed).success());
     assert!(!target.exists(), "the sandbox let the command write");
 
@@ -53,9 +57,11 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     assert!(target.exists());
 }
 
+// test-category: security
 #[test]
 fn protected_roots_refuse_writes_by_path_and_real_path() {
-    assert_eq!(WRITE_PROTECTION, cfg!(target_os = "macos"));
+    let write_protection = capabilities().write_protection.is_enforced();
+    assert_eq!(write_protection, cfg!(target_os = "macos"));
     let directory = scratch("protect-writes");
     let root = directory.join("installation");
     let outside = directory.join("outside");
@@ -71,7 +77,7 @@ fn protected_roots_refuse_writes_by_path_and_real_path() {
     let protection = protect_writes(shell.clone(), &root).unwrap();
     assert_eq!(
         matches!(protection, Protection::Enforced(_)),
-        WRITE_PROTECTION
+        write_protection
     );
     match protection {
         Protection::Unavailable(unchanged) => assert_eq!(unchanged, shell),
@@ -84,4 +90,27 @@ fn protected_roots_refuse_writes_by_path_and_real_path() {
             assert!(allowed.exists(), "a write outside the root was refused");
         }
     }
+}
+
+fn expected_host_sandbox_is_enforced() {
+    let Ok(expected) = std::env::var("BUTLER_EXPECT_SANDBOX") else {
+        return;
+    };
+    let caps = capabilities();
+    assert!(
+        matches!(expected.as_str(), "linux" | "macos" | "unavailable"),
+        "unknown BUTLER_EXPECT_SANDBOX contract: {expected}"
+    );
+    match expected.as_str() {
+        "linux" => {
+            assert!(caps.approval_free_reads(), "{caps:?}");
+            assert!(!caps.write_protection.is_enforced(), "P3 is deferred");
+        }
+        "macos" => assert!(
+            caps.approval_free_reads() && caps.write_protection.is_enforced(),
+            "{caps:?}"
+        ),
+        _ => assert!(!caps.read_only.is_enforced(), "{caps:?}"),
+    }
+    eprintln!("sandbox capabilities: {caps:?}");
 }

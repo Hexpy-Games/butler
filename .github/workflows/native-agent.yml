@@ -47,9 +47,12 @@ jobs:
           # retain their debug hooks and assertions in the other shared archive.
           feature=prebuilt-ort
           if [ "$ORT_MODE" = static-ort ]; then feature=static-ort; fi
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features "$feature"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features "$feature"
           mkdir -p "$RUNNER_TEMP/agent-payload"
           cp target/release/butler-agent "$RUNNER_TEMP/agent-payload/butler-agent"
+          if [[ "${{ inputs.platform }}" == linux-* ]]; then
+            cp target/release/butler-sandbox "$RUNNER_TEMP/agent-payload/butler-sandbox"
+          fi
       - name: Upload Cargo build timings
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

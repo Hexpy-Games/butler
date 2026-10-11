@@ -77,6 +77,12 @@ fn locate() -> Result<PathBuf, String> {
             "butler-agent",
             "--bin",
             "butler-agent",
+            "-p",
+            "butler-platform",
+            "--bin",
+            "butler-sandbox",
+            "--features",
+            "butler-platform/test-support",
         ]);
         if profile == "release" {
             command.arg("--release");
