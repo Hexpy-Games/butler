@@ -14,13 +14,22 @@
             }
         }
         if ($env:BUTLER_COMMAND_CWD) {
-            $directory = $env:BUTLER_COMMAND_CWD
-            if (!$directory.StartsWith('\\?\')) {
-                $directory = if ($directory.StartsWith('\\')) {
-                    '\\?\UNC\' + $directory.Substring(2)
-                } else { '\\?\' + $directory }
+            $directory = $env:BUTLER_COMMAND_CWD.Replace('/', '\')
+            if ($PSVersionTable.PSEdition -eq 'Desktop' -and [System.IO.Path]::GetFullPath($directory).Length -ge 248) {
+                # Give relative paths an explicit extended provider root at
+                # the volume/share boundary, preserving parent traversal.
+                $root = [System.IO.Path]::GetPathRoot($directory)
+                $extendedRoot = if ($root.StartsWith('\\')) {
+                    '\\?\UNC\' + $root.Substring(2)
+                } else { '\\?\' + $root }
+                $extendedRoot = $extendedRoot.TrimEnd('\') + '\'
+                $relative = $directory.Substring($root.Length).TrimStart('\')
+                New-PSDrive -Name ButlerFileSystem -PSProvider FileSystem -Root $extendedRoot -Scope Global -ErrorAction Stop | Out-Null
+                Set-Location -LiteralPath ('ButlerFileSystem:\' + $relative) -ErrorAction Stop
+                [System.Environment]::CurrentDirectory = $extendedRoot + $relative
+            } else {
+                Set-Location -LiteralPath $directory -ErrorAction Stop
             }
-            Set-Location -LiteralPath $directory -ErrorAction Stop
             Remove-Item Env:BUTLER_COMMAND_CWD -ErrorAction Stop
         }
     } catch {

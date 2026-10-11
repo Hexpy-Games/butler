@@ -84,7 +84,8 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             long_directory.push("long-component-012345678901234567890123456789");
         }
         std::fs::create_dir_all(&long_directory).unwrap();
-        let script = "'한국어 내용' > 'unicode marker.txt'; Rename-Item -LiteralPath 'unicode marker.txt' -NewName 'renamed marker.txt' -ErrorAction Stop; $content=Get-Content -LiteralPath 'renamed marker.txt' -Raw -ErrorAction Stop; Remove-Item -LiteralPath 'renamed marker.txt' -ErrorAction Stop; [Console]::Write($content)";
+        std::fs::write(long_directory.parent().unwrap().join("parent marker.txt"), "parent marker").unwrap();
+        let script = "if ((Get-Content -LiteralPath '..\\parent marker.txt' -Raw -ErrorAction Stop) -cne 'parent marker') { throw 'Parent directory changed' }; '한국어 내용' > 'unicode marker.txt'; Rename-Item -LiteralPath 'unicode marker.txt' -NewName 'renamed marker.txt' -ErrorAction Stop; $content=Get-Content -LiteralPath 'renamed marker.txt' -Raw -ErrorAction Stop; if ([IO.File]::ReadAllText('renamed marker.txt') -cne $content) { throw 'Process directory changed' }; Remove-Item -LiteralPath 'renamed marker.txt' -ErrorAction Stop; [Console]::Write($content)";
         let invocation = login_shell(script, ShellAccess::Full, &environment).unwrap();
         let mut command = std::process::Command::new(&invocation.program);
         command.env_clear().envs(&environment).current_dir(working_directory(&long_directory).unwrap());
