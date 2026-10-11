@@ -96,6 +96,9 @@ pub enum SignedInPlace {
     Granted,
     /// An identity page on the way back: observe only until its site is granted.
     Identity,
+    /// A payment provider's checkout page (a PG pop-up or redirect): open like
+    /// a granted page; every act on it keeps its per-act card.
+    Payment,
     /// Not reachable from this conversation.
     Denied,
 }
@@ -107,6 +110,13 @@ pub fn signed_in_place(raw: &str, sites: &[String]) -> SignedInPlace {
     match site_of(raw) {
         Some(site) if sites.contains(&site) => SignedInPlace::Granted,
         _ if idp_page(raw) => SignedInPlace::Identity,
+        _ if url::Url::parse(raw)
+            .ok()
+            .and_then(|url| url.host_str().map(super::payment_host))
+            == Some(true) =>
+        {
+            SignedInPlace::Payment
+        }
         _ => SignedInPlace::Denied,
     }
 }

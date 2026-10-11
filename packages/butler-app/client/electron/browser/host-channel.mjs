@@ -87,9 +87,22 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     const response = await request("/internal/browser-host/visits", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visits }) });
     if (!response.ok) throw new Error("history_unavailable");
   });
+  /** A saved card's or profile's values, once per token, for the exact origins
+   * the token binds; never logged, never returned to Rust. */
+  async function vault(token, origin, frameOrigins) {
+    const unavailable = { error: "vault_unavailable" };
+    if (!running || !controller || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string" || !Array.isArray(frameOrigins)) return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/vault/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin, frame_origins: frameOrigins }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      const values = await response.json();
+      return values && typeof values === "object" && !Array.isArray(values) ? { values } : unavailable;
+    } catch { return unavailable; }
+  }
   return {
     history,
     credential,
+    vault,
     start() { if (!running && enabled()) { running = true; void connect(); } },
     changed() {
       revision++;

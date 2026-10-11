@@ -239,6 +239,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
         )
     };
     match prompt {
+        "Publish identity" => vec![
+            (
+                "write_file",
+                json!({"path":"identity-site/index.html","content":super::identity::PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"identity-site","title":"Identity fixture"}),
+            ),
+        ],
         "Publish broken" => vec![
             (
                 "write_file",
@@ -288,6 +298,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
     cassette.exchanges.clear();
     for history in 0..=6 {
         for prompt in [
+            "Publish identity",
             "Publish broken",
             "Publish fixture",
             "Open fixture",

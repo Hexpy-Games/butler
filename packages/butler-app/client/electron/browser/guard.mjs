@@ -43,7 +43,8 @@ export function installNavigationGuard(tab, onViolation) {
       const entry = router.get(detail.webContentsId);
       if (entry && detail.resourceType === "xhr") (entry.tab.pendingRequests ??= new Map()).set(detail.id, Date.now());
       if (!entry || !["mainFrame", "subFrame"].includes(detail.resourceType)) { done({}); return; }
-      if (detail.resourceType === "mainFrame" && entry.tab.opener && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
+      // While the user holds a pop-up (a card company's 3-D Secure page, say) they browse freely.
+      if (detail.resourceType === "mainFrame" && entry.tab.opener && entry.tab.holder !== "user" && !agentPopupAllowed(entry.tab.policy, entry.tab.popupParentUrl, detail.url)) {
         done({ cancel: true }); entry.onViolation(detail.url); return;
       }
       // While the user holds the tab they browse freely; Rust re-checks the page at hand-back.

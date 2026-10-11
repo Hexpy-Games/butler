@@ -1029,6 +1029,22 @@ function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]
   if (path === "/security/browser-import/sources" && method === "GET") return { action: "listImportSources" };
   if (path === "/security/browser-import/preview" && method === "POST") return { action: "previewImport", input: payload() };
   if (path === "/security/browser-import/run" && method === "POST") return { action: "runImport", input: payload() };
+  return vaultBridgeCall(method, path, payload);
+}
+
+/** Settings → Browser → Payment methods and Traveler details: main adds the admin credential. */
+function vaultBridgeCall(method: string, path: string, payload: () => unknown): { action: string; input?: unknown } | null {
+  if (path === "/security/vault") return method === "GET" ? { action: "listVault" } : null;
+  if (path === "/security/vault/purchase-sites" && method === "POST") return { action: "setPurchaseSite", input: payload() };
+  const match = path.match(/^\/security\/vault\/(cards|travelers)(?:\/([0-9a-f-]{36})(?:\/(reveal|sites))?)?$/u);
+  if (!match) return null;
+  const [, kind, id, suffix] = match;
+  const noun = kind === "cards" ? "Card" : "Traveler";
+  if (!id) return method === "POST" ? { action: `add${noun}`, input: payload() } : null;
+  if (!suffix && method === "PATCH") return { action: `update${noun}`, input: { id, payload: payload() } };
+  if (!suffix && method === "DELETE") return { action: `delete${noun}`, input: { id } };
+  if (suffix === "sites" && method === "POST") return { action: `set${noun}Site`, input: { id, payload: payload() } };
+  if (suffix === "reveal" && method === "POST" && kind === "cards") return { action: "revealCard", input: { id, payload: payload() } };
   return null;
 }
 

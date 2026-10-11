@@ -3,7 +3,7 @@
 import { wallpaperContentRectUniform } from "./contentRect";
 import type { WallpaperEventKind } from "./drift";
 import { createDriftController, type DriftColumn, type DriftFrame } from "./driftController";
-import { createDriftLayers } from "./driftLayers";
+import type { DriftLayers } from "./driftLayers";
 import { createDriftLooks } from "./driftLooks";
 import { WALLPAPER_DRIFT_SLOW_KEYFRAMES, wallpaperDriftHidden, wallpaperDriftHost } from "./driftScheduler";
 import { createEngineWatchdog } from "./engineWatchdog";
@@ -14,9 +14,10 @@ import { wallpaperDayPhase } from "./time";
 import type { WallpaperContentRect } from "./types";
 
 export interface EngineDriftOptions {
-  canvas: HTMLCanvasElement;
   /** The display layers; without them drift modules hold still frames on the canvas. */
-  layers: { base: HTMLCanvasElement; top: HTMLCanvasElement } | null;
+  layers: DriftLayers | null;
+  /** Something else (the first-run intro) holds the canvas: the drift waits. */
+  held(): boolean;
   renderer: WallpaperRenderer;
   box(): WallpaperCanvasBox;
   contentRect(): WallpaperContentRect | null;
@@ -32,6 +33,8 @@ export interface EngineDrift {
   owns(): boolean;
   /** A scene was handed to the renderer: start (under `state`'s host), refresh or stop the drift. */
   shown(hasScene: boolean, state: WallpaperScheduleState): void;
+  /** The intro let go of the canvas: the base layer holds its last frame, which the first segment dissolves from. */
+  handoff(state: WallpaperScheduleState, seeded: boolean): void;
   sync(state: WallpaperScheduleState): void;
   refresh(): void;
   repaint(): void;
@@ -42,7 +45,7 @@ export interface EngineDrift {
 }
 
 export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
-  const { canvas, layers, renderer, box } = options;
+  const { layers: drawLayers, renderer, box } = options;
   let column: WallpaperContentRect | null = null;
   let contentRect2: WallpaperContentRect | null = null;
   let scene = false;
@@ -62,7 +65,6 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
     });
     return true;
   };
-  const drawLayers = layers ? createDriftLayers(canvas, layers.base, layers.top) : null;
   const controller = drawLayers && createDriftController({
     layers: { ...drawLayers, present: (layer) => { drawLayers.present(layer); if (layer === 0) options.onDrawn(); } },
     looks,
@@ -74,7 +76,7 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
       return { size: [current.width, current.height], keep: keep ? [keep.x - current.left, keep.y - current.top, keep.width, keep.height] : [] };
     },
   });
-  const owns = () => controller !== null && scene && renderer.motion() === "drift";
+  const owns = () => controller !== null && scene && renderer.motion() === "drift" && !options.held();
   const sync = (state: WallpaperScheduleState) => {
     if (!controller || !owns()) return;
     controller.setHost(wallpaperDriftHost(state));
@@ -96,6 +98,11 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
       sync(state);
       controller.activate();
     },
+    handoff(state, seeded) {
+      if (!controller || !owns()) return;
+      sync(state);
+      controller.activate(seeded);
+    },
     sync,
     refresh() {
       if (!controller || !owns()) return;
@@ -109,8 +116,10 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
       controller?.column(columnTarget(), true);
     },
     setContentRect2(rect) {
+      // Like the content rect: a moved composer is picked up at the next keyframe; one appearing or going redraws.
+      const appeared = (contentRect2 === null) !== (rect === null);
       contentRect2 = rect;
-      if (owns()) controller?.refresh();
+      if (appeared && owns()) controller?.refresh();
     },
     event(kind) {
       if (owns()) controller?.event(kind);

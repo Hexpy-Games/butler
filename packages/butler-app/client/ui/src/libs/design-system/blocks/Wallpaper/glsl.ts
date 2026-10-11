@@ -6,7 +6,9 @@ export type WallpaperPrecision = "highp" | "mediump";
 export type WallpaperUniformValue =
   | { name: string; type: "float"; value: number }
   | { name: string; type: "int"; value: number }
+  | { name: string; type: "vec2"; value: [number, number] }
   | { name: string; type: "vec3"; value: [number, number, number] }
+  | { name: string; type: "vec4"; value: [number, number, number, number] }
   | { name: string; type: "vec3[]"; value: number[] };
 
 /** The engine uniforms of contract v1, in prelude order. */

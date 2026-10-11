@@ -36,7 +36,7 @@ pub struct BrowserApprovalStep {
 
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
     let input = facts.input;
-    if let Some(operation) = signed_in_operation(&facts) {
+    if let Some(operation) = signed_in_operation(&facts).or_else(|| pay_operation(&facts)) {
         return operation;
     }
     if facts.capability == "browser_act"
@@ -198,6 +198,54 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
             .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
         wait_reason: None,
         browser_steps: Vec::new(),
+    })
+}
+
+/// Saved card and traveler fills: the merchant origin (with the amount when
+/// the page shows one), the item by nickname and last four, and any payment
+/// window origin; the hand-back wait names the site and the step. One exact
+/// card each, never a standing conversation permission.
+fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
+    if !matches!(
+        facts.capability,
+        "browser_pay_fill" | "browser_traveler_fill"
+    ) {
+        return None;
+    }
+    let input = facts.input;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
+    let (tool, access, targets, wait_reason) = if let Some(pay) = input.get("pay") {
+        let merchant = text(&pay["merchant"]);
+        let mut place = merchant.clone();
+        if let Some(amount) = pay["amount"].as_str().filter(|a| !a.is_empty()) {
+            place = format!("{place} · {amount}");
+        }
+        let mut targets = vec![place, text(&pay["label"])];
+        let windows =
+            std::iter::once(&pay["top"]).chain(pay["frames"].as_array().into_iter().flatten());
+        for origin in windows.filter_map(Value::as_str) {
+            if origin != merchant && !targets.iter().any(|t| t == origin) && targets.len() < 5 {
+                targets.push(origin.to_owned());
+            }
+        }
+        (facts.capability, "change", targets, None)
+    } else if input.get("wait").is_some() {
+        let site = text(input.pointer("/wait/site").unwrap_or(&Value::Null));
+        let reason = text(input.pointer("/wait/reason").unwrap_or(&Value::Null));
+        ("browser_pay_wait", "read_only", vec![site], Some(reason))
+    } else {
+        return None;
+    };
+    Some(ApprovalOperation {
+        tool: tool.into(),
+        access: access.into(),
+        targets,
+        command: None,
+        allow_conversation: Some(false),
+        browser_mode: None,
+        browser_steps: Vec::new(),
+        sign_in_step: None,
+        wait_reason,
     })
 }
 

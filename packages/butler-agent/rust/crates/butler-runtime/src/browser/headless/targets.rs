@@ -249,7 +249,18 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
     let session = params["sessionId"].as_str().unwrap_or("").to_owned();
     let info = &params["targetInfo"];
     let target = info["targetId"].as_str().unwrap_or("").to_owned();
-    match info["type"].as_str().unwrap_or("") {
+    let kind = info["type"].as_str().unwrap_or("");
+    if super::identity::apply(&browser.cdp, &session, kind)
+        .await
+        .is_err()
+    {
+        let _ = browser
+            .cdp
+            .send("Target.closeTarget", json!({"targetId":target}), None)
+            .await;
+        return;
+    }
+    match kind {
         "iframe" => {
             let tab = parent
                 .as_deref()
@@ -269,6 +280,12 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
                     .send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
                     .await;
             }
+        }
+        "worker" | "shared_worker" | "service_worker" => {
+            let _ = browser
+                .cdp
+                .send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
+                .await;
         }
         "page" => page_attached(browser, session, target, info).await,
         _ => {

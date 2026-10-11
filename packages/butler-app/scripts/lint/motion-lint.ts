@@ -306,6 +306,10 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       RISO_BLUR_FREEZE_MS: "Window blur after which the riso drift pauses on its current mix (10 min); a power policy threshold, not UI timing.",
       RISO_FOCUS_AWAY_MS: "Time away (hidden or blurred) after which returning fires the riso focus event (5 min); an event throttle, not UI timing.",
       RISO_ZONE_EASE_MS: "The riso column keep-out eases over 300 ms (resize, screen switch), shaped in the density shader; a simulation tween, snapped under reduced motion.",
+      RISO_INTRO_TIMELINE_S: "The first-run ink intro reveal (intro spec Concept A rev 5 motion table: drop, bloom, pen, drying key ink, bow tie registration, glide, residue, card keep-out, GL stop at 2.9 s) as one GL timeline; segments with tokens match --motion-intro-*, and the card side reads its cues from here. Played once per install, skipped on a click or key, a still frame under reduced motion.",
+      RISO_INTRO_FRAME_MS: "Caps the intro reveal at 60 fps on high-refresh displays (2 ms vsync slack); a performance budget, not a duration.",
+      RISO_INTRO_BEAT_MS: "The 600 ms print beat of the dried intro print when the setup card changes (plates breathe once, keep-out follows the card); a simulation tween, off under reduced motion.",
+      RISO_INTRO_STIR_DECAY_MS: "Time constant (320 ms) of the decay of the pointer stir on the dried intro print, which then stops by itself; simulation damping, not UI timing.",
     },
   },
   {

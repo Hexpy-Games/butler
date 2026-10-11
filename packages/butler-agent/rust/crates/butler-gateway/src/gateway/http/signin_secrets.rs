@@ -34,7 +34,16 @@ fn unavailable() -> HttpError {
     )
 }
 
+/// The payment vault's service (card numbers, CVCs, optional card PIN digits).
+pub(super) const PAYMENT_SERVICE: &str = "com.hexpy.butler.payment";
+/// Traveler profiles' service (birth date, passport and resident numbers).
+pub(super) const TRAVELER_SERVICE: &str = "com.hexpy.butler.traveler";
+
 fn service(root: &Path) -> String {
+    service_in(root, SERVICE)
+}
+
+fn service_in(root: &Path, base: &str) -> String {
     use sha2::{Digest, Sha256};
     let default = butler_platform::user_dirs::home_dir().map(|home| home.join(".butler"));
     let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -42,11 +51,11 @@ fn service(root: &Path) -> String {
         .as_deref()
         .is_some_and(|home| resolve(home) == resolve(root))
     {
-        return SERVICE.to_owned();
+        return base.to_owned();
     }
     let digest = Sha256::digest(resolve(root).to_string_lossy().as_bytes());
     let hex = format!("{digest:x}");
-    format!("{SERVICE}.{}", hex.get(..12).unwrap_or(&hex))
+    format!("{base}.{}", hex.get(..12).unwrap_or(&hex))
 }
 
 fn root(state: &HttpState) -> Option<PathBuf> {
@@ -101,6 +110,43 @@ async fn blocking<T: Send + 'static>(
 fn key(state: &HttpState, entry: &str) -> Result<SecretKey, HttpError> {
     let root = root(state).ok_or_else(unavailable)?;
     SecretKey::new(&service(&root), entry).map_err(|_| unavailable())
+}
+
+fn key_in(state: &HttpState, base: &str, entry: &str) -> Result<SecretKey, HttpError> {
+    let root = root(state).ok_or_else(unavailable)?;
+    SecretKey::new(&service_in(&root, base), entry).map_err(|_| unavailable())
+}
+
+/// A vault item's secret under another module's service (payment, traveler).
+pub(super) async fn get_in(
+    state: &Arc<HttpState>,
+    base: &str,
+    entry: &str,
+) -> Result<Option<SecretText>, HttpError> {
+    let store = store(state).await?;
+    let key = key_in(state, base, entry)?;
+    blocking(state, move || store.get(&key)).await
+}
+
+pub(super) async fn set_in(
+    state: &Arc<HttpState>,
+    base: &str,
+    entry: &str,
+    secret: SecretText,
+) -> Result<(), HttpError> {
+    let store = store(state).await?;
+    let key = key_in(state, base, entry)?;
+    blocking(state, move || store.set(&key, secret.expose())).await
+}
+
+pub(super) async fn delete_in(
+    state: &Arc<HttpState>,
+    base: &str,
+    entry: &str,
+) -> Result<bool, HttpError> {
+    let store = store(state).await?;
+    let key = key_in(state, base, entry)?;
+    blocking(state, move || store.delete(&key)).await
 }
 
 pub(super) async fn get(

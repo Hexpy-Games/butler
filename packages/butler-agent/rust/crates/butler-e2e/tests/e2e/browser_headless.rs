@@ -11,6 +11,7 @@ mod backend;
 mod downloads;
 mod guard;
 mod hidden;
+mod identity;
 mod preview;
 mod real_app;
 mod selfcheck;

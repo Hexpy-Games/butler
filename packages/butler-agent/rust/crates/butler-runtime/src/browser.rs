@@ -210,6 +210,7 @@ pub const PAYMENT_SITES: &[&str] = &[
     "tosspayments.com",
     "inicis.com",
     "nicepay.co.kr",
+    "kcp.co.kr",
     "kakaopay.com",
     "naverpay.com",
     "pay.naver.com",
@@ -254,7 +255,8 @@ pub fn batch_receipts(count: usize, mut result: Value) -> Value {
     result
 }
 
-/// Release-maintained auth/utility policy. Payment popups require an owner decision.
+/// Release-maintained auth/utility policy. Payment widget hosts may open as
+/// pop-ups too (a PG checkout window); acting in one keeps its per-act card.
 pub const POPUP_HOSTS: &[&str] = &[
     "accounts.google.com",
     "login.microsoftonline.com",
@@ -271,7 +273,7 @@ pub fn navigation_policy(content_origin: &str, raw: &str) -> Value {
     let site = site_scope(raw).unwrap_or_default();
     let popup_site = site.strip_prefix("browser:signed_out:").unwrap_or("");
     serde_json::json!({"content_origin":content_origin,"secure_keypads":SECURE_KEYPAD_MARKERS,
-        "sites":[site],"popup_sites":[popup_site],"popup_hosts":POPUP_HOSTS})
+        "sites":[site],"popup_sites":[popup_site],"popup_hosts":POPUP_HOSTS,"payment_sites":PAYMENT_SITES})
 }
 
 pub fn popup_permitted(parent: &str, target: &str) -> bool {
@@ -291,5 +293,7 @@ pub fn popup_permitted(parent: &str, target: &str) -> bool {
     matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
-        && (site_scope(parent).ok() == site_scope(target).ok() || POPUP_HOSTS.contains(&host))
+        && (site_scope(parent).ok() == site_scope(target).ok()
+            || POPUP_HOSTS.contains(&host)
+            || payment_host(host))
 }
