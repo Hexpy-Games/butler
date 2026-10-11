@@ -187,6 +187,15 @@ async function executeFrame(browser, frame) {
   }
   return { status: "refused", reason: "unsupported_op" };
 }
+// Resolves once the new document is parsed (or fully loaded, if that comes
+// first). Images and late scripts finish while the model reads the result;
+// the next observation settles a page that is still loading.
+function parsed(contents, url) {
+  const loading = contents.loadURL(url);
+  const ready = new Promise(resolve => contents.once("dom-ready", resolve));
+  void loading.catch(() => {});
+  return Promise.race([loading, ready]);
+}
 async function openAgent(browser, { session, args, id: callId }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
@@ -205,7 +214,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.identityReady; await tab.view.webContents.loadURL(args.url); }
+  try { await tab.identityReady; await parsed(tab.view.webContents, args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

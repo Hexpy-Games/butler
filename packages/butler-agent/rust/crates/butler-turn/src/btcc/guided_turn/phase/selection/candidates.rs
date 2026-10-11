@@ -2,9 +2,20 @@
 
 use super::*;
 
+/// Driving a tab is a core capability: when the turn may use the browser, its
+/// everyday tools are offered directly instead of through tool search, which
+/// cost browsing tasks extra search and describe rounds before the first page.
+const BROWSER_CORE: [&str; 4] = [
+    "browser_open",
+    "browser_observe",
+    "browser_act",
+    "browser_close",
+];
+
 /// Names of the tools the provider surface offers: initial tools of the
 /// always-on and required profiles, memory startup tools, required tools,
-/// bridges, Work tools where Work is tracked, and the role's delegation tools.
+/// bridges, the authorized core browser tools, Work tools where Work is
+/// tracked, and the role's delegation tools.
 pub(super) fn provider_candidates(
     catalog: &GuidedCatalogSnapshot,
     authorized: &[&GuidedCatalogTool],
@@ -17,7 +28,7 @@ pub(super) fn provider_candidates(
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {
-        if tool.name == ToolName::UpdateTodoList {
+        if tool.name == ToolName::UpdateTodoList || BROWSER_CORE.contains(&tool.name.as_str()) {
             names.insert(tool.name.clone());
         }
         if tool.category.as_deref() == Some("control")

@@ -18,7 +18,9 @@ use std::{
 
 /// Retries an observation that a load-time navigation interrupted.
 pub(crate) async fn observe(page: &Page, args: &Value) -> Result<Value, String> {
-    if args["settle"] == true {
+    // A tab still loading (opened at its parsed document) settles first.
+    let loading = page.shared.with_tab(&page.tab, |t| t.loading) == Some(true);
+    if args["settle"] == true || loading {
         super::settle::settle(page, Duration::from_secs(5)).await;
     }
     let mut attempt = 0;
@@ -303,6 +305,7 @@ async fn observe_once(page: &Page, args: &Value) -> Result<Value, String> {
                 nodes: &g.nodes,
                 fields: &g.fields,
                 thumb: observation.thumb.clone(),
+                view: format!("{url}\n{}", g.text.join("\n")),
             })
         })
         .flatten();

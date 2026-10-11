@@ -1,7 +1,7 @@
 //! What the last batch did to the page, stated plainly so the model can change
 //! approach (the App executor's `progress.mjs`): fields it cleared, a batch
-//! that repeats an earlier one with the same outcome, no effect at all, or new
-//! options right after typing. Notes carry refs and ids, never page text.
+//! that repeats an earlier one with the same outcome, no effect at all, a
+//! return to a view already seen, or new options right after typing. Notes carry refs and ids, never page text.
 use super::js::{js_string, round};
 use indexmap::IndexMap;
 use serde_json::{Value, json};
@@ -13,6 +13,8 @@ const REMEMBERED: usize = 50;
 
 struct Entry {
     obs: String,
+    /// The page as the model reads it: URL, controls, fields and reading text.
+    view: String,
     fingerprint: String,
     thumb: Option<Vec<u8>>,
     values: IndexMap<String, (Value, Value)>,
@@ -40,6 +42,8 @@ pub(crate) struct Progress {
     last_batch: Option<Batch>,
     no_progress: IndexMap<String, (String, String)>,
     refused: IndexMap<String, Value>,
+    transitions: IndexMap<String, String>,
+    loops: IndexMap<String, (String, String)>,
 }
 
 /// The observation a progress note compares.
@@ -49,6 +53,7 @@ pub(crate) struct Current<'a> {
     pub nodes: &'a [Value],
     pub fields: &'a [Value],
     pub thumb: Option<Vec<u8>>,
+    pub view: String,
 }
 
 fn field_key(field: &Value) -> String {
@@ -80,6 +85,7 @@ fn entry(current: Current<'_>) -> Entry {
     parts.extend(labels);
     Entry {
         obs: current.obs.to_owned(),
+        view: current.view,
         fingerprint: parts.join("\n"),
         thumb: current.thumb,
         values: current
@@ -167,7 +173,9 @@ impl Progress {
     /// that already ran from this same page state and made no progress.
     pub(crate) fn repeat_refusal(&self, args: &Value, prepared: &[Value]) -> Option<Value> {
         let state = self.history.back()?;
-        if args["observation"] != state.obs.as_str() || self.no_progress.is_empty() {
+        if args["observation"] != state.obs.as_str()
+            || self.no_progress.is_empty() && self.loops.is_empty()
+        {
             return None;
         }
         let steps = args["steps"].as_array()?;
@@ -182,11 +190,17 @@ impl Progress {
             })
             .collect();
         for length in 1..=identities.len() {
-            let key = std::iter::once(state.fingerprint.clone())
-                .chain(identities[..length].iter().cloned())
-                .collect::<Vec<_>>()
-                .join("\n");
-            let Some((obs, what)) = self.no_progress.get(&key) else {
+            let key = |start: &str| {
+                std::iter::once(start.to_owned())
+                    .chain(identities[..length].iter().cloned())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            let Some((obs, what)) = self
+                .no_progress
+                .get(&key(&state.fingerprint))
+                .or_else(|| self.loops.get(&key(&state.view)))
+            else {
                 continue;
             };
             let scope = if length == identities.len() {
@@ -295,6 +309,18 @@ impl Progress {
             notes.push("The last batch changed nothing visible: no URL, field, control or pixel changed. Try a different control or approach instead of repeating it.".to_owned());
             remembered.push("changed nothing visible".to_owned());
         }
+        let back = if lost.is_empty() {
+            self.revisit(batch)
+        } else {
+            None
+        };
+        let length = self.history.len();
+        let (Some(previous), Some(entry)) =
+            (self.history.get(length - 2), self.history.get(length - 1))
+        else {
+            return notes;
+        };
+        notes.extend(back);
         if let Some(options) = suggestions(previous, entry, batch) {
             notes.push(options);
         }
@@ -309,6 +335,45 @@ impl Progress {
             }
         }
         notes
+    }
+}
+
+impl Progress {
+    /// Each completed batch is a transition between views. Returning to a view
+    /// already seen is noted; a transition that again leads back to a seen view
+    /// is a loop, and repeating it from that same view is refused.
+    fn revisit(&mut self, batch: &Batch) -> Option<String> {
+        let length = self.history.len();
+        let previous = self.history.get(length.checked_sub(2)?)?;
+        let entry = self.history.get(length - 1)?;
+        if entry.view.is_empty()
+            || entry.view == previous.view
+            || !batch.steps.iter().all(|s| s.completed)
+        {
+            return None;
+        }
+        let key = std::iter::once(previous.view.clone())
+            .chain(batch.steps.iter().map(|s| s.identity.clone()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let repeated = self.transitions.get(&key) == Some(&entry.view);
+        let (view, obs) = (entry.view.clone(), entry.obs.clone());
+        let earlier = self
+            .history
+            .iter()
+            .take(length - 2)
+            .rev()
+            .find(|old| old.view == view)
+            .map(|old| old.obs.clone());
+        bounded(&mut self.transitions, key.clone(), view);
+        let earlier = earlier?;
+        if repeated {
+            let what = format!("returned again to the view of {earlier}");
+            bounded(&mut self.loops, key, (obs, what));
+        }
+        Some(format!(
+            "The page is back to the view it showed at {earlier}; nothing new appeared. Use a different control or approach instead of moving between views already seen."
+        ))
     }
 }
 

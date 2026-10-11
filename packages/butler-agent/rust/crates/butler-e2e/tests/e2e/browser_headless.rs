@@ -16,6 +16,7 @@ mod preview;
 mod real_app;
 mod selfcheck;
 mod settings;
+mod speed;
 mod support;
 
 use butler_e2e::e2e::HarnessError;

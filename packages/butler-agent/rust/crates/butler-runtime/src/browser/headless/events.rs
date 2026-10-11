@@ -88,6 +88,9 @@ fn tab_event(browser: &Browser, session: &str, method: &str, params: &Value) {
         "Page.loadEventFired" if session == tab.session => {
             tab.loads.send_modify(|n| *n += 1);
         }
+        "Page.domContentEventFired" if session == tab.session => {
+            tab.parsed.send_modify(|n| *n += 1);
+        }
         "Network.requestWillBeSent" if matches!(params["type"].as_str(), Some("XHR" | "Fetch")) => {
             tab.requests.insert(
                 params["requestId"].as_str().unwrap_or("").to_owned(),

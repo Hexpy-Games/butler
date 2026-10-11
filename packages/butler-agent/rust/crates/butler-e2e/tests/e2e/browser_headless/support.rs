@@ -277,6 +277,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"headless-site","title":"Headless fixture"}),
             ),
         ],
+        "Publish shop" => vec![
+            (
+                "write_file",
+                json!({"path":"shop-site/index.html","content":super::speed::SHOP,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"shop-site","title":"Shop fixture"}),
+            ),
+        ],
         "Open fixture" => vec![
             describe,
             tool("browser_open", json!({"url":"{{OUTPUT_URL}}"})),
@@ -301,6 +311,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish identity",
             "Publish broken",
             "Publish fixture",
+            "Publish shop",
             "Open fixture",
             "Observe fixture",
             "Act fixture",

@@ -91,16 +91,39 @@ pub(super) fn prepare<'a>(
     }
 }
 
-/// Whether a fresh batch may run concurrently: more than one call, all valid
-/// and all declared concurrency-safe. Resumed batches always run in order.
+/// Whether a fresh batch may run concurrently: more than one call, all valid,
+/// and each either declared concurrency-safe or a browser call on its own tab
+/// (calls on one tab keep their order). Resumed batches always run in order.
 pub(super) fn concurrent(calls: &[PreparedCall<'_>]) -> bool {
+    let mut tabs = std::collections::HashSet::new();
     calls.len() > 1
         && calls.iter().all(|prepared| {
             prepared.validation.is_none()
-                && prepared
+                && (prepared
                     .tool
                     .is_some_and(|tool| tool.concurrency_safe == Some(true))
+                    || browser_tab(&prepared.call)
+                        .is_some_and(|tab| tab.is_none_or(|tab| tabs.insert(tab))))
         })
+}
+
+/// The tab a tab-scoped browser call drives: `Some(None)` for a new tab,
+/// `None` for anything else. A `tool_call` bridge resolves to its target.
+fn browser_tab(call: &ModelRoundToolCall) -> Option<Option<String>> {
+    let (name, arguments) = if call.name == "tool_call" {
+        let id = call.arguments.get("id")?.as_str()?;
+        let arguments = call.arguments.get("arguments")?.as_object()?;
+        (id.strip_prefix("native:")?, arguments)
+    } else {
+        (call.name.as_str(), &call.arguments)
+    };
+    match name {
+        "browser_open" => Some(None),
+        "browser_observe" | "browser_act" | "browser_screenshot" | "browser_close" => {
+            Some(Some(arguments.get("tab")?.as_str()?.to_owned()))
+        }
+        _ => None,
+    }
 }
 
 pub(super) async fn execute<'a>(
