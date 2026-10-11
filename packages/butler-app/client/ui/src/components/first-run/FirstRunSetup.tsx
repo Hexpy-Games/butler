@@ -4,6 +4,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { resolveAppearanceTheme } from "@/app/utils.ts";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+import { FirstRunBrowserImport } from "./FirstRunBrowserImport";
 import { useSetupSceneReady } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
@@ -47,6 +48,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
     >
       {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
         : flow.step === "consent" ? <FirstRunConsent flow={flow} />
+          : flow.step === "import" ? <FirstRunBrowserImport flow={flow} />
           : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );

@@ -15,6 +15,20 @@ pub struct PasswordRow {
     pub password: SecretText,
 }
 
+/// Decrypted native rows use the same origin validation as exports.
+pub fn native_passwords(logins: Vec<butler_platform::browser_transfer::Login>) -> Vec<PasswordRow> {
+    logins
+        .into_iter()
+        .filter_map(|login| {
+            row(
+                &login.origin,
+                login.username.expose(),
+                login.password.expose(),
+            )
+        })
+        .collect()
+}
+
 /// Rows with a web origin, a username and a password; others are counted as skipped.
 pub fn parse_password_csv(bytes: &[u8]) -> Result<(Vec<PasswordRow>, usize), ImportError> {
     let text = std::str::from_utf8(bytes).map_err(|_| ImportError::Format)?;
@@ -43,7 +57,7 @@ pub fn parse_password_csv(bytes: &[u8]) -> Result<(Vec<PasswordRow>, usize), Imp
     Ok((rows, skipped))
 }
 
-fn row(url: &str, username: &str, password: &str) -> Option<PasswordRow> {
+pub(super) fn row(url: &str, username: &str, password: &str) -> Option<PasswordRow> {
     let parsed = url::Url::parse(url.trim()).ok()?;
     if !matches!(parsed.scheme(), "https" | "http") || username.is_empty() || password.is_empty() {
         return None;

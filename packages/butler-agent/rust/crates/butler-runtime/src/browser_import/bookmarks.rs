@@ -41,17 +41,15 @@ fn chromium_node(node: &Value, folder: &str, out: &mut Vec<Bookmark>, depth: usi
 
 /// Firefox `places.sqlite`, read from a private copy (the browser may hold a lock).
 pub fn firefox(places: &Path, scratch: &Path) -> Result<Vec<Bookmark>, ImportError> {
-    std::fs::create_dir_all(scratch).map_err(|_| ImportError::Unreadable)?;
-    let copy = scratch.join("places.sqlite");
-    std::fs::copy(places, &copy).map_err(|_| ImportError::Unreadable)?;
-    let wal = places.with_extension("sqlite-wal");
-    if wal.is_file() {
-        std::fs::copy(&wal, scratch.join("places.sqlite-wal"))
-            .map_err(|_| ImportError::Unreadable)?;
-    }
-    let result = read_places(&copy);
-    let _ = std::fs::remove_dir_all(scratch);
-    result
+    let copy =
+        butler_platform::browser_transfer::Snapshot::new(places, scratch).map_err(|e| match e {
+            butler_platform::browser_transfer::ImportError::PermissionDenied => {
+                ImportError::PermissionDenied
+            }
+            butler_platform::browser_transfer::ImportError::Locked => ImportError::Locked,
+            _ => ImportError::Unreadable,
+        })?;
+    read_places(&copy.path)
 }
 
 struct Folder {
@@ -87,7 +85,7 @@ fn read_places(path: &Path) -> Result<Vec<Bookmark>, ImportError> {
     let mut statement = db
         .prepare(
             "SELECT b.parent,COALESCE(b.title,''),p.url FROM moz_bookmarks b JOIN moz_places p ON p.id=b.fk \
-             WHERE b.type=1 ORDER BY b.parent,b.position LIMIT 100000",
+             WHERE b.type=1 ORDER BY b.parent,b.position",
         )
         .map_err(|_| ImportError::Format)?;
     let rows = statement

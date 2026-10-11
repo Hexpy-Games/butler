@@ -137,6 +137,7 @@ async fn add(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError
             origin,
             username,
             source: source.into(),
+            import_run: None,
         },
         password,
     )

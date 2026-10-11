@@ -43,7 +43,7 @@ function SecuritySignInsSection({ signIns }: { signIns: ReturnType<typeof useSig
       )}>
       {adding && <SignInAddForm busy={signIns.busy !== null} onCancel={() => setAdding(false)}
         onSave={async (input) => { if (await signIns.add(input)) setAdding(false); }} />}
-      {rows.map(row => <SignInRow key={row.site} row={row} busy={signIns.busy !== null} actions={signIns} />)}
+      {rows.map(row => <SignInRow key={row.entry?.id ?? row.site} row={row} busy={signIns.busy !== null} actions={signIns} />)}
     </SettingsSection>
   );
 }

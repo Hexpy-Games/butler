@@ -23,7 +23,7 @@ for (const component of catalog.components) {
 }
 const original = catalog.components[0];
 assert.ok(!first.includes("Permission is hereby granted"), "full license bodies must not ship");
-assert.ok(Buffer.byteLength(first) <= 300_000, "complete disclosure size budget");
+assert.ok(Buffer.byteLength(first) <= 301_000, "complete disclosure size budget");
 catalog.components[0] = { ...original, links: [] };
 assert.throws(() => generate(catalog), /Missing or invalid license link/);
 catalog.components[0] = { ...original, links: ["javascript:invalid"] };

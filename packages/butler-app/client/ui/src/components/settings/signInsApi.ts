@@ -28,7 +28,7 @@ export const setAllConversations = (site: string, value: boolean) =>
 export const revokeSite = (site: string) =>
   api("/security/signins/site", { method: "POST", body: JSON.stringify({ site, revoke: true }) });
 
-export interface ImportSource { key: string; browser: string; name: string }
+export interface ImportSource { key: string; browser: string; name: string; permission?: "ready" | "denied"; passwords?: "direct" | "csv" }
 export type ImportRequest = { kind: "bookmarks"; source?: string; path?: string } | { kind: "passwords"; path: string };
 export const listImportSources = () => api<{ sources: ImportSource[] }>("/security/browser-import/sources");
 export const previewImport = (input: ImportRequest) =>
@@ -54,3 +54,17 @@ export function canSignOut(): boolean {
 export async function signOutSite(site: string) {
   await (globalThis as { butlerBrowser?: BrowserBridge }).butlerBrowser?.call?.("signout", { site });
 }
+
+export interface BrowserImportCounts { run_id: string; bookmarks: number; passwords: number; updated: number; existing: number; needs_csv?: boolean; export_id?: string; waiting?: boolean; error?: string }
+export interface BrowserImportInput { source: string; bookmarks: boolean; passwords: boolean; primary_password?: string; bookmarks_path?: string; passwords_path?: string }
+const importAction = <T>(op: string, body: unknown) => api<T>(`/security/browser-import/${op}`, { method: "POST", body: JSON.stringify(body) });
+export const startBrowserImport = (input: BrowserImportInput) => importAction<BrowserImportCounts>("start", input);
+export const undoBrowserImport = (run_id: string) => importAction("undo", { run_id });
+export const pickBrowserFolder = (source: string) => importAction<{ selected: boolean; source?: string }>("folder", { source });
+export const openImportDiskAccess = () => importAction("disk-access", {});
+export const beginPasswordExport = (source: string, run_id: string) => importAction<{ export_id: string }>("export", { source, run_id });
+export const pollPasswordExport = (export_id: string) => importAction<BrowserImportCounts>("export/poll", { export_id });
+export const deletePasswordExport = (export_id: string) => importAction("export/delete", { export_id });
+export const cancelPasswordExport = (export_id: string) => importAction("export/cancel", { export_id });
+
+export const choosePasswordExport = (export_id: string, path: string) => importAction<BrowserImportCounts>("export/file", { export_id, path });
