@@ -54,7 +54,9 @@ impl TurnRuntime {
         conversation: &dyn PreparedConversation,
         destination: ProgressDestination,
     ) -> Result<(TurnOutcome, bool), BtccError> {
+        let timing = super::super::agent_loop::command_timing::CommandTiming::new("turn_load");
         let (mut turn, fresh) = self.store.load_or_admit(prepared).await?;
+        timing.mark("loaded");
         if fresh && prepared.is_fresh && turn.semantic_state != TurnSemanticState::Cancelled {
             self.publish(conversation, &turn, &destination, ProgressEvent::Started)
                 .await?;
@@ -69,6 +71,7 @@ impl TurnRuntime {
                 .resume_authority(&turn.turn_id)
                 .await?
                 .unwrap_or(turn);
+            timing.mark("authority_resumed");
         }
         if let Some(reason) = turn.suspension {
             return Ok((suspended(&turn, reason), fresh));
@@ -77,6 +80,7 @@ impl TurnRuntime {
             self.publish_state(conversation, &turn, &destination).await;
         }
         if turn.semantic_state != TurnSemanticState::DeliveryCommitted {
+            timing.mark("before_agent");
             turn = Box::pin(self.run_until_undecided(
                 turn,
                 conversation,
@@ -84,6 +88,7 @@ impl TurnRuntime {
                 prepared.request.recovery_attempt.unwrap_or(1),
             ))
             .await?;
+            timing.mark("agent_returned");
         }
         if let Some(reason) = turn.suspension {
             return Ok((suspended(&turn, reason), fresh));

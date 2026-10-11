@@ -268,13 +268,17 @@ async fn send_request(
         stream_observer: prepared.ports.stream_observer.as_deref(),
         identity_observer: prepared.ports.identity_observer.as_deref(),
     };
+    let timing = super::command_timing::CommandTiming::new("model_exchange");
     input.model_round_observer.request(&request).await;
+    timing.mark("before_round");
     let response = input
         .model
         .run_round(request)
         .await
         .map_err(AttemptError::Model)?;
+    timing.mark("round_returned");
     input.model_round_observer.response(&response).await;
+    timing.mark("observer_returned");
     Ok(response)
 }
 
