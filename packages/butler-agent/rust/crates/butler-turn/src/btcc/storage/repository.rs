@@ -145,9 +145,12 @@ impl TurnStore for BtccRepositories {
         key: ModelRoundKey,
     ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         let storage = self.storage.clone();
+        let memo = storage.payload_memo();
         Box::pin(async move {
             storage
-                .execute(move |db| model::load_acceptance(db, &key))
+                .execute(move |db| {
+                    model::load_acceptance(db, &key, &mut *super::payload::lock(&memo)?)
+                })
                 .await
                 .map_err(BtccError::from)
         })
@@ -157,9 +160,12 @@ impl TurnStore for BtccRepositories {
         write: ModelRoundAcceptanceWrite,
     ) -> PortFuture<'_, ()> {
         let storage = self.storage.clone();
+        let memo = storage.payload_memo();
         Box::pin(async move {
             storage
-                .execute(move |db| model::record_acceptance(db, &write))
+                .execute(move |db| {
+                    model::record_acceptance(db, &write, &mut *super::payload::lock(&memo)?)
+                })
                 .await
                 .map_err(BtccError::from)
         })
