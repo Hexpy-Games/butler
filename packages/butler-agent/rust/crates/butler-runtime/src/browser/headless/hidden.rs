@@ -186,10 +186,25 @@ impl HiddenPage {
 
     /// Navigates and waits for the load event, at most `budget`.
     pub(crate) async fn navigate(&self, url: &str, budget: Duration) -> Result<(), String> {
+        self.navigate_until(url, budget, false).await
+    }
+
+    /// Reader content does not depend on unrelated images or long-lived resources.
+    pub(crate) async fn navigate_dom(&self, url: &str, budget: Duration) -> Result<(), String> {
+        self.navigate_until(url, budget, true).await
+    }
+
+    async fn navigate_until(&self, url: &str, budget: Duration, dom: bool) -> Result<(), String> {
         let mut loads = self
             .page
             .shared
-            .with_tab(&self.page.tab, |t| t.loads.subscribe())
+            .with_tab(&self.page.tab, |t| {
+                if dom {
+                    t.parsed.subscribe()
+                } else {
+                    t.loads.subscribe()
+                }
+            })
             .ok_or("tab_closed")?;
         let navigated = self.page.send("Page.navigate", json!({"url":url})).await?;
         if navigated["errorText"]

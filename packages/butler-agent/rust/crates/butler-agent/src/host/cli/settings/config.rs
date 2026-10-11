@@ -24,6 +24,8 @@ pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "webSearch.braveApiBase",
     "webSearch.tavilyApiBase",
     "webSearch.planning.enabled",
+    "webSearch.planning.model",
+    "webSearch.planning.reasoningEffort",
     "webSearch.planning.defaultDepth",
     "update.previews",
     "metrics.enabled",
@@ -206,12 +208,17 @@ pub(super) fn validate(config: &Value) -> Validation {
             .errors
             .push("webSearch.readerBackend is not supported".into());
     }
+    validate_planning(web_search, &mut result);
+    validate_remaining(config, result)
+}
+
+fn validate_planning(web_search: Option<&Value>, result: &mut Validation) {
     if let Some(planning) = web_search.and_then(|value| value.get("planning")) {
         let Some(planning) = planning.as_object() else {
             result
                 .errors
                 .push("webSearch.planning must be an object".into());
-            return validate_remaining(config, result);
+            return;
         };
         if planning
             .get("enabled")
@@ -220,6 +227,21 @@ pub(super) fn validate(config: &Value) -> Validation {
             result
                 .errors
                 .push("webSearch.planning.enabled must be boolean".into());
+        }
+        if planning
+            .get("model")
+            .is_some_and(|value| value.as_str().is_none_or(|model| model.trim().is_empty()))
+        {
+            result
+                .errors
+                .push("webSearch.planning.model must be a nonempty model reference".into());
+        }
+        if planning.get("reasoningEffort").is_some_and(|value| {
+            serde_json::from_value::<butler_models::models::ReasoningEffort>(value.clone()).is_err()
+        }) {
+            result
+                .errors
+                .push("webSearch.planning.reasoningEffort is not supported".into());
         }
         if planning.contains_key("mode") {
             result.warnings.push(
@@ -235,7 +257,6 @@ pub(super) fn validate(config: &Value) -> Validation {
                 .push("webSearch.planning.defaultDepth is not supported".into());
         }
     }
-    validate_remaining(config, result)
 }
 
 fn validate_remaining(config: &Value, mut result: Validation) -> Validation {

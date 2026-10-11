@@ -198,3 +198,5 @@ mod storage_correction;
 mod session_titles;
 #[path = "storage_correction/seed.rs"]
 mod storage_correction_seed;
+
+mod web_speed;

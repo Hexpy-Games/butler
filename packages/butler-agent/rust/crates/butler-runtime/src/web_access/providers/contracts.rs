@@ -31,6 +31,7 @@ pub(in crate::web_access) struct SearchOutput {
     pub search_requests: u64,
     pub search_warnings: Vec<String>,
     pub failed_queries: Vec<Value>,
+    pub timings: Vec<Value>,
 }
 
 pub(in crate::web_access) trait SearchProvider: Send + Sync {
@@ -56,6 +57,7 @@ impl SearchOutput {
             search_requests: 1,
             search_warnings: Vec::new(),
             failed_queries: Vec::new(),
+            timings: vec![serde_json::json!({"request_ms":duration_ms})],
         }
     }
 }

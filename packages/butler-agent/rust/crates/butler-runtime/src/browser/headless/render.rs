@@ -73,7 +73,7 @@ async fn read(
     url: &str,
     content: Option<crate::browser::ContentOrigin>,
 ) -> Result<Rendered, &'static str> {
-    let navigated = hidden.navigate(url, Duration::from_secs(15)).await;
+    let navigated = hidden.navigate_dom(url, Duration::from_secs(15)).await;
     if hidden.diagnostics(|d| d.denied).unwrap_or(false) {
         return Err("navigation_denied");
     }

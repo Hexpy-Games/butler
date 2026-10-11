@@ -55,7 +55,14 @@ export async function renderReader(args) {
   try {
     await new Promise(resolve => setTimeout(resolve, 0));
     await configureWebIdentity(contents);
-    await contents.loadURL(args.url).catch(() => {});
+    // Register before navigation: loadURL waits for all load-blocking resources,
+    // while DOM readiness proves the complete document was parsed.
+    await new Promise((resolve, reject) => {
+      const ready = () => { contents.removeListener("dom-ready", ready); contents.removeListener("destroyed", ready); resolve(); };
+      contents.once("dom-ready", ready);
+      contents.once("destroyed", ready);
+      void contents.loadURL(args.url).catch(reject);
+    });
     if (denied) return { status: "navigation_denied" };
     await contents.executeJavaScript(SETTLE).catch(() => {});
     const page = await contents.executeJavaScript("({url:location.href,html:document.documentElement.outerHTML})");

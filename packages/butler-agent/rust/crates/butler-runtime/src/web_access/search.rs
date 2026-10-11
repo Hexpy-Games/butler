@@ -2,6 +2,7 @@ mod parse;
 
 use std::{collections::HashSet, time::Instant};
 
+use futures_util::{FutureExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -25,72 +26,17 @@ impl WebSession {
         args: &Value,
         cancellation: &CancellationToken,
     ) -> Result<Value, WebAccessError> {
-        let query = args
-            .get("query")
-            .and_then(Value::as_str)
-            .map(butler_core::public_text::trim_js_whitespace)
-            .unwrap_or_default();
-        if query.encode_utf16().count() < 2 {
-            return Err(WebAccessError::new(
-                WebAccessCode::InvalidArguments,
-                "web_search requires a query with at least 2 characters.",
-            ));
-        }
-        let allowed = string_array(args.get("allowed_domains"));
-        let blocked = string_array(args.get("blocked_domains"));
-        if !allowed.is_empty() && !blocked.is_empty() {
-            return Err(WebAccessError::new(
-                WebAccessCode::InvalidArguments,
-                "web_search cannot use allowed_domains and blocked_domains together.",
-            ));
-        }
-        let requested_max_results = optional_number(args.get("max_results"), 1, 10);
-        let max_results = requested_max_results.unwrap_or(5);
-        let coverage_limit = requested_max_results.unwrap_or(10);
-        let recency_days = optional_number(args.get("recency_days"), 1, usize::MAX);
-        let input = SearchInput {
-            query: query.to_owned(),
-            allowed_domains: allowed,
-            blocked_domains: blocked,
-            max_results,
-            requested_max_results,
-            recency_days: recency_days.map(|days| days as u64),
-        };
+        let total_started = Instant::now();
+        let input = search_input(args)?;
+        let query = input.query.as_str();
+        let coverage_limit = input.requested_max_results.unwrap_or(10);
         let provider = providers::configured(&self.access).await?;
-        let gate = self.lock_planning().await;
-        let first_search = !self.first_search_consumed();
-        let plan_result = if first_search {
-            match planning::create_plan(
-                &self.access,
-                &input,
-                &self.original_request(),
-                cancellation,
-            )
-            .await
-            {
-                Ok(result) => result,
-                Err(error) => {
-                    self.access
-                        .metrics()
-                        .record(provider.id(), query, Some(error.code()));
-                    return Err(error);
-                }
-            }
-        } else {
-            PlanningResult {
-                plan: None,
-                used_planner: false,
-                attempts: 0,
-                fallback_reason: Some(
-                    "smart search planning already ran in this turn; direct follow-up search used"
-                        .into(),
-                ),
-            }
-        };
-        if plan_result.used_planner || plan_result.plan.is_some() {
-            self.mark_planner_ran();
-        }
-        drop(gate);
+        let planning_started = Instant::now();
+        let plan_result = self
+            .plan_search(provider.id(), &input, cancellation)
+            .await?;
+        let planning_ms = planning_started.elapsed().as_millis();
+        let search_started = Instant::now();
         if cancellation.is_cancelled() {
             return Err(WebAccessError::cancelled());
         }
@@ -111,87 +57,189 @@ impl WebSession {
         self.access
             .metrics()
             .record(&searched.provider, query, None);
-        let results = searched.results;
-        let observed_at = evidence::now_iso();
-        let urls = results
-            .iter()
-            .map(|result| result.url.clone())
-            .collect::<Vec<_>>();
-        let stop_reason = if results.is_empty() {
-            "no_source_candidates"
-        } else if results.len() >= coverage_limit {
-            "candidate_limit_reached"
-        } else {
-            "provider_results_exhausted"
-        };
-        let result_values = results
-            .iter()
-            .map(|result| {
-                let mut value = json!({
-                    "title":result.title,
-                    "url":result.url,
-                    "snippet":result.snippet,
-                    "source":result.source,
-                });
-                if let Some(published_at) = &result.published_at {
-                    value["published_at"] = json!(published_at);
-                }
-                value
-            })
-            .collect::<Vec<_>>();
-        let search_plan = plan_result
-            .plan
-            .as_ref()
-            .map(planning::compact)
-            .unwrap_or_else(|| {
-                json!({
-                    "mode":"direct",
-                    "planner_used":plan_result.used_planner,
-                    "planner_attempts":plan_result.attempts,
-                    "fallback_reason":plan_result.fallback_reason,
-                    "original_query":query,
-                })
-            });
-        let mut result = json!({
-            "ok":true,
-            "query":query,
-            "results":result_values,
-            "duration_ms":searched.duration_ms,
-            "provider":searched.provider,
-            "usage":{"search_requests":searched.search_requests},
-            "search_plan":search_plan,
-            "public_web_evidence_items":evidence::search_items(&results, &observed_at),
-            "evidence_capability_receipts":[evidence::search_capability_receipt(&results, &observed_at)],
-            "evidence_receipts":[evidence::tool_receipt(&evidence::ToolReceiptInput {
-                tool: "web_search",
-                receipt_type: "coverage",
-                summary: "Search returned public source candidates for the requested evidence.",
-                verified: !results.is_empty(),
-                covers: &["source_candidates"],
-                satisfies: &[],
-                urls: &urls,
-                metrics: json!({"result_count":results.len(),"search_requests":searched.search_requests}),
-            })],
-            "citation_required":true,
-            "coverage_budget":{
-                "mode":"coverage_based",
-                "result_count":results.len(),
-                "stop_reason":stop_reason,
-                "next_search_guidance":"Run another search only for a specific missing outcome field, category, source type, or verification gap.",
-            },
-            "source_urls":urls,
-        });
-        if let Some(overview) = searched.provider_overview {
-            result["provider_overview"] = json!(overview);
-        }
-        if !searched.search_warnings.is_empty() {
-            result["search_warnings"] = json!(searched.search_warnings);
-        }
-        if !searched.failed_queries.is_empty() {
-            result["failed_queries"] = json!(searched.failed_queries);
-        }
-        Ok(result)
+        let search_ms = search_started.elapsed().as_millis();
+        Ok(project_search(
+            query,
+            coverage_limit,
+            searched,
+            &plan_result,
+            total_started.elapsed().as_millis(),
+            planning_ms,
+            search_ms,
+        ))
     }
+    async fn plan_search(
+        &self,
+        provider: &str,
+        input: &SearchInput,
+        cancellation: &CancellationToken,
+    ) -> Result<PlanningResult, WebAccessError> {
+        let gate = self.lock_planning().await;
+        let first_search = !self.first_search_consumed();
+        let plan_result = if first_search {
+            match planning::create_plan(&self.access, input, &self.original_request(), cancellation)
+                .await
+            {
+                Ok(result) => result,
+                Err(error) => {
+                    self.access
+                        .metrics()
+                        .record(provider, &input.query, Some(error.code()));
+                    return Err(error);
+                }
+            }
+        } else {
+            PlanningResult {
+                plan: None,
+                used_planner: false,
+                attempts: 0,
+                measurements: Vec::new(),
+                fallback_reason: Some(
+                    "smart search planning already ran in this turn; direct follow-up search used"
+                        .into(),
+                ),
+            }
+        };
+        if plan_result.used_planner || plan_result.plan.is_some() {
+            self.mark_planner_ran();
+        }
+        drop(gate);
+        Ok(plan_result)
+    }
+}
+
+fn search_input(args: &Value) -> Result<SearchInput, WebAccessError> {
+    let query = args
+        .get("query")
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .unwrap_or_default();
+    if query.encode_utf16().count() < 2 {
+        return Err(WebAccessError::new(
+            WebAccessCode::InvalidArguments,
+            "web_search requires a query with at least 2 characters.",
+        ));
+    }
+    let allowed = string_array(args.get("allowed_domains"));
+    let blocked = string_array(args.get("blocked_domains"));
+    if !allowed.is_empty() && !blocked.is_empty() {
+        return Err(WebAccessError::new(
+            WebAccessCode::InvalidArguments,
+            "web_search cannot use allowed_domains and blocked_domains together.",
+        ));
+    }
+    let requested_max_results = optional_number(args.get("max_results"), 1, 10);
+    let max_results = requested_max_results.unwrap_or(5);
+    let recency_days = optional_number(args.get("recency_days"), 1, usize::MAX);
+    Ok(SearchInput {
+        query: query.to_owned(),
+        allowed_domains: allowed,
+        blocked_domains: blocked,
+        max_results,
+        requested_max_results,
+        recency_days: recency_days.map(|days| days as u64),
+    })
+}
+
+fn project_results(results: &[SearchResult]) -> Vec<Value> {
+    results
+        .iter()
+        .map(|result| {
+            let mut value = json!({
+                "title":result.title,
+                "url":result.url,
+                "snippet":result.snippet,
+                "source":result.source,
+            });
+            if let Some(published_at) = &result.published_at {
+                value["published_at"] = json!(published_at);
+            }
+            value
+        })
+        .collect::<Vec<_>>()
+}
+
+fn project_plan(plan_result: &PlanningResult, query: &str) -> Value {
+    plan_result
+        .plan
+        .as_ref()
+        .map(planning::compact)
+        .unwrap_or_else(|| {
+            json!({
+                "mode":"direct",
+                "planner_used":plan_result.used_planner,
+                "planner_attempts":plan_result.attempts,
+                "fallback_reason":plan_result.fallback_reason,
+                "original_query":query,
+            })
+        })
+}
+
+fn project_search(
+    query: &str,
+    coverage_limit: usize,
+    searched: SearchOutput,
+    plan_result: &PlanningResult,
+    total_ms: u128,
+    planning_ms: u128,
+    search_ms: u128,
+) -> Value {
+    let results = searched.results;
+    let observed_at = evidence::now_iso();
+    let urls = results
+        .iter()
+        .map(|result| result.url.clone())
+        .collect::<Vec<_>>();
+    let stop_reason = if results.is_empty() {
+        "no_source_candidates"
+    } else if results.len() >= coverage_limit {
+        "candidate_limit_reached"
+    } else {
+        "provider_results_exhausted"
+    };
+    let result_values = project_results(&results);
+    let search_plan = project_plan(plan_result, query);
+    let mut result = json!({
+        "ok":true,
+        "query":query,
+        "results":result_values,
+        "duration_ms":total_ms,
+        "timings":{"planning_ms":planning_ms,"planner_calls":plan_result.measurements,
+            "search_ms":search_ms,"requests":searched.timings},
+        "provider":searched.provider,
+        "usage":{"search_requests":searched.search_requests},
+        "search_plan":search_plan,
+        "public_web_evidence_items":evidence::search_items(&results, &observed_at),
+        "evidence_capability_receipts":[evidence::search_capability_receipt(&results, &observed_at)],
+        "evidence_receipts":[evidence::tool_receipt(&evidence::ToolReceiptInput {
+            tool: "web_search",
+            receipt_type: "coverage",
+            summary: "Search returned public source candidates for the requested evidence.",
+            verified: !results.is_empty(),
+            covers: &["source_candidates"],
+            satisfies: &[],
+            urls: &urls,
+            metrics: json!({"result_count":results.len(),"search_requests":searched.search_requests}),
+        })],
+        "citation_required":true,
+        "coverage_budget":{
+            "mode":"coverage_based",
+            "result_count":results.len(),
+            "stop_reason":stop_reason,
+            "next_search_guidance":"Run another search only for a specific missing outcome field, category, source type, or verification gap.",
+        },
+        "source_urls":urls,
+    });
+    if let Some(overview) = searched.provider_overview {
+        result["provider_overview"] = json!(overview);
+    }
+    if !searched.search_warnings.is_empty() {
+        result["search_warnings"] = json!(searched.search_warnings);
+    }
+    if !searched.failed_queries.is_empty() {
+        result["failed_queries"] = json!(searched.failed_queries);
+    }
+    result
 }
 
 async fn execute_planned(
@@ -219,47 +267,70 @@ async fn execute_planned(
         .unwrap_or(planned_inputs.len())
         .max(1)
         .min(planned_inputs.len());
+    // Refill a freed slot immediately; a slow query must not hold the next batch.
+    // Restore query order before ranking, independent of completion order.
+    let requests = planned_inputs
+        .iter()
+        .enumerate()
+        .map(|(index, search)| {
+            async move {
+                (
+                    index,
+                    provider.search(&session.access, search, cancellation).await,
+                )
+            }
+            .boxed()
+        })
+        .collect::<Vec<_>>();
+    let pending = futures_util::stream::iter(requests)
+        .buffer_unordered(batch_size)
+        .collect::<Vec<_>>();
+    let mut settled = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
+        settled = pending => settled,
+    };
+    settled.sort_by_key(|(index, _)| *index);
     let mut outputs = Vec::new();
     let mut failures = Vec::new();
-    for (batch_index, batch) in planned_inputs.chunks(batch_size).enumerate() {
-        if cancellation.is_cancelled() {
-            return Err(WebAccessError::cancelled());
-        }
-        let settled = futures_util::future::join_all(
-            batch
-                .iter()
-                .map(|search| provider.search(&session.access, search, cancellation)),
-        )
-        .await;
-        if cancellation.is_cancelled() {
-            return Err(WebAccessError::cancelled());
-        }
-        for (offset, result) in settled.into_iter().enumerate() {
-            match result {
-                Ok(output) => outputs.push(output),
-                Err(error) => {
-                    let index = batch_index * batch_size + offset;
-                    failures.push(json!({
-                        "query":planned_inputs[index].query,
-                        "error":bounded_error(&error.message(), 500),
-                    }));
-                }
-            }
+    for (index, result) in settled {
+        match result {
+            Ok(output) => outputs.push(output),
+            Err(error) => failures.push(json!({
+                "query":planned_inputs[index].query,
+                "error":bounded_error(&error.message(), 500),
+            })),
         }
     }
+    merge_planned(
+        provider.id(),
+        &outputs,
+        failures,
+        planned_inputs.len(),
+        final_limit,
+        started.elapsed().as_millis(),
+    )
+}
+
+fn merge_planned(
+    provider: &str,
+    outputs: &[SearchOutput],
+    failures: Vec<Value>,
+    query_count: usize,
+    final_limit: usize,
+    elapsed_ms: u128,
+) -> Result<SearchOutput, WebAccessError> {
     if outputs.is_empty() {
         return Err(WebAccessError::new(
             WebAccessCode::WebSearchPlannedAllFailed,
-            format!(
-                "All {} planned web searches failed via {}.",
-                planned_inputs.len(),
-                provider.id(),
-            ),
+            format!("All {query_count} planned web searches failed via {provider}."),
         ));
     }
-    let results = interleave_results(&outputs, final_limit);
+    let ranking_started = Instant::now();
+    let results = interleave_results(outputs, final_limit);
+    let ranking_us = ranking_started.elapsed().as_micros();
     let mut providers = Vec::<String>::new();
-    for output in &outputs {
+    for output in outputs {
         if !providers.contains(&output.provider) {
             providers.push(output.provider.clone());
         }
@@ -270,10 +341,19 @@ async fn execute_planned(
         .sum::<u64>()
         .saturating_add(failures.len() as u64);
     let mut output = SearchOutput {
+        timings: outputs
+            .iter()
+            .enumerate()
+            .map(|(index, output)| {
+                json!({
+                    "index":index,"duration_ms":output.duration_ms,"steps":output.timings,
+                })
+            })
+            .chain(std::iter::once(json!({"ranking_us":ranking_us})))
+            .collect(),
         results,
         provider_overview: None,
-        duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
-            .unwrap_or(u64::MAX),
+        duration_ms: u64::try_from(elapsed_ms.min(u128::from(u64::MAX))).unwrap_or(u64::MAX),
         provider: if providers.len() == 1 {
             providers.remove(0)
         } else {
@@ -287,7 +367,7 @@ async fn execute_planned(
         output.search_warnings.push(format!(
             "{} of {} planned web searches failed; successful results were preserved.",
             output.failed_queries.len(),
-            planned_inputs.len(),
+            query_count,
         ));
     }
     Ok(output)

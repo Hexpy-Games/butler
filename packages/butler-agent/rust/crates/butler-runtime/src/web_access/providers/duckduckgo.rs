@@ -63,53 +63,64 @@ impl SearchProvider for DuckDuckGoHtmlSearchProvider {
                 .header(reqwest::header::USER_AGENT, "Mozilla/5.0 Butler/1.0");
             request = request.header(reqwest::header::ACCEPT_ENCODING, "gzip, deflate, br");
             let fetched = access.fetch_request_to_spool(request, cancellation).await?;
-            let status = fetched.status;
-            let results = tokio::task::spawn_blocking({
-                let input = input.clone();
-                move || {
-                    let bytes = fetched.read_all().map_err(|source| {
-                        WebAccessError::new(
-                            WebAccessCode::WebAccessSpoolFailed,
-                            "Search response could not be read.",
-                        )
-                        .with_source(source)
-                    })?;
-                    let html = String::from_utf8_lossy(&bytes);
-                    if !(200..300).contains(&status) {
-                        return Err(WebAccessError::new(
-                            WebAccessCode::WebSearchRequestFailed,
-                            format!("DuckDuckGo search failed with HTTP {status}."),
-                        ));
-                    }
-                    if crate::web_access::search::is_duckduckgo_challenge(&html) {
-                        return Err(WebAccessError::new(
-                            WebAccessCode::WebSearchChallenge,
-                            "DuckDuckGo returned an anti-bot challenge page.",
-                        ));
-                    }
-                    Ok(parse_results(
-                        &html,
-                        input.max_results,
-                        &input.allowed_domains,
-                        &input.blocked_domains,
-                    ))
-                }
-            })
-            .await
-            .map_err(|source| {
-                WebAccessError::new(
-                    WebAccessCode::WebSearchParseFailed,
-                    "Search response could not be parsed.",
-                )
-                .with_source(source)
-            })??;
-            Ok(SearchOutput::direct(
+            let fetch_ms = started.elapsed().as_millis();
+            let extraction_started = Instant::now();
+            let results = extract(fetched, input.clone()).await?;
+            let extract_ms = extraction_started.elapsed().as_millis();
+            let mut output = SearchOutput::direct(
                 self.id(),
                 results,
                 u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
                     .unwrap_or(u64::MAX),
-            ))
+            );
+            output.timings = vec![serde_json::json!({"fetch_ms":fetch_ms,"extract_ms":extract_ms})];
+            Ok(output)
         }
         .boxed()
     }
+}
+
+async fn extract(
+    fetched: crate::web_access::spool::FetchedBody,
+    input: SearchInput,
+) -> Result<Vec<super::contracts::SearchResult>, WebAccessError> {
+    let status = fetched.status;
+    tokio::task::spawn_blocking({
+        move || {
+            let bytes = fetched.read_all().map_err(|source| {
+                WebAccessError::new(
+                    WebAccessCode::WebAccessSpoolFailed,
+                    "Search response could not be read.",
+                )
+                .with_source(source)
+            })?;
+            let html = String::from_utf8_lossy(&bytes);
+            if !(200..300).contains(&status) {
+                return Err(WebAccessError::new(
+                    WebAccessCode::WebSearchRequestFailed,
+                    format!("DuckDuckGo search failed with HTTP {status}."),
+                ));
+            }
+            if crate::web_access::search::is_duckduckgo_challenge(&html) {
+                return Err(WebAccessError::new(
+                    WebAccessCode::WebSearchChallenge,
+                    "DuckDuckGo returned an anti-bot challenge page.",
+                ));
+            }
+            Ok(parse_results(
+                &html,
+                input.max_results,
+                &input.allowed_domains,
+                &input.blocked_domains,
+            ))
+        }
+    })
+    .await
+    .map_err(|source| {
+        WebAccessError::new(
+            WebAccessCode::WebSearchParseFailed,
+            "Search response could not be parsed.",
+        )
+        .with_source(source)
+    })?
 }

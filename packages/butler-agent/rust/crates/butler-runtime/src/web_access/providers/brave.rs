@@ -66,6 +66,8 @@ impl SearchProvider for BraveWebSearchProvider {
                 .header(reqwest::header::ACCEPT, "application/json")
                 .header("X-Subscription-Token", &self.api_key);
             let (status, bytes) = response_bytes(access, request, cancellation).await?;
+            let fetch_ms = started.elapsed().as_millis();
+            let extraction_started = Instant::now();
             if !(200..300).contains(&status) {
                 return Err(http_error("Brave", status));
             }
@@ -83,11 +85,13 @@ impl SearchProvider for BraveWebSearchProvider {
                 .flatten()
                 .filter_map(parse_result)
                 .collect();
-            Ok(SearchOutput::direct(
+            let mut output = SearchOutput::direct(
                 self.id(),
                 filter_results(results, input),
                 elapsed_ms(started),
-            ))
+            );
+            output.timings = vec![serde_json::json!({"fetch_ms":fetch_ms,"extract_ms":extraction_started.elapsed().as_millis()})];
+            Ok(output)
         }
         .boxed()
     }

@@ -18,6 +18,21 @@ pub fn access(data_root: PathBuf, search_endpoint: &str) -> WebAccess {
     )
 }
 
+/// Offline smoke composition with the real planner and named loopback fixtures.
+pub fn access_with_planner(
+    data_root: PathBuf,
+    search_endpoint: &str,
+    prompt: Arc<dyn butler_models::models::ProviderPromptPort>,
+) -> WebAccess {
+    configured(
+        data_root,
+        search_endpoint,
+        Some(prompt),
+        Arc::new(DirectPageRoute),
+        &[search_endpoint],
+    )
+}
+
 /// Web access with an optional planner prompt and page route. `fixtures`
 /// names the loopback servers the test runs: the egress guard's documented
 /// test exception (`LoopbackFixtures`); every other private address is refused.

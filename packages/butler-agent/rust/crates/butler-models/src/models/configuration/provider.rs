@@ -137,7 +137,7 @@ impl ModelConfiguration {
                 &read,
                 &metadata.provider_id,
                 &metadata.model_ref,
-                registered,
+                registered.as_ref(),
             )
             .await?;
         let local_base = read
@@ -150,7 +150,7 @@ impl ModelConfiguration {
             &metadata.provider_id,
             &metadata.model_id,
             metadata.hosted_api_shape,
-            registered,
+            registered.as_ref(),
             local_base,
             auth.mode(),
         )?;
@@ -344,11 +344,11 @@ fn effective_model(
     }
 }
 
-fn registered_config<'a>(
-    read: &'a ModelConfigurationRead,
+fn registered_config(
+    read: &ModelConfigurationRead,
     provider: &str,
     model_ref: &str,
-) -> Option<&'a RegisteredHostedModelConfig> {
+) -> Option<RegisteredHostedModelConfig> {
     let parsed = parse_model_ref(model_ref);
     read.registered
         .iter()
@@ -360,6 +360,29 @@ fn registered_config<'a>(
             read.default_connection
                 .as_ref()
                 .filter(|value| value.model_ref == parsed.canonical_ref)
+        })
+        .cloned()
+        .or_else(|| {
+            let preset = read.catalog.search_planning_preset(provider)?;
+            if preset.model != parsed.canonical_ref {
+                return None;
+            }
+            let connection = read
+                .registered
+                .iter()
+                .find(|entry| {
+                    entry.provider_id == provider
+                        && entry.model_ref == read.catalog.view().default_model_ref
+                })
+                .or_else(|| {
+                    read.default_connection
+                        .as_ref()
+                        .filter(|entry| entry.provider_id == provider)
+                })?;
+            let mut planning = connection.clone();
+            planning.model_ref = parsed.canonical_ref;
+            planning.model_id = parsed.model_id;
+            Some(planning)
         })
 }
 #[expect(
