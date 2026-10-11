@@ -117,6 +117,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "main_screen_theme_custom_colors",
         "wallpaper",
         "composer_decoration",
+        "conversation_background",
         "translucent_sidebar",
         "smart_grouping_enabled",
         "desktop_notifications",
@@ -236,9 +237,11 @@ pub(super) fn normalize_model_fallback(
     json!({"enabled":enabled,"models":models})
 }
 
-/// Repeated composer preferences have no mutation or persistence work.
-pub(super) fn unchanged_composer_preferences(patch: &Value, current: &Value) -> bool {
-    unchanged_composer_fold(patch, current) || super::composer_decoration::unchanged(patch, current)
+/// Repeated surface preferences have no mutation or persistence work.
+pub(super) fn unchanged_preferences(patch: &Value, current: &Value) -> bool {
+    unchanged_composer_fold(patch, current)
+        || super::composer_decoration::unchanged(patch, current)
+        || super::conversation_background::unchanged(patch, current)
 }
 
 fn unchanged_composer_fold(patch: &Value, current: &Value) -> bool {

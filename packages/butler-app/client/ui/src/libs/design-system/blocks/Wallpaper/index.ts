@@ -61,6 +61,7 @@ export {
 export {
   BLOOM_WALLPAPER,
   CHERRY_BLOSSOM_WALLPAPER,
+  RISO_PRINT_WALLPAPER,
   DIATOM_WALLPAPER,
   DUSK_WALLPAPER,
   GRAIN_WALLPAPER,
@@ -78,4 +79,15 @@ export { WallpaperParamControls, withWallpaperParam, type WallpaperParamControls
 export { wallpaperLabelText, type WallpaperLocale } from "./labels";
 export { wallpaperImageDefaultDim } from "./imageMath";
 export { bundledWallpaperImage } from "./imageCache";
+export { setWallpaperHostConstrained } from "./hostSignals";
+export type { WallpaperEvent, WallpaperEventKind } from "./drift";
 export { renderWallpaperStill, wallpaperStillKey, type WallpaperStillSize, type WallpaperStillTarget } from "./still";
+export {
+  RISO_INTRO_TIMELINE_S,
+  createWallpaperIntroTimeline,
+  type WallpaperIntroEvent,
+  type WallpaperIntroLayout,
+  type WallpaperIntroMode,
+  type WallpaperIntroStart,
+  type WallpaperIntroTimeline,
+} from "./intro/introTimeline";

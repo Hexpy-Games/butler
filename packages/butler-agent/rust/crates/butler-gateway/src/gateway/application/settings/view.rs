@@ -322,6 +322,10 @@ fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
         json!(main_preset(stored.get("main_screen_theme_preset"), &colors)),
     );
     output.insert("main_screen_theme_custom_colors".into(), json!(colors));
+    output.insert(
+        super::conversation_background::KEY.into(),
+        super::conversation_background::view(stored.get(super::conversation_background::KEY)),
+    );
     let setting = wallpaper::view(stored.get(wallpaper::KEY), legacy_source(stored));
     output.insert(wallpaper::KEY.into(), setting);
     output.insert(

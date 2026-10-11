@@ -23,8 +23,28 @@
   height: 100%;
 }
 
+/* Drift modules: the top layer starts hidden (the engine steps its opacity); the
+   WebGL canvas they copy from stays out of the composite while they show. */
+.driftTop {
+  opacity: 0;
+}
+
+.root[data-drift-covered] {
+  visibility: hidden;
+}
+
+/* One uniform layer of the theme's paper over the whole wallpaper. */
+.paper {
+  background: var(--riso-paper-day);
+}
+
+.paper[data-tone="dark"] {
+  background: var(--riso-paper-night);
+}
+
+/* Drift modules draw a static print under reduced motion and are not dimmed. */
 @media (prefers-reduced-motion: reduce) {
-  .root {
+  .root:not([data-drift-layer]) {
     opacity: 0.72;
   }
 }

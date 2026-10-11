@@ -57,6 +57,18 @@ const SECURITY_ROUTES = Object.freeze({
   chooseBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/file", payload: true },
   deleteBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/delete", payload: true },
   cancelBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/cancel", payload: true },
+  // Payment methods and traveler details: card and identity numbers pass through main to the Agent's keychain store only.
+  listVault: { method: "GET", path: "/security/vault" },
+  addCard: { method: "POST", path: "/security/vault/cards", payload: true },
+  addTraveler: { method: "POST", path: "/security/vault/travelers", payload: true },
+  updateCard: { method: "PATCH", path: "/security/vault/cards", entry: true, payload: true },
+  updateTraveler: { method: "PATCH", path: "/security/vault/travelers", entry: true, payload: true },
+  deleteCard: { method: "DELETE", path: "/security/vault/cards", entry: true },
+  deleteTraveler: { method: "DELETE", path: "/security/vault/travelers", entry: true },
+  setCardSite: { method: "POST", path: "/security/vault/cards", entry: true, suffix: "/sites", payload: true },
+  setTravelerSite: { method: "POST", path: "/security/vault/travelers", entry: true, suffix: "/sites", payload: true },
+  revealCard: { method: "POST", path: "/security/vault/cards", entry: true, suffix: "/reveal", payload: true },
+  setPurchaseSite: { method: "POST", path: "/security/vault/purchase-sites", payload: true },
 });
 const ENTRY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -118,7 +130,7 @@ export async function requestSecurityRoute(
   if (route?.entry && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) return failure("invalid_request");
   const payload = input?.body?.payload;
   if (route?.payload && (typeof payload !== "object" || payload === null)) return failure("invalid_request");
-  const path = route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}` : route?.path;
+  const path = route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook || route?.payload;
   if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {

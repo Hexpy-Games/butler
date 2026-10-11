@@ -1234,6 +1234,20 @@ const butlerApp = Object.freeze({
   chooseBrowserPasswordExport: (payload) => requestSecurity("chooseBrowserPasswordExport", { payload }),
   deleteBrowserPasswordExport: (payload) => requestSecurity("deleteBrowserPasswordExport", { payload }),
   cancelBrowserPasswordExport: (payload) => requestSecurity("cancelBrowserPasswordExport", { payload }),
+  // Payment methods and traveler details (host only). Card and identity numbers
+  // go to main, then to the Agent's keychain store; only a card reveal, after
+  // the operating system verifies the user, answers a number.
+  listVault: () => requestSecurity("listVault"),
+  addCard: (payload) => requestSecurity("addCard", { payload }),
+  addTraveler: (payload) => requestSecurity("addTraveler", { payload }),
+  updateCard: ({ id, payload } = {}) => requestSecurity("updateCard", { id, payload }),
+  updateTraveler: ({ id, payload } = {}) => requestSecurity("updateTraveler", { id, payload }),
+  deleteCard: ({ id } = {}) => requestSecurity("deleteCard", { id }),
+  deleteTraveler: ({ id } = {}) => requestSecurity("deleteTraveler", { id }),
+  setCardSite: ({ id, payload } = {}) => requestSecurity("setCardSite", { id, payload }),
+  setTravelerSite: ({ id, payload } = {}) => requestSecurity("setTravelerSite", { id, payload }),
+  revealCard: ({ id, payload } = {}) => requestSecurity("revealCard", { id, payload }),
+  setPurchaseSite: (payload) => requestSecurity("setPurchaseSite", { payload }),
   // The file path is chosen in a native dialog and stays in main and the Agent.
   pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.

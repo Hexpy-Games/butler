@@ -16,6 +16,7 @@ mod native_import;
 mod oneclick;
 mod schedule;
 mod tool;
+mod vault;
 mod wait;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};

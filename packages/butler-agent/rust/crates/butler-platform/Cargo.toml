@@ -88,3 +88,9 @@ workspace = true
 
 [target.'cfg(windows)'.dependencies.windows-native-keyring-store]
 workspace = true
+
+# `user_auth`: Touch ID or the login password (LocalAuthentication) on macOS,
+# Windows Hello or the Windows credential prompt on Windows, behind a safe API
+# (the workspace forbids unsafe code). Other systems report Unavailable.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies.robius-authentication]
+version = "=0.3.1"

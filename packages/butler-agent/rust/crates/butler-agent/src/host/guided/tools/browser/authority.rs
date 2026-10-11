@@ -86,6 +86,9 @@ fn action_key(occurrence: &str, input: &Value) -> String {
     if input.get("sign_in").is_some() {
         return format!("{occurrence}:sign_in");
     }
+    if input.get("pay").is_some() {
+        return format!("{occurrence}:pay");
+    }
     if input.get("wait").is_some() {
         return format!("{occurrence}:wait");
     }

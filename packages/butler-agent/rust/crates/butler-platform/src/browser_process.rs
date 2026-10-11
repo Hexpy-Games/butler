@@ -12,6 +12,9 @@
 //! tree: renderers, GPU and utility processes included. Its output goes to a
 //! log file, never to this process's stdio.
 
+mod identity;
+pub use identity::chrome_identity;
+
 use std::ffi::OsString;
 use std::io;
 use std::path::Path;

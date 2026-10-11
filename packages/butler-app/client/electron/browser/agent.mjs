@@ -5,19 +5,23 @@ import { noteNativeContext } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose, resolveDialog } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
 import { guardUrl, installNavigationGuard } from "./guard.mjs";
+import { agentPopupAllowed } from "./popup-policy.mjs";
 import { observeTab } from "./observe.mjs";
 import { prepareBatch, actBatch } from "./act.mjs";
 import { screenshotTab } from "./capture.mjs";
 import { zoomTab } from "./zoom.mjs";
 import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed-in.mjs";
 import { fillSignIn } from "./signin-fill.mjs";
+import { fillPay, inspectPay } from "./pay-fill.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
+  // A pop-up the user took somewhere Butler may not go closes instead of returning.
+  if (holder === "agent" && tab.opener && tab.holder === "user" && tab.url && !agentPopupAllowed(tab.policy ?? {}, tab.popupParentUrl, tab.url)) { browser.close(tab.id); return; }
   if (holder === "user") releaseHold(browser, tab);
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
-  if (holder === "agent") tab.signinStep = null;
+  if (holder === "agent") { tab.signinStep = null; tab.payStep = null; }
   browser.publish();
 }
 export function wireAgentTab(browser, tab) {
@@ -27,6 +31,8 @@ export function wireAgentTab(browser, tab) {
 
   contents.on("did-frame-navigate", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   contents.on("did-navigate-in-page", () => { tab.epoch++; tab.observation = null; browser.publish(); });
+  // A new top-level page holds no field Butler filled from a saved item.
+  contents.on("did-navigate", () => { tab.vaultFilled = false; });
   const takeover = input => {
     if (!tab.expectedInputs?.some(expected => expected.type === input.type && (expected.x === undefined || expected.x === input.x && expected.y === input.y)) && tab.holder === "agent" && ["mouseDown", "keyDown"].includes(input.type)) controlTab(browser, tab, "user");
   };
@@ -44,8 +50,7 @@ export function wireAgentTab(browser, tab) {
 }
 export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
-  if (contents.debugger.isAttached()) return;
-  contents.debugger.attach("1.3");
+  if (tab.debuggerReady) return;
   wireDialogs(browser,tab);
   tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
   contents.debugger.on("message",(_event,method,value,sessionId)=>{
@@ -56,14 +61,13 @@ export function connectDebugger(browser, tab) {
         const {frameTree}=await contents.debugger.sendCommand("Page.getFrameTree",{},value.sessionId);
         tab.frameSessions.set(frameTree.frame.id,value.sessionId);
         await contents.debugger.sendCommand("Runtime.enable",{},value.sessionId);
-        await contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true},value.sessionId);
       })();
       tab.frameAttachPromises.set(value.sessionId,ready);void ready.catch(()=>{});
     }
     if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
   });
-  tab.debuggerReady=Promise.all([contents.debugger.sendCommand("Runtime.enable"),contents.debugger.sendCommand("Target.setAutoAttach",{autoAttach:true,waitForDebuggerOnStart:false,flatten:true})]);
-  void contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true}).catch(()=>{});
+  tab.debuggerReady=tab.identityReady.then(() => contents.debugger.sendCommand("Runtime.enable"));
+  void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
 export function emulation(tab) {
   if (!tab.agent || !tab.view || !tab.loaded) return;
@@ -109,7 +113,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "traveler.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -172,6 +176,8 @@ async function executeFrame(browser, frame) {
   if (op === "tab.zoom") return zoomTab(tab, args);
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "signin.fill") return fillSignIn(browser, tab, args, controlTab);
+  if (op === "pay.inspect") return inspectPay(browser, tab, args, controlTab);
+  if (op === "pay.fill" || op === "traveler.fill") return fillPay(browser, tab, args, controlTab);
   if (op === "tab.act") {
     if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
@@ -199,7 +205,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.view.webContents.loadURL(args.url); }
+  try { await tab.identityReady; await tab.view.webContents.loadURL(args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

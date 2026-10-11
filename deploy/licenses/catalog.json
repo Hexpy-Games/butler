@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "714ebe25f13c4ba3cb5666febaa8b048f1b1f848b34f65907d787dfc1a8093e1",
     "deploy/licenses/inputs.mjs": "8b8f71b92ff873d77dade2f90fbea05395cfdc3151c900607774de31796a7657",
     "deploy/licenses/refresh.py": "27180cf428992f1976388063f42faae7113255f6630f15e48c6012b4ee9268bc",
-    "packages/butler-agent/rust/Cargo.lock": "259039e3ac591c6b01e97bef0d68e93e8005ff50e0c263bc1ed99b38e2db1fbc",
+    "packages/butler-agent/rust/Cargo.lock": "fad7a0755914a9a43f2e5762b0b26f32e07f0c53aef9b763fdaab764e4cf323a",
     "packages/butler-agent/rust/Cargo.toml": "84e021c080b775ab00c9967a4ec8c75c8c46fced4a9eab1b8d30d4fab2d4ef61",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "ba2918e2519ba5f268c39525cac8ff244864d03a28fd78ef173e9b26c7da245a",
@@ -19,7 +19,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "6823161ebcffd1ab5c100a48c5891a4a754273fce5b7f13b78a10fab1dc9a3d9",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "b3c9ea495892dee248dea085c4bc22e026152801fe20317bb17492ef4104d566",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "03b414dc5ef889248322932afad72105f28e6bd4d26b103da4b591f359e5607f",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "981c39eae0e26a39b034c3edb8e4ae5f9ecee881aee92f0f2419f60bf09a4ba2",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "2aef74f12eec60a86d3c8e5047cd56c4bda1efd6ba402d5f456ffec89b46b798",
@@ -1232,7 +1232,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g==",
       "links": [
@@ -1324,7 +1324,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg==",
       "links": [
@@ -1370,7 +1370,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-jCi/QKUM2r1Ju5a3J64TH2A5SpKAgh0LpknyqdQ4m6DCV0xJ2HG1xARRwNGPQfi1SLdLWZ1OJz6F4OMBBNiGJA==",
       "links": [
@@ -1416,7 +1416,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-1UEWRX6jnOA2y4H5WczZ44gOOjTEmlqv1uNW4GAJEO5+bauCBhv8snY65Iw5/VOS/ghKN9gr2KjnLKxrsvoMVw==",
       "links": [
@@ -1531,7 +1531,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-kGkGegYIdQsOb4XjsfM97rXsiHaBwco+hFI66oO4s9LU+PLAC5oJ7khdOVFxkhsmlbpUqDAvXw11CluXP+jkHg==",
       "links": [
@@ -1899,7 +1899,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-FkBMwD+qbGQeMu1cOHnuGB6x4yzPjho8ap5WtbEJ26umhgqVXbhekKUQO+hZEL1vU92a3wHwdp0HAcqAUF5iDg==",
       "links": [
@@ -1968,7 +1968,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-Il0+boE7w/XebUHyBjroE+DbByORGR9KKmITzbR7MyQ4akpORYP/ZmbhAr0DG7RmmBqoOnZdy2QlvajJ2QA59g==",
       "links": [
@@ -1991,7 +1991,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-RbJRS4UWQFkzHTTwVymMTUv8EqYhOp8dOOviLj2ugtTiXRaRQS7GLGxZTLL1jWhMeoSCf5zmcZkqTl9IiYfXcQ==",
       "links": [
@@ -2014,7 +2014,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-2dHfToCj/pzca2Ck724OZ5L0EVrr3eHRNsG/b3xQJLA2hZpVCS99bLAX+hm1IHXDEnzU6by5z/5MIY794/a8NQ==",
       "links": [
@@ -2037,7 +2037,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-QTYuDesS0VtuHNNvMh+CjlKJ4LJickCMUAqjlE3+j8w+RlRpwyX3apEQKGFzbZGdo7XNG1tXa+bQqIE7HIXT2w==",
       "links": [
@@ -2060,7 +2060,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-ewrXRDTAqAXlkl6t/fkXWNAhFX9I+CkKlw6zjEwk86RSPKwZr3xpBRso655aqYafwtnbpHLj6toFzmd6xdVptQ==",
       "links": [
@@ -2106,7 +2106,7 @@
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "Radix repository MIT license from react-dialog 1.2.0/LICENSE"
+        "Radix repository MIT license from react-dialog 1.1.15/LICENSE"
       ],
       "integrity": "sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==",
       "links": [
@@ -3464,20 +3464,17 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
-        "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490"
+        "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb"
       ],
       "files": [
-        "license",
-        "node_modules/highlight.js/LICENSE"
+        "license"
       ],
       "integrity": "sha512-0JNhgFoPvP6U6lE/UdVsSq99tn6DhjjpAj5MxG49ewd2mOBVtwWYIT8ClyABhq198aXXODMU6Ox8DrGy/CpTZQ==",
       "links": [
         "https://www.npmjs.com/package/lowlight/v/3.3.0"
       ],
       "copyright": [
-        "Copyright (c) Titus Wormer <tituswormer@gmail.com>",
-        "Copyright (c) 2006, Ivan Sagalaev."
+        "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
       ]
     },
     {
@@ -4526,20 +4523,17 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b"
       ],
       "files": [
-        "license",
-        "node_modules/@types/unist/LICENSE"
+        "license"
       ],
       "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
       "links": [
         "https://www.npmjs.com/package/parse-entities/v/4.0.2"
       ],
       "copyright": [
-        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
-        "Copyright (c) Microsoft Corporation."
+        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>"
       ]
     },
     {
@@ -21610,6 +21604,28 @@
       "copyright": []
     },
     {
+      "id": "rust:objc2-local-authentication@0.3.2",
+      "name": "objc2-local-authentication",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://github.com/madsmtm/objc2/tree/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
+        "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
+      ],
+      "files": [
+        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+      ],
+      "links": [
+        "https://crates.io/crates/objc2-local-authentication/0.3.2"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:objc2@0.6.5",
       "name": "objc2",
       "version": "0.6.5",
@@ -23753,6 +23769,28 @@
       ]
     },
     {
+      "id": "rust:retry@2.2.0",
+      "name": "retry",
+      "version": "2.2.0",
+      "license": "MIT",
+      "source": "https://github.com/jimmycuadra/retry/tree/f3c92f309a4155b71b5b2a4b8be159911deeb265",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "a2b3fcd275f1f936b30856ce02aa8b1d137b06cda13e9b679355890a9618ba0f"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/jimmycuadra/retry/blob/f3c92f309a4155b71b5b2a4b8be159911deeb265/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015-2020 Jimmy Cuadra and Sam Rijs"
+      ]
+    },
+    {
       "id": "rust:rfd@0.15.4",
       "name": "rfd",
       "version": "0.15.4",
@@ -23894,6 +23932,29 @@
       ],
       "copyright": [
         "Copyright (c) 2016 The roaring-rs developers."
+      ]
+    },
+    {
+      "id": "rust:robius-authentication@0.3.1",
+      "name": "robius-authentication",
+      "version": "0.3.1",
+      "license": "MIT",
+      "source": "https://github.com/project-robius/robius/tree/e18299f7c6a0efbb2ee93cebb83d41267c745f04",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "4411ed6ac0ab8ea859b56748e0b654a951a15205c165c63c0f1b63342ed55fac"
+      ],
+      "files": [
+        "https://github.com/project-robius/robius/tree/e18299f7c6a0efbb2ee93cebb83d41267c745f04/LICENSE"
+      ],
+      "links": [
+        "https://github.com/project-robius/robius/blob/e18299f7c6a0efbb2ee93cebb83d41267c745f04/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2023-2025 Project Robius"
       ]
     },
     {
@@ -27771,6 +27832,31 @@
       ]
     },
     {
+      "id": "rust:windows-core@0.56.0",
+      "name": "windows-core",
+      "version": "0.56.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/ae896c59e4d05895cb17d3b2c3c7c56ccac47207",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/core/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/core/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-core@0.61.2",
       "name": "windows-core",
       "version": "0.61.2",
@@ -27846,6 +27932,31 @@
       ]
     },
     {
+      "id": "rust:windows-implement@0.56.0",
+      "name": "windows-implement",
+      "version": "0.56.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/ae896c59e4d05895cb17d3b2c3c7c56ccac47207",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/implement/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/implement/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-implement@0.60.2",
       "name": "windows-implement",
       "version": "0.60.2",
@@ -27865,6 +27976,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-interface@0.56.0",
+      "name": "windows-interface",
+      "version": "0.56.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/ae896c59e4d05895cb17d3b2c3c7c56ccac47207",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/interface/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/interface/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -28018,6 +28154,31 @@
       ],
       "copyright": [
         "Copyright (c) <year> <copyright holders>"
+      ]
+    },
+    {
+      "id": "rust:windows-result@0.1.2",
+      "name": "windows-result",
+      "version": "0.1.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/15947886be041bebd0fe670fd4e73f18d95100d0",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/15947886be041bebd0fe670fd4e73f18d95100d0/crates/libs/result/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/15947886be041bebd0fe670fd4e73f18d95100d0/crates/libs/result/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
       ]
     },
     {
@@ -28290,6 +28451,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows@0.56.0",
+      "name": "windows",
+      "version": "0.56.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/ae896c59e4d05895cb17d3b2c3c7c56ccac47207",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."

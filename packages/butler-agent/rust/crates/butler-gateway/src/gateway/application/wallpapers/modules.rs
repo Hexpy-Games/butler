@@ -316,7 +316,7 @@ impl AppApplication {
         if !users.is_empty() {
             return Err(GatewayApplicationError::public(
                 409,
-                "wallpaper_module_in_use",
+                "wallpaper_in_use",
                 format!("Wallpaper module is in use by {}.", users.join(", ")),
             ));
         }

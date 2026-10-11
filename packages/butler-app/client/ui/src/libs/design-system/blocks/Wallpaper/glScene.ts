@@ -1,6 +1,7 @@
 // One frame of a selected scene: image pre-fit, a two-pass module's cached base, the module pass, then dim.
 import { NO_WALLPAPER_CONTENT_RECT } from "./contentRect";
 import { drawWallpaperProgram, type WallpaperDrawFrame, type WallpaperDrawProgram, type WallpaperImageInput } from "./glDraw";
+import { restWallpaperPrintFrame, scaleWallpaperRect, wallpaperDensitySize } from "./glPrint";
 import type { CompiledWallpaperProgram } from "./glProgram";
 import type { WallpaperGpuResources } from "./glResources";
 import { buildWallpaperFragmentSource } from "./glsl";
@@ -12,6 +13,8 @@ import type { WallpaperImageScene } from "./registry";
 export interface WallpaperDrawScene extends WallpaperDrawProgram {
   /** `overlay.frag` of a two-pass module; `compiled` is then its base (shader.frag), drawn into a cache. */
   overlay: CompiledWallpaperProgram | null;
+  /** The density pass of a print module (`density.frag`); `compiled` is then its print pass. */
+  density?: CompiledWallpaperProgram | null;
   image: WallpaperImageScene | null;
   /** Identity of this selection (module, values, tone, image options): a new one redraws the cached base. */
   revision: number;
@@ -55,6 +58,27 @@ function baseKey({ compiled, revision }: WallpaperDrawScene, frame: WallpaperDra
   ].join("|");
 }
 
+let densityDraws = 0;
+
+/** A print module: its density pass at 1 texel per 4 CSS px (keep-outs scaled into it), then the print pass over it. */
+function drawPrint(gl: WebGL2RenderingContext, resources: WallpaperGpuResources, scene: WallpaperDrawScene, frame: WallpaperDrawFrame, image: SceneImageInput) {
+  const print = frame.print ?? restWallpaperPrintFrame([frame.width / frame.pixelRatio, frame.height / frame.pixelRatio]);
+  const size = wallpaperDensitySize(print.css);
+  const sx = size.width / frame.width;
+  const sy = size.height / frame.height;
+  const densityFrame: WallpaperDrawFrame = {
+    ...frame, ...size, pixelRatio: size.width / print.css[0],
+    contentRect: scaleWallpaperRect(frame.contentRect ?? NO_WALLPAPER_CONTENT_RECT, sx, sy),
+    print: { ...print, contentRect2: scaleWallpaperRect(print.contentRect2, sx, sy) },
+  };
+  // Every print frame moves the field, so the density pass always redraws.
+  densityDraws += 1;
+  const density = resources.density.use(size.width, size.height, String(densityDraws), () => {
+    drawWallpaperProgram(gl, resources, { ...scene, compiled: scene.density! }, densityFrame, image);
+  });
+  drawWallpaperProgram(gl, resources, scene, { ...frame, print }, image, undefined, density);
+}
+
 /**
  * Draws one frame into the default framebuffer. A two-pass module's
  * `shader.frag` is drawn at `u_time = 0` into a cached texture only when an
@@ -64,7 +88,9 @@ function baseKey({ compiled, revision }: WallpaperDrawScene, frame: WallpaperDra
  */
 export function drawWallpaperScene(gl: WebGL2RenderingContext, resources: WallpaperGpuResources, scene: WallpaperDrawScene, frame: WallpaperDrawFrame) {
   const image = imageInput(gl, resources, scene, frame);
-  if (scene.overlay) {
+  if (scene.density) {
+    drawPrint(gl, resources, scene, frame, image);
+  } else if (scene.overlay) {
     const base = resources.base.use(frame.width, frame.height, baseKey(scene, frame, image), () => {
       drawWallpaperProgram(gl, resources, scene, { ...frame, timeMs: 0 }, image);
     });
