@@ -147,6 +147,11 @@ pub(super) async fn operation(
         .clone()
         .expect("model receives complete result");
     if case.refused {
+        for [step, received, matched, logged] in script.diagnostics.lock().unwrap().iter() {
+            eprintln!(
+                "command_provider_callback step={step} received_us={received} matched_us={matched} logged_us={logged}"
+            );
+        }
         for line in s
             .agent
             .logs()

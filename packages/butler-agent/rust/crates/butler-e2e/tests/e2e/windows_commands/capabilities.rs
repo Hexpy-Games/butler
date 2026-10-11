@@ -7,6 +7,8 @@ mod current_work;
 mod delegation;
 #[path = "capabilities/operation.rs"]
 mod operation;
+#[path = "capabilities/refusal_latency.rs"]
+mod refusal_latency;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{

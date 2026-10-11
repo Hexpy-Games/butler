@@ -29,6 +29,7 @@ pub(super) struct Script {
     sent: Mutex<Option<Instant>>,
     pub result: Mutex<Option<(Value, Duration)>>,
     pub disposition: Mutex<Option<Value>>,
+    pub diagnostics: Mutex<Vec<[u128; 4]>>,
     selected: Mutex<Instant>,
 }
 
@@ -52,6 +53,7 @@ impl Script {
         *self.sent.lock().unwrap() = None;
         *self.result.lock().unwrap() = None;
         *self.disposition.lock().unwrap() = None;
+        self.diagnostics.lock().unwrap().clear();
         *self.selected.lock().unwrap() = Instant::now();
     }
 }
@@ -70,6 +72,7 @@ pub(super) async fn start(
         sent: Mutex::new(None),
         result: Mutex::new(None),
         disposition: Mutex::new(None),
+        diagnostics: Mutex::new(Vec::new()),
         selected: Mutex::new(Instant::now()),
     });
     let router = Router::new()
@@ -85,6 +88,7 @@ async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
+    let received = utc_us();
     let delegated = script.delegated.load(Ordering::SeqCst);
     let work = script.work.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
@@ -92,6 +96,7 @@ async fn reply(
         &body,
         &butler_e2e::e2e::sanitize::Placeholders::default(),
     );
+    let matched = utc_us();
     let child = key.user_request.starts_with("role: steward");
     if !child && key.user_request != PROMPT && key.user_request != DELEGATE_PROMPT {
         return (
@@ -129,6 +134,11 @@ async fn reply(
             .filter_map(|v| v["work"]["work_id"].as_str())
             .collect::<Vec<_>>()
     );
+    script
+        .diagnostics
+        .lock()
+        .unwrap()
+        .push([step as u128, received, matched, utc_us()]);
     let objective = format!("Verify {} {}", case.tool, case.args);
     if step == 4 {
         let output = outputs.last().expect("tool result").clone();
