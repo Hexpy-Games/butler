@@ -25,7 +25,7 @@ const STUB_MODEL_LABEL = /^Stub\b/u;
 const STUB_REASONING_LABEL = "Instant";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
-const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
+const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root, ".tmp", "app-layout-smoke"));
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
 const turnActivityTimeoutMs = 5_000;
@@ -54,7 +54,7 @@ async function screenshot(page: Page, name: string): Promise<string> {
   await page.screenshot({ path, fullPage: false });
   const stats = statSync(path);
   assert(stats.size > 8_000, `screenshot is unexpectedly small: ${name}`);
-  return `.tmp/app-layout-smoke/${name}`;
+  return path;
 }
 
 async function expectLocatorCount(
@@ -2479,7 +2479,7 @@ try {
   await wallpaperPicker.waitFor({ state: "visible" });
   const wallpaperTile = (key: string) =>
     wallpaperPicker.locator(`[data-option="${key}"] [role="radio"]`);
-  for (const key of ["none", "live:butler.bloom", "live:butler.silk"]) {
+  for (const key of ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk"]) {
     await wallpaperTile(key).waitFor({ state: "visible" });
   }
   await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
@@ -3014,7 +3014,8 @@ try {
   // widths; measure the settled layout, not the opening transition.
   await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
   await page.waitForTimeout(400);
-  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.bloom");
+  await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.riso-print");
+  assert(await page.locator('[data-slot="conversation-background"] [data-test-class~="conversation-wallpaper"]').count() === 1, "One conversation wallpaper layer");
   const emptyStateLayout = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate(async (element) => {
@@ -3037,7 +3038,7 @@ try {
       const composer = document.querySelector<HTMLElement>(
         '[data-test-class~="composer-card"]',
       );
-      const fluid = element.querySelector<HTMLElement>(
+      const fluid = element.closest('[data-test-class~="conversation"]')?.querySelector<HTMLElement>(
         '[data-test-class~="new-chat-fluid-gradient"]',
       );
       const railViewport = element.querySelector<HTMLElement>(
@@ -3088,7 +3089,7 @@ try {
       const firstDescriptionRect = firstDescription?.getBoundingClientRect();
       const firstMetaRect = firstMeta?.getBoundingClientRect();
       const scrollStyle = scroll ? getComputedStyle(scroll) : null;
-      const fluidStyle = fluid ? getComputedStyle(fluid) : null;
+      const fluidStyle = radiusStyle ?? (fluid ? getComputedStyle(fluid) : null);
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
       return {
@@ -3115,7 +3116,7 @@ try {
             fluidRect.right >= emptyRect.right - 1
           : false,
         fluidPainted: fluid?.getAttribute("data-wallpaper-state") === "painted"
-          && fluid.getAttribute("data-painted-module") === "butler.bloom"
+          && fluid.getAttribute("data-painted-module") === "butler.riso-print"
           && fluid.getAttribute("data-painted-tone") === fluid.getAttribute("data-tone"),
         fluidTopLeftRadius: Number.parseFloat(
           fluidStyle?.borderTopLeftRadius ?? "0",
@@ -3417,7 +3418,7 @@ try {
       const composer = document.querySelector<HTMLElement>(
         "[data-test-class~='composer-card']",
       );
-      const fluid = element.querySelector<HTMLElement>(
+      const fluid = element.closest('[data-test-class~="conversation"]')?.querySelector<HTMLElement>(
         "[data-test-class~='new-chat-fluid-gradient']",
       );
       const titleBox = title?.getBoundingClientRect();

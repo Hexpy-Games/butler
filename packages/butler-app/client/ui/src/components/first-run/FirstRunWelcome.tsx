@@ -3,8 +3,7 @@ import { useEffect } from "react";
 import {
   Button,
   ButtonContainer,
-  ButlerThinkingMark,
-  IconTile,
+  SetupWizardMark,
   Field,
   FieldLabel,
   NativeSelect,
@@ -33,9 +32,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
   return (
     <SetupWizardContent surface="solid">
       <Stack cross="center" gap="md">
-        <IconTile size="xl" tone="plain">
-          <ButlerThinkingMark state={readiness.status === "preparing" ? "working" : "idle"} />
-        </IconTile>
+        <SetupWizardMark />
         <Typo.H3 align="center" as="h1">{copy.welcomeTitle}</Typo.H3>
         <Typo.Body align="center" tone="secondary">{copy.welcomeLede}</Typo.Body>
       </Stack>
@@ -51,7 +48,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           {SUPPORTED_UI_LANGUAGES.map(({ value, label }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
         </NativeSelect>
       </Field>
-      <Stack gap="sm">
+      <Stack data-setup-rows gap="sm">
         <ButtonContainer size="lg" align="column" cross="stretch">
           <Button
             id="first-run-start"

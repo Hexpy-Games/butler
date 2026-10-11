@@ -33,7 +33,8 @@ async fn cbg_07_one_settings_write_and_zero_idle_bytes() -> Result<(), HarnessEr
     assert_eq!(repeated.status, 200, "{}", repeated.text);
     assert_eq!(count(), 1, "an unchanged PATCH has zero writes");
     drop(db);
-    let mut watch = super::super::idle_resources::writes::Watch::open(&s.sandbox.data)?;
+    let mut watch =
+        super::super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     let pid = s.agent.pid().unwrap();
     let before = usage::sample(pid)?.expect("process write counters available");
     tokio::time::sleep(Duration::from_secs(60)).await;

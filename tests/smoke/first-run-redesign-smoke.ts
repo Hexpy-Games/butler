@@ -8,6 +8,7 @@ import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
 import { settleFirstRun } from "../support/first-run-visual";
+import { installIntroProbe, assertIntroIdle } from "../support/first-run-intro";
 
 const runtime = await nativeSmokeRuntime(import.meta.url);
 if (runtime !== null) process.exit(runtime);
@@ -22,6 +23,13 @@ let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
 
 async function capture(page: Page, name: string) {
   await settleFirstRun(page);
+  assert.equal(await page.locator('[data-morph="run"]').count(), 0, "morph settled");
+  assert.equal(await page.locator('[data-test-class="setup-wizard-morph-surface"]').count(), 1, "one DS morph surface");
+  assert.equal(await page.locator('[data-test-class="setup-wizard-morph-surface"]:not([hidden])').count(), 0, "morph surface removed at rest");
+  if (await page.locator("#first-run-language").count()) {
+    assert.equal(await page.locator("[data-setup-mark]").count(), 1, "plain still logo");
+    assert.equal(await page.locator("[data-setup-rows]").count(), 1, "five-line intro rows");
+  }
   const geometry = await page.evaluate(() => {
     const card = document.querySelector('[data-surface="raised-opaque"]')!;
     const box = card.getBoundingClientRect();
@@ -136,6 +144,7 @@ async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "d
   const copy = firstRunCopy[language], prefix = `after-${language}-${theme}`;
   await reset(page, language, theme);
   await capture(page, `${prefix}-welcome`);
+  measurements.push({ name: `${prefix}-intro-idle`, ...await assertIntroIdle(page) });
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await capture(page, `${prefix}-consent`);
   await page.getByRole("button", { name: copy.back, exact: true }).click();
@@ -232,6 +241,7 @@ async function renewalAndRerun(page: Page) {
 try {
   app = await firstRunElectron(server, stub.url);
   const page = app.page;
+  await installIntroProbe(page);
   await page.addInitScript(() => {
     const state = window as unknown as { signInOpens: string[] };
     state.signInOpens = [];

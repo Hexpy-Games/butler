@@ -1,5 +1,10 @@
-const constrainedThermalStates = new Set(["fair", "serious", "critical"]);
-const supportedThermalStates = new Set(["unknown", "nominal", ...constrainedThermalStates]);
+const constrainedThermalStates = new Set(["serious", "critical"]);
+const supportedThermalStates = new Set([
+  "unknown",
+  "nominal",
+  "fair",
+  ...constrainedThermalStates,
+]);
 
 function initialOnBattery(powerMonitor) {
   try {

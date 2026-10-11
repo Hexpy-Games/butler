@@ -241,7 +241,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
       ) : view.kind === "project-dashboard" ? (
         <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary></AdaptiveShellCard>
       ) : (
-        <ErrorBoundary key={activeChatId} scope="conversation"><ConversationBrowserFrame
+        <ErrorBoundary resetKey={activeChatId} scope="conversation"><ConversationBrowserFrame
           sessionId={activeChatId} paneOpen={paneOpen} chatWidth={chatWidth} notice={<LiveConnectionNotice />} /></ErrorBoundary>
       )}
     </AdaptiveShellWorkspace>
