@@ -1,5 +1,5 @@
-//! `browser_pay_fill {tab, card_ref?}` and `browser_traveler_fill {tab,
-//! traveler_ref?, section_ref?}`: Butler fills a saved card or traveler
+//! `browser_pay_fill {tab, card_ref?}` and `browser_autofill_fill {tab,
+//! profile_id, targets}`: Butler fills a saved card or autofill
 //! profile without the model ever seeing a value. The model sees nicknames
 //! and the last four card numbers only. Policy `ask` raises one exact card
 //! naming the merchant origin, the amount when the page shows one and the
@@ -54,12 +54,12 @@ pub(super) async fn execute(
         tab: &tab,
     };
     let card = call.name == "browser_pay_fill";
-    let (kind, section) = (if card { "card" } else { "traveler" }, &args["section_ref"]);
+    let (kind, section) = (if card { "card" } else { "profile" }, &args["section_ref"]);
     let signal = invocation.cancellation;
     let request = (
         "pay.inspect",
         &tab,
-        &json!({"kind": kind, "section_ref": section}),
+        &json!({"kind": kind, "section_ref": section, "targets": args["targets"]}),
     );
     let inspected = grant::call(owner, call, occurrence, &client, request, signal).await?;
     if inspected["status"] == "user_required" {
@@ -75,13 +75,13 @@ pub(super) async fn execute(
     if looked["status"] != "ok" {
         return encoded(&looked);
     }
-    let reference = &args[if card { "card_ref" } else { "traveler_ref" }];
+    let reference = &args[if card { "card_ref" } else { "profile_id" }];
     match choose(
-        &looked[if card { "cards" } else { "travelers" }],
+        &looked[if card { "cards" } else { "profiles" }],
         reference,
         card,
     ) {
-        Ok(item) => fill(&this, (&inspected, &looked), &item, kind, section).await,
+        Ok(item) => fill(&this, (&inspected, &looked), &item, kind, &args["targets"]).await,
         Err(refusal) => encoded(&refusal),
     }
 }
@@ -92,7 +92,7 @@ async fn fill(
     (inspected, looked): (&Value, &Value),
     item: &Value,
     kind: &str,
-    section: &Value,
+    targets: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut approval = None;
     if item["allowed"] != true {
@@ -106,10 +106,10 @@ async fn fill(
     let op = if kind == "card" {
         "pay.fill"
     } else {
-        "traveler.fill"
+        "autofill.fill"
     };
     let args = json!({"item_id": item["id"], "top_origin": inspected["top_origin"],
-        "frame_origins": inspected["frame_origins"], "section_ref": section});
+        "frame_origins": inspected["frame_origins"], "targets": targets});
     let result = this
         .client
         .call(op, this.tab, &args, this.invocation.cancellation)
@@ -144,7 +144,7 @@ fn choose(items: &Value, reference: &Value, card: bool) -> Result<Value, Value> 
             if card {
                 json!({"card_ref": item["nickname"], "last4": item["last4"], "brand": item["brand"]})
             } else {
-                json!({"traveler_ref": item["nickname"], "fields": item["fields"]})
+                json!({"profile_id": item["id"], "nickname": item["nickname"], "fields": item["fields"]})
             }
         })
         .collect();
@@ -152,21 +152,28 @@ fn choose(items: &Value, reference: &Value, card: bool) -> Result<Value, Value> 
         let reason = if card {
             "no_saved_card"
         } else {
-            "no_saved_traveler"
+            "no_saved_autofill"
         };
         return Err(json!({"status":"not_dispatched","reason":reason,
             "recovery":"Nothing is saved for this. Ask the user to enter the details in the tab, then call browser_wait_for_user with reason secure_field; they can save items in Settings."}));
     }
     let wanted = reference.as_str().map(str::trim).filter(|r| !r.is_empty());
+    if !card && wanted.is_none() {
+        return Err(
+            json!({"status":"not_dispatched","reason":"choose_one","options":options,
+            "recovery":"Pass the profile_id the user chose."}),
+        );
+    }
     let matches: Vec<&Value> = match wanted {
         Some(wanted) => list
             .iter()
             .copied()
             .filter(|item| {
                 item["id"] == wanted
-                    || item["nickname"]
-                        .as_str()
-                        .is_some_and(|n| n.eq_ignore_ascii_case(wanted))
+                    || card
+                        && item["nickname"]
+                            .as_str()
+                            .is_some_and(|n| n.eq_ignore_ascii_case(wanted))
                     || card && item["last4"] == wanted.trim_start_matches(['*', '•', ' '])
             })
             .collect(),

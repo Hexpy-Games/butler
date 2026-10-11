@@ -2,7 +2,7 @@
 // Answers field kinds, page facts and short-lived refs; never a field value.
 
 /** Field targets, steps only the user can do, and the amount a page shows. */
-export function vaultScan({ sectionRef, markers }) {
+export function vaultScan({ sectionRef, markers, targets: requested }) {
   const refs = globalThis.__butlerVaultRefs = new Map();
   let next = 0;
   const keep = element => { const id = `v${++next}`; refs.set(id, new WeakRef(element)); return id; };
@@ -19,21 +19,29 @@ export function vaultScan({ sectionRef, markers }) {
     root = anchor;
     while (root.parentElement && [...root.querySelectorAll("input,select")].filter(element => vaultKind(element)).length < 2) root = root.parentElement;
   }
-  const controls = [...root.querySelectorAll("input,select")].filter(element => !element.disabled && shown(element));
+  const mapped = new Map();
+  if (Array.isArray(requested)) for (const target of requested) {
+    const element = globalThis.__butlerObservation?.refs?.get(target.ref)?.deref();
+    if (element?.isConnected && ["input", "select", "textarea"].includes(element.localName)
+      && !["number", "cvc", "name", "expiry", "exp_month", "exp_year", "pin_short"].includes(vaultKind(element))
+      && (element.type !== "password" || ["passport_number", "birth_date", "rrn"].includes(target.field))) mapped.set(element, target.field);
+  }
+  const controls = (Array.isArray(requested) ? [...mapped.keys()] : [...root.querySelectorAll("input,select")]).filter(element => !element.disabled && shown(element));
   const keyImages = [...document.querySelectorAll('img,input[type="image"],[style*="background"]')]
     .filter(node => /key|pad|kbd/u.test(`${labelOf(node)} ${labelOf(node.parentElement)}`)).length;
   const cardContext = element => [...(element.closest("form") ?? document).querySelectorAll("input")].some(input => ["number", "cvc"].includes(vaultKind(input)));
   const targets = [];
   for (const element of controls) {
-    const kind = vaultKind(element);
+    const kind = mapped.get(element) ?? vaultKind(element);
     if (!kind) continue;
     const keypad = marked(element) || element.readOnly && element.type === "password" && keyImages >= 10;
     targets.push({ id: keep(element), kind, tag: element.localName, type: (element.type ?? "").toLowerCase(),
       max: element.maxLength > 0 ? element.maxLength : 0, placeholder: (element.getAttribute("placeholder") ?? "").slice(0, 24),
+      value: element.type === "radio" ? `${element.value} ${element.labels?.[0]?.textContent ?? ""}`.trim().slice(0, 40) : undefined,
       empty: !element.value, readOnly: element.readOnly, keypad, card: cardContext(element),
       options: element.localName === "select" ? [...element.options].slice(0, 300).map(option => [option.value, option.textContent.trim().slice(0, 40)]) : undefined });
   }
-  const genders = [...root.querySelectorAll('input[type="radio"]')].filter(input => shown(input) && /gender|sex|성별/iu.test(`${input.name} ${input.id}`));
+  const genders = (requested ? [] : [...root.querySelectorAll('input[type="radio"]')]).filter(input => shown(input) && /gender|sex|성별/iu.test(`${input.name} ${input.id}`));
   for (const input of genders) targets.push({ id: keep(input), kind: "gender", tag: "radio", value: `${input.value} ${input.labels?.[0]?.textContent ?? ""}`.trim().slice(0, 40), empty: !genders.some(item => item.checked) });
   const text = (document.body?.innerText ?? "").slice(0, 20000);
   const inputs = [...document.querySelectorAll("input")].filter(shown);

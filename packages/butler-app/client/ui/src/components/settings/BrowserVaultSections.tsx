@@ -3,16 +3,16 @@ import { SettingsSection, Stack } from "@/butler-ds";
 import { useVault } from "./useVault";
 import { VaultCardsSection } from "./VaultCardsSection";
 import { VaultSitesField } from "./VaultSitesField";
-import { VaultTravelersSection } from "./VaultTravelersSection";
+import { VaultProfilesSection } from "./VaultProfilesSection";
 
-/** Settings → Browser: payment methods, traveler details, and the sites where a purchase needs no final card. */
+/** Settings → Browser: payment methods, autofill details, and the sites where a purchase needs no final card. */
 export function BrowserVaultSections() {
   const vault = useVault();
   const copy = appCopy.settings.vault;
   const sites = vault.view?.purchase_sites ?? [];
   return <>
     <VaultCardsSection vault={vault} />
-    <VaultTravelersSection vault={vault} />
+    <VaultProfilesSection vault={vault} />
     <SettingsSection id="purchase-sites" kind="form" title={appCopy.settings.pageSections.purchaseSites}
       state={vault.state} onRetry={() => void vault.reload()}>
       <Stack gap="sm" data-test-class="vault-purchase-sites">

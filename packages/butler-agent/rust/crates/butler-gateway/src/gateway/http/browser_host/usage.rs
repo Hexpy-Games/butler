@@ -24,7 +24,7 @@ fn executes(op: &str) -> bool {
             | "signin.fill"
             | "pay.inspect"
             | "pay.fill"
-            | "traveler.fill"
+            | "autofill.fill"
     )
 }
 pub(super) fn dispatch(

@@ -15,6 +15,7 @@ const STORE_TIMEOUT: Duration = Duration::from_secs(20);
 pub(super) struct SignInSecrets {
     store: tokio::sync::Mutex<Option<SecretStore>>,
     calls: tokio::sync::Semaphore,
+    migrated: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
 impl SignInSecrets {
@@ -22,6 +23,7 @@ impl SignInSecrets {
         Self {
             store: tokio::sync::Mutex::new(None),
             calls: tokio::sync::Semaphore::new(1),
+            migrated: Arc::default(),
         }
     }
 }
@@ -36,8 +38,8 @@ fn unavailable() -> HttpError {
 
 /// The payment vault's service (card numbers, CVCs, optional card PIN digits).
 pub(super) const PAYMENT_SERVICE: &str = "com.hexpy.butler.payment";
-/// Traveler profiles' service (birth date, passport and resident numbers).
-pub(super) const TRAVELER_SERVICE: &str = "com.hexpy.butler.traveler";
+/// Autofill profiles' service (birth date, passport and resident numbers).
+pub(super) const AUTOFILL_SERVICE: &str = "com.hexpy.butler.autofill";
 
 fn service(root: &Path) -> String {
     service_in(root, SERVICE)
@@ -117,7 +119,7 @@ fn key_in(state: &HttpState, base: &str, entry: &str) -> Result<SecretKey, HttpE
     SecretKey::new(&service_in(&root, base), entry).map_err(|_| unavailable())
 }
 
-/// A vault item's secret under another module's service (payment, traveler).
+/// A vault item's secret under another module's service (payment, autofill).
 pub(super) async fn get_in(
     state: &Arc<HttpState>,
     base: &str,
@@ -125,6 +127,40 @@ pub(super) async fn get_in(
 ) -> Result<Option<SecretText>, HttpError> {
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
+    if base == AUTOFILL_SERVICE {
+        let legacy = key_in(state, "com.hexpy.butler.traveler", entry)?;
+        let migrated = state.signin_secrets.migrated.clone();
+        let entry = entry.to_owned();
+        return blocking(state, move || {
+            let mut done = migrated
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if done.contains(&entry) {
+                return store.get(&key);
+            }
+            let current = store.get(&key)?;
+            let old = store.get(&legacy)?;
+            if let Some(old) = old {
+                if current.is_none() {
+                    store.set(&key, old.expose())?;
+                }
+                // Confirm the copied bytes before deleting legacy data; preserve a newer destination.
+                let copied = store.get(&key)?;
+                if copied
+                    .as_ref()
+                    .is_some_and(|value| current.is_some() || value.expose() == old.expose())
+                {
+                    store.delete(&legacy)?;
+                    done.insert(entry);
+                    return Ok(copied);
+                }
+                return Ok(current);
+            }
+            done.insert(entry);
+            Ok(current)
+        })
+        .await;
+    }
     blocking(state, move || store.get(&key)).await
 }
 
@@ -144,6 +180,9 @@ pub(super) async fn delete_in(
     base: &str,
     entry: &str,
 ) -> Result<bool, HttpError> {
+    if base == AUTOFILL_SERVICE {
+        get_in(state, base, entry).await?;
+    }
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
     blocking(state, move || store.delete(&key)).await
@@ -172,4 +211,18 @@ pub(super) async fn delete(state: &Arc<HttpState>, entry: &str) -> Result<bool, 
     let store = store(state).await?;
     let key = key(state, entry)?;
     blocking(state, move || store.delete(&key)).await
+}
+
+/// Run once for each existing profile, also before a user deletes an unused item.
+pub(super) async fn migrate_profile(state: &Arc<HttpState>, id: &str) -> Result<(), HttpError> {
+    let done = state
+        .signin_secrets
+        .migrated
+        .lock()
+        .map_err(|_| HttpError::Internal)?
+        .contains(id);
+    if !done {
+        get_in(state, AUTOFILL_SERVICE, id).await?;
+    }
+    Ok(())
 }

@@ -6210,11 +6210,11 @@
       "durable": false
     },
     {
-      "name": "browser_traveler_fill",
+      "name": "browser_autofill_fill",
       "definition": {
         "type": "function",
-        "name": "browser_traveler_fill",
-        "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+        "name": "browser_autofill_fill",
+        "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6222,15 +6222,59 @@
             "tab": {
               "type": "string"
             },
-            "traveler_ref": {
-              "type": "string"
+            "profile_id": {
+              "type": "string",
+              "description": "Saved profile ID."
             },
-            "section_ref": {
-              "type": "string"
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ref": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "full_name",
+                      "family_name",
+                      "given_name",
+                      "name_latin",
+                      "name_latin_surname",
+                      "name_latin_given",
+                      "email",
+                      "phone",
+                      "organization",
+                      "country",
+                      "postal_code",
+                      "region",
+                      "city",
+                      "address_line1",
+                      "address_line2",
+                      "birth_date",
+                      "gender",
+                      "passport_number",
+                      "passport_expiry",
+                      "nationality",
+                      "issuing_country",
+                      "rrn"
+                    ]
+                  }
+                },
+                "required": [
+                  "ref",
+                  "field"
+                ]
+              }
             }
           },
           "required": [
-            "tab"
+            "tab",
+            "targets"
           ]
         },
         "effectBoundary": "turn_local",
@@ -11425,10 +11469,10 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "browser_traveler_fill": {
+    "browser_autofill_fill": {
       "type": "function",
-      "name": "browser_traveler_fill",
-      "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+      "name": "browser_autofill_fill",
+      "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11436,15 +11480,59 @@
           "tab": {
             "type": "string"
           },
-          "traveler_ref": {
-            "type": "string"
+          "profile_id": {
+            "type": "string",
+            "description": "Saved profile ID."
           },
-          "section_ref": {
-            "type": "string"
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "full_name",
+                    "family_name",
+                    "given_name",
+                    "name_latin",
+                    "name_latin_surname",
+                    "name_latin_given",
+                    "email",
+                    "phone",
+                    "organization",
+                    "country",
+                    "postal_code",
+                    "region",
+                    "city",
+                    "address_line1",
+                    "address_line2",
+                    "birth_date",
+                    "gender",
+                    "passport_number",
+                    "passport_expiry",
+                    "nationality",
+                    "issuing_country",
+                    "rrn"
+                  ]
+                }
+              },
+              "required": [
+                "ref",
+                "field"
+              ]
+            }
           }
         },
         "required": [
-          "tab"
+          "tab",
+          "targets"
         ]
       },
       "effectBoundary": "turn_local",

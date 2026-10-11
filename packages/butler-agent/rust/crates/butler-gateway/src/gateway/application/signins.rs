@@ -5,7 +5,7 @@ mod vault;
 use super::{AppApplication, app_error};
 use crate::gateway::ApplicationFuture;
 use serde_json::Value;
-pub use vault::{AppCardInput, AppTravelerInput, AppVaultCommand};
+pub use vault::{AppCardInput, AppProfileInput, AppVaultCommand};
 
 /// One saved sign-in to add, or to merge from an import.
 #[derive(Clone, Debug)]
@@ -97,7 +97,7 @@ pub enum AppSignInCommand {
     },
 }
 
-/// Sign-in entries, site grants and audit rows, and the payment and traveler
+/// Sign-in entries, site grants and audit rows, and the payment and autofill
 /// vault's metadata, allowances and audit rows (never secrets).
 pub trait GatewaySignIns: Send + Sync {
     fn signins(&self, command: AppSignInCommand) -> ApplicationFuture<Value> {

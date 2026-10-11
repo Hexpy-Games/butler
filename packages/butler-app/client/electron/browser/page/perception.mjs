@@ -318,9 +318,9 @@ export function layoutRegions(elements) {
   return regions;
 }
 
-/** What a form control asks for, for saved card and traveler fills: a card
+/** What a form control asks for, for saved card and autofill fills: a card
  * field (number, expiry, CVC, holder name, the PIN's first numbers, the owner
- * birth date) or a traveler field. Self-contained: it also runs in the fill
+ * birth date) or a autofill field. Self-contained: it also runs in the fill
  * world. Context-dependent kinds stay generic (`birth`, `pin_short`). */
 export function vaultKind(element) {
   if (!element || !/^(input|select)$/u.test(element.localName ?? "")) return null;
@@ -348,7 +348,7 @@ export function vaultKind(element) {
   if (/given.?name|first.?name|영문.?이름/u.test(label)) return "given_name";
   if (/gender|(^|[^a-z])sex([^a-z]|$)|성별/u.test(label)) return "gender";
   if (/nationality|citizenship|국적/u.test(label)) return "nationality";
-  if (/full.?name|passenger.?name|성명|탑승객.?(명|이름)|(^|\s)(이름|name)(\s|$)/u.test(label)) return "full_name";
+  if (/full.?name|성명|(^|\s)(이름|name)(\s|$)/u.test(label)) return "full_name";
   if (type === "email" || /e-?mail|이메일/u.test(label)) return "email";
   if (type === "tel" || /phone|mobile|휴대.?폰|전화.?번호|연락처/u.test(label)) return "phone";
   return null;

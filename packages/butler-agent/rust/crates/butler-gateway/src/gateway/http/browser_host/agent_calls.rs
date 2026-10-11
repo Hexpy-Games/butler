@@ -32,7 +32,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
-        "signin.fill" | "pay.fill" | "traveler.fill" => 25000,
+        "signin.fill" | "pay.fill" | "autofill.fill" => 25000,
         "pay.inspect" => 8000,
         // A post-batch observation first waits up to 2 s for the page to settle.
         "tab.observe" if frame["args"]["settle"] == true => 8000,
@@ -205,7 +205,7 @@ fn page_op(op: &str) -> bool {
             | "signin.fill"
             | "pay.inspect"
             | "pay.fill"
-            | "traveler.fill"
+            | "autofill.fill"
     )
 }
 pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError> {
@@ -303,7 +303,7 @@ fn validate(
             | "pay.inspect"
             | "pay.lookup"
             | "pay.fill"
-            | "traveler.fill"
+            | "autofill.fill"
     ) {
         return Err(error(400, "invalid_browser_op"));
     }

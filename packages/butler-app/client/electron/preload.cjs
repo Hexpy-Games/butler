@@ -1245,18 +1245,19 @@ const butlerApp = Object.freeze({
   chooseBrowserPasswordExport: (payload) => requestSecurity("chooseBrowserPasswordExport", { payload }),
   deleteBrowserPasswordExport: (payload) => requestSecurity("deleteBrowserPasswordExport", { payload }),
   cancelBrowserPasswordExport: (payload) => requestSecurity("cancelBrowserPasswordExport", { payload }),
-  // Payment methods and traveler details (host only). Card and identity numbers
+  // Payment methods and autofill details (host only). Card and identity numbers
   // go to main, then to the Agent's keychain store; only a card reveal, after
   // the operating system verifies the user, answers a number.
   listVault: () => requestSecurity("listVault"),
   addCard: (payload) => requestSecurity("addCard", { payload }),
-  addTraveler: (payload) => requestSecurity("addTraveler", { payload }),
+  addProfile: (payload) => requestSecurity("addProfile", { payload }),
   updateCard: ({ id, payload } = {}) => requestSecurity("updateCard", { id, payload }),
-  updateTraveler: ({ id, payload } = {}) => requestSecurity("updateTraveler", { id, payload }),
+  updateProfile: ({ id, payload } = {}) => requestSecurity("updateProfile", { id, payload }),
   deleteCard: ({ id } = {}) => requestSecurity("deleteCard", { id }),
-  deleteTraveler: ({ id } = {}) => requestSecurity("deleteTraveler", { id }),
+  deleteProfile: ({ id } = {}) => requestSecurity("deleteProfile", { id }),
   setCardSite: ({ id, payload } = {}) => requestSecurity("setCardSite", { id, payload }),
-  setTravelerSite: ({ id, payload } = {}) => requestSecurity("setTravelerSite", { id, payload }),
+  setProfileSite: ({ id, payload } = {}) => requestSecurity("setProfileSite", { id, payload }),
+  revealProfile: ({ id, payload } = {}) => requestSecurity("revealProfile", { id, payload }),
   revealCard: ({ id, payload } = {}) => requestSecurity("revealCard", { id, payload }),
   setPurchaseSite: (payload) => requestSecurity("setPurchaseSite", { payload }),
   // The file path is chosen in a native dialog and stays in main and the Agent.
