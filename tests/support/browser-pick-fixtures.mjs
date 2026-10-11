@@ -49,7 +49,7 @@ export const pages = {
     <iframe name="cross" src="${other}/frame-card" style="width:360px;height:220px;border:2px solid #999;margin-left:16px"></iframe>`),
   // The real App run: a cross-site framed card beside a text run for an area.
   mix: (other) => page("Pick mix", `<h1>Pick mix</h1><iframe name="cross" src="${other}/frame-card" style="width:360px;height:220px;border:2px solid #999"></iframe>
-    <p id="para" style="width:600px">Some <strong id="strong">bold words</strong> sit beside a <a href="#x" id="link">link</a> inside a paragraph for an area capture.</p>`),
+    <p id="para" style="width:600px">Some <strong id="strong">bold words</strong> sit beside a <a href="#x" id="link">link</a> inside a paragraph for an area capture.</p><div style="height:1600px"></div>`),
   "frame-card": page("Frame card", "<div class=\"card\" id=\"fc\" style=\"width:280px\"><h3 id=\"fh\">Framed card</h3><p id=\"fp\">Text inside the frame.</p><input id=\"fi\" value=\"framed secret\"></div>"),
   sticky: page("Sticky", `<header id="hdr" style="position:sticky;top:0;background:#223;color:white;padding:12px 24px;margin:-24px -24px 0">Sticky header <nav style="display:inline">Home · Docs</nav></header>
     <div style="height:2400px;padding-top:24px"><p id="sp">Scrolled content paragraph.</p></div><script>scrollTo(0,400)</script>`),

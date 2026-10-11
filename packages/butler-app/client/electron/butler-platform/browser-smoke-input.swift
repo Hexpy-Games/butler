@@ -45,6 +45,14 @@ case "drag", "altdrag":
         event.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.035)
     }
+    // Press and release Option itself so the system modifier state does not stay held after the gesture.
+    func option(_ down: Bool) {
+        guard args[1] == "altdrag", let event = CGEvent(keyboardEventSource: nil, virtualKey: 58, keyDown: down) else { return }
+        event.flags = down ? .maskAlternate : []
+        event.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.035)
+    }
+    option(true)
     held(.mouseMoved, point)
     held(.leftMouseDown, point)
     for step in 1...20 {
@@ -52,6 +60,7 @@ case "drag", "altdrag":
         held(.leftMouseDragged, CGPoint(x: x + (endX - x) * fraction, y: y + (endY - y) * fraction))
     }
     held(.leftMouseUp, CGPoint(x: endX, y: endY))
+    option(false)
 case "key":
     // Virtual key code in args[4] (126 up arrow, 125 down arrow, 53 escape); x/y are unused.
     guard args.count == 5, let code = UInt16(args[4]),

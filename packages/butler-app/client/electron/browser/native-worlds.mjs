@@ -28,14 +28,15 @@ export function nativeFrameWorld(tab,frameId) {
   return worldOf(tab,tab.nativeFrames.get(tab.contextNames.get(frameId)));
 }
 /** The preload world of a WebFrameMain once its preload reported ready; needs no debugger. */
-export function nativeWorldOf(tab,target) {
+/** `wait` is for a call that resolves on a page event (a pick watch): no deadline, the caller can stop waiting. */
+export function nativeWorldOf(tab,target,wait=false) {
   if(!target || target.isDestroyed()) return undefined;
-  return worldOf(tab,[...tab.nativeFrames.values()].find(frame=>frame===target || !frame.isDestroyed() && frame.processId===target.processId && frame.routingId===target.routingId));
+  return worldOf(tab,[...tab.nativeFrames.values()].find(frame=>frame===target || !frame.isDestroyed() && frame.processId===target.processId && frame.routingId===target.routingId),wait);
 }
-function worldOf(tab,frame) {
+function worldOf(tab,frame,wait=false) {
   if(!frame || frame.isDestroyed() || frame.detached)return undefined;
   return {executeJavaScriptInIsolatedWorld:(_world,scripts)=>new Promise((resolve,reject)=>{
-    const id=randomUUID(),timer=setTimeout(()=>{pending.delete(id);reject(new Error('frame_unavailable'))},5000);
+    const id=randomUUID(),timer=wait?null:setTimeout(()=>{pending.delete(id);reject(new Error('frame_unavailable'))},5000);
     pending.set(id,{frame,contentsId:tab.view.webContents.id,timer,resolve,reject});
     try{frame.send('butler-browser-world:call',id,scripts[0].code)}catch(error){clearTimeout(timer);pending.delete(id);reject(error)}
   })};

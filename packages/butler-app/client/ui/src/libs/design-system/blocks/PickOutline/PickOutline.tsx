@@ -9,6 +9,8 @@ export interface PickOutlinePick {
   /** Stable per pick (its badge pops in once). */
   id: string;
   rect: PickOutlineRect;
+  /** Scrolled out of view: no outline or badge, and the other picks keep their numbers. */
+  hidden?: boolean;
 }
 
 export interface PickOutlineProps extends DsPrivateStyleProps {
@@ -52,14 +54,14 @@ export function PickOutline({ hover, hoverLabel, picks = [], width, height, redu
   return (
     <div className={cn("theme-light", styles.layer, className)} data-slot="pick-outline" data-reduced={reducedMotion ? "true" : undefined}
       aria-hidden="true">
-      {picks.map((pick) => <span key={`outline-${pick.id}`} className={styles.picked} style={box(pick.rect)} data-pick-outline="picked" />)}
+      {picks.map((pick) => pick.hidden ? null : <span key={`outline-${pick.id}`} className={styles.picked} style={box(pick.rect)} data-pick-outline="picked" />)}
       {hover ? (
         <span className={styles.hover} style={box(hover)} data-pick-outline="hover" data-tag-below={tagBelow || undefined}
           data-tag-start={tagStart || undefined}>
           {hoverLabel ? <span className={styles.tag}>{hoverLabel}</span> : null}
         </span>
       ) : null}
-      {picks.map((pick, index) => (
+      {picks.map((pick, index) => pick.hidden ? null : (
         <span key={`badge-${pick.id}`} className={styles.badge} style={badgeAt(pick.rect, width, height)} data-pick-badge="">
           {index + 1 > 99 ? "99+" : index + 1}
         </span>

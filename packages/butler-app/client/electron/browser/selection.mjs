@@ -14,22 +14,29 @@ const edges = r => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r
 const rectOf = b => b.right - b.left >= 0.5 && b.bottom - b.top >= 0.5 ? { x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top } : null;
 /** A frame-local rect in main-viewport CSS pixels, inside every owning iframe's visible box. */
 const place = (rect, frame) => { const b = shift(edges(rect), frame.offset); return rectOf(frame.clip ? meet(b, frame.clip) : b); };
+const sameRect = (a, b) => ["x", "y", "width", "height"].every(key => Math.abs(a[key] - b[key]) < 0.5);
 const sameBox = (a, b) => ["left", "top", "right", "bottom"].every(key => Math.abs(edges(a)[key] - edges(b)[key]) <= 2);
 const inside = (rect, point) => point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height;
 const nested = (base, frame) => ({ path: [...base.path, ...frame.path], offset: { x: base.offset.x + frame.offset.x, y: base.offset.y + frame.offset.y },
   clip: base.clip ? meet(base.clip, shift(frame.clip, base.offset)) : shift(frame.clip, base.offset) });
 const TOP = { path: [], offset: { x: 0, y: 0 }, clip: null };
+/** Whether a pick's outline is out of view; never part of the pick's data (not enumerable). Returns whether it changed. */
+function offscreen(item, hidden) {
+  if ((item.offscreen === true) === hidden) return false;
+  Object.defineProperty(item, "offscreen", { value: hidden, writable: true, configurable: true, enumerable: false });
+  return true;
+}
 const GENERIC = new Set(["div", "span"]);
 /** One opaque neutral pixel (BGRA): a filled field's box in a crop. */
 const MASK = Buffer.from([0xd9, 0xd9, 0xd9, 0xff]);
 
 /** Runs pick-page in the main frame's pick world, or a subframe's preload world by window.frames path. */
-async function runIn(tab, path, args) {
+async function runIn(tab, path, args, wait = false) {
   const code = `(${PAGE})(${JSON.stringify({ ...args, token: randomUUID() })})`;
   if (!path.length) return tab.view.webContents.executeJavaScriptInIsolatedWorld(MAIN_WORLD, [{ code }]);
   let frame = tab.view.webContents.mainFrame;
   for (const index of path) frame = frame?.frames[index];
-  const world = frame && nativeWorldOf(tab, frame);
+  const world = frame && nativeWorldOf(tab, frame, wait);
   return world ? world.executeJavaScriptInIsolatedWorld(FRAME_WORLD, [{ code }]).catch(() => null) : null;
 }
 /** A frame's current placement, resolving each window.frames step in its parent's world. */
@@ -67,43 +74,135 @@ function maskImage(image, rect, masks) {
 export class BrowserSelection {
   constructor(browser) {
     this.browser = browser;
-    // The frame each element pick lives in; areas have none and never outlive their view.
-    this.anchors = new WeakMap();
+    // The frame each element pick lives in, and where each area was taken (page scroll at capture).
+    this.anchors = new WeakMap(); this.areas = new WeakMap();
+    // Per tab, one event-driven page watch per frame that holds picks (and the main frame).
+    this.loops = new WeakMap();
   }
   /** Picks follow their document: a new document clears them, an in-page change re-anchors them. */
   watch(tab) {
     const contents = tab.view.webContents;
     contents.on("did-navigate", () => this.navigated(tab, false));
     contents.on("did-navigate-in-page", () => this.navigated(tab, true));
-    contents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => { if (!isMainFrame) this.navigated(tab, true); });
+    contents.on("did-frame-navigate", (_event, _url, _code, _status, isMainFrame) => { if (!isMainFrame) this.navigated(tab, true, true); });
+    contents.once("destroyed", () => this.follow(tab, true));
   }
-  navigated(tab, sameDocument) {
+  navigated(tab, sameDocument, frameDocument = false) {
     this.clearHover(tab); this.preferred = null;
-    if (!tab.selections?.length) return;
-    if (!sameDocument) {
-      tab.selections = []; this.browser.publish(); this.browser.pointer.sync(tab); return;
-    }
-    tab.reanchoring = (tab.reanchoring ?? Promise.resolve()).then(() => this.reanchor(tab)).catch(() => this.browser.pointer.inputFailed());
-    return tab.reanchoring;
+    // A replaced document takes its page watch with it (its pending call may never answer): watch the new one.
+    const loops = this.loops.get(tab);
+    for (const [key, loop] of loops ?? []) if (!sameDocument || (frameDocument && key)) { loop.stop(); loops.delete(key); }
+    if (!tab.selections?.length) return this.follow(tab);
+    if (!sameDocument) { tab.selections = []; this.changed(tab); return; }
+    // An area is a view of the page; an in-page navigation changes what it showed.
+    tab.selections = tab.selections.filter(item => !this.areas.has(item));
+    this.changed(tab);
+    return this.refresh(tab);
   }
-  /** Moves each element pick's outline to where its element now is; drops picks whose element is gone. */
-  async reanchor(tab) {
-    const gone = new Set();
-    for (const item of [...tab.selections ?? []]) {
-      const stored = this.anchors.get(item);
-      // A cross-origin frame can move with its parent's layout: place it again from its owners.
-      const frame = stored?.path.length ? await frameAt(tab, stored.path) : stored;
-      if (frame) this.anchors.set(item, frame);
-      const found = frame && await runIn(tab, frame.path, { op: "anchor", identity: item.identity }).catch(() => null);
-      if (!found || found.gone) { gone.add(item); continue; }
-      const rect = found.rect && place(found.rect, frame);
-      if (!rect) continue;
-      const dx = rect.x - item.rect.x, dy = rect.y - item.rect.y;
-      item.cropRect = { ...item.cropRect, x: item.cropRect.x + dx, y: item.cropRect.y + dy };
-      item.rect = rect;
+  /** The tab's picks changed: tell the App and (re)start or stop following them. */
+  changed(tab) {
+    this.browser.publish(); this.browser.pointer.sync(tab); this.follow(tab);
+  }
+  /**
+   * Outlines follow scrolling, layout changes and re-renders. Each frame that holds picks (and the main
+   * frame) has one page watch that resolves only after a scroll, resize or DOM change moved something
+   * (rAF-throttled in the page); a static page or a tab without picks or picking does no work.
+   */
+  follow(tab, stop = false) {
+    const loops = this.loops.get(tab) ?? new Map(); this.loops.set(tab, loops);
+    const live = !stop && tab.view && !tab.view.webContents.isDestroyed();
+    const want = new Map();
+    if (live && (tab.picking || tab.selections?.length)) {
+      want.set("", []);
+      for (const item of tab.selections ?? []) {
+        const path = this.anchors.get(item)?.path ?? [];
+        for (let depth = 1; depth <= path.length; depth++) want.set(path.slice(0, depth).join("/"), path.slice(0, depth));
+      }
     }
-    if (gone.size) tab.selections = (tab.selections ?? []).filter(item => !gone.has(item));
-    this.browser.publish(); this.browser.pointer.sync(tab);
+    for (const [key, loop] of loops) if (!want.has(key)) {
+      loop.stop(); loops.delete(key);
+      if (live) void runIn(tab, loop.path, { op: "unwatch" }).catch(() => null);
+    }
+    // A running watch learns changed picks by a renewed call (the page supersedes the old one).
+    for (const [key, path] of want) if (loops.has(key)) loops.get(key).renew(); else this.followFrame(tab, loops, key, path);
+  }
+  followFrame(tab, loops, key, path) {
+    const loop = { path, renew: () => {} };
+    const stopped = new Promise(resolve => { loop.stop = () => { loop.stopped = true; resolve(null); }; });
+    loops.set(key, loop);
+    void (async () => {
+      let fresh = true;
+      while (!loop.stopped) {
+        const picks = (tab.selections ?? []).filter(item => (this.anchors.get(item)?.path ?? null)?.join("/") === key);
+        // Child frames holding picks: their owners move with this document.
+        const frames = [...new Set((tab.selections ?? []).map(item => this.anchors.get(item)?.path)
+          .filter(inner => inner && inner.length === path.length + 1 && inner.slice(0, path.length).join("/") === key).map(inner => inner.at(-1)))];
+        const renewed = new Promise(resolve => { loop.renew = () => resolve({ superseded: true }); });
+        const watching = runIn(tab, path, { op: "watch", identities: picks.map(item => item.identity), frames }, true).catch(() => null);
+        // Calls into one world run in order: this measure sees anything that moved before the watch took its baseline.
+        if (fresh) void this.refresh(tab);
+        const result = await Promise.race([watching, stopped, renewed]);
+        if (loop.stopped) return;
+        fresh = Boolean(result?.superseded);
+        if (result?.superseded) continue;
+        if (!result || result.gone || result.stopped) { if (loops.get(key) === loop) loops.delete(key); return; }
+        await this.refresh(tab);
+        // The element under a resting pointer changes when the page moves under it.
+        if (tab.picking && this.lastHover?.tab === tab && !this.down) this.hover(tab, this.lastHover.input);
+      }
+    })().catch(() => { if (loops.get(key) === loop) loops.delete(key); });
+  }
+  /** Moves each pick's outline to where its element now is (a re-rendered element takes over); drops picks whose element is gone. */
+  async refresh(tab) {
+    if (tab.refreshing) { tab.refreshAgain = true; return tab.refreshing; }
+    tab.refreshing = (async () => {
+      do {
+        tab.refreshAgain = false;
+        await this.measure(tab);
+      } while (tab.refreshAgain);
+    })().catch(() => this.browser.pointer.inputFailed()).finally(() => { tab.refreshing = null; });
+    return tab.refreshing;
+  }
+  async measure(tab) {
+    const gone = new Set(), groups = new Map();
+    for (const item of tab.selections ?? []) {
+      if (this.areas.has(item)) continue;
+      const stored = this.anchors.get(item), key = stored?.path.join("/") ?? null;
+      if (key === null) { gone.add(item); continue; }
+      if (!groups.has(key)) groups.set(key, { stored, items: [] });
+      groups.get(key).items.push(item);
+    }
+    if (!groups.has("") && (tab.selections ?? []).some(item => this.areas.has(item))) groups.set("", { stored: TOP, items: [] });
+    let moved = false;
+    for (const [key, group] of groups) {
+      // A cross-origin frame can move with its parent's layout: place it again from its owners.
+      const frame = key ? await frameAt(tab, group.stored.path) : TOP;
+      const found = frame && await runIn(tab, frame.path, { op: "rects", identities: group.items.map(item => item.identity) }).catch(() => null);
+      if (!found) { group.items.forEach(item => gone.add(item)); continue; }
+      for (const item of group.items) {
+        const now = found.picks[item.identity];
+        if (!now || now.gone) { gone.add(item); continue; }
+        this.anchors.set(item, frame);
+        if (now.identity !== item.identity) { item.identity = now.identity; moved = true; }
+        const rect = now.rect && place(now.rect, frame);
+        // Scrolled out of view (page, container or frame): keep the pick, hide its outline.
+        if (offscreen(item, !rect)) moved = true;
+        if (!rect || sameRect(rect, item.rect)) continue;
+        item.cropRect = { ...item.cropRect, x: item.cropRect.x + rect.x - item.rect.x, y: item.cropRect.y + rect.y - item.rect.y };
+        item.rect = rect; moved = true;
+      }
+      // An area is fixed to the page: it moves with the main document's scroll.
+      const bounds = tab.view.getBounds(), scale = tab.bounds?.scale ?? 1, view = { left: 0, top: 0, right: bounds.width / scale, bottom: bounds.height / scale };
+      if (!key) for (const item of tab.selections ?? []) {
+        const area = this.areas.get(item);
+        if (!area) continue;
+        const rect = { ...area.rect, x: area.rect.x - (found.scroll.x - area.scroll.x), y: area.rect.y - (found.scroll.y - area.scroll.y) };
+        if (offscreen(item, !rectOf(meet(edges(rect), view)))) moved = true;
+        if (!sameRect(rect, item.rect)) { item.rect = rect; item.cropRect = rect; moved = true; }
+      }
+    }
+    if (gone.size) { tab.selections = (tab.selections ?? []).filter(item => !gone.has(item)); this.changed(tab); }
+    else if (moved) this.browser.pointer.sync(tab);
   }
   shortcut(input) {
     if (!isPickShortcut(input)) return false;
@@ -117,12 +216,12 @@ export class BrowserSelection {
     tab.picking = value === true;
     this.preferred = null;
     this.cancelDrag(); this.clearHover(tab);
-    this.browser.publish();
+    this.browser.publish(); this.follow(tab);
     if (tab.picking) this.browser.pointer.view?.webContents.focus();
   }
   clear(id) {
     const tab = this.browser.tabs.get(id); if (!tab) return;
-    tab.selections = []; this.browser.publish();
+    tab.selections = []; this.changed(tab);
   }
   result(tab, session) {
     const elements = (tab.selections ?? []).map(item => {
@@ -133,7 +232,7 @@ export class BrowserSelection {
     return { status: "ok", tab: tab.id, untrusted_content: { kind: "web_page_data", elements } };
   }
   clearHover(tab) {
-    if (tab) tab.pickHover = null; this.hoverInput = null; this.hoverRevision = (this.hoverRevision ?? 0) + 1;
+    if (tab) tab.pickHover = null; this.hoverInput = null; this.lastHover = null; this.hoverRevision = (this.hoverRevision ?? 0) + 1;
   }
   /** Pick levels under a view point, leaf first, across open shadow roots and every frame. */
   async probe(tab, input) {
@@ -173,6 +272,7 @@ export class BrowserSelection {
     tab.pickHover = ladder?.levels.length ? { levels: ladder.levels, index: ladder.index, ...this.label(ladder.levels, ladder.index) } : null;
   }
   async hoverAt(tab, input) {
+    this.lastHover = { tab, input };
     const ladder = await this.probe(tab, input);
     this.show(tab, ladder); return ladder;
   }
@@ -252,8 +352,9 @@ export class BrowserSelection {
     if (!crop || !this.browser.tabs.has(tab.id) || tab.epoch !== epoch || tab.url !== url) return null;
     const item = this.picked(tab, url, { title: (main?.title || text.split("\n")[0] || `${Math.round(rect.width)} × ${Math.round(rect.height)}`).slice(0, 200),
       text, tag: "area", rect, cropRect: rect, identity: `area:${randomUUID()}`, contains, crop });
+    this.areas.set(item, { rect, scroll: main?.scroll ?? { x: 0, y: 0 } });
     tab.selections = [...tab.selections ?? [], item];
-    this.browser.publish();
+    this.changed(tab);
     return item;
   }
   band(tab, start, input) {
@@ -274,11 +375,12 @@ export class BrowserSelection {
       return true;
     }
     if (!["mouseDown", "mouseMove", "mouseUp"].includes(input.type)) return false;
+    if (input.type === "mouseMove") this.lastHover = { tab, input };
     if (input.type === "mouseMove" && !this.down) this.hover(tab, input);
     if (input.type === "mouseDown" && input.button === "left") {
       const scale = tab.bounds?.scale ?? 1, point = { x: input.x / scale, y: input.y / scale };
       const start = { x: input.x, y: input.y, input, epoch: tab.epoch, alt: input.modifiers?.includes("alt"),
-        onPick: (tab.selections ?? []).some(item => inside(item.rect, point)) };
+        onPick: (tab.selections ?? []).some(item => !item.offscreen && inside(item.rect, point)) };
       this.down = start;
       void this.hit(tab, input).then(item => {
         start.item = item; start.ready = true;
@@ -326,7 +428,7 @@ export class BrowserSelection {
     const prior = tab.selections ?? [], item = start.item;
     const exists = prior.some(p => this.same(p, item));
     tab.selections = exists ? (start.moved ? prior : prior.filter(p => !this.same(p, item))) : [...prior, item];
-    this.browser.publish();
+    this.changed(tab);
     if (start.moved) {
       this.drag(tab, start.input, "start");
       if (start.ended) this.drag(tab, start.input, "end");

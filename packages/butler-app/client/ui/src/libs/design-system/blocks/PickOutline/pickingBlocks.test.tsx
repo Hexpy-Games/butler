@@ -60,6 +60,16 @@ test("PickOutline numbers picks in order and keeps badges inside the layer", () 
   expect(markup).toContain("div.card · 120 × 80");
 });
 
+test("PickOutline hides a scrolled-out pick and keeps the other picks' numbers", () => {
+  const markup = renderToStaticMarkup(
+    <PickOutline width={400} height={300} reducedMotion picks={[{ id: "a", rect: { x: 0, y: -200, width: 100, height: 100 }, hidden: true },
+      { id: "b", rect: { x: 150, y: 150, width: 80, height: 80 } }]} />,
+  );
+  expect(markup.match(/data-pick-outline="picked"/gu)?.length).toBe(1);
+  expect(markup).not.toMatch(/data-pick-badge="">1</u);
+  expect(markup).toMatch(/data-pick-badge="">2</u);
+});
+
 test("DragPreview floats at the pointer when given `at`, and renders static without it", () => {
   const floating = renderToStaticMarkup(<DragPreview kind="elements" images={[{ src: "a.png" }]} count={3} at={{ x: 40, y: 20 }} strategy="absolute" />);
   expect(floating).toContain('data-slot="drag-preview-floating"');

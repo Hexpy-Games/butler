@@ -160,7 +160,7 @@ app.whenReady().then(async () => {
     const until = async (check) => { for (let i = 0; i < 60 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 50)); return check(); };
     const pickAt = async (frames, el) => {
       const point = await pointOf({ frames, el, fx: 0.5, fy: 0.5, dx: 0, dy: 0 });
-      const item = await selection.hit(tab, point); tab.selections = [...tab.selections, item]; return item;
+      const item = await selection.hit(tab, point); tab.selections = [...tab.selections, item]; selection.changed?.(tab); return item;
     };
     await load("list");
     const item = await pickAt([], "document.querySelector(\"#ls2\")"), before = { ...item.rect };
@@ -181,6 +181,59 @@ app.whenReady().then(async () => {
       detail: { count: tab.selections.length, before: framedY, after: framed.rect.y } });
     await contents.executeJavaScript(`document.querySelector('iframe[name="cross"]').src='http://cross.test:${server.address().port}/text'`);
     navRows.push({ id: "nav-frame-document", ok: await until(() => tab.selections.length === 1 && tab.selections[0] === main), detail: { count: tab.selections.length } });
+
+    // Outlines follow scrolling (page, inner containers, frames), layout changes and re-renders, with no navigation.
+    const moves = async (id, page, el, frames, change, expected) => {
+      if (page) await load(page);
+      const item = await pickAt(frames, el), from = { ...item.rect };
+      await contents.executeJavaScript(change);
+      const ok = await until(() => tab.selections.includes(item) && Math.abs(item.rect.y - from.y - expected) <= 1);
+      navRows.push({ id, ok, detail: { before: from.y, after: item.rect.y, expected } });
+      return item;
+    };
+    const scrolled = await moves("follow-page-scroll", "sizes", "document.querySelector(\"#dotline\")", [], "scrollTo(0,30)", -30);
+    await contents.executeJavaScript("scrollTo(0,300)");
+    const hidden = await until(() => scrolled.offscreen === true);
+    await contents.executeJavaScript("scrollTo(0,0)");
+    navRows.push({ id: "follow-offscreen", ok: hidden && await until(() => scrolled.offscreen === false && Math.abs(scrolled.rect.y - 40) <= 1) && !JSON.stringify(scrolled).includes("offscreen"),
+      detail: { hidden, back: scrolled.rect.y } });
+    await moves("follow-inner-scroll", "scroll", "document.querySelector(\"#it4\")", [], "box.scrollTop+=30", -30);
+    await moves("follow-frame-scroll", "frames", "document.querySelector(\"#fc\")", ["cross"], "document.body.style.paddingBottom='2000px';scrollTo(0,40)", -40);
+    {
+      const inFrame = tab.selections.at(-1), y = inFrame.rect.y;
+      const cross = contents.mainFrame.frames.find(frame => frame.name === "cross");
+      await cross.executeJavaScript("document.body.style.paddingBottom='2000px';scrollTo(0,20)");
+      navRows.push({ id: "follow-scroll-inside-frame", ok: await until(() => Math.abs(inFrame.rect.y - y + 20) <= 1), detail: { before: y, after: inFrame.rect.y } });
+    }
+    const layout = await moves("follow-layout", "list", "document.querySelector(\"#ls2\")", [], "document.querySelector('ul').insertAdjacentHTML('beforebegin','<div style=\"height:50px\"></div>')", 50);
+    const identity = layout.identity, at = { ...layout.rect };
+    await contents.executeJavaScript("{const p=document.querySelector('#ls2');p.replaceWith(p.cloneNode(true))}");
+    navRows.push({ id: "follow-rerender-same", ok: await until(() => tab.selections.length === 1 && layout.identity !== identity && Math.abs(layout.rect.y - at.y) <= 1),
+      detail: { count: tab.selections.length, identityChanged: layout.identity !== identity } });
+    await contents.executeJavaScript("{const p=document.querySelector('#ls2');const n=p.cloneNode(true);n.textContent='Different snippet';p.replaceWith(n)}");
+    navRows.push({ id: "follow-rerender-changed", ok: await until(() => tab.selections.length === 0), detail: { count: tab.selections.length } });
+    await load("sizes");
+    const area = await selection.area(tab, { x: 30, y: 30, width: 120, height: 40 });
+    await contents.executeJavaScript("scrollTo(0,60)");
+    navRows.push({ id: "follow-area-scroll", ok: await until(() => Math.abs(area.rect.y + 30) <= 1), detail: { after: area.rect.y } });
+    await contents.executeJavaScript("scrollTo(0,0)");
+    const hoverPoint = await pointOf({ frames: [], el: "document.querySelector(\"#dotline\")", fx: 0.1, fy: 0.5, dx: 0, dy: 0 });
+    await selection.hoverAt(tab, hoverPoint);
+    const hoverBefore = { ...tab.pickHover.rect };
+    await contents.executeJavaScript("scrollTo(0,200)");
+    navRows.push({ id: "follow-hover-scroll", ok: await until(() => tab.pickHover && !["y", "height"].every(key => Math.abs(tab.pickHover.rect[key] - hoverBefore[key]) < 1)),
+      detail: { before: hoverBefore, after: tab.pickHover?.rect } });
+    // A static page does no work: no re-measure in a quiet second.
+    let measures = 0;
+    const measure = selection.measure.bind(selection);
+    selection.measure = (...args) => { measures++; return measure(...args); };
+    await new Promise(resolve => setTimeout(resolve, 400)); measures = 0;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    navRows.push({ id: "follow-idle", ok: measures === 0, detail: { measures, loops: selection.loops.get(tab)?.size } });
+    // Nothing picked and not picking: every page watch stops.
+    tab.picking = false; selection.clear(tab.id);
+    navRows.push({ id: "follow-stopped", ok: await until(() => selection.loops.get(tab)?.size === 0), detail: { loops: selection.loops.get(tab)?.size } });
+    tab.picking = true;
   }
   writeFileSync(join(evidence, fresh ? "pick-after.json" : "pick-before.json"), JSON.stringify({ dpr, rows, areaRows, navRows }, null, 2));
   for (const row of navRows) console.log(`${row.ok ? "ok  " : "FAIL"} ${row.id.padEnd(20)} ${JSON.stringify(row.detail)}`);
