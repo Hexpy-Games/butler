@@ -54,6 +54,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         s.agent.terminate().await?;
     }
     super::restore(&path, &baseline)?;
+    // File identity and preserved data prove disk-full deferral avoids replacement despite normal-open writes.
     let original = secure_fs::identity(&std::fs::metadata(&path)?).id;
     s.agent
         .launch

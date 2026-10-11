@@ -117,6 +117,7 @@ pub(super) fn admission(
 }
 
 pub(super) fn defer(db: &rusqlite::Connection, state: &str, attempts: u32) -> StorageResult<()> {
+    // A tiny retry-marker write bounds slow-compaction deferral to three attempts.
     if state == "pending_time" && attempts >= 2 {
         set(db, "done", true, &serde_json::json!({"skipped":"slow"}))
     } else {

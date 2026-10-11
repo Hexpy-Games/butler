@@ -1,4 +1,4 @@
-//! CORR-01: correction, byte-exact replay, crash recovery, queue drain and idle.
+//! CORR-01: correction, interrupted-turn preservation, crash recovery, queue drain and idle.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
 mod matrix;
@@ -10,6 +10,7 @@ use butler_e2e::e2e::{
     gateway::turn_state,
     scenario::{Access, Setup, accepted_turn_id},
 };
+use butler_platform::secure_fs;
 use notify::{RecursiveMode, Watcher};
 use rusqlite::Connection;
 use std::{
@@ -36,9 +37,11 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(30), script.held.notified())
         .await
         .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
-    let held = script.requests.lock().unwrap().last().unwrap()["input"].to_string();
-    s.agent.kill9()?;
+    let requests = script.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 4);
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    wait_published(&path).await?;
+    s.agent.kill9()?;
     let active = seed::admitted(&path, &id)?;
     assert_eq!(active.len(), 3);
     let turn = id.clone();
@@ -58,7 +61,10 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         if !watched.exists() {
             absent.store(true, Ordering::SeqCst);
         }
-        if let Ok(event) = event {
+        // Opens/closes (including WAL sampling) are access notifications, not file changes.
+        if let Ok(event) = event
+            && !matches!(event.kind, notify::EventKind::Access(_))
+        {
             sink.lock().unwrap().push(event);
         }
     })
@@ -67,9 +73,6 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)
         .map_err(std::io::Error::other)?;
     s.gw = s.agent.start_again().await?;
-    tokio::time::timeout(Duration::from_secs(30), script.held.notified())
-        .await
-        .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
     check(&path, 480, &id, &active, &snapshot).await?;
     assert!(
         !path
@@ -88,15 +91,8 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
                 .file_name()
                 .is_some_and(|n| n == "storage-correction.json"))
     );
-    assert_eq!(
-        script.requests.lock().unwrap().last().unwrap()["input"].to_string(),
-        held
-    );
-    assert_eq!(
-        script.requests.lock().unwrap().len(),
-        5,
-        "rounds 1–3 were requested again"
-    );
+    assert_eq!(script.requests.lock().unwrap().as_slice(), requests);
+    assert_eq!(payload_states(&path, &id)?, [0, 0, 0]);
     for session in 0..120 {
         let view =
             s.gw.get(&format!("/session-view?session_id=corr-chat-{session}"))
@@ -105,18 +101,34 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         assert_eq!(view.data()["messages"].as_array().unwrap().len(), 1);
         assert_eq!(view.data()["messages"][0]["text"], "Synthetic history");
     }
-    script.hold.store(false, Ordering::SeqCst);
-    script.release.notify_waiters();
     let done =
         s.gw.wait_terminal("general", &id, Duration::from_secs(30))
             .await?;
-    assert_eq!(turn_state(&done), "delivered");
+    assert_eq!(turn_state(&done), "failed");
+    assert_eq!(done["safe_error_code"], "turn_interrupted");
+    assert_eq!(done["retryable"], true);
+    assert_eq!(script.requests.lock().unwrap().as_slice(), requests);
+    assert_eq!(seed::admitted(&path, &id)?, active);
+    // Reporting preserves retry state; fixture settlement exercises the reclaim trigger.
+    assert_eq!(Connection::open(&path)?.execute(
+        "UPDATE btcc_turns SET semantic_state='cancelled' WHERE turn_id=?1 AND semantic_state='admitted'",
+        [&id],
+    )?, 1);
     let queued: u64 = Connection::open(&path)?.query_row(
         "SELECT count(*) FROM agent_acceptance_reclaims",
         [],
         |r| r.get(0),
     )?;
     assert_eq!(queued, 1);
+    assert_eq!(
+        Connection::open(&path)?.query_row(
+            "SELECT turn_id FROM agent_acceptance_reclaims",
+            [],
+            |r| r.get::<_, String>(0)
+        )?,
+        id
+    );
+    let settled_snapshot = offline(&path, seed::snapshot).await?;
     s.agent.terminate().await?;
     events.lock().unwrap().clear();
     s.gw = s.agent.start_again().await?;
@@ -130,12 +142,14 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
                 .file_name()
                 .is_some_and(|n| n == "storage-correction.json"))
     );
-    assert!(s.agent.logs().contains("step=reclaim_chunk turns=1"));
-    assert!(
-        s.agent
-            .logs()
-            .contains("phase=storage_correction outcome=noop")
-    );
+    let drain_trace = std::fs::read_to_string(s.agent.launch.logs.join("agent-3.log"))?;
+    assert!(drain_trace.contains("step=reclaim_chunk turns=1"));
+    assert_eq!(payload_states(&path, &id)?, [2, 2, 2]);
+    assert_eq!(seed::admitted(&path, &id)?, ["{}", "{}", "{}"]);
+    let after = offline(&path, seed::snapshot).await?;
+    assert_snapshot(&settled_snapshot, &after);
+    assert_eq!(script.requests.lock().unwrap().as_slice(), requests);
+    assert!(drain_trace.contains("phase=storage_correction outcome=noop"));
     assert_eq!(
         Connection::open(&path)?.query_row(
             "SELECT count(*) FROM agent_acceptance_reclaims",
@@ -146,7 +160,17 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     );
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
-    assert!(s.agent.logs().contains("outcome=noop"));
+    let idle_trace = std::fs::read_to_string(s.agent.launch.logs.join("agent-4.log"))?;
+    assert!(idle_trace.contains("phase=storage_correction outcome=noop"));
+    assert!(!idle_trace.contains("step=reclaim_chunk"));
+    assert_eq!(
+        Connection::open(&path)?.query_row(
+            "SELECT count(*) FROM agent_acceptance_reclaims",
+            [],
+            |r| r.get::<_, u64>(0)
+        )?,
+        0
+    );
     tokio::time::sleep(Duration::from_secs(2)).await;
     let pinned = wal::Wal::pin(&s.sandbox.data, "agent-runtime/btcc.sqlite")?;
     let before = pinned.sample()?;
@@ -178,13 +202,14 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
             assert_eq!(seed::admitted(&path, &id)?, active);
         }
         s.agent.launch.remove_env("BUTLER_E2E_ABORT_POINT");
-        // Freeze the resumed turn so all pre-upgrade acceptances can be compared.
-        script.hold.store(true, Ordering::SeqCst);
+        // Restored BTCC acceptances remain admitted; the App turn is already settled.
         s.gw = s.agent.start_again().await?;
         check(&path, 480, &id, &active, &snapshot).await?;
         s.agent.kill9()?;
     }
     restore(&path, &baseline)?;
+    // Identity and preserved data prove deferral avoids replacement despite normal-open writes.
+    let original = secure_fs::identity(&std::fs::metadata(&path)?).id;
     s.agent
         .launch
         .set_env("BUTLER_E2E_DISK_AVAILABLE_BYTES", "1");
@@ -198,17 +223,15 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         "pending_space"
     );
     assert_eq!(seed::admitted(&path, &id)?, active);
-    assert_eq!(
-        std::fs::metadata(&path)?.len(),
-        std::fs::metadata(&baseline)?.len()
-    );
+    assert_eq!(secure_fs::identity(&std::fs::metadata(&path)?).id, original);
+    assert_snapshot(&snapshot, &offline(&path, seed::snapshot).await?);
     s.agent.kill9()?;
-    let pending_bytes = std::fs::metadata(&path)?.len();
-    // Repeated deferral must leave the original allocation intact.
+    // Repeated deferral preserves the original file and its admitted payloads.
     s.gw = s.agent.start_again().await?;
     s.agent.kill9()?;
-    // Normal open registers an owner, but performs no copy or replacement.
-    assert_eq!(std::fs::metadata(&path)?.len(), pending_bytes);
+    assert_eq!(secure_fs::identity(&std::fs::metadata(&path)?).id, original);
+    assert_eq!(seed::admitted(&path, &id)?, active);
+    assert_snapshot(&snapshot, &offline(&path, seed::snapshot).await?);
     s.agent.launch.remove_env("BUTLER_E2E_DISK_AVAILABLE_BYTES");
     s.gw = s.agent.start_again().await?;
     check(&path, 480, &id, &active, &snapshot).await?;
@@ -296,4 +319,33 @@ async fn check(
     .await?;
     assert_snapshot(snapshot, &after);
     Ok(())
+}
+
+fn payload_states(path: &std::path::Path, id: &str) -> Result<Vec<u32>, HarnessError> {
+    let db = Connection::open(path)?;
+    Ok(db.prepare("SELECT payload_state FROM btcc_model_round_acceptances WHERE turn_id=?1 ORDER BY rowid")?
+        .query_map([id], |r| r.get(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+async fn wait_published(path: &std::path::Path) -> Result<(), HarnessError> {
+    // Finish normal progress publication before taking the correction-only snapshot.
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let pending = offline(path, |path| {
+                Ok(Connection::open(path)?.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM btcc_progress_events WHERE status='pending')",
+                    [],
+                    |r| r.get::<_, bool>(0),
+                )?)
+            })
+            .await?;
+            if !pending {
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?
 }

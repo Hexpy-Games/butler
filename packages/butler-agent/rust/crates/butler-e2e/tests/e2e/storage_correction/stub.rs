@@ -1,4 +1,4 @@
-//! Six tool rounds; round four stays blocked across the correction restart.
+//! Six tool rounds; round four is blocked when the original process crashes.
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
