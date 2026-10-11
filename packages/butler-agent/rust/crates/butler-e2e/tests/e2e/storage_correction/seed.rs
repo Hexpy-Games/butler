@@ -34,11 +34,14 @@ pub(super) fn seed(path: &Path, p: &Profile, active: &str) -> Result<(), Harness
     db.execute_batch(
         "PRAGMA secure_delete=OFF; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
     )?;
+    // Exercise the additive migration against the actual pre-upgrade layout.
+    db.execute_batch("ALTER TABLE btcc_model_round_acceptances DROP COLUMN continuation_delta_json; ALTER TABLE btcc_model_round_acceptances DROP COLUMN payload_state;")?;
     let tx = db.transaction()?;
     for i in 0..p.turns {
         let id = format!("corr-{i:04}");
-        tx.execute("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status) VALUES(?1,'general',?1,?1,'fixture','{}','constructed')",[&id])?;
-        tx.execute("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES(?1,'general',?1,?1,?1,'Synthetic history','fixture','{}','{}',?2,1,1)",params![id,if i%20==0 {"cancelled"} else {"delivered"}])?;
+        tx.execute("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status) VALUES(?1,?2,?1,?1,'fixture','{}','constructed')",params![id,format!("corr-chat-{i}")])?;
+        tx.execute("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES(?1,?3,?1,?1,?1,'Synthetic history','fixture','{}','{}',?2,1,1)",params![id,if i%20==0 {"cancelled"} else {"delivered"},format!("corr-chat-{i}")])?;
+        tx.execute("INSERT INTO btcc_messages(message_id,session_id,turn_id,role,content,idempotency_key,created_at) VALUES(?1,?2,?1,'assistant','Synthetic history',?1,'2026-01-01T00:00:00Z')",params![id,format!("corr-chat-{i}")])?;
     }
     let admitted = if p.perf { 162 } else { 0 };
     let mut insert=tx.prepare("INSERT INTO btcc_model_round_acceptances(acceptance_id,turn_id,round_id,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,provider_identity_json,created_at) VALUES(?1,?2,?1,'fixture',0,'fixture',1,'openai/gpt-6-luna',1,?3,'{}','2026-01-01T00:00:00Z')")?;
@@ -70,7 +73,7 @@ pub(super) fn seed(path: &Path, p: &Profile, active: &str) -> Result<(), Harness
         } else if i < admitted + 473 {
             1_020_000 + (i - admitted) * 1_520_000 / 472
         } else {
-            344_000 + (i % 7) * 1_000
+            340_764 + (i % 7) * 1_000
         };
         let payload = format!(
             r#"{{"continuation":{{"statelessInput":[{{"type":"message","content":"distinct-{i}:{}"}}]}}}}"#,
@@ -85,6 +88,7 @@ pub(super) fn seed(path: &Path, p: &Profile, active: &str) -> Result<(), Harness
     tx.commit()?;
     db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); DROP TRIGGER acceptance_reclaim_on_settle; DROP TABLE agent_storage_corrections; DROP TABLE agent_acceptance_reclaims;")?;
     db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+    seed_history(path, p.turns)?;
     Ok(())
 }
 
@@ -153,5 +157,46 @@ pub(super) fn assert_correct(
     assert_eq!(secure, 0);
     assert!(!path.with_extension("sqlite.compact-tmp").exists());
     assert!(!path.with_extension("sqlite.precompact").exists());
+    Ok(())
+}
+
+/// Matching public history for every seeded BTCC session.
+fn seed_history(path: &Path, turns: usize) -> Result<(), HarnessError> {
+    let data = path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| butler_e2e::e2e::harness_error("missing synthetic data root"))?;
+    let mut db = Connection::open(data.join("app-server/butler-client.sqlite"))?;
+    let tx = db.transaction()?;
+    for i in 0..turns {
+        let id = format!("corr-chat-{i}");
+        let turn = format!("corr-{i:04}");
+        tx.execute("INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES(?1,'Synthetic history','chat','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",[&id])?;
+        tx.execute("INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at) VALUES(?1,?2,'delivered','Delivered','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",params![turn,id])?;
+        tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES(?1,?2,?1,'assistant','Synthetic history','delivered','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",params![turn,id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+pub(super) fn live_bytes(path: &Path) -> Result<u64, HarnessError> {
+    let db = Connection::open(path)?;
+    let size: u64 = db.pragma_query_value(None, "page_size", |r| r.get(0))?;
+    let count: u64 = db.pragma_query_value(None, "page_count", |r| r.get(0))?;
+    let free: u64 = db.pragma_query_value(None, "freelist_count", |r| r.get(0))?;
+    Ok((count - free) * size)
+}
+
+/// Stream actual unrelated disk writes before timing; no privileged cache drop.
+pub(super) fn evict_cache(path: &Path) -> Result<(), HarnessError> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)?;
+    let buffer = vec![0x5a; 1_000_000];
+    for _ in 0..20_000 {
+        file.write_all(&buffer)?;
+    }
+    file.sync_all()?;
+    drop(file);
+    std::fs::remove_file(path)?;
     Ok(())
 }

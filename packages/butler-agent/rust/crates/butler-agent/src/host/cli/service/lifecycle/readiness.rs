@@ -23,6 +23,7 @@ pub(super) async fn wait_until_ready(
     expected_nonce: Option<String>,
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let mut deadline = Instant::now() + START_TIMEOUT;
+    let mut progress = StorageProgress::default();
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(2))
@@ -72,7 +73,8 @@ pub(super) async fn wait_until_ready(
         } else if child.is_none() {
             return Err("native_service_stopped_before_readiness".into());
         }
-        deadline = storage_deadline(&config.data_root)
+        deadline = progress
+            .deadline(&config.data_root)
             .await
             .map_or(deadline, |extended| deadline.max(extended));
         if Instant::now() >= deadline {
@@ -260,22 +262,38 @@ pub(super) async fn cleanup_spawned(mut child: Child) {
     }
 }
 
-/// Read only the bounded startup progress record, outside Tokio workers.
-async fn storage_deadline(data: &Path) -> Option<Instant> {
-    let path = data.join("agent-runtime/storage-correction.json");
-    let time = tokio::task::spawn_blocking(move || {
-        let raw = std::fs::read_to_string(path).ok()?;
-        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        if value["schema"] != "butler.storage-correction-progress.v1" {
-            return None;
-        }
-        chrono::DateTime::parse_from_rfc3339(value["deadlineAt"].as_str()?).ok()
-    })
-    .await
-    .ok()??;
-    let remaining = (time.with_timezone(&chrono::Utc) + chrono::Duration::seconds(30)
-        - chrono::Utc::now())
-    .to_std()
-    .ok()?;
-    Some(Instant::now() + remaining)
+/// Metadata polling reads the small record only when it changes.
+#[derive(Default)]
+struct StorageProgress {
+    observed: Option<(std::time::SystemTime, u64)>,
+}
+impl StorageProgress {
+    async fn deadline(&mut self, data: &Path) -> Option<Instant> {
+        let path = data.join("agent-runtime/storage-correction.json");
+        let observed = self.observed;
+        let (identity, time) = tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+            let metadata = std::fs::metadata(&path).ok()?;
+            let identity = (metadata.modified().ok()?, metadata.len());
+            if Some(identity) == observed || metadata.len() > 4096 {
+                return None;
+            }
+            let file = std::fs::File::open(path).ok()?;
+            let mut raw = String::new();
+            file.take(4097).read_to_string(&mut raw).ok()?;
+            let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+            let time = (value["schema"] == "butler.storage-correction-progress.v1")
+                .then(|| chrono::DateTime::parse_from_rfc3339(value["deadlineAt"].as_str()?).ok())
+                .flatten();
+            Some((identity, time))
+        })
+        .await
+        .ok()??;
+        self.observed = Some(identity);
+        let remaining = (time?.with_timezone(&chrono::Utc) + chrono::Duration::seconds(30)
+            - chrono::Utc::now())
+        .to_std()
+        .ok()?;
+        Some(Instant::now() + remaining)
+    }
 }

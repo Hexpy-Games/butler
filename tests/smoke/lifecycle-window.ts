@@ -29,6 +29,12 @@ try {
       await page.goto(`${pathToFileURL(join(directory, "lifecycle.html"))}?${query}`);
       await page.locator("html[data-painted=true]").waitFor();
       await page.evaluate((forceQuit) => (window as unknown as { lifecycleState(state: unknown): void }).lifecycleState({ forceQuit }), forceQuit);
+      await page.evaluate(async () => { await document.fonts.ready; });
+      if (!["error", "failed"].includes(state)) {
+        await page.locator("[data-slot=title]").waitFor({ state: "visible" });
+        await page.locator("[data-slot=line]").waitFor({ state: "visible" });
+        assert.equal(await page.locator("[data-slot=line]").textContent(), copy[locale][kind].stage[stage]);
+      }
       const height = await page.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height));
       await page.setViewportSize({ width: 296, height });
       await page.evaluate(async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); });

@@ -21,18 +21,62 @@ pub(super) async fn until_ready(
         // Keep polling the service so its original error survives that teardown.
         biased;
         result = &mut service => result,
-        initialized = tokio::time::timeout(STARTUP_TIMEOUT, ready) => {
-            match initialized {
-                Ok(_) => service.await,
-                Err(_) => {
-                    trace_timeout().await;
-                    Err(BtccError::relayed(
-                        "native_service_start_timeout", "Startup did not finish within 90 seconds",
-                    ))
-                },
+        initialized = wait_ready(ready, stop) => {
+            if initialized {
+                service.await
+            } else {
+                trace_timeout().await;
+                Err(BtccError::relayed(
+                    "native_service_start_timeout", "Startup exceeded its readiness deadline",
+                ))
             }
         }
         () = stop.wait() => Err(StopSignal::cancelled_startup()),
+    }
+}
+
+// Only an expired startup timer probes the sidecar; no idle work is added.
+async fn wait_ready(mut ready: oneshot::Receiver<()>, stop: &StopSignal) -> bool {
+    if tokio::time::timeout(STARTUP_TIMEOUT, &mut ready)
+        .await
+        .is_ok()
+    {
+        return true;
+    }
+    let Some(path) = stop
+        .data_root()
+        .map(|root| root.join("agent-runtime/storage-correction.json"))
+    else {
+        return false;
+    };
+    let remaining = tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut raw = String::new();
+        std::fs::File::open(path)
+            .ok()?
+            .take(4097)
+            .read_to_string(&mut raw)
+            .ok()?;
+        if raw.len() > 4096 {
+            return None;
+        }
+        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        if value["schema"] != "butler.storage-correction-progress.v1"
+            || !matches!(value["phase"].as_str(), Some("reclaim" | "compact"))
+        {
+            return None;
+        }
+        let deadline = chrono::DateTime::parse_from_rfc3339(value["deadlineAt"].as_str()?).ok()?;
+        (deadline.with_timezone(&chrono::Utc) + chrono::Duration::seconds(30) - chrono::Utc::now())
+            .to_std()
+            .ok()
+    })
+    .await
+    .ok()
+    .flatten();
+    match remaining {
+        Some(remaining) => tokio::time::timeout(remaining, ready).await.is_ok(),
+        None => false,
     }
 }
 

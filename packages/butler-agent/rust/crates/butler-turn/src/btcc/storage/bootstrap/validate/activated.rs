@@ -29,9 +29,18 @@ pub(crate) fn read(
     let started = std::time::Instant::now();
     trace("activated_begin", started);
     let db = open_validation(path, full, cancellation, deferred, started)?;
+    validate_connection(&db, full, started)
+}
+
+/// Validate the manifest using the caller's deadline-aware connection.
+pub(in crate::btcc::storage) fn validate_connection(
+    db: &Connection,
+    full: bool,
+    started: std::time::Instant,
+) -> StorageResult<String> {
     let expected = manifest_id();
     let (receipt_id, receipt_raw) = marker_row(
-        &db,
+        db,
         "agent_storage_migration_receipt",
         "receipt_json",
         StorageCode::AgentBtccStorageUnreceiptedTarget,
@@ -42,17 +51,17 @@ pub(crate) fn read(
     let receipt: Value = serde_json::from_str(&receipt_raw)
         .map_err(|source| error(StorageCode::AgentBtccStorageReceiptInvalid).with_source(source))?;
     validate_receipt(&receipt, &expected)?;
-    canonical_schema(&db)?;
+    canonical_schema(db)?;
     trace("schema_validated", started);
     if full {
         trace("full_validation_begin", started);
-        integrity(&db)?;
+        integrity(db)?;
         trace("integrity_validated", started);
-        references::validate(&db)?;
+        references::validate(db)?;
         trace("references_validated", started);
     }
     let (marker_id, marker_raw) = marker_row(
-        &db,
+        db,
         "agent_storage_activation_marker",
         "marker_json",
         StorageCode::AgentBtccStorageActivationMissing,

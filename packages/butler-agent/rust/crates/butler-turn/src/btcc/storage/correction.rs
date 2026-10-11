@@ -90,7 +90,15 @@ pub fn run_startup_correction(
     remove(&sidecar)?;
     let result = execute(path, &mut run);
     let cleaned = remove(&sidecar);
-    let outcome = result?;
+    let outcome = match result {
+        Err(StorageError::Sqlite { source })
+            if source.sqlite_error_code() == Some(rusqlite::ErrorCode::OperationInterrupted)
+                && (run.stop.is_cancelled() || run.remaining().is_zero()) =>
+        {
+            CorrectionOutcome::Deferred
+        }
+        other => other?,
+    };
     cleaned?;
     (run.progress)(
         match outcome {
@@ -121,13 +129,17 @@ fn execute(path: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionOutcome> {
     }
     drop(db);
     let mut db = writer(path)?;
-    bootstrap::migrate_current(&mut db)?;
+    // An estimated-time deferral only updates its bounded retry marker; it
+    // must not rerun migration or reclaim while compaction is inadmissible.
     if initial.name.as_deref() == Some("pending_time")
+        && initial.queued == 0
         && state::admission(path, &state::pages(&db)?, run.remaining())? == Some("pending_time")
     {
         state::defer(&db, "pending_time", initial.attempts)?;
         return Ok(CorrectionOutcome::Deferred);
     }
+    run.hook(&db);
+    bootstrap::migrate_current(&mut db)?;
     if initial.name.is_none() {
         let start = Instant::now();
         reclaim::backfill(&mut db)?;

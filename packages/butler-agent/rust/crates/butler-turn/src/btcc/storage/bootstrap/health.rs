@@ -51,8 +51,8 @@ pub(in crate::btcc::storage) fn stamp_verified(path: &Path) -> StorageResult<()>
 
 pub(in crate::btcc::storage) fn verify_correction(
     db: &Connection,
-    path: &Path,
+    started: std::time::Instant,
 ) -> StorageResult<()> {
     validate::correction(db)?;
-    validate::activated::read(path, false, CancellationToken::new(), false).map(|_| ())
+    validate::activated::validate_connection(db, false, started).map(|_| ())
 }

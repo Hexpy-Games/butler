@@ -12,6 +12,10 @@ const observer = watchStorageCorrection(root, (value: number) => { deadline = va
 try {
   const directory = join(root, "agent-runtime");
   await mkdir(directory);
+  const stale = JSON.stringify({ schema: "butler.storage-correction-progress.v1", phase: "compact", deadlineAt: new Date(Date.now() - 60_000).toISOString() });
+  await writeFile(join(directory, "storage-correction.json"), stale);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(deadline, 0, "stale crash progress must not expire the new startup");
   const expires = Date.now() + 180_000;
   const record = JSON.stringify({ schema: "butler.storage-correction-progress.v1", phase: "compact", deadlineAt: new Date(expires).toISOString() });
   const staging = join(directory, "progress.tmp");

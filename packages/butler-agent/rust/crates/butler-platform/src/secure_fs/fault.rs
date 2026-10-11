@@ -37,3 +37,21 @@ pub fn abort_point(point: &str) {
     #[cfg(not(debug_assertions))]
     let _ = point;
 }
+
+/// Debug-only storage pause, bounded by the caller's stop token and deadline.
+pub fn hold_point(point: &str, stopped: impl Fn() -> bool) -> io::Result<()> {
+    #[cfg(debug_assertions)]
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && std::env::var("BUTLER_E2E_HOLD_POINT").as_deref() == Ok(point)
+        && let Some(release) = std::env::var_os("BUTLER_E2E_HOLD_RELEASE")
+    {
+        let release = std::path::PathBuf::from(release);
+        drop(File::create_new(release.with_extension("held"))?);
+        while !release.exists() && !stopped() {
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = (point, stopped);
+    Ok(())
+}

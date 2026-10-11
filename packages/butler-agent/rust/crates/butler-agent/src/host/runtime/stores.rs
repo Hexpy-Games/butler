@@ -134,12 +134,15 @@ async fn open_btcc(
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
         let correction = butler_turn::btcc::run_startup_correction(
-            &bootstrap.path, &cancellation, |step, duration, bytes| {
-                butler_core::diagnostic!("[btcc-startup] phase=storage_correction step={step} duration_us={} wal_bytes={bytes}", duration.as_micros());
-            },
-        ).map_err(|e| error(e.code(), e.message()))?;
+            &bootstrap.path,
+            &cancellation,
+            correction_progress,
+        )
+        .map_err(|e| error(e.code(), e.message()))?;
         Ok::<_, BtccError>((bootstrap, correction))
-    }).await.map_err(|e| error("storage_bootstrap_worker_failed", e))??;
+    })
+    .await
+    .map_err(|e| error("storage_bootstrap_worker_failed", e))??;
     check_startup(stop)?;
     let host_id = SystemIdentity
         .hostname()
@@ -195,5 +198,19 @@ fn btcc_config(path: &Path, manifest_id: &str, host_id: &str) -> BtccStorageConf
         process_liveness: Arc::new(ProcessLivenessProbe {
             host_id: host_id.to_owned(),
         }),
+    }
+}
+
+fn correction_progress(step: &str, duration: std::time::Duration, bytes: u64) {
+    if let Some(outcome) = step.strip_prefix("outcome=") {
+        butler_core::diagnostic!(
+            "[btcc-startup] phase=storage_correction outcome={outcome} duration_us={} wal_bytes={bytes}",
+            duration.as_micros()
+        );
+    } else {
+        butler_core::diagnostic!(
+            "[btcc-startup] phase=storage_correction step={step} duration_us={} wal_bytes={bytes}",
+            duration.as_micros()
+        );
     }
 }

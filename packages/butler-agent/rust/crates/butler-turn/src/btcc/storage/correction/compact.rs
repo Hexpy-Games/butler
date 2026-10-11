@@ -19,13 +19,24 @@ pub(super) fn run(
     sidecar(path, "compact", run)?;
     set(&db, "compacting", false, &serde_json::json!({}))?;
     run.hook(&db);
-    let counts = counts(&db)?;
+    let counts = match counts(&db) {
+        Ok(counts) => counts,
+        Err(error) => {
+            db.progress_handler(0, None::<fn() -> bool>);
+            if expired(run) {
+                state::defer(&db, "pending_time", attempts)?;
+                return Ok(CorrectionOutcome::Deferred);
+            }
+            return Err(error);
+        }
+    };
     db.progress_handler(0, None::<fn() -> bool>);
     db.close().map_err(|(_, e)| StorageError::sqlite(e))?;
     retire_wal(path)?;
     let tmp = sibling(path, "compact-tmp");
     remove(&tmp)?;
     abort_point("before_vacuum");
+    secure_fs::hold_point("before_vacuum", || expired(run)).map_err(io_error)?;
     if let Err(e) = copy(path, &tmp, run) {
         remove(&tmp)?;
         return copy_failure(path, &e, attempts, run);
@@ -97,7 +108,7 @@ fn verify(
             "copy integrity, page size or counts differ",
         ));
     }
-    bootstrap::verify_correction(&db, path)?;
+    bootstrap::verify_correction(&db, started)?;
     (run.progress)("verification", started.elapsed(), 0);
     Ok(())
 }

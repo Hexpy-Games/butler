@@ -13,7 +13,7 @@ mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
-pub use fault::{abort_point, checkpoint as fault_checkpoint, write as fault_write};
+pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;

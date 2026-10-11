@@ -1,6 +1,7 @@
 //! CORR-01: correction, byte-exact replay, crash recovery, queue drain and idle.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
+mod matrix;
 mod stub;
 use super::data_perf::wal;
 use butler_e2e::e2e::{
@@ -40,8 +41,12 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let active = seed::admitted(&path, &id)?;
     assert_eq!(active.len(), 3);
-    seed::seed(&path, &seed::Profile::small(), &id)?;
-    let snapshot = seed::snapshot(&path)?;
+    let turn = id.clone();
+    let snapshot = offline(&path, move |path| {
+        seed::seed(path, &seed::Profile::small(), &turn)?;
+        seed::snapshot(path)
+    })
+    .await?;
     let baseline = s.sandbox.root.join("legacy.sqlite");
     std::fs::copy(&path, &baseline)?;
     let events = Arc::new(Mutex::new(vec![]));
@@ -65,9 +70,7 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     tokio::time::timeout(Duration::from_secs(30), script.held.notified())
         .await
         .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
-    seed::assert_correct(&path, 480, &id, &active)?;
-    assert_snapshot(&snapshot, &seed::snapshot(&path)?);
-    assert!(std::fs::metadata(&path)?.len() <= 60_000_000);
+    check(&path, 480, &id, &active, &snapshot).await?;
     assert!(
         !path
             .parent()
@@ -94,10 +97,14 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         5,
         "rounds 1–3 were requested again"
     );
-    assert_eq!(
-        s.gw.get("/session-view?session_id=general").await?.status,
-        200
-    );
+    for session in 0..120 {
+        let view =
+            s.gw.get(&format!("/session-view?session_id=corr-chat-{session}"))
+                .await?;
+        assert_eq!(view.status, 200);
+        assert_eq!(view.data()["messages"].as_array().unwrap().len(), 1);
+        assert_eq!(view.data()["messages"][0]["text"], "Synthetic history");
+    }
     script.hold.store(false, Ordering::SeqCst);
     script.release.notify_waiters();
     let done =
@@ -122,6 +129,12 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
             .any(|p| p
                 .file_name()
                 .is_some_and(|n| n == "storage-correction.json"))
+    );
+    assert!(s.agent.logs().contains("step=reclaim_chunk turns=1"));
+    assert!(
+        s.agent
+            .logs()
+            .contains("phase=storage_correction outcome=noop")
     );
     assert_eq!(
         Connection::open(&path)?.query_row(
@@ -158,12 +171,17 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         );
         s.agent.reap();
         assert!(path.exists());
+        if point == "after_rename" {
+            // Before normal open changes owners/claims, compare EVERY table.
+            let after = offline(&path, seed::snapshot).await?;
+            assert_eq!(after, snapshot, "offline correction changed durable data");
+            assert_eq!(seed::admitted(&path, &id)?, active);
+        }
         s.agent.launch.remove_env("BUTLER_E2E_ABORT_POINT");
         // Freeze the resumed turn so all pre-upgrade acceptances can be compared.
         script.hold.store(true, Ordering::SeqCst);
         s.gw = s.agent.start_again().await?;
-        seed::assert_correct(&path, 480, &id, &active)?;
-        assert_snapshot(&snapshot, &seed::snapshot(&path)?);
+        check(&path, 480, &id, &active, &snapshot).await?;
         s.agent.kill9()?;
     }
     restore(&path, &baseline)?;
@@ -185,9 +203,15 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
         std::fs::metadata(&baseline)?.len()
     );
     s.agent.kill9()?;
+    let pending_bytes = std::fs::metadata(&path)?.len();
+    // Repeated deferral must leave the original allocation intact.
+    s.gw = s.agent.start_again().await?;
+    s.agent.kill9()?;
+    // Normal open registers an owner, but performs no copy or replacement.
+    assert_eq!(std::fs::metadata(&path)?.len(), pending_bytes);
     s.agent.launch.remove_env("BUTLER_E2E_DISK_AVAILABLE_BYTES");
     s.gw = s.agent.start_again().await?;
-    seed::assert_correct(&path, 480, &id, &active)?;
+    check(&path, 480, &id, &active, &snapshot).await?;
     script.hold.store(false, Ordering::SeqCst);
     script.release.notify_waiters();
     s.gw.wait_terminal("general", &id, Duration::from_secs(30))
@@ -196,6 +220,15 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     assert!(
         !missing.load(Ordering::SeqCst),
         "btcc.sqlite was absent during startup"
+    );
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event.kind, notify::EventKind::Remove(_))
+                && event.paths.contains(&path)),
+        "btcc.sqlite was removed instead of atomically replaced"
     );
     s.finish().await?;
     server.abort();
@@ -218,7 +251,10 @@ pub(super) fn assert_snapshot(
         assert_eq!(after.get(table), Some(value), "table changed: {table}");
     }
 }
-fn restore(path: &std::path::Path, baseline: &std::path::Path) -> Result<(), HarnessError> {
+pub(super) fn restore(
+    path: &std::path::Path,
+    baseline: &std::path::Path,
+) -> Result<(), HarnessError> {
     for suffix in [
         "sqlite-wal",
         "sqlite-shm",
@@ -229,5 +265,35 @@ fn restore(path: &std::path::Path, baseline: &std::path::Path) -> Result<(), Har
         let _ = std::fs::remove_file(path.with_extension(suffix));
     }
     std::fs::copy(baseline, path)?;
+    Ok(())
+}
+
+/// Large fixture I/O belongs on a blocking worker, not the stub's Tokio worker.
+pub(super) async fn offline<T: Send + 'static>(
+    path: &std::path::Path,
+    work: impl FnOnce(&std::path::Path) -> Result<T, HarnessError> + Send + 'static,
+) -> Result<T, HarnessError> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || work(&path))
+        .await
+        .map_err(|error| butler_e2e::e2e::harness_error(error.to_string()))?
+}
+
+async fn check(
+    path: &std::path::Path,
+    settled: usize,
+    id: &str,
+    active: &[String],
+    snapshot: &std::collections::BTreeMap<String, (u64, String)>,
+) -> Result<(), HarnessError> {
+    let turn = id.to_owned();
+    let active = active.to_vec();
+    let after = offline(path, move |path| {
+        seed::assert_correct(path, settled, &turn, &active)?;
+        assert!(std::fs::metadata(path)?.len() as f64 <= seed::live_bytes(path)? as f64 * 1.2);
+        seed::snapshot(path)
+    })
+    .await?;
+    assert_snapshot(snapshot, &after);
     Ok(())
 }

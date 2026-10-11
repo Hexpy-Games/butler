@@ -15,7 +15,8 @@ export function watchStorageCorrection(dataRoot, onProgress) {
       if ((await stat(path)).size > 4096) return;
       const progress = JSON.parse(await readFile(path, "utf8"));
       const time = Date.parse(progress.deadlineAt);
-      if (closed || progress.schema !== "butler.storage-correction-progress.v1" || !Number.isFinite(time)) return;
+      if (closed || progress.schema !== "butler.storage-correction-progress.v1" ||
+          !["reclaim", "compact"].includes(progress.phase) || !Number.isFinite(time) || time <= Date.now()) return;
       deadline = time + 30_000;
       onProgress(deadline);
     } catch { /* The record appears and disappears during startup. */ }

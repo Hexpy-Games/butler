@@ -583,7 +583,7 @@ async function ensureServer() {
 }
 
 async function recoverUnexpectedForegroundExit() {
-  if (startupPending()) { failStartup(); return; }
+  if (startupPending()) { storageCorrectionWatch?.close(); storageCorrectionWatch = null; failStartup(); return; }
   if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
   if (!foregroundRecoveryBudget.record()) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
@@ -2768,6 +2768,7 @@ app.on("window-all-closed", () => {
 app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
     quitFeedback?.destroy();
@@ -2928,6 +2929,7 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
+  storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (!failStartup()) app.quit();
 }
 
@@ -2936,7 +2938,7 @@ function recordAppStartupProgress(stage, {
   trayReady = Boolean(tray),
 } = {}) {
   startupTiming(stage);
-  if (stage === "agent_starting") {
+  if (stage === "agent_starting" && startupPending()) {
     startupStage("service");
     storageCorrectionWatch?.close();
     storageCorrectionWatch = watchStorageCorrection(butlerDataRoot, (deadline) => startupStage("storage", deadline));
