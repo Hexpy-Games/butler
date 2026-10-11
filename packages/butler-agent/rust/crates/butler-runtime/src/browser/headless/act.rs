@@ -215,6 +215,7 @@ fn same_target(prepared: &Value, current: &Value) -> bool {
             "payment",
             "upload",
             "submit",
+            "form_post",
             "addons",
         ]
         .iter()
@@ -305,7 +306,7 @@ async fn select_text(page: &Page, args: &Value, step: &Value) -> Result<(), Stri
 fn recovery(reason: &str, first: usize) -> String {
     match reason {
         "control_changed" => "The page navigated or re-rendered after the completed steps, so the observation expired. Completed steps took effect; never repeat them. Observe and continue with the remaining steps using fresh refs or points.".to_owned(),
-        "approval_target_changed" => "An earlier step changed this step's target (focus or element moved, or it became sensitive). Completed steps took effect; never repeat them. Observe and send the remaining steps again; a keyboard step into a payment or upload control needs its own call.".to_owned(),
+        "approval_target_changed" => "An earlier step changed this step's target (focus or element moved, or it became sensitive). Completed steps took effect; never repeat them. Observe and send the remaining steps again; a keyboard step into a payment, upload or committing control needs its own call.".to_owned(),
         "stale_ref" => "The observation expired after the completed steps. Completed steps took effect; never repeat them. Observe and continue with fresh refs.".to_owned(),
         other => format!("Step {first} was not dispatched ({other}). Completed steps took effect; never repeat them. Observe before continuing."),
     }

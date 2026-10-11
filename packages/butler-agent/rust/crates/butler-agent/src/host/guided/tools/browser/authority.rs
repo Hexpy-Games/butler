@@ -1,8 +1,8 @@
 //! Durable ask-first and hand-back waits use the existing #162 continuation lane.
 use super::super::GuidedTools;
 use butler_turn::btcc::{
-    AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput, ModelRoundToolCall,
-    RequestDecision, ToolExecutionError,
+    AccessMode, AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
+    ModelRoundToolCall, RequestDecision, ToolExecutionError,
 };
 use serde_json::{Value, json};
 pub(super) enum Gate {
@@ -128,14 +128,39 @@ pub(super) async fn act_gate(
     input: &Value,
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
-    if input["always_confirm"] == true
-        || owner.binding.access_mode.reviews_effects()
-        || owner.binding.authority_request_ref.is_some()
-    {
+    if reviews(&owner.binding.access_mode, input) || resume_reference(owner, occurrence).is_some() {
         gate(owner, call, occurrence, input, target).await
     } else {
         Ok(Gate::Allowed(None))
     }
+}
+
+/// Which batches a tier asks about: payment and upload steps on every tier,
+/// every batch under ask-always, and under ask-first only a batch that
+/// commits something on the user's behalf. Browsing never asks there.
+fn reviews(mode: &AccessMode, input: &Value) -> bool {
+    input["always_confirm"] == true
+        || match mode {
+            AccessMode::AskAlways => true,
+            AccessMode::AskExceptReads => input["commit"] == true,
+            AccessMode::FullAccess | AccessMode::ReadOnly => false,
+        }
+}
+
+/// Whether a focus-dependent step may still land on a signed-in commit: only
+/// when ask-first did not review this batch as one.
+pub(super) fn commit_cleared(mode: &AccessMode, input: &Value) -> bool {
+    input["commit"] == true || *mode != AccessMode::AskExceptReads
+}
+
+/// A batch commits when the model declares a step as committing, or when a
+/// step posts a form in a signed-in tab, whatever the model declared.
+pub(super) fn commits(args: &Value, prepared: &Value) -> bool {
+    let declared = args["steps"].as_array().into_iter().flatten();
+    let resolved = prepared["steps"].as_array().into_iter().flatten();
+    declared.into_iter().any(|step| step["commits"] == true)
+        || prepared["profile"] == "signed_in"
+            && resolved.into_iter().any(|step| step["form_post"] == true)
 }
 
 fn resume_reference<'a>(owner: &'a GuidedTools, occurrence: &str) -> Option<&'a str> {

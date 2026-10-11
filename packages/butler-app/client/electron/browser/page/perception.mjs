@@ -359,3 +359,13 @@ export function paymentForm(element) {
   const root = element?.closest?.("form") ?? element?.ownerDocument;
   return Boolean(root && [...root.querySelectorAll("input")].some(input => ["number", "cvc"].includes(vaultKind(input))));
 }
+
+/** Whether clicking this control (no key) or pressing key in it submits a POST form: a structural sign of a committing step. */
+export function postsForm(element, key) {
+  const form = element?.form;
+  if (!form || element.localName === "textarea") return false;
+  const submitter = ["submit", "image"].includes(element.type);
+  if (key === undefined ? !submitter : !(key === "Enter" || submitter && key === "Space")) return false;
+  const method = submitter && element.getAttribute("formmethod") || form.getAttribute("method") || "get";
+  return method.toLowerCase() === "post";
+}

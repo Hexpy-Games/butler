@@ -11,5 +11,6 @@ export function focusTarget({ key }) {
   const form = element.form ?? element.closest("form");
   return { hit, payment: paymentForm(element),
     upload: element.localName === "input" && element.type === "file" && /^(Enter|Space)$/u.test(key ?? ""),
-    submit: key === "Enter" && Boolean(form) || element.type === "submit" && /^(Enter|Space)$/u.test(key ?? "") };
+    submit: key === "Enter" && Boolean(form) || element.type === "submit" && /^(Enter|Space)$/u.test(key ?? ""),
+    form_post: postsForm(element, key ?? "") };
 }
