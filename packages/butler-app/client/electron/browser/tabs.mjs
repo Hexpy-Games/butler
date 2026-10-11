@@ -79,7 +79,8 @@ class UserBrowser {
   detach(tab) {
     // Layout/preview occlusion must not remove a held overlay: macOS synthesizes
     // mouseUp at (0,0), losing the click/drag release and its destination.
-    const dragging = this.pointer.captures(tab?.id) && tab.id === this.activeId && this.areaVisible && !this.nativeCovers;
+    // Navigation may hide the area while a held pick is being carried into the App.
+    const dragging = this.pointer.captures(tab?.id) && tab.id === this.activeId && !this.nativeCovers;
     if (tab?.id === this.activeId && !dragging) this.pointer.hide();
     if (tab?.attached && tab.view) {
       void this.capture(tab);

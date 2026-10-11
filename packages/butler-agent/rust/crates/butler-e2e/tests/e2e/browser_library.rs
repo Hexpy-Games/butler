@@ -1,11 +1,25 @@
 //! S6: persistent Library, Script15 KO/EN/JA search and one idle-write observation.
-#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test assertions"
+)]
+mod agent;
+mod migration;
+mod organize;
+mod pages;
 use super::idle_resources::writes as idle_disk;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 fn scrap(id: &str, title: &str) -> Value {
-    json!({"id":id,"kind":"scrap","title":title,"url":"https://example.com/","text":title,"crop":"data:image/jpeg;base64,YQ==","capturedAt":"2026-10-09T00:00:00Z"})
+    json!({"id":id,"kind":"scrap","title":title,"url":"https://example.com/","site":"example.com","text":title,"crop":"data:image/jpeg;base64,YQ==","capturedAt":"2026-10-09T00:00:00Z"})
+}
+/// The `data` of a 200 reply.
+fn ok(reply: butler_e2e::e2e::gateway::Reply) -> Value {
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    reply.data().clone()
 }
 async fn page(s: &butler_e2e::e2e::scenario::Scenario, path: &str) -> Result<Value, HarnessError> {
     let reply = s.gw.get(path).await?;

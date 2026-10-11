@@ -31,7 +31,8 @@ import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 import { BrowserToggle } from "../browser/BrowserToggle";
 import { HubConversationButton } from "../browser/HubConversationButton";
-
+import { libraryTitle, useLibraryNames } from "../library/libraryNav";
+import { useTitlebarBack } from "@/app/navigationBack";
 
 export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   useAppLocale();
@@ -44,6 +45,8 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
+  const back = useTitlebarBack();
+  useLibraryNames();
   const { title, subtitle } = useMemo(
     () =>
       activeTitleForView(
@@ -67,13 +70,11 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   );
   const hasWorkspaceIdentity = branchInfo?.workspace_binding === "session_worktree" ||
     branchInfo?.workspace_binding === "project";
-  const canOpenSessionFolder = Boolean(
-    hasWorkspaceIdentity && branchInfo?.workspace_status === "available",
-  );
-
+  const canOpenSessionFolder = Boolean(hasWorkspaceIdentity && branchInfo?.workspace_status === "available");
   return (
     <TitlebarShell
-      title={<span data-test-class="titlebar-title">{title}</span>}
+      title={<span data-test-class="titlebar-title">{storeView.kind === "library" ? libraryTitle(storeView) : title}</span>}
+      back={back}
       subtitle={
         subtitle || hasWorkspaceIdentity ? (
           <TitlebarWorkspaceSubtitle

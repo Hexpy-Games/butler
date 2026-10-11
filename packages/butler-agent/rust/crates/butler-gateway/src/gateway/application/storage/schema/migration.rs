@@ -108,7 +108,7 @@ pub(super) fn add_current_columns(connection: &Connection) -> Result<(), AppStor
     Ok(())
 }
 
-fn ensure_column(
+pub(super) fn ensure_column(
     connection: &Connection,
     table: &str,
     column: &str,

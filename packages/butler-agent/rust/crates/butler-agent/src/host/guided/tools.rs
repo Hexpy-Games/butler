@@ -9,6 +9,7 @@ mod execute;
 mod feedback;
 mod hooks;
 mod image;
+mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
 mod browser;
@@ -330,6 +331,8 @@ impl GuidedTools {
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
+                    | ToolName::LibrarySearch
+                    | ToolName::LibraryOrganize
             )
         ) || browser::supports(name)
             || GuidedWorkTools::is_work_tool(name)
