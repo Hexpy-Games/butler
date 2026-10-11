@@ -47,11 +47,11 @@ async function runCase(width: number, theme: string) {
   } finally { rmSync(isolation, { recursive: true, force: true }); }
 }
 
-const output = resolve(".tmp/ui-crash-smoke");
+const output = resolve(process.env.BUTLER_CRASH_SMOKE_OUT ?? ".tmp/ui-crash-smoke");
 mkdirSync(output, { recursive: true });
 const temporary = mkdtempSync(join(tmpdir(), "butler-ui-crash-"));
 const store = createUiCrashStore(temporary, () => "0.1.0-preview.10");
-const server = await createNativeAppServer({ uiRoot: resolve(".tmp/ui-crash-build") });
+const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_CRASH_SMOKE_UI_ROOT ?? ".tmp/ui-crash-build") });
 const browser = await launchSmokeBrowser();
 let currentPage: Page | undefined;
 

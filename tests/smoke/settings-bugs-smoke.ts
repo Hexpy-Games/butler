@@ -1,5 +1,6 @@
 // Public UI -> isolated native gateway, with injected transport failures only.
 // UI smoke coverage for #218–#221; all model providers are stubbed.
+import { conversationBackgroundFlow } from "../support/conversation-background-flow";
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -310,6 +311,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
     await skillChecks(page, prefix);
     await mcpChecks(page, prefix);
     await scheduleChecks(page, prefix);
+    await conversationBackgroundFlow(page, language);
     assert.deepEqual(errors, [], "no unhandled renderer errors");
   } catch (error) {
     const visibility = !page.isClosed() ? await page.evaluate(() => ({ hidden: document.hidden, focused: document.hasFocus() })).catch(() => null) : null;
