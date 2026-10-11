@@ -1,0 +1,50 @@
+/* Card morph between a 420px and a 520px setup card (intro spec rev 5).
+   One surface with the card's own paint grows or shrinks with real
+   left/width/height while the top edge stays put; nothing is scaled, so the
+   hairline border, the corners and the text stay crisp on every frame. The
+   larger card's content is clipped to the moving edge with clip-path on the
+   same curve. These geometry transitions are the motion lint's one
+   file-exact allowance (scripts/lint/motion-lint.ts GEOMETRY_MORPH). The
+   surface is empty and absolutely positioned, so each frame lays out one
+   box; it exists only for --motion-deliberate. */
+.surface {
+  position: absolute;
+  z-index: -1;
+  top: var(--setup-morph-top);
+  left: var(--setup-morph-from-left);
+  width: var(--setup-morph-from-width);
+  height: var(--setup-morph-from-height);
+  box-sizing: border-box;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-raised-opaque);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+}
+
+.surface[data-phase="to"] {
+  left: var(--setup-morph-to-left);
+  width: var(--setup-morph-to-width);
+  height: var(--setup-morph-to-height);
+  transition:
+    left var(--motion-deliberate) var(--motion-ease-emphasized),
+    width var(--motion-deliberate) var(--motion-ease-emphasized),
+    height var(--motion-deliberate) var(--motion-ease-emphasized);
+}
+
+.clip {
+  clip-path: var(--setup-morph-clip-from);
+}
+
+.clip[data-phase="to"] {
+  clip-path: var(--setup-morph-clip-to);
+  transition: clip-path var(--motion-deliberate) var(--motion-ease-emphasized);
+}
+
+/* The morph never starts under reduced motion (the cards swap at once). */
+@media (prefers-reduced-motion: reduce) {
+  .surface[data-phase="to"],
+  .clip[data-phase="to"] {
+    transition: none;
+  }
+}

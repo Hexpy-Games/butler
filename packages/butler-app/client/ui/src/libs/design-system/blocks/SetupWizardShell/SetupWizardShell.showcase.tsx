@@ -1,8 +1,11 @@
+import { useEffect, useId, useRef, useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
+import { ShieldCheck } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
-import { SetupWizardContent, SetupWizardList, SetupWizardProgress, SetupWizardShell } from "./SetupWizardShell";
+import { SetupWizardStepAction, SetupWizardStepCard } from "../SetupWizardStepCard";
+import { SetupWizardContent, SetupWizardList, SetupWizardProgress, SetupWizardShell, type SetupWizardIntro } from "./SetupWizardShell";
 
 export const meta: ShowcaseMeta = {
   title: "SetupWizardShell",
@@ -63,6 +66,38 @@ function Focus({ context, tone, anchor = "center" }: { context: ShowcaseRenderCo
   );
 }
 
+/**
+ * The first-run pair: the 420px intro and the 520px consent step. Start and
+ * Back change `stepKey`, so the card morphs; focus follows the new card.
+ */
+function MorphFlow({ context, tone, intro }: { context: ShowcaseRenderContext; tone: "light" | "dark"; intro?: SetupWizardIntro }) {
+  const copy = text(context), welcome = focusLabels[context.locale], id = useId();
+  const [step, setStep] = useState(false);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (moved.current) document.getElementById(step ? `${id}-title` : `${id}-start`)?.focus({ preventScroll: true });
+    moved.current = true;
+  }, [id, step]);
+  return (
+    <SetupWizardShell anchor="top" embedded intro={intro} stepKey={step ? "step" : "intro"} title="Butler" tone={tone} variant="focus">
+      {step ? (
+        <SetupWizardStepCard activeIndex={1} backLabel={copy.back} icon={<ShieldCheck size="lg" />} onBack={() => setStep(false)}
+          steps={copy.steps.map((label) => ({ id: label, label }))} title={copy.title} titleId={`${id}-title`}
+          actions={<SetupWizardStepAction forward text={copy.accept} />}>
+          <Typo.Body>{copy.body}</Typo.Body>
+          <SetupWizardList>{copy.items.map((item) => <li key={item}><Typo.Body as="span">{item}</Typo.Body></li>)}</SetupWizardList>
+        </SetupWizardStepCard>
+      ) : (
+        <SetupWizardContent surface="solid">
+          <Typo.H3 as="h1" align="center">{welcome.title}</Typo.H3>
+          <Typo.Body align="center" tone="secondary">{welcome.body}</Typo.Body>
+          <Button id={`${id}-start`} size="lg" stretch onClick={() => setStep(true)}>{welcome.agree}</Button>
+        </SetupWizardContent>
+      )}
+    </SetupWizardShell>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Step (light backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="light" /> },
   { name: "Step (dark backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="dark" /> },
@@ -70,6 +105,9 @@ export const stories: ShowcaseStory[] = [
   { name: "Focus (one column, dark)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="dark" /> },
   { name: "Focus anchored to the top (light)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="light" /> },
   { name: "Focus anchored to the top (dark)", widths: ["app", "wide"], render: (context) => <Focus anchor="top" context={context} tone="dark" /> },
+  { name: "Card morph (intro to step)", widths: ["375", "app", "wide"], render: (context) => <MorphFlow context={context} tone="light" /> },
+  { name: "Card morph (intro to step, dark)", widths: ["375", "app"], render: (context) => <MorphFlow context={context} tone="dark" /> },
+  { name: "Re-run entrance (intro=\"rerun\")", widths: ["375", "app"], render: (context) => <MorphFlow context={context} intro="rerun" tone="light" /> },
   {
     name: "Step indicator (SetupWizardProgress)",
     widths: ["375", "app"],

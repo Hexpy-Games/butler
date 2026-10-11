@@ -19,6 +19,20 @@
   background: var(--conversation-bg);
 }
 
+/* A background layer paints over the shell's own background and under every
+   child: the shell isolates it so the layer's negative z-index stays inside. */
+.withBackground {
+  isolation: isolate;
+}
+
+.background {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .scroll {
   --conversation-scrollbar-offset: 10px;
 
@@ -78,6 +92,14 @@
     --conversation-content-width: calc(
       100% - var(--adaptive-composer-inset) - var(--adaptive-composer-inset)
     );
+  }
+}
+
+/* A compact conversation has square leading corners (as the new chat sets
+   for its own wallpaper). */
+@container conversation (width <= 560px) {
+  .background {
+    --workspace-left-radius: 0;
   }
 }
 

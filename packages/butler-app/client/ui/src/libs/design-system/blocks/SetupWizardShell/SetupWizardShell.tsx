@@ -6,14 +6,19 @@ import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
 import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
-import { SetupWizardStage } from "./SetupWizardStage";
+import { SetupWizardStage, type SetupWizardIntro } from "./SetupWizardStage";
 import styles from "./SetupWizardShell.module.css";
 import { dsClass } from "../../lib/internal";
 
 export { SetupWizardProgress, type SetupWizardProgressProps, type SetupWizardStep } from "./SetupWizardProgress";
 export { SetupWizardContent, SetupWizardList, type SetupWizardContentProps } from "./SetupWizardContent";
+export type { SetupWizardIntro } from "./SetupWizardStage";
 
-/** The first-run backdrop stays bloom, whatever the user's wallpaper. */
+/**
+ * The first-run backdrop stays bloom, whatever the user's wallpaper. The
+ * first-install ink intro (`intro="full"`) draws on this layer and reads the
+ * card morph's rects (`SetupWizardMorph.from/to`) for its keep-out.
+ */
 const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
 
 /** `wizard`: title, stepper and a glass body. `focus`: one centered column on the backdrop. */
@@ -39,8 +44,14 @@ interface SetupWizardShellProps
   embedded?: boolean;
   /** Focus only: where the column sits (default `center`). */
   anchor?: SetupWizardAnchor;
-  /** Focus only: a new key replaces the card (old one fades out, new one rises in). */
+  /**
+   * Focus only: a new key replaces the card. A width change (420px intro and
+   * 520px step) morphs one card into the other; otherwise the old card fades
+   * out and the new one rises in.
+   */
   stepKey?: string;
+  /** Focus only: how the first card appears (`rerun`: the short re-run variant). */
+  intro?: SetupWizardIntro;
 }
 
 export function SetupWizardShell({
@@ -55,6 +66,7 @@ export function SetupWizardShell({
   embedded = false,
   anchor = "center",
   stepKey,
+  intro,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
@@ -92,7 +104,8 @@ export function SetupWizardShell({
             className={dsClass(styles.focusColumn)}
             aria-label={regionLabel}
           >
-            {stepKey === undefined ? children : <SetupWizardStage stepKey={stepKey}>{children}</SetupWizardStage>}
+            {stepKey === undefined && intro === undefined ? children
+              : <SetupWizardStage intro={intro} stepKey={stepKey ?? "card"}>{children}</SetupWizardStage>}
           </PageContainer>
         </ScrollArea>
       ) : (
