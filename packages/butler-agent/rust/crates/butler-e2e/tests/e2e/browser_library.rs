@@ -17,7 +17,7 @@ fn scrap(id: &str, title: &str) -> Value {
     json!({"id":id,"kind":"scrap","title":title,"url":"https://example.com/","site":"example.com","text":title,"crop":"data:image/jpeg;base64,YQ==","capturedAt":"2026-10-09T00:00:00Z"})
 }
 /// The `data` of a 200 reply.
-fn ok(reply: butler_e2e::e2e::gateway::Reply) -> Value {
+fn ok(reply: &butler_e2e::e2e::gateway::Reply) -> Value {
     assert_eq!(reply.status, 200, "{}", reply.text);
     let mut body = reply.body;
     body["data"].take()
