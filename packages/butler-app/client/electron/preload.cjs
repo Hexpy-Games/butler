@@ -9,6 +9,9 @@ const messageCacheSchema = "butler.message-cache.v1";
 const messageCachePrefix = "butler:message-cache:v1:";
 const appUiStateSchema = "butler.app-ui-state.v1";
 const appUiStateKey = "butler:app-ui-state:v1";
+const powerStateChannel = "butler:power-state";
+const powerStateSubscribers = new Set();
+let latestPowerState = null;
 // Sandboxed preloads cannot load arbitrary Node modules or JSON files. The
 // main process validates the shared JSON artifact and passes this typed,
 // bounded value through BrowserWindow.additionalArguments instead.
@@ -25,6 +28,20 @@ const disabledCacheBudget = Object.freeze({
 });
 const bridgeErrorSchema = "butler.app.bridge-error.v1";
 const safeBridgeCodePattern = /^[a-z][a-z0-9_]{1,63}$/u;
+
+function normalizePowerState(value) {
+  if (!value || typeof value !== "object" ||
+      typeof value.onBattery !== "boolean" || typeof value.constrained !== "boolean") return null;
+  return { onBattery: value.onBattery, constrained: value.constrained };
+}
+
+ipcRenderer.on(powerStateChannel, (_event, value) => {
+  const state = normalizePowerState(value);
+  if (!state || (latestPowerState && latestPowerState.onBattery === state.onBattery &&
+      latestPowerState.constrained === state.constrained)) return;
+  latestPowerState = state;
+  for (const handler of powerStateSubscribers) handler(state);
+});
 
 function safeBridgeCode(value) {
   return typeof value === "string" && safeBridgeCodePattern.test(value)
@@ -594,6 +611,10 @@ const butlerApp = Object.freeze({
     if (!allowed || !["GET", "POST", "PATCH", "DELETE"].includes(method)) throw new Error("Invalid Library request.");
     return requestJson(route.pathname + route.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   },
+  history: ({ path, method = "GET", body }) => {
+    if (!/^\/browser-history(?:\/(?:search|suggestions|delete|delete-url|clear))?(?:\?|$)/u.test(path)) throw new Error("invalid_history_route");
+    return requestJson(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
   listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -710,6 +731,12 @@ const butlerApp = Object.freeze({
     const listener = (_event, state) => handler(state);
     ipcRenderer.on("butler:app-update-state", listener);
     return () => ipcRenderer.removeListener("butler:app-update-state", listener);
+  },
+  onPowerState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    powerStateSubscribers.add(handler);
+    if (latestPowerState) handler(latestPowerState);
+    return () => { powerStateSubscribers.delete(handler); };
   },
   getUpdates: () => requestJson("/updates"),
   checkUpdates: (request = {}) => requestJson("/updates/check", {
@@ -1422,6 +1449,10 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     const listener = (_event, point) => handler(point);
     ipcRenderer.on("butler-browser:pointer", listener);
     return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
+  onHistory: (handler) => {
+    const listener = () => handler(); ipcRenderer.on("butler-browser:history", listener);
+    return () => ipcRenderer.removeListener("butler-browser:history", listener);
   },
   onAddress: (handler) => {
     const listener = () => handler();
