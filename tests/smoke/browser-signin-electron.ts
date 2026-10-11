@@ -140,8 +140,16 @@ try {
   const outsideActed = await internal("tab.act", out.tab, { observation: outside.obs, steps: outsideSteps, prepared_steps: outsidePrepared.steps });
   assert.equal(outsideActed.status, "ok", JSON.stringify(outsideActed));
   await waitBrowser(async () => { const text = String((await internal("tab.observe", out.tab, { include_image: false })).text); return text.includes("설치됨") && text.includes('value="AD-1!"'); }, "point, fill and key inside the signed-out cross-origin frame");
+  // A drag inside the cross-origin frame holds the button from press to release there.
+  const dragObserved = await internal("tab.observe", out.tab, { include_image: false });
+  const dragSteps = [{ action: "drag", ref: refOf(String(dragObserved.text), /slider "드래그 패드" \[([^\]]+)\]/u), offset: [80, 0] }];
+  const dragPrepared = await internal("tab.prepare", out.tab, { observation: dragObserved.obs, steps: dragSteps });
+  assert.equal(dragPrepared.status, "ok", JSON.stringify(dragPrepared)); assert.ok(noCard(dragPrepared.steps[0]), JSON.stringify(dragPrepared.steps[0]));
+  const dragged = await internal("tab.act", out.tab, { observation: dragObserved.obs, steps: dragSteps, prepared_steps: dragPrepared.steps });
+  assert.equal(dragged.status, "ok", JSON.stringify(dragged));
+  await waitBrowser(async () => String((await internal("tab.observe", out.tab, { include_image: false })).text).includes("dragged 80"), "drag inside the signed-out cross-origin frame");
   await internal("tab.close", out.tab);
-  console.log("frames: signed-out tab clicks, fills and presses keys in the cross-origin frame with no card");
+  console.log("frames: signed-out tab clicks, fills, presses keys and drags in the cross-origin frame with no card");
 
   // A security keypad answers user_required on every act.
   await internal("signin.grant", "", { site: "fixture-bank.test" });

@@ -15,19 +15,26 @@ export function routeTarget(target, frame) {
 
 const MOUSE = { mouseMove: "mouseMoved", mouseDown: "mousePressed", mouseUp: "mouseReleased", mouseWheel: "mouseWheel" };
 const BITS = { alt: 1, control: 2, meta: 4, shift: 8 };
+const BUTTONS = { left: 1, right: 2, middle: 4 };
 const bits = modifiers => (modifiers ?? []).reduce((sum, name) => sum | (BITS[name] ?? 0), 0);
 
-/** The mouse sender for a target: Electron input for the main renderer, CDP for a remote frame. */
-export function mouseSender(tab, target) {
+/** The mouse sender for a gesture's targets: Electron input when all are in the
+ * main renderer, CDP when any is in a remote frame (CDP routes every event by
+ * hit test, so a drag may cross between frames). */
+export function mouseSender(tab, ...targets) {
   const contents = tab.view.webContents;
-  if (!target?.[REMOTE_FRAME]) return async input => contents.sendInputEvent(input);
-  return input => contents.debugger.sendCommand("Input.dispatchMouseEvent", {
-    type: MOUSE[input.type], x: input.x, y: input.y, modifiers: bits(input.modifiers),
-    button: ["mouseDown", "mouseUp"].includes(input.type) ? input.button ?? "left" : "none",
-    clickCount: input.clickCount ?? 0,
-    // Electron's wheel delta is positive upward; CDP's is positive downward.
-    ...(input.type === "mouseWheel" ? { deltaX: -input.deltaX, deltaY: -input.deltaY } : {}),
-  });
+  if (!targets.some(target => target?.[REMOTE_FRAME])) return async input => contents.sendInputEvent(input);
+  return input => {
+    // A move with the button held carries it as a modifier in Electron's form.
+    const held = (input.modifiers ?? []).includes("leftButtonDown");
+    const button = ["mouseDown", "mouseUp"].includes(input.type) ? input.button ?? "left" : held ? "left" : "none";
+    return contents.debugger.sendCommand("Input.dispatchMouseEvent", {
+      type: MOUSE[input.type], x: input.x, y: input.y, modifiers: bits(input.modifiers), button,
+      buttons: input.type === "mouseUp" ? 0 : BUTTONS[button] ?? 0, clickCount: input.clickCount ?? 0,
+      // Electron's wheel delta is positive upward; CDP's is positive downward.
+      ...(input.type === "mouseWheel" ? { deltaX: -input.deltaX, deltaY: -input.deltaY } : {}),
+    });
+  };
 }
 
 /** Inserts text at the focus, inside the remote frame that holds it if any. */
