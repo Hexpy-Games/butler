@@ -5,9 +5,10 @@ import { openImportDiskAccess } from "./signInsApi";
 import { useBrowserImport } from "./useBrowserImport";
 
 const BRANDS: Record<string, string> = { chrome: "Chrome", chromium: "Chromium", edge: "Edge", brave: "Brave", arc: "Arc", whale: "Whale", firefox: "Firefox", zen: "Zen", safari: "Safari" };
+// Whale's official icon: https://shared-whale.pstatic.net/favicon/icon.png (Naver trademark).
 
 /** Settings → Browser, shared by the optional first-run step. Passwords stay out of view state. */
-export function SecurityBrowserImportSection({ keychain, onImported }: { keychain: boolean; onImported: () => void }) {
+export function SecurityBrowserImportSection({ keychain, onImported, showTitle = true }: { keychain: boolean; onImported: () => void; showTitle?: boolean }) {
   const copy = appCopy.settings.browserImport;
   const flow = useBrowserImport(onImported);
   const [expanded, setExpanded] = useState(false);
@@ -23,7 +24,7 @@ export function SecurityBrowserImportSection({ keychain, onImported }: { keychai
     void flow.run(flow.selected, value);
   }
   return (
-    <SettingsSection id="browser-import" kind="form" title={appCopy.settings.pageSections.browserImport} state={flow.sources === null ? "loading" : "ready"}>
+    <SettingsSection id="browser-import" kind="form" title={showTitle ? appCopy.settings.pageSections.browserImport : undefined} state={flow.sources === null ? "loading" : "ready"}>
       <Stack gap="sm" data-test-class="browser-import-flow">
         {!flow.result ? <>
           <DisclosureRow title={copy.chooseItems} open={expanded} onToggle={() => setExpanded(value => !value)}>
@@ -35,7 +36,7 @@ export function SecurityBrowserImportSection({ keychain, onImported }: { keychai
             </ButtonContainer>
           </DisclosureRow>
           {flow.sources?.map(source => <Tooltip key={source.key} label={!keychain && flow.passwords ? copy.needsKeychain : copy.run}>
-            <ChoiceCard icon={source.browser === "whale" || !BRANDS[source.browser] ? <Globe2 size="lg" /> : <IconSlot size="lg"><img src={`/browser-icons/${source.browser}.svg`} width={20} height={20} alt="" /></IconSlot>} title={BRANDS[source.browser] ?? source.browser} description={source.name}
+            <ChoiceCard icon={!BRANDS[source.browser] ? <Globe2 size="lg" /> : <IconSlot size="lg"><img src={`/browser-icons/${source.browser}.${source.browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" /></IconSlot>} title={BRANDS[source.browser] ?? source.browser} description={source.name}
               meta={source.permission === "denied" ? copy.pickFolder : copy.run} data-import-source={source.key}
               state={flow.busy && flow.selected === source.key ? "loading" : blocked ? "disabled" : "default"}
               onClick={() => void flow.run(source.key)} />

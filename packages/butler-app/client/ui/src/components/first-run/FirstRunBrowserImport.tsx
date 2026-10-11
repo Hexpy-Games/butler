@@ -20,6 +20,6 @@ export function FirstRunBrowserImport({ flow }: { flow: FirstRunFlow }) {
       <SetupWizardStepAction onClick={flow.skipImport}>{copy.skip}</SetupWizardStepAction>
       <SetupWizardStepAction forward onClick={flow.skipImport}>{copy.continue}</SetupWizardStepAction>
     </>}>
-    <SettingsPage><SecurityBrowserImportSection keychain={keychain} onImported={() => {}} /></SettingsPage>
+    <SettingsPage><SecurityBrowserImportSection keychain={keychain} showTitle={false} onImported={() => {}} /></SettingsPage>
   </FirstRunStepCard>;
 }

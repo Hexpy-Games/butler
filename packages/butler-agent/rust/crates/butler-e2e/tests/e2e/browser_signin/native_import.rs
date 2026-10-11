@@ -3,7 +3,10 @@ use super::{
     fill::{Cleanup, keychain_opt_in, keychain_scenario},
     host::admin,
 };
-use butler_e2e::e2e::{HarnessError, scenario::Setup};
+use butler_e2e::e2e::{
+    HarnessError,
+    scenario::{Scenario, Setup},
+};
 use butler_platform::{
     browser_profiles::profile_roots,
     secrets::{SecretKey, SecretStore},
@@ -11,6 +14,7 @@ use butler_platform::{
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 const CANARY: &str = "canary-native-723ac8";
 fn fixture(name: &str, file: &str, destination: &Path) -> Result<(), HarnessError> {
@@ -85,12 +89,10 @@ async fn firefox_nss_with_and_without_primary_password() -> Result<(), HarnessEr
         assert_eq!(run.status, 200, "{}", run.text);
         assert_eq!(
             run.data()["passwords"],
-            if name == "firefox-empty" { 1 } else { 0 }
+            usize::from(name == "firefox-empty")
         );
-        assert_eq!(
-            run.data()["updated"],
-            if name == "firefox-empty" { 0 } else { 1 }
-        );
+        assert_eq!(run.data()["updated"], usize::from(name != "firefox-empty"));
+        assert_imported_password(&s, &view.data()["sites"][0]["entry"]).await?;
         assert!(!run.text.contains(CANARY));
     }
     super::canary_absent(&s.sandbox.data, CANARY, &s.agent.logs());
@@ -168,6 +170,7 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
     }
     assert_eq!(run.status, 200, "{}", run.text);
     assert_eq!(run.data()["passwords"], 1);
+    assert_imported_password(&s, &view.data()["sites"][0]["entry"]).await?;
     let undo = a
         .send(
             Method::POST,
@@ -181,4 +184,79 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
     drop(cleanup);
     drop(source_key);
     s.finish().await
+}
+
+/// Exercise the public fill path, proving the decrypted value without logging it.
+async fn assert_imported_password(s: &Scenario, entry: &Value) -> Result<(), HarnessError> {
+    use super::host::{attach, call, snapshot, tab};
+    let a = admin(s);
+    let origin = entry["origins"][0].as_str().unwrap().to_owned();
+    let pulled = Arc::new(Mutex::new(false));
+    let (host_admin, host_origin, received) = (a.clone(), origin.clone(), pulled.clone());
+    let host = attach(
+        s,
+        Arc::new(move |frame: Value| {
+            let (a, origin, received) = (host_admin.clone(), host_origin.clone(), received.clone());
+            Box::pin(async move {
+                if frame["op"] == "signin.fill" {
+                    let token = frame["args"]["fill_token"].as_str().unwrap();
+                    let reply = a
+                        .send(
+                            Method::POST,
+                            &format!("/internal/browser-host/credentials/{token}"),
+                            Some(json!({"origin":origin})),
+                            &[],
+                        )
+                        .await
+                        .unwrap();
+                    assert_eq!(reply.status, 200, "fixture credential pull");
+                    *received.lock().unwrap() = reply.body["password"].as_str() == Some(CANARY);
+                    json!({"status":"filled","url":origin})
+                } else {
+                    json!({"status":"ok","tab":frame["tab"],"url":origin})
+                }
+            })
+        }),
+    )
+    .await?;
+    snapshot(
+        &a,
+        json!([tab(
+            "t1",
+            "conversation:general",
+            &format!("{origin}/login"),
+            "agent"
+        )]),
+    )
+    .await?;
+    call(
+        &a,
+        "general",
+        "signin.grant",
+        "",
+        json!({"site":entry["site"]}),
+    )
+    .await?;
+    let filled = call(
+        &a,
+        "general",
+        "signin.fill",
+        "t1",
+        json!({"entry_id":entry["id"]}),
+    )
+    .await?;
+    assert_eq!(filled["status"], "filled");
+    assert!(
+        *pulled.lock().unwrap(),
+        "imported password must match the fixture"
+    );
+    assert!(
+        !host
+            .last("signin.fill")
+            .unwrap()
+            .to_string()
+            .contains(CANARY)
+    );
+    drop(host);
+    Ok(())
 }

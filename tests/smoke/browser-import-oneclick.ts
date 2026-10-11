@@ -90,6 +90,7 @@ try {
     await page.getByRole("button", { name: copy.firstRun.agree, exact: true }).click();
     if (!before) {
       await page.locator('[data-first-run-screen="import"]').waitFor();
+      assert.equal(await page.getByRole("heading", { name: copy.settings.pageSections.browserImport, exact: true }).count(), 1);
       await capture("wizard-import");
       await page.getByRole("button", { name: copy.settings.browserImport.skip, exact: true }).click();
     }
@@ -138,9 +139,14 @@ try {
     await capture("csv-waiting");
     csvReady = true;
     await section.getByText(copy.settings.browserImport.result(120, 34, 5), { exact: true }).waitFor();
+    await section.getByRole("button", { name: copy.settings.browserImport.undo, exact: true }).click();
+    await section.getByText(copy.settings.browserImport.undone, { exact: true }).waitFor();
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).click();
     await section.getByRole("button", { name: copy.settings.browserImport.deleteCsv, exact: true }).waitFor({ state: "detached" });
     assert.equal(csvDeleted, true, "CSV deletion needs the owner's click");
+    await section.getByRole("button", { name: copy.settings.browserImport.more, exact: true }).click();
+    await section.locator('[data-import-source="chrome:work"]').click();
+    await section.getByText(copy.settings.browserImport.result(120, 34, 5), { exact: true }).waitFor();
     for (const width of [320, 390, 430]) { await page.setViewportSize({ width, height: 1000 }); await capture(`result-${width}`); }
   }
   assert.equal(server.stubModelCalls.length, 0);

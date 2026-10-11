@@ -51,7 +51,7 @@ pub(super) async fn begin(state: &Arc<HttpState>, body: &Value) -> Result<Value,
     watches.retain(|_, session| {
         session
             .try_lock()
-            .map_or(true, |s| s.expires > Instant::now())
+            .map_or(true, |s| s.result.is_some() || s.expires > Instant::now())
     });
     if watches.len() >= 8 {
         return Err(failure("import_busy"));
@@ -74,10 +74,22 @@ pub(super) async fn begin(state: &Arc<HttpState>, body: &Value) -> Result<Value,
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(180)).await;
         if let Some(state) = weak.upgrade() {
-            state.browser_import.watches.lock().await.remove(&expiry_id);
+            expire_waiting(&state, &expiry_id).await;
         }
     });
     Ok(json!({"export_id":id,"run_id":run}))
+}
+
+/// Stop abandoned watches, retaining completed receipts until the UI cancels them.
+async fn expire_waiting(state: &Arc<HttpState>, id: &str) {
+    let session = state.browser_import.watches.lock().await.get(id).cloned();
+    if let Some(session) = session {
+        let mut export = session.lock().await;
+        if export.result.is_none() {
+            export.watch = None;
+            state.browser_import.watches.lock().await.remove(id);
+        }
+    }
 }
 
 async fn session(state: &Arc<HttpState>, body: &Value) -> Result<Arc<Mutex<Export>>, HttpError> {

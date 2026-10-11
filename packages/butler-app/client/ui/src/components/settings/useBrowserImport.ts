@@ -78,7 +78,7 @@ export function useBrowserImport(onImported: () => void) {
   async function more() { await cancel(); setResult(null); setError(null); setUndone(false); }
   async function undo() {
     if (!result) return;
-    await action(async () => { await cancel(); await undoBrowserImport(result.run_id); setUndone(true); imported.current(); });
+    await action(async () => { if (exportId) await cancel(); await undoBrowserImport(result.run_id); setUndone(true); imported.current(); });
   }
   async function selectCsv() {
     if (!activeExport.current) return;

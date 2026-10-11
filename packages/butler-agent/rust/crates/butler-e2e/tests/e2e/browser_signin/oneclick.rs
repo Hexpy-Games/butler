@@ -90,11 +90,12 @@ async fn oneclick_profiles_folder_dedupe_and_exact_undo() -> Result<(), HarnessE
     );
     let undo = post(&admin, "undo", json!({"run_id":first["run_id"]})).await?;
     assert_eq!(undo["bookmarks"], 2);
-    assert!(
+    assert_eq!(
         s.gw.get("/library?kind=bookmark").await?.data()["items"]
             .as_array()
             .unwrap()
-            .is_empty()
+            .as_slice(),
+        &[] as &[Value]
     );
     assert_eq!(
         post(&admin, "undo", json!({"run_id":first["run_id"]})).await?["bookmarks"],
