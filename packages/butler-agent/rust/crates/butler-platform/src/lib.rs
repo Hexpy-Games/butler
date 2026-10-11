@@ -39,6 +39,8 @@
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
+//! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
+//!   Hello or the account password) before a secret is shown.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! implements what the service needs to run and stop (process identity,
@@ -72,6 +74,7 @@ pub mod sqlite;
 pub mod stdio;
 pub mod storage_size;
 pub mod time_zone;
+pub mod user_auth;
 pub mod user_dirs;
 
 #[cfg(windows)]

@@ -22,6 +22,9 @@ fn executes(op: &str) -> bool {
             | "tab.dialog"
             | "tab.close"
             | "signin.fill"
+            | "pay.inspect"
+            | "pay.fill"
+            | "traveler.fill"
     )
 }
 pub(super) fn dispatch(

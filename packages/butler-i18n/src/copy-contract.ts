@@ -135,6 +135,9 @@ export interface ApprovalRequestCopy {
   signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
   /** The wait-for-user hand-off card title, by why the user must act. */
   waitHandoff: (reason: string) => string;
+  /** A saved card or traveler fill's hand-off: the step only the user can do (keypad, card app, OTP, 3-D Secure). */
+  payStep: (reason: string) => string;
+  payHandoff: string;
   browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
@@ -238,7 +241,7 @@ export interface BrowserCopy {
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
   signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
   butlerTab: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
-  stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string;
+  stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string; paymentRequired: string;
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
   pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
@@ -608,6 +611,7 @@ export interface AppCopy {
     attention: string;
     /** What a waiting browser hand-off needs, in place of `attention`. */
     signInAttention: string;
+    paymentAttention: string;
     tabAttention: string;
     newGroup: string;
     saveFailed: string;
@@ -1153,7 +1157,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "paymentMethods" | "travelers" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1786,6 +1790,56 @@ export interface AppCopy {
       revoke: string;
       revokeConfirm: (site: string) => string;
       revoked: string;
+    };
+    /** Settings → Browser → Payment methods and Traveler details. Card numbers,
+     * CVCs and identity numbers are never shown; a card number is revealed only
+     * after the operating system verifies the user. */
+    vault: {
+      unavailable: string;
+      emptyCards: string;
+      emptyTravelers: string;
+      emptyPurchaseSites: string;
+      add: string;
+      save: string;
+      cancel: string;
+      edit: string;
+      delete: string;
+      saved: string;
+      failed: string;
+      nickname: string;
+      cardNumber: string;
+      expiry: string;
+      cvc: string;
+      holderName: string;
+      pin2: string;
+      ownerId: string;
+      keepSecret: string;
+      reveal: string;
+      revealUnavailable: string;
+      hide: string;
+      expired: string;
+      deleteConfirm: (name: string) => string;
+      askEveryTime: string;
+      allowedSites: (count: number) => string;
+      site: string;
+      sitePlaceholder: string;
+      addSite: string;
+      removeSite: (site: string) => string;
+      lastUsed: (when: string) => string;
+      notUsed: string;
+      travelerName: string;
+      latinSurname: string;
+      latinGiven: string;
+      birthDate: string;
+      gender: string;
+      genderOptions: { M: string; F: string };
+      nationality: string;
+      passportNumber: string;
+      passportExpiry: string;
+      rrn: string;
+      phone: string;
+      email: string;
+      storedFields: (fields: string) => string;
     };
     /** Settings → Security → import from another browser (counts only). */
     browserImport: {

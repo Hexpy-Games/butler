@@ -1,0 +1,233 @@
+// test-category: security
+/** Saved card and traveler fills in the real App with offline fixtures; stub only, no model calls.
+ * Main types the values with native text input into cc-* fields, a PG-style
+ * cross-origin iframe with split Korean card fields and a PG pop-up; a keypad
+ * and a 3-D Secure frame hand the tab to the user; a look-alike origin and a
+ * replayed token are refused; observations hide and screenshots mask the
+ * filled fields; the canary card number appears nowhere. The fill needs the
+ * system keychain (opt-in `BUTLER_E2E_KEYCHAINS`, test-only service, deleted). */
+import { strict as assert } from "node:assert";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
+import { hostResolverRules, publicResolverPatch, startPayFixtures } from "../support/pay-fixtures";
+
+const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
+mkdirSync(evidence, { recursive: true });
+const CARD = { number: "4000056655665556", month: "12", year: "2030", cvc: "737", name: "HONG GILDONG", pin2: "12", owner: "900101" };
+const CANARY = CARD.number;
+const keychains = process.env.BUTLER_E2E_KEYCHAINS;
+const fixtures = startPayFixtures(CARD);
+process.env.BUTLER_SMOKE_ELECTRON_ARGS = JSON.stringify([...JSON.parse(process.env.BUTLER_SMOKE_ELECTRON_ARGS ?? "[]"), hostResolverRules()]);
+let agentHome: string | undefined;
+if (keychains) {
+  agentHome = mkdtempSync(join(tmpdir(), "pay-agent-home-"));
+  mkdirSync(join(agentHome, "Library"), { recursive: true }); mkdirSync(join(agentHome, ".codex"));
+  symlinkSync(keychains, join(agentHome, "Library/Keychains"));
+}
+const app = await browserAgentApp(evidence, () => null, undefined,
+  keychains ? { env: { HOME: agentHome!, BUTLER_USER_AUTH: "deny" }, config: { secrets: { store: "system" } } } : {});
+type Tab = { id: string; owner: string; holder: string; url: string; opener?: string; payStep?: string };
+const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})`;
+const subject = "globalThis.browserAgentSubject";
+const state = () => app.call<{ tabs: Tab[] }>("state");
+const tabOf = async (id: string) => (await state()).tabs.find(tab => tab.id === id)!;
+const admin = () => JSON.parse(readFileSync(join(app.gateway.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret as string;
+const results: unknown[] = [];
+async function internal(op: string, tab?: string, args: Record<string, unknown> = {}) {
+  const response = await fetch(`${app.gateway.url}internal/browser/calls`, { method: "POST",
+    headers: { ...app.gateway.authHeaders, "x-butler-admin": admin(), "content-type": "application/json" }, body: JSON.stringify({ op, session: "general", tab, args }) });
+  const result = await response.json(); results.push({ op, result }); return result as Record<string, any>;
+}
+async function security(method: string, path: string, body?: unknown) {
+  const response = await fetch(`${app.gateway.url}${path.slice(1)}`, { method, headers: { ...app.gateway.authHeaders, "x-butler-admin": admin(), "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  return { status: response.status, body: await response.json() as Record<string, any> };
+}
+const shop = (path: string) => fixtures.url("www.fixture-shop.test", path);
+const originOf = (url: string) => new URL(url).origin;
+async function open(path: string) {
+  const opened = await internal("tab.open", undefined, { url: shop(path) });
+  assert.equal(opened.status, "ok", JSON.stringify(opened));
+  return opened.tab as string;
+}
+async function close(tab: string) {
+  if ((await tabOf(tab))?.holder === "user") await app.call("control", { id: tab, holder: "agent" });
+  // The gateway sees the hand-back once main publishes it.
+  await waitBrowser(async () => (await internal("tab.close", tab)).reason !== "user_control", "tab closed");
+  await waitBrowser(async () => !(await tabOf(tab)), "tab gone");
+}
+const refOf = (text: string, pattern: RegExp) => { const ref = pattern.exec(text)?.[1]; assert.ok(ref, `${pattern} in ${text}`); return ref; };
+
+try {
+  await app.main(publicResolverPatch(module));
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: "light", access_mode: "full_access" }) });
+  await app.call("open");
+  if (keychains) await fillFlows();
+  else {
+    const tab = await open("/checkout-cc");
+    assert.equal((await internal("pay.lookup", tab)).reason, "vault_unavailable", "file store only: module off");
+    await close(tab);
+    console.log("vault: off without the system keychain");
+    await settingsShots();
+  }
+  writeFileSync(join(evidence, "calls.json"), JSON.stringify(results, null, 2));
+  for (const text of [JSON.stringify(results), app.gateway.diagnostics()]) assert.ok(!text.includes(CANARY), "canary leaked");
+  scan(app.gateway.butlerData);
+  console.log("canary absent");
+} finally {
+  writeFileSync(join(evidence, "calls.json"), JSON.stringify(results, null, 2));
+  await app.stop(); fixtures.stop();
+  if (agentHome) rmSync(agentHome, { recursive: true, force: true });
+}
+assert.ok(!readFileSync(join(evidence, "electron.log"), "utf8").includes(CANARY), "canary in the App log");
+assert.ok(!readFileSync(join(evidence, "agent.log"), "utf8").includes(CANARY), "canary in the Agent log");
+
+async function fillFlows() {
+  const added = await security("POST", "/security/vault/cards", { nickname: "Travel card", number: CARD.number.replace(/(\d{4})/gu, "$1 ").trim(),
+    exp_month: Number(CARD.month), exp_year: Number(CARD.year), cvc: CARD.cvc, holder_name: CARD.name, pin2: CARD.pin2, owner_id: CARD.owner });
+  assert.equal(added.status, 200, JSON.stringify(added.body));
+  const id = added.body.data.id as string;
+  // Record the tokens main pulls with, to replay one.
+  await app.main(`(()=>{const b=${subject};if(b.__payTokens)return;b.__payTokens=[];const pull=b.pullVault;b.pullVault=(token,...rest)=>{b.__payTokens.push(token);return pull(token,...rest)}})()`);
+  try {
+    await checkoutFlow(id);
+    await pgFrameFlow(id);
+    await handOffFlows(id);
+    await popupFlow(id);
+    // Settings with a saved card: masked number, allowed sites, reveal denied by the harness.
+    await settingsShots();
+  } finally { await security("DELETE", `/security/vault/cards/${id}`); }
+}
+
+async function checkoutFlow(id: string) {
+  const tab = await open("/checkout-cc");
+  const inspected = await internal("pay.inspect", tab, { kind: "card" });
+  assert.equal(inspected.status, "ok", JSON.stringify(inspected));
+  assert.equal(inspected.amount, "59,800원");
+  assert.deepEqual([...inspected.fields].sort(), ["cvc", "expiry", "name", "number"]);
+  const looked = await internal("pay.lookup", tab);
+  assert.equal(looked.cards[0].last4, "5556", JSON.stringify(looked));
+  // A look-alike top-level origin is refused before any token.
+  const lookalike = originOf(fixtures.url("files.fixture-shop.test", "/"));
+  const refused = await internal("pay.fill", tab, { item_id: id, top_origin: lookalike, frame_origins: [] });
+  assert.equal(refused.status, "origin_mismatch", JSON.stringify(refused));
+  const filled = await internal("pay.fill", tab, { item_id: id, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+  assert.equal(filled.status, "filled", JSON.stringify(filled));
+  assert.deepEqual([...filled.filled].sort(), ["cvc", "expiry", "name", "number"]);
+  // The token was single use.
+  const token = (await app.main<string[]>(`${subject}.__payTokens`)).at(-1);
+  const replay = await fetch(`${app.gateway.url}internal/browser-host/vault/${token}`, { method: "POST",
+    headers: { ...app.gateway.authHeaders, "x-butler-admin": admin(), "content-type": "application/json" },
+    body: JSON.stringify({ origin: inspected.top_origin, frame_origins: [inspected.top_origin] }) });
+  assert.equal(replay.status, 410, "token reuse refused");
+  // Observations hide the filled fields and screenshots mask them.
+  const observed = await internal("tab.observe", tab, { include_image: true });
+  assert.equal(String(observed.text).match(/filled from saved item \(hidden\)/gu)?.length, 4, String(observed.text));
+  assert.ok(!JSON.stringify(observed).includes(CANARY));
+  await maskedPixels(observed, "checkout");
+  const shot = await internal("tab.screenshot", tab, { observation: observed.obs });
+  assert.ok(!JSON.stringify(shot).includes(CANARY));
+  // Native text input reached the page: the merchant got the exact card.
+  await app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("document.forms[0].submit()")`);
+  await waitBrowser(async () => fixtures.verdicts.some(item => item.startsWith("www.fixture-shop.test/paid:")), "merchant verdict");
+  assert.ok(fixtures.verdicts.includes("www.fixture-shop.test/paid:ok"), JSON.stringify(fixtures.verdicts));
+  await close(tab);
+  console.log("checkout: cc-* fields filled natively; look-alike and replay refused; hidden and masked");
+}
+
+async function pgFrameFlow(id: string) {
+  const tab = await open("/checkout-pg");
+  const pg = originOf(fixtures.url("js.tosspayments.com", "/"));
+  await waitBrowser(async () => (await internal("pay.inspect", tab, { kind: "card" })).status === "ok", "pg frame fields");
+  const inspected = await internal("pay.inspect", tab, { kind: "card" });
+  assert.deepEqual(inspected.frame_origins, [pg], JSON.stringify(inspected));
+  assert.equal(inspected.amount, "32,000원");
+  // Fields in a frame outside the binding are never filled.
+  const unbound = await internal("pay.fill", tab, { item_id: id, top_origin: inspected.top_origin, frame_origins: [] });
+  assert.equal(unbound.status, "no_fields", JSON.stringify(unbound));
+  const filled = await internal("pay.fill", tab, { item_id: id, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+  assert.equal(filled.status, "filled", JSON.stringify(filled));
+  assert.deepEqual([...filled.filled].sort(), ["exp_month", "exp_year", "number", "owner_id", "pin2"]);
+  const observed = await internal("tab.observe", tab, { include_image: false });
+  assert.ok(!JSON.stringify(observed).includes(CANARY) && !JSON.stringify(observed).includes(CARD.owner));
+  await app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.mainFrame.frames.find(f=>f.url.includes("tosspayments")).executeJavaScript("document.forms[0].submit()")`);
+  await waitBrowser(async () => fixtures.verdicts.some(item => item.startsWith("js.tosspayments.com/approve:")), "pg verdict");
+  assert.ok(fixtures.verdicts.includes("js.tosspayments.com/approve:ok"), JSON.stringify(fixtures.verdicts));
+  await close(tab);
+  console.log("pg frame: split card fields, month/year selects, PIN and birth date filled in the cross-origin frame");
+}
+
+async function handOffFlows(id: string) {
+  const keypad = await open("/checkout-keypad");
+  await waitBrowser(async () => (await internal("pay.inspect", keypad, { kind: "card" })).status === "ok", "keypad frame");
+  const inspected = await internal("pay.inspect", keypad, { kind: "card" });
+  const result = await internal("pay.fill", keypad, { item_id: id, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+  assert.deepEqual([result.status, result.reason], ["user_required", "secure_keypad"], JSON.stringify(result));
+  assert.deepEqual(result.filled, ["number"]);
+  const held = await tabOf(keypad);
+  assert.deepEqual([held.holder, held.payStep], ["user", "secure_keypad"], "the keypad is the user's");
+  await close(keypad);
+  const acs = await open("/checkout-3ds");
+  await waitBrowser(async () => (await internal("tab.observe", acs, { include_image: false })).status === "ok", "3ds page");
+  const challenge = await internal("pay.inspect", acs, { kind: "card" });
+  assert.deepEqual([challenge.status, challenge.reason], ["user_required", "three_ds"], JSON.stringify(challenge));
+  assert.equal((await tabOf(acs)).holder, "user");
+  await close(acs);
+  console.log("hand-off: keypad after the number, 3-D Secure before any field");
+}
+
+async function popupFlow(id: string) {
+  const tab = await open("/checkout-popup");
+  const observed = await internal("tab.observe", tab, { include_image: false });
+  const steps = [{ action: "click", ref: refOf(String(observed.text), /button "결제창 열기" \[([^\]]+)\]/u) }];
+  const prepared = await internal("tab.prepare", tab, { observation: observed.obs, steps });
+  assert.equal(prepared.status, "ok", JSON.stringify(prepared));
+  await internal("tab.act", tab, { observation: observed.obs, steps, prepared_steps: prepared.steps });
+  let popup = "";
+  await waitBrowser(async () => { popup = (await state()).tabs.find(item => item.opener === tab)?.id ?? ""; return Boolean(popup); }, "pg pop-up");
+  await waitBrowser(async () => (await internal("pay.inspect", popup, { kind: "card" })).status === "ok", "pop-up fields");
+  const inspected = await internal("pay.inspect", popup, { kind: "card" });
+  assert.equal(inspected.merchant_origin, originOf(shop("/")), JSON.stringify(inspected));
+  assert.equal(inspected.top_origin, originOf(fixtures.url("stdpay.inicis.com", "/")));
+  const filled = await internal("pay.fill", popup, { item_id: id, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+  assert.equal(filled.status, "filled", JSON.stringify(filled));
+  await app.main(`${subject}.tabs.get(${JSON.stringify(popup)}).view.webContents.executeJavaScript("document.forms[0].submit()")`);
+  await waitBrowser(async () => fixtures.verdicts.some(item => item.startsWith("stdpay.inicis.com/paid:")), "pop-up verdict");
+  assert.ok(fixtures.verdicts.includes("stdpay.inicis.com/paid:ok"), JSON.stringify(fixtures.verdicts));
+  await close(tab);
+  console.log("pop-up: the PG window opened for the agent and was filled natively");
+}
+
+/** The observation image is black over every field Butler filled. */
+async function maskedPixels(observed: Record<string, any>, name: string) {
+  const data = observed.image?.data as string; assert.ok(data, "observation image");
+  writeFileSync(join(evidence!, `${name}-observation.jpg`), Buffer.from(data, "base64"));
+  const geometry = observed.image_geometry as { width: number; height: number; cssWidth: number; cssHeight: number };
+  const points = (observed.nodes as Array<{ vault?: boolean; rect: { x: number; y: number; width: number; height: number } }>).filter(node => node.vault)
+    .map(node => [(node.rect.x + node.rect.width / 2) * geometry.width / geometry.cssWidth, (node.rect.y + node.rect.height / 2) * geometry.height / geometry.cssHeight]);
+  assert.equal(points.length, 4, "four filled fields");
+  const dark = await app.main<boolean[]>(`(()=>{const {nativeImage}=${module}('electron');const image=nativeImage.createFromBuffer(Buffer.from(${JSON.stringify(data)},"base64"));const width=image.getSize().width,bitmap=image.toBitmap();
+    return ${JSON.stringify(points)}.map(([x,y])=>{const n=(Math.round(y)*width+Math.round(x))*4;return bitmap[n]<48&&bitmap[n+1]<48&&bitmap[n+2]<48})})()`);
+  assert.ok(dark.every(Boolean), `masked: ${JSON.stringify(dark)}`);
+}
+
+async function settingsShots() {
+  for (const [locale, theme] of [["ko", "light"], ["ko", "dark"], ["en", "light"], ["en", "dark"]]) {
+    await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
+    await app.page.reload();
+    await app.click(locale === "ko" ? "설정" : "Settings");
+    await app.click(locale === "ko" ? "브라우저" : "Browser");
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('#payment-methods,[data-test-class=vault-card-add]'))"), "payment methods");
+    await app.page.expression("(document.querySelector('[data-test-class=vault-card-row]') ?? document.querySelector('[data-test-class=vault-card-add]')).scrollIntoView({block:'center'})");
+    writeFileSync(join(evidence!, `settings-payment-${locale}-${theme}.png`), await app.page.screenshot());
+  }
+}
+
+function scan(root: string) {
+  for (const name of readdirSync(root)) {
+    const path = join(root, name);
+    if (statSync(path).isDirectory()) scan(path);
+    else assert.ok(!readFileSync(path).includes(CANARY), `canary in ${path}`);
+  }
+}

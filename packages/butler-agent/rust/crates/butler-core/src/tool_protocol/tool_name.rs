@@ -135,6 +135,8 @@ tool_names! {
     BrowserClose = "browser_close",
     BrowserWaitForUser = "browser_wait_for_user",
     BrowserSignIn = "browser_sign_in",
+    BrowserPayFill = "browser_pay_fill",
+    BrowserTravelerFill = "browser_traveler_fill",
     OutputCheck = "output_check",
     PreviewStart = "preview_start",
     PreviewStop = "preview_stop",

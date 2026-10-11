@@ -66,7 +66,7 @@ impl Drop for Cleanup {
 
 /// The isolated home reaches the user's keychain folder only through this
 /// opt-in link (`BUTLER_E2E_KEYCHAINS`); nothing else of the real home.
-fn link_keychains(home: &std::path::Path) -> Result<(), HarnessError> {
+pub(super) fn link_keychains(home: &std::path::Path) -> Result<(), HarnessError> {
     if let Some(keychains) = std::env::var_os("BUTLER_E2E_KEYCHAINS") {
         std::fs::create_dir_all(home.join("Library"))?;
         butler_platform::secure_fs::symlink(

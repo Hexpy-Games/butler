@@ -6,6 +6,7 @@ mod effect;
 mod grant;
 pub(super) mod images;
 mod observe_after;
+mod pay;
 mod preview;
 mod signin;
 mod upload;
@@ -31,6 +32,8 @@ pub(super) fn supports(name: &str) -> bool {
             | "browser_close"
             | "browser_wait_for_user"
             | "browser_sign_in"
+            | "browser_pay_fill"
+            | "browser_traveler_fill"
     )
 }
 pub(super) async fn execute(
@@ -66,8 +69,8 @@ pub(super) async fn execute(
     if call.name == "browser_wait_for_user" {
         return wait(owner, invocation, call, occurrence, client, args).await;
     }
-    if call.name == "browser_sign_in" {
-        return signin::execute(owner, invocation, call, occurrence, client, args).await;
+    if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
+        return pay::execute(owner, invocation, call, occurrence, client, args).await;
     }
     // look "never" asks for a text-only observation: no screenshot, no vision.
     let text_only =
@@ -305,14 +308,18 @@ fn delimit_labels(value: &mut Value) {
     }
 }
 fn approval_input(args: &Value, prepared: &mut Value, scope: &str) -> Value {
+    // A purchase step asks every time unless the user lets this merchant site
+    // skip the final card in Settings; uploads always ask.
+    let purchase = prepared["purchase_allowed"] != true;
     let always = prepared["steps"].as_array().is_some_and(|steps| {
         steps.iter().any(|s| {
-            s["payment"] == true && s["submit"] == true
-                || s["upload"] == true
-                || s["frame_payment"] == true
-                || s["hit"]["frame"]
-                    .as_str()
-                    .is_some_and(butler_runtime::browser::payment_host)
+            s["upload"] == true
+                || purchase
+                    && (s["payment"] == true && s["submit"] == true
+                        || s["frame_payment"] == true
+                        || s["hit"]["frame"]
+                            .as_str()
+                            .is_some_and(butler_runtime::browser::payment_host))
         })
     });
     if let Some(steps) = prepared["steps"].as_array_mut() {

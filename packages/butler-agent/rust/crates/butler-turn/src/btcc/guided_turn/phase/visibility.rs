@@ -416,7 +416,11 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     }
     if matches!(
         tool.name.as_str(),
-        "browser_act" | "browser_wait_for_user" | "browser_sign_in"
+        "browser_act"
+            | "browser_wait_for_user"
+            | "browser_sign_in"
+            | "browser_pay_fill"
+            | "browser_traveler_fill"
     ) {
         return true;
     }

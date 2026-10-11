@@ -12,6 +12,7 @@ mod security;
 mod signins;
 mod space;
 mod supporting;
+mod vault;
 mod wallpapers;
 
 use std::path::Path;
@@ -79,6 +80,7 @@ pub(super) fn migrate(
     space::migrate(connection)?;
     wallpapers::create(connection)?;
     signins::create(connection)?;
+    vault::create(connection)?;
     message_ownership::migrate(connection)?;
     monitoring::migrate(connection)?;
     library::recover(connection, butler_data)?;

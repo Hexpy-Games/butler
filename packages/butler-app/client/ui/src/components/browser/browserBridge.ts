@@ -16,6 +16,7 @@ export interface BrowserTab {
   status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
   /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
   signinStep?: string;
+  payStep?: string;
   /** "로그인 저장" after a takeover sign-in; never carries the password. */
   saveOffer?: { username: string; host: string };
 }

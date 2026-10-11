@@ -11,6 +11,7 @@ async function attentionLabel(sessionId: string): Promise<string> {
   const requests = Array.isArray(view?.requests) ? view.requests as Array<{ approval?: { operation?: { tool?: unknown } } }> : [];
   const tool = requests[0]?.approval?.operation?.tool;
   return tool === "browser_sign_in_wait" ? appCopy.space.signInAttention
+    : tool === "browser_pay_wait" ? appCopy.space.paymentAttention
     : tool === "browser_wait_for_user" ? appCopy.space.tabAttention : appCopy.space.attention;
 }
 

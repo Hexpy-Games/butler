@@ -6,5 +6,7 @@ export function agentPopupAllowed(policy, parent, raw) {
   const target = new URL(url);
   const host = target.hostname;
   const sameOrigin = webUrl(parent) && new URL(parent).origin === target.origin;
-  return Boolean(sameOrigin || policy.popup_sites?.some(site => host === site || host.endsWith(`.${site}`)) || policy.popup_hosts?.includes(host));
+  const inSite = site => host === site || host.endsWith(`.${site}`);
+  // A payment provider's checkout window (PG pop-up) may open; acting in it keeps its per-act card.
+  return Boolean(sameOrigin || policy.popup_sites?.some(inSite) || policy.popup_hosts?.includes(host) || policy.payment_sites?.some(inSite));
 }

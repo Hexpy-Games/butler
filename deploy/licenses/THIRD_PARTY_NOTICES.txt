@@ -3003,6 +3003,12 @@ License: https://github.com/RustCrypto/utils/blob/6c8370f218505d3a767ace760ddef2
 Copyright (c) 2018-2025 The RustCrypto Project Developers
 
 ===== COMPONENT =====
+block2 0.6.2
+MIT
+License: https://crates.io/crates/block2/0.6.2
+
+
+===== COMPONENT =====
 blocking 1.7.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/blocking/blob/e29a5e6979f56c7537b04ab17ca7bdceee66ef5f/LICENSE-APACHE
@@ -5198,13 +5204,38 @@ Copyright (c) 2015-2025 Sean McArthur
 ===== COMPONENT =====
 objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
-License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md
+License: https://crates.io/crates/objc2-core-foundation/0.3.2
+
+
+===== COMPONENT =====
+objc2-encode 4.1.0
+MIT
+License: https://crates.io/crates/objc2-encode/4.1.0
+
+
+===== COMPONENT =====
+objc2-foundation 0.3.2
+MIT
+License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/copying.rs
+License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/tests/copying.rs
 
 
 ===== COMPONENT =====
 objc2-io-kit 0.3.2
 Zlib OR Apache-2.0 OR MIT
-License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md
+License: https://crates.io/crates/objc2-io-kit/0.3.2
+
+
+===== COMPONENT =====
+objc2-local-authentication 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-local-authentication/0.3.2
+
+
+===== COMPONENT =====
+objc2 0.6.5
+MIT
+License: https://crates.io/crates/objc2/0.6.5
 
 
 ===== COMPONENT =====
@@ -5749,6 +5780,12 @@ Copyright 2016 Sean McArthur
 Copyright (c) 2016-2026 Sean McArthur
 
 ===== COMPONENT =====
+retry 2.2.0
+MIT
+License: https://github.com/jimmycuadra/retry/blob/f3c92f309a4155b71b5b2a4b8be159911deeb265/LICENSE
+Copyright (c) 2015-2020 Jimmy Cuadra and Sam Rijs
+
+===== COMPONENT =====
 ring 0.17.14
 Apache-2.0 AND ISC
 License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE
@@ -5780,6 +5817,12 @@ MIT OR Apache-2.0
 License: https://github.com/RoaringBitmap/roaring-rs/blob/0ce3fc8b55b193ce220253bfbc0c3e09bd171375/roaring/LICENSE-APACHE
 License: https://github.com/RoaringBitmap/roaring-rs/blob/0ce3fc8b55b193ce220253bfbc0c3e09bd171375/roaring/LICENSE-MIT
 Copyright (c) 2016 The roaring-rs developers.
+
+===== COMPONENT =====
+robius-authentication 0.3.1
+MIT
+License: https://github.com/project-robius/robius/blob/e18299f7c6a0efbb2ee93cebb83d41267c745f04/LICENSE
+Copyright (c) 2023-2025 Project Robius
 
 ===== COMPONENT =====
 roxmltree 0.20.0
@@ -6796,6 +6839,13 @@ License: https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedb
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====
+windows-core 0.56.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/core/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/core/license-mit
+Copyright (c) Microsoft Corporation.
+
+===== COMPONENT =====
 windows-core 0.61.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/core/license-apache-2.0
@@ -6817,10 +6867,24 @@ License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578c
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====
+windows-implement 0.56.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/implement/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/implement/license-mit
+Copyright (c) Microsoft Corporation.
+
+===== COMPONENT =====
 windows-implement 0.60.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-mit
+Copyright (c) Microsoft Corporation.
+
+===== COMPONENT =====
+windows-interface 0.56.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/interface/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/interface/license-mit
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====
@@ -6864,6 +6928,13 @@ windows-permissions 0.2.4
 MIT
 License: https://crates.io/crates/windows-permissions/0.2.4
 Copyright (c) <year> <copyright holders>
+
+===== COMPONENT =====
+windows-result 0.1.2
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/15947886be041bebd0fe670fd4e73f18d95100d0/crates/libs/result/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/15947886be041bebd0fe670fd4e73f18d95100d0/crates/libs/result/license-mit
+Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====
 windows-result 0.3.4
@@ -6933,6 +7004,13 @@ windows-threading 0.1.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-mit
+Copyright (c) Microsoft Corporation.
+
+===== COMPONENT =====
+windows 0.56.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-mit
 Copyright (c) Microsoft Corporation.
 
 ===== COMPONENT =====

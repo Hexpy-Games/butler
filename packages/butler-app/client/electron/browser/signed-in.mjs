@@ -14,12 +14,15 @@ export function identityPage(raw, policy) {
   return url.protocol === "https:" && (policy.idp_pages ?? []).some(page => page.host === url.hostname && (!page.paths?.length || page.paths.some(path => url.pathname.startsWith(path))));
 }
 
-/** "granted" | "identity" | "denied" for a top-level URL. */
+/** "granted" | "identity" | "payment" | "denied" for a top-level URL. A
+ * payment provider's checkout page (a PG pop-up or redirect) opens like a
+ * granted page; every act on it keeps its per-act card. */
 export function signedInPlace(raw, policy) {
   const host = hostOf(raw);
   if (!host || !webUrl(raw)) return "denied";
   if ((policy.sites ?? []).some(site => inSite(host, site))) return "granted";
-  return identityPage(raw, policy) ? "identity" : "denied";
+  if (identityPage(raw, policy)) return "identity";
+  return (policy.payment_sites ?? []).some(site => inSite(host, site)) ? "payment" : "denied";
 }
 
 function topSite(raw, policy) {
