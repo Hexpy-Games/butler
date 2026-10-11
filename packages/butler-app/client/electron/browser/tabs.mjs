@@ -38,8 +38,9 @@ class UserBrowser {
   initialization = null;
   metadataTimer = null;
 
-  constructor(app, getWindow) {
+  constructor(app, getWindow, getLanguage) {
     this.getWindow = getWindow;
+    this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
     this.selection = new BrowserSelection(this);
     this.downloads = new BrowserDownloads(this, join(app.getPath("userData"), "browser-downloads"));
@@ -162,7 +163,8 @@ class UserBrowser {
     attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
-      linkMenu: (url) => linkMenuItems(this, url, tab), window: this.getWindow, shortcut: (input) => {
+      linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
+      window: this.getWindow, shortcut: (input) => {
         if (tab.popupWindow && input.type === "keyDown" && (input.meta || input.control) && input.key.toLowerCase() === "w") { tab.popupWindow.close(); return true; }
         return this.shortcut(input, true);
       },
@@ -382,4 +384,4 @@ class UserBrowser {
   }
 }
 
-export function createUserBrowser(app, getWindow) { return new UserBrowser(app, getWindow); }
+export function createUserBrowser(app, getWindow, getLanguage = async () => "en") { return new UserBrowser(app, getWindow, getLanguage); }
