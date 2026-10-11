@@ -52,7 +52,7 @@ export interface WallpaperIntroTimeline {
   dispose(): void;
 }
 
-/** Where each start ends: the reveal, or the fallback once its last text line is in (the line takes 320 ms). */
+/** Where each start ends: the reveal, or the fallback once its last text line is in (five lines, 600 ms after the first). */
 function endOf(kind: WallpaperIntroStart | null): number {
   const { end, fallback } = RISO_INTRO_TIMELINE_S;
   return kind === "fallback" ? fallback.text + 0.6 : end;
@@ -74,6 +74,7 @@ export function createWallpaperIntroTimeline(mode: WallpaperIntroMode): Wallpape
   let skipped = false;
   let handed = false;
   let current: WallpaperIntroLayout | null = null;
+  const stopWatching = () => document.removeEventListener("visibilitychange", visibility);
   const emit = (event: WallpaperIntroEvent) => { for (const listener of [...listeners]) listener(event); };
   const end = () => endOf(kind);
   const now = () => {
@@ -82,6 +83,8 @@ export function createWallpaperIntroTimeline(mode: WallpaperIntroMode): Wallpape
     return Math.min(end(), ((pausedAt ?? performance.now()) - startedAt) / 1000);
   };
   const visibility = () => {
+    // The reveal is over: nothing left to pause.
+    if (pausedAt === null && now() >= end()) return stopWatching();
     if (document.hidden && pausedAt === null) {
       pausedAt = performance.now();
       emit({ type: "pause" });
@@ -91,7 +94,6 @@ export function createWallpaperIntroTimeline(mode: WallpaperIntroMode): Wallpape
       emit({ type: "resume" });
     }
   };
-  const stopWatching = () => document.removeEventListener("visibilitychange", visibility);
 
   return {
     mode,
