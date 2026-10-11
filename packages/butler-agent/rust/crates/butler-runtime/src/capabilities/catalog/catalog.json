@@ -6214,7 +6214,7 @@
       "definition": {
         "type": "function",
         "name": "browser_autofill_fill",
-        "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. Uses payment-fill approval rules. Observe afterwards.",
+        "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6224,7 +6224,7 @@
             },
             "profile_id": {
               "type": "string",
-              "description": "Omit to list saved profiles."
+              "description": "Saved profile ID."
             },
             "targets": {
               "type": "array",
@@ -11472,7 +11472,7 @@
     "browser_autofill_fill": {
       "type": "function",
       "name": "browser_autofill_fill",
-      "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. Uses payment-fill approval rules. Observe afterwards.",
+      "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11482,7 +11482,7 @@
           },
           "profile_id": {
             "type": "string",
-            "description": "Omit to list saved profiles."
+            "description": "Saved profile ID."
           },
           "targets": {
             "type": "array",

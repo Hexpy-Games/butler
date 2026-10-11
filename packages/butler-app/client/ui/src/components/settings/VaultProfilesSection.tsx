@@ -56,38 +56,32 @@ function VaultProfileRow({ profile, vault, onEdit }: { profile: VaultProfile; va
     catch (error) { notifyError(error, copy.failed); }
     finally { setRevealing(false); }
   }
-  const labels: Record<string, string> = { birth_date: copy.birthDate, passport_number: copy.passportNumber, rrn: copy.rrn };
-  const stored = profile.extras.map(key => (labels[key] ?? key).replace(/\s*\(.*\)$/u, "")).join(", ");
   return (
     <CardListItem data-test-class="vault-profile-row" icon={<UserRound />} title={profile.nickname}
-      meta={profile.details.name ?? ""}
+      meta={profile.extras.includes("passport_number") ? `${copy.passport} ${shown ?? "••••"}` : undefined}
       description={(
         <Stack as="span" gap="sm">
-          <Stack as="span" align="row" cross="center" gap="xs" wrap>
-            {stored && <Typo.Caption tone="secondary">{copy.storedFields(stored)}</Typo.Caption>}
-            <Typo.Caption tone="secondary">{profile.sites.length ? copy.allowedSites(profile.sites.length) : copy.askEveryTime}</Typo.Caption>
-          </Stack>
-          {profile.extras.includes("passport_number") && <Stack as="span" align="row" gap="xs">
-            {shown && <Typo.Caption>{shown}</Typo.Caption>}
-            <Tooltip label={vault.view?.reveal_available ? copy.reveal : copy.revealUnavailable}>
-              <Button size="sm" variant="outline" disabled={!vault.view?.reveal_available || revealing} data-test-class="vault-profile-reveal"
-                onClick={() => shown ? setShown(null) : void reveal()}>{shown ? copy.hide : copy.reveal}</Button>
-            </Tooltip>
-          </Stack>}
+          <Typo.Caption tone="secondary">{[profile.details.name, profile.sites.length ? copy.allowedSites(profile.sites.length) : copy.askEveryTime].filter(Boolean).join(" · ")}</Typo.Caption>
           <VaultSitesField sites={profile.sites} label={copy.site}
             onChange={(next) => void vault.sites("profiles", profile.id, profile.sites, next)} />
         </Stack>
       )}
       actions={(
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton label={profile.nickname} disabled={vault.busy !== null}><MoreHorizontal size="sm" /></IconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onEdit}>{copy.edit}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void vault.remove("profiles", profile.id, profile.nickname)}>{copy.delete}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Stack as="span" align="row" cross="center" gap="xs">
+          {profile.extras.includes("passport_number") && <Tooltip label={vault.view?.reveal_available ? shown ? copy.hide : copy.reveal : copy.revealUnavailable}>
+            <Button size="sm" variant="outline" disabled={!vault.view?.reveal_available || revealing} data-test-class="vault-profile-reveal"
+              onClick={() => shown ? setShown(null) : void reveal()}>{shown ? copy.hide : copy.reveal}</Button>
+          </Tooltip>}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton label={profile.nickname} disabled={vault.busy !== null}><MoreHorizontal size="sm" /></IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onEdit}>{copy.edit}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void vault.remove("profiles", profile.id, profile.nickname)}>{copy.delete}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </Stack>
       )}
     />
   );

@@ -1853,7 +1853,12 @@ export interface AppCopy {
       rrn: string;
       phone: string;
       email: string;
-      storedFields: (fields: string) => string;
+      profileName: string;
+      nameSection: string;
+      contactSection: string;
+      addressSection: string;
+      otherSection: string;
+      passport: string;
     };
     /** Settings → Security → import from another browser (counts only). */
     browserImport: {

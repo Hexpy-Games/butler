@@ -281,21 +281,29 @@ async function profileFlows() {
 }
 
 async function profileShots() {
-  await app.main(`${winExpression()}.setContentSize(1440,1200)`);
+  await app.main(`${winExpression()}.setContentSize(1440,1440)`);
   for (const theme of ["light", "dark"]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
     await app.page.reload(); await app.click("설정"); await app.click("브라우저");
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-row]'))"), "profile section");
+    const summary = await app.page.expression<string>("document.querySelector('[data-test-class=vault-profile-row]').textContent");
+    assert.ok(summary.includes("Sample Person · 입력할 때마다 확인") && summary.includes("여권 ••••") && !summary.includes("저장됨:"), "separate profile name, policy and masked passport");
     await app.page.expression("document.querySelector('[data-test-class=vault-profile-row]').scrollIntoView({block:'center'})");
     writeFileSync(join(evidence!, `settings-profile-ko-${theme}.png`), await app.page.screenshot());
     await app.click("Self");
     await app.page.clickText("수정", '[role="menuitem"]');
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-form]'))"), "profile edit form");
-    assert.equal(await app.page.expression("document.querySelector('[data-test-class=vault-profile-id]').getAttribute('aria-expanded')"), "false");
-    await app.page.expression("document.querySelector('[data-test-class=vault-profile-form]').scrollIntoView({block:'center'})");
+    assert.equal(await app.page.expression("document.querySelector('[data-test-class=vault-profile-id] [aria-expanded]').getAttribute('aria-expanded')"), "false");
+    const labels = await app.page.expression<string[]>("Array.from(document.querySelectorAll('[data-test-class=vault-profile-form] [data-slot=field-label]')).map(el=>el.textContent)");
+    assert.deepEqual(labels.slice(0, 17), ["프로필 이름", "전체 이름", "성", "이름", "영문 성", "영문 이름", "전화", "이메일", "국가", "우편번호", "시/도", "시/군/구", "주소", "상세 주소", "소속", "생년월일", "성별"]);
+    assert.equal(await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=vault-profile-form] input')).every(el=>Boolean(document.querySelector('label[for=\"'+el.id+'\"]')) && !el.getAttribute('placeholder'))"), true);
+    await app.page.expression("(()=>{const form=document.querySelector('[data-test-class=vault-profile-form]');form.scrollIntoView({block:'start'});for(let el=form.parentElement;el;el=el.parentElement){if(el.scrollHeight>el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY)){el.scrollTop-=32;break}}})()");
     writeFileSync(join(evidence!, `settings-profile-edit-ko-${theme}.png`), await app.page.screenshot());
-    await app.click("신분증");
+    await app.click("신분증 (선택)");
     await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=vault-profile-form]').getAnimations({subtree:true}).every(a=>a.playState!=='running' || a.effect?.getComputedTiming().iterations===Infinity)"), "ID section expanded");
+    assert.equal(await app.page.expression("document.querySelector('[data-test-class=vault-profile-id] [aria-expanded]').getAttribute('aria-expanded')"), "true");
+    assert.deepEqual(await app.page.expression<string[]>("Array.from(document.querySelectorAll('[data-test-class=vault-profile-id] [data-slot=field-label]')).map(el=>el.textContent)"), ["여권 번호", "여권 만료일", "국적", "발급 국가"]);
+    await app.page.expression("document.querySelector('[data-test-class=vault-profile-id]').scrollIntoView({block:'center'})");
     writeFileSync(join(evidence!, `settings-profile-id-ko-${theme}.png`), await app.page.screenshot());
     await app.click("취소");
   }
