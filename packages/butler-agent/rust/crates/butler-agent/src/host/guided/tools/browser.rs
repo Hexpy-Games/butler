@@ -335,7 +335,8 @@ fn approval_input(args: &Value, prepared: &mut Value, scope: &str) -> Value {
     } else {
         "signed_out"
     };
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always})
+    let commit = authority::commits(args, prepared);
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"commit":commit})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
@@ -374,6 +375,10 @@ async fn dispatch_effect(
         .unwrap_or_else(|| super::effect::runtime_work::untracked(owner));
     let mut dispatch_args = args.clone();
     dispatch_args["prepared_steps"] = prepared["steps"].clone();
+    dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
+        &owner.binding.access_mode,
+        &input
+    ));
     let outcome = owner
         .effects
         .execute(ExecuteEffect {

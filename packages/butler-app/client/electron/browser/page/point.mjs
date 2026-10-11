@@ -24,5 +24,5 @@ export function pointHit({ x, y, expect }) {
     verification: meaning.role === "canvas" ? "unverified" : "verified",
     payment: paymentForm(element),
     upload: element.localName === "input" && element.type === "file",
-    submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name), addons: currentAddons() };
+    submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name), form_post: postsForm(element), addons: currentAddons() };
 }

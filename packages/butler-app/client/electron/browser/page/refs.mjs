@@ -29,7 +29,8 @@ export function resolveRef({ ref, obs, epoch, scroll = false, offset }) {
     payment: paymentForm(element),
     addons: currentAddons(),
     upload: element.localName === "input" && element.type === "file",
-    submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name) };
+    submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name),
+    form_post: postsForm(element) };
 }
 export function selectValue({ ref, obs, epoch, value }) {
   const target = resolveRef({ ref, obs, epoch });

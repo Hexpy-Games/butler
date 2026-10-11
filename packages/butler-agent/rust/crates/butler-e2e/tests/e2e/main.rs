@@ -15,6 +15,7 @@ mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
 mod browser_agent;
+mod browser_approval;
 mod browser_batch;
 mod browser_delegation;
 mod browser_downloads;
