@@ -9,7 +9,7 @@ mod output;
 mod path_guard;
 mod registered_artifacts;
 mod structured_stdout;
-pub(in crate::host::guided) mod timing;
+pub(in crate::host) mod timing;
 mod validation;
 
 use std::collections::HashMap;

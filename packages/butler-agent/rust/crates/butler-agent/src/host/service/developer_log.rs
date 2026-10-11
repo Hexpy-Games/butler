@@ -21,13 +21,22 @@ struct Settings {
 
 impl DeveloperDiagnosticsSettingsPort for Settings {
     fn enabled(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>> {
+        let timing = crate::host::guided::command::timing::CommandTiming::new("developer_settings");
         let database_path = self.database_path.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                butler_gateway::gateway::diagnostics_enabled_readonly(&database_path)
+            timing.mark("before_job");
+            let enabled = tokio::task::spawn_blocking(move || {
+                let work = crate::host::guided::command::timing::CommandTiming::new(
+                    "developer_settings_work",
+                );
+                let enabled = butler_gateway::gateway::diagnostics_enabled_readonly(&database_path);
+                work.mark(if enabled { "enabled" } else { "disabled" });
+                enabled
             })
             .await
-            .unwrap_or(false)
+            .unwrap_or(false);
+            timing.mark("job_done");
+            enabled
         })
     }
 }

@@ -2,14 +2,14 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-pub(in crate::host::guided) struct CommandTiming {
+pub(in crate::host) struct CommandTiming {
     phase: &'static str,
     started: Option<Instant>,
     id: u64,
 }
 
 impl CommandTiming {
-    pub(in crate::host::guided) fn new(phase: &'static str) -> Self {
+    pub(in crate::host) fn new(phase: &'static str) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let timing = Self {
             phase,
@@ -22,7 +22,7 @@ impl CommandTiming {
         timing
     }
 
-    pub(in crate::host::guided) fn mark(&self, event: &'static str) {
+    pub(in crate::host) fn mark(&self, event: &'static str) {
         if let Some(started) = self.started {
             eprintln!(
                 "command_phase_timing phase={} id={} event={} utc_us={} elapsed_us={}",
