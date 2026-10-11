@@ -107,9 +107,14 @@ pub(super) fn admission(
     if !worthwhile(p) {
         return Ok(Some("done"));
     }
-    if butler_platform::fs_space::available_bytes(parent(path)).map_err(io_error)?
-        < p.live.saturating_mul(2).saturating_add(1024 * 1024 * 1024)
-    {
+    let available = match butler_platform::fs_space::available_bytes(parent(path)) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            butler_core::diagnostic!("[btcc-storage] skipping compaction: {error}");
+            return Ok(Some("failed_space"));
+        }
+    };
+    if available < p.live.saturating_mul(2).saturating_add(1024 * 1024 * 1024) {
         return Ok(Some("pending_space"));
     }
     let seconds = p.live as f64 / 40_000_000.0 + p.live as f64 / 100_000_000.0;
@@ -121,6 +126,11 @@ pub(super) fn defer(db: &rusqlite::Connection, state: &str, attempts: u32) -> St
     if state == "pending_time" && attempts >= 2 {
         set(db, "done", true, &serde_json::json!({"skipped":"slow"}))
     } else {
-        set(db, state, state != "done", &serde_json::json!({}))
+        set(
+            db,
+            state,
+            state != "done" && !state.starts_with("failed_"),
+            &serde_json::json!({}),
+        )
     }
 }

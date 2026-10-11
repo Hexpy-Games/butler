@@ -20,18 +20,18 @@ pub enum CorrectionOutcome {
     Noop,
     Deferred,
     Reclaimed,
-    Compacted { precompact: bool },
+    Compacted { swapped: bool },
 }
 impl CorrectionOutcome {
     /// Delete the rollback link after the normal storage lane has opened.
-    pub fn opened(&self, path: &Path) -> StorageResult<()> {
-        remove(&sibling(path, "precompact"))?;
-        remove(&sibling(path, "compact-tmp"))
+    pub fn opened(&self, path: &Path) {
+        cleanup(&sibling(path, "precompact"));
+        cleanup(&sibling(path, "compact-tmp"));
     }
     /// Restore the original atomically, record the permanent open failure.
     pub fn rollback(&self, path: &Path) -> StorageResult<bool> {
         let backup = sibling(path, "precompact");
-        if !backup.exists() {
+        if !matches!(self, Self::Compacted { swapped: true }) || !has_backup(path)? {
             return Ok(false);
         }
         // A failed lane must have closed all its connections before restoring.
@@ -39,16 +39,20 @@ impl CorrectionOutcome {
             remove(&PathBuf::from(format!("{}{suffix}", path.display())))?;
         }
         secure_fs::rename(&backup, path).map_err(io_error)?;
-        secure_fs::sync_path(parent(path)).map_err(io_error)?;
-        let db = writer(path)?;
-        state::set(
-            &db,
-            "failed_open",
-            false,
-            &serde_json::json!({"code":"storage_correction_open_failed"}),
-        )?;
-        drop(db);
-        bootstrap::stamp_verified(path)?;
+        if let Err(error) = secure_fs::sync_path(parent(path)) {
+            butler_core::diagnostic!("[btcc-storage] rollback sync: {error}");
+        }
+        let recorded = writer(path).and_then(|db| {
+            state::set(
+                &db,
+                "failed_open",
+                false,
+                &serde_json::json!({"code":"storage_correction_open_failed"}),
+            )
+        });
+        if let Err(error) = recorded.and_then(|()| bootstrap::stamp_verified(path)) {
+            butler_core::diagnostic!("[btcc-storage] rollback marker: {error}");
+        }
         Ok(true)
     }
 }
@@ -57,6 +61,8 @@ pub(super) struct Run<'a> {
     stop: &'a CancellationToken,
     deadline: Instant,
     progress: &'a mut dyn FnMut(&str, Duration, u64),
+    swapped: bool,
+    failure_state: &'static str,
 }
 impl Run<'_> {
     fn remaining(&self) -> Duration {
@@ -78,28 +84,23 @@ pub fn run_startup_correction(
     path: &Path,
     stop: &CancellationToken,
     mut progress: impl FnMut(&str, Duration, u64),
-) -> StorageResult<CorrectionOutcome> {
+) -> CorrectionOutcome {
     let started = Instant::now();
     let mut run = Run {
         stop,
         deadline: started + BUDGET,
         progress: &mut progress,
+        swapped: false,
+        failure_state: "failed_correction",
     };
     let sidecar = parent(path).join("storage-correction.json");
     // A crash may leave a progress file; its old deadline must never extend this run.
-    remove(&sidecar)?;
-    let result = execute(path, &mut run);
-    let cleaned = remove(&sidecar);
-    let outcome = match result {
-        Err(StorageError::Sqlite { source })
-            if source.sqlite_error_code() == Some(rusqlite::ErrorCode::OperationInterrupted)
-                && (run.stop.is_cancelled() || run.remaining().is_zero()) =>
-        {
-            CorrectionOutcome::Deferred
-        }
-        other => other?,
+    cleanup(&sidecar);
+    let outcome = match execute(path, &mut run) {
+        Ok(outcome) => outcome,
+        Err(error) => recover_error(path, &error, &run),
     };
-    cleaned?;
+    cleanup(&sidecar);
     (run.progress)(
         match outcome {
             CorrectionOutcome::Noop => "outcome=noop",
@@ -110,25 +111,32 @@ pub fn run_startup_correction(
         started.elapsed(),
         0,
     );
-    Ok(outcome)
+    outcome
 }
 
 fn execute(path: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionOutcome> {
-    let tmp = sibling(path, "compact-tmp");
-    if tmp.exists() {
-        remove(&tmp)?;
-        let backup = sibling(path, "precompact");
-        if backup.exists() && secure_fs::same_file(&backup, path).map_err(io_error)? {
-            remove(&backup)?;
-        }
+    let backup = sibling(path, "precompact");
+    if backup.exists() && secure_fs::same_file(&backup, path).map_err(io_error)? {
+        remove(&backup)?;
     }
+    remove(&sibling(path, "compact-tmp"))?;
     let db = reader(path)?;
     let initial = state::read(&db)?;
+    if initial.name.as_deref() == Some("compacting") && initial.attempts >= 2 {
+        drop(db);
+        state::set(
+            &*writer(path)?,
+            "failed_copy",
+            false,
+            &serde_json::json!({"code":"interrupted_copy"}),
+        )?;
+        return Ok(CorrectionOutcome::Deferred);
+    }
     if let Some(outcome) = fast_path(path, run, &db, &initial)? {
         return Ok(outcome);
     }
     drop(db);
-    let mut db = writer(path)?;
+    let db = writer(path)?;
     // An estimated-time deferral only updates its bounded retry marker; it
     // must not rerun migration or reclaim while compaction is inadmissible.
     if initial.name.as_deref() == Some("pending_time")
@@ -138,6 +146,16 @@ fn execute(path: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionOutcome> {
         state::defer(&db, "pending_time", initial.attempts)?;
         return Ok(CorrectionOutcome::Deferred);
     }
+    reclaim_and_compact(path, db, &initial, run)
+}
+
+fn reclaim_and_compact(
+    path: &Path,
+    mut db: sqlite::Connection,
+    initial: &state::State,
+    run: &mut Run<'_>,
+) -> StorageResult<CorrectionOutcome> {
+    run.failure_state = "reclaiming";
     run.hook(&db);
     bootstrap::migrate_current(&mut db)?;
     if initial.name.is_none() {
@@ -187,8 +205,8 @@ fn fast_path(
     if initial.queued == 0
         && (name == Some("done") || name.is_some_and(|s| s.starts_with("failed_")))
     {
-        return Ok(Some(if sibling(path, "precompact").exists() {
-            CorrectionOutcome::Compacted { precompact: true }
+        return Ok(Some(if has_backup(path)? {
+            CorrectionOutcome::Compacted { swapped: false }
         } else {
             CorrectionOutcome::Noop
         }));
@@ -245,4 +263,42 @@ fn sidecar(path: &Path, phase: &str, run: &Run<'_>) -> StorageResult<()> {
         },
         io_error,
     )
+}
+
+fn has_backup(path: &Path) -> StorageResult<bool> {
+    let backup = sibling(path, "precompact");
+    Ok(backup.exists() && !secure_fs::same_file(&backup, path).map_err(io_error)?)
+}
+
+fn cleanup(path: &Path) {
+    if let Err(error) = remove(path) {
+        butler_core::diagnostic!("[btcc-storage] correction cleanup: {error}");
+    }
+}
+
+fn recover_error(path: &Path, error: &StorageError, run: &Run<'_>) -> CorrectionOutcome {
+    butler_core::diagnostic!("[btcc-storage] correction deferred: {error}");
+    let transient = matches!(error, StorageError::Sqlite { source } if matches!(
+        source.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            | rusqlite::ErrorCode::DiskFull | rusqlite::ErrorCode::OperationInterrupted)
+    ));
+    // Reclaim transactions roll back independently; keep their queue for another start.
+    let state = if run.failure_state == "reclaiming" {
+        "reclaiming"
+    } else if transient || run.stop.is_cancelled() || run.remaining().is_zero() {
+        "pending_space"
+    } else {
+        run.failure_state
+    };
+    let recorded = writer(path)
+        .and_then(|db| state::set(&db, state, false, &serde_json::json!({"code":error.code()})));
+    if let Err(error) = recorded {
+        butler_core::diagnostic!("[btcc-storage] correction state not recorded: {error}");
+    }
+    if run.swapped {
+        CorrectionOutcome::Compacted { swapped: true }
+    } else {
+        CorrectionOutcome::Deferred
+    }
 }

@@ -39,6 +39,8 @@ pub(super) fn drain(db: &mut rusqlite::Connection, run: &mut Run<'_>) -> Storage
         if count == 0 {
             return Ok(true);
         }
+        #[cfg(debug_assertions)]
+        secure_fs::fault_checkpoint("correction_drain").map_err(io_error)?;
         abort_point("reclaim_chunk");
         tx.commit().map_err(StorageError::sqlite)?;
         // No other connection exists. Reset after each chunk, bounding WAL and

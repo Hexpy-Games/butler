@@ -11,13 +11,16 @@ pub(super) fn run(
     attempts: u32,
     run: &mut Run<'_>,
 ) -> StorageResult<CorrectionOutcome> {
+    run.failure_state = "failed_copy";
     let p = pages(&db)?;
     if let Some(reason) = state::admission(path, &p, run.remaining())? {
         state::defer(&db, reason, attempts)?;
         return Ok(CorrectionOutcome::Deferred);
     }
     sidecar(path, "compact", run)?;
-    set(&db, "compacting", false, &serde_json::json!({}))?;
+    set(&db, "compacting", true, &serde_json::json!({}))?;
+    #[cfg(debug_assertions)]
+    secure_fs::fault_checkpoint("correction_counts").map_err(io_error)?;
     run.hook(&db);
     let counts = match counts(&db) {
         Ok(counts) => counts,
@@ -41,6 +44,7 @@ pub(super) fn run(
         remove(&tmp)?;
         return copy_failure(path, &e, attempts, run);
     }
+    run.failure_state = "failed_verify";
     if let Err(e) = verify(&tmp, &p, &counts, run) {
         remove(&tmp)?;
         if expired(run) {
@@ -53,6 +57,7 @@ pub(super) fn run(
             &e.to_string(),
         );
     }
+    run.failure_state = "failed_copy";
     swap(path, &tmp, run)
 }
 
@@ -152,11 +157,12 @@ fn swap(path: &Path, tmp: &Path, run: &mut Run<'_>) -> StorageResult<CorrectionO
             &e.to_string(),
         );
     }
+    run.swapped = true;
     secure_fs::sync_path(parent(path)).map_err(io_error)?;
     abort_point("after_rename");
     bootstrap::stamp_verified(path)?;
     (run.progress)("swap", started.elapsed(), 0);
-    Ok(CorrectionOutcome::Compacted { precompact: true })
+    Ok(CorrectionOutcome::Compacted { swapped: true })
 }
 
 fn counts(db: &rusqlite::Connection) -> StorageResult<BTreeMap<String, u64>> {

@@ -2,8 +2,9 @@
 
 use std::{future::Future, time::Duration};
 
+use crate::host::runtime::startup_trace::Correction;
 use butler_turn::btcc::BtccError;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 
 use super::stop_signal::StopSignal;
 
@@ -13,6 +14,7 @@ pub(crate) const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
 pub(super) async fn until_ready(
     service: impl Future<Output = Result<String, BtccError>>,
     ready: oneshot::Receiver<()>,
+    timing: watch::Receiver<Correction>,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
     tokio::pin!(service);
@@ -21,7 +23,7 @@ pub(super) async fn until_ready(
         // Keep polling the service so its original error survives that teardown.
         biased;
         result = &mut service => result,
-        initialized = wait_ready(ready, stop) => {
+        initialized = wait_ready(ready, timing) => {
             if initialized {
                 service.await
             } else {
@@ -35,48 +37,28 @@ pub(super) async fn until_ready(
     }
 }
 
-// Only an expired startup timer probes the sidecar; no idle work is added.
-async fn wait_ready(mut ready: oneshot::Receiver<()>, stop: &StopSignal) -> bool {
-    if tokio::time::timeout(STARTUP_TIMEOUT, &mut ready)
-        .await
-        .is_ok()
-    {
-        return true;
-    }
-    let Some(path) = stop
-        .data_root()
-        .map(|root| root.join("agent-runtime/storage-correction.json"))
-    else {
-        return false;
-    };
-    let remaining = tokio::task::spawn_blocking(move || {
-        use std::io::Read;
-        let mut raw = String::new();
-        std::fs::File::open(path)
-            .ok()?
-            .take(4097)
-            .read_to_string(&mut raw)
-            .ok()?;
-        if raw.len() > 4096 {
-            return None;
+// Timing updates are change-driven; external CLI/Electron sidecars are unchanged.
+async fn wait_ready(
+    mut ready: oneshot::Receiver<()>,
+    mut timing: watch::Receiver<Correction>,
+) -> bool {
+    let original = std::time::Instant::now() + STARTUP_TIMEOUT;
+    loop {
+        let deadline = match *timing.borrow_and_update() {
+            Correction::Pending => original,
+            Correction::Running(start) => start + Duration::from_secs(180) + STARTUP_TIMEOUT,
+            Correction::Finished(end) => original.max(end + STARTUP_TIMEOUT),
+        };
+        tokio::select! {
+            biased;
+            _ = &mut ready => return true,
+            changed = timing.changed() => {
+                if changed.is_err() {
+                    return true; // Preserve the service's original startup error.
+                }
+            }
+            () = tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)) => return false,
         }
-        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        if value["schema"] != "butler.storage-correction-progress.v1"
-            || !matches!(value["phase"].as_str(), Some("reclaim" | "compact"))
-        {
-            return None;
-        }
-        let deadline = chrono::DateTime::parse_from_rfc3339(value["deadlineAt"].as_str()?).ok()?;
-        (deadline.with_timezone(&chrono::Utc) + chrono::Duration::seconds(30) - chrono::Utc::now())
-            .to_std()
-            .ok()
-    })
-    .await
-    .ok()
-    .flatten();
-    match remaining {
-        Some(remaining) => tokio::time::timeout(remaining, ready).await.is_ok(),
-        None => false,
     }
 }
 

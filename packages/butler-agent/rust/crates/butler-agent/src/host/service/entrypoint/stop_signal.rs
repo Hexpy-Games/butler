@@ -96,10 +96,6 @@ impl StopSignal {
             .set((data_root, nonce.to_owned(), installation));
     }
 
-    pub(super) fn data_root(&self) -> Option<&std::path::Path> {
-        self.inner.instance.get().map(|(root, _, _)| root.as_path())
-    }
-
     /// All host and controller stops share one grace deadline.
     pub(super) fn request_controlled(&self) {
         self.request();

@@ -29,8 +29,10 @@ impl RuntimeStores {
         data_root: &Path,
         collation: Arc<LocaleCollation>,
         stop: &tokio_util::sync::CancellationToken,
+        correction: super::startup_trace::CorrectionSender,
     ) -> Result<Self, BtccError> {
-        let btcc = open_btcc(data_root, stop).await?;
+        check_startup(stop)?;
+        let btcc = open_btcc(data_root, stop, correction).await?;
         if let Err(error) = check_startup(stop) {
             let _ = btcc.close().await;
             return Err(error);
@@ -127,18 +129,24 @@ pub(super) fn check_startup(stop: &tokio_util::sync::CancellationToken) -> Resul
 async fn open_btcc(
     data_root: &Path,
     stop: &tokio_util::sync::CancellationToken,
+    timing: super::startup_trace::CorrectionSender,
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
     let cancellation = stop.clone();
     let (bootstrap, correction) = tokio::task::spawn_blocking(move || {
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
+        timing.send_replace(super::startup_trace::Correction::Running(
+            std::time::Instant::now(),
+        ));
         let correction = butler_turn::btcc::run_startup_correction(
             &bootstrap.path,
             &cancellation,
             correction_progress,
-        )
-        .map_err(|e| error(e.code(), e.message()))?;
+        );
+        timing.send_replace(super::startup_trace::Correction::Finished(
+            std::time::Instant::now(),
+        ));
         Ok::<_, BtccError>((bootstrap, correction))
     })
     .await
@@ -174,10 +182,9 @@ async fn open_btcc(
         started.elapsed().as_micros()
     );
     let path = bootstrap.path;
-    tokio::task::spawn_blocking(move || correction.opened(&path))
-        .await
-        .map_err(|e| error("storage_correction_open_failed", e))?
-        .map_err(|e| error(e.code(), e.message()))?;
+    if let Err(error) = tokio::task::spawn_blocking(move || correction.opened(&path)).await {
+        butler_core::diagnostic!("[btcc-storage] correction cleanup worker: {error}");
+    }
     Ok(btcc)
 }
 
