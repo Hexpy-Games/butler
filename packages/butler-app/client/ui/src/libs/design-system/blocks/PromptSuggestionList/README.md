@@ -22,6 +22,8 @@ At compact widths, the title icon moves into the moment row beside the three-dot
 
 Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `wallpaper` (a `WallpaperSource`; keep its identity stable), optional `wallpaperMotion` and `wallpaperPauseOnBattery` (the stored setting's motion preferences), optional `wallpaperTone` (omit it to follow the nearest theme scope, live; the wallpaper's `contentRect` is measured here: the header plus the visible cards, so modules keep the headline and cards readable), and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
 
+External wallpaper: when one wallpaper is shared by the new chat and the conversation (mounted in `ConversationShell background`), omit `wallpaper` and pass `onContentRect`. The block then draws no wallpaper of its own and reports the same measure (the header plus the visible cards) for the shared `Wallpaper contentRect`: each new value once, and `undefined` when it unmounts. Without `wallpaper` and `onContentRect` it measures nothing, as before.
+
 ## Who can use this component
 
 Butler client containers and design-system fixtures can use this block. The block itself must stay presenter-only.

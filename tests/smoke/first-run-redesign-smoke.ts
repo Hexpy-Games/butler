@@ -45,7 +45,8 @@ async function capture(page: Page, name: string) {
   if (geometry.viewport[0] === 960) {
     assert.equal(geometry.card.width, geometry.intro ? 420 : 520, name);
     assert.equal(geometry.card.x, geometry.intro ? 265 : 215, name);
-    assert(Math.abs(geometry.card.y - 85.2) < 1, `${name}: top anchor`);
+    // Top edge: clamp(titlebar + 16px, 20% of the window, 240px) = 142px at 710px.
+    assert(Math.abs(geometry.card.y - 142) < 1, `${name}: top anchor`);
     if (geometry.intro) { assert.equal(geometry.selectWidth, 386); assert.equal(geometry.buttonWidth, 386); }
     else assert.equal(geometry.titleX, 260, name);
   }

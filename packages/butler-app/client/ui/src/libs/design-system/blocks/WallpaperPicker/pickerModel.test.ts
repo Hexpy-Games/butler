@@ -7,6 +7,7 @@ import {
   wallpaperPickerDefault,
   wallpaperPickerKey,
   wallpaperPickerOptions,
+  withWallpaperImageDefaults,
   withWallpaperImageFilter,
 } from "./pickerModel";
 
@@ -57,6 +58,14 @@ test("a tile's default: images fill the screen with a dim from their luminance",
     { kind: "image", asset: "bright", fit: "cover", dim: 0.4, blur: 0 },
     { kind: "image", asset: "unknown", fit: "cover", dim: 0.2, blur: 0 },
   ]);
+});
+
+test("caller image defaults replace only the image's starting options", () => {
+  const image = { kind: "image", asset: "bright", fit: "cover", dim: 0.4, blur: 0 } as const;
+  expect(withWallpaperImageDefaults(image, { dim: 0 })).toEqual({ ...image, dim: 0 });
+  expect(withWallpaperImageDefaults(image, undefined)).toBe(image);
+  expect(withWallpaperImageDefaults({ kind: "live", module: "butler.bloom" }, { dim: 0 })).toEqual({ kind: "live", module: "butler.bloom" });
+  expect(withWallpaperImageDefaults("inherit", { dim: 0 })).toBe("inherit");
 });
 
 test("filters are the registered modules that take an image, except living photos", () => {
