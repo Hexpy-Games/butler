@@ -25,6 +25,21 @@ function files(root: string, relative = ""): Record<string, { size: number; modi
   }
   return result;
 }
+const changes = (before: ReturnType<typeof files>, after: ReturnType<typeof files>) =>
+  [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(path => JSON.stringify(before[path]) !== JSON.stringify(after[path]));
+/** The first turn's own follow-up writes (memory sync, metrics) end before an idle window starts: recorded, never dropped. */
+async function settle(): Promise<{ seconds: number; files: string[] }> {
+  const start = Date.now(), written = new Set<string>();
+  let last = files(app.gateway.butlerData), quietSince = start;
+  while (Date.now() - quietSince < 5000) {
+    assert(Date.now() - start < 60_000, `Data files never went quiet: ${[...written].join(", ")}`);
+    await new Promise(done => setTimeout(done, 1000));
+    const now = files(app.gateway.butlerData), changed = changes(last, now);
+    if (changed.length > 0) { quietSince = Date.now(); for (const path of changed) written.add(path); }
+    last = now;
+  }
+  return { seconds: (Date.now() - start) / 1000, files: [...written] };
+}
 async function instrument() {
   await app.page.expression(`(() => {
     const state = globalThis.__backgroundPerf = { draws:0,raf:0,shaders:0,fades:0,pending:false,canvas:document.querySelector('[data-test-class~="conversation-wallpaper"]') };
@@ -40,11 +55,25 @@ async function instrument() {
   })()`);
 }
 const counts = () => app.page.expression<{ draws: number; raf: number; shaders: number; fades: number }>("(({draws,raf,shaders,fades})=>({draws,raf,shaders,fades}))(__backgroundPerf)");
+const electron = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})('electron')`;
+/**
+ * The owner's quiet desktop: focused, visible, on AC, nominal thermal state. A loaded host reports thermal "fair",
+ * which rightly holds drift prints on a static print; the real powerMonitor events drive the app's power path.
+ */
+async function quietHost() {
+  return app.main<{ thermal: string; battery: boolean }>(`(() => { const e=${electron}, w=${app.win};
+    const host={thermal:e.powerMonitor.getCurrentThermalState(),battery:e.powerMonitor.isOnBatteryPower()};
+    e.powerMonitor.emit('on-ac');e.powerMonitor.emit('thermal-state-change',{state:'nominal'});
+    e.app.focus({steal:true});w.show();w.focus();w.webContents.focus();return host; })()`);
+}
+const presence = () => app.page.expression<{ focus: boolean; visible: boolean }>("({focus:document.hasFocus(),visible:document.visibilityState==='visible'})");
 async function idle(module: string) {
+  const host = await quietHost();
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ conversation_background: { source: { kind: "live", module }, overlay: 70 } }) });
   await app.page.waitForFunction(() => document.querySelector('[data-test-class~="conversation-wallpaper"]')?.getAttribute("data-wallpaper-state") === "painted");
   await new Promise(done => setTimeout(done, 7000));
-  const before = await counts(); const disk = files(app.gateway.butlerData);
+  const settled = await settle();
+  const before = await counts(); const disk = files(app.gateway.butlerData); const presentBefore = await presence();
   await app.main(`(() => { const d=${app.win}.webContents.debugger;if(!d.isAttached()) d.attach('1.3');
     globalThis.__backgroundTrace=[];globalThis.__backgroundTraceDone=null;
     globalThis.__backgroundTraceListener=(event,method,params)=>{if(method==='Tracing.dataCollected') __backgroundTrace.push(...params.value);if(method==='Tracing.tracingComplete') __backgroundTraceDone?.();};
@@ -60,9 +89,10 @@ async function idle(module: string) {
     d.removeListener('message',globalThis.__backgroundTraceListener);return __backgroundTrace.filter(e=>e.name==='DrawFrame').length;
   })()`);
   const current = files(app.gateway.butlerData);
-  const changedFiles = [...new Set([...Object.keys(disk), ...Object.keys(current)])].filter(path => JSON.stringify(disk[path]) !== JSON.stringify(current[path]));
+  const changedFiles = changes(disk, current);
   const row = { seconds: 60, frames: after.draws-before.draws, raf: after.raf-before.raf, fadeSteps: after.fades-before.fades,
-    compositorFrames, shaders: after.shaders-before.shaders, cpu: cpu.filter(p => p.type === "Tab" || p.type === "GPU").map(p => ({ type: p.type, percent: p.cpu.percentCPUUsage })), changedFiles };
+    compositorFrames, shaders: after.shaders-before.shaders, cpu: cpu.filter(p => p.type === "Tab" || p.type === "GPU").map(p => ({ type: p.type, percent: p.cpu.percentCPUUsage })), changedFiles,
+    settled, host: { ...host, thermalAfter: await app.main<string>(`${electron}.powerMonitor.getCurrentThermalState()`) }, presence: [presentBefore, await presence()] };
   results[module] = row; writeFileSync(join(out!, "perf.json"), JSON.stringify(results, null, 2));
   check(changedFiles.length === 0, `${module}: Zero data file writes in idle`);
   if (module === "butler.riso-print") { check(row.frames >= 6 && row.frames <= 8, "Riso keyframe budget"); check(row.raf === 0, "Riso idle has zero rAF"); }
