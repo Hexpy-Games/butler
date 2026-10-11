@@ -23,6 +23,7 @@ mod events;
 mod frames;
 mod hidden;
 pub mod history;
+mod identity;
 mod imaging;
 mod input;
 pub mod install;
