@@ -3,7 +3,7 @@ import type { ShowcaseGuidance } from "../../showcase";
 import { Card } from "../../components/Card";
 import { Typo } from "../../components/Typo";
 import { showcaseImageLoader } from "../Wallpaper/Wallpaper.demo";
-import { INHERIT_LABEL, PICKER_LABELS } from "./WallpaperPicker.demo";
+import { CONVERSATION_COPY, INHERIT_LABEL, OverlayDemoControl, PICKER_LABELS } from "./WallpaperPicker.demo";
 import { WallpaperPicker, type WallpaperPickerValue } from "./index";
 
 // #region recipe: Settings wallpaper
@@ -28,6 +28,20 @@ function ProjectWallpaper() {
 }
 // #endregion
 
+// #region recipe: Conversation background with an overlay
+// The caller's own control goes in extraControls (after the tile's options); photos start undimmed because the overlay dims.
+function ConversationBackground() {
+  const [value, setValue] = useState<WallpaperPickerValue>({ kind: "live", module: "butler.bloom" });
+  const [overlay, setOverlay] = useState(70);
+  const overlaid = value !== "inherit" && value.kind !== "none";
+  return (
+    <WallpaperPicker imageDefaults={{ dim: 0 }} imageLoader={showcaseImageLoader} images={[{ id: "landscape", luminance: 0.55 }]}
+      labels={{ ...PICKER_LABELS["en-US"], none: CONVERSATION_COPY["en-US"].none }} locale="en-US" value={value} onChange={setValue}
+      extraControls={overlaid ? <OverlayDemoControl label={CONVERSATION_COPY["en-US"].overlay} value={overlay} onChange={setOverlay} /> : undefined} />
+  );
+}
+// #endregion
+
 function Note({ text }: { text: string }) {
   return <Card><Typo.Body>{text}</Typo.Body></Card>;
 }
@@ -46,6 +60,11 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Settings wallpaper", description: "Controlled value; onUpload/onDeleteImage and onImportModule/onDeleteModule go to the container, which owns the image and module stores.", render: () => <SettingsWallpaper /> },
     { name: "Project wallpaper that can inherit", description: "inherit adds a first tile whose value is \"inherit\"; its source is previewed.", render: () => <ProjectWallpaper /> },
+    {
+      name: "Conversation background with an overlay",
+      description: "extraControls renders the caller's control after the selected tile's options; the caller decides when to show it. imageDefaults sets what a photo starts with.",
+      render: () => <ConversationBackground />,
+    },
   ],
   doDont: [
     {
@@ -58,6 +77,7 @@ export const guidance: ShowcaseGuidance = {
     "Errors (type, size, image in use) are the container's brief toasts, never text inside the picker.",
     "User modules (userModules, or the WallpaperRegistryProvider's) follow the built-ins with a subtle labels.mine marker; one that cannot be used is a disabled tile whose tooltip is the first line of its error.",
     "The import-module tile sits with the upload tile, after every option; onImportModule(file) receives a chosen .zip, and the container installs it, then selects the new module.",
+    "extraControls is for a control that belongs to this scope only (the conversation's overlay); never repeat the tile's own options there.",
   ],
   accessibility: [
     "The tiles are a radiogroup: one tab stop, arrow keys move and select (skipping tiles that cannot be chosen), Home and End jump.",

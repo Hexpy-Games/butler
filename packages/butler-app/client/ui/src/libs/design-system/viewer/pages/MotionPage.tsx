@@ -32,6 +32,7 @@ const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["components/LoadingIndicator", "Spinner to check", "LoadingIndicator: spinner resolves into a drawn check"],
   ["components/ButlerThinkingMark", "Idle to working", "ButlerThinkingMark: halftone morph and settle to the logo"],
   ["components/Toast", "Motion", "Toasts: drop in, stack, leave faster"],
+  ["blocks/SetupWizardShell", "Card morph (intro to step)", "SetupWizardShell: the setup card morphs 420 to 520 without scaling"],
 ];
 
 /**
@@ -82,7 +83,7 @@ export function MotionPage({ entries, locale, state, anchor, onChange, onOpen }:
   const [shiftRun, replayShift] = useReplay();
   const group = (name: string) => tokenCatalog.filter((token) => token.category === "motion" && token.group === name);
   const chapter = chapterById("motion")!;
-  const s = chapterSections(chapter, [["durations", "Durations"], ["easings", "Easings"], ["distances", "Distances and scales"], ["loops", "Loops"], ["components", "DS motion components"]]);
+  const s = chapterSections(chapter, [["durations", "Durations"], ["easings", "Easings"], ["distances", "Distances and scales"], ["sequences", "Sequences"], ["loops", "Loops"], ["components", "DS motion components"]]);
   return (
     <div data-ds-motion-page>
       <ChapterLayout anchor={anchor} chapter={chapter} locale={locale === "ko-KR" ? "ko" : "en"} onOpen={onOpen} sections={s.list}
@@ -112,6 +113,11 @@ export function MotionPage({ entries, locale, state, anchor, onChange, onOpen }:
                 <Typo.Code>{token.name}</Typo.Code>
               </Stack>
             ))}
+          </Stack>
+        </GuideSection>
+        <GuideSection spec={s.at("sequences")} lead="Staggers and the first-run intro timeline: setup card rows 30ms apart after a card morph, intro lines 70ms apart, and the ink scene's segments.">
+          <Stack align="row" cross="center" gap="xl" wrap data-ds-motion-group="sequences">
+            {group("Sequences").map((token) => <Typo.Code key={token.name}>{`${token.name}: ${token.light}`}</Typo.Code>)}
           </Stack>
         </GuideSection>
         <GuideSection spec={s.at("loops")} lead="Spinner, pulse and shimmer loop on their own durations; reduced motion stops them.">

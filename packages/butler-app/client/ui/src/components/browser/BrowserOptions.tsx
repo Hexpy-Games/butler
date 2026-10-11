@@ -1,14 +1,15 @@
 import { appCopy } from "@/app/copy";
-import { ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, IconButton, MoreHorizontal, Typo } from "@/butler-ds";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, IconButton, MoreHorizontal, Typo } from "@/butler-ds";
 import { browserCall, type BrowserTab } from "./browserBridge";
+import { openHistory } from "./historyApi";
 
-/** Keep the existing still preference in the toolbar when control moves onto the card. */
+/** Browser-wide commands and conversation-specific presentation. */
 export function BrowserOptions({ tab }: { tab?: BrowserTab }) {
-  if (!tab || tab.owner === "mine") return null;
-  if (tab.profile === "signed_in") return <Typo.Caption>{appCopy.browser.signedIn}</Typo.Caption>;
-  return <ButtonContainer size="icon-sm"><DropdownMenu><DropdownMenuTrigger asChild>
-    <IconButton label={appCopy.browser.stills}><MoreHorizontal size="sm" /></IconButton>
+  return <>{tab?.owner !== "mine" && tab?.profile === "signed_in" && <Typo.Caption>{appCopy.browser.signedIn}</Typo.Caption>}<DropdownMenu><DropdownMenuTrigger asChild>
+    <IconButton label={appCopy.browser.more}><MoreHorizontal size="sm" /></IconButton>
   </DropdownMenuTrigger><DropdownMenuContent align="end">
-    <DropdownMenuCheckboxItem checked={tab.stills !== false} onCheckedChange={(value) => void browserCall("stills", { id: tab.id, value })}>{appCopy.browser.stills}</DropdownMenuCheckboxItem>
-  </DropdownMenuContent></DropdownMenu></ButtonContainer>;
+    <DropdownMenuItem onSelect={() => openHistory()}>{appCopy.browser.history.title}</DropdownMenuItem>
+    {tab && tab.owner !== "mine" && <DropdownMenuCheckboxItem checked={tab.stills !== false}
+      onCheckedChange={value => void browserCall("stills", { id: tab.id, value })}>{appCopy.browser.stills}</DropdownMenuCheckboxItem>}
+  </DropdownMenuContent></DropdownMenu></>;
 }

@@ -82,6 +82,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
   browser: [
+    { id: "browser-history", kind: "form", fields: ["browser-history"] },
     { id: "sign-ins", kind: "list", fields: [] },
     { id: "browser-import", kind: "form", fields: ["browser-import-bookmarks", "browser-import-passwords"] },
   ],

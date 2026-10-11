@@ -30,6 +30,7 @@ pub(super) fn migrate(
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
     library::create(connection)?;
+    super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the
     // index get it here.

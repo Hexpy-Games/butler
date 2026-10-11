@@ -202,6 +202,7 @@ impl Headless {
             &self.config.root,
             self.config.content,
             self.downloads.clone(),
+            self.history.clone(),
         )
         .await
         .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
