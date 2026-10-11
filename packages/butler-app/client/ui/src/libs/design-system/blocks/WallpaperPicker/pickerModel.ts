@@ -8,7 +8,7 @@ import {
   type WallpaperSource,
   type WallpaperUserModule,
 } from "../Wallpaper";
-import type { WallpaperPickerImage, WallpaperPickerInherit, WallpaperPickerValue } from "./types";
+import type { WallpaperPickerImage, WallpaperPickerImageDefaults, WallpaperPickerInherit, WallpaperPickerValue } from "./types";
 
 export type WallpaperImageSource = Extract<WallpaperSource, { kind: "image" }>;
 export type WallpaperLiveSource = Extract<WallpaperSource, { kind: "live" }>;
@@ -109,6 +109,11 @@ export function wallpaperPickerDefault(option: WallpaperPickerOption): Wallpaper
     case "image":
       return { kind: "image", asset: option.image.id, fit: "cover", dim: wallpaperImageDefaultDim(option.image.luminance ?? Number.NaN), blur: 0 };
   }
+}
+
+/** A first pick with the caller's image defaults over the picker's (images only; other values pass through). */
+export function withWallpaperImageDefaults(value: WallpaperPickerValue, defaults: WallpaperPickerImageDefaults | undefined): WallpaperPickerValue {
+  return defaults && value !== "inherit" && value.kind === "image" ? { ...value, ...defaults } : value;
 }
 
 /** Only the buckets that hold values (a stored source never carries empty keys). */

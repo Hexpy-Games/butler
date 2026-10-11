@@ -56,7 +56,7 @@ export function SetupWizardStepCard({
           {steps ? <SetupWizardProgress activeIndex={activeIndex} ariaLabel={progressLabel} steps={steps} /> : null}
         </Stack>
       ) : null}
-      <Stack className={dsClass(fade.current ? styles.bodyEnter : undefined)} gap="lg" key={contentKey} data-motion={fade.current ? "enter" : undefined} data-slot="setup-step-body">
+      <Stack className={dsClass(fade.current ? styles.bodyEnter : undefined)} gap="lg" key={contentKey} data-motion={fade.current ? "enter" : undefined} data-slot="setup-step-body" data-setup-rows="">
         <Stack align="row" cross="start" gap="sm">
           <span aria-hidden="true" className={styles.glyph}><IconSlot size="lg" minHeight="line">{icon}</IconSlot></span>
           <Stack gap="xs" minWidth="0">

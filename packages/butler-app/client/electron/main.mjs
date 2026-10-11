@@ -2,6 +2,7 @@ import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
+import { startPowerStateMonitor } from "./butler-platform/power.mjs";
 import {
   app,
   BrowserWindow,
@@ -267,6 +268,10 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
+let powerStateMonitor = null;
+let powerStateMonitorStart = null;
+const sentPowerStateByWebContents = new WeakMap();
+const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
@@ -284,6 +289,39 @@ let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
   trayEnabled: !legacyDataBlocked,
 };
+
+function sendPowerState(state, window = mainWindow) {
+  const webContents = window?.webContents;
+  if (!window || window.isDestroyed() || !webContents || webContents.isDestroyed() ||
+      !readyPowerStateWebContents.has(webContents)) return;
+  const previous = sentPowerStateByWebContents.get(webContents);
+  if (previous?.onBattery === state.onBattery && previous?.constrained === state.constrained) return;
+  webContents.send("butler:power-state", state);
+  sentPowerStateByWebContents.set(webContents, state);
+}
+
+async function ensurePowerStateMonitor() {
+  if (!powerStateMonitorStart) {
+    powerStateMonitorStart = startPowerStateMonitor((state) => sendPowerState(state))
+      .then((monitor) => {
+        powerStateMonitor = monitor;
+        return monitor;
+      })
+      .catch(() => {
+        powerStateMonitorStart = null;
+        return null;
+      });
+  }
+  return await powerStateMonitorStart;
+}
+
+async function syncPowerStateToWindow(window) {
+  const monitor = await ensurePowerStateMonitor();
+  if (!monitor || powerStateMonitor !== monitor || window.isDestroyed() || window.webContents.isDestroyed()) return;
+  readyPowerStateWebContents.add(window.webContents);
+  sendPowerState(monitor.getState(), window);
+}
+
 const nativeNotificationState = {
   lastError: null,
   lastAttemptedAt: null,
@@ -2170,6 +2208,12 @@ async function createWindow() {
     },
   });
   mainWindow = win;
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    if (!isMainFrame) return;
+    readyPowerStateWebContents.delete(win.webContents);
+    sentPowerStateByWebContents.delete(win.webContents);
+  });
+  win.webContents.on("did-finish-load", () => { void syncPowerStateToWindow(win); });
   const firstDataPaint = waitForStartupRenderer(win);
   userBrowser ??= installUserBrowser(app, () => mainWindow);
   win.on("hide", () => userBrowser.syncAll());
@@ -2770,6 +2814,7 @@ if (appSingleInstanceLock) {
         return;
       }
       void installDevtools().catch(() => undefined);
+      await ensurePowerStateMonitor();
       await createWindow();
       if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
         const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
@@ -2790,6 +2835,7 @@ app.on("activate", activateButlerApp);
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
+    powerStateMonitor?.stop();
     quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
