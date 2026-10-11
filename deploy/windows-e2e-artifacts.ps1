@@ -12,6 +12,7 @@ if ($Mode -eq 'Export') {
     }
     Copy-Item "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe" $artifacts
 } else {
+    if ($env:BUTLER_E2E_TIER -ne 'stub') { throw 'Compiled Windows verification requires BUTLER_E2E_TIER=stub' }
     foreach ($test in $Tests) {
         $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())

@@ -412,6 +412,9 @@ jobs:
     needs: [changes, stub]
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      BUTLER_E2E_TIER: stub
+      RUST_TEST_THREADS: 8
     strategy:
       fail-fast: false
       matrix:
