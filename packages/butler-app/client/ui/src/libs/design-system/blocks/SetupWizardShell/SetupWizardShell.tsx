@@ -15,11 +15,11 @@ export { SetupWizardContent, SetupWizardList, type SetupWizardContentProps } fro
 export type { SetupWizardIntro } from "./SetupWizardStage";
 
 /**
- * The first-run backdrop stays bloom, whatever the user's wallpaper. The
+ * The first-run backdrop is the riso print, whatever the user's wallpaper. The
  * first-install ink intro (`intro="full"`) draws on this layer and reads the
  * card morph's rects (`SetupWizardMorph.from/to`) for its keep-out.
  */
-const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
+const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.riso-print" };
 
 /** `wizard`: title, stepper and a glass body. `focus`: one centered column on the backdrop. */
 export type SetupWizardVariant = "wizard" | "focus";

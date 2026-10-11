@@ -2,16 +2,10 @@ import type { ShowcaseGuidance } from "../../showcase";
 import { Card } from "../../components/Card";
 import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
-import {
-  Wallpaper,
-  WallpaperImageLoaderProvider,
-  WallpaperRegistryProvider,
-  createWallpaperRegistry,
-  defineWallpaperModule,
-  BUILTIN_WALLPAPERS,
-  type WallpaperSource,
-} from "./index";
+import { Wallpaper, WallpaperImageLoaderProvider, WallpaperRegistryProvider, createWallpaperRegistry, defineWallpaperModule, BUILTIN_WALLPAPERS } from "./index";
+import type { WallpaperContentRect, WallpaperEvent, WallpaperSource } from "./index";
 import { showcaseImageLoader } from "./Wallpaper.demo";
+import { NearViewport } from "./Wallpaper.drift";
 
 // #region recipe: Screen wallpaper
 // Sources are data (settings, agent tools); keep the object stable across renders.
@@ -24,6 +18,14 @@ function ScreenWallpaper() {
       <Wallpaper source={APP_WALLPAPER} />
     </div>
   );
+}
+// #endregion
+
+// #region recipe: Riso print behind a conversation
+// Column and composer are client rects (measured on resize, never per scroll); a new event id fires once.
+function RisoConversation({ column, composer, turn }: { column?: WallpaperContentRect; composer?: WallpaperContentRect; turn?: WallpaperEvent }) {
+  const source: WallpaperSource = { kind: "live", module: "butler.riso-print" };
+  return <div style={{ position: "relative", height: 160, overflow: "hidden" }}><Wallpaper columnRect={column} contentRect2={composer} event={turn} scope="container" source={source} /></div>;
 }
 // #endregion
 
@@ -112,7 +114,7 @@ function Note({ text }: { text: string }) {
 }
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The app wallpaper: a live WebGL2 shader module (built-in bloom and silk, or a user module), an image, or nothing, drawn behind a surface under one performance and motion policy.",
+  purpose: "The app wallpaper: a live WebGL2 shader module (the default riso print, bloom, silk and the other built-ins, or a user module), an image, or nothing, drawn behind a surface under one performance and motion policy.",
   whenToUse: [
     "Behind a whole screen (new chat, setup wizard) with the default viewport scope",
     "Behind a content area such as a dashboard with scope=\"container\"",
@@ -127,6 +129,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Screen wallpaper", description: "A live module with a preset palette as a fixed full-screen layer.", render: () => <ScreenWallpaper /> },
     { name: "Wallpaper inside a panel", description: "Container scope fills the nearest positioned parent; motion=\"paused\" holds a still frame.", render: () => <PanelWallpaper /> },
+    { name: "Riso print behind a conversation", description: "Pass columnRect (the message list's client rect) and contentRect2 (the composer); fire event={{ id, kind }} on new chat, turn start (thinking) and turn end (done).", render: () => <NearViewport height={160}><RisoConversation /></NearViewport> },
     { name: "Image wallpaper", description: "An image source with the app's imageLoader (prop or WallpaperImageLoaderProvider); fit, dim and blur are source fields.", render: () => <ImageWallpaper /> },
     { name: "Decoration on a card", description: "A transparent module (\"transparent\": true) draws only its art; the canvas stays see-through, so the glass shows. Keep text above it.", render: () => <CardDecoration /> },
     { name: "Plug in a module", description: "defineWallpaperModule validates wallpaper.json + shader.frag; pass a registry that includes it.", render: () => <PluggedModule /> },
@@ -149,6 +152,7 @@ export const guidance: ShowcaseGuidance = {
     "Keep text readable: wallpapers stay low-contrast behind text, and panels over them use TintedGlass.",
     "Image wallpapers: set dim from the asset's luminance (wallpaperImageDefaultDim); the dark theme dims one step more on its own.",
     "Pass contentRect (the text area's client rect) so modules can keep detail away from the text via u_contentRect.",
+    "The riso print drifts slowly and moves on events; reduced motion, low power and the user's pause hold one static print.",
   ],
-  tokens: ["--adaptive-viewport-block-size", "--radius-panel"],
+  tokens: ["--adaptive-viewport-block-size", "--radius-panel", "--riso-paper", "--riso-paper-day", "--riso-paper-night", "--butler-ink-blue", "--butler-ink-pink", "--butler-ink-purple"],
 };

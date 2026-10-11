@@ -151,7 +151,7 @@ pub(super) fn from_legacy(theme: &str, preset: &str, colors: &[String]) -> Value
     match theme {
         "none" => json!({"kind": "none"}),
         "silk" => json!({"kind": "live", "module": "butler.silk"}),
-        _ => {
+        "bloom" | "riso" if preset != "monochrome" => {
             let palette = if preset == "custom" {
                 json!(colors)
             } else {
@@ -159,6 +159,7 @@ pub(super) fn from_legacy(theme: &str, preset: &str, colors: &[String]) -> Value
             };
             json!({"kind": "live", "module": "butler.bloom", "params": {"colors": palette}})
         }
+        _ => default_source(),
     }
 }
 
@@ -177,7 +178,23 @@ pub(super) fn view(stored: Option<&Value>, legacy: Value) -> Value {
     {
         setting.extend(stored.clone());
     }
+    if setting.get(ORIGIN).and_then(Value::as_str) != Some(CHOSEN)
+        && setting.get("source").is_some_and(old_default)
+    {
+        setting.insert("source".into(), default_source());
+    }
     Value::Object(setting)
+}
+
+pub(super) fn default_source() -> Value {
+    json!({"kind":"live", "module":"butler.riso-print"})
+}
+
+fn old_default(source: &Value) -> bool {
+    source == &json!({"kind":"live", "module":"butler.bloom"})
+        || source == &json!({"kind":"live", "module":"butler.bloom", "params":{}})
+        || source
+            == &json!({"kind":"live", "module":"butler.bloom", "params":{"colors":"monochrome"}})
 }
 
 /// Resolves `wallpaper` in a settings projection. A PATCH that sets it is the

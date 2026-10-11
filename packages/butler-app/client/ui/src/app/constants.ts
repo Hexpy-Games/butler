@@ -47,7 +47,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   appearance_theme: "system",
   reduce_motion: false,
   collapse_message_box: true,
-  main_screen_theme: "bloom",
+  main_screen_theme: "riso",
   main_screen_theme_preset: "monochrome",
   main_screen_theme_custom_colors: [
     "#32424d",
@@ -61,12 +61,12 @@ export const EMPTY_SETTINGS: SettingsView = {
   wallpaper: {
     source: {
       kind: "live",
-      module: "butler.bloom",
-      params: { colors: "monochrome" },
+      module: "butler.riso-print",
     },
     motion: "auto",
     pauseOnBattery: false,
   },
+  conversation_background: { source: { kind: "live", module: "butler.riso-print" }, overlay: 70 },
   composer_decoration: { theme: "none", character: true },
   translucent_sidebar: true,
   smart_grouping_enabled: true,

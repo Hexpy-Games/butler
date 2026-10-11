@@ -14,7 +14,12 @@ export interface EngineWatchdog {
  * renders degrades (`onDegrade`, `first` once per scene), and after a quiet
  * period that grows per retry it tries animating again (`onRetry`).
  */
-export function createEngineWatchdog({ onDegrade, onRetry }: { onDegrade: (first: boolean) => void; onRetry: () => void }): EngineWatchdog {
+export function createEngineWatchdog({ onDegrade, onRetry, slowFrames }: {
+  onDegrade: (first: boolean) => void;
+  onRetry: () => void;
+  /** Slow renders in a row that degrade; omitted: the animated-frame threshold. */
+  slowFrames?: number;
+}): EngineWatchdog {
   let watchdog = HEALTHY_WATCHDOG;
   let timer = 0;
   let reported = false;
@@ -26,7 +31,7 @@ export function createEngineWatchdog({ onDegrade, onRetry }: { onDegrade: (first
     time(render) {
       const start = performance.now();
       render();
-      watchdog = stepFrameWatchdog(watchdog, performance.now() - start);
+      watchdog = stepFrameWatchdog(watchdog, performance.now() - start, slowFrames);
       if (!watchdog.degraded) return false;
       stop();
       timer = window.setTimeout(() => {

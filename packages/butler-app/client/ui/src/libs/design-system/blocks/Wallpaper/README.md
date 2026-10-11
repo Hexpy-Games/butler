@@ -44,9 +44,55 @@ harness that must see live frames opts out with
 focus is not a pause: a visible Butler window behind another app keeps
 animating. WebGL context loss is recovered (images are
 re-uploaded from cached bytes), and a module that fails to compile or link
-falls back to the default (`butler.bloom`) and reports through `onError`.
+falls back to `butler.bloom` (one pass, no density target) and reports
+through `onError`. Unknown modules and images that fail to load fall back to
+the default, `butler.riso-print`. Animated frames wake on a timer at their
+frame slot, not on every display frame, so rAF calls match frames drawn.
 Unmounting frees every GPU object and gives the context back
 (`WEBGL_lose_context`).
+
+### Drift modules (the riso print)
+
+`motion: "drift"` modules (bundled only; `density: true`) are prints, not
+loops. A quarter-resolution density pass (1 texel per 4 CSS px, diffused when
+sampled) shapes the ink; the print pass screens it at full resolution. One
+buffer serves rest and events: DPR ≤ 1.5 within 2.4MP (touch: 1.2MP).
+
+- **At rest** one keyframe is drawn every 8 s into a hidden top layer and
+  faded in at 4 Hz by a timer (never rAF, never a CSS transition: a running
+  opacity animation would composite every vsync). About 7 keyframes and 245
+  opacity steps a minute, 0 rAF. Two 2D layers above the WebGL canvas show the
+  frames (a GPU copy per frame); the canvas itself stays out of the composite.
+- **Events** (`event={{ id, kind }}`, a new `id` fires once): `focus` (also
+  fired by the engine on first paint and after 5 min hidden or blurred),
+  `newChat`, `thinking`, `done`. Each adds flow under an envelope (attack
+  smoothstep, hold, release (1-k)²; overlapping events add, capped at 1) and
+  its look (plates breathe, the purple drop, plates lift, register + dot
+  gain). Live frames run at 6 + 24 × boost fps (30 while a look tweens); the
+  crossfade layer dissolves out over 250 ms on entry, and the drift resumes
+  from the last live frame when the envelope reaches 0.
+- **Host states**: window blur ≥ 2 min or battery → half speed; blur ≥ 10 min
+  → paused on the current mix (events still run); reduced motion, the user's
+  pause (or pause on battery), low power or thermal pressure
+  (`setWallpaperHostConstrained(true)`), software GL or a degraded watchdog →
+  one static print, and events draw one still (`thinking` and `done` draw
+  nothing); hidden or off-screen → nothing, and the segment resumes where it
+  stopped. 8 slow event frames (> 50 ms) end an event on its end state; 3 slow
+  keyframes fall back to a static print with the watchdog's backoff.
+- **Keep-outs**: `contentRect` (the new-chat content), `contentRect2` (the
+  composer, 30% ink) and `columnRect` (the reading column: ink stays out of
+  its width below its top, only a faint tail enters). A column change eases
+  over 300 ms (instantly under reduced motion, low power or while hidden).
+  A keep-out that moves (a scrolling suggestion rail) is picked up at the
+  next keyframe, so scrolling never redraws the print; one that appears or
+  goes redraws at once.
+- Drift modules are not dimmed under reduced motion; their paper follows the
+  theme (`--riso-paper`: the lower stop of the light `--conversation-bg`, or
+  the night stock).
+
+`paperOverlay` (0–0.95) lays one uniform layer of the theme's paper over any
+wallpaper (live module or image), for surfaces that read over it. The riso
+print needs none.
 
 Another kind, module, image or filter module crossfades (opacity,
 `--motion-slow`): the previous frame is frozen on an overlay canvas and fades
@@ -66,6 +112,8 @@ fades out and the drawing buffer is released, and the next source fades in
 Props: `source`, `motion` (`auto` | `paused`), `pauseOnBattery`, `tone` (omit
 to follow the nearest theme scope), `scope`, `contentRect` (the main
 text/content area in client CSS px, e.g. its `getBoundingClientRect()`),
+`contentRect2` and `columnRect` (print keep-outs, client CSS px), `event`
+(drift events), `paperOverlay` (0–0.95),
 `registry` (defaults to the nearest `WallpaperRegistryProvider`'s, else the
 built-ins), `imageLoader`, `onError`, `dataTestClass`.
 
@@ -207,7 +255,10 @@ param (label above control): number → slider (or a shuffle button), boolean
 swatch, palette → presets plus "Custom" swatches. Edits land where the tone
 reads them (`withWallpaperParam`).
 
-Built-ins live in `modules/<id>/`: `butler.bloom` (the default), `butler.silk`,
+Built-ins live in `modules/<id>/`: `butler.riso-print` (the default: the v9
+riso print, `density.frag` + `print.frag`, params `inks`, `paper` (light, night
+in dark), `composition` (masses, corners, low tide) and a shuffled `seed`),
+`butler.bloom`, `butler.silk`,
 the analog collection (`butler.riso-flow`, `butler.lamina`, `butler.diatom`
 two-pass, `butler.dusk`, `butler.shoreline` with a real-time `sceneTone` and
 the internal `dayClouds` (0..1, default 1: the day grade's cloud shadows; the

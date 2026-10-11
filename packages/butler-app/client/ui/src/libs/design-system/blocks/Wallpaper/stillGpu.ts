@@ -3,6 +3,7 @@
 import type { WallpaperStillSize } from "./still";
 import { wallpaperContentRectUniform } from "./contentRect";
 import { linkWallpaperModule, type WallpaperModuleProgramsResult } from "./glModule";
+import { wallpaperPrintStillContent } from "./glPrint";
 import { drawWallpaperScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
 import { loadWallpaperImageBytes } from "./imageCache";
@@ -84,7 +85,7 @@ export function probeWallpaperStillDraw(module: WallpaperModule): void {
   canvas.height = PROBE_SIZE;
   const uniforms = wallpaperParamUniforms(module.manifest, resolveWallpaperValues(module.manifest, {}, "light"));
   revision += 1;
-  const drawn = { compiled: result.base, overlay: result.overlay, module, uniforms, dark: false, image: null, revision };
+  const drawn = { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module, uniforms, dark: false, image: null, revision };
   clearTransparentStill(context, mode, canvas);
   drawWallpaperScene(gl, resources, drawn, { width: PROBE_SIZE, height: PROBE_SIZE, ...STILL_FRAME, timeMs: 0 });
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
@@ -119,14 +120,17 @@ export async function drawWallpaperStill(scene: WallpaperScene, size: WallpaperS
   const width = size.compositionWidth ?? Math.max(size.width, STILL_SCREEN_WIDTH);
   const screen = { width, height: Math.round(width * size.height / size.width) };
   const pixelRatio = size.pixelRatio ?? 1;
-  const contentRect = wallpaperContentRectUniform(size.contentRect, { left: 0, top: 0, width: screen.width / pixelRatio, height: screen.height / pixelRatio }, screen);
+  const css = { left: 0, top: 0, width: screen.width / pixelRatio, height: screen.height / pixelRatio };
+  // A print composes around the new-chat content, as on screen.
+  const content = size.contentRect ?? (scene.module.manifest.density ? wallpaperPrintStillContent(css.width, css.height) : undefined);
+  const contentRect = wallpaperContentRectUniform(content, css, screen);
   canvas.width = screen.width;
   canvas.height = screen.height;
   const result = linked(context, scene.module);
   if (!result.ok) throw new Error(result.log);
   const uniforms = wallpaperParamUniforms(scene.module.manifest, scene.values);
   revision += 1;
-  const drawn = { compiled: result.base, overlay: result.overlay, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
+  const drawn = { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
   clearTransparentStill(context, mode, screen);
   drawWallpaperScene(gl, resources, drawn, { ...screen, ...STILL_FRAME, pixelRatio, contentRect, dayPhase: size.dayPhase ?? STILL_FRAME.dayPhase, timeMs: (scene.module.stillTime ?? 0) * 1000 });
   return encodeScaled(canvas, size);

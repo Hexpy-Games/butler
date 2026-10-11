@@ -3,7 +3,7 @@
 import { isRecord } from "./manifestParams";
 import type { WallpaperManifest, WallpaperParamSpec } from "./types";
 
-type Options = Pick<WallpaperManifest, "overlay" | "pixelRatio" | "imageDim" | "defaultImage" | "sceneTone" | "transparent" | "decoration">;
+type Options = Pick<WallpaperManifest, "overlay" | "density" | "pixelRatio" | "imageDim" | "defaultImage" | "sceneTone" | "transparent" | "decoration">;
 
 const PIXEL_RATIOS = new Set<unknown>(["default", "device"]);
 const IMAGE_DIMS = new Set<unknown>(["auto", "noDarkStep", "none"]);
@@ -27,6 +27,16 @@ function sceneTone(raw: unknown, params: readonly WallpaperParamSpec[], errors: 
   return { param: param as string, darkPhases: (phases ? darkPhases : []) as Array<[number, number]> };
 }
 
+/** `density` (a quarter-resolution density pass): image none, never with `overlay`; `drift` modules need it. */
+function densityOption(raw: Record<string, unknown>, options: Options, errors: string[]) {
+  const { density } = raw;
+  if (density !== undefined && typeof density !== "boolean") errors.push("density: must be a boolean");
+  else if (density === true && raw.image !== "none") errors.push("density: needs image none");
+  else if (density === true && raw.overlay === true) errors.push("density: not with overlay");
+  else if (density !== undefined) options.density = density;
+  if (raw.motion === "drift" && density !== true) errors.push("motion: drift needs density: true");
+}
+
 /** Validates the optional fields; pushes contract errors and returns the ones present. */
 export function validateManifestOptions(raw: Record<string, unknown>, params: readonly WallpaperParamSpec[], errors: string[]): Options {
   const options: Options = {};
@@ -35,6 +45,7 @@ export function validateManifestOptions(raw: Record<string, unknown>, params: re
     if (typeof overlay === "boolean") options.overlay = overlay;
     else errors.push("overlay: must be a boolean");
   }
+  densityOption(raw, options, errors);
   if (pixelRatio !== undefined) {
     if (PIXEL_RATIOS.has(pixelRatio)) options.pixelRatio = pixelRatio as Options["pixelRatio"];
     else errors.push("pixelRatio: must be default or device");

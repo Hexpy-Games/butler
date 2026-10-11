@@ -2,7 +2,7 @@
 //! anything does.
 //!
 //! Each scope that can hold a wallpaper source is one scan returning the
-//! labels of its references: the global setting's source and every project's
+//! labels of its references: both global settings' sources and every project's
 //! `dashboard_preferences_json.wallpaper` (`"inherit"` or a source).
 
 use rusqlite::Connection;
@@ -45,11 +45,10 @@ fn global_setting(
     id: &str,
     refers: Refers,
 ) -> Result<Vec<String>, AppStorageError> {
-    let source = settings::stored_wallpaper_source(db)?;
-    Ok(source
-        .filter(|source| refers(source, id))
-        .map(|_| "settings.wallpaper".to_owned())
+    Ok(settings::stored_background_sources(db)?
         .into_iter()
+        .filter(|(_, source)| refers(source, id))
+        .map(|(label, _)| label)
         .collect())
 }
 

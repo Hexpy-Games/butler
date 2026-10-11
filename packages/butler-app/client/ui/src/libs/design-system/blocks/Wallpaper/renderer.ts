@@ -4,8 +4,8 @@ import { linkWallpaperModule } from "./glModule";
 import { createWallpaperResources } from "./glResources";
 import { drawWallpaperScene, type WallpaperDrawScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
-import { WALLPAPER_IMAGE_MODULE } from "./modules";
-import { BUILTIN_WALLPAPERS, defaultWallpaperModule, type WallpaperScene } from "./registry";
+import { BLOOM_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
+import type { WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
 import { clearTransparent, wallpaperContextAttributes } from "./glContext";
 import { isSoftwareWallpaperRenderer, wallpaperRendererName, wallpaperSoftwareFallbackAllowed } from "./softwareGl";
@@ -33,6 +33,8 @@ export interface WallpaperRenderer {
    * reads every frame back on the main thread, so the engine holds still frames.
    */
   softwareRendering(): boolean;
+  /** A frame can be drawn now: a module is selected and the context is not lost. */
+  drawable(): boolean;
   usesDayPhase(): boolean;
   usesContentRect(): boolean;
   draw(frame: WallpaperDrawFrame): void;
@@ -55,7 +57,8 @@ export interface WallpaperRendererOptions {
 
 export function createWallpaperRenderer(
   canvas: HTMLCanvasElement,
-  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS), transparent = false }: WallpaperRendererOptions,
+  // A GPU or compile failure falls back to Bloom: one pass, no density target.
+  { onError, fallback = BLOOM_WALLPAPER, transparent = false }: WallpaperRendererOptions,
 ): WallpaperRenderer | null {
   const gl = canvas.getContext("webgl2", wallpaperContextAttributes(transparent)) as WebGL2RenderingContext | null;
   if (!gl) return null;
@@ -91,11 +94,11 @@ export function createWallpaperRenderer(
     }
     revision += 1;
     active = result.ok
-      ? { compiled: result.base, overlay: result.overlay, module, uniforms: wallpaperParamUniforms(module.manifest, values), dark, image, revision }
+      ? { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module, uniforms: wallpaperParamUniforms(module.manifest, values), dark, image, revision }
       : null;
   };
 
-  const uses = (flag: "usesDayPhase" | "usesContentRect") => Boolean(active && (active.compiled[flag] || active.overlay?.[flag]));
+  const uses = (flag: "usesDayPhase" | "usesContentRect") => Boolean(active && (active.compiled[flag] || active.overlay?.[flag] || active.density?.[flag]));
 
   return {
     setScene(next) {
@@ -111,6 +114,7 @@ export function createWallpaperRenderer(
     pixelRatio: () => active?.module.manifest.pixelRatio ?? "default",
     drawnModule: () => active?.module.manifest.id ?? null,
     softwareRendering: () => software,
+    drawable: () => active !== null && !gl.isContextLost(),
     usesDayPhase: () => uses("usesDayPhase"),
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {
@@ -132,6 +136,8 @@ export function createWallpaperRenderer(
       resources.programs.dispose();
       resources.images.dispose();
       resources.base.dispose();
+      resources.density.dispose();
+      gl.deleteTexture(resources.printNoise);
       gl.deleteTexture(resources.noise);
       gl.deleteTexture(resources.image);
       gl.deleteVertexArray(resources.vao);
