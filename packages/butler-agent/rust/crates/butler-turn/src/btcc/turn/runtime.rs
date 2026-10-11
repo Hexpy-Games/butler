@@ -135,6 +135,8 @@ impl TurnRuntime {
         destination: &ProgressDestination,
         recovery_attempt: u32,
     ) -> Result<TurnRecord, BtccError> {
+        let timing =
+            super::super::agent_loop::command_timing::CommandTiming::new("turn_transition");
         let permit = self.supervisor.enter(&turn.turn_id, turn.semantic_state)?;
         let claim = self.store.acquire_state_claim(&turn).await?;
         let progress = self.progress_scope(conversation, &turn, destination);
@@ -150,7 +152,9 @@ impl TurnRuntime {
                 permit.cancellation(),
             )
             .await;
+        timing.mark("agent_returned");
         developer_log.capture(&turn, agent_result.as_ref()).await;
+        timing.mark("developer_log_captured");
         let mut result = match agent_result {
             Ok(result) => result,
             Err(AgentLoopError::Propagate(error)) => return Err(error),
@@ -159,12 +163,16 @@ impl TurnRuntime {
         permit.assert_active()?;
         explain_runtime_failure(&turn, &mut result);
         let transition = guided_transition(&turn, result)?;
+        timing.mark("before_commit");
         let committed = self
             .commit_agent_transition(&turn, &claim, &transition, &permit)
             .await;
+        timing.mark("committed");
         super::super::agent_loop::authority_batch(&progress, &transition, committed.is_ok()).await;
+        timing.mark("authority_events_done");
         committed?;
         let committed = self.store.activate_successor(&turn.turn_id).await?;
+        timing.mark("successor_activated");
         if let TurnTransition::Suspend { reason, .. } = transition {
             if committed.suspension != Some(reason) {
                 return Err(BtccError::detected(

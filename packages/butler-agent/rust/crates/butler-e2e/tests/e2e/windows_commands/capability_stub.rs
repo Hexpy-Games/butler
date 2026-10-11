@@ -33,6 +33,19 @@ pub(super) struct Script {
 }
 
 impl Script {
+    pub(super) fn mark(&self, event: &'static str) {
+        let elapsed = self
+            .sent
+            .lock()
+            .unwrap()
+            .map_or(0, |sent| sent.elapsed().as_micros());
+        eprintln!(
+            "command_provider_timing event={event} refused={} elapsed_us={elapsed} utc_us={}",
+            self.case.lock().unwrap().refused,
+            utc_us()
+        );
+    }
+
     pub(super) fn select(&self, case: Case) {
         *self.case.lock().unwrap() = case;
         *self.step.lock().unwrap() = 0;
