@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex, PoisonError,
+        Arc, Mutex, OnceLock, PoisonError,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -21,6 +21,7 @@ pub(crate) struct Event {
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
 pub(crate) struct Cdp {
+    pub(super) identity: OnceLock<Value>,
     outgoing: mpsc::Sender<Vec<u8>>,
     pending: Pending,
     next: AtomicU64,
@@ -61,6 +62,7 @@ impl Cdp {
         });
         (
             Arc::new(Self {
+                identity: OnceLock::new(),
                 outgoing,
                 pending,
                 next: AtomicU64::new(1),

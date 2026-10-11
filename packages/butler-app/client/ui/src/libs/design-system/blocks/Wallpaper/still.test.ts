@@ -2,7 +2,7 @@
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
 import { defineWallpaperModule } from "./manifest";
-import { BLOOM_WALLPAPER, SILK_WALLPAPER } from "./modules";
+import { BLOOM_WALLPAPER, RISO_PRINT_WALLPAPER, SILK_WALLPAPER } from "./modules";
 import { BUILTIN_WALLPAPERS, createWallpaperRegistry, type WallpaperScene } from "./registry";
 import { createWallpaperStillRenderer, wallpaperStillKey, type WallpaperStillSize } from "./still";
 
@@ -44,7 +44,7 @@ test("scenes resolve values for the tone; unknown modules draw the default", asy
   await stills.render(SILK_WALLPAPER, SIZE, "dark");
   await stills.render({ kind: "live", module: "me.gone" }, SIZE, "light");
   expect(scenes[0]?.scene.values).toEqual({ base: "#1a1b1e" });
-  expect(scenes[1]?.scene.module).toBe(BLOOM_WALLPAPER);
+  expect(scenes[1]?.scene.module).toBe(RISO_PRINT_WALLPAPER);
 });
 
 test("a failed render is not cached, so the next request tries again", async () => {

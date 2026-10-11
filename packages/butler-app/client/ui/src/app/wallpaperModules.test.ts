@@ -103,10 +103,10 @@ test("browser mode: importing a zip installs the module; deleting it goes to the
   expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual(["POST /wallpaper-modules/import", "DELETE /wallpaper-modules/me.flow"]);
 });
 
-test("browser mode: an import failure keeps the gateway's own message; a delete conflict is wallpaper_module_in_use", async () => {
+test("browser mode: an import failure keeps the gateway's own message; a delete conflict is wallpaper_in_use", async () => {
   browser({
     "POST /wallpaper-modules/import": () => new Response(JSON.stringify({ error: { code: "wallpaper_module_archive_invalid", message: "shader.frag: missing\nsee docs" } }), { status: 400 }),
-    "DELETE /wallpaper-modules/me.flow": () => new Response(JSON.stringify({ error: { code: "wallpaper_module_in_use" } }), { status: 409 }),
+    "DELETE /wallpaper-modules/me.flow": () => new Response(JSON.stringify({ error: { code: "wallpaper_in_use" } }), { status: 409 }),
   });
   await expect(importWallpaperModule(new File(["x"], "x.zip"))).rejects.toMatchObject({
     code: "wallpaper_module_archive_invalid", status: 400, message: "shader.frag: missing\nsee docs",
@@ -125,13 +125,13 @@ test("desktop mode: the preload bridge carries import and delete", async () => {
     },
     deleteWallpaperModule: async (input: unknown) => {
       calls.push(["deleteWallpaperModule", input]);
-      return { ok: false, error: { code: "wallpaper_module_in_use", status: 409 } };
+      return { ok: false, error: { code: "wallpaper_in_use", status: 409 } };
     },
   };
   Object.defineProperty(globalThis, "window", { configurable: true, value: { butlerApp: bridge } });
   globalThis.fetch = (() => Promise.reject(new Error("fetch must not be used"))) as unknown as typeof fetch;
   expect((await importWallpaperModule(new File(["z"], "flow.zip"))).id).toBe("me.flow");
-  await expect(deleteWallpaperModule("me.flow")).rejects.toMatchObject({ code: "wallpaper_module_in_use", status: 409 });
+  await expect(deleteWallpaperModule("me.flow")).rejects.toMatchObject({ code: "wallpaper_in_use", status: 409 });
   expect(calls).toEqual([
     ["importWallpaperModule", { name: "flow.zip", size: 1 }],
     ["deleteWallpaperModule", { id: "me.flow" }],

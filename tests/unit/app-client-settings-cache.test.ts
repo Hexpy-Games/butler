@@ -1,3 +1,4 @@
+// test-category: pure-logic
 import { afterEach, expect, test } from "bun:test";
 import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import {
@@ -67,11 +68,11 @@ test("settings cache preserves an explicit custom palette draft", () => {
 });
 
 test("settings defaults carry the gateway's default wallpaper", () => {
+  expect(EMPTY_SETTINGS.conversation_background).toEqual({ source: { kind: "live", module: "butler.riso-print" }, overlay: 70 });
   expect(EMPTY_SETTINGS.wallpaper).toEqual({
     source: {
       kind: "live",
-      module: "butler.bloom",
-      params: { colors: "monochrome" },
+      module: "butler.riso-print",
     },
     motion: "auto",
     pauseOnBattery: false,

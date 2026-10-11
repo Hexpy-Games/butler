@@ -16,7 +16,7 @@ pub(crate) mod user;
 mod values;
 pub(crate) mod watch;
 
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use serde_json::{Value, json};
 
@@ -44,6 +44,7 @@ static BUILTIN: LazyLock<WallpaperModules> = LazyLock::new(|| {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WallpaperModules {
     modules: Vec<WallpaperModule>,
+    index: HashMap<String, usize>,
     /// User modules that cannot be drawn, with why: `(id, reason)`.
     unusable: Vec<(String, String)>,
 }
@@ -63,6 +64,11 @@ impl WallpaperModules {
             }
         }
         Self {
+            index: modules
+                .iter()
+                .enumerate()
+                .map(|(i, module)| (module.id.clone(), i))
+                .collect(),
             modules,
             unusable: self.unusable.clone(),
         }
@@ -96,7 +102,9 @@ impl WallpaperModules {
     }
 
     pub(crate) fn get(&self, id: &str) -> Option<&WallpaperModule> {
-        self.modules.iter().find(|module| module.id == id)
+        self.index
+            .get(id)
+            .and_then(|index| self.modules.get(*index))
     }
 
     /// A live source's module and parameters (`source.module`, `source.params`

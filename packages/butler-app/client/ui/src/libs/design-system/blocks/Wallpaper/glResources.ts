@@ -2,6 +2,7 @@ import { createWallpaperImageGpu, type WallpaperImageGpu } from "./glImage";
 import { createWallpaperProgramCache, type WallpaperProgramCache } from "./glProgram";
 import { createWallpaperRenderTarget, type WallpaperRenderTarget } from "./glTarget";
 import { WALLPAPER_NOISE_SIZE, wallpaperNoiseTexture } from "./noise";
+import { WALLPAPER_PRINT_NOISE_SIZE, wallpaperPrintNoiseTexture } from "./glPrint";
 
 /** GPU objects of one context; rebuilt as a whole after a context loss. */
 export interface WallpaperGpuResources {
@@ -13,6 +14,10 @@ export interface WallpaperGpuResources {
   images: WallpaperImageGpu;
   /** Cached `shader.frag` output of two-pass modules (their `u_base`). */
   base: WallpaperRenderTarget;
+  /** The density pass of print modules (their `u_density`, 1 texel per 4 CSS px, linear). */
+  density: WallpaperRenderTarget;
+  /** The print modules' own noise (their `u_noiseTexture`). */
+  printNoise: WebGLTexture | null;
   vao: WebGLVertexArrayObject | null;
   precision: "highp" | "mediump";
 }
@@ -37,6 +42,8 @@ export function createWallpaperResources(gl: WebGL2RenderingContext): WallpaperG
     image: texture(gl, 1, new Uint8Array([128, 128, 128, 255]), gl.CLAMP_TO_EDGE),
     images: createWallpaperImageGpu(gl, programs),
     base: createWallpaperRenderTarget(gl, gl.NEAREST),
+    density: createWallpaperRenderTarget(gl, gl.LINEAR),
+    printNoise: texture(gl, WALLPAPER_PRINT_NOISE_SIZE, wallpaperPrintNoiseTexture(), gl.REPEAT),
     vao: gl.createVertexArray(),
     precision: high && high.precision > 0 ? "highp" : "mediump",
   };

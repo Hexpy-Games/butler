@@ -1,4 +1,5 @@
 {
+  "butler.riso-print|light": "butler.riso-print.light.png",
   "butler.bloom|light": "butler.bloom.light.png",
   "butler.silk|light": "butler.silk.light.png",
   "butler.riso-flow|light": "butler.riso-flow.light.png",
@@ -9,6 +10,7 @@
   "butler.photo-clouds|light": "butler.photo-clouds.light.png",
   "butler.photo-daisies|light": "butler.photo-daisies.light.png",
   "butler.stipple|light": "butler.stipple.light.png",
+  "butler.riso-print|dark": "butler.riso-print.dark.png",
   "butler.bloom|dark": "butler.bloom.dark.png",
   "butler.silk|dark": "butler.silk.dark.png",
   "butler.riso-flow|dark": "butler.riso-flow.dark.png",

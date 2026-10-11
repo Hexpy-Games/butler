@@ -1,3 +1,4 @@
+// test-category: race
 /** Functional history acceptance in the real App with disposable data and no live model. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -21,7 +22,13 @@ try {
     const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const box=document.querySelectorAll('[data-row-id]')[${index}].getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2}})()`);
     await a.page.movePointer(point.x, point.y);
   };
-  const fill = (selector: string, value: string) => a.page.expression(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const fill = async (selector: string, value: string) => {
+    // The main-process shortcut returns before React mounts/focuses the combobox.
+    const input = `document.querySelector('input'+${JSON.stringify(selector)})`;
+    await waitBrowser(() => a.page.expression(`${input} instanceof HTMLInputElement && document.activeElement===${input}`), "address input focused");
+    await a.page.expression(`${input}.select()`);
+    await a.page.insertText(value);
+  };
   const ready = async (title: string) => waitBrowser(() => a.main(`globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId)?.title===${JSON.stringify(title)}`), title);
   await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light" }) });
   await a.page.reload(); await shellReady(a, "en"); await a.call("open");

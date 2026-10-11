@@ -1,3 +1,4 @@
+import { configureWebIdentity } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
@@ -54,7 +55,7 @@ class UserBrowser {
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
       tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
-        signinStep: tab.signinStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
+        signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
     this.pointer.sync(this.tabs.get(this.activeId));
@@ -156,6 +157,7 @@ class UserBrowser {
     tab.view ??= new WebContentsView({ webPreferences: this.pagePreferences(tab) });
     tab.wired = true;
     tab.session = tab.view.webContents.session;
+    tab.identityReady = configureWebIdentity(tab.view.webContents, !supplied);
     attachNativeWorlds(tab);
     wireTab(tab, { update: (item) => this.update(item), capture: (item) => this.capture(item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
@@ -168,7 +170,7 @@ class UserBrowser {
     wireUserDialogs(this, tab);
     this.selection.watch(tab);
     if (tab.agent) wireAgentTab(this, tab);
-    if (tab.url && !tab.agent && !supplied) void tab.view.webContents.loadURL(tab.url).catch(() => {});
+    if (tab.url && !tab.agent && !supplied) void tab.identityReady.then(() => tab.view.webContents.loadURL(tab.url)).catch(() => {});
   }
   allowPopup(id) { return allowPopup(this, id); }
   create(input = {}, activateTab = true, popupSource) {
@@ -289,7 +291,7 @@ class UserBrowser {
       if (url) {
         tab.status = "loading"; tab.url = url;
         if (tab.owner === "mine") this.restore.changed();
-        void contents.loadURL(url).catch(() => {});
+        void tab.identityReady.then(() => contents.loadURL(url)).catch(() => {});
       }
     } else if (op === "reload") { tab.status = "loading"; contents.reload(); }
     else if (op === "stop") contents.stop();

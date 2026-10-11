@@ -177,13 +177,14 @@
   /* Sequences. Rows of a setup card arrive 30ms apart once the morphing card
      is 94% there (150ms on the emphasized curve); intro text lines 70ms
      apart. The intro segments are the first-run ink scene's timeline: the
-     drop, the pen drawing the ring, the ink bloom, and the whole reveal until
-     the GL loop stops. */
+     drop, the pen drawing the ring, the bow tie printing (also the no-WebGL
+     reveal), the ink bloom, and the whole reveal until the GL loop stops. */
   --motion-stagger-row: 30ms;
   --motion-stagger-intro: 70ms;
   --motion-morph-rows: 150ms;
   --motion-intro-drop: 350ms;
   --motion-intro-draw: 850ms;
+  --motion-intro-print: 400ms;
   --motion-intro-bloom: 1450ms;
   --motion-intro-total: 2900ms;
   /* Skeleton heights for a text line and a heading line. */
@@ -727,6 +728,14 @@
   --butler-ink-blue: rgb(0, 120, 191);
   --butler-ink-purple: rgb(96, 56, 156);
   --butler-ink-pink: rgb(255, 72, 176);
+  /* Riso print paper (the default wallpaper, its paper overlay and the intro):
+     day = the lower stop of the light --conversation-bg, night = the night
+     stock; --riso-paper follows the theme. The print's inks are the Butler inks. */
+  --riso-paper-day: rgb(250, 250, 248);
+  --riso-paper-night: rgb(25, 28, 36);
+  --riso-paper: var(--riso-paper-day);
+  /* The Butler mark's key ink (the plain logo; the intro's printed key). */
+  --butler-mark-ink: rgb(10, 10, 11);
   --browser-card-shadow:
     0 1px 2px rgba(15, 18, 22, 0.05), 0 6px 20px rgba(15, 18, 22, 0.06);
   --background: var(--surface-raised);
@@ -1053,6 +1062,8 @@
   --butler-ink-blue: rgb(96, 140, 255);
   --butler-ink-purple: rgb(150, 96, 236);
   --butler-ink-pink: rgb(255, 112, 190);
+  --riso-paper: var(--riso-paper-night);
+  --butler-mark-ink: rgb(255, 255, 255);
   /* Softer in dark so the page card's rim does not glow; the riso edge is separate. */
   --browser-card-shadow:
     0 1px 2px rgba(0, 0, 0, 0.32), 0 6px 20px rgba(0, 0, 0, 0.28);
@@ -1222,6 +1233,9 @@
   --butler-ink-blue: rgb(0, 120, 191);
   --butler-ink-purple: rgb(96, 56, 156);
   --butler-ink-pink: rgb(255, 72, 176);
+  --riso-paper: var(--riso-paper-day);
+  /* The Butler mark's key ink (the plain logo; the intro's printed key). */
+  --butler-mark-ink: rgb(10, 10, 11);
   --browser-card-shadow:
     0 1px 2px rgba(15, 18, 22, 0.05), 0 6px 20px rgba(15, 18, 22, 0.06);
   --browser-pane-bg: color-mix(

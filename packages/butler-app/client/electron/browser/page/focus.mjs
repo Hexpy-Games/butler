@@ -9,7 +9,7 @@ export function focusTarget({ key }) {
   for (const [ref, weak] of globalThis.__butlerObservation?.refs ?? []) if (weak.deref() === element) { hit.ref = ref; break; }
   if (meaning.secure || secureKeypad(element) || element.type === "password") return { reason: "secure_field", hit };
   const form = element.form ?? element.closest("form");
-  return { hit, payment: Boolean(form?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
+  return { hit, payment: paymentForm(element),
     upload: element.localName === "input" && element.type === "file" && /^(Enter|Space)$/u.test(key ?? ""),
     submit: key === "Enter" && Boolean(form) || element.type === "submit" && /^(Enter|Space)$/u.test(key ?? "") };
 }

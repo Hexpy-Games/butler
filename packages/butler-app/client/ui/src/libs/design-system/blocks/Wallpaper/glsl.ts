@@ -6,7 +6,9 @@ export type WallpaperPrecision = "highp" | "mediump";
 export type WallpaperUniformValue =
   | { name: string; type: "float"; value: number }
   | { name: string; type: "int"; value: number }
+  | { name: string; type: "vec2"; value: [number, number] }
   | { name: string; type: "vec3"; value: [number, number, number] }
+  | { name: string; type: "vec4"; value: [number, number, number, number] }
   | { name: string; type: "vec3[]"; value: number[] };
 
 /** The engine uniforms of contract v1, in prelude order. */
@@ -78,6 +80,23 @@ export function wallpaperParamUniforms(manifest: WallpaperManifest, values: Reso
 /** What a two-pass module's `overlay.frag` reads besides the prelude: `shader.frag`'s cached output. */
 export const WALLPAPER_BASE_UNIFORM = "uniform sampler2D u_base;";
 
+/**
+ * Engine uniforms of print modules (`density: true`), in both passes: the canvas's CSS size, the drift state
+ * (flow clock, plate lift, dot-gain pulse, the new-chat drop), the composer keep-out (like `u_contentRect`)
+ * and the message column `(left, right, top, on)` in CSS px.
+ */
+export const WALLPAPER_PRINT_UNIFORMS = [
+  "uniform vec2 u_css;",
+  "uniform float u_flow;",
+  "uniform float u_lift;",
+  "uniform float u_pulse;",
+  "uniform vec4 u_drop;",
+  "uniform vec4 u_contentRect2;",
+  "uniform vec4 u_col;",
+] as const;
+/** What a print module's main pass reads besides those: the density pass's output. */
+export const WALLPAPER_DENSITY_UNIFORM = "uniform sampler2D u_density;";
+
 function fragmentSource(module: WallpaperModule, precision: WallpaperPrecision, extra: readonly string[], body: string): string {
   const params = wallpaperParamDeclarations(module.manifest);
   return [
@@ -94,7 +113,13 @@ function fragmentSource(module: WallpaperModule, precision: WallpaperPrecision, 
 
 /** Engine prelude + param uniforms + the module body; `#line 1` maps errors to shader.frag lines. */
 export function buildWallpaperFragmentSource(module: WallpaperModule, precision: WallpaperPrecision): string {
-  return fragmentSource(module, precision, [], module.fragment);
+  const extra = module.manifest.density ? [...WALLPAPER_PRINT_UNIFORMS, WALLPAPER_DENSITY_UNIFORM] : [];
+  return fragmentSource(module, precision, extra, module.fragment);
+}
+
+/** A print module's density pass: the prelude, the print uniforms, param uniforms and `density.frag`; null for other modules. */
+export function buildWallpaperDensitySource(module: WallpaperModule, precision: WallpaperPrecision): string | null {
+  return module.manifest.density && module.density !== undefined ? fragmentSource(module, precision, WALLPAPER_PRINT_UNIFORMS, module.density) : null;
 }
 
 /** A two-pass module's per-frame pass: the prelude, `u_base`, param uniforms and `overlay.frag`; null for single-pass modules. */

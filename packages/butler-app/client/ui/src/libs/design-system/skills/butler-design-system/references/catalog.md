@@ -1451,7 +1451,7 @@ The first-run setup frame: step progress, a large title and centered content, or
 - Use for: A short onboarding of one or two screens with no stepper
 - Not for: A settings page → `SettingsShell`
 - Not for: A short task in the app → `DialogForm`
-- Tokens: `--titlebar-height`, `--motion-deliberate`, `--motion-ease-emphasized`, `--motion-morph-rows`, `--motion-stagger-row`, `--motion-slow`, `--motion-base`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-distance-sm`, `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`, `--space-lg`, `--color-surface-raised-opaque`
+- Tokens: `--titlebar-height`, `--motion-deliberate`, `--motion-ease-emphasized`, `--motion-morph-rows`, `--motion-stagger-row`, `--motion-slow`, `--motion-base`, `--motion-exit-base`, `--motion-exit-fast`, `--motion-distance-sm`, `--motion-stagger-intro`, `--motion-intro-draw`, `--motion-intro-print`, `--butler-mark-ink`, `--riso-paper`, `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`, `--space-lg`, `--color-surface-raised-opaque`
 
 ### SetupWizardStepCard
 
@@ -1503,7 +1503,7 @@ The window titlebar: leading toggle, title and subtitle, trailing actions and wi
 
 `import { Wallpaper } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/Wallpaper`
 
-The app wallpaper: a live WebGL2 shader module (built-in bloom and silk, or a user module), an image, or nothing, drawn behind a surface under one performance and motion policy.
+The app wallpaper: a live WebGL2 shader module (the default riso print, bloom, silk and the other built-ins, or a user module), an image, or nothing, drawn behind a surface under one performance and motion policy.
 
 - Use for: Behind a whole screen (new chat, setup wizard) with the default viewport scope
 - Use for: Behind a content area such as a dashboard with scope="container"
@@ -1512,7 +1512,7 @@ The app wallpaper: a live WebGL2 shader module (built-in bloom and silk, or a us
 - Not for: A translucent surface over the wallpaper → `TintedGlass`
 - Not for: Letting the user choose a wallpaper → `WallpaperPicker`
 - Not for: The new-chat prompt screen (pass its wallpaper prop instead) → `PromptSuggestionList`
-- Tokens: `--adaptive-viewport-block-size`, `--radius-panel`
+- Tokens: `--adaptive-viewport-block-size`, `--radius-panel`, `--riso-paper`, `--riso-paper-day`, `--riso-paper-night`, `--butler-ink-blue`, `--butler-ink-pink`, `--butler-ink-purple`
 
 ### WallpaperStage
 

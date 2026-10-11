@@ -40,7 +40,7 @@ export function validateWallpaperManifest(raw: unknown): WallpaperManifestResult
   if (!validLabel(name)) errors.push("name: needs non-empty en and ko");
   if (typeof version !== "string" || !SEMVER.test(version)) errors.push("version: must be semver");
   if (engine !== 1) errors.push("engine: must be 1");
-  if (motion !== "static" && motion !== "animated") errors.push("motion: must be static or animated");
+  if (motion !== "static" && motion !== "animated" && motion !== "drift") errors.push("motion: must be static, animated or drift");
   if (image !== "none" && image !== "optional" && image !== "required") errors.push("image: must be none, optional or required");
   const { timePeriod } = raw;
   if (timePeriod !== undefined && !validTimePeriod(timePeriod)) errors.push("timePeriod: must be seconds in (0, 5000*PI]");
@@ -67,6 +67,13 @@ function fragmentErrors(fragment: string, file = "shader.frag"): string[] {
   return errors;
 }
 
+/** A print manifest (`density: true`) needs its `density.frag`; any other takes none. */
+function densityErrors(manifest: unknown, density: string | undefined): string[] {
+  const wanted = isRecord(manifest) && manifest.density === true;
+  if (wanted) return density === undefined ? ["density.frag: required by density: true"] : fragmentErrors(density, "density.frag");
+  return density === undefined ? [] : ["density.frag: set density: true in wallpaper.json"];
+}
+
 /** A two-pass manifest needs its `overlay.frag`; a single-pass one takes none. */
 function overlayErrors(manifest: unknown, overlay: string | undefined): string[] {
   const twoPass = isRecord(manifest) && manifest.overlay === true;
@@ -81,6 +88,8 @@ export interface WallpaperModuleSource {
   fragment: string;
   /** `overlay.frag` body of a two-pass module. */
   overlay?: string;
+  /** `density.frag` body of a print module. */
+  density?: string;
   /** The loaded `defaultImage` file; ignored when the manifest names none. */
   defaultImage?: WallpaperDefaultImage;
   /** Clock (seconds) of the module's still frames. */
@@ -89,13 +98,13 @@ export interface WallpaperModuleSource {
 
 /**
  * A wallpaper module from a parsed `wallpaper.json` and its `shader.frag`
- * body (plus `overlay.frag` for two-pass modules and the loaded default
+ * body (plus `overlay.frag` for two-pass modules, `density.frag` for print modules and the loaded default
  * image). Built-ins and user modules go through the same checks; invalid
  * input throws with every contract error.
  */
-export function defineWallpaperModule({ manifest, fragment, overlay, defaultImage, stillTime }: WallpaperModuleSource): WallpaperModule {
+export function defineWallpaperModule({ manifest, fragment, overlay, density, defaultImage, stillTime }: WallpaperModuleSource): WallpaperModule {
   const result = validateWallpaperManifest(manifest);
-  const errors = [...(result.ok ? [] : result.errors), ...fragmentErrors(fragment), ...overlayErrors(manifest, overlay)];
+  const errors = [...(result.ok ? [] : result.errors), ...fragmentErrors(fragment), ...overlayErrors(manifest, overlay), ...densityErrors(manifest, density)];
   if (!result.ok || errors.length > 0) {
     const id = isRecord(manifest) && typeof manifest.id === "string" ? manifest.id : "wallpaper";
     throw new Error(`${id}: ${errors.join("; ")}`);
@@ -104,6 +113,7 @@ export function defineWallpaperModule({ manifest, fragment, overlay, defaultImag
     manifest: result.manifest,
     fragment,
     ...(overlay === undefined ? {} : { overlay }),
+    ...(density === undefined ? {} : { density }),
     ...(defaultImage && result.manifest.defaultImage ? { defaultImage } : {}),
     ...(stillTime === undefined ? {} : { stillTime }),
   };
