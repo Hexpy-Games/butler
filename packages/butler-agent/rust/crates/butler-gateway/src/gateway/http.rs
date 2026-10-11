@@ -98,6 +98,7 @@ struct HttpState {
     static_ui_root: Option<PathBuf>,
     output_data: Option<PathBuf>,
     signin_secrets: signin_secrets::SignInSecrets,
+    browser_import: browser_import::ImportSessions,
 }
 
 /// Who sent an authorized request (a request extension for the routes).

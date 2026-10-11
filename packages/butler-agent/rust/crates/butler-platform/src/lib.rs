@@ -55,6 +55,7 @@ pub mod app_browser;
 pub mod app_update;
 pub mod browser_process;
 pub mod browser_profiles;
+pub mod browser_transfer;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;

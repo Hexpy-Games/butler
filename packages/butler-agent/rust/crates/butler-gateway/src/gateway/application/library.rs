@@ -141,7 +141,7 @@ fn save_item(db: &Connection, mut item: Value) -> Result<Value, AppStorageError>
     save_snapshot(db, &item, html)?;
     Ok(saved)
 }
-fn delete(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
+pub(super) fn delete(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
     let sql = AppStorageError::sqlite;
     db.execute("DELETE FROM browser_library_fts WHERE rowid=(SELECT rowid FROM browser_library WHERE id=?1)",[id]).map_err(sql)?;
     db.execute("DELETE FROM browser_library_snapshot WHERE id=?1", [id])

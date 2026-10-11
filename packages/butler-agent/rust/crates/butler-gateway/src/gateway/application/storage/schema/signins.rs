@@ -8,7 +8,8 @@ use super::super::AppStorageError;
 pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
     connection
         .execute_batch(SIGNIN_SCHEMA)
-        .map_err(AppStorageError::sqlite)
+        .map_err(AppStorageError::sqlite)?;
+    migrate_accounts(connection)
 }
 
 const SIGNIN_SCHEMA: &str = r"
@@ -58,6 +59,17 @@ CREATE TABLE IF NOT EXISTS app_automation_run_inputs (
   run_id TEXT NOT NULL UNIQUE REFERENCES app_automation_runs(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS automation_runs_turn_idx ON app_automation_runs(turn_id);
+CREATE INDEX IF NOT EXISTS browser_library_import_url ON browser_library(kind,url,group_id);
+CREATE TABLE IF NOT EXISTS browser_import_schema(version INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS browser_signin_identity(
+  origin TEXT NOT NULL, username TEXT NOT NULL, entry_id TEXT NOT NULL,
+  PRIMARY KEY(origin,username)
+);
+CREATE INDEX IF NOT EXISTS browser_signin_identity_entry ON browser_signin_identity(entry_id);
+CREATE TABLE IF NOT EXISTS browser_import_additions(
+  run_id TEXT NOT NULL, kind TEXT NOT NULL, entry_id TEXT NOT NULL,
+  PRIMARY KEY(run_id,kind,entry_id)
+);
 CREATE TABLE IF NOT EXISTS browser_import_audit (
   id INTEGER PRIMARY KEY,
   source TEXT NOT NULL,
@@ -66,3 +78,31 @@ CREATE TABLE IF NOT EXISTS browser_import_audit (
   created_at TEXT NOT NULL
 );
 ";
+
+/// Runs once, preserving existing IDs, policies, secrets and every origin.
+fn migrate_accounts(db: &Connection) -> Result<(), AppStorageError> {
+    use rusqlite::OptionalExtension;
+    let migrated = db
+        .query_row(
+            "SELECT 1 FROM browser_import_schema WHERE version=2",
+            [],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    if migrated.is_some() {
+        return Ok(());
+    }
+    db.execute_batch("SAVEPOINT browser_accounts;
+      CREATE TABLE browser_signin_entries_v2 (
+        id TEXT PRIMARY KEY, site TEXT NOT NULL, origins_json TEXT NOT NULL, username TEXT NOT NULL,
+        policy TEXT NOT NULL CHECK(policy IN ('always','ask','never')), source TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT);
+      INSERT INTO browser_signin_entries_v2 SELECT * FROM browser_signin_entries;
+      DROP TABLE browser_signin_entries;
+      ALTER TABLE browser_signin_entries_v2 RENAME TO browser_signin_entries;
+      CREATE INDEX browser_signin_entries_site ON browser_signin_entries(site,created_at,id);
+      INSERT INTO browser_signin_identity(origin,username,entry_id)
+        SELECT j.value,e.username,e.id FROM browser_signin_entries e,json_each(e.origins_json) j;
+      INSERT INTO browser_import_schema VALUES(2);
+      RELEASE browser_accounts;").map_err(AppStorageError::sqlite)
+}

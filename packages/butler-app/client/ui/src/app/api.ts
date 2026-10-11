@@ -1021,6 +1021,15 @@ function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]
   if (path === "/security/browser-import/sources" && method === "GET") return { action: "listImportSources" };
   if (path === "/security/browser-import/preview" && method === "POST") return { action: "previewImport", input: payload() };
   if (path === "/security/browser-import/run" && method === "POST") return { action: "runImport", input: payload() };
+  if (path === "/security/browser-import/start" && method === "POST") return { action: "startBrowserImport", input: payload() };
+  if (path === "/security/browser-import/undo" && method === "POST") return { action: "undoBrowserImport", input: payload() };
+  if (path === "/security/browser-import/folder" && method === "POST") return { action: "pickBrowserImportFolder", input: payload() };
+  if (path === "/security/browser-import/disk-access" && method === "POST") return { action: "openBrowserImportDiskAccess", input: payload() };
+  if (path === "/security/browser-import/export" && method === "POST") return { action: "beginBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/poll" && method === "POST") return { action: "pollBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/file" && method === "POST") return { action: "chooseBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/delete" && method === "POST") return { action: "deleteBrowserPasswordExport", input: payload() };
+  if (path === "/security/browser-import/export/cancel" && method === "POST") return { action: "cancelBrowserPasswordExport", input: payload() };
   return null;
 }
 

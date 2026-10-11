@@ -53,7 +53,7 @@ async function capture(page: Page, name: string) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");
     assert.equal(await page.locator('[data-slot="setup-step-body"] > :first-child [data-slot="icon-tile"]').count(), 0, "no title icon tile");
     const step = await page.locator("[data-first-run-screen]").getAttribute("data-first-run-screen");
-    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${step === "consent" ? 2 : step === "ready" ? 4 : 3}\n${firstRunCopy[await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en"].steps[step as "consent" | "ready" | "connect"]}`);
+    assert.equal(await page.locator('ol [aria-current="step"]').innerText(), `${step === "consent" ? 2 : step === "ready" ? await page.locator("ol li").count() : await page.locator("ol li").count() - 1}\n${firstRunCopy[await page.locator("html").getAttribute("lang") === "ko-KR" ? "ko" : "en"].steps[step as "consent" | "ready" | "connect"]}`);
   }
 }
 
@@ -69,6 +69,8 @@ async function reachProviders(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
+  await page.locator('[data-first-run-screen="import"]').waitFor();
+  await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
   await page.locator("#first-run-connect-title").waitFor();
 }
 
@@ -250,6 +252,8 @@ try {
     await page.getByRole("button", { name: firstRunCopy.en.start, exact: true }).click();
     await capture(page, `after-mobile-${width}-consent`);
     await page.getByRole("button", { name: firstRunCopy.en.agree, exact: true }).click();
+    await page.locator('[data-first-run-screen="import"]').waitFor();
+    await page.getByRole("button", { name: getAppCopy("en-US").settings.browserImport.skip, exact: true }).click();
     await capture(page, `after-mobile-${width}-providers`);
   }
   writeFileSync(join(output, "measurements.json"), JSON.stringify(measurements, null, 2));

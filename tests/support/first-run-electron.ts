@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { chromium } from "playwright";
 import { freeGatewayPort, type NativeAppServerHandle } from "./native-app-server";
 import { smokeElectronArgs } from "./smoke-browser";
@@ -16,7 +17,8 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
   const port = await freeGatewayPort();
   const app = resolve(root, "packages/butler-app/client/electron");
   const output: string[] = [];
-  const child = spawnElectron(join(app, "node_modules/.bin/electron"), [
+  const executable = createRequire(join(app, "package.json"))("electron") as string;
+  const child = spawnElectron(executable, [
     `--remote-debugging-port=${port}`, ...smokeElectronArgs(), app,
   ], { cwd: root, onOutput: bytes => output.push(String(bytes)), env: {
     ...process.env, HOME: home, BUTLER_DATA: server.butlerData, CODEX_HOME: join(home, ".codex"),

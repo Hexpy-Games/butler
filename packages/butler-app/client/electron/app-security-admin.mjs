@@ -48,6 +48,15 @@ const SECURITY_ROUTES = Object.freeze({
   listImportSources: { method: "GET", path: "/security/browser-import/sources" },
   previewImport: { method: "POST", path: "/security/browser-import/preview", payload: true },
   runImport: { method: "POST", path: "/security/browser-import/run", payload: true },
+  startBrowserImport: { method: "POST", path: "/security/browser-import/start", payload: true },
+  undoBrowserImport: { method: "POST", path: "/security/browser-import/undo", payload: true },
+  pickBrowserImportFolder: { method: "POST", path: "/security/browser-import/folder", payload: true },
+  openBrowserImportDiskAccess: { method: "POST", path: "/security/browser-import/disk-access", payload: true },
+  beginBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export", payload: true },
+  pollBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/poll", payload: true },
+  chooseBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/file", payload: true },
+  deleteBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/delete", payload: true },
+  cancelBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/cancel", payload: true },
 });
 const ENTRY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 

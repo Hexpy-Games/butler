@@ -51,6 +51,20 @@ fn firefox_profile(root: &Path) -> Result<(), HarnessError> {
          INSERT INTO moz_places VALUES(1,'https://paper.fixture.test/a'),(2,'https://news.fixture.test/'),(3,'https://tag.fixture.test/');",
     )
     .unwrap();
+    let base = if root.file_name().is_some_and(|n| n == "Profiles") {
+        root.parent().unwrap()
+    } else {
+        root
+    };
+    let path = if root == base {
+        "ab12cd.default-release"
+    } else {
+        "Profiles/ab12cd.default-release"
+    };
+    std::fs::write(
+        base.join("profiles.ini"),
+        format!("[Profile0]\nName=default-release\nIsRelative=1\nPath={path}\n"),
+    )?;
     Ok(())
 }
 
@@ -111,7 +125,7 @@ async fn bookmarks_import_with_folders_once() -> Result<(), HarnessError> {
     .await?;
     assert_eq!(
         preview,
-        json!({"bookmarks": 2, "folders": 2}),
+        json!({"bookmarks": 3, "folders": 3}),
         "web URLs only, duplicates once"
     );
     let first = post(
@@ -122,7 +136,7 @@ async fn bookmarks_import_with_folders_once() -> Result<(), HarnessError> {
     .await?;
     assert_eq!(
         (first["imported"].as_u64(), first["existing"].as_u64()),
-        (Some(2), Some(0)),
+        (Some(3), Some(0)),
         "{first}"
     );
     let again = post(
@@ -133,7 +147,7 @@ async fn bookmarks_import_with_folders_once() -> Result<(), HarnessError> {
     .await?;
     assert_eq!(
         (again["imported"].as_u64(), again["existing"].as_u64()),
-        (Some(0), Some(2)),
+        (Some(0), Some(3)),
         "{again}"
     );
     let firefox = post(
@@ -189,7 +203,7 @@ async fn bookmarks_import_with_folders_once() -> Result<(), HarnessError> {
             .iter()
             .filter(|item| item["url"] == "https://docs.fixture.test/")
             .count(),
-        1
+        2
     );
     let refused = admin
         .send(

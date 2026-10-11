@@ -4,7 +4,7 @@
 mod bookmarks;
 mod passwords;
 pub use bookmarks::{chromium, firefox, netscape_html, safari};
-pub use passwords::{PasswordRow, parse_password_csv};
+pub use passwords::{PasswordRow, native_passwords, parse_password_csv};
 
 /// Most bookmarks one import accepts.
 pub const MAX_BOOKMARKS: usize = 20_000;
@@ -26,14 +26,18 @@ pub struct Bookmark {
 pub enum ImportError {
     #[error("the file could not be read")]
     Unreadable,
+    #[error("browser folder access denied")]
+    PermissionDenied,
+    #[error("close the browser and retry")]
+    Locked,
     #[error("the file is not in the expected format")]
     Format,
     #[error("the file is too large")]
     TooLarge,
 }
 
-/// Web bookmarks only, normalized, de-duplicated by URL (first kept) and capped.
-pub fn finish(items: Vec<Bookmark>) -> Vec<Bookmark> {
+/// Web bookmarks only, normalized, de-duplicated by URL within each folder (first kept).
+pub fn finish(items: Vec<Bookmark>) -> Result<Vec<Bookmark>, ImportError> {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
     for mut item in items {
@@ -47,7 +51,8 @@ pub fn finish(items: Vec<Bookmark>) -> Vec<Bookmark> {
             continue;
         }
         item.url = url.to_string();
-        if item.url.len() > 4096 || !seen.insert(item.url.clone()) {
+        item.folder = clip(item.folder.trim(), 200);
+        if item.url.len() > 4096 || !seen.insert((item.folder.clone(), item.url.clone())) {
             continue;
         }
         item.title = clip(item.title.trim(), 2000);
@@ -56,11 +61,11 @@ pub fn finish(items: Vec<Bookmark>) -> Vec<Bookmark> {
         }
         item.folder = clip(item.folder.trim(), 200);
         out.push(item);
-        if out.len() == MAX_BOOKMARKS {
-            break;
+        if out.len() > MAX_BOOKMARKS {
+            return Err(ImportError::TooLarge);
         }
     }
-    out
+    Ok(out)
 }
 
 fn clip(value: &str, max: usize) -> String {
@@ -76,7 +81,7 @@ fn clip(value: &str, max: usize) -> String {
 pub fn library_item(bookmark: &Bookmark, captured_at: &str) -> serde_json::Value {
     use sha2::{Digest, Sha256};
     let mut item = serde_json::json!({
-        "id": format!("bookmark-{:x}", Sha256::digest(bookmark.url.as_bytes())),
+        "id": format!("bookmark-{:x}", Sha256::digest(format!("{}\0{}", bookmark.folder, bookmark.url).as_bytes())),
         "kind": "bookmark", "title": bookmark.title, "url": bookmark.url, "capturedAt": captured_at,
     });
     if !bookmark.folder.is_empty() {

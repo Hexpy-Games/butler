@@ -1,3 +1,4 @@
+import { useButlerStore } from "@/app/store";
 import { appCopy } from "@/app/copy";
 import type { LibraryKind, LibraryView } from "@/app/types";
 import { Button, ChevronRight, EmptyLine, Grid, Section, Typo } from "@/butler-ds";
@@ -43,6 +44,7 @@ function MainSection({ kind, columns, view, onAttach }: { kind: LibraryKind; col
         <Grid columns={CARD_COLUMNS} gap="md">{row.map((item) => <LibraryItemCard key={item.id} item={item} view={view} onAttach={() => onAttach(item)} />)}</Grid>
       ) : null}
       {empty ? <EmptyLine message={page.failed ? copy.failed : copy.noItems} /> : null}
+      {empty && !page.failed && kind === "bookmark" ? <Button size="sm" variant="ghost" onClick={() => useButlerStore.getState().openSettings("browser-import")}>{appCopy.settings.pageSections.browserImport}</Button> : null}
     </Section>
   );
 }

@@ -1198,6 +1198,15 @@ const butlerApp = Object.freeze({
   listImportSources: () => requestSecurity("listImportSources"),
   previewImport: (payload) => requestSecurity("previewImport", { payload }),
   runImport: (payload) => requestSecurity("runImport", { payload }),
+  startBrowserImport: (payload) => requestSecurity("startBrowserImport", { payload }),
+  undoBrowserImport: (payload) => requestSecurity("undoBrowserImport", { payload }),
+  pickBrowserImportFolder: (payload) => requestSecurity("pickBrowserImportFolder", { payload }),
+  openBrowserImportDiskAccess: (payload) => requestSecurity("openBrowserImportDiskAccess", { payload }),
+  beginBrowserPasswordExport: (payload) => requestSecurity("beginBrowserPasswordExport", { payload }),
+  pollBrowserPasswordExport: (payload) => requestSecurity("pollBrowserPasswordExport", { payload }),
+  chooseBrowserPasswordExport: (payload) => requestSecurity("chooseBrowserPasswordExport", { payload }),
+  deleteBrowserPasswordExport: (payload) => requestSecurity("deleteBrowserPasswordExport", { payload }),
+  cancelBrowserPasswordExport: (payload) => requestSecurity("cancelBrowserPasswordExport", { payload }),
   // The file path is chosen in a native dialog and stays in main and the Agent.
   pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.

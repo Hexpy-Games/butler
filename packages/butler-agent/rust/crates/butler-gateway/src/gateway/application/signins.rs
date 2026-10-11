@@ -13,6 +13,7 @@ pub struct AppSignInUpsert {
     pub username: String,
     /// `manual` replaces the site's entry; `import` keeps an entry for another account.
     pub source: String,
+    pub import_run: Option<String>,
 }
 
 /// Explicit sign-in commands over the App SQLite owner lane.
@@ -70,7 +71,22 @@ pub enum AppSignInCommand {
         source_session: String,
     },
     /// Saves imported bookmarks that are not saved yet; answers counts.
-    ImportBookmarks(Vec<Value>),
+    ImportBookmarks {
+        items: Vec<Value>,
+        run_id: String,
+    },
+    ImportAdditions {
+        run_id: String,
+    },
+    UndoBookmark {
+        run_id: String,
+        id: String,
+    },
+    ForgetAddition {
+        run_id: String,
+        kind: String,
+        id: String,
+    },
     /// Counts only, never values.
     ImportSummary {
         source: String,
@@ -105,6 +121,7 @@ impl AppApplication {
                     | AppSignInCommand::Lookup { .. }
                     | AppSignInCommand::Entry { .. }
                     | AppSignInCommand::Grants { .. }
+                    | AppSignInCommand::ImportAdditions { .. }
             );
             if read {
                 this.storage
