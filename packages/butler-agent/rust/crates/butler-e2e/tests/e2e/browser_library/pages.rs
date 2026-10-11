@@ -39,7 +39,7 @@ fn ids(items: &[Value]) -> Vec<String> {
 fn item(n: usize) -> Value {
     let site = ["alpha.example", "beta.example", "gamma.example"][n % 3];
     json!({"id": format!("s{n:03}"), "kind": "scrap", "title": format!("{} note {n}", ["Zebra", "apple", "Mango", "banana"][n % 4]),
-        "url": format!("https://{site}/{n}"), "site": site, "text": if n % 5 == 0 { "harbor view" } else { "plain" },
+        "url": format!("https://{site}/{n}"), "site": site, "text": if n.is_multiple_of(5) { "harbor view" } else { "plain" },
         "crop": "data:image/jpeg;base64,YQ==", "capturedAt": format!("2026-10-01T{:02}:{:02}:00Z", n / 60, n % 60)})
 }
 
@@ -63,7 +63,7 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         .to_owned();
     // Keep group metadata distinct from the words tested below.
     let evens: Vec<String> = (0..total)
-        .filter(|n| n % 2 == 0)
+        .filter(|n| n.is_multiple_of(2))
         .map(|n| format!("s{n:03}"))
         .collect();
     ok(s.gw
@@ -80,7 +80,7 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         )
         .await?);
     let fours: Vec<String> = (0..total)
-        .filter(|n| n % 4 == 0)
+        .filter(|n| n.is_multiple_of(4))
         .map(|n| format!("s{n:03}"))
         .collect();
     ok(s.gw
@@ -118,8 +118,13 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
         assert_eq!(pages, 3, "sort {sort}");
     }
     // Every filter at once, in every sort: group ∧ both tags ∧ site ∧ date range ∧ words.
-    let wanted =
-        |n: usize| n % 2 == 0 && n % 3 == 0 && n % 4 == 0 && n % 5 == 0 && (12..=140).contains(&n);
+    let wanted = |n: usize| {
+        n.is_multiple_of(2)
+            && n.is_multiple_of(3)
+            && n.is_multiple_of(4)
+            && n.is_multiple_of(5)
+            && (12..=140).contains(&n)
+    };
     for (sort, order) in &expected {
         let path = format!(
             "/library?kind=scrap&sort={sort}&group={group}&tags=port,NIGHT&site=alpha.example&since=2026-10-01T00:12:00Z&until=2026-10-01T02:20:00%2B00:00&q=harbor"

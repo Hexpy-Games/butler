@@ -19,7 +19,8 @@ fn scrap(id: &str, title: &str) -> Value {
 /// The `data` of a 200 reply.
 fn ok(reply: butler_e2e::e2e::gateway::Reply) -> Value {
     assert_eq!(reply.status, 200, "{}", reply.text);
-    reply.data().clone()
+    let mut body = reply.body;
+    body["data"].take()
 }
 async fn page(s: &butler_e2e::e2e::scenario::Scenario, path: &str) -> Result<Value, HarnessError> {
     let reply = s.gw.get(path).await?;
