@@ -120,14 +120,15 @@ async fn chromium_mac_safe_storage_fixture_item_only() -> Result<(), HarnessErro
     let store = SecretStore::system().unwrap();
     let key = SecretKey::new(&service, "Chrome").unwrap();
     let source_key = SourceKey { store, key };
-    source_key
-        .store
-        .set(&source_key.key, "fixture-safe-storage")
-        .unwrap();
     let setup = Setup::new("BROWSER-IMPORT-CHROMIUM-MAC")?
         .env("BUTLER_SECRET_STORE", "")
         .env("BUTLER_BROWSER_IMPORT_TEST_SERVICE", &service);
     super::fill::link_keychains(&setup.sandbox.home)?;
+    butler_platform::browser_transfer::fixture_safe_storage(&service, &setup.sandbox.binary)?;
+    assert!(
+        source_key.store.get(&source_key.key).unwrap().is_some(),
+        "fixture item exists"
+    );
     let roots = profile_roots(&setup.sandbox.home);
     let root = &roots
         .chromium
