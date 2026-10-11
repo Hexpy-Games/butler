@@ -11,7 +11,7 @@ const matrix = [320, 375, 768, 1280, 1440].flatMap(width =>
     ["fresh", "renewal"].map(mode => `${width}-${language}-${theme}-${mode}`))));
 if (await runSmokeCases(matrix, "BUTLER_CONSENT_CASE", import.meta.path)) process.exit(0);
 
-const screenshots = resolve(".tmp/firstrun-ds");
+const screenshots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? process.env.TMPDIR ?? "/tmp", "consent");
 let textNodes = 0;
 let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
@@ -123,6 +123,8 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   if (!renewal) {
     await screen(page, "welcome");
     await audit(page);
+    assert(await page.locator("[data-setup-mark]").count() === 1, "plain intro mark");
+    assert(await page.locator("[data-setup-rows]").count() === 1, "intro action rows");
     assert(await page.locator("#first-run-start").evaluate((node) =>
       node !== document.activeElement && !node.matches(":focus-visible")), "fresh Start is not focused");
     await page.screenshot({ path: resolve(screenshots, `${label}-welcome.png`) });
