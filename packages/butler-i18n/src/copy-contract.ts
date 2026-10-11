@@ -1847,7 +1847,8 @@ export interface AppCopy {
     browserImport: {
       chooseItems: string;
       importing: string;
-      result: (bookmarks: number, passwords: number, updated: number) => string;
+      history: string;
+      result: (bookmarks: number, passwords: number, updated: number, history?: number) => string;
       undo: string;
       more: string;
       undone: string;

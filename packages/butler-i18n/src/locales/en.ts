@@ -2146,7 +2146,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     browserImport: {
       chooseItems: "Choose items",
       importing: "Importing…",
-      result: (bookmarks, passwords, updated) => `${bookmarks} bookmarks · ${passwords} passwords added${updated ? `, ${updated} updated` : ""}`,
+      history: "History",
+      result: (bookmarks, passwords, updated, history = 0) => `${bookmarks} bookmarks · ${history} visits · ${passwords} passwords added${updated ? `, ${updated} updated` : ""}`,
       undo: "Undo", more: "Import more", undone: "Added items removed",
       pickFolder: "Choose browser folder", diskAccess: "Full Disk Access settings",
       restartAfterAccess: "Allow access, then restart Butler",

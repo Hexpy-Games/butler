@@ -8,6 +8,7 @@ export function useBrowserImport(onImported: () => void) {
   const [sources, setSources] = useState<ImportSource[] | null>(null);
   const [selected, setSelected] = useState("file");
   const [bookmarks, setBookmarks] = useState(true);
+  const [history, setHistory] = useState(true);
   const [passwords, setPasswords] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function useBrowserImport(onImported: () => void) {
         const counts = await pollPasswordExport(exportId!);
         if (!live) return;
         if (counts.waiting) { timer = setTimeout(() => void poll(), 1000); return; }
-        setResult(prior => ({ ...counts, bookmarks: (prior?.bookmarks ?? 0) + counts.bookmarks, existing: prior?.existing ?? 0 }));
+        setResult(prior => ({ ...counts, history: prior?.history ?? 0, bookmarks: (prior?.bookmarks ?? 0) + counts.bookmarks, existing: prior?.existing ?? 0 }));
         setExportId(null); setError(counts.error ?? null); imported.current();
       } catch (e) { if (live) { setError(apiErrorCode(e) ?? "import_unreadable"); setExportId(null); } }
     }
@@ -46,7 +47,7 @@ export function useBrowserImport(onImported: () => void) {
     if (busy || exportId) return;
     setSelected(source); setBusy(true); setError(null); setUndone(false);
     try {
-      const input: BrowserImportInput = { source, bookmarks, passwords, primary_password: primary };
+      const input: BrowserImportInput = { source, bookmarks, history: source !== "file" && history, passwords, primary_password: primary };
       if (source === "file") {
         if (bookmarks) { const file = await pickImportFile("bookmarks"); if (!file) return; input.bookmarks_path = file.path; }
         if (passwords) { const file = await pickImportFile("passwords"); if (!file) return; input.passwords_path = file.path; }
@@ -86,7 +87,7 @@ export function useBrowserImport(onImported: () => void) {
     await action(async () => {
       const counts = await choosePasswordExport(activeExport.current!, file.path);
       setExportId(null);
-      setResult(prior => ({ ...counts, bookmarks: prior?.bookmarks ?? 0, existing: prior?.existing ?? 0 }));
+      setResult(prior => ({ ...counts, history: prior?.history ?? 0, bookmarks: prior?.bookmarks ?? 0, existing: prior?.existing ?? 0 }));
       imported.current();
     });
   }
@@ -95,5 +96,5 @@ export function useBrowserImport(onImported: () => void) {
     if (!result?.export_id) return;
     await action(async () => { await deletePasswordExport(result.export_id!); setResult({ ...result, export_id: undefined }); });
   }
-  return { sources, selected, bookmarks, setBookmarks, passwords, setPasswords, busy, error, result, exportId, undone, run, folder, cancel, more, undo, removeCsv, selectCsv, resumeExport };
+  return { sources, selected, bookmarks, setBookmarks, history, setHistory, passwords, setPasswords, busy, error, result, exportId, undone, run, folder, cancel, more, undo, removeCsv, selectCsv, resumeExport };
 }

@@ -2,8 +2,10 @@
 //! `places.sqlite`, Safari property list, HTML export) and the browsers'
 //! own password CSV exports. Parsing only; callers own storage.
 mod bookmarks;
+mod history;
 mod passwords;
 pub use bookmarks::{chromium, firefox, netscape_html, safari};
+pub use history::history;
 pub use passwords::{PasswordRow, native_passwords, parse_password_csv};
 
 /// Most bookmarks one import accepts.

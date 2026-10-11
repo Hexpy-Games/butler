@@ -14,7 +14,7 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
   const [expanded, setExpanded] = useState(false);
   const primaryId = useId();
   const [diskHint, setDiskHint] = useState(false);
-  const blocked = flow.busy || !!flow.exportId || (!flow.bookmarks && !flow.passwords) || (flow.passwords && !keychain);
+  const blocked = flow.busy || !!flow.exportId || (!flow.bookmarks && !flow.passwords && !flow.history) || (flow.passwords && !keychain);
   const permission = flow.error === "full_disk_access_required";
   const needsPrimary = flow.error === "primary_password_required" || flow.error === "incorrect_primary_password";
   function submitPrimary() {
@@ -33,6 +33,7 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
               <Tooltip label={keychain ? copy.passwords : copy.needsKeychain}>
                 <Button size="sm" variant="ghost" role="checkbox" aria-checked={flow.passwords} disabled={flow.busy} iconStart={flow.passwords ? <CheckIcon size="sm" /> : <Square size="sm" />} onClick={() => flow.setPasswords(!flow.passwords)}>{copy.passwords}</Button>
               </Tooltip>
+              <Button size="sm" variant="ghost" role="checkbox" aria-checked={flow.history} disabled={flow.busy} iconStart={flow.history ? <CheckIcon size="sm" /> : <Square size="sm" />} onClick={() => flow.setHistory(!flow.history)}>{copy.history}</Button>
             </ButtonContainer>
           </DisclosureRow>
           {flow.sources?.map(source => <Tooltip key={source.key} label={!keychain && flow.passwords ? copy.needsKeychain : copy.run}>
@@ -44,13 +45,13 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
           {!flow.sources?.length ? <Typo.Caption tone="secondary">{copy.noSources}</Typo.Caption> : null}
           <ButtonContainer size="sm">
             <Tooltip label={!keychain && flow.passwords ? copy.needsKeychain : copy.chooseFile}>
-              <Button size="sm" variant="ghost" iconStart={<FileText size="sm" />} disabled={blocked} onClick={() => void flow.run("file")}>{copy.chooseFile}</Button>
+              <Button size="sm" variant="ghost" iconStart={<FileText size="sm" />} disabled={blocked || (!flow.bookmarks && !flow.passwords)} onClick={() => void flow.run("file")}>{copy.chooseFile}</Button>
             </Tooltip>
           </ButtonContainer>
         </> : null}
         {flow.busy ? <Stack align="row" gap="sm" cross="center" role="status" data-test-class="import-progress"><Spinner /><Typo.Text>{copy.importing}</Typo.Text></Stack> : null}
         {flow.result ? <Stack gap="sm" role="status" data-test-class="import-result">
-          <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated)}</Typo.Text>
+          <Typo.Text>{flow.undone ? copy.undone : copy.result(flow.result.bookmarks, flow.result.passwords, flow.result.updated, flow.result.history ?? 0)}</Typo.Text>
           <ButtonContainer size="sm">
             <Button size="sm" variant="outline" disabled={flow.busy || flow.undone} onClick={() => void flow.undo()}>{copy.undo}</Button>
             <Button size="sm" variant="ghost" disabled={flow.busy} onClick={() => void flow.more()}>{copy.more}</Button>

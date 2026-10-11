@@ -7,6 +7,10 @@ use std::collections::BTreeSet;
 const SQL: fn(rusqlite::Error) -> AppStorageError = AppStorageError::sqlite;
 
 pub(super) fn record(db: &Connection, visits: &[Value]) -> Result<Value, AppStorageError> {
+    let mut insert = db.prepare_cached("INSERT OR IGNORE INTO browser_history(url,title,favicon,visited_at,transition,tab_kind,conversation_id,butler_driven,source) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)").map_err(SQL)?;
+    let mut index = db
+        .prepare_cached("INSERT INTO browser_history_visit_fts(rowid,terms) VALUES(?1,?2)")
+        .map_err(SQL)?;
     let mut changed = BTreeSet::new();
     let mut count = 0;
     for visit in visits {
@@ -25,30 +29,35 @@ pub(super) fn record(db: &Connection, visits: &[Value]) -> Result<Value, AppStor
         {
             continue;
         }
-        let inserted = db.execute("INSERT OR IGNORE INTO browser_history(url,title,favicon,visited_at,transition,tab_kind,conversation_id,butler_driven,source) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            params![url,visit["title"].as_str().unwrap_or(&url),visit["favicon"].as_str().unwrap_or(""),time,
-                visit["transition"].as_str().unwrap_or("link"),visit["tabKind"].as_str().unwrap_or("mine"),
-                visit["conversationId"].as_str(),visit["butlerDriven"].as_bool().unwrap_or(false),source]).map_err(SQL)?;
+        let inserted = insert
+            .execute(params![
+                url,
+                visit["title"].as_str().unwrap_or(&url),
+                visit["favicon"].as_str().unwrap_or(""),
+                time,
+                visit["transition"].as_str().unwrap_or("link"),
+                visit["tabKind"].as_str().unwrap_or("mine"),
+                visit["conversationId"].as_str(),
+                visit["butlerDriven"].as_bool().unwrap_or(false),
+                source
+            ])
+            .map_err(SQL)?;
         if inserted > 0 {
-            db.execute(
-                "INSERT INTO browser_history_visit_fts(rowid,terms) VALUES(?1,?2)",
-                params![
+            index
+                .execute(params![
                     db.last_insert_rowid(),
                     analyze_search_field(&format!(
                         "{} {url}",
                         visit["title"].as_str().unwrap_or("")
                     ))
-                ],
-            )
-            .map_err(SQL)?;
+                ])
+                .map_err(SQL)?;
             insert_summary(db, &url, time, visit)?;
             changed.insert(url);
             count += inserted;
         }
     }
-    for url in changed {
-        index_summary(db, &url)?;
-    }
+    super::indexing::summaries(db, changed)?;
     Ok(json!({"recorded":count}))
 }
 fn eligible(db: &Connection, visit: &Value) -> Result<Option<(String, i64)>, AppStorageError> {
@@ -224,6 +233,26 @@ fn insert_summary(
     time: i64,
     visit: &Value,
 ) -> Result<(), AppStorageError> {
-    db.execute("INSERT INTO browser_history_url(url,title,favicon,last_visit,visits) VALUES(?1,?2,?3,?4,1) ON CONFLICT(url) DO UPDATE SET visits=visits+1,title=CASE WHEN excluded.last_visit>=last_visit THEN excluded.title ELSE title END,favicon=CASE WHEN excluded.last_visit>=last_visit THEN excluded.favicon ELSE favicon END,last_visit=max(last_visit,excluded.last_visit)", params![url,visit["title"].as_str().unwrap_or(url),visit["favicon"].as_str().unwrap_or(""),time]).map_err(SQL)?;
+    db.prepare_cached("INSERT INTO browser_history_url(url,title,favicon,last_visit,visits) VALUES(?1,?2,?3,?4,1) ON CONFLICT(url) DO UPDATE SET visits=visits+1,title=CASE WHEN excluded.last_visit>=last_visit THEN excluded.title ELSE title END,favicon=CASE WHEN excluded.last_visit>=last_visit THEN excluded.favicon ELSE favicon END,last_visit=max(last_visit,excluded.last_visit)").map_err(SQL)?.execute(params![url,visit["title"].as_str().unwrap_or(url),visit["favicon"].as_str().unwrap_or(""),time]).map_err(SQL)?;
     Ok(())
+}
+
+/// Only inserted visits carry this receipt; native or previously imported visits survive.
+pub(super) fn undo_import(db: &Connection, run: &str) -> Result<Value, AppStorageError> {
+    let source = format!("imported:{run}");
+    let mut statement = db
+        .prepare("SELECT DISTINCT url FROM browser_history WHERE source=?1")
+        .map_err(SQL)?;
+    let urls = statement
+        .query_map([&source], |r| r.get::<_, String>(0))
+        .map_err(SQL)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SQL)?;
+    let count = db
+        .execute("DELETE FROM browser_history WHERE source=?1", [&source])
+        .map_err(SQL)?;
+    for url in urls {
+        refresh(db, &url)?;
+    }
+    Ok(json!({"deleted":count}))
 }

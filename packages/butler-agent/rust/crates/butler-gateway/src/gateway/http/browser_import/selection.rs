@@ -4,10 +4,19 @@ use butler_platform::{browser_profiles::BrowserProfile, secrets::SecretText};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-pub(super) struct Selection {
-    pub(super) profile: Option<BrowserProfile>,
+pub(super) struct Items {
     pub(super) bookmarks: bool,
     pub(super) passwords: bool,
+    pub(super) history: bool,
+}
+pub(super) struct SelectedData {
+    pub(super) bookmarks: Vec<import::Bookmark>,
+    pub(super) passwords: Vec<import::PasswordRow>,
+    pub(super) history: Vec<Value>,
+}
+pub(super) struct Selection {
+    pub(super) profile: Option<BrowserProfile>,
+    pub(super) items: Items,
     pub(super) csv: bool,
     pub(super) request: Value,
     pub(super) primary: SecretText,
@@ -19,13 +28,26 @@ impl Drop for Selection {
     }
 }
 impl Selection {
-    pub(super) fn read(
-        &self,
-    ) -> Result<(Vec<import::Bookmark>, Vec<import::PasswordRow>), HttpError> {
-        Ok((self.read_bookmarks()?, self.read_passwords()?))
+    pub(super) fn read(&self) -> Result<SelectedData, HttpError> {
+        Ok(SelectedData {
+            bookmarks: self.read_bookmarks()?,
+            passwords: self.read_passwords()?,
+            history: self.read_history()?,
+        })
+    }
+    fn read_history(&self) -> Result<Vec<Value>, HttpError> {
+        if !self.items.history {
+            return Ok(Vec::new());
+        }
+        match &self.profile {
+            Some(profile) => {
+                import::history(profile, &self.scratch.join("history")).map_err(native_error)
+            }
+            None => Ok(Vec::new()),
+        }
     }
     fn read_bookmarks(&self) -> Result<Vec<import::Bookmark>, HttpError> {
-        if !self.bookmarks {
+        if !self.items.bookmarks {
             return Ok(Vec::new());
         }
         if let Some(profile) = &self.profile {
@@ -42,7 +64,7 @@ impl Selection {
             .map_err(|e| super::import_error(&e))
     }
     fn read_passwords(&self) -> Result<Vec<import::PasswordRow>, HttpError> {
-        if !self.passwords || self.csv {
+        if !self.items.passwords || self.csv {
             return Ok(Vec::new());
         }
         if let Some(profile) = &self.profile {

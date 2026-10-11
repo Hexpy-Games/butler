@@ -1,4 +1,5 @@
 //! Visits and their search summaries on the existing App SQLite owner lane.
+mod indexing;
 mod query;
 mod records;
 pub(super) mod schema;
@@ -17,6 +18,7 @@ pub struct AppHistoryQuery {
 }
 pub enum AppHistoryCommand {
     Record(Vec<Value>),
+    UndoImport(String),
     Page(AppHistoryQuery),
     Suggestions(String),
     Delete(Vec<i64>),
@@ -49,6 +51,9 @@ impl AppApplication {
                             let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                             let result = match mutation {
                                 AppHistoryCommand::Record(visits) => records::record(&tx, &visits),
+                                AppHistoryCommand::UndoImport(run) => {
+                                    records::undo_import(&tx, &run)
+                                }
                                 AppHistoryCommand::Delete(ids) => records::delete_ids(&tx, &ids),
                                 AppHistoryCommand::DeleteUrl(url) => records::delete_url(&tx, &url),
                                 AppHistoryCommand::Clear {
