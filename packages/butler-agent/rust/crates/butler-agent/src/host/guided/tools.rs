@@ -88,6 +88,31 @@ impl GuidedToolBinding {
             butler_turn::btcc::LedgerEffects::Disabled
         }
     }
+
+    fn validate_surface(&self) -> Result<(), BtccError> {
+        for name in self
+            .required_names
+            .iter()
+            .chain(self.visible_names.iter())
+            .chain(self.authorized_names.iter())
+        {
+            if !GuidedTools::supports(name) {
+                return Err(BtccError::relayed(
+                    "guided_tool_executor_missing",
+                    format!("No native executor is registered for {name}"),
+                ));
+            }
+        }
+        for tool in &self.surface {
+            if !self.visible_names.contains(&tool.name) {
+                return Err(BtccError::relayed(
+                    "guided_tool_surface_not_visible",
+                    format!("Selected tool {} is not visible", tool.name),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -127,6 +152,7 @@ pub(crate) struct GuidedTools {
     session_worktrees: butler_turn::workspace::SessionWorktrees,
     web_session: butler_runtime::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
+    browser_http: OnceCell<reqwest::Client>,
     binding: GuidedToolBinding,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
@@ -198,27 +224,7 @@ impl GuidedTools {
         restored: Option<&AuthorityLoopContinuation>,
         binding: GuidedToolBinding,
     ) -> Result<Self, BtccError> {
-        for name in binding
-            .required_names
-            .iter()
-            .chain(binding.visible_names.iter())
-            .chain(binding.authorized_names.iter())
-        {
-            if !Self::supports(name) {
-                return Err(BtccError::relayed(
-                    "guided_tool_executor_missing",
-                    format!("No native executor is registered for {name}"),
-                ));
-            }
-        }
-        for tool in &binding.surface {
-            if !binding.visible_names.contains(&tool.name) {
-                return Err(BtccError::relayed(
-                    "guided_tool_surface_not_visible",
-                    format!("Selected tool {} is not visible", tool.name),
-                ));
-            }
-        }
+        binding.validate_surface()?;
         let described_ids = restored
             .into_iter()
             .flat_map(|continuation| &continuation.messages)
@@ -255,6 +261,7 @@ impl GuidedTools {
             session_worktrees,
             web_session,
             app_endpoint,
+            browser_http: OnceCell::new(),
             binding,
             state: Mutex::new(State {
                 described_ids,

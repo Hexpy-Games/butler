@@ -5,6 +5,7 @@ use serde_json::Map;
 // test-category: format-pin
 #[test]
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
+    super::sizing::sizing_counts_image_allowance_and_preserves_complete_wire_bytes();
     let (catalog, snapshot) = catalog();
     drop(catalog);
     let messages = [ModelRoundMessage {
