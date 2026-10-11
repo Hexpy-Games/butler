@@ -1,3 +1,4 @@
+import { openLink } from "./links.mjs";
 import { BrowserWindow, WebContentsView, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import { popupWindowOptions, popupPlatform } from "../butler-platform/popup-window.mjs";
@@ -88,6 +89,12 @@ function popupView(browser, source, details, options, agent) {
 }
 export function popupHandler(browser, source, details) {
   const agent = (source.agent || source.driven) && source.holder !== "user";
+  const programmatic = source.programmaticPopup === true;
+  source.programmaticPopup = false;
+  if (!agent && !programmatic && ["foreground-tab", "background-tab"].includes(details.disposition) && webUrl(details.url)) {
+    void openLink(browser, details.url, source).catch(() => {});
+    return { action: "deny" };
+  }
   const valid = webUrl(details.url) || details.url === "about:blank";
   const gesture = source.popupGesture === true && Date.now() - source.popupGestureAt < 5000;
   source.popupGesture = false;

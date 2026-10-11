@@ -35,7 +35,9 @@ export function wireUserDialogs(browser, tab) {
       if (!entry || !event.senderFrame || event.senderFrame.isDestroyed()) { event.returnValue = null; return; }
       const { browser: host, tab: source } = entry;
       const page = source.view.webContents;
+      if (input?.type === "popup-finished") { source.programmaticPopup = false; event.returnValue = true; return; }
       if (input?.type === "popup" || input?.type === "gesture") {
+        source.programmaticPopup = input.type === "popup";
         source.popupGesture = input.gesture === true; source.popupGestureAt = Date.now(); event.returnValue = true; return;
       }
       if (!["alert", "confirm", "prompt", "beforeunload", "print", "file"].includes(input?.type)) { event.returnValue = null; return; }

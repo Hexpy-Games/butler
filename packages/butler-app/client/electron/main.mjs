@@ -18,6 +18,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { openLink, installAppLinks } from "./browser/links.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
@@ -1032,7 +1033,7 @@ function beginOAuthLoginProcess(command, args, env) {
       session.authUrl = authUrl.trim();
       session.redirectUri = redirectUriFromAuthUrl(session.authUrl);
       session.state = stateFromAuthUrl(session.authUrl);
-      void shell.openExternal(session.authUrl);
+      void openLink(userBrowser, session.authUrl).catch(() => {});
       resolveOnce();
     });
     child.stderr?.on("data", (chunk) => {
@@ -2248,8 +2249,9 @@ async function createWindow() {
     win.setVibrancy(macVibrancy);
   }
   if (isWindows) win.setBackgroundMaterial(windowsBackgroundMaterial);
+  if (userBrowser) installAppLinks(win, userBrowser);
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (openExternalUrl(url)) return { action: "deny" };
+    if (openAppLink(url)) return { action: "deny" };
     return { action: "deny" };
   });
   win.webContents.on("before-input-event", (event, input) => {
@@ -2265,7 +2267,7 @@ async function createWindow() {
   win.webContents.on("will-navigate", (event, url) => {
     if (isAppNavigationUrl(url)) return;
     event.preventDefault();
-    openExternalUrl(url);
+    openAppLink(url);
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
@@ -3120,7 +3122,7 @@ function isAppNavigationUrl(value) {
   }
 }
 
-function openExternalUrl(value) {
+function openAppLink(value) {
   let url;
   try {
     url = new URL(value);
@@ -3128,6 +3130,7 @@ function openExternalUrl(value) {
     return false;
   }
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
-  void shell.openExternal(url.toString());
+  if (url.protocol === "mailto:") void shell.openExternal(url.toString());
+  else void openLink(userBrowser, url.toString()).catch(() => {});
   return true;
 }
