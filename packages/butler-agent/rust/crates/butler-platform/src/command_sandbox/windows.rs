@@ -84,7 +84,7 @@ pub(super) fn legacy_shell(
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
     // Enter the admitted short CWD with process-local .NET path compatibility.
-    // Leave provider drive semantics intact, independently of machine policy.
+    // Long folders retain an extended provider root and real parent traversal.
     let paths = include_str!("windows/paths.ps1");
     let script = format!(
         "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{paths}{command}"

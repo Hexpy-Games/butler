@@ -15,7 +15,22 @@
         }
         if ($env:BUTLER_COMMAND_CWD) {
             $directory = $env:BUTLER_COMMAND_CWD.Replace('/', '\')
-            Set-Location -LiteralPath $directory -ErrorAction Stop
+            if ($PSVersionTable.PSEdition -eq 'Desktop' -and [System.IO.Path]::GetFullPath($directory).Length -ge 248) {
+                # The provider treats \\?\C:\ as an incomplete UNC root and
+                # drops its first child. DosDevices retains the logon's drive
+                # lookup while giving the provider a complete extended root.
+                $root = [System.IO.Path]::GetPathRoot($directory)
+                $extendedRoot = '\\?\GLOBALROOT\DosDevices\' + $(if ($root.StartsWith('\\')) {
+                    'UNC\' + $root.Substring(2)
+                } else { $root })
+                $extendedRoot = $extendedRoot.TrimEnd('\') + '\'
+                $relative = $directory.Substring($root.Length).TrimStart('\')
+                New-PSDrive -Name ButlerFileSystem -PSProvider FileSystem -Root $extendedRoot -Scope Global -ErrorAction Stop | Out-Null
+                Set-Location -LiteralPath ('ButlerFileSystem:\' + $relative) -ErrorAction Stop
+                [System.Environment]::CurrentDirectory = $extendedRoot + $relative
+            } else {
+                Set-Location -LiteralPath $directory -ErrorAction Stop
+            }
             Remove-Item Env:BUTLER_COMMAND_CWD -ErrorAction Stop
         }
     } catch {
