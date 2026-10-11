@@ -1,5 +1,6 @@
 import { Component, createRef, type ReactNode } from "react";
 import { prefersReducedMotion } from "../../lib/motion";
+import { copyFrame } from "./setupMorphLayers";
 import { canMorph, startSetupMorph, type SetupWizardMorph } from "./setupWizardMorph";
 import morphStyles from "./SetupWizardMorph.module.css";
 import styles from "./SetupWizardShell.module.css";
@@ -50,7 +51,7 @@ export class SetupWizardStage extends Component<SetupWizardStageProps, SetupWiza
     this.morph?.finish();
     if (prefersReducedMotion()) return null;
     const node = this.frame.current;
-    return node ? (node.cloneNode(true) as HTMLElement) : null;
+    return node ? copyFrame(node) : null;
   }
 
   componentDidUpdate(_previous: SetupWizardStageProps, _state: SetupWizardStageState, snapshot: HTMLElement | null) {

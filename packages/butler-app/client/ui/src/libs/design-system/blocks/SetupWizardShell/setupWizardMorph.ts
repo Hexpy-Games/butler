@@ -1,15 +1,12 @@
 import { animateMotion, motionDistance, motionDuration } from "../../lib/motion";
-import styles from "./SetupWizardMorph.module.css";
+import { boxIn, clearLayers, startLayers, type SetupMorphBox } from "./setupMorphLayers";
 
 /** A solid setup card (`SetupWizardContent surface="solid"`). */
 const CARD = "[data-setup-card]";
 /** A row group whose children arrive one by one (the step card's body). */
 const ROW_GROUP = "data-setup-rows";
-const SURFACE_VARS = ["--setup-morph-top", "--setup-morph-from-left", "--setup-morph-from-width", "--setup-morph-from-height",
-  "--setup-morph-to-left", "--setup-morph-to-width", "--setup-morph-to-height"] as const;
-const CLIP_VARS = ["--setup-morph-clip-from", "--setup-morph-clip-to"] as const;
 
-export interface SetupMorphBox { left: number; top: number; width: number; height: number }
+export type { SetupMorphBox };
 
 export interface SetupWizardMorph {
   /** The card rects relative to the stage: the print beat and the ink keep-out follow them. */
@@ -17,13 +14,6 @@ export interface SetupWizardMorph {
   to: SetupMorphBox;
   /** Jumps to the end state at once (a resize or new copy makes the measured rects stale). */
   finish(): void;
-}
-
-const px = (value: number) => `${Math.max(0, value).toFixed(2)}px`;
-
-function boxIn(element: Element, origin: DOMRect): SetupMorphBox {
-  const rect = element.getBoundingClientRect();
-  return { left: rect.left - origin.left, top: rect.top - origin.top, width: rect.width, height: rect.height };
 }
 
 /** Both frames hold a solid card and the card width changes (the 420px intro and a 520px step). */
@@ -40,28 +30,15 @@ function cardRows(card: Element): Element[] {
   return [...column.children].flatMap((row) => (row.hasAttribute(ROW_GROUP) ? [...row.children] : [row]));
 }
 
-/** The small card's rect as an inset of the big card, with the card's own corner radius. */
-function insetOf(big: SetupMorphBox, small: SetupMorphBox, radius: string): string {
-  const right = big.left + big.width - small.left - small.width;
-  const bottom = big.top + big.height - small.top - small.height;
-  return `inset(${px(small.top - big.top)} ${px(right)} ${px(bottom)} ${px(small.left - big.left)} round ${radius})`;
-}
+const present = (animation: Animation | null): animation is Animation => animation !== null;
 
-function placeSurface(surface: HTMLElement, from: SetupMorphBox, to: SetupMorphBox) {
-  const values = [to.top, from.left, from.width, from.height, to.left, to.width, to.height];
-  SURFACE_VARS.forEach((name, index) => surface.style.setProperty(name, `${values[index]!.toFixed(2)}px`));
-  surface.hidden = false;
-}
-
-/** Content swap: the old card's content leaves; the new card's rows rise in once the surface is nearly there. */
-function swapContent(fromCard: HTMLElement, toCard: HTMLElement, grow: boolean): Array<Animation | null> {
-  const out = animateMotion(fromCard, [{ opacity: 1 }, { opacity: 0 }],
-    { duration: grow ? "exit-base" : "exit-fast", easing: "accelerate", fill: "forwards" });
+/** The new card's rows rise in once the surface is nearly there, one after another; `elapsed` is the morph time already gone. */
+function riseRows(toCard: Element, elapsed: number): Animation[] {
   const rise = `translateY(${motionDistance("sm")}px)`;
-  const start = motionDuration("morph-rows");
+  const start = motionDuration("morph-rows") - elapsed;
   const step = motionDuration("stagger-row");
-  return [out, ...cardRows(toCard).map((row, index) => animateMotion(row, [{ opacity: 0, transform: rise }, { opacity: 1, transform: "none" }],
-    { duration: "base", easing: "decelerate", delay: start + index * step, fill: "backwards" }))];
+  return cardRows(toCard).map((row, index) => animateMotion(row, [{ opacity: 0, transform: rise }, { opacity: 1, transform: "none" }],
+    { duration: "base", easing: "decelerate", delay: Math.max(0, start + index * step), fill: "backwards" })).filter(present);
 }
 
 /**
@@ -82,25 +59,19 @@ export function startSetupMorph(stage: HTMLElement, surface: HTMLElement, fromFr
   const from = boxIn(fromCard, origin);
   const to = boxIn(toCard, origin);
   const grow = to.width * to.height >= from.width * from.height;
-  const [big, bigBox, smallBox] = grow ? [toCard, to, from] : [fromCard, from, to];
-  const radius = getComputedStyle(big).borderTopLeftRadius;
-  const closed = insetOf(bigBox, smallBox, radius);
-  const open = `inset(0px round ${radius})`;
+  const big = grow ? toCard : fromCard;
   stage.dataset.morph = "run";
-  placeSurface(surface, from, to);
-  big.style.setProperty(CLIP_VARS[0], grow ? closed : open);
-  big.style.setProperty(CLIP_VARS[1], grow ? open : closed);
-  big.classList.add(styles.clip);
-  // Commit the start geometry, then switch both layers to the end state so the transitions run.
-  void surface.offsetWidth;
-  surface.dataset.phase = "to";
-  big.dataset.phase = "to";
-  const run = [...surface.getAnimations(), ...big.getAnimations(), ...swapContent(fromCard, toCard, grow)]
-    .filter((animation): animation is Animation => animation !== null);
+  startLayers(surface, big, from, to, grow);
+  // The old content leaves in the first third (sooner going back, where the shrinking edge reaches it).
+  const out = animateMotion(fromCard, [{ opacity: 1 }, { opacity: 0 }],
+    { duration: grow ? "exit-base" : "exit-fast", easing: "accelerate", fill: "forwards" });
+  const run = [...surface.getAnimations(), ...big.getAnimations(), out].filter(present);
+  const startedAt = performance.now();
 
   let done = false;
   let paused: Animation[] = [];
   let measured = false;
+  let rows = 0;
   const block = (event: Event) => { event.preventDefault(); event.stopPropagation(); };
   const visibility = () => {
     if (document.hidden) {
@@ -120,26 +91,31 @@ export function startSetupMorph(stage: HTMLElement, surface: HTMLElement, fromFr
     document.removeEventListener("visibilitychange", visibility);
     stage.removeEventListener("click", block, true);
     observer?.disconnect();
+    cancelAnimationFrame(rows);
     for (const animation of run) animation.cancel();
-    surface.hidden = true;
-    delete surface.dataset.phase;
-    for (const name of SURFACE_VARS) surface.style.removeProperty(name);
-    big.classList.remove(styles.clip);
-    delete big.dataset.phase;
-    for (const name of CLIP_VARS) big.style.removeProperty(name);
+    clearLayers(surface, big);
     delete stage.dataset.morph;
     onEnd();
   };
   function finish() {
     if (done) return;
-    for (const animation of run) animation.finish();
+    for (const animation of run) {
+      // A transition the browser already cancelled has no end to jump to.
+      try { animation.finish(); } catch { /* end() below still clears every layer */ }
+    }
     end();
   }
   window.addEventListener("resize", finish);
   document.addEventListener("visibilitychange", visibility);
   stage.addEventListener("click", block, true);
   observer?.observe(toCard);
-  // A transition the browser cancels on its own (a node replaced mid-morph) also jumps to the end.
-  void Promise.all(run.map((animation) => animation.finished)).then(end, finish);
+  // Rows are found in the next frame, before it paints: a step that re-keys its body while it
+  // mounts (SetupWizardStepCard contentKey) has replaced those nodes by then.
+  rows = requestAnimationFrame(() => {
+    if (done) return;
+    run.push(...riseRows(toCard, performance.now() - startedAt));
+    // A transition the browser cancels on its own (a node replaced mid-morph) also jumps to the end.
+    void Promise.all(run.map((animation) => animation.finished)).then(end, finish);
+  });
   return { from, to, finish };
 }
