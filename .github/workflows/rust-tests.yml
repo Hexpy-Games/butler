@@ -31,7 +31,7 @@ jobs:
     name: Offline browser fixtures
     runs-on: ${{ inputs.runner }}
     env:
-      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || startsWith(inputs.platform, 'darwin-') && 'macos' || 'unavailable' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +84,7 @@ jobs:
     if: ${{ !inputs.performance-only && inputs.workspace }}
     runs-on: ${{ inputs.runner }}
     env:
-      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || startsWith(inputs.platform, 'darwin-') && 'macos' || 'unavailable' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +107,7 @@ jobs:
     name: E2E (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     env:
-      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || startsWith(inputs.platform, 'darwin-') && 'macos' || 'unavailable' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -153,7 +153,7 @@ jobs:
     name: Performance (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     env:
-      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || '' }}
+      BUTLER_EXPECT_SANDBOX: ${{ startsWith(inputs.platform, 'linux-') && 'linux' || startsWith(inputs.platform, 'darwin-') && 'macos' || 'unavailable' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
