@@ -14,8 +14,9 @@ take an image, e.g. `butler.stipple`, `butler.grain`) with that filter's own par
 
 ## When to use this component
 
-Use it wherever the user picks a wallpaper: the Home screen setting, and a
-project's wallpaper (with `inherit`).
+Use it wherever the user picks a wallpaper: the Home screen setting, a
+project's wallpaper (with `inherit`), and the conversation background (with
+`extraControls` and `imageDefaults`).
 
 ## Where to use this component
 
@@ -73,6 +74,14 @@ Commit the generated PNGs, input hashes and `builtinPosters.ts` together.
 - A picked image starts as `{ fit: "cover", dim, blur: 0 }` with
   `dim = wallpaperImageDefaultDim(luminance)` (brighter images dim more).
   Re-picking any tile restores what it had earlier in the session.
+  `imageDefaults` (e.g. `{ dim: 0 }`) replaces those starting options for a
+  first pick, where the caller dims on its own (the conversation's overlay);
+  a remembered value still wins.
+- `extraControls` renders the caller's own controls after the selected
+  tile's options, inside the picker (e.g. the conversation's 배경 불투명도
+  slider, the value in its label). The caller decides for which values it
+  shows; anything after the picker (a field error) stays below it. The Home
+  screen picker passes none.
 - Image thumbnails load through `imageLoader(id, "thumbnail")` (prop or
   `WallpaperImageLoaderProvider`) and show as `data:` URLs.
 - `inherit={{ label, source }}` adds the first tile; `source` is previewed.
