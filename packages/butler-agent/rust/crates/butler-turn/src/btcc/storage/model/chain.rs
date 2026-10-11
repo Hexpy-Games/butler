@@ -2,7 +2,7 @@
 use super::super::{StorageError, StorageResult, common::json};
 use super::{
     delta::{self, Delta},
-    memo::{ContinuationMemo, Entry},
+    memo::{self, ContinuationMemo, Entry},
 };
 use rusqlite::{Connection, OptionalExtension};
 
@@ -80,7 +80,7 @@ pub(super) fn reconstruct(
         if current.state == 0 {
             let items = full_items(&current)?;
             // JSON size plus Value/string/map allocation overhead, conservatively.
-            let bytes = current.raw.len() * 2 + items.len() * 128;
+            let bytes = current.raw.len() * 3 + items.len() * 160;
             let count = items.len();
             break (Some(items), None, count, bytes, 1);
         }
@@ -94,15 +94,20 @@ pub(super) fn reconstruct(
         bytes = bytes.saturating_add(delta::literal_bytes(delta)?);
         depth += 1;
     }
-    let mut items = match items {
-        Some(items) => items,
+    let (mut items, mut serialized) = match items {
+        Some(items) => {
+            let serialized = memo::item_strings(&items)?;
+            (items, serialized)
+        }
         None => {
-            memo.take(&cached.ok_or_else(delta::invalid)?)
-                .ok_or_else(delta::invalid)?
-                .items
+            let entry = memo
+                .take(&cached.ok_or_else(delta::invalid)?)
+                .ok_or_else(delta::invalid)?;
+            (entry.items, entry.serialized)
         }
     };
     for delta in pending.into_iter().rev() {
+        memo::apply_serialized_validated(&mut serialized, &delta)?;
         items = delta::apply_validated(items, &delta);
     }
     Ok(Entry {
@@ -111,6 +116,7 @@ pub(super) fn reconstruct(
         checkpoint_revision: target.checkpoint_revision,
         acceptance_id: target.acceptance_id,
         items,
+        serialized,
         approx_bytes: bytes,
         chain_len: depth,
     })

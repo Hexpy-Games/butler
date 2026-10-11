@@ -52,6 +52,7 @@ async fn main() -> Result<(), Error> {
     let mut hashes = Vec::new();
     let mut full_rows = Vec::new();
     let mut times = Vec::new();
+    let mut write_times = Vec::new();
     let start = Instant::now();
     let first = if mode == "latest" {
         rounds.saturating_sub(1)
@@ -80,6 +81,7 @@ async fn main() -> Result<(), Error> {
             };
             if mode == "write" && round == 4 {
                 driver::reorder_item(&mut result)?;
+                driver::literal_item(&mut result)?;
             }
             if mode == "seed" {
                 seed_result = Some(result.clone());
@@ -96,9 +98,11 @@ async fn main() -> Result<(), Error> {
                 transport_attempt: 1,
                 result: Box::new(result.clone()),
             };
+            let begin_write = Instant::now();
             repositories
                 .record_model_round_acceptance(write.clone())
                 .await?;
+            write_times.push(begin_write.elapsed().as_secs_f64() * 1000.0);
             if mode == "write" && round == 2 {
                 driver::duplicate(&repositories, write).await?;
             }
@@ -116,7 +120,7 @@ async fn main() -> Result<(), Error> {
         continuation = result.continuation;
         driver::outputs(&mut messages, round..round + 1);
     }
-    let report = json!({"open_ms":open_ms,"rounds_ms":start.elapsed().as_secs_f64()*1000.0,"round_ms":times,"hashes":hashes,"full_rows":full_rows});
+    let report = json!({"open_ms":open_ms,"rounds_ms":start.elapsed().as_secs_f64()*1000.0,"round_ms":times,"write_ms":write_times,"hashes":hashes,"full_rows":full_rows});
     std::fs::write(
         Path::new(path).with_extension(format!("{mode}.json")),
         serde_json::to_vec(&report)?,

@@ -217,3 +217,19 @@ pub(super) fn reorder_item(result: &mut ModelRoundResult) -> Result<(), Error> {
     item["extension"] = Value::Object(reordered);
     Ok(())
 }
+
+/// A literal rewrite pins escaping, nested values and JavaScript number formatting.
+pub(super) fn literal_item(result: &mut ModelRoundResult) -> Result<(), Error> {
+    let items = result
+        .continuation
+        .as_mut()
+        .and_then(|v| v.get_mut("statelessInput"))
+        .and_then(Value::as_array_mut)
+        .ok_or("missing continuation items")?;
+    let call = items.last_mut().ok_or("missing call")?;
+    call["extension"] = serde_json::json!({
+        "quoted": "line\n\"\\한글😀",
+        "values": [null, true, false, -0.0, 1.5, 1e-7, 1e21, {"z": "last", "a": "first", "2": "two"}],
+    });
+    Ok(())
+}

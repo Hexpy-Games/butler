@@ -8,18 +8,18 @@ use serde_json::Value;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub(super) struct Delta {
+pub(super) struct Delta<T = Value> {
     pub v: u8,
     pub base: String,
     pub base_count: usize,
     pub count: usize,
-    pub ops: Vec<Op>,
+    pub ops: Vec<Op<T>>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
-pub(super) enum Op {
+pub(super) enum Op<T = Value> {
     Copy(CopyOp),
-    Literal(LiteralOp),
+    Literal(LiteralOp<T>),
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -28,8 +28,8 @@ pub(super) struct CopyOp {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct LiteralOp {
-    pub l: Vec<Value>,
+pub(super) struct LiteralOp<T = Value> {
+    pub l: Vec<T>,
 }
 
 pub(super) fn invalid() -> super::super::StorageError {
@@ -53,24 +53,18 @@ pub(super) fn split_stateless(value: &mut Value) -> Option<Vec<Value>> {
     }
 }
 
-// Passthrough: exact serialized comparison of opaque provider items.
+// Passthrough: compare the cached, insertion-order-preserving item bytes.
 pub(super) fn encode(
     base_id: &str,
-    base: &[Value],
-    items: &[Value],
-) -> StorageResult<Option<Delta>> {
+    base: &[String],
+    items: &[String],
+) -> StorageResult<Option<String>> {
     let mut ops = Vec::new();
     let mut literal_bytes = 0usize;
     let mut full_bytes = 2usize;
-    for (j, item) in items.iter().enumerate() {
-        let raw = stringify(item)?;
+    for (j, raw) in items.iter().enumerate() {
         full_bytes += raw.len() + usize::from(j > 0);
-        let copied = base
-            .get(j)
-            .map(stringify)
-            .transpose()?
-            .is_some_and(|v| v == raw);
-        if copied {
+        if base.get(j) == Some(raw) {
             if let Some(Op::Copy(op)) = ops.last_mut() {
                 op.c[1] += 1;
             } else {
@@ -79,10 +73,10 @@ pub(super) fn encode(
         } else {
             literal_bytes += raw.len();
             if let Some(Op::Literal(op)) = ops.last_mut() {
-                op.l.push(item.clone());
+                op.l.push(raw.as_str());
             } else {
                 ops.push(Op::Literal(LiteralOp {
-                    l: vec![item.clone()],
+                    l: vec![raw.as_str()],
                 }));
             }
         }
@@ -97,32 +91,69 @@ pub(super) fn encode(
         count: items.len(),
         ops,
     };
-    let checked = apply(base.to_vec(), &delta);
-    if !checked
-        .as_ref()
-        .is_ok_and(|checked| same_items(checked, items).unwrap_or(false))
-    {
+    if !self_check(base, items, &delta) {
         butler_core::diagnostic!("model_acceptance_delta_self_check_failed");
         return Ok(None);
     }
-    Ok(Some(delta))
+    encoded_delta(&delta).map(Some)
 }
 
-// Passthrough: comparison includes provider object key insertion order.
-fn same_items(a: &[Value], b: &[Value]) -> StorageResult<bool> {
-    if a.len() != b.len() {
-        return Ok(false);
+// Apply the validated ops to borrowed strings, then compare every item byte for byte.
+fn self_check(base: &[String], items: &[String], delta: &Delta<&str>) -> bool {
+    if validate(base.len(), delta).is_err() {
+        return false;
     }
-    for (a, b) in a.iter().zip(b) {
-        if stringify(a)? != stringify(b)? {
-            return Ok(false);
+    let mut applied = Vec::with_capacity(delta.count);
+    for op in &delta.ops {
+        match op {
+            Op::Copy(op) => {
+                let Some(copied) = base.get(op.c[0]..op.c[0] + op.c[1]) else {
+                    return false;
+                };
+                applied.extend(copied.iter().map(String::as_str));
+            }
+            Op::Literal(op) => applied.extend(op.l.iter().copied()),
         }
     }
-    Ok(true)
+    applied.len() == items.len()
+        && applied
+            .iter()
+            .zip(items)
+            .all(|(applied, item)| *applied == item)
+}
+
+// Passthrough: literals are complete JSON from stringify, never interpolated content.
+fn encoded_delta(delta: &Delta<&str>) -> StorageResult<String> {
+    let mut raw = format!(
+        "{{\"v\":1,\"base\":{},\"baseCount\":{},\"count\":{},\"ops\":[",
+        stringify(&Value::String(delta.base.clone()))?,
+        delta.base_count,
+        delta.count,
+    );
+    for (i, op) in delta.ops.iter().enumerate() {
+        if i > 0 {
+            raw.push(',');
+        }
+        match op {
+            Op::Copy(op) => raw.push_str(&format!("{{\"c\":[{},{}]}}", op.c[0], op.c[1])),
+            Op::Literal(op) => {
+                raw.push_str("{\"l\":[");
+                for (i, item) in op.l.iter().enumerate() {
+                    if i > 0 {
+                        raw.push(',');
+                    }
+                    raw.push_str(item);
+                }
+                raw.push_str("]}");
+            }
+        }
+    }
+    raw.push_str("]}");
+    Ok(raw)
 }
 
 /// Validate all positional guards before taking ownership of a cached vector.
-pub(super) fn validate(base_count: usize, delta: &Delta) -> StorageResult<()> {
+pub(super) fn validate<T>(base_count: usize, delta: &Delta<T>) -> StorageResult<()> {
     if delta.v != 1 || base_count != delta.base_count {
         return Err(invalid());
     }
@@ -149,10 +180,6 @@ pub(super) fn validate(base_count: usize, delta: &Delta) -> StorageResult<()> {
         return Err(invalid());
     }
     Ok(())
-}
-pub(super) fn apply(items: Vec<Value>, delta: &Delta) -> StorageResult<Vec<Value>> {
-    validate(items.len(), delta)?;
-    Ok(apply_validated(items, delta))
 }
 
 // Passthrough: callers validate every delta before moving the cached base.
@@ -185,7 +212,7 @@ pub(super) fn literal_bytes(delta: &Delta) -> StorageResult<usize> {
     for op in &delta.ops {
         if let Op::Literal(op) = op {
             for item in &op.l {
-                bytes += stringify(item)?.len() * 2 + 128;
+                bytes += stringify(item)?.len() * 3 + 160;
             }
         }
     }

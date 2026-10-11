@@ -161,6 +161,9 @@ async fn acceptance_payload_perf_1() -> Result<(), HarnessError> {
         super::acceptance_payload::crash_replay(&sandbox, &script, &endpoint, &mut child, "latest")
             .await?;
     let written = super::acceptance_payload::report(&sandbox, "seed")?;
+    let record_times: Vec<f64> = serde_json::from_value(written["write_ms"].clone())?;
+    assert_eq!(record_times.len(), 400);
+    assert!(record_times.iter().all(|ms| ms.is_finite() && *ms > 0.0));
     let loaded = super::acceptance_payload::report(&sandbox, "latest")?;
     let mut resumed = resumed;
     resumed.kill9()?;
@@ -187,7 +190,9 @@ async fn acceptance_payload_perf_1() -> Result<(), HarnessError> {
     super::acceptance_payload::release(&script);
     full.finish().await?;
     let report = json!({"baseline":baseline,"cache":cache,
-        "rounds":400,"setup_ms":setup_ms,"write_400_ms":write_ms,"replay_ms":replay.as_secs_f64()*1000.0,
+        "rounds":400,"setup_ms":setup_ms,"record_ms_per_round":record_times,
+        "record_400_ms":record_times.iter().sum::<f64>(),
+        "write_probe":write_probe(&sandbox.logs.join("seed.log"))?,"write_400_ms":write_ms,"replay_ms":replay.as_secs_f64()*1000.0,
         "open_ms":loaded["open_ms"],"reconstruct_ms":loaded["rounds_ms"],
         "payload_bytes":bytes.iter().sum::<usize>(),"payload_bytes_per_round":bytes,
         "wal_bytes":wal_bytes,"wal_bytes_per_round":wal_bytes as f64/400.0,"wal_commits":commits,
@@ -224,4 +229,25 @@ fn verify_input(raw: &str) -> Result<(), HarnessError> {
         );
     }
     Ok(())
+}
+
+// Optional content-free timing probe from an instrumented storage build.
+fn write_probe(path: &std::path::Path) -> Result<serde_json::Value, HarnessError> {
+    let log = std::fs::read_to_string(path)?;
+    let mut totals = std::collections::BTreeMap::<String, u64>::new();
+    for line in log
+        .lines()
+        .filter(|line| line.starts_with("write_probe step="))
+    {
+        let step = line
+            .split("step=")
+            .nth(1)
+            .unwrap()
+            .split_whitespace()
+            .next()
+            .unwrap();
+        let ns = number(line, "ns=").unwrap();
+        *totals.entry(step.into()).or_default() += ns;
+    }
+    Ok(serde_json::to_value(totals)?)
 }

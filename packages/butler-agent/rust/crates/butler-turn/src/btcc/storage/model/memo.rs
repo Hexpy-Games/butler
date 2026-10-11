@@ -1,4 +1,8 @@
 //! Lane-owned bounded continuation LRU. No polling or persistent cache.
+use super::{
+    super::{StorageResult, common::stringify},
+    delta::{Delta, Op},
+};
 use serde_json::Value;
 use std::collections::VecDeque;
 
@@ -8,6 +12,7 @@ pub(in crate::btcc::storage) struct Entry {
     pub checkpoint_revision: u64,
     pub acceptance_id: String,
     pub items: Vec<Value>,
+    pub serialized: Vec<String>,
     pub approx_bytes: usize,
     pub chain_len: usize,
 }
@@ -55,4 +60,35 @@ impl ContinuationMemo {
         }
         self.entries.push_back(entry);
     }
+}
+
+// Passthrough: the byte carrier uses the same serializer as persisted continuations.
+pub(super) fn item_strings(items: &[Value]) -> StorageResult<Vec<String>> {
+    items.iter().map(stringify).collect()
+}
+
+// Passthrough: keep the memo's serialized carrier in sync using only literal work.
+pub(super) fn apply_serialized_validated(
+    items: &mut Vec<String>,
+    delta: &Delta,
+) -> StorageResult<()> {
+    let mut output = 0;
+    for op in &delta.ops {
+        match op {
+            Op::Copy(op) => output += op.c[1],
+            Op::Literal(op) => {
+                for value in &op.l {
+                    let raw = stringify(value)?;
+                    if let Some(slot) = items.get_mut(output) {
+                        *slot = raw;
+                    } else {
+                        items.push(raw);
+                    }
+                    output += 1;
+                }
+            }
+        }
+    }
+    items.truncate(output);
+    Ok(())
 }

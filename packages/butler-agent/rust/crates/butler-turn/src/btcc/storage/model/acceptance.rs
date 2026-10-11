@@ -8,7 +8,7 @@ use super::normalizer::normalize;
 use super::{
     chain::{self, Row},
     delta,
-    memo::{ContinuationMemo, Entry},
+    memo::{ContinuationMemo, Entry, item_strings},
 };
 use crate::btcc::StorageCode;
 use crate::btcc::turn::{ModelRoundAcceptanceWrite, ModelRoundKey};
@@ -61,15 +61,19 @@ pub(in crate::btcc::storage) fn load_acceptance(
             .as_ref()
             .and_then(|v| v.get("statelessInput"))
             .and_then(Value::as_array)
-            .map(|items| Entry {
-                turn_id: row.turn_id,
-                checkpoint_id: row.checkpoint_id,
-                checkpoint_revision: row.checkpoint_revision,
-                acceptance_id: row.acceptance_id,
-                approx_bytes: row.raw.len() * 2 + items.len() * 128,
-                items: items.clone(),
-                chain_len: 1,
+            .map(|items| -> StorageResult<Entry> {
+                Ok(Entry {
+                    turn_id: row.turn_id,
+                    checkpoint_id: row.checkpoint_id,
+                    checkpoint_revision: row.checkpoint_revision,
+                    acceptance_id: row.acceptance_id,
+                    approx_bytes: row.raw.len() * 3 + items.len() * 160,
+                    serialized: item_strings(items)?,
+                    items: items.clone(),
+                    chain_len: 1,
+                })
             })
+            .transpose()?
     };
     if let Some(entry) = entry {
         memo.put(entry);
@@ -267,11 +271,12 @@ fn prepare_payload(
         None
     };
     let base = memo.base(turn, checkpoint, revision).or(cold.as_ref());
+    let serialized = item_strings(&items)?;
     let encoded = base
-        .map(|base| delta::encode(&base.acceptance_id, &base.items, &items))
+        .map(|base| delta::encode(&base.acceptance_id, &base.serialized, &serialized))
         .transpose()?
         .flatten();
-    let approx_bytes = stringify(&Value::Array(items.clone()))?.len() * 2 + items.len() * 128;
+    let approx_bytes = serialized.iter().map(String::len).sum::<usize>() * 3 + items.len() * 160;
     let chain_len = if encoded.is_some() {
         base.map_or(1, |e| e.chain_len + 1)
     } else {
@@ -280,9 +285,6 @@ fn prepare_payload(
     if chain_len > 10_000 {
         return Err(delta::invalid());
     }
-    let encoded = encoded
-        .map(|delta| super::super::common::stringify_record(&delta))
-        .transpose()?;
     let state = u8::from(encoded.is_some());
     if state == 0 {
         normalized
@@ -301,6 +303,7 @@ fn prepare_payload(
             checkpoint_revision: revision,
             acceptance_id: id.into(),
             items,
+            serialized,
             approx_bytes,
             chain_len,
         }),
