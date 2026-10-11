@@ -75,16 +75,24 @@ pub(in crate::gateway) fn serve(
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
-        if let Some(headless) = &state.headless {
-            headless.set_download_port(Arc::new(
-                super::browser_host::downloads::HeadlessDownloads(Arc::downgrade(&state)),
-            ));
-        }
+        browser_ports(&state);
         super::content::spawn(content_listener, state.clone(), shutdown.clone());
         listeners::spawn(listener, state, shutdown)
             .await
             .map_err(std::io::Error::other)?
     })
+}
+
+/// Reader renders and headless downloads go through this gateway.
+fn browser_ports(state: &Arc<HttpState>) {
+    butler_runtime::browser::set_render_port(Arc::new(super::browser_host::reader::ReaderPort(
+        Arc::downgrade(state),
+    )));
+    if let Some(headless) = &state.headless {
+        headless.set_download_port(Arc::new(super::browser_host::downloads::HeadlessDownloads(
+            Arc::downgrade(state),
+        )));
+    }
 }
 
 /// The hidden App host, where the browser without the App may use one.

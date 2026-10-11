@@ -43,7 +43,7 @@ mod validate;
 use super::egress::{ContentOrigin, guard_preview_url, guard_url};
 use browser::Browser;
 pub use install::InstallSource;
-use install::{Installer, Progress};
+use install::Installer;
 pub use render::{Rendered, reader};
 use serde_json::{Value, json};
 use std::{
@@ -170,7 +170,7 @@ impl Headless {
 
     /// Runs one tool-level call, exactly as the App executor answers it.
     pub async fn execute(self: &Arc<Self>, frame: Value) -> Value {
-        self.in_flight.fetch_add(1, Ordering::SeqCst);
+        let _in_flight = lifecycle::InFlight::enter(&self.in_flight);
         let op = frame["op"].as_str().unwrap_or("").to_owned();
         let session = frame["session"].as_str().unwrap_or("").to_owned();
         let mut result = if valid_session(&session) {
@@ -204,7 +204,6 @@ impl Headless {
             }
         }
         self.drain(&op, &session, &mut result);
-        self.in_flight.fetch_sub(1, Ordering::SeqCst);
         result
     }
 
@@ -261,39 +260,6 @@ impl Headless {
             }
             _ => self.tab_call(op, session, frame).await,
         }
-    }
-
-    async fn ready(self: &Arc<Self>) -> Result<Arc<Browser>, Value> {
-        if let Some(browser) = self.browser() {
-            return Ok(browser);
-        }
-        let _start = self.starting.lock().await;
-        if let Some(browser) = self.browser() {
-            return Ok(browser);
-        }
-        let executable = match self.installer.executable_within(INSTALL_WAIT).await {
-            Progress::Ready(path) => path,
-            Progress::Running { received, total } => {
-                return Err(
-                    json!({"status":"unavailable","reason":"browser_installing","progress":{"received":received,"total":total},
-                    "recovery":"The browser is being installed for its first use. Retry browser_open shortly; nothing was opened."}),
-                );
-            }
-            Progress::Failed(reason) => {
-                return Err(json!({"status":"unavailable","reason":reason}));
-            }
-        };
-        let browser = Browser::launch(
-            &executable,
-            &self.config.root,
-            self.config.content,
-            self.downloads.clone(),
-        )
-        .await
-        .map_err(|reason| json!({"status":"unavailable","reason":reason}))?;
-        *self.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(browser.clone());
-        tokio::spawn(lifecycle::janitor(Arc::downgrade(self), browser.clone()));
-        Ok(browser)
     }
 
     async fn open(self: &Arc<Self>, session: &str, args: &Value, deadline_ms: u64) -> Value {

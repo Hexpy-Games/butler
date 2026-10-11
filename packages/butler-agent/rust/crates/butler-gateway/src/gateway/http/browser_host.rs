@@ -6,6 +6,7 @@ mod fill;
 mod hand_back;
 pub(super) mod hidden;
 mod previews;
+pub(super) mod reader;
 mod report;
 pub(super) mod signed_in;
 mod usage;
@@ -119,8 +120,13 @@ pub(super) async fn route(
                 .to_owned();
             fill::credentials(state, &token, &read_json(request).await?).await
         }
-        (&Method::POST, p) if p.starts_with("/internal/browser-host/results/") => {
-            let id = p.trim_start_matches("/internal/browser-host/results/");
+        (&Method::POST, p)
+            if p.starts_with("/internal/browser-host/results/")
+                || p.starts_with("/internal/browser-host/renders/") =>
+        {
+            let id = p
+                .trim_start_matches("/internal/browser-host/results/")
+                .trim_start_matches("/internal/browser-host/renders/");
             let body = read_json(request).await?;
             let sender = state
                 .browser
@@ -297,11 +303,11 @@ fn checked(value: &Value, args: &Value) -> Value {
 }
 
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
-    let limit = if request
-        .uri()
-        .path()
-        .starts_with("/internal/browser-host/results/")
-    {
+    let path = request.uri().path();
+    // A rendered page: up to 8 MiB of HTML, base64 in JSON.
+    let limit = if path.starts_with("/internal/browser-host/renders/") {
+        12 * 1024 * 1024
+    } else if path.starts_with("/internal/browser-host/results/") {
         256 * 1024
     } else {
         64 * 1024

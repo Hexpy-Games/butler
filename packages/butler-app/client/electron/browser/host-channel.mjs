@@ -1,4 +1,5 @@
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
+import { closeReaderRenders, renderReader } from "./reader-render.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
 // `onClosed` (the hidden host): a lost channel ends the host instead of reconnecting.
@@ -24,14 +25,20 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   async function execute(frame) {
     await flushState();
     let result;
-    try { result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" }; }
+    try {
+      result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
+        : frame.op === "reader.render" ? await renderReader(frame.args)
+          : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" };
+    }
     catch (error) {
       // Keep the cause: an executor error is otherwise invisible to diagnosis.
       console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
       result = { status: "unknown", reason: "executor_error" };
     }
     await flushState();
-    await request(`/internal/browser-host/results/${encodeURIComponent(frame.id)}`, {
+    // Rendered pages exceed the result size; they have their own route.
+    const results = frame.op === "reader.render" ? "renders" : "results";
+    await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });
   }
@@ -59,7 +66,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
         }
       }
     } catch { /* Disconnect is an unknown result, never replay a call. */ }
-    finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); }
+    finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); }
     if (running && onClosed) { running = false; onClosed(); }
     else if (running) reconnect = setTimeout(connect, 1000);
   }
@@ -81,6 +88,6 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       revision++;
       if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
     },
-    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); },
+    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
   };
 }
