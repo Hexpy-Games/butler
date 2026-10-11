@@ -29,6 +29,39 @@ The shell supplies the named `conversation` inline-size container for empty-stat
 content. Within AdaptiveShell's `workspace` container, narrow conversation gutters
 and composer insets follow the actual pane width even on desktop.
 
+### Background layer
+
+`background` mounts one layer behind everything in the shell, e.g. a
+`Wallpaper` shared by the new chat and its messages. It paints over the
+shell's `--conversation-bg`, under every child (the shell isolates it), is
+clipped to the shell, is `aria-hidden` and never takes pointer input. It stays
+mounted while the children swap, so the first send neither remounts nor
+recompiles it. Its leading corners follow `--workspace-left-radius`, which is
+0 in a compact conversation (560px or narrower), as on the new chat. Without
+`background` the shell renders exactly as before.
+
+Pair it with `PromptSuggestionList onContentRect` (external-wallpaper mode,
+no `wallpaper`) for the new chat's keep-out, and with
+`MessageListSurface onColumnRect` for the messages'. `onColumnRect` reports
+`{ left, right, top }` in client CSS px: the column's edges (the composer
+shares them) and the conversation's top. It reports once laid out and again
+only when the column or the shell resizes or the window does; never on
+scroll, and never the same value twice.
+
+```tsx
+<ConversationShell composerReserve={reserve} background={<Wallpaper scope="container" source={source} contentRect={keepOut} />}>
+  {empty ? (
+    <ConversationScroll masked={false} scrollable={false}>
+      <PromptSuggestionList title={title} suggestions={suggestions} onContentRect={setPromptRect} />
+    </ConversationScroll>
+  ) : (
+    <ConversationScroll>
+      <MessageListSurface onColumnRect={setColumn}>{rows}</MessageListSurface>
+    </ConversationScroll>
+  )}
+</ConversationShell>
+```
+
 ## Who can use this component
 
 Agents building Butler chat, transcript, or conversation preview surfaces.
@@ -51,4 +84,4 @@ blocks such as `ChromeFrame`, `SurfacePanel`, or `InspectorPanel` instead.
 
 ## Tags
 
-conversation, chat, virtual-list, scroll, composer-reserve
+conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper

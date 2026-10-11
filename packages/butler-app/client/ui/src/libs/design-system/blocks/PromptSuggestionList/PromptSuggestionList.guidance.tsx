@@ -39,7 +39,11 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "New chat suggestions", description: "Each suggestion carries the prompt text that goes into the composer.", render: () => <NewChatSuggestions /> },
-    { name: "New chat over a wallpaper", description: "Pass a WallpaperSource; the block draws it full-screen behind the prompt in the current theme.", render: () => <NewChatOverWallpaper /> },
+    {
+      name: "New chat over a wallpaper",
+      description: "Pass a WallpaperSource; the block draws it full-screen behind the prompt in the current theme. A wallpaper shared with the messages goes in ConversationShell background instead, with onContentRect here.",
+      render: () => <NewChatOverWallpaper />,
+    },
   ],
   doDont: [
     {
