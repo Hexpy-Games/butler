@@ -83,7 +83,9 @@ buffer serves rest and events: DPR ≤ 1.5 within 2.4MP (touch: 1.2MP).
   composer, 30% ink) and `columnRect` (the reading column: ink stays out of
   its width below its top, only a faint tail enters). A column change eases
   over 300 ms (instantly under reduced motion, low power or while hidden).
-  None of them depends on scroll, so scrolling never redraws the print.
+  A keep-out that moves (a scrolling suggestion rail) is picked up at the
+  next keyframe, so scrolling never redraws the print; one that appears or
+  goes redraws at once.
 - Drift modules are not dimmed under reduced motion; their paper follows the
   theme (`--riso-paper`: the lower stop of the light `--conversation-bg`, or
   the night stock).

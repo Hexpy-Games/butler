@@ -109,8 +109,10 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
       controller?.column(columnTarget(), true);
     },
     setContentRect2(rect) {
+      // Like the content rect: a moved composer is picked up at the next keyframe; one appearing or going redraws.
+      const appeared = (contentRect2 === null) !== (rect === null);
       contentRect2 = rect;
-      if (owns()) controller?.refresh();
+      if (appeared && owns()) controller?.refresh();
     },
     event(kind) {
       if (owns()) controller?.event(kind);
