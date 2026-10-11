@@ -1264,7 +1264,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       memory: ["instructions", "chat memory", "profile", "project memory", "reset", "free up space", "storage"],
       general: ["basics", "general settings", "conversation", "smart groups", "sidebar", "default permission"],
       models: ["model settings", "workers", "backup models", "api keys"],
-      appearance: ["theme", "display", "design", "message box", "composer", "conversation background", "overlay"],
+      appearance: ["theme", "display", "design", "message box", "composer", "conversation", "conversation background", "chat background", "overlay"],
       server: ["connection", "project folder"],
       updates: ["upgrade", "new version"],
       mcp: ["tool servers", "external tools"],
