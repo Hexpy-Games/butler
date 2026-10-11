@@ -1,6 +1,7 @@
 import { installFrameLinks } from "./app-frame-links.mjs";
-import { clipboard, ipcMain, Menu, shell } from "electron";
+import { clipboard, ipcMain, shell } from "electron";
 import { defaultBrowserName } from "../butler-platform/default-browser.mjs";
+import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
 
 /** All App web links open a focused user-owned tab, including window.open. */
@@ -37,22 +38,17 @@ export async function linkMenuItems(browser, value, source) {
 
 /** Link-only ingress; it grants no App APIs to output/preview frames. */
 export function installAppLinks(win, browser) {
-  const menu = async (url, point) => {
+  const menu = async (url, point, fromDom = false) => {
     const items = await linkMenuItems(browser, url);
-    if (items.length && !win.isDestroyed()) Menu.buildFromTemplate(items.slice(0, -1)).popup({ window: win, ...menuPoint(point) });
+    if (items.length && !win.isDestroyed()) await popupMenu(win, items.slice(0, -1), menuPoint(win.webContents, point, undefined, fromDom));
   };
   const receive = (event, op, url, point) => {
     if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame || !webUrl(url)) return;
     if (op === "open") void openLink(browser, url).catch(() => {});
-    if (op === "menu") void menu(url, point);
+    if (op === "menu") void menu(url, point, true);
   };
   ipcMain.on("butler-app:link", receive);
   win.once("closed", () => ipcMain.removeListener("butler-app:link", receive));
   win.webContents.on("context-menu", (_event, params) => { if (params.linkURL) void menu(params.linkURL, params); });
   installFrameLinks(win.webContents);
-}
-
-function menuPoint(point) {
-  return Number.isFinite(point?.x) && Number.isFinite(point?.y)
-    ? { x: Math.round(point.x), y: Math.round(point.y) } : {};
 }

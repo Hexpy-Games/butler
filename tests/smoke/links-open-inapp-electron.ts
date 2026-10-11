@@ -1,9 +1,11 @@
 // test-category: race
 /** Real App link ingress and both native menus; external opens are stubbed. */
 import { strict as assert } from "node:assert";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
+import { tmpdir } from "node:os";
+import { captureLinkMenu, compileMenuInspector, nativeMenuBounds } from "../../packages/butler-app/client/electron/butler-platform/link-menu-smoke-capture.mjs";
 import { shellReady } from "../support/browser-shell-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
@@ -15,12 +17,16 @@ let app: Awaited<ReturnType<typeof browserAgentApp>> | undefined;
 type State = { activeId: string; tabs: Array<{ id: string; owner: string; url: string }> };
 const facts: unknown[] = [];
 const captureErrors: string[] = [];
+const captureDir = mkdtempSync(join(tmpdir(), "link-menu-capture-"));
 try {
+  const inspector = compileMenuInspector(captureDir);
   app = await browserAgentApp(evidence, () => null, undefined, { config: { language: "ko" }, stubReply: () => `[테스트 링크](${fixture.url.href})` });
   const a = app;
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
   const electron = `${module}('electron')`;
   await shellReady(a, "ko");
+  const display = await a.main<{ bounds:{ x:number;y:number;width:number;height:number };scaleFactor:number }>(`${electron}.screen.getPrimaryDisplay()`);
+  await a.main(`${a.win}.setPosition(${display.bounds.x+Math.round((display.bounds.width-1440)/2)},${display.bounds.y+Math.round((display.bounds.height-900)/2)})`);
   await a.main(`(()=>{const e=${electron};globalThis.externalLinks=[];e.shell.openExternal=async url=>{globalThis.externalLinks.push(url)};globalThis.linkMenus=[];
     const build=e.Menu.buildFromTemplate;e.Menu.buildFromTemplate=function(items){const menu=build.call(this,items);globalThis.linkMenus.push(menu);return menu};})()`);
   const name = await a.main<string>(`${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/butler-platform/default-browser.mjs"))}).defaultBrowserName('ko')`);
@@ -41,43 +47,74 @@ try {
   assert.deepEqual(await a.main("globalThis.externalLinks"), []);
   facts.push({ chatClick: "passed", tab, owner: "mine" });
 
-  async function menu(context: "app" | "page", theme: "light" | "dark") {
-    await a.main(`${electron}.nativeTheme.themeSource=${JSON.stringify(theme)};globalThis.linkMenus=[]`);
+  async function menu(context: "app" | "page", theme: "light" | "dark", zoom = 1, edge = false) {
+    const suffix = zoom === 1 && !edge ? "" : `-${edge ? "edge" : "zoom"}`;
+    await a.main(`${electron}.app.focus({steal:true});${a.win}.show();${a.win}.focus();${a.win}.moveTop();${electron}.nativeTheme.themeSource=${JSON.stringify(theme)};globalThis.linkMenus=[]`);
     await a.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
+    let click: { x:number;y:number };
     if (context === "app") {
       await a.click("일반");
       await waitBrowser(() => a.page.expression(`Boolean(document.querySelector(${JSON.stringify(chatLink)}))`), "chat link visible");
-      const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(chatLink)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
-      await a.main(`${a.win}.webContents.sendInputEvent({type:'mouseDown',button:'right',clickCount:1,x:${Math.round(point.x)},y:${Math.round(point.y)}});${a.win}.webContents.sendInputEvent({type:'mouseUp',button:'right',clickCount:1,x:${Math.round(point.x)},y:${Math.round(point.y)}})`);
+      await a.main(`${a.win}.webContents.setZoomFactor(${zoom})`);
+      await waitBrowser(() => a.page.expression(`Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01`), "App zoom applied");
+      if (edge) await a.page.expression(`Object.assign(document.querySelector(${JSON.stringify(chatLink)}).style,{position:'fixed',right:'16px',bottom:'16px',zIndex:'9999'})`);
+      const point = await a.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(chatLink)}).getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()`);
+      click = { x:point.x*zoom, y:point.y*zoom };
+      await a.page.rightClick(click.x, click.y);
     } else {
       await a.click("브라우저"); await a.call("activate", { id: tab });
-      await nativeClick("#plain", "right");
+      await a.main(`${contents}.setZoomFactor(${zoom})`);
+      await waitBrowser(() => a.main(`${contents}.executeJavaScript('Math.abs(devicePixelRatio-${display.scaleFactor*zoom})<0.01')`), "page zoom applied");
+      if (edge) await a.main(`${contents}.executeJavaScript("Object.assign(document.querySelector('#plain').style,{position:'fixed',right:'16px',bottom:'16px'})")`);
+      const point = await a.main<{ x:number;y:number }>(`${contents}.executeJavaScript("(()=>{const r=document.querySelector('#plain').getBoundingClientRect();return {x:r.right-2,y:r.y+r.height/2}})()")`);
+      const offset = await a.main<{ x:number;y:number }>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.getBounds()`);
+      click = { x:offset.x+point.x*zoom, y:offset.y+point.y*zoom };
+      // Reuse the App's attached CDP debugger instead of competing for a second session.
+      await a.main(`(()=>{const c=${contents};if(!c.debugger.isAttached())c.debugger.attach('1.3');
+        globalThis.linkInputError=null;
+        globalThis.linkInput=Promise.all(['mouseMoved','mousePressed','mouseReleased'].map(type=>c.debugger.sendCommand('Input.dispatchMouseEvent',
+          {type,x:${point.x*zoom},y:${point.y*zoom},button:type==='mouseMoved'?'none':'right',buttons:type==='mousePressed'?2:0,clickCount:1})))
+          .catch(error=>{globalThis.linkInputError=String(error)})})()`);
     }
     await waitBrowser(() => a.main("globalThis.linkMenus.length>0"), "native link menu");
     const labels = await a.main<string[]>("globalThis.linkMenus.at(-1).items.map(i=>i.label)");
     assert.ok(labels.includes(label), JSON.stringify(labels));
     assert.ok(labels.includes("링크 복사"));
     const bounds = await a.main<{ x: number; y: number; width: number; height: number }>(`${a.win}.getBounds()`);
-    const path = join(evidence, `ko-${theme}-${context}-menu.png`);
-    if (!captureErrors.length) {
-      try {
-        if (process.env.BUTLER_LINK_MENU_CAPTURE_EXTERNAL === "1") {
-          writeFileSync(join(evidence, "capture-request.json"), JSON.stringify({ path, context, theme, bounds }));
-          await waitBrowser(async () => existsSync(path), "external native menu screenshot");
-        } else await a.main(`${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/butler-platform/link-menu-smoke-capture.mjs"))}).captureLinkMenu(${JSON.stringify(bounds)},${JSON.stringify(path)})`);
-      } catch (error) { captureErrors.push(String(error)); }
-    }
+    const pid = await a.main<number>("process.pid");
+    let menuBounds!: { x:number;y:number;width:number;height:number };
+    await waitBrowser(async () => {
+      try { menuBounds = nativeMenuBounds(pid, inspector); return true; } catch { return false; }
+    }, "native menu painted");
+    const local = { x:menuBounds.x-bounds.x, y:menuBounds.y-bounds.y, width:menuBounds.width, height:menuBounds.height };
+    const distance = Math.hypot(Math.max(local.x-click!.x, click!.x-local.x-local.width, 0), Math.max(local.y-click!.y, click!.y-local.y-local.height, 0));
+    assert.ok(distance <= 24, `Menu is ${distance}px from right-click: ${JSON.stringify({ click, local })}`);
+    assert.ok(local.x >= 0 && local.y >= 0 && local.x+local.width <= bounds.width && local.y+local.height <= bounds.height, JSON.stringify({ local, bounds }));
+    writeFileSync(join(evidence, `ko-${theme}-${context}${suffix}-geometry.json`), JSON.stringify({ click, menu:local, distance, window:bounds, zoom, edge }));
+    const path = join(evidence, `ko-${theme}-${context}${suffix}-menu.png`);
+    if (!captureErrors.length) try { captureLinkMenu(bounds, path); }
+    catch (error) { captureErrors.push(String(error)); }
     await a.main(`(()=>{const m=globalThis.linkMenus.at(-1);m.items.find(i=>i.label===${JSON.stringify(label)}).click();m.closePopup(${a.win})})()`);
+    await waitBrowser(async () => {
+      try { nativeMenuBounds(pid, inspector); return false; } catch { return true; }
+    }, "native menu closed");
+    if (context === "page") assert.equal(await a.main("globalThis.linkInput.then(()=>globalThis.linkInputError)"), null, "CDP right-click completed");
     await waitBrowser(() => a.main("globalThis.externalLinks.length>0"), "stub external path invoked");
     const opened = await a.main<string>("globalThis.externalLinks.pop()");
     assert.equal(opened, context === "app" ? fixture.url.href : new URL("/next", fixture.url).href);
-    facts.push({ context, theme, labels, externalOpen: "stubbed" });
+    await a.main(`${a.win}.webContents.setZoomFactor(1);${contents}.setZoomFactor(1)`);
+    if (edge) await (context === "app" ? a.page.expression(`document.querySelector(${JSON.stringify(chatLink)}).removeAttribute('style')`) : a.main(`${contents}.executeJavaScript("document.querySelector('#plain').removeAttribute('style')")`));
+    facts.push({ context, theme, zoom, edge, labels, distance, externalOpen: "stubbed" });
   }
   async function nativeClick(selector: string, button = "left", modifiers: string[] = []) {
     const point = await a.main<{ x: number; y: number }>(`${contents}.executeJavaScript(${JSON.stringify(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)})`);
     await a.main(`${contents}.sendInputEvent(${JSON.stringify({ type: "mouseDown", ...point, button, clickCount: 1, modifiers })});${contents}.sendInputEvent(${JSON.stringify({ type: "mouseUp", ...point, button, clickCount: 1, modifiers })})`);
   }
   for (const theme of ["light", "dark"] as const) for (const context of ["app", "page"] as const) await menu(context, theme);
+  for (const context of ["app", "page"] as const) {
+    await menu(context, "light", 1.25);
+    await menu(context, "dark", 1.25, true);
+  }
   const modifier = await a.main<string>(`${module}(${JSON.stringify(resolve("packages/butler-app/client/electron/butler-platform/browser-shortcuts.mjs"))}).newTabModifier()`);
   for (const [selector, button, modifiers] of [["#blank", "left", []], ["#plain", "middle", []], ["#plain", "left", [modifier]]] as const) {
     await a.call("activate", { id: tab });
@@ -130,4 +167,4 @@ try {
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), facts, lastMain: app?.lastMain(), frames: await app?.main(`${app.win}.webContents.mainFrame.framesInSubtree.map(f=>({url:f.url,name:f.name}))`).catch(()=>null) }, null, 2));
   throw error;
-} finally { fixture.stop(true); await app?.stop(); }
+} finally { fixture.stop(true); await app?.stop(); rmSync(captureDir, { recursive:true, force:true }); }
