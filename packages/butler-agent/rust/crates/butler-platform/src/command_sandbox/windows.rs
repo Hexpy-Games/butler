@@ -83,8 +83,8 @@ pub(super) fn legacy_shell(
     let modules = default_modules(environment);
     let shell_started = phase_marker("script_started");
     let modules_ready = phase_marker("modules_ready");
-    // Keep the extended prefix when PowerShell expands the admitted short CWD.
-    // Its .NET file APIs must receive it too, independently of machine policy.
+    // Enter the admitted short CWD with process-local .NET path compatibility.
+    // Leave provider drive semantics intact, independently of machine policy.
     let paths = include_str!("windows/paths.ps1");
     let script = format!(
         "{shell_started}[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{modules_ready}{paths}{command}"
