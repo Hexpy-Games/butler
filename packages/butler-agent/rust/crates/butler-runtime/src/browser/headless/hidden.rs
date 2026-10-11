@@ -200,7 +200,7 @@ impl HiddenPage {
             .shared
             .with_tab(&self.page.tab, |t| {
                 if dom {
-                    t.dom_ready.subscribe()
+                    t.parsed.subscribe()
                 } else {
                     t.loads.subscribe()
                 }

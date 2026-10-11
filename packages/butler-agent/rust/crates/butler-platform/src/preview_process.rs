@@ -129,7 +129,6 @@ fn prepare(text: &str, cwd: &Path) -> io::Result<std::process::Command> {
         command_sandbox::login_shell(text, command_sandbox::ShellAccess::Full, &environment)
             .map_err(io::Error::other)?;
     let mut command = std::process::Command::new(&invocation.program);
-    command_sandbox::add_arguments(&mut command, &invocation);
     command
         .current_dir(command_sandbox::working_directory(cwd)?)
         .env_clear()
@@ -137,6 +136,7 @@ fn prepare(text: &str, cwd: &Path) -> io::Result<std::process::Command> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    command_sandbox::add_arguments(&mut command, &invocation);
     process_control::hide_console(&mut command);
     if process_control::isolate_group(&mut command).is_none() {
         return Err(io::Error::other("Process containment unavailable"));

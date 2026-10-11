@@ -12,6 +12,8 @@ mod composer_decoration;
 mod controls;
 mod conversation_background;
 mod default_model;
+mod diagnostics_reader;
+pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
 mod persistence;

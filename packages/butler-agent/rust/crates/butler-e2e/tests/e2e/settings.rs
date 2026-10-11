@@ -14,6 +14,9 @@ use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::{Value, json};
 
+#[path = "settings/diagnostics_reader.rs"]
+mod diagnostics_reader;
+
 fn controls(turn: &Value) -> (&str, &str) {
     (
         turn["execution_controls"]["model_ref"]

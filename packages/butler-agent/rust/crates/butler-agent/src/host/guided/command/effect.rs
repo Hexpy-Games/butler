@@ -217,6 +217,28 @@ impl CommandEffectAdapter {
                 })?;
             return Ok(AdapterOutcome::Applied(result));
         }
+        if let Some(rejected) = self
+            .observation
+            .check_paths(
+                args,
+                &CommandScope {
+                    workspace_reference: None,
+                    workspace_path: &self.workspace,
+                    butler_data: &self.butler_data,
+                    execution: super::CommandExecution::Registered,
+                    contained_reads: false,
+                    abort: signal.clone(),
+                    allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
+                    installation_root: self.installation_root.as_deref(),
+                },
+            )
+            .await
+            .map_err(|error| {
+                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
+            })?
+        {
+            return Ok(AdapterOutcome::Applied(rejected));
+        }
         self.run_mutation(args, command, signal).await
     }
 

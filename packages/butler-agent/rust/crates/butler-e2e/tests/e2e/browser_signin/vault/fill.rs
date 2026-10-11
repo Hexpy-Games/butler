@@ -1,4 +1,4 @@
-//! Card and traveler fills with the system keychain: a top-level origin that
+//! Card and autofill fills with the system keychain: a top-level origin that
 //! is not the tab's is refused before any token, a frame outside the binding
 //! burns the token without values, the right origins get the values exactly
 //! once, and nothing but masked metadata leaves the vault.
@@ -32,7 +32,7 @@ async fn vault_fill_is_bound_to_exact_origins_single_use_and_masked() -> Result<
         400,
         "Luhn"
     );
-    let card = json!({"nickname": "Travel card", "number": CARD, "exp_month": 12, "exp_year": 30, "cvc": "737",
+    let card = json!({"nickname": "Everyday card", "number": CARD, "exp_month": 12, "exp_year": 30, "cvc": "737",
         "holder_name": "HONG GILDONG", "pin2": "12", "owner_id": "900101"});
     let added = admin
         .send(Method::POST, "/security/vault/cards", Some(card), &[])
@@ -66,19 +66,21 @@ async fn vault_fill_is_bound_to_exact_origins_single_use_and_masked() -> Result<
         .await?;
     assert_eq!(reveal.status, 403, "{}", reveal.text);
     assert!(!reveal.text.contains(CANARY));
-    let traveler = json!({"nickname": "Me", "name": "홍길동", "gender": "M", "nationality": "KR",
+    let autofill = json!({"nickname": "Me", "name": "홍길동", "gender": "M", "nationality": "KR", "email": "self@example.test", "phone": "+82 10 1234 5678",
+        "country": "KR", "postal_code": "12345", "region": "Seoul", "city": "Seoul", "address_line1": "12 Sample Street",
+        "passport_expiry": "2030-12-31", "issuing_country": "KR",
         "birth_date": "1990-01-01", "passport_number": "M12345678", "rrn": "900101-1234567"});
     let saved = admin
         .send(
             Method::POST,
-            "/security/vault/travelers",
-            Some(traveler),
+            "/security/vault/profiles",
+            Some(autofill),
             &[],
         )
         .await?;
     assert_eq!(saved.status, 200, "{}", saved.text);
-    let traveler_id = saved.data()["id"].as_str().unwrap().to_owned();
-    cleanup.track("travelers", &traveler_id);
+    let autofill_id = saved.data()["id"].as_str().unwrap().to_owned();
+    cleanup.track("profiles", &autofill_id);
 
     let pulls = Arc::new(Mutex::new(Vec::<(u16, String)>::new()));
     let script = Arc::new(Mutex::new(Vec::<&'static str>::new()));
@@ -88,6 +90,8 @@ async fn vault_fill_is_bound_to_exact_origins_single_use_and_masked() -> Result<
     assert_eq!(looked["site"], "fixture-shop.test", "{looked}");
     assert_eq!(looked["cards"][0]["last4"], "5556");
     assert_eq!(looked["cards"][0]["allowed"], false);
+    assert!(looked["profiles"][0].get("details").is_none());
+    assert!(!looked.to_string().contains("self@example.test"));
     assert!(!looked.to_string().contains(CANARY) && !looked.to_string().contains(RRN));
     let fill = |top: &str| json!({"item_id": card_id, "top_origin": top, "frame_origins": [PAY]});
 
@@ -143,17 +147,21 @@ async fn vault_fill_is_bound_to_exact_origins_single_use_and_masked() -> Result<
     assert_eq!(sent["args"]["frame_origins"], json!([PAY]));
     assert_eq!(sent["args"]["meta"]["exp_month"], 12);
 
-    // Traveler details pull the same way; the resident number never reaches a result.
-    script.lock().unwrap().push("traveler");
+    // Profile details pull the same way; the resident number never reaches a result.
+    script.lock().unwrap().push("profile");
     let filled = call(
         &admin,
         "general",
-        "traveler.fill",
+        "autofill.fill",
         "t1",
-        json!({"item_id": traveler_id, "top_origin": TOP, "frame_origins": []}),
+        json!({"item_id": autofill_id, "top_origin": TOP, "frame_origins": [], "targets": [{"ref":"f0-e1","field":"full_name"},{"ref":"f0-e2","field":"country"},{"ref":"f0-e3","field":"passport_number"},{"ref":"f0-e4","field":"passport_expiry"}]}),
     )
     .await?;
     assert_eq!(filled["status"], "filled", "{filled}");
+    assert_eq!(
+        filled["filled"],
+        json!(["full_name", "country", "passport_number", "passport_expiry"])
+    );
     let last = pulls.lock().unwrap().last().cloned().unwrap();
     assert_eq!(last.0, 200);
     assert!(
@@ -175,7 +183,7 @@ async fn vault_fill_is_bound_to_exact_origins_single_use_and_masked() -> Result<
     for text in [view.text.clone(), s.gw.get("/events?limit=500").await?.text] {
         assert!(!text.contains(CANARY) && !text.contains(RRN));
     }
-    for (kind, id) in [("cards", &card_id), ("travelers", &traveler_id)] {
+    for (kind, id) in [("cards", &card_id), ("profiles", &autofill_id)] {
         let deleted = admin
             .send(
                 Method::DELETE,
@@ -206,7 +214,7 @@ fn responder(
 ) -> super::super::host::Respond {
     Arc::new(move |frame: Value| {
         let (admin, pulls) = (admin.clone(), pulls.clone());
-        let fills = matches!(frame["op"].as_str(), Some("pay.fill" | "traveler.fill"));
+        let fills = matches!(frame["op"].as_str(), Some("pay.fill" | "autofill.fill"));
         let case = if fills {
             script.lock().unwrap().pop()
         } else {
@@ -249,9 +257,9 @@ fn responder(
                     pull(json!([TOP, PAY])).await;
                     json!({"status":"user_required","reason":"secure_keypad","url":CHECKOUT,"frame_origin":PAY,"filled":["number"],"missing":["pin2"]})
                 }
-                Some("traveler") => {
+                Some("profile") => {
                     pull(json!([TOP])).await;
-                    json!({"status":"filled","url":CHECKOUT,"filled":["full_name","rrn"]})
+                    json!({"status":"filled","url":CHECKOUT,"filled":["full_name","country","passport_number","passport_expiry"]})
                 }
                 _ => json!({"status":"ok","tab":frame["tab"],"url":CHECKOUT}),
             }

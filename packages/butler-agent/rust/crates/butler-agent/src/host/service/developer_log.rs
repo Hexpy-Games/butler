@@ -16,18 +16,17 @@ use butler_runtime::operations::{
 use crate::host::ResolvedInstallation;
 
 struct Settings {
-    database_path: PathBuf,
+    reader: butler_gateway::gateway::DiagnosticsSettingsReader,
 }
 
 impl DeveloperDiagnosticsSettingsPort for Settings {
     fn enabled(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>> {
-        let database_path = self.database_path.clone();
+        let timing = crate::host::guided::command::timing::CommandTiming::new("developer_settings");
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                butler_gateway::gateway::diagnostics_enabled_readonly(&database_path)
-            })
-            .await
-            .unwrap_or(false)
+            timing.mark("before_read");
+            let enabled = self.reader.enabled().await;
+            timing.mark(if enabled { "enabled" } else { "disabled" });
+            enabled
         })
     }
 }
@@ -81,13 +80,20 @@ pub(in crate::host) fn capture(
     data_root: PathBuf,
     database_path: PathBuf,
     installation: ResolvedInstallation,
-) -> Arc<OperationsDeveloperLogCapture> {
+) -> io::Result<(
+    Arc<OperationsDeveloperLogCapture>,
+    butler_gateway::gateway::DiagnosticsSettingsReader,
+)> {
+    let reader = butler_gateway::gateway::DiagnosticsSettingsReader::new(database_path)?;
     let authority = Arc::new(WriteAuthority {
         data_root: data_root.clone(),
         installation,
     });
-    Arc::new(OperationsDeveloperLogCapture::new(
+    let capture = Arc::new(OperationsDeveloperLogCapture::new(
         Arc::new(DeveloperLogStore::new(data_root, authority)),
-        Arc::new(Settings { database_path }),
-    ))
+        Arc::new(Settings {
+            reader: reader.clone(),
+        }),
+    ));
+    Ok((capture, reader))
 }

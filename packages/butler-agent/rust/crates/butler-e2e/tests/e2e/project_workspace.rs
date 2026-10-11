@@ -184,7 +184,20 @@ async fn approve_write(
             .filter(|i| i["type"] == "function_call_output")
             .collect::<Vec<_>>()
     );
-    assert_eq!(fs::read_to_string(file)?.trim_end(), expected);
+    let bytes = fs::read(file)?;
+    let content = if let Some(utf16) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        assert_eq!(utf16.len() % 2, 0, "incomplete UTF-16 marker");
+        let units = utf16
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect::<Vec<_>>();
+        String::from_utf16(&units).unwrap()
+    } else {
+        String::from_utf8(bytes).unwrap()
+    };
+    assert_eq!(content.trim_end(), expected);
     Ok(())
 }
 

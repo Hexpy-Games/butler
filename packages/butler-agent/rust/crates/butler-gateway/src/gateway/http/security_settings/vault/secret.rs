@@ -8,8 +8,8 @@ use zeroize::Zeroizing;
 /// first two digits of the card PIN and the owner's birth date (or business
 /// number).
 pub(in crate::gateway::http) const CARD_FIELDS: &[&str] = &["number", "cvc", "pin2", "owner_id"];
-/// Traveler secrets.
-pub(in crate::gateway::http) const TRAVELER_FIELDS: &[&str] =
+/// Profile secrets.
+pub(in crate::gateway::http) const AUTOFILL_FIELDS: &[&str] =
     &["birth_date", "passport_number", "rrn"];
 
 #[derive(Default)]

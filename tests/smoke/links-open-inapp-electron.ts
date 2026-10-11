@@ -80,6 +80,13 @@ try {
     const labels = await a.main<string[]>("globalThis.linkMenus.at(-1).items.map(i=>i.label)");
     assert.ok(labels.includes(label), JSON.stringify(labels));
     assert.ok(labels.includes("링크 복사"));
+    assert.ok(labels.includes(context === "app" ? "버틀러에서 열기" : "새 탭에서 열기"), JSON.stringify(labels));
+    if (context === "page") {
+      assert.ok(labels.includes("복사") && labels.includes("모두 선택"), JSON.stringify(labels));
+      assert.deepEqual(await a.main("globalThis.linkMenus.at(-1).items.filter(i=>i.role).map(i=>({role:i.role,label:i.label}))"), [
+        { role: "copy", label: "복사" }, { role: "selectAll", label: "모두 선택" },
+      ]);
+    }
     const bounds = await a.main<{ x: number; y: number; width: number; height: number }>(`${a.win}.getBounds()`);
     const pid = await a.main<number>("process.pid");
     let menuBounds!: { x:number;y:number;width:number;height:number };

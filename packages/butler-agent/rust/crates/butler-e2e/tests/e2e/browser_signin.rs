@@ -9,6 +9,7 @@
     reason = "test assertions"
 )]
 mod fill;
+mod history_import;
 mod host;
 mod import;
 mod import_export;

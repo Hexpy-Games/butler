@@ -16,6 +16,8 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    let timing = (call.name == ToolName::RunCommand)
+        .then(|| super::super::command::timing::CommandTiming::new("handler"));
     owner
         .same_turn(invocation)
         .map_err(ToolExecutionError::Integrity)?;
@@ -116,7 +118,13 @@ pub(super) async fn execute(
     if record.is_none() {
         start(owner, call, &call_id, &effective_name, &presentation_args).await?;
     }
+    if let Some(timing) = &timing {
+        timing.mark("before_dispatch");
+    }
     let result = dispatch_result(owner, invocation, call, &call_id).await?;
+    if let Some(timing) = &timing {
+        timing.mark("result_returned");
+    }
     super::discovery::remember_described(owner, call, &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.
@@ -124,6 +132,16 @@ pub(super) async fn execute(
         // completed tool-journal result before a decision exists.
         return Ok(result);
     }
+    complete(owner, invocation, call, call_id, result).await
+}
+
+async fn complete(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: String,
+    result: JsonDocument,
+) -> Result<JsonDocument, ToolExecutionError> {
     if invocation.cancellation.is_cancelled() {
         owner
             .journal

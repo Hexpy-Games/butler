@@ -7,6 +7,7 @@ pub(in crate::gateway::application) fn create(db: &Connection) -> Result<(), App
         visited_at INTEGER NOT NULL, transition TEXT NOT NULL, tab_kind TEXT NOT NULL,
         conversation_id TEXT, butler_driven INTEGER NOT NULL, source TEXT NOT NULL,
         UNIQUE(url,visited_at));
+        CREATE INDEX IF NOT EXISTS browser_history_source ON browser_history(source);
         CREATE INDEX IF NOT EXISTS browser_history_time ON browser_history(visited_at DESC,id DESC);
         CREATE INDEX IF NOT EXISTS browser_history_driven_time ON browser_history(butler_driven,visited_at DESC,id DESC);
         CREATE INDEX IF NOT EXISTS browser_history_url_time ON browser_history(url,visited_at DESC,id DESC);

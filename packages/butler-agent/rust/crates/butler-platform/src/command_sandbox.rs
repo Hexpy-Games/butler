@@ -69,7 +69,7 @@ pub fn copy_command_helper(source: &Path, destination: &Path) -> std::io::Result
 }
 
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
-/// runs them in `cmd.exe`, whose syntax differs.
+/// runs them in Windows PowerShell 5.1, whose syntax differs.
 pub const POSIX_SHELL: bool = shell::POSIX;
 
 /// A program and its arguments.
@@ -119,7 +119,8 @@ pub enum Protection {
 }
 
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
-/// on Unix and `%ComSpec% /d /s /c` on Windows (read from `environment`).
+/// on Unix and Windows PowerShell 5.1 on Windows. Explicit `cmd /c` scripts
+/// use `%ComSpec% /d /s /c` (read from `environment`).
 /// Read-only commands run inside the host sandbox, and hosts without one
 /// refuse them.
 pub fn login_shell(
@@ -154,6 +155,8 @@ pub fn login_shell_contained(
 /// one pair of quotes: `cmd` does not undo the `\"` escaping that
 /// `Command::arg` applies, so a command containing quotes would reach it
 /// mangled.
+/// Configure the environment and working directory first; PowerShell also
+/// restores its provider location to that same admitted directory.
 pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     shell::add_arguments(command, invocation);
 }

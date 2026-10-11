@@ -57,16 +57,17 @@ const SECURITY_ROUTES = Object.freeze({
   chooseBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/file", payload: true },
   deleteBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/delete", payload: true },
   cancelBrowserPasswordExport: { method: "POST", path: "/security/browser-import/export/cancel", payload: true },
-  // Payment methods and traveler details: card and identity numbers pass through main to the Agent's keychain store only.
+  // Payment methods and autofill details: card and identity numbers pass through main to the Agent's keychain store only.
   listVault: { method: "GET", path: "/security/vault" },
   addCard: { method: "POST", path: "/security/vault/cards", payload: true },
-  addTraveler: { method: "POST", path: "/security/vault/travelers", payload: true },
+  addProfile: { method: "POST", path: "/security/vault/profiles", payload: true },
   updateCard: { method: "PATCH", path: "/security/vault/cards", entry: true, payload: true },
-  updateTraveler: { method: "PATCH", path: "/security/vault/travelers", entry: true, payload: true },
+  updateProfile: { method: "PATCH", path: "/security/vault/profiles", entry: true, payload: true },
   deleteCard: { method: "DELETE", path: "/security/vault/cards", entry: true },
-  deleteTraveler: { method: "DELETE", path: "/security/vault/travelers", entry: true },
+  deleteProfile: { method: "DELETE", path: "/security/vault/profiles", entry: true },
   setCardSite: { method: "POST", path: "/security/vault/cards", entry: true, suffix: "/sites", payload: true },
-  setTravelerSite: { method: "POST", path: "/security/vault/travelers", entry: true, suffix: "/sites", payload: true },
+  setProfileSite: { method: "POST", path: "/security/vault/profiles", entry: true, suffix: "/sites", payload: true },
+  revealProfile: { method: "POST", path: "/security/vault/profiles", entry: true, suffix: "/reveal", payload: true },
   revealCard: { method: "POST", path: "/security/vault/cards", entry: true, suffix: "/reveal", payload: true },
   setPurchaseSite: { method: "POST", path: "/security/vault/purchase-sites", payload: true },
 });

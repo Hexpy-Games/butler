@@ -83,6 +83,9 @@ pub(super) fn guard(
     {
         return Some(value);
     }
+    if !trusted && let Some(value) = native_paths(command, cwd, workspace, data, home) {
+        return Some(value);
+    }
     let write = write_candidates(command);
     if let Some(value) =
         first_protected(write.iter().map(String::as_str), cwd, workspace, data, home)
@@ -114,6 +117,28 @@ pub(super) fn guard(
         }
     }
     None
+}
+
+// Regex write hints alone do not cover cmdlets and alias parameter syntax.
+fn native_paths(
+    command: &str,
+    cwd: &Path,
+    workspace: &Path,
+    data: &Path,
+    home: Option<&Path>,
+) -> Option<Value> {
+    let paths = butler_platform::command_sandbox::path_tokens(command);
+    let normalized: Vec<_> = paths
+        .iter()
+        .map(|path| butler_platform::command_sandbox::normalize_path_token(path))
+        .collect();
+    first_protected(
+        normalized.iter().map(String::as_str),
+        cwd,
+        workspace,
+        data,
+        home,
+    )
 }
 
 fn write_candidates(command: &str) -> Vec<String> {

@@ -223,14 +223,14 @@
       "definition": {
         "type": "function",
         "name": "run_command",
-        "description": "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+        "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "command": {
               "type": "string",
-              "description": "Non-interactive command; prefer cross-platform executables, explicit arguments, and focused output."
+              "description": "Non-interactive shell text: POSIX shell syntax on macOS/Linux; Windows PowerShell 5.1 on Windows. Use cmd /c explicitly for cmd syntax. Prefer explicit arguments and focused output."
             },
             "summary": {
               "type": "string",
@@ -5851,7 +5851,7 @@
       "definition": {
         "type": "function",
         "name": "browser_act",
-        "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call (e.g. click a field, type, press Enter). Set observe:true to receive the settled post-batch observation (screenshot, refs, fields) in this result; act on its new observation id next. Targets: each pointer step uses exactly one of ref or point. Prefer refs. A point is [x,y] in the observation screenshot (bounded by image_geometry) with expect naming the observed role and name (\"button Search\"), \"canvas\" for a drawing surface, or the role listed for a Graphical target (\"element icon\"); never invent roles. A point that hits something else is refused with the actual hit before anything is dispatched. Pointer actions: click (button left|right|middle; click_count 2 or 3), fill (replace a field's text), select (an option value), scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag (ref with target_ref or offset; point with target_point, optional path of up to 24 intermediate points drawn with the button held). modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. Keyboard actions take no target and go to the focused element: press one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Control+Z\"); type inserts text at the focus without clearing it. wait pauses 50–5000 ms. back, forward and reload navigate the tab and must be the batch's last step. upload clicks the page's upload control (ref or point) and gives its file chooser one workspace file (value: path relative to the workspace); the owner always confirms uploads. Fill one autocomplete field as a batch's last step and look at its suggestions; the batch that picks one may continue with further fields (a step whose target changed meanwhile is refused, never misdirected). Filling text does not commit a suggestion. blocked_by means a popup covers the target: use blocker.controls to select or dismiss it, observe, then retry. Secure fields (passwords, cards, keypads) need the user's takeover. On a canvas a hit test confirms only the surface; check fresh pixels for the result. Use only native input, never injected scripts or generated image data.",
+        "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call (e.g. click a field, type, press Enter). Set observe:true to receive the settled post-batch observation (screenshot, refs, fields) in this result; act on its new observation id next. Targets: each pointer step uses exactly one of ref or point. Prefer refs. A point is [x,y] in the observation screenshot (bounded by image_geometry) with expect naming the observed role and name (\"button Search\"), \"canvas\" for a drawing surface, or the role listed for a Graphical target (\"element icon\"); never invent roles. A point that hits something else is refused with the actual hit before anything is dispatched. Pointer actions: click (button left|right|middle; click_count 2 or 3), fill (replace a field's text), select (an option value), scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag (ref with target_ref or offset; point with target_point, optional path of up to 24 intermediate points drawn with the button held). modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. Keyboard actions take no target and go to the focused element: press one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Control+Z\"); type inserts text at the focus without clearing it. wait pauses 50–5000 ms. back, forward and reload navigate the tab and must be the batch's last step. upload clicks the page's upload control (ref or point) and gives its file chooser one workspace file (value: path relative to the workspace); the owner always confirms uploads. Fill one autocomplete field as a batch's last step and look at its suggestions; the batch that picks one may continue with further fields (a step whose target changed meanwhile is refused, never misdirected). Filling text does not commit a suggestion. blocked_by means a popup covers the target: use blocker.controls to select or dismiss it, observe, then retry. On cookie or consent prompts, pick the most privacy-preserving choice (reject non-essential) without asking. Set commits:true on a step that commits something for the user; ordinary browsing never does. Secure fields (passwords, cards, keypads) need the user's takeover. On a canvas a hit test confirms only the surface; check fresh pixels for the result. Use only native input, never injected scripts or generated image data.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5978,6 +5978,10 @@
                       "maxItems": 2
                     },
                     "description": "Point drag only: intermediate screenshot points between point and target_point, in order."
+                  },
+                  "commits": {
+                    "type": "boolean",
+                    "description": "True when this step sends, posts, orders, deletes or saves a change on the user's behalf; such a step may wait for the user's approval."
                   }
                 },
                 "required": [
@@ -6210,11 +6214,11 @@
       "durable": false
     },
     {
-      "name": "browser_traveler_fill",
+      "name": "browser_autofill_fill",
       "definition": {
         "type": "function",
-        "name": "browser_traveler_fill",
-        "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+        "name": "browser_autofill_fill",
+        "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6222,15 +6226,59 @@
             "tab": {
               "type": "string"
             },
-            "traveler_ref": {
-              "type": "string"
+            "profile_id": {
+              "type": "string",
+              "description": "Saved profile ID."
             },
-            "section_ref": {
-              "type": "string"
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ref": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "full_name",
+                      "family_name",
+                      "given_name",
+                      "name_latin",
+                      "name_latin_surname",
+                      "name_latin_given",
+                      "email",
+                      "phone",
+                      "organization",
+                      "country",
+                      "postal_code",
+                      "region",
+                      "city",
+                      "address_line1",
+                      "address_line2",
+                      "birth_date",
+                      "gender",
+                      "passport_number",
+                      "passport_expiry",
+                      "nationality",
+                      "issuing_country",
+                      "rrn"
+                    ]
+                  }
+                },
+                "required": [
+                  "ref",
+                  "field"
+                ]
+              }
             }
           },
           "required": [
-            "tab"
+            "tab",
+            "targets"
           ]
         },
         "effectBoundary": "turn_local",
@@ -8129,14 +8177,14 @@
     "run_command": {
       "type": "function",
       "name": "run_command",
-      "description": "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
+      "description": "Run a non-interactive command in the active workspace using POSIX shell syntax on macOS/Linux (/bin/sh -lc for changes, /bin/bash -o pipefail -lc for observations) or Windows PowerShell 5.1 (powershell.exe, no profile) on Windows. Explicit cmd /c scripts use cmd.exe on Windows. summary is the compact model-authored action label shown to the user, such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; it never authorizes execution. Set validation_suite for validation receipts. Put generated artifacts under $BUTLER_ARTIFACTS_DIR, and list intentional existing workspace deliverables in output_paths. Prefer cross-platform executables and JSON-safe command text.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "command": {
             "type": "string",
-            "description": "Non-interactive command; prefer cross-platform executables, explicit arguments, and focused output."
+            "description": "Non-interactive shell text: POSIX shell syntax on macOS/Linux; Windows PowerShell 5.1 on Windows. Use cmd /c explicitly for cmd syntax. Prefer explicit arguments and focused output."
           },
           "summary": {
             "type": "string",
@@ -11163,7 +11211,7 @@
     "browser_act": {
       "type": "function",
       "name": "browser_act",
-      "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call (e.g. click a field, type, press Enter). Set observe:true to receive the settled post-batch observation (screenshot, refs, fields) in this result; act on its new observation id next. Targets: each pointer step uses exactly one of ref or point. Prefer refs. A point is [x,y] in the observation screenshot (bounded by image_geometry) with expect naming the observed role and name (\"button Search\"), \"canvas\" for a drawing surface, or the role listed for a Graphical target (\"element icon\"); never invent roles. A point that hits something else is refused with the actual hit before anything is dispatched. Pointer actions: click (button left|right|middle; click_count 2 or 3), fill (replace a field's text), select (an option value), scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag (ref with target_ref or offset; point with target_point, optional path of up to 24 intermediate points drawn with the button held). modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. Keyboard actions take no target and go to the focused element: press one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Control+Z\"); type inserts text at the focus without clearing it. wait pauses 50–5000 ms. back, forward and reload navigate the tab and must be the batch's last step. upload clicks the page's upload control (ref or point) and gives its file chooser one workspace file (value: path relative to the workspace); the owner always confirms uploads. Fill one autocomplete field as a batch's last step and look at its suggestions; the batch that picks one may continue with further fields (a step whose target changed meanwhile is refused, never misdirected). Filling text does not commit a suggestion. blocked_by means a popup covers the target: use blocker.controls to select or dismiss it, observe, then retry. Secure fields (passwords, cards, keypads) need the user's takeover. On a canvas a hit test confirms only the surface; check fresh pixels for the result. Use only native input, never injected scripts or generated image data.",
+      "description": "Run 1–10 native input steps against one observation. Steps run in order and stop at the first failure; the result reports every step (completed, not_dispatched or unknown) plus completed, next_step_index and recovery, so continue from the first unfinished step and never repeat completed ones. Compose continuous batches: put every step that does not depend on a page change in one call (e.g. click a field, type, press Enter). Set observe:true to receive the settled post-batch observation (screenshot, refs, fields) in this result; act on its new observation id next. Targets: each pointer step uses exactly one of ref or point. Prefer refs. A point is [x,y] in the observation screenshot (bounded by image_geometry) with expect naming the observed role and name (\"button Search\"), \"canvas\" for a drawing surface, or the role listed for a Graphical target (\"element icon\"); never invent roles. A point that hits something else is refused with the actual hit before anything is dispatched. Pointer actions: click (button left|right|middle; click_count 2 or 3), fill (replace a field's text), select (an option value), scroll (value \"dy\" or \"dx,dy\"; positive moves down/right), hover, drag (ref with target_ref or offset; point with target_point, optional path of up to 24 intermediate points drawn with the button held). modifiers [\"Shift\",\"Control\",\"Alt\",\"Meta\"] apply to click, drag and scroll. Keyboard actions take no target and go to the focused element: press one key or chord (\"Enter\", \"Escape\", \"Tab\", \"ArrowDown\", \"Control+Z\"); type inserts text at the focus without clearing it. wait pauses 50–5000 ms. back, forward and reload navigate the tab and must be the batch's last step. upload clicks the page's upload control (ref or point) and gives its file chooser one workspace file (value: path relative to the workspace); the owner always confirms uploads. Fill one autocomplete field as a batch's last step and look at its suggestions; the batch that picks one may continue with further fields (a step whose target changed meanwhile is refused, never misdirected). Filling text does not commit a suggestion. blocked_by means a popup covers the target: use blocker.controls to select or dismiss it, observe, then retry. On cookie or consent prompts, pick the most privacy-preserving choice (reject non-essential) without asking. Set commits:true on a step that commits something for the user; ordinary browsing never does. Secure fields (passwords, cards, keypads) need the user's takeover. On a canvas a hit test confirms only the surface; check fresh pixels for the result. Use only native input, never injected scripts or generated image data.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11290,6 +11338,10 @@
                     "maxItems": 2
                   },
                   "description": "Point drag only: intermediate screenshot points between point and target_point, in order."
+                },
+                "commits": {
+                  "type": "boolean",
+                  "description": "True when this step sends, posts, orders, deletes or saves a change on the user's behalf; such a step may wait for the user's approval."
                 }
               },
               "required": [
@@ -11425,10 +11477,10 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "browser_traveler_fill": {
+    "browser_autofill_fill": {
       "type": "function",
-      "name": "browser_traveler_fill",
-      "description": "Fill traveler or passenger fields (name, birth date, gender, nationality, passport number and expiry, resident registration number, phone, email) from a saved traveler profile; you never see the values. Pass traveler_ref (the profile nickname) and, when the page has several passengers, section_ref: a ref inside that passenger's block from the latest observation. The user approves each fill unless they allowed the profile on this site. Observe afterwards.",
+      "name": "browser_autofill_fill",
+      "description": "Fill form fields from a saved profile by ID and target ref + field kind. Values stay hidden. The user approves each fill unless they allowed this profile on the site. Observe afterwards.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11436,15 +11488,59 @@
           "tab": {
             "type": "string"
           },
-          "traveler_ref": {
-            "type": "string"
+          "profile_id": {
+            "type": "string",
+            "description": "Saved profile ID."
           },
-          "section_ref": {
-            "type": "string"
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "full_name",
+                    "family_name",
+                    "given_name",
+                    "name_latin",
+                    "name_latin_surname",
+                    "name_latin_given",
+                    "email",
+                    "phone",
+                    "organization",
+                    "country",
+                    "postal_code",
+                    "region",
+                    "city",
+                    "address_line1",
+                    "address_line2",
+                    "birth_date",
+                    "gender",
+                    "passport_number",
+                    "passport_expiry",
+                    "nationality",
+                    "issuing_country",
+                    "rrn"
+                  ]
+                }
+              },
+              "required": [
+                "ref",
+                "field"
+              ]
+            }
           }
         },
         "required": [
-          "tab"
+          "tab",
+          "targets"
         ]
       },
       "effectBoundary": "turn_local",

@@ -113,7 +113,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
   if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id); return; }
-  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "traveler.fill"].includes(frame.op);
+  const tracked = ["tab.open", "tab.observe", "tab.zoom", "tab.screenshot", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
   try { return await executeCall(browser, frame, tracked); }
@@ -177,7 +177,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.prepare") return prepareBatch(tab, args);
   if (op === "signin.fill") return fillSignIn(browser, tab, args, controlTab);
   if (op === "pay.inspect") return inspectPay(browser, tab, args, controlTab);
-  if (op === "pay.fill" || op === "traveler.fill") return fillPay(browser, tab, args, controlTab);
+  if (op === "pay.fill" || op === "autofill.fill") return fillPay(browser, tab, args, controlTab);
   if (op === "tab.act") {
     if (new Set([...browser.tabs.values()].filter(item=>item.busy).map(item=>item.owner)).size>=2 && ![...browser.tabs.values()].some(item=>item.busy && item.owner===owner)) return {status:"not_dispatched",reason:"browser_busy"};
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
@@ -186,6 +186,15 @@ async function executeFrame(browser, frame) {
     finally { tab.busy = false; browser.publish(); }
   }
   return { status: "refused", reason: "unsupported_op" };
+}
+// Resolves once the new document is parsed (or fully loaded, if that comes
+// first). Images and late scripts finish while the model reads the result;
+// the next observation settles a page that is still loading.
+function parsed(contents, url) {
+  const loading = contents.loadURL(url);
+  const ready = new Promise(resolve => contents.once("dom-ready", resolve));
+  void loading.catch(() => {});
+  return Promise.race([loading, ready]);
 }
 async function openAgent(browser, { session, args, id: callId }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
@@ -205,7 +214,7 @@ async function openAgent(browser, { session, args, id: callId }, source) {
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.identityReady; await tab.view.webContents.loadURL(args.url); }
+  try { await tab.identityReady; await parsed(tab.view.webContents, args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

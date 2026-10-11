@@ -135,7 +135,7 @@ export interface ApprovalRequestCopy {
   signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
   /** The wait-for-user hand-off card title, by why the user must act. */
   waitHandoff: (reason: string) => string;
-  /** A saved card or traveler fill's hand-off: the step only the user can do (keypad, card app, OTP, 3-D Secure). */
+  /** A saved card or autofill fill's hand-off: the step only the user can do (keypad, card app, OTP, 3-D Secure). */
   payStep: (reason: string) => string;
   payHandoff: string;
   browserStep: (action: string, role: string, name: string, frame: string) => string;
@@ -232,6 +232,10 @@ interface ConversationCopy {
 }
 
 export interface BrowserCopy {
+  contextMenu: {
+    openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
+    copy: string; selectAll: string; paste: string;
+  };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
@@ -1158,7 +1162,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "paymentMethods" | "travelers" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1793,13 +1797,13 @@ export interface AppCopy {
       revokeConfirm: (site: string) => string;
       revoked: string;
     };
-    /** Settings → Browser → Payment methods and Traveler details. Card numbers,
+    /** Settings → Browser → Payment methods and Profile details. Card numbers,
      * CVCs and identity numbers are never shown; a card number is revealed only
      * after the operating system verifies the user. */
     vault: {
       unavailable: string;
       emptyCards: string;
-      emptyTravelers: string;
+      emptyProfiles: string;
       emptyPurchaseSites: string;
       add: string;
       save: string;
@@ -1829,7 +1833,19 @@ export interface AppCopy {
       removeSite: (site: string) => string;
       lastUsed: (when: string) => string;
       notUsed: string;
-      travelerName: string;
+      familyName: string;
+      givenName: string;
+      latinName: string;
+      organization: string;
+      country: string;
+      postalCode: string;
+      region: string;
+      city: string;
+      addressLine1: string;
+      addressLine2: string;
+      idSection: string;
+      issuingCountry: string;
+      autofillName: string;
       latinSurname: string;
       latinGiven: string;
       birthDate: string;
@@ -1841,13 +1857,19 @@ export interface AppCopy {
       rrn: string;
       phone: string;
       email: string;
-      storedFields: (fields: string) => string;
+      profileName: string;
+      nameSection: string;
+      contactSection: string;
+      addressSection: string;
+      otherSection: string;
+      passport: string;
     };
     /** Settings → Security → import from another browser (counts only). */
     browserImport: {
       chooseItems: string;
       importing: string;
-      result: (bookmarks: number, passwords: number, updated: number) => string;
+      history: string;
+      result: (bookmarks: number, passwords: number, updated: number, history?: number) => string;
       undo: string;
       more: string;
       undone: string;

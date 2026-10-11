@@ -82,10 +82,17 @@ pub(in crate::btcc::agent_loop) fn assert_per_tab_cycles() {
     assert_eq!(messages, once);
     observe(&mut messages, "a", "a3");
     supersede(&mut messages);
+    assert_eq!(
+        messages[..6],
+        once[..6],
+        "written stubs never change, so the provider prefix before them stays cached"
+    );
     let updated: Value = serde_json::from_str(&messages[0].content).unwrap();
-    assert_eq!(updated["output"]["superseded_by"], "a3");
+    assert_eq!(updated["output"]["superseded_by"], "a2");
     assert_eq!(updated["output"]["tab"], "a");
     assert_eq!(updated["output"]["acted"], old["output"]["acted"]);
+    let replaced: Value = serde_json::from_str(&messages[6].content).unwrap();
+    assert_eq!(replaced["output"]["superseded_by"], "a3");
     assert!(
         !is_superseded(&messages[3].content),
         "another tab's latest stays intact"
@@ -119,7 +126,7 @@ pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
     observed_act(&mut messages, "a2", "a3");
     supersede(&mut messages);
     let first: Value = serde_json::from_str(&messages[0].content).unwrap();
-    assert_eq!(first["output"]["superseded_by"], "a3");
+    assert_eq!(first["output"]["superseded_by"], "a2");
     assert_eq!(first["output"]["acted"], "hover f0-e2 ×2 completed");
     let middle: Value = serde_json::from_str(&messages[2].content).unwrap();
     assert_eq!(middle["output"]["status"], "superseded");

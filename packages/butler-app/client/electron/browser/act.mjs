@@ -94,10 +94,11 @@ async function prepareSteps(tab, args) {
   return repeatRefusal(tab, args, steps) ?? { status: "ok", tab: tab.id, epoch: tab.epoch, obs: args.observation, url: tab.url, profile: tab.profile, steps };
 }
 const sensitive = target => Boolean(target.payment && target.submit || target.upload || target.frame_payment);
-function sameTarget(prepared, current) {
-  // A focus-dependent step was approved as non-sensitive; anything sensitive needs its own approval.
-  if (prepared?.deferred) return !sensitive(current);
-  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && JSON.stringify(prepared.destination) === JSON.stringify(current.destination) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.upload === current.upload && prepared.submit === current.submit && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
+function sameTarget(prepared, current, uncleared) {
+  // A focus-dependent step was cleared as non-sensitive; anything sensitive, or a signed-in commit the batch
+  // was not cleared for, needs its own call.
+  if (prepared?.deferred) return !sensitive(current) && !(uncleared && current.form_post);
+  return prepared && JSON.stringify(prepared.hit) === JSON.stringify(current.hit) && JSON.stringify(prepared.destination) === JSON.stringify(current.destination) && prepared.frame_payment === current.frame_payment && prepared.payment === current.payment && prepared.upload === current.upload && prepared.submit === current.submit && Boolean(prepared.form_post) === Boolean(current.form_post) && JSON.stringify(prepared.addons) === JSON.stringify(current.addons);
 }
 function wheelDelta(value) {
   const parts = String(value ?? "").split(",").map(Number);
@@ -141,7 +142,7 @@ async function dispatch(tab, args, step, target) {
 
 const RECOVERY = {
   control_changed: "The page navigated or re-rendered after the completed steps, so the observation expired. Completed steps took effect; never repeat them. Observe and continue with the remaining steps using fresh refs or points.",
-  approval_target_changed: "An earlier step changed this step's target (focus or element moved, or it became sensitive). Completed steps took effect; never repeat them. Observe and send the remaining steps again; a keyboard step into a payment or upload control needs its own call.",
+  approval_target_changed: "An earlier step changed this step's target (focus or element moved, or it became sensitive). Completed steps took effect; never repeat them. Observe and send the remaining steps again; a keyboard step into a payment, upload or committing control needs its own call.",
   stale_ref: "The observation expired after the completed steps. Completed steps took effect; never repeat them. Observe and continue with fresh refs.",
 };
 function batchResult(tab, steps, failed) {
@@ -169,7 +170,7 @@ export async function actBatch(tab, args, session) {
       const target = prepared?.deferred ? await resolveFocus(tab, args.observation, step.action === "press" ? parseChord(step.value)?.keyCode : undefined)
         : await resolveAction(tab, args, step, true);
       if (target.reason) { steps.push({ status: "not_dispatched", ...target }); failed = true; continue; }
-      if (!sameTarget(prepared, target)) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
+      if (!sameTarget(prepared, target, args.commit_cleared === false && tab.profile === "signed_in")) { steps.push({ status: "not_dispatched", reason: "approval_target_changed" }); failed = true; continue; }
       if (Date.now() >= deadline || tab.cancelled || tab.epoch !== epoch || tab.holder !== "agent" || tab.owner !== `conversation:${session}`) { steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : "control_changed" }); failed = true; continue; }
       const before = step.action === "drag" ? await canvasBefore(tab, target) : null;
       steps.push(await dispatch(tab, args, step, target));

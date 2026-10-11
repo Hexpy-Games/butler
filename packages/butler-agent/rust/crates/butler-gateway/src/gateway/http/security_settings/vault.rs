@@ -1,17 +1,17 @@
-//! Settings → Browser → Payment methods and Traveler details (host only: a
+//! Settings → Browser → Payment methods and Profile details (host only: a
 //! local client with the admin credential). Card numbers, CVCs and identity
-//! numbers go straight to the OS credential store; only a card's reveal,
+//! numbers go straight to the OS credential store; only an item's reveal,
 //! after the user verifies themselves to the operating system, answers one.
 //!
 //! - `GET /security/vault`: availability, cards, profiles, purchase sites.
-//! - `POST /security/vault/cards` | `/travelers`: add.
-//! - `PATCH|DELETE /security/vault/{cards|travelers}/{id}`: change or delete.
-//! - `POST /security/vault/cards/{id}/reveal`: the number, after OS user verification.
-//! - `POST /security/vault/{cards|travelers}/{id}/sites`: `{site, allow}` fill without asking.
+//! - `POST /security/vault/cards` | `/profiles`: add.
+//! - `PATCH|DELETE /security/vault/{cards|profiles}/{id}`: change or delete.
+//! - `POST /security/vault/{cards|profiles}/{id}/reveal`: the number after OS user verification.
+//! - `POST /security/vault/{cards|profiles}/{id}/sites`: `{site, allow}` fill without asking.
 //! - `POST /security/vault/purchase-sites`: `{site, allow}` purchase without the final card.
 mod cards;
+mod profiles;
 pub(in crate::gateway::http) mod secret;
-mod travelers;
 
 use crate::gateway::AppVaultCommand;
 use crate::gateway::http::{HttpError, HttpState, json, read_body_with_limit, signin_secrets};
@@ -63,7 +63,7 @@ pub(super) async fn route(
                 .await?
         }
         (&Method::POST, "/security/vault/cards") => cards::add(&state, body).await?,
-        (&Method::POST, "/security/vault/travelers") => travelers::save(&state, None, body).await?,
+        (&Method::POST, "/security/vault/profiles") => profiles::save(&state, None, body).await?,
         _ => item(&state, &method, &path, body).await?,
     };
     json(
@@ -85,7 +85,7 @@ async fn item(
     let mut parts = rest.split('/');
     let kind = match parts.next() {
         Some("cards") => "card",
-        Some("travelers") => "traveler",
+        Some("profiles") => "profile",
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     let id = parts
@@ -95,11 +95,12 @@ async fn item(
         .to_owned();
     match (method, parts.next(), parts.next()) {
         (&Method::PATCH, None, _) if kind == "card" => cards::update(state, &id, body).await,
-        (&Method::PATCH, None, _) => travelers::save(state, Some(&id), body).await,
+        (&Method::PATCH, None, _) => profiles::save(state, Some(&id), body).await,
         (&Method::DELETE, None, _) => delete(state, kind, &id).await,
         (&Method::POST, Some("reveal"), None) if kind == "card" => {
             cards::reveal(state, &id, &body).await
         }
+        (&Method::POST, Some("reveal"), None) => profiles::reveal(state, &id, &body).await,
         (&Method::POST, Some("sites"), None) => {
             let site =
                 site_key(body["site"].as_str().unwrap_or("")).ok_or_else(|| invalid("site"))?;
@@ -120,7 +121,15 @@ async fn item(
 
 async fn list(state: &Arc<HttpState>) -> Result<Value, HttpError> {
     let mut view = state.application.vault(AppVaultCommand::List).await?;
-    view["available"] = json!(signin_secrets::available(state).await);
+    let available = signin_secrets::available(state).await;
+    if available {
+        for profile in view["profiles"].as_array().into_iter().flatten() {
+            if let Some(id) = profile["id"].as_str() {
+                signin_secrets::migrate_profile(state, id).await?;
+            }
+        }
+    }
+    view["available"] = json!(available);
     view["reveal_available"] = json!(butler_platform::user_auth::available());
     Ok(view)
 }
@@ -144,7 +153,7 @@ pub(in crate::gateway::http) fn service(kind: &str) -> &'static str {
     if kind == "card" {
         signin_secrets::PAYMENT_SERVICE
     } else {
-        signin_secrets::TRAVELER_SERVICE
+        signin_secrets::AUTOFILL_SERVICE
     }
 }
 
