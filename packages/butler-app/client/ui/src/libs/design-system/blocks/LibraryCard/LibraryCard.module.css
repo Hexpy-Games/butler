@@ -147,3 +147,80 @@
   right: 0;
   bottom: 0;
 }
+
+/* The kind tag keeps a document preview's first line and a quote's first words clear. */
+.media[data-tagged] .document {
+  padding-top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+.media[data-tagged] .quote {
+  margin-top: calc(var(--tag-height-sm) + var(--space-sm));
+}
+
+/* Tags: one line under the meta; "+N" says how many more. */
+.tags {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  gap: var(--space-xs);
+  padding-inline-end: var(--control-height-md);
+}
+
+/* Rename in place: the title row becomes a field of the same type. */
+.titleInput {
+  min-width: 0;
+  height: var(--control-height-sm);
+  margin-inline: calc(-1 * var(--space-xs)) var(--control-height-md);
+  padding: 0 var(--space-xs);
+  border: var(--border-hairline) solid
+    color-mix(in srgb, var(--accent) 52%, var(--line));
+  border-radius: calc(var(--radius-control) - var(--border-width-strong));
+  outline: none;
+  background: var(--surface-raised);
+  box-shadow: var(--focus-ring);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Selection: a circle on the media's corner, on hover or focus, always while selecting. */
+.check {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  display: grid;
+  width: var(--tag-height-sm);
+  height: var(--tag-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--line-strong);
+  color: var(--neutral-white);
+  cursor: pointer;
+  opacity: 0;
+  place-items: center;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.layout:hover .check,
+.layout:focus-within .check,
+.layout[data-selection="active"] .check,
+.check[data-checked] {
+  opacity: 1;
+}
+
+.check[data-checked] {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.check:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.layout[data-dragging="true"] {
+  opacity: 0.45;
+}

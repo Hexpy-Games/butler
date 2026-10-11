@@ -1,29 +1,22 @@
-import { useEffect, useState } from "react";
-import { appCopy, useAppLocale } from "@/app/copy";
-import { Box, Button, EmptyLine, Grid, Input, PageContainer, ScrollArea, Section, Stack } from "@/butler-ds";
-import { LibraryItemCard, openLibraryItem } from "./LibraryItemCard";
-import { ScrapViewer } from "./ScrapViewer";
+import { useState } from "react";
+import { useAppLocale } from "@/app/copy";
+import { useButlerStore } from "@/app/store";
+import { Box, PageContainer, ScrollArea, Stack } from "@/butler-ds";
+import { LibraryMain } from "../library/LibraryMain";
+import { LibraryKindView } from "../library/LibraryKindView";
+import { LibraryDetail } from "../library/LibraryDetail";
+import { LibraryToolbar } from "../library/LibraryToolbar";
 import { LibraryAttachDialog } from "./LibraryAttachDialog";
-import { useLibraryPage, type LibraryItem, type LibraryKind } from "./libraryStore";
-function LibrarySection({ kind, query, onAttach }: { kind: LibraryKind; query: string; onAttach: (item: LibraryItem) => void }) {
-  const page = useLibraryPage(kind, query);
-  const copy = appCopy.browser;
-  const title = { scrap: copy.scraps, document: copy.documents, bookmark: copy.bookmarks, output: copy.outputs }[kind];
-  return <Section title={title} data-library-kind={kind}>
-    <Grid columns={{ base: "3", wide: "4" }} gap="md">{page.items.map(item => <LibraryItemCard key={item.id} item={item} onAttach={() => onAttach(item)} />)}</Grid>
-    {!page.loading && !page.items.length && <EmptyLine message={page.failed ? copy.failed : copy.emptyLibrary} />}
-    {page.next_cursor && <Button variant="ghost" disabled={page.loading} onClick={page.more}>{copy.loadMore}</Button>}
-  </Section>;
-}
+import type { LibraryItem } from "./libraryStore";
 export function LibraryPage() {
   useAppLocale();
-  const [text, setText] = useState(""), [query, setQuery] = useState("");
+  const view = useButlerStore((state) => state.view);
   const [attachment, setAttachment] = useState<LibraryItem>();
-  useEffect(() => { const timer = setTimeout(() => setQuery(text), 150); return () => clearTimeout(timer); }, [text]);
+  if (view.kind !== "library") return null;
+  if (view.item) return <><LibraryDetail view={view} onAttach={setAttachment} /><LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} /></>;
   return <ScrollArea fill dataTestClass="library-page"><PageContainer width="full" gutter="xl"><Box paddingY="xl"><Stack gap="xl">
-    <Input value={text} onChange={event => setText(event.target.value)} aria-label={appCopy.browser.librarySearch} placeholder={appCopy.browser.librarySearch} />
-    {(["scrap", "document", "bookmark", "output"] as const).map(kind => <LibrarySection key={kind} kind={kind} query={query} onAttach={setAttachment} />)}
+    <LibraryToolbar view={view} />
+    {view.section ? <LibraryKindView key={view.section} view={view} onAttach={setAttachment} /> : <LibraryMain view={view} onAttach={setAttachment} />}
     <LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} />
-    <ScrapViewer onSource={item => void openLibraryItem(item, true)} />
   </Stack></Box></PageContainer></ScrollArea>;
 }

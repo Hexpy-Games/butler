@@ -588,6 +588,12 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  organizeLibrary: ({ path, method, body }) => {
+    const route = new URL(path, "http://butler.invalid");
+    const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
+    if (!allowed || !["GET", "POST", "PATCH", "DELETE"].includes(method)) throw new Error("Invalid Library request.");
+    return requestJson(route.pathname + route.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
   listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),

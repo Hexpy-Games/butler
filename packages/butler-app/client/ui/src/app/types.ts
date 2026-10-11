@@ -1715,9 +1715,17 @@ export interface WorkStatusView {
   counts: Record<WorkStatusState, number>;
 }
 
+/** A Library (서랍) kind; scraps and bookmarks have groups (bookmark groups are its folders). */
+export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
+/**
+ * The Library: the main screen, a kind's full view (`section`), a group in it (`group`: an id or "none"
+ * for ungrouped) and a scrap's detail (`item`). Each level is one step up from the next (titlebar back).
+ */
+export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string };
+
 export type AppView =
   | { kind: "browser" }
-  | { kind: "library" }
+  | LibraryView
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
