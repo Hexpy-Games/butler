@@ -10,6 +10,7 @@
 mod backend;
 mod downloads;
 mod guard;
+mod hidden;
 mod preview;
 mod selfcheck;
 mod settings;

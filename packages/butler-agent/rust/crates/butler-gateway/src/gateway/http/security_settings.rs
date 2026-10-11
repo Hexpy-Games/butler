@@ -46,6 +46,9 @@ struct SecurityView {
     /// gateway has none.
     #[serde(skip_serializing_if = "Option::is_none")]
     headless_browser: Option<bool>,
+    /// That browser is the installed App's own, run without a window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    headless_browser_app: Option<bool>,
     /// Compatibility with the existing UI: always null; no token metadata.
     connection_code: Option<ConnectionCodeView>,
 }
@@ -194,6 +197,7 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
         allowed_hosts: remote.exposure.allowed_hosts,
         content_hosts: remote.exposure.content_hosts,
         headless_browser: state.headless.as_ref().map(|h| h.enabled()),
+        headless_browser_app: state.app_host.as_ref().map(|h| h.installed()),
         connection_code,
     })
 }
@@ -273,6 +277,9 @@ pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Resul
             .ok_or_else(|| invalid_security("No built-in browser on this host."))?;
         if let Some(store) = &state.security_store {
             store.save_headless_browser(enabled).await?;
+        }
+        if !enabled {
+            super::browser_host::hidden::turn_off(state).await;
         }
         headless.set_enabled(enabled).await;
     }

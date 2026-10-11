@@ -29,6 +29,7 @@ pub(in crate::gateway) fn serve(
             content_hosts: config.content_hosts.clone(),
         };
         let content = butler_runtime::browser::ContentOrigin(local_addr.port().saturating_add(1));
+        let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
         let headless = config.headless_browser.map(|browser| {
             butler_runtime::browser::Headless::new(
                 butler_runtime::browser::HeadlessConfig {
@@ -43,6 +44,7 @@ pub(in crate::gateway) fn serve(
         let state = Arc::new(HttpState {
             browser: super::browser_host::Hub::default(),
             headless,
+            app_host,
             previews: butler_runtime::previews::Previews::default(),
             preview_lifetime_started: parking_lot::Mutex::new(false),
             application,
@@ -83,4 +85,25 @@ pub(in crate::gateway) fn serve(
             .await
             .map_err(std::io::Error::other)?
     })
+}
+
+/// The hidden App host, where the browser without the App may use one.
+fn app_host(
+    browser: Option<&crate::gateway::HeadlessBrowserConfig>,
+    shutdown: &CancellationToken,
+) -> Option<Arc<butler_runtime::browser::AppHost>> {
+    let browser = browser?;
+    if matches!(
+        browser.app_host,
+        butler_runtime::browser::AppHostSource::Off
+    ) {
+        return None;
+    }
+    Some(butler_runtime::browser::AppHost::new(
+        butler_runtime::browser::AppHostConfig {
+            root: browser.app_host_root.clone(),
+            source: browser.app_host.clone(),
+        },
+        shutdown.clone(),
+    ))
 }

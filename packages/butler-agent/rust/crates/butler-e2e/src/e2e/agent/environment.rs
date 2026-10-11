@@ -15,6 +15,9 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
         .env("XDG_CACHE_HOME", home.join(".cache"))
         .env("XDG_STATE_HOME", home.join(".local/state"))
         // Only headless-browser scenarios start (and download) Chromium.
-        .env("BUTLER_BROWSER_HEADLESS", "off");
+        .env("BUTLER_BROWSER_HEADLESS", "off")
+        // Never the machine's installed App: hidden-host scenarios name the
+        // in-worktree Electron.
+        .env("BUTLER_BROWSER_APP", "off");
     command
 }

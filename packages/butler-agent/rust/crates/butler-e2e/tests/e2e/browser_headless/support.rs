@@ -16,10 +16,48 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
-/// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios (they start a
-/// real browser; the first run downloads the pinned build into a temp cache).
+/// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios on Chrome for
+/// Testing (the first run downloads the pinned build into a temp cache);
+/// `=hidden-app` runs them on the hidden App host: the in-worktree Electron
+/// named by `BUTLER_E2E_ELECTRON` with the App's own executor, no Chrome.
 pub(crate) fn selected() -> bool {
-    std::env::var("BUTLER_E2E_BROWSER_BACKEND").as_deref() == Ok("headless")
+    matches!(backend().as_deref(), Ok("headless" | "hidden-app"))
+}
+
+fn backend() -> Result<String, std::env::VarError> {
+    std::env::var("BUTLER_E2E_BROWSER_BACKEND")
+}
+
+/// Whether the scenarios run on the hidden App host (Electron).
+pub(crate) fn hidden_app() -> bool {
+    backend().as_deref() == Ok("hidden-app")
+}
+
+/// The in-worktree Electron and the App directory it loads.
+pub(crate) fn electron() -> (PathBuf, PathBuf) {
+    let executable = std::env::var_os("BUTLER_E2E_ELECTRON")
+        .map(PathBuf::from)
+        .expect("BUTLER_E2E_ELECTRON names the in-worktree Electron executable");
+    let app = butler_e2e::e2e::binary::workspace_root()
+        .join("../../butler-app/client/electron")
+        .canonicalize()
+        .expect("the in-worktree App directory");
+    (executable, app)
+}
+
+/// The (never created) Chrome cache of a hidden-app scenario: any Chrome
+/// install attempt would create it.
+pub(crate) fn no_chrome_cache(id: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("butler-e2e-no-chrome-{id}"))
+}
+
+/// Where the browser of the selected backend keeps its profiles.
+pub(crate) fn state_root(data: &std::path::Path) -> PathBuf {
+    data.join(if hidden_app() {
+        "state/browser/app-host"
+    } else {
+        "state/browser/headless"
+    })
 }
 
 /// A shared, test-only download cache (never the owner's data folder).
@@ -31,14 +69,30 @@ pub(crate) fn cache() -> PathBuf {
 }
 
 pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
-    Ok(Setup::new(id)?
+    let setup = Setup::new(id)?
         .access(Access::FullAccess)
         .env("BUTLER_BROWSER_HEADLESS", "on")
-        .env(
+        .stub_cassette(cassette()?);
+    if !hidden_app() {
+        return Ok(setup.env(
             "BUTLER_BROWSER_CACHE_DIR",
             cache().to_string_lossy().into_owned(),
+        ));
+    }
+    let (executable, app) = electron();
+    // Chrome can never come into it: no cache, and nowhere to download from.
+    let cache = no_chrome_cache(id);
+    Ok(setup
+        .env(
+            "BUTLER_BROWSER_APP",
+            executable.to_string_lossy().into_owned(),
         )
-        .stub_cassette(cassette()?))
+        .env("BUTLER_BROWSER_APP_DIR", app.to_string_lossy().into_owned())
+        .env(
+            "BUTLER_BROWSER_CACHE_DIR",
+            cache.to_string_lossy().into_owned(),
+        )
+        .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/"))
 }
 
 pub(crate) fn admin(s: &Scenario) -> AdminClient {
@@ -135,9 +189,17 @@ pub(crate) async fn publish_as(
     Ok((id, view.data()["url"].as_str().unwrap().to_owned()))
 }
 
-/// `chrome-headless-shell` processes whose command line names `marker`.
+/// The selected browser's processes whose command line names `marker`
+/// (`chrome-headless-shell`, or the Electron of the hidden App host).
 pub(crate) fn browser_processes(marker: &str) -> Vec<String> {
-    butler_platform::browser_process::matching_processes("chrome-headless-shell", marker)
+    let executable = if hidden_app() {
+        // Its helpers (`Electron Helper …`) name the profile as user data dir.
+        let main = electron().0;
+        main.file_stem().unwrap().to_string_lossy().into_owned()
+    } else {
+        "chrome-headless-shell".to_owned()
+    };
+    butler_platform::browser_process::matching_processes(&executable, marker)
         .expect("the scenario's browser process listing is readable")
 }
 

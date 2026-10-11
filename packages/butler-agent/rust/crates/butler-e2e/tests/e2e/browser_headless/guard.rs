@@ -166,7 +166,7 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         seconds >= 50,
         "reaped after {seconds} polls, before the 60 s grace"
     );
-    let root = s.sandbox.data.join("state/browser/headless");
+    let root = super::support::state_root(&s.sandbox.data);
     let profiles = std::fs::read_dir(&root)?
         .flatten()
         .filter(|e| e.file_name().to_string_lossy().starts_with("profile-"))

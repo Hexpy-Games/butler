@@ -52,6 +52,11 @@ pub struct HeadlessBrowserConfig {
     pub install: butler_runtime::browser::InstallSource,
     /// On at start (Settings → Security changes it while running).
     pub enabled: bool,
+    /// The installed App's Electron, run without a window, serves before
+    /// the headless browser when it can start (same switch).
+    pub app_host: butler_runtime::browser::AppHostSource,
+    /// The hidden App host's profiles and log.
+    pub app_host_root: std::path::PathBuf,
 }
 
 impl Default for GatewayConfig {

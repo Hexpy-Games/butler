@@ -1478,6 +1478,7 @@ export interface AppCopy {
       remoteAccessDescription: string;
       headlessBrowser: string;
       headlessBrowserDescription: string;
+      headlessBrowserAppDescription: string;
       addresses: string;
       noAddresses: string;
       copyAddress: string;

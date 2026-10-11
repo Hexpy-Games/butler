@@ -1,7 +1,8 @@
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
-export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true }) {
+// `onClosed` (the hidden host): a lost channel ends the host instead of reconnecting.
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed }) {
   let controller = null;
   let reconnect = null;
   let running = false;
@@ -59,7 +60,8 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       }
     } catch { /* Disconnect is an unknown result, never replay a call. */ }
     finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); }
-    if (running) reconnect = setTimeout(connect, 1000);
+    if (running && onClosed) { running = false; onClosed(); }
+    else if (running) reconnect = setTimeout(connect, 1000);
   }
   /** The fill password, once per token; never logged, never returned to Rust. */
   async function credential(token, origin) {

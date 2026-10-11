@@ -53,10 +53,7 @@ pub(super) fn dispatch(
     }
     if host.try_send(frame).is_err() {
         // A failed control delivery closes the stream; the App resets on loss.
-        hub.host = None;
-        hub.pending.clear();
-        hub.uses.clear();
-        hub.turns.clear();
+        hub.detach();
         return Err(error(429, "browser_busy"));
     }
     hub.pending.insert(id, sender);
@@ -79,10 +76,7 @@ fn send(hub: &mut Inner, frame: Value) {
         .as_ref()
         .is_some_and(|host| host.try_send(frame).is_err())
     {
-        hub.host = None;
-        hub.pending.clear();
-        hub.uses.clear();
-        hub.turns.clear();
+        hub.detach();
     }
 }
 pub(super) fn cancel(state: &Arc<HttpState>, session: &str, call: &str) -> Result<(), HttpError> {
@@ -180,5 +174,6 @@ fn finish_owner_turn(state: &HttpState, session: &str, turn_id: &str) {
             &mut hub,
             json!({"op":"use.finished","session":session,"turn_id":turn_id,"args":{}}),
         );
+        super::hidden::hand_over(state, &mut hub);
     }
 }

@@ -13,6 +13,8 @@
 //!
 //! - [`browser_process`]: a Chromium process tree driven over the DevTools
 //!   pipe.
+//! - [`app_browser`]: the installed App's Electron, found and run without a
+//!   window as a browser host.
 //! - [`process_control`]: process groups, group signals, exit signals,
 //!   liveness, detached processes and the stop requests a service receives.
 //! - [`instance`]: the instance lock, host facts, process identity and
@@ -49,6 +51,7 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod app_browser;
 pub mod app_update;
 pub mod browser_process;
 pub mod browser_profiles;

@@ -29,7 +29,10 @@ const backgroundLaunch = process.argv.some((arg) =>
 if (process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR) {
   app.setPath("userData", process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR);
 }
-if (backgroundLaunch) {
+if (process.argv.some((arg) => arg.startsWith("--butler-browser-host="))) {
+  // The Agent's windowless browser host: no single-instance lock, no App UI.
+  await import("./browser-host.mjs");
+} else if (backgroundLaunch) {
   await import("./main.mjs");
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();

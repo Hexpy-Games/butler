@@ -7,7 +7,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, open, publish, selected, setup};
+use super::support::{admin, call, hidden_app, open, publish, selected, setup};
 use butler_e2e::e2e::{HarnessError, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -63,15 +63,29 @@ async fn call_in_turn(
     Ok(reply.body)
 }
 
-/// A minimal App host: answers `tab.open` with its own tab and records ops.
-async fn app_host(admin: AdminClient, ops: Arc<Mutex<Vec<String>>>) -> Result<(), HarnessError> {
-    let mut stream = reqwest::Client::new()
+/// The App's attach to the browser-host channel.
+pub(super) async fn attach_app(admin: &AdminClient) -> Result<reqwest::Response, HarnessError> {
+    Ok(reqwest::Client::new()
         .get(format!("{}/internal/browser-host", admin.gw.base))
         .bearer_auth(&admin.gw.token)
         .header("x-butler-admin", &admin.admin)
         .send()
-        .await?;
+        .await?)
+}
+
+/// A minimal App host: answers `tab.open` with its own tab and records ops.
+async fn app_host(admin: AdminClient, ops: Arc<Mutex<Vec<String>>>) -> Result<(), HarnessError> {
+    let stream = attach_app(&admin).await?;
     assert_eq!(stream.status(), 200);
+    serve_app(admin, stream, ops).await
+}
+
+/// Serves an attached App's channel like [`app_host`].
+pub(super) async fn serve_app(
+    admin: AdminClient,
+    mut stream: reqwest::Response,
+    ops: Arc<Mutex<Vec<String>>>,
+) -> Result<(), HarnessError> {
     let mut buffer = String::new();
     loop {
         let frame = crate::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
@@ -113,6 +127,7 @@ async fn app_host(admin: AdminClient, ops: Arc<Mutex<Vec<String>>>) -> Result<()
 async fn attached_app_serves_new_work_and_tasks_never_switch() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    butler_e2e::skip_unless!(!hidden_app(), "Chrome for Testing only");
     let s = setup("BROWSER-HEADLESS-BACKEND")?.start().await?;
     let admin = admin(&s);
     let url = publish(&s).await?;
@@ -211,6 +226,7 @@ async fn tampered_archive_host() -> Result<(String, tokio::task::JoinHandle<()>)
 async fn unverified_browser_download_is_never_run() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    butler_e2e::skip_unless!(!hidden_app(), "Chrome for Testing only");
     let (base, server) = tampered_archive_host().await?;
     let isolated = tempdir_for("tampered")?;
     let s = setup("BROWSER-HEADLESS-UNVERIFIED")?
