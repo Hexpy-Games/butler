@@ -15,6 +15,7 @@ export const meta: ShowcaseMeta = {
 const COPY = {
   "en-US": {
     element: "Element", view: "View", doc: "Document", more: "More", attach: "Attach to chat", open: "Open source", remove: "Delete",
+    tags: ["chairs", "office", "under 150k", "reviews"], select: "Select", name: "Name",
     crops: ["Office chairs (heading)", "128 items (a line)", "Filters (a column)", "Getting started (a view)", "Browser fixture (page title)"],
     items: [
       ["Lumbar height comes first", "desk.example.kr · Today", "“Adjust the lumbar height before the backrest angle.”"],
@@ -25,6 +26,7 @@ const COPY = {
   },
   "ko-KR": {
     element: "요소", view: "화면", doc: "문서", more: "더 보기", attach: "대화에 첨부", open: "원본 열기", remove: "삭제",
+    tags: ["의자", "사무실", "15만원 이하", "후기"], select: "선택", name: "이름",
     crops: ["사무용 의자 (제목)", "128개 상품 (한 줄)", "필터 (세로 칸)", "Getting started (화면)", "Browser fixture (페이지 제목)"],
     items: [
       ["요추 지지대 높이 조절이 먼저", "desk.example.kr · 오늘", "“등받이 각도보다 요추 지지대의 높이 조절이 먼저입니다.”"],
@@ -55,7 +57,25 @@ function cards({ locale }: ShowcaseRenderContext, count: number) {
   ));
 }
 
+/** Tags (2 + “+N”), no tags, selection mode with two selected, a rename in place, a dragged card. */
+function Organizing({ locale }: ShowcaseRenderContext) {
+  const copy = COPY[locale];
+  const base = { meta: copy.items[1][1], tag: copy.element, selectLabel: copy.select, onSelectedChange: () => undefined, onOpen: () => undefined };
+  return (
+    <Grid columns="4" gap="md">
+      <LibraryCard {...base} media={{ kind: "image", src: cropImage(0) }} title={copy.items[1][0]} tags={copy.tags} selectionMode selected />
+      <LibraryCard {...base} media={{ kind: "image", src: cropImage(1) }} title={copy.items[2][0]} tags={copy.tags.slice(0, 1)} selectionMode selected />
+      <LibraryCard {...base} media={{ kind: "quote", text: copy.items[0][2] }} title={copy.items[0][0]} selectionMode />
+      <LibraryCard {...base} media={{ kind: "document" }} tag={copy.doc} title={copy.items[7][0]} tags={copy.tags.slice(2, 3)} />
+      <LibraryCard {...base} media={{ kind: "image", src: viewImage("docs") }} title={copy.items[6][0]}
+        editing={{ value: copy.items[6][0], label: copy.name, onCommit: () => undefined, onCancel: () => undefined }} />
+      <LibraryCard {...base} media={{ kind: "image", src: viewImage("article") }} title={copy.items[3][0]} dragging />
+    </Grid>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  { name: "Organizing: tags, selection, rename, dragging", widths: ["app", "wide"], render: (context) => <Organizing {...context} /> },
   { name: "3-column grid", widths: ["app", "wide"], render: (context) => <Grid columns="3" gap="md">{cards(context, 6)}</Grid> },
   { name: "4-column grid", widths: ["app", "wide"], render: (context) => <Grid columns="4" gap="md">{cards(context, 8)}</Grid> },
   { name: "Phone: one column", widths: ["375"], render: (context) => <Grid columns="1" gap="md">{cards(context, 3)}</Grid> },

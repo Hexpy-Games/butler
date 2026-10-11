@@ -71,6 +71,7 @@ const KINDS: &[CapabilityKind] = &[
     Exempt(ApprovalExemptAction::FirstConversationOnboarding),
     Exempt(ApprovalExemptAction::MemorySave),
     Exempt(ApprovalExemptAction::AttachedImageAnalysis),
+    Exempt(ApprovalExemptAction::LibraryOrganize),
     InternalRead,
     FileRead,
     CommandObservation { sandboxed: true },
@@ -189,7 +190,8 @@ fn access_boundary_matches_the_owner_table() {
                 "ingest_task_memory",
                 "summarize_user_profile",
                 "update_explicit_memory",
-                "update_onboarding_profile"
+                "update_onboarding_profile",
+                "library_organize"
             ]
         );
     }
@@ -209,6 +211,11 @@ fn access_boundary_matches_the_owner_table() {
         ("run_due_automations", Schedule),
         ("set_wallpaper", SettingsWrite),
         ("save_wallpaper_module", SettingsWrite),
+        ("library_search", InternalRead),
+        (
+            "library_organize",
+            Exempt(ApprovalExemptAction::LibraryOrganize),
+        ),
         (
             "request_service_restart",
             FullOnly(FullOnlyAction::ServiceRestart),

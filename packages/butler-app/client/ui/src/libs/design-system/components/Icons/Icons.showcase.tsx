@@ -5,7 +5,7 @@ import { Typo } from "../Typo";
 import { IconGallery } from "./IconGallery";
 import {
   ArrowRight, Bookmark, Download, Folder, Key, LayoutDashboard, Library, MessageSquare, Pick, Plus, Popup, Scrap, Settings,
-  Star, StarFilled, TabIn, Warning, type IconProps,
+  Star, StarFilled, TabIn, TagIcon, Warning, type IconProps,
 } from "./Icons";
 import type { ComponentType } from "react";
 
@@ -29,6 +29,7 @@ const BROWSER_ICONS: Array<[string, ComponentType<IconProps>, string, string]> =
   ["Popup", Popup, "Pop-up", "팝업"], ["Key", Key, "Your input needed", "직접 입력 필요"],
   ["ArrowRight", ArrowRight, "Forward", "앞으로"], ["Warning", Warning, "Not secure", "주의 요함"],
   ["Library", Library, "Library", "서랍"], ["TabIn", TabIn, "Bring in a tab", "내 탭 가져오기"],
+  ["TagIcon", TagIcon, "Tags", "태그"],
 ];
 
 function BrowserIconSet({ locale }: { locale: "en-US" | "ko-KR" }) {

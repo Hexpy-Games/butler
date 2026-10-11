@@ -21,7 +21,7 @@ import {
   Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Task01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 
@@ -110,6 +110,8 @@ export const ShieldQuestion = createIcon(SecurityIcon);
 export const ShieldEnergy = createIcon(ShieldEnergyIcon);
 export const SlidersHorizontal = createIcon(SlidersHorizontalIcon);
 export const Sparkles = createIcon(StarIcon);
+/** A tag (label) on a saved item; `Tag` is the pill component. */
+export const TagIcon = createIcon(Tag01Icon);
 export const Square = createIcon(SquareIcon);
 export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);

@@ -37,3 +37,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 
 ## Tags
 menu, command, navigation
+
+## Partial checks
+`DropdownMenuCheckboxItem` takes `checked="indeterminate"` for a value some of the selected items have (a bulk tag
+menu): it shows a dash instead of the check; choosing it applies the value to all.
