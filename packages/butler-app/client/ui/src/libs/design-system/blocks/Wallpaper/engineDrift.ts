@@ -49,6 +49,7 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
   const looks = createDriftLooks();
   const watchdog = createEngineWatchdog({ onDegrade: options.onDegrade, onRetry: options.onRetry, slowFrames: WALLPAPER_DRIFT_SLOW_KEYFRAMES });
   const render = ({ flow, looks: l }: DriftFrame) => {
+    if (!renderer.drawable()) return false;
     const current = box();
     const geometry = measureWallpaperFrame(current, "drift", options.contentRect(), renderer.pixelRatio());
     const col: DriftColumn = [l.colL, l.colR, l.colT, l.colOn];
@@ -59,6 +60,7 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
         contentRect2: wallpaperContentRectUniform(contentRect2, current, geometry),
       },
     });
+    return true;
   };
   const drawLayers = layers ? createDriftLayers(canvas, layers.base, layers.top) : null;
   const controller = drawLayers && createDriftController({

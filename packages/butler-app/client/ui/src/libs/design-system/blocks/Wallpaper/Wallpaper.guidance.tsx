@@ -5,6 +5,7 @@ import { Typo } from "../../components/Typo";
 import { Wallpaper, WallpaperImageLoaderProvider, WallpaperRegistryProvider, createWallpaperRegistry, defineWallpaperModule, BUILTIN_WALLPAPERS } from "./index";
 import type { WallpaperContentRect, WallpaperEvent, WallpaperSource } from "./index";
 import { showcaseImageLoader } from "./Wallpaper.demo";
+import { NearViewport } from "./Wallpaper.drift";
 
 // #region recipe: Screen wallpaper
 // Sources are data (settings, agent tools); keep the object stable across renders.
@@ -128,7 +129,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Screen wallpaper", description: "A live module with a preset palette as a fixed full-screen layer.", render: () => <ScreenWallpaper /> },
     { name: "Wallpaper inside a panel", description: "Container scope fills the nearest positioned parent; motion=\"paused\" holds a still frame.", render: () => <PanelWallpaper /> },
-    { name: "Riso print behind a conversation", description: "Pass columnRect (the message list's client rect) and contentRect2 (the composer); fire event={{ id, kind }} on new chat, turn start (thinking) and turn end (done).", render: () => <RisoConversation /> },
+    { name: "Riso print behind a conversation", description: "Pass columnRect (the message list's client rect) and contentRect2 (the composer); fire event={{ id, kind }} on new chat, turn start (thinking) and turn end (done).", render: () => <NearViewport height={160}><RisoConversation /></NearViewport> },
     { name: "Image wallpaper", description: "An image source with the app's imageLoader (prop or WallpaperImageLoaderProvider); fit, dim and blur are source fields.", render: () => <ImageWallpaper /> },
     { name: "Decoration on a card", description: "A transparent module (\"transparent\": true) draws only its art; the canvas stays see-through, so the glass shows. Keep text above it.", render: () => <CardDecoration /> },
     { name: "Plug in a module", description: "defineWallpaperModule validates wallpaper.json + shader.frag; pass a registry that includes it.", render: () => <PluggedModule /> },

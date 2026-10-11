@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { SegmentedControl } from "../../components/SegmentedControl";
@@ -45,6 +45,29 @@ function useClientRect(ref: RefObject<HTMLElement | null>, active: boolean): Wal
   return rect;
 }
 
+/**
+ * Mounts its wallpaper only while near the viewport: the viewer page shows many wallpapers and the browser keeps at
+ * most 16 live WebGL contexts (the oldest is lost), so off-screen stories give theirs back.
+ */
+function useNearViewport(ref: RefObject<HTMLElement | null>): boolean {
+  const [near, setNear] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver !== "function") { setNear(true); return undefined; }
+    const observer = new IntersectionObserver((entries) => setNear(entries.some((entry) => entry.isIntersecting)), { rootMargin: "200px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return near;
+}
+
+/** Renders `children` (a live wallpaper) only near the viewport; holds `height` meanwhile. */
+export function NearViewport({ children, height }: { children: ReactNode; height: number }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const near = useNearViewport(ref);
+  return <div ref={ref} style={{ minHeight: height }}>{near ? children : null}</div>;
+}
+
 /** The riso print at rest, each event, and the conversation's column keep-out against the new-chat keep-out. */
 export function RisoDriftDemo({ locale }: ShowcaseRenderContext) {
   const text = copy[locale];
@@ -53,14 +76,16 @@ export function RisoDriftDemo({ locale }: ShowcaseRenderContext) {
   const columnRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const near = useNearViewport(stageRef);
   const chat = screen === "chat";
   const column = useClientRect(columnRef, chat);
   const content = useClientRect(contentRef, !chat);
   const composer = useClientRect(composerRef, true);
   return (
     <Stack gap="md">
-      <div className={styles.driftStage}>
-        <Wallpaper columnRect={column} contentRect={content} contentRect2={composer} event={event} scope="container" source={RISO} />
+      <div className={styles.driftStage} ref={stageRef}>
+        {near ? <Wallpaper columnRect={column} contentRect={content} contentRect2={composer} event={event} scope="container" source={RISO} /> : null}
         {chat ? <div aria-label={text.column} className={styles.driftColumn} ref={columnRef} /> : <div className={styles.driftContent} ref={contentRef} />}
         <div className={styles.driftComposer} ref={composerRef} />
       </div>
@@ -78,23 +103,24 @@ export function RisoDriftDemo({ locale }: ShowcaseRenderContext) {
   );
 }
 
-/** One uniform layer of the theme's paper over a live module and over an image. */
+/** One uniform layer of the theme's paper over a live module or an image. */
 export function PaperOverlayDemo({ locale }: ShowcaseRenderContext) {
   const text = copy[locale];
-  const sources: Array<[string, WallpaperSource]> = [
-    [text.bloom, { kind: "live", module: "butler.bloom" }],
-    [text.image, { kind: "image", asset: "showcase", fit: "cover", dim: 0, blur: 0 }],
-  ];
+  // One canvas with a source switch: the viewer page already holds many live WebGL contexts.
+  const [choice, setChoice] = useState<"bloom" | "image">("bloom");
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const near = useNearViewport(stageRef);
+  const source: WallpaperSource = choice === "bloom" ? { kind: "live", module: "butler.bloom" } : { kind: "image", asset: "showcase", fit: "cover", dim: 0, blur: 0 };
   return (
-    <div className={styles.overlayGrid}>
-      {sources.map(([label, source]) => (
-        <Stack gap="xs" key={label}>
-          <div className={styles.overlayStage}>
-            <Wallpaper imageLoader={showcaseImageLoader} paperOverlay={0.7} scope="container" source={source} />
-          </div>
-          <Typo.Caption tone="secondary">{`${label} · ${text.overlay}`}</Typo.Caption>
-        </Stack>
-      ))}
-    </div>
+    <Stack gap="sm">
+      <div className={styles.overlayStage} ref={stageRef}>
+        {near ? <Wallpaper imageLoader={showcaseImageLoader} paperOverlay={0.7} scope="container" source={source} /> : null}
+      </div>
+      <Stack align="row" cross="center" gap="md" wrap>
+        <SegmentedControl ariaLabel={text.overlay} size="sm" value={choice} onValueChange={(value) => setChoice(value as "bloom" | "image")}
+          options={[{ value: "bloom", label: text.bloom }, { value: "image", label: text.image }]} />
+        <Typo.Caption tone="secondary">{text.overlay}</Typo.Caption>
+      </Stack>
+    </Stack>
   );
 }

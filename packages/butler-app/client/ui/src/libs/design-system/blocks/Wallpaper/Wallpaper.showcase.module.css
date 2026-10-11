@@ -124,12 +124,6 @@
   height: 88px;
 }
 
-.overlayGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: var(--space-3);
-}
-
 .overlayStage {
   position: relative;
   height: 200px;

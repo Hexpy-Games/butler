@@ -33,6 +33,8 @@ export interface WallpaperRenderer {
    * reads every frame back on the main thread, so the engine holds still frames.
    */
   softwareRendering(): boolean;
+  /** A frame can be drawn now: a module is selected and the context is not lost. */
+  drawable(): boolean;
   usesDayPhase(): boolean;
   usesContentRect(): boolean;
   draw(frame: WallpaperDrawFrame): void;
@@ -112,6 +114,7 @@ export function createWallpaperRenderer(
     pixelRatio: () => active?.module.manifest.pixelRatio ?? "default",
     drawnModule: () => active?.module.manifest.id ?? null,
     softwareRendering: () => software,
+    drawable: () => active !== null && !gl.isContextLost(),
     usesDayPhase: () => uses("usesDayPhase"),
     usesContentRect: () => uses("usesContentRect"),
     draw(frame) {

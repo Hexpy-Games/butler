@@ -13,8 +13,8 @@ export interface DriftFrame {
 export interface DriftDeps {
   layers: DriftLayers;
   looks: DriftLooks;
-  /** Draws one frame into the WebGL canvas (presented to a layer right after, in the same task). */
-  render(frame: DriftFrame): void;
+  /** Draws one frame into the WebGL canvas (presented to a layer right after, in the same task); false when it could not. */
+  render(frame: DriftFrame): boolean;
   /** Runs a keyframe render under the keyframe watchdog; true when the print just degraded to a still. */
   timeKeyframe(render: () => void): boolean;
   /** The canvas's CSS size and the content keep-out (CSS px, x y w h) the new-chat drop avoids. */
@@ -56,7 +56,8 @@ export function createDriftCore(deps: DriftDeps): DriftCore {
     deps, mode: "off", host: "full", hidden: false, dirty: false, flow: 0, layerFlow: [0, 0], seg: null, boosts: [],
     timer: 0, raf: 0, last: 0, fadeTop: null,
     drawTo(layer, flow) {
-      deps.render({ flow, looks: deps.looks.state });
+      // A lost context draws nothing: never copy an empty (black) frame onto a layer.
+      if (!deps.render({ flow, looks: deps.looks.state })) return;
       deps.layers.present(layer);
       core.layerFlow[layer] = flow;
     },
