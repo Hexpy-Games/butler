@@ -2,7 +2,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const agent = process.argv.includes("--butler-agent-page");
 contextBridge.exposeInMainWorld("__butlerPageControl", (type, message, value) => {
-  if (type === "popup") return ipcRenderer.sendSync("butler-browser:page-control", { type, gesture: navigator.userActivation.isActive });
+  if (type === "popup" || type === "popup-finished") return ipcRenderer.sendSync("butler-browser:page-control", { type, gesture: navigator.userActivation.isActive });
   if (!["alert", "confirm", "prompt", "beforeunload", "print", "file"].includes(type)) return null;
   return ipcRenderer.sendSync("butler-browser:page-control", { type, message: String(message ?? ""), value: String(value ?? "") });
 });
@@ -76,7 +76,11 @@ if (!agent) contextBridge.executeInMainWorld({ func: () => {
 } });
 contextBridge.executeInMainWorld({ func: (isAgent) => {
   const open = window.open;
-  window.open = function (...args) { window.__butlerPageControl("popup"); return open.apply(this, args); };
+  window.open = function (...args) {
+    window.__butlerPageControl("popup");
+    try { return open.apply(this, args); }
+    finally { window.__butlerPageControl("popup-finished"); }
+  };
   // Electron throws before CDP can report native prompt(); use the same narrow
   // bridge for that one dialog. Agent alert/confirm/beforeunload remain CDP-owned.
   for (const type of isAgent ? ["prompt"] : ["alert", "confirm", "prompt"]) {

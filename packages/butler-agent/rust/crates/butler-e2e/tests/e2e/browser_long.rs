@@ -19,6 +19,7 @@ const OBSERVATIONS: usize = 64;
 #[tokio::test]
 async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let started = std::time::Instant::now();
     let setup = Setup::new("BROWSER-LONG")?.stub_cassette(cassette()?);
     let s = setup.start().await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
@@ -29,7 +30,13 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         .send()
         .await?;
     let host = tokio::spawn(serve_host(stream, admin));
+    eprintln!("browser-long setup_ms={}", started.elapsed().as_millis());
+    let turn_started = std::time::Instant::now();
     s.turn("general", "Long browser task").await?;
+    eprintln!(
+        "browser-long turn_ms={}",
+        turn_started.elapsed().as_millis()
+    );
     let text_only = tokio::time::timeout(Duration::from_secs(30), host)
         .await
         .unwrap()
@@ -39,12 +46,14 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         "exactly the look-never observation skipped the screenshot"
     );
     let requests = s.provider()?.requests();
+    assert_observations(&requests);
     let last = requests.last().unwrap().to_string();
     assert!(
         !last.contains("image_budget_exhausted"),
         "no observation hit a budget"
     );
     let capture = output(requests.last().unwrap());
+    assert_eq!(capture["output"]["status"], "ok", "{capture}");
     assert_eq!(
         capture["output"]["schema"], "butler.browser-capture.v1",
         "{capture}"
@@ -62,6 +71,12 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
     );
     assert!(plain["output"].get("image").is_none());
     let sizes: Vec<usize> = requests.iter().map(|r| r.to_string().len()).collect();
+    let pixels = format!(
+        "data:image/jpeg;base64,{}",
+        STANDARD.encode(include_bytes!(
+            "../../fixtures/browser-route/observation.jpg"
+        ))
+    );
     for (index, request) in requests.iter().enumerate().skip(3) {
         let images = pictured(request);
         assert!(images <= 2, "request {index} carries {images} images");
@@ -72,6 +87,14 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
             .rev()
             .find(|item| item["type"] == "function_call_output")
             .unwrap();
+        if let Some(parts) = newest["output"].as_array() {
+            for image in parts.iter().filter(|part| part["type"] == "input_image") {
+                assert_eq!(
+                    image["image_url"], pixels,
+                    "complete pixels at request {index}"
+                );
+            }
+        }
         let text_only_round = index == requests.len() - 3;
         assert_eq!(
             newest["output"].to_string().contains("input_image"),
@@ -92,6 +115,31 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         "{per_round} bytes per round: superseded pixels stay out of context"
     );
     s.finish().await
+}
+
+fn assert_observations(requests: &[Value]) {
+    let observations: Vec<_> = requests
+        .iter()
+        .skip(1)
+        .map(output)
+        .filter(|result| result["output"]["schema"] == "butler.browser-observation.v1")
+        .collect();
+    assert_eq!(observations.len(), OBSERVATIONS + 2);
+    for (index, result) in observations.iter().enumerate() {
+        let observed = &result["output"];
+        assert_eq!(observed["status"], "ok", "{result}");
+        assert_eq!(observed["obs"], format!("o{}", index + 1));
+        assert_eq!(
+            observed["untrusted_content"]["text"],
+            format!("link \"Page {}\" [f0-e1]", index + 1)
+        );
+        if index != OBSERVATIONS {
+            assert_eq!(
+                observed["image_geometry"],
+                json!({"width":1024,"height":640,"cssWidth":1280,"cssHeight":800})
+            );
+        }
+    }
 }
 
 fn pictured(request: &Value) -> usize {

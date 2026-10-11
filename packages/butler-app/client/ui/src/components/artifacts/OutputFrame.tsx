@@ -1,3 +1,4 @@
+import { openLink } from "@/components/browser/browserBridge";
 import { useCallback, useEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { openBrowser, useBrowserState } from "../browser/browserBridge";
@@ -34,7 +35,7 @@ export function OutputFrame({ outputId, title, preview = false }: { outputId: st
     <Stack gap="sm">
       <Stack align="row" gap="sm" cross="center" wrap>
         <ButtonContainer size="xs">
-          <Button size="xs" variant="outline" disabled={!view} title={failure} onClick={() => view && window.open(view.url, "_blank", "noopener,noreferrer")}>{copy.open}</Button>
+          <Button size="xs" variant="outline" disabled={!view} title={failure} onClick={() => view && void openLink(view.url)}>{copy.open}</Button>
           {window.butlerBrowser && <Button size="xs" variant="outline" disabled={!view || !browserEnabled} title={!browserEnabled ? appCopy.browser.updateRequired : undefined}
             onClick={() => view && void openBrowser({ url: view.url, sessionId, previewId: preview ? outputId : undefined })}>{appCopy.browser.openOutput}</Button>}
           <Button size="xs" variant="outline" onClick={() => { setGeneration((value) => value + 1); void load(); }}>{copy.reload}</Button>

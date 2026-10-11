@@ -42,7 +42,7 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
     { icon: <Trash2 size="sm" />, label: copy.deleteItem, variant: "destructive" as const, onSelect: remove },
   ];
   return (
-    <Box data-library-item={item.id}><LibraryCard title={item.title} tag={KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
+    <Box data-library-item={item.id} data-butler-link={item.url}><LibraryCard title={item.title} tag={KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
       media={item.crop ? { kind: "image", src: item.crop } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" }}
       onOpen={open} selected={selection?.selected} selectionMode={selection?.mode} selectLabel={selection ? copy.select : undefined}
       onSelectedChange={selection?.onSelect} dragging={dragging}

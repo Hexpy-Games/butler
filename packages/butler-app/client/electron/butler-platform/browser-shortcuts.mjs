@@ -10,3 +10,6 @@ export function isHistoryShortcut(input, platform = process.platform) {
     (platform === "darwin" ? input.meta && !input.control && input.key.toLowerCase() === "y"
       : input.control && !input.meta && input.key.toLowerCase() === "h");
 }
+
+/** The browser engine's standard new-tab modifier, also used by native smokes. */
+export function newTabModifier() { return process.platform === "darwin" ? "meta" : "control"; }
