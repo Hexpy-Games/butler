@@ -1810,7 +1810,8 @@ export function appShellTheme(
   return {
     appearance: resolveAppearanceTheme(settings?.appearance_theme, prefersDark),
     sidebar: settings?.translucent_sidebar === false ? "solid" : "translucent",
-    mainScreen: settings?.main_screen_theme ?? "bloom",
+    // The shell retains its legacy tone hint; Wallpaper owns the riso source.
+    mainScreen: settings?.main_screen_theme === "riso" ? "none" : settings?.main_screen_theme ?? "none",
   };
 }
 

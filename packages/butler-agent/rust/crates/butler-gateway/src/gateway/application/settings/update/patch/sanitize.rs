@@ -155,7 +155,7 @@ pub(super) fn sanitize(
     if let Some(value) = input.get("main_screen_theme").and_then(Value::as_str) {
         let normalized = match value {
             "curtain" => Some("silk"),
-            "none" | "bloom" | "silk" => Some(value),
+            "none" | "bloom" | "silk" | "riso" => Some(value),
             _ => None,
         };
         if let Some(normalized) = normalized {
