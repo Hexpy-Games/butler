@@ -10,6 +10,7 @@ pub use egress::{
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, Rendered,
     downloads::{DownloadPort, PortFuture},
+    history::{HistoryPort, VisitFuture},
     reader as headless_reader,
 };
 pub use reader::{RenderFuture, RenderPort, render as reader_render, set_render_port};

@@ -1,4 +1,5 @@
 //! Single-owner SQLite lane for the App database.
+pub(in crate::gateway) mod history;
 
 mod cached;
 mod error;
