@@ -34,6 +34,10 @@ spec = importlib.util.spec_from_file_location('windows_tests', ROOT / 'test-wind
 windows_tests = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(windows_tests)
 WindowsSafety = windows_tests.WindowsSafety
+spec = importlib.util.spec_from_file_location('native_archive_tests', ROOT / 'test-native-archive-safety.py')
+native_archive_tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(native_archive_tests)
+NativeArchiveSafety = native_archive_tests.NativeArchiveSafety
 
 
 class ArchivedLibtest(unittest.TestCase):

@@ -70,13 +70,7 @@ def main() -> int:
         binary = stage / "butler-agent"
         shutil.copyfile(binary_source, binary)
         binary.chmod(0o555)
-        if platform == "linux":
-            helper = binary_source.parent / "butler-sandbox"
-            if helper.is_symlink() or not helper.is_file():
-                raise SystemExit("Linux payload is missing butler-sandbox")
-            verify_binary(helper, platform, architecture)
-            shutil.copyfile(helper, stage / "butler-sandbox")
-            (stage / "butler-sandbox").chmod(0o555)
+        sandbox_manifest = stage_sandbox(binary_source, stage, platform, architecture)
         renderer_notices = resources_source / "app-client/dist/THIRD_PARTY_NOTICES.txt.gz"
         expected = subprocess.check_output(["node", "--input-type=module", "-e",
             f"import {{generate}} from '{Path(__file__).resolve().parents[4]}/deploy/licenses/generate.mjs'; process.stdout.write(generate());"])
@@ -100,6 +94,7 @@ def main() -> int:
             "launcher": "butler",
             "binarySha256": sha256_file(binary),
             "resourcesSha256": sha256_tree(stage / "resources"),
+            **sandbox_manifest,
         }
         (stage / "native-agent-manifest.json").write_text(
             json.dumps(standalone_manifest, indent=2, sort_keys=True) + "\n",
@@ -118,6 +113,19 @@ def main() -> int:
     )
     print(output)
     return 0
+
+
+def stage_sandbox(binary_source: Path, stage: Path, platform: str, architecture: str) -> dict:
+    if platform != "linux":
+        return {}
+    helper = binary_source.parent / "butler-sandbox"
+    if helper.is_symlink() or not helper.is_file():
+        raise SystemExit("Linux payload is missing butler-sandbox")
+    verify_binary(helper, platform, architecture)
+    destination = stage / "butler-sandbox"
+    shutil.copyfile(helper, destination)
+    destination.chmod(0o555)
+    return {"sandboxSha256": sha256_file(destination)}
 
 
 def binary_signing(binary: Path) -> dict | None:
