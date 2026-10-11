@@ -291,8 +291,20 @@ fn recover_error(path: &Path, error: &StorageError, run: &Run<'_>) -> Correction
     } else {
         run.failure_state
     };
-    let recorded = writer(path)
-        .and_then(|db| state::set(&db, state, false, &serde_json::json!({"code":error.code()})));
+    let recorded = writer(path).and_then(|db| {
+        // A queued drain also runs after done/failed_*; never re-enable a one-time copy.
+        let current = if run.failure_state == "reclaiming" {
+            state::read(&db)?.name
+        } else {
+            None
+        };
+        state::set(
+            &db,
+            current.as_deref().unwrap_or(state),
+            false,
+            &serde_json::json!({"code":error.code()}),
+        )
+    });
     if let Err(error) = recorded {
         butler_core::diagnostic!("[btcc-storage] correction state not recorded: {error}");
     }

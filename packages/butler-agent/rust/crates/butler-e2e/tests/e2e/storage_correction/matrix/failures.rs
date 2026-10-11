@@ -37,6 +37,8 @@ pub(super) async fn exercise(
         } else {
             assert_eq!(super::state(path)?, "failed_copy");
             assert_eq!(secure_fs::identity(&std::fs::metadata(path)?).id, original);
+            s.agent.terminate().await?;
+            preserve_failed_copy(s, path, original, active, snapshot).await?;
         }
         s.agent.terminate().await?;
     }
@@ -104,4 +106,51 @@ async fn intact(
     assert_eq!(seed::admitted(path, "corr-active")?, active);
     super::super::assert_snapshot(snapshot, &offline(path, seed::snapshot).await?);
     s.agent.terminate().await
+}
+
+async fn preserve_failed_copy(
+    s: &mut Scenario,
+    path: &Path,
+    original: Option<secure_fs::FileId>,
+    active: &[String],
+    snapshot: &BTreeMap<String, (u64, String)>,
+) -> Result<(), HarnessError> {
+    Connection::open(path)?.execute(
+        "INSERT INTO agent_acceptance_reclaims VALUES('corr-active','fixture')",
+        [],
+    )?;
+    let marker = s.sandbox.root.join("failed-copy-drain");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_FILE_FAULT", "correction_drain");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_FILE_FAULT_MARKER", marker.to_string_lossy());
+    s.gw = s.agent.start_again().await?;
+    assert!(marker.exists());
+    assert_eq!(super::state(path)?, "failed_copy");
+    assert_eq!(
+        Connection::open(path)?.query_row(
+            "SELECT count(*) FROM agent_acceptance_reclaims",
+            [],
+            |r| r.get::<_, u64>(0)
+        )?,
+        1
+    );
+    intact(s, path, original, active, snapshot).await?;
+    s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT");
+    s.agent.launch.remove_env("BUTLER_E2E_FILE_FAULT_MARKER");
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(super::state(path)?, "failed_copy");
+    assert_eq!(
+        Connection::open(path)?.query_row(
+            "SELECT count(*) FROM agent_acceptance_reclaims",
+            [],
+            |r| r.get::<_, u64>(0)
+        )?,
+        0
+    );
+    assert_eq!(secure_fs::identity(&std::fs::metadata(path)?).id, original);
+    assert_eq!(seed::admitted(path, "corr-active")?, active);
+    Ok(())
 }
