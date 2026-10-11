@@ -17,7 +17,7 @@ const LENS = defineWallpaperModule({
 const REGISTRY = createWallpaperRegistry([...BUILTIN_WALLPAPERS.list(), LENS]);
 /** Built-in live tiles: modules that draw alone, living photos (on their own photo) and stipple (on its sample) included. */
 const BUILTIN_LIVE = [
-  "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk",
+  "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk",
   "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple",
 ];
 
@@ -47,10 +47,10 @@ test("the selected image keeps its tile while the image list catches up", () => 
 });
 
 test("a tile's default: images fill the screen with a dim from their luminance", () => {
-  const [inherit, none, bloom] = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [], inherit: { label: "x" }, value: "inherit" });
+  const [inherit, none, riso] = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [], inherit: { label: "x" }, value: "inherit" });
   expect(wallpaperPickerDefault(inherit!)).toBe("inherit");
   expect(wallpaperPickerDefault(none!)).toEqual({ kind: "none" });
-  expect(wallpaperPickerDefault(bloom!)).toEqual({ kind: "live", module: "butler.bloom" });
+  expect(wallpaperPickerDefault(riso!)).toEqual({ kind: "live", module: "butler.riso-print" });
   const images = wallpaperPickerOptions({ registry: BUILTIN_WALLPAPERS, images: [{ id: "bright", luminance: 0.9 }, { id: "unknown" }], value: "inherit" })
     .filter((option) => option.kind === "image");
   expect(images.map(wallpaperPickerDefault)).toEqual([

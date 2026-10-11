@@ -1,5 +1,6 @@
 import { NO_WALLPAPER_CONTENT_RECT, type WallpaperContentRectUniform } from "./contentRect";
 import type { CompiledWallpaperProgram } from "./glProgram";
+import { uploadWallpaperPrintUniforms, type WallpaperPrintFrame } from "./glPrint";
 import type { WallpaperGpuResources } from "./glResources";
 import type { WallpaperUniformValue } from "./glsl";
 import type { WallpaperImageUniforms } from "./imageMath";
@@ -16,6 +17,8 @@ export interface WallpaperDrawFrame {
   seed: number;
   /** `u_contentRect` in drawing-buffer px (bottom-left origin); zeros when omitted. */
   contentRect?: WallpaperContentRectUniform;
+  /** Print modules' uniforms (drift state, column, composer); omitted: the print at rest. */
+  print?: WallpaperPrintFrame;
 }
 
 /** A linked module with its parameter uploads. */
@@ -44,6 +47,17 @@ function upload(gl: WebGL2RenderingContext, location: WebGLUniformLocation | nul
 
 /** Texture unit of `u_base` (a two-pass module's cached shader.frag output). */
 const BASE_UNIT = 2;
+/** Texture unit of `u_density` (a print module's density pass). */
+const DENSITY_UNIT = 3;
+
+/** Print modules: their uniforms, and the density pass's output for the print pass. */
+function bindPrint(gl: WebGL2RenderingContext, compiled: CompiledWallpaperProgram, frame: WallpaperDrawFrame, density: WebGLTexture | null | undefined) {
+  if (frame.print) uploadWallpaperPrintUniforms(gl, compiled, frame.print);
+  if (density === undefined) return;
+  gl.activeTexture(gl.TEXTURE0 + DENSITY_UNIT);
+  gl.bindTexture(gl.TEXTURE_2D, density);
+  gl.uniform1i(compiled.uniform("u_density"), DENSITY_UNIT);
+}
 
 /** One full-screen pass of a module into the bound framebuffer, with every engine uniform (and `u_base` for an overlay pass). */
 export function drawWallpaperProgram(
@@ -53,6 +67,7 @@ export function drawWallpaperProgram(
   frame: WallpaperDrawFrame,
   image: WallpaperImageInput,
   base?: WebGLTexture | null,
+  density?: WebGLTexture | null,
 ) {
   const uniform = compiled.uniform;
   gl.viewport(0, 0, frame.width, frame.height);
@@ -65,7 +80,7 @@ export function drawWallpaperProgram(
   gl.uniform1f(uniform("u_dayPhase"), frame.dayPhase);
   gl.uniform1f(uniform("u_seed"), frame.seed);
   gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, resources.noise);
+  gl.bindTexture(gl.TEXTURE_2D, module.manifest.density ? resources.printNoise : resources.noise);
   gl.uniform1i(uniform("u_noiseTexture"), 0);
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, image.texture);
@@ -82,6 +97,7 @@ export function drawWallpaperProgram(
     gl.bindTexture(gl.TEXTURE_2D, base);
     gl.uniform1i(uniform("u_base"), BASE_UNIT);
   }
+  bindPrint(gl, compiled, frame, density);
   for (const value of uniforms) upload(gl, uniform(value.name), value);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }

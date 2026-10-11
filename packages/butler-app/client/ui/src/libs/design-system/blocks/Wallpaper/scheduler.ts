@@ -30,6 +30,8 @@ const POLICIES: Record<WallpaperModuleMotion, WallpaperRenderPolicy> = {
   animated: { maxFps: WALLPAPER_ANIMATED_FPS, maxPixelRatio: 1, maxPixels: 1_400_000 },
   // Rendered once per change, so a static frame can afford paper-fiber detail.
   static: { maxFps: 0, maxPixelRatio: 2, maxPixels: 4_000_000 },
+  // One buffer for rest keyframes and event frames (the drift policy caps touch devices lower).
+  drift: { maxFps: 0, maxPixelRatio: 1.5, maxPixels: 2_400_000 },
 };
 
 /** The largest pixel ratio of `pixelRatio: "device"` modules (e.g. 1-device-pixel grain), which take no pixel budget. */
@@ -84,7 +86,7 @@ export type WallpaperFrameMode = "idle" | "still" | "animate";
 
 export function wallpaperFrameMode(state: WallpaperScheduleState): WallpaperFrameMode {
   if (state.documentHidden || !state.intersecting || state.contextLost) return "idle";
-  const paused = state.moduleMotion === "static" ||
+  const paused = state.moduleMotion !== "animated" ||
     state.motion === "paused" ||
     state.reducedMotion ||
     state.degraded ||

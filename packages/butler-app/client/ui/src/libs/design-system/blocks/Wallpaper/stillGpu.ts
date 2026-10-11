@@ -84,7 +84,7 @@ export function probeWallpaperStillDraw(module: WallpaperModule): void {
   canvas.height = PROBE_SIZE;
   const uniforms = wallpaperParamUniforms(module.manifest, resolveWallpaperValues(module.manifest, {}, "light"));
   revision += 1;
-  const drawn = { compiled: result.base, overlay: result.overlay, module, uniforms, dark: false, image: null, revision };
+  const drawn = { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module, uniforms, dark: false, image: null, revision };
   clearTransparentStill(context, mode, canvas);
   drawWallpaperScene(gl, resources, drawn, { width: PROBE_SIZE, height: PROBE_SIZE, ...STILL_FRAME, timeMs: 0 });
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
@@ -126,7 +126,7 @@ export async function drawWallpaperStill(scene: WallpaperScene, size: WallpaperS
   if (!result.ok) throw new Error(result.log);
   const uniforms = wallpaperParamUniforms(scene.module.manifest, scene.values);
   revision += 1;
-  const drawn = { compiled: result.base, overlay: result.overlay, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
+  const drawn = { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module: scene.module, uniforms, dark: scene.dark, image: scene.image, revision };
   clearTransparentStill(context, mode, screen);
   drawWallpaperScene(gl, resources, drawn, { ...screen, ...STILL_FRAME, pixelRatio, contentRect, dayPhase: size.dayPhase ?? STILL_FRAME.dayPhase, timeMs: (scene.module.stillTime ?? 0) * 1000 });
   return encodeScaled(canvas, size);

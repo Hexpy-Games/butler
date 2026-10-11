@@ -91,7 +91,7 @@ export function createWallpaperRenderer(
     }
     revision += 1;
     active = result.ok
-      ? { compiled: result.base, overlay: result.overlay, module, uniforms: wallpaperParamUniforms(module.manifest, values), dark, image, revision }
+      ? { compiled: result.base, overlay: result.overlay, density: result.density ?? null, module, uniforms: wallpaperParamUniforms(module.manifest, values), dark, image, revision }
       : null;
   };
 
@@ -132,6 +132,8 @@ export function createWallpaperRenderer(
       resources.programs.dispose();
       resources.images.dispose();
       resources.base.dispose();
+      resources.density.dispose();
+      gl.deleteTexture(resources.printNoise);
       gl.deleteTexture(resources.noise);
       gl.deleteTexture(resources.image);
       gl.deleteVertexArray(resources.vao);
