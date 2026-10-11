@@ -10,7 +10,7 @@ import { connectElectronMain } from "./electron-main-cdp";
 import { smokeElectronArgs } from "./smoke-browser";
 
 /** Spawn this checkout's Electron App and attach to its real renderer through CDP. */
-export async function firstRunElectron(server: NativeAppServerHandle, serverUrl = server.url) {
+export async function firstRunElectron(server: NativeAppServerHandle, serverUrl = server.url, readySelector = "[data-first-run-screen]") {
   const root = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? process.cwd();
   const scratch = mkdtempSync(join(tmpdir(), "first-run-electron-"));
   const home = join(scratch, "home");
@@ -47,7 +47,7 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
     while (Date.now() < deadline) {
       if (!shown) shown = await inspector.evaluate<boolean>(`(()=>{const w=${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'));if(!w)return false;w.hide();w.show();w.focus();return true})()`);
       for (const page of context.pages()) {
-        if (await page.evaluate(() => Boolean(window.butlerApp) && Boolean(document.querySelector("[data-first-run-screen]"))).catch(() => false)) {
+        if (await page.evaluate(selector => Boolean(window.butlerApp) && Boolean(document.querySelector(selector)), readySelector).catch(() => false)) {
           const startupPages = context.pages().filter(candidate => candidate !== page && candidate.url().includes("/lifecycle/"));
           await Promise.all(startupPages.filter(candidate => !candidate.isClosed()).map(candidate => candidate.waitForEvent("close")));
           return { page, context: page.context(), async stop() { try { inspector?.close(); await connected.close(); } finally { await stopElectronChild(child); rmSync(scratch, { recursive: true, force: true }); } } };

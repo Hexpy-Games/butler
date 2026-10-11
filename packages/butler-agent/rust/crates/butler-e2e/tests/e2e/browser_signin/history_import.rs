@@ -183,17 +183,31 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
     let db =
         rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     let mut query = db
-        .prepare("SELECT url,visited_at FROM browser_history ORDER BY visited_at,id")
+        .prepare("SELECT url,visited_at,title,tab_kind,source FROM browser_history ORDER BY visited_at,id")
         .unwrap();
     let rows = query
-        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        })
         .unwrap();
     let mut count = 0;
     for row in rows {
         count += 1;
-        let (url, time) = row.unwrap();
+        let (url, time, title, kind, source) = row.unwrap();
         assert_eq!(url, format!("https://history.fixture.test/{count}"));
         assert_eq!(time, now - 200_000 + count);
+        assert_eq!(title, "Imported");
+        assert_eq!(kind, "mine");
+        assert_eq!(
+            source,
+            format!("imported:{}", first["run_id"].as_str().unwrap())
+        );
     }
     assert_eq!(count, 200_000);
     let summary: i64 = db
@@ -202,6 +216,16 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
         })
         .unwrap();
     assert_eq!(summary, 200_000);
+    for table in [
+        "browser_history_url",
+        "browser_history_visit_fts",
+        "browser_history_fts",
+    ] {
+        let indexed: i64 = db
+            .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(indexed, 200_000, "{table}");
+    }
     eprintln!("HISTORY-IMPORT visits={count} elapsed_ms={elapsed} complete_order=true");
     drop(query);
     drop(db);

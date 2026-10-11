@@ -55,6 +55,35 @@ fn runs(text: &str) -> Vec<(String, Script)> {
 }
 
 fn tokens(text: &str, query: bool) -> Vec<String> {
+    if text.is_ascii() {
+        return ascii_tokens(text);
+    }
+    unicode_tokens(text, query)
+}
+
+// ASCII is already NFKC/NFD stable; Latin letters and Common digits are distinct runs.
+fn ascii_tokens(text: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut tokens = Vec::new();
+    for run in text.as_bytes().chunk_by(|a, b| {
+        a.is_ascii_alphabetic() == b.is_ascii_alphabetic()
+            && a.is_ascii_digit() == b.is_ascii_digit()
+    }) {
+        if !run.first().is_some_and(u8::is_ascii_alphanumeric) {
+            continue;
+        }
+        let token: String = run
+            .iter()
+            .map(|byte| char::from(byte.to_ascii_lowercase()))
+            .collect();
+        if seen.insert(token.clone()) {
+            tokens.push(token);
+        }
+    }
+    tokens
+}
+
+fn unicode_tokens(text: &str, query: bool) -> Vec<String> {
     let normalized = crate::cognition::lexical::case_fold(&text.nfkc().collect::<String>());
     let single = normalized.chars().filter(|c| grams(c.script())).count() == 1;
     let mut tokens = Vec::new();
@@ -128,6 +157,7 @@ pub(in crate::cognition) fn query(text: &str) -> String {
 
 #[cfg(test)]
 pub(in crate::cognition) fn assert_frozen_analysis() {
+    assert_ascii_analysis();
     assert_eq!(field("CAFÉ café STRAßE forêt"), "cafe strasse foret");
     assert_eq!(field("ΆΛΦΑ ЙЁ"), "αλφα ие");
     let repeated = format!("cjk{:x}x{:x}", '청' as u32, '자' as u32);
@@ -142,4 +172,20 @@ pub(in crate::cognition) fn assert_frozen_analysis() {
     assert!(query("청").contains(&format!("uni{:x}", '청' as u32)));
     assert!(field("ภาษาไทย").contains(&format!("cjk{:x}x{:x}", 'ภ' as u32, 'า' as u32)));
     assert_eq!(query("청자Azure비밀번호"), query("청자 azure 비밀번호"));
+}
+
+#[cfg(test)]
+fn assert_ascii_analysis() {
+    // Pin boundaries, folding and duplicate runs to the frozen Unicode path.
+    for left in 0_u8..128 {
+        for right in 0_u8..128 {
+            let text = format!("AA{}9{}Z aa 99", char::from(left), char::from(right));
+            assert_eq!(
+                ascii_tokens(&text),
+                unicode_tokens(&text, false),
+                "{text:?}"
+            );
+            assert_eq!(ascii_tokens(&text), unicode_tokens(&text, true), "{text:?}");
+        }
+    }
 }

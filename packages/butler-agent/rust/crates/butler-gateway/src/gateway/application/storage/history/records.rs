@@ -5,13 +5,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 const SQL: fn(rusqlite::Error) -> AppStorageError = AppStorageError::sqlite;
-
 pub(super) fn record(db: &Connection, visits: &[Value]) -> Result<Value, AppStorageError> {
     let mut insert = db.prepare_cached("INSERT OR IGNORE INTO browser_history(url,title,favicon,visited_at,transition,tab_kind,conversation_id,butler_driven,source) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)").map_err(SQL)?;
     let mut index = db
         .prepare_cached("INSERT INTO browser_history_visit_fts(rowid,terms) VALUES(?1,?2)")
         .map_err(SQL)?;
-    let mut changed = BTreeSet::new();
+    let mut changed = super::indexing::SummaryTerms::new();
+    let defer_index = visits.iter().all(|visit| visit["metadataOnly"] != true);
+    let mut pending_index = Vec::new();
     let mut count = 0;
     for visit in visits {
         let Some((url, time)) = eligible(db, visit)? else {
@@ -19,6 +20,9 @@ pub(super) fn record(db: &Connection, visits: &[Value]) -> Result<Value, AppStor
         };
         if visit["metadataOnly"] == true {
             metadata(db, &url, time, visit)?;
+            if let Some(cached) = changed.get_mut(&url) {
+                *cached = None;
+            }
             continue;
         }
         let source = visit["source"].as_str().unwrap_or("butler");
@@ -43,19 +47,22 @@ pub(super) fn record(db: &Connection, visits: &[Value]) -> Result<Value, AppStor
             ])
             .map_err(SQL)?;
         if inserted > 0 {
-            index
-                .execute(params![
-                    db.last_insert_rowid(),
-                    analyze_search_field(&format!(
-                        "{} {url}",
-                        visit["title"].as_str().unwrap_or("")
-                    ))
-                ])
-                .map_err(SQL)?;
+            let terms =
+                analyze_search_field(&format!("{} {url}", visit["title"].as_str().unwrap_or("")));
+            if defer_index {
+                pending_index.push((db.last_insert_rowid(), terms.clone()));
+            } else {
+                index
+                    .execute(params![db.last_insert_rowid(), terms])
+                    .map_err(SQL)?;
+            }
             insert_summary(db, &url, time, visit)?;
-            changed.insert(url);
+            super::indexing::remember(&mut changed, url, time, terms);
             count += inserted;
         }
+    }
+    for (id, terms) in pending_index {
+        index.execute(params![id, terms]).map_err(SQL)?;
     }
     super::indexing::summaries(db, changed)?;
     Ok(json!({"recorded":count}))
@@ -195,7 +202,6 @@ pub(super) fn clear(
     }
     Ok(json!({"deleted":count}))
 }
-
 /// Complete one committed visit, never recreating a deleted row.
 fn metadata(db: &Connection, url: &str, time: i64, visit: &Value) -> Result<(), AppStorageError> {
     let title = visit["title"].as_str().unwrap_or(url);
@@ -225,7 +231,6 @@ fn metadata(db: &Connection, url: &str, time: i64, visit: &Value) -> Result<(), 
     .map_err(SQL)?;
     index_summary(db, url)
 }
-
 /// Count only new deduplicated visits; no scan of the URL's previous visits.
 fn insert_summary(
     db: &Connection,
@@ -236,7 +241,6 @@ fn insert_summary(
     db.prepare_cached("INSERT INTO browser_history_url(url,title,favicon,last_visit,visits) VALUES(?1,?2,?3,?4,1) ON CONFLICT(url) DO UPDATE SET visits=visits+1,title=CASE WHEN excluded.last_visit>=last_visit THEN excluded.title ELSE title END,favicon=CASE WHEN excluded.last_visit>=last_visit THEN excluded.favicon ELSE favicon END,last_visit=max(last_visit,excluded.last_visit)").map_err(SQL)?.execute(params![url,visit["title"].as_str().unwrap_or(url),visit["favicon"].as_str().unwrap_or(""),time]).map_err(SQL)?;
     Ok(())
 }
-
 /// Only inserted visits carry this receipt; native or previously imported visits survive.
 pub(super) fn undo_import(db: &Connection, run: &str) -> Result<Value, AppStorageError> {
     let source = format!("imported:{run}");

@@ -37,7 +37,7 @@ export function SecurityBrowserImportSection({ keychain, onImported, showTitle =
             </ButtonContainer>
           </DisclosureRow>
           {flow.sources?.map(source => <Tooltip key={source.key} label={!keychain && flow.passwords ? copy.needsKeychain : copy.run}>
-            <ChoiceCard icon={!BRANDS[source.browser] ? <Globe2 size="lg" /> : <IconSlot size="lg"><img src={`/browser-icons/${source.browser}.${source.browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" /></IconSlot>} title={BRANDS[source.browser] ?? source.browser} description={source.name}
+            <ChoiceCard icon={!BRANDS[source.browser] ? <Globe2 size="lg" /> : <IconSlot size="lg"><img src={`/browser-icons/${source.browser}.${source.browser === "whale" ? "png" : "svg"}`} width={20} height={20} alt="" /></IconSlot>} title={BRANDS[source.browser] ?? source.browser} description={source.name === (BRANDS[source.browser] ?? source.browser) ? undefined : source.name}
               meta={source.permission === "denied" ? copy.pickFolder : copy.run} data-import-source={source.key}
               state={flow.busy && flow.selected === source.key ? "loading" : blocked ? "disabled" : "default"}
               onClick={() => void flow.run(source.key)} />

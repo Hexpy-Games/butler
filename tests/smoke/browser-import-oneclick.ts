@@ -112,8 +112,14 @@ try {
     await page.goto("app://butler/?settings=browser");
     const section = page.locator('[data-settings-section-id="browser-import"]');
     await section.waitFor();
-    if (!before) await section.locator("[data-import-source]").nth(3).waitFor();
+    await section.locator("[data-import-source]").nth(3).waitFor();
+    const history = page.locator('[data-settings-section-id="browser-history"]');
+    await history.scrollIntoViewIfNeeded();
+    assert.equal(await history.getByText(copy.settings.browserImport.history, { exact: true }).count(), before ? 2 : 1);
+    await capture("history");
     await section.scrollIntoViewIfNeeded();
+    const safari = section.locator('[data-import-source="safari:default"]');
+    assert.equal(await safari.getByText("Safari", { exact: true }).count(), before ? 2 : 1);
     await capture("sources");
     if (before) {
       await section.getByRole("button", { name: copy.settings.browserImport.chooseItems, exact: true }).click();
