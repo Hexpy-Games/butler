@@ -118,6 +118,7 @@ json_stringify
 legacy_turn_cutover_cas_conflict
 legacy_turn_quarantine_cas_conflict
 model_acceptance_claim
+model_acceptance_delta_invalid
 model_acceptance_format_unknown
 model_acceptance_json
 model_acceptance_reclaimed

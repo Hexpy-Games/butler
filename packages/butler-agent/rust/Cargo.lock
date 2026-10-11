@@ -867,7 +867,10 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "butler-core",
+ "butler-models",
  "butler-platform",
+ "butler-turn",
  "bytes",
  "chrono",
  "flate2",
@@ -883,6 +886,8 @@ dependencies = [
  "tar",
  "tiktoken-rs",
  "tokio",
+ "tokio-util",
+ "url",
  "uuid",
  "zip",
 ]
