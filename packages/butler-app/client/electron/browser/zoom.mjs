@@ -2,6 +2,7 @@ import { nativeImage } from "electron";
 import { secureBoxes } from "./capture-security.mjs";
 import { evaluateWorld } from "./frame-worlds.mjs";
 import { fitJpeg } from "./capture.mjs";
+import { captureBrowserDetail } from "../butler-platform/browser-capture.mjs";
 
 const MAX_SIDE = 1024;
 
@@ -25,7 +26,7 @@ export async function zoomTab(tab, args) {
   // CDP re-renders the clip at the requested scale: real detail, not upsampled
   // pixels. Its clip is in page coordinates, so add the visual viewport offset.
   const page = await evaluateWorld(observation.main, "({x:visualViewport.pageLeft,y:visualViewport.pageTop})");
-  const shot = await tab.view.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "jpeg", quality: 80,
+  const shot = await captureBrowserDetail(tab.view.webContents, { format: "jpeg", quality: 80,
     clip: { ...css, x: css.x + page.x, y: css.y + page.y, scale }, fromSurface: true, captureBeyondViewport: false });
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
   // The surface may carry a device pixel ratio; bound the bitmap actually returned.

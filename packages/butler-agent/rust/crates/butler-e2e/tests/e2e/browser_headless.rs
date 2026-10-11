@@ -12,6 +12,7 @@ mod downloads;
 mod guard;
 mod hidden;
 mod preview;
+mod real_app;
 mod selfcheck;
 mod settings;
 mod support;
@@ -235,6 +236,9 @@ async fn headless_browser_answers_the_app_protocol() -> Result<(), HarnessError>
     )
     .await?;
     assert_eq!(zoom["status"], "ok", "{}", zoom["reason"]);
+    assert_eq!(zoom["image"]["width"], 640, "{zoom}");
+    assert_eq!(zoom["image"]["height"], 400, "{zoom}");
+    real_app::evidence("zoom", &zoom)?;
     assert!(
         zoom["mapping"]
             .as_str()

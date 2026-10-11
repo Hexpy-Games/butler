@@ -151,6 +151,7 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         call(&admin, "general", "tab.close", &tab["id"], json!({})).await?;
     }
     let marker = s.sandbox.data.to_string_lossy().into_owned();
+    let started = tokio::time::Instant::now();
     assert!(
         !browser_processes(&marker).is_empty(),
         "the browser runs until the reap"
@@ -166,6 +167,7 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         seconds >= 50,
         "reaped after {seconds} polls, before the 60 s grace"
     );
+    let elapsed_ms = started.elapsed().as_millis();
     let root = super::support::state_root(&s.sandbox.data);
     let profiles = std::fs::read_dir(&root)?
         .flatten()
@@ -179,5 +181,12 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         before,
         "no writes while idle"
     );
+    if let Some(dir) = std::env::var_os("BUTLER_E2E_BROWSER_EVIDENCE") {
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(
+            std::path::Path::new(&dir).join("idle-reap.json"),
+            json!({"elapsed_ms":elapsed_ms,"polls":seconds,"processes":browser_processes(&marker),"profiles":profiles,"no_writes_for_seconds":10}).to_string(),
+        )?;
+    }
     Ok(())
 }
