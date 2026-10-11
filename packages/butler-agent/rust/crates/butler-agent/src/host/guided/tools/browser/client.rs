@@ -27,8 +27,16 @@ impl Client {
         .await
         .ok()?
         .ok()?;
+        // Reuse only transport: endpoint, credentials and tab ownership are
+        // freshly resolved above/on every call. Trust-store loading is blocking.
+        let client = owner
+            .browser_http
+            .get_or_try_init(|| tokio::task::spawn_blocking(reqwest::Client::new))
+            .await
+            .ok()?
+            .clone();
         Some(Self {
-            client: reqwest::Client::new(),
+            client,
             turn: owner.binding.turn_id.clone(),
             base: endpoint.base_url,
             bearer: endpoint.local_auth.token()?.to_string(),

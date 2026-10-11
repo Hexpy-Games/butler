@@ -13,7 +13,7 @@ use super::{
     parse_model_ref,
 };
 
-const IMAGE_TOKEN_ALLOWANCE: f64 = 8_192.0;
+pub(super) const IMAGE_TOKEN_ALLOWANCE: f64 = 8_192.0;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 pub(super) struct PreparedRequestAdmission<'a> {
@@ -59,19 +59,11 @@ impl<'a> PreparedRequestAdmission<'a> {
             .transpose()
             .map_err(serialization_failure)?
             .map_or(2, |value| value.len());
-        let mut image_count = 0;
-        let token_input = if has_image_data_url(input.body) {
-            Bytes::from(
-                butler_core::json::stringify_with_string_projection(input.body, |text| {
-                    image_data_url(text).then(|| {
-                        image_count += 1;
-                        format!("[image input bytes={}]", text.len())
-                    })
-                })
-                .map_err(serialization_failure)?,
-            )
+        let (token_input, image_count) = if has_image_data_url(input.body) {
+            let (text, count) = image_token_projection(input.body)?;
+            (Bytes::from(text), count)
         } else {
-            input.serialized.clone()
+            (input.serialized.clone(), 0)
         };
         Ok(Self {
             catalog: input.catalog,
@@ -238,6 +230,22 @@ fn serialization_failure(error: impl std::fmt::Display) -> ModelRoundError {
         code: Some("model_request_serialization_failed".into()),
         message: error.to_string(),
     }
+}
+
+/// Image payloads are pixels, not text tokens. Keep the same conservative
+/// allowance in pre-round sizing and physical request admission.
+pub(super) fn image_token_projection(
+    body: &serde_json::Value,
+) -> Result<(String, u32), ModelRoundError> {
+    let mut count = 0;
+    let text = butler_core::json::stringify_with_string_projection(body, |text| {
+        image_data_url(text).then(|| {
+            count += 1;
+            format!("[image input bytes={}]", text.len())
+        })
+    })
+    .map_err(serialization_failure)?;
+    Ok((text, count))
 }
 
 fn image_data_url(value: &str) -> bool {
