@@ -3,6 +3,7 @@
 import type { WallpaperStillSize } from "./still";
 import { wallpaperContentRectUniform } from "./contentRect";
 import { linkWallpaperModule, type WallpaperModuleProgramsResult } from "./glModule";
+import { wallpaperPrintStillContent } from "./glPrint";
 import { drawWallpaperScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
 import { loadWallpaperImageBytes } from "./imageCache";
@@ -119,7 +120,10 @@ export async function drawWallpaperStill(scene: WallpaperScene, size: WallpaperS
   const width = size.compositionWidth ?? Math.max(size.width, STILL_SCREEN_WIDTH);
   const screen = { width, height: Math.round(width * size.height / size.width) };
   const pixelRatio = size.pixelRatio ?? 1;
-  const contentRect = wallpaperContentRectUniform(size.contentRect, { left: 0, top: 0, width: screen.width / pixelRatio, height: screen.height / pixelRatio }, screen);
+  const css = { left: 0, top: 0, width: screen.width / pixelRatio, height: screen.height / pixelRatio };
+  // A print composes around the new-chat content, as on screen.
+  const content = size.contentRect ?? (scene.module.manifest.density ? wallpaperPrintStillContent(css.width, css.height) : undefined);
+  const contentRect = wallpaperContentRectUniform(content, css, screen);
   canvas.width = screen.width;
   canvas.height = screen.height;
   const result = linked(context, scene.module);

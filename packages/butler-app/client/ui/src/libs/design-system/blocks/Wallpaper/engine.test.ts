@@ -1,6 +1,7 @@
 // test-category: pure-logic
 /// <reference types="bun" />
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { RISO_EVENTS, driftBoostLevel, driftEventArea, driftLiveFps } from "./drift";
 import { createWallpaperEngine } from "./engine";
 import { defineWallpaperModule } from "./manifest";
 import { BUILTIN_WALLPAPERS, createWallpaperRegistry, resolveWallpaperScene } from "./registry";
@@ -21,7 +22,9 @@ let lostContexts = 0;
 /** `performance.now()` for the engine; each draw call advances it by `drawCost` (render time). */
 let fakeNow = 0;
 let drawCost = 0;
-let timers: Array<{ callback: () => void; ms: number }> = [];
+let timers: Array<{ callback: () => void; ms: number; at: number; fired?: boolean }> = [];
+/** The last animation-frame time `step` ran; short timers (frame-slot wakes) are due relative to it. */
+let frameTime = 0;
 let performanceNow: { mockRestore(): void } | null = null;
 
 function fakeCanvas({ unused = ["u_dayPhase"], renderer = "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro)" }: { unused?: string[]; renderer?: string } = {}): HTMLCanvasElement {
@@ -57,6 +60,7 @@ beforeEach(() => {
   fakeNow = 0;
   drawCost = 0;
   timers = [];
+  frameTime = 0;
   performanceNow = spyOn(performance, "now").mockImplementation(() => fakeNow);
   frames = [];
   draws = 0;
@@ -70,7 +74,7 @@ beforeEach(() => {
     innerHeight: 50,
     requestAnimationFrame: (callback: (time: number) => void) => frames.push(callback),
     cancelAnimationFrame: () => undefined,
-    setTimeout: (callback: () => void, ms: number) => timers.push({ callback, ms }),
+    setTimeout: (callback: () => void, ms: number) => timers.push({ callback, ms, at: frameTime + ms }),
     clearTimeout: () => undefined,
     matchMedia: () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }),
   }) as unknown as typeof window;
@@ -83,8 +87,17 @@ afterEach(() => {
   globalThis.document = saved.document;
 });
 
-/** Runs the pending animation frame at `time`; returns whether one was pending. */
+/** A frame-slot wake: the loop sleeps on a short timer between animated frames instead of waking every vsync. */
+const WAKE_TIMER_MS = 100;
+
+/** Runs the frame-slot wakes due by `time`, then the pending animation frame at `time`; returns whether one was pending. */
 function step(time: number): boolean {
+  frameTime = time;
+  for (const timer of timers) {
+    if (timer.fired || timer.ms > WAKE_TIMER_MS || timer.at > time) continue;
+    timer.fired = true;
+    timer.callback();
+  }
   const pending = frames.splice(0);
   for (const callback of pending) callback(time);
   return pending.length > 0;
@@ -112,6 +125,28 @@ test("animated modules loop at no more than 20fps", () => {
   for (let time = 0; time <= 1000; time += 1000 / 60) step(time);
   expect(draws).toBeGreaterThanOrEqual(19);
   expect(draws).toBeLessThanOrEqual(21);
+});
+
+test("an animated module wakes once per frame slot (a timer between slots), not on every display frame", () => {
+  start();
+  let requests = 0;
+  const request = window.requestAnimationFrame;
+  window.requestAnimationFrame = (callback) => { requests += 1; return request(callback); };
+  for (let time = 0; time <= 1000; time += 1000 / 60) step(time);
+  expect(draws).toBeGreaterThanOrEqual(19);
+  expect(requests).toBeLessThanOrEqual(draws * 1.1 + 1);
+});
+
+test("drift envelopes add the spec's extra flow per event and cap the boost at 1", () => {
+  expect(RISO_EVENTS.focus && driftEventArea(RISO_EVENTS.focus)).toBeCloseTo(0.16, 2);
+  expect(driftEventArea(RISO_EVENTS.newChat)).toBeCloseTo(0.43, 2);
+  expect(driftEventArea(RISO_EVENTS.thinking)).toBeCloseTo(0.03, 2);
+  expect(driftEventArea(RISO_EVENTS.done)).toBeCloseTo(0.07, 2);
+  const boosts = [{ e: RISO_EVENTS.newChat, t0: 0 }, { e: RISO_EVENTS.focus, t0: 0 }];
+  expect(driftBoostLevel(boosts, 600)).toBe(1);
+  expect(driftLiveFps(driftBoostLevel(boosts, 600), false)).toBe(30);
+  expect(driftLiveFps(0, false)).toBe(6);
+  expect(driftBoostLevel(boosts, 3300)).toBe(0);
 });
 
 test("software GL holds still frames for animated modules and marks the canvas before the first frame", () => {
@@ -403,7 +438,8 @@ test("a failed image load falls back to the default module and reports it", asyn
   await settle();
   step(50);
   expect(errors).toEqual([{ reason: "image-load", module: "butler.image", asset: "a", message: "404" }]);
-  expect(lastUpload("p_colors")).toBeDefined();
+  // The default module (the riso print) draws instead.
+  expect(lastUpload("p_seed")).toBeDefined();
 });
 
 test("without an imageLoader, image sources fall back to the default module", async () => {

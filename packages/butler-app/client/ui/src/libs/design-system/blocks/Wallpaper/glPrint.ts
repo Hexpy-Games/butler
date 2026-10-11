@@ -39,6 +39,14 @@ export function uploadWallpaperPrintUniforms(gl: WebGL2RenderingContext, compile
   gl.uniform4f(uniform("u_contentRect2"), ...print.contentRect2);
 }
 
+/**
+ * Where a print still (a picker poster) keeps its ink out when no content rect is given: the new-chat content
+ * (headline and cards) of the approved print, as fractions of the screen (262, 250, 600 x 360 of 1125 x 900).
+ */
+export function wallpaperPrintStillContent(width: number, height: number): { x: number; y: number; width: number; height: number } {
+  return { x: width * 0.233, y: height * 0.278, width: width * 0.533, height: height * 0.4 };
+}
+
 /** Density texels per CSS px: 1 per 4 (1/16 of the pixels; diffused when sampled, so invisible). */
 export const WALLPAPER_DENSITY_SCALE = 0.25;
 

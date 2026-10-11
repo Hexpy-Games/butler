@@ -14,7 +14,7 @@ mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
 const browser = await launchSmokeBrowser();
 writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
-const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
+const expected = ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -63,7 +63,7 @@ async function measure(width: number, module: string, tone: string) {
     if (width === 375 && round === "reopen") await page.getByRole("button", { name: "돌아가기", exact: true }).filter({ visible: true }).click();
     await startTrace(cdp);
     const interactiveMs = await navigateAppearance(page);
-    await page.waitForFunction(() => document.querySelectorAll('[data-slot="wallpaper-picker"] img').length === 10 && [...document.querySelectorAll<HTMLImageElement>('[data-slot="wallpaper-picker"] img')].every((e) => e.complete && e.naturalWidth > 0));
+    await page.waitForFunction(() => document.querySelectorAll('[data-slot="wallpaper-picker"] img').length === 11 && [...document.querySelectorAll<HTMLImageElement>('[data-slot="wallpaper-picker"] img')].every((e) => e.complete && e.naturalWidth > 0));
     const readyMs = await page.evaluate(() => performance.now() - (window as any).__appearance.start);
     await page.waitForTimeout(1000);
     const events = await endTrace(cdp);

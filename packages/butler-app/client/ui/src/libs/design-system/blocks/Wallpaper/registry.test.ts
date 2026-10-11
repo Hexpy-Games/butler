@@ -1,7 +1,7 @@
 // test-category: pure-logic
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
-import { BLOOM_WALLPAPER, GRAIN_WALLPAPER, SILK_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
+import { BLOOM_WALLPAPER, GRAIN_WALLPAPER, RISO_PRINT_WALLPAPER, SILK_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
 import {
   BUILTIN_WALLPAPERS,
   DEFAULT_WALLPAPER_MODULE_ID,
@@ -22,7 +22,7 @@ test("the built-in registry holds the riso print first, bloom, silk, the analog 
     "butler.riso-print", "butler.bloom", "butler.silk", "butler.riso-flow", "butler.lamina", "butler.diatom", "butler.dusk", "butler.shoreline",
     "butler.photo-clouds", "butler.photo-daisies", "butler.stipple", "butler.grain", "butler.cherry-blossom",
   ]);
-  expect(DEFAULT_WALLPAPER_MODULE_ID).toBe("butler.bloom");
+  expect(DEFAULT_WALLPAPER_MODULE_ID).toBe("butler.riso-print");
   expect(BUILTIN_WALLPAPERS.get("butler.silk")).toBe(SILK_WALLPAPER);
   expect(BUILTIN_WALLPAPERS.get("butler.nope")).toBeUndefined();
 });
@@ -60,10 +60,10 @@ test("scenes resolve per source kind", () => {
   expect(aurora?.values.colors).toEqual(["#8b5cf6", "#6366f1", "#38bdf8", "#2dd4bf", "#f472b6", "#fbbf24"]);
 });
 
-test("an unknown module falls back to the default module and reports it", () => {
+test("an unknown module falls back to the default module (the riso print) and reports it", () => {
   const scene = resolveWallpaperScene({ kind: "live", module: "me.gone", params: { colors: "aurora" } }, BUILTIN_WALLPAPERS, "light");
-  expect(scene?.module).toBe(BLOOM_WALLPAPER);
-  expect(scene?.values.colors).toEqual(MONOCHROME);
+  expect(scene?.module).toBe(RISO_PRINT_WALLPAPER);
+  expect(scene?.values).toEqual({ inks: "print", paper: "day", composition: "masses", seed: 0 });
   expect(scene?.error).toEqual({ reason: "unknown-module", module: "me.gone", message: "Unknown wallpaper module me.gone" });
 });
 
@@ -122,7 +122,8 @@ test("an ineligible or unknown filter falls back to the plain image and reports 
 
 test("the fallback scene is the default module in the tone's defaults", () => {
   expect(fallbackWallpaperScene(true)).toEqual({
-    key: wallpaperTransitionKey({ kind: "live", module: "butler.bloom" }), module: BLOOM_WALLPAPER, values: { colors: MONOCHROME }, dark: true, image: null, error: null,
+    key: wallpaperTransitionKey({ kind: "live", module: "butler.riso-print" }), module: RISO_PRINT_WALLPAPER,
+    values: { inks: "print", paper: "night", composition: "masses", seed: 0 }, dark: true, image: null, error: null,
   });
 });
 
@@ -161,7 +162,7 @@ test("a scene is keyed by what it draws (kind, module, image, filter), not its p
   expect(wallpaperTransitionKey({ kind: "live", module: "me.duotone" })).not.toBe(filtered);
   const unknown = resolveWallpaperScene({ kind: "live", module: "me.gone" }, BUILTIN_WALLPAPERS, "light");
   expect(unknown?.key).toBe(fallbackWallpaperScene(false).key);
-  expect(unknown?.key).toBe(resolveWallpaperScene({ kind: "live", module: "butler.bloom" }, BUILTIN_WALLPAPERS, "dark")?.key);
+  expect(unknown?.key).toBe(resolveWallpaperScene({ kind: "live", module: "butler.riso-print" }, BUILTIN_WALLPAPERS, "dark")?.key);
 });
 
 test("grain is a static image filter; the built-ins now offer an eligible filter", () => {

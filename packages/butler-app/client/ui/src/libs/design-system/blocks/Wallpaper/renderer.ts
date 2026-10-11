@@ -4,8 +4,8 @@ import { linkWallpaperModule } from "./glModule";
 import { createWallpaperResources } from "./glResources";
 import { drawWallpaperScene, type WallpaperDrawScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
-import { WALLPAPER_IMAGE_MODULE } from "./modules";
-import { BUILTIN_WALLPAPERS, defaultWallpaperModule, type WallpaperScene } from "./registry";
+import { BLOOM_WALLPAPER, WALLPAPER_IMAGE_MODULE } from "./modules";
+import type { WallpaperScene } from "./registry";
 import type { WallpaperError, WallpaperImageVariant, WallpaperModule, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
 import { clearTransparent, wallpaperContextAttributes } from "./glContext";
 import { isSoftwareWallpaperRenderer, wallpaperRendererName, wallpaperSoftwareFallbackAllowed } from "./softwareGl";
@@ -55,7 +55,8 @@ export interface WallpaperRendererOptions {
 
 export function createWallpaperRenderer(
   canvas: HTMLCanvasElement,
-  { onError, fallback = defaultWallpaperModule(BUILTIN_WALLPAPERS), transparent = false }: WallpaperRendererOptions,
+  // A GPU or compile failure falls back to Bloom: one pass, no density target.
+  { onError, fallback = BLOOM_WALLPAPER, transparent = false }: WallpaperRendererOptions,
 ): WallpaperRenderer | null {
   const gl = canvas.getContext("webgl2", wallpaperContextAttributes(transparent)) as WebGL2RenderingContext | null;
   if (!gl) return null;
@@ -95,7 +96,7 @@ export function createWallpaperRenderer(
       : null;
   };
 
-  const uses = (flag: "usesDayPhase" | "usesContentRect") => Boolean(active && (active.compiled[flag] || active.overlay?.[flag]));
+  const uses = (flag: "usesDayPhase" | "usesContentRect") => Boolean(active && (active.compiled[flag] || active.overlay?.[flag] || active.density?.[flag]));
 
   return {
     setScene(next) {

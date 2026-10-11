@@ -13,8 +13,8 @@ import { dsClass } from "../../lib/internal";
 export { SetupWizardProgress, type SetupWizardProgressProps, type SetupWizardStep } from "./SetupWizardProgress";
 export { SetupWizardContent, SetupWizardList, type SetupWizardContentProps } from "./SetupWizardContent";
 
-/** The first-run backdrop stays bloom, whatever the user's wallpaper. */
-const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
+/** The first-run backdrop is the riso print, whatever the user's wallpaper. */
+const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.riso-print" };
 
 /** `wizard`: title, stepper and a glass body. `focus`: one centered column on the backdrop. */
 export type SetupWizardVariant = "wizard" | "focus";

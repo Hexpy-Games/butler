@@ -1,4 +1,5 @@
 import { wallpaperContentRectUniform, type WallpaperContentRectUniform } from "./contentRect";
+import { WALLPAPER_DRIFT_TOUCH_PIXELS } from "./driftScheduler";
 import { wallpaperCanvasSize, wallpaperRenderPolicy, type WallpaperCanvasSize } from "./scheduler";
 import type { WallpaperContentRect, WallpaperModuleMotion, WallpaperPixelRatioMode } from "./types";
 
@@ -12,12 +13,15 @@ export interface WallpaperCanvasBox {
   top: number;
   width: number;
   height: number;
+  /** A coarse primary pointer (a touch device): drift modules take a smaller pixel budget. */
+  coarse?: boolean;
 }
 
 /** Reads the canvas's box (a layout read: callers cache it and read again on resize). */
 export function readWallpaperCanvasBox(canvas: HTMLCanvasElement): WallpaperCanvasBox {
   const rect = canvas.getBoundingClientRect();
-  return { left: rect.left, top: rect.top, width: rect.width || window.innerWidth, height: rect.height || window.innerHeight };
+  const coarse = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+  return { left: rect.left, top: rect.top, width: rect.width || window.innerWidth, height: rect.height || window.innerHeight, coarse };
 }
 
 /**
@@ -31,6 +35,8 @@ export function measureWallpaperFrame(
   contentRect: WallpaperContentRect | null,
   pixelRatio: WallpaperPixelRatioMode = "default",
 ): WallpaperFrameGeometry {
-  const size = wallpaperCanvasSize(box, window.devicePixelRatio || 1, wallpaperRenderPolicy(motion, pixelRatio));
+  const policy = wallpaperRenderPolicy(motion, pixelRatio);
+  const budget = motion === "drift" && box.coarse ? { ...policy, maxPixels: Math.min(policy.maxPixels, WALLPAPER_DRIFT_TOUCH_PIXELS) } : policy;
+  const size = wallpaperCanvasSize(box, window.devicePixelRatio || 1, budget);
   return { ...size, contentRect: wallpaperContentRectUniform(contentRect, box, size) };
 }

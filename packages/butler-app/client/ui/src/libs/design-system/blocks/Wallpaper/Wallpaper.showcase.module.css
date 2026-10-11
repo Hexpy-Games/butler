@@ -88,3 +88,52 @@
   gap: var(--space-6);
   padding-top: var(--space-2);
 }
+
+/* Riso print: a conversation-sized stage with a mock message column, new-chat content and composer. */
+.driftStage {
+  position: relative;
+  height: 520px;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  isolation: isolate;
+}
+
+.driftColumn,
+.driftContent,
+.driftComposer {
+  position: absolute;
+  z-index: 1;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+  pointer-events: none;
+  inset-inline: max(var(--space-4), calc((100% - 720px) / 2));
+}
+
+.driftColumn {
+  top: var(--space-4xl);
+  bottom: 0;
+}
+
+.driftContent {
+  top: 30%;
+  height: 34%;
+}
+
+.driftComposer {
+  bottom: var(--space-4);
+  height: 88px;
+}
+
+.overlayGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-3);
+}
+
+.overlayStage {
+  position: relative;
+  height: 200px;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  isolation: isolate;
+}
