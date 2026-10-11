@@ -23,6 +23,17 @@ fn storage_key(browser: &str) -> Result<Zeroizing<Vec<u8>>, ImportError> {
         .filter(|s| s.starts_with("com.hexpy.butler.e2e.import."));
     #[cfg(feature = "test-support")]
     let service = fixture.as_deref().unwrap_or(service);
+    // The fixture is created by the importing executable, retaining default
+    // Keychain access controls without an unattended cross-binary consent.
+    #[cfg(feature = "test-support")]
+    if fixture.is_some() && std::env::var("BUTLER_BROWSER_IMPORT_TEST_SEED").as_deref() == Ok("1") {
+        security_framework::passwords::set_generic_password(
+            service,
+            account,
+            b"fixture-safe-storage",
+        )
+        .map_err(|_| ImportError::Keychain)?;
+    }
     security_framework::passwords::get_generic_password(service, account)
         .map(Zeroizing::new)
         .map_err(|_| ImportError::Keychain)

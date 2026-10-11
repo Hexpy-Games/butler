@@ -3,15 +3,11 @@ mod chromium;
 mod der;
 mod downloads;
 mod firefox;
-#[cfg(feature = "test-support")]
-mod fixture_keychain;
 mod locks;
 mod nss;
 use crate::browser_profiles::{BookmarkFormat, BrowserProfile, ProfileAccess};
 use crate::secrets::SecretText;
 pub use downloads::DownloadWatch;
-#[cfg(feature = "test-support")]
-pub use fixture_keychain::fixture_safe_storage;
 #[cfg(feature = "test-support")]
 pub use locks::fixture_profile_lock;
 use std::path::{Path, PathBuf};
