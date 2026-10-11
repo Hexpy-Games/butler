@@ -1,6 +1,7 @@
 name: Unsigned Windows preview smoke
 
 on:
+  pull_request:
   push:
     branches: ['release/**']
   workflow_dispatch:
@@ -87,6 +88,7 @@ jobs:
     timeout-minutes: 90
     env:
       BUTLER_E2E_TIER: stub
+      BUTLER_DEBUG_COMMAND_TIMINGS: "1"
       RUST_TEST_THREADS: 8
       RUSTFLAGS: -C target-feature=+crt-static
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
@@ -315,6 +317,7 @@ jobs:
     timeout-minutes: 30
     env:
       BUTLER_E2E_TIER: stub
+      BUTLER_DEBUG_COMMAND_TIMINGS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

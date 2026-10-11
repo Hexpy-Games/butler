@@ -221,6 +221,7 @@ async fn operation(
                 case.args["path"].as_str().unwrap()
             }])
         };
+        assert_eq!(cards.len(), 1, "exactly one approval, no fallback");
         assert_eq!(card["approval"]["examples"], examples);
         let operation = &card["approval"]["operation"];
         assert_eq!(operation["tool"], case.tool);
@@ -280,6 +281,9 @@ async fn operation(
     }
     let turn = terminal?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    if case.tool == "run_command" {
+        approval_resume::assert_single_operation(s, chat, &id).await?;
+    }
     let (output, elapsed) = script
         .result
         .lock()

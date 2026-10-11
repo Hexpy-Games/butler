@@ -41,23 +41,11 @@ fn is_cmd(program: &str) -> bool {
 }
 
 pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
-    let program = environment
+    let environment = environment
         .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
-        .map(|(_, value)| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("cmd.exe")
-        .to_owned();
-    Invocation {
-        program,
-        arguments: vec![
-            "/d".into(),
-            "/s".into(),
-            "/c".into(),
-            format!("chcp 65001>nul & {command}"),
-        ],
-    }
+        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .collect();
+    legacy_shell(command, false, &environment)
 }
 
 pub(super) fn legacy_shell(
@@ -65,6 +53,9 @@ pub(super) fn legacy_shell(
     _pipefail: bool,
     environment: &HashMap<String, Option<String>>,
 ) -> Invocation {
+    if cmd_script(command).is_some() {
+        return cmd_shell(command, environment);
+    }
     let program = environment
         .get("BUTLER_POWERSHELL")
         .and_then(Option::as_deref)
@@ -103,6 +94,43 @@ pub(super) fn legacy_shell(
         ]
         .map(str::to_owned)
         .to_vec(),
+    }
+}
+
+// Explicit cmd scripts retain cmd quoting, percent expansion and operators.
+// Passing them through PowerShell would reinterpret that syntax first.
+fn cmd_script(command: &str) -> Option<&str> {
+    let (program, mut tail) = command.trim().split_once(char::is_whitespace)?;
+    if !program.eq_ignore_ascii_case("cmd") && !program.eq_ignore_ascii_case("cmd.exe") {
+        return None;
+    }
+    loop {
+        let (argument, rest) = tail.trim_start().split_once(char::is_whitespace)?;
+        match argument.to_ascii_lowercase().as_str() {
+            "/d" | "/s" => tail = rest,
+            "/c" => return Some(rest.trim()),
+            _ => return None,
+        }
+    }
+}
+
+fn cmd_shell(text: &str, environment: &HashMap<String, Option<String>>) -> Invocation {
+    let program = environment
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
+        .and_then(|(_, value)| value.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("cmd.exe")
+        .to_owned();
+    Invocation {
+        program,
+        arguments: vec![
+            "/d".into(),
+            "/s".into(),
+            "/c".into(),
+            format!("chcp 65001>nul & {text}"),
+        ],
     }
 }
 

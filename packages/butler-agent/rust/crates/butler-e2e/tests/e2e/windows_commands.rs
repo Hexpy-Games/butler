@@ -22,6 +22,8 @@ mod private_metadata;
 mod profile_files;
 #[path = "windows_commands/profile_observation.rs"]
 mod profile_observation;
+#[path = "windows_commands/startup.rs"]
+mod startup;
 #[path = "windows_commands/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{
@@ -87,6 +89,24 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         "{row}"
     );
     let requests = s.provider()?.requests();
+    let definition = requests
+        .iter()
+        .filter_map(|request| request["tools"].as_array())
+        .flatten()
+        .find(|tool| tool["name"] == "run_command")
+        .expect("model receives the command schema");
+    assert!(
+        definition["description"]
+            .as_str()
+            .unwrap()
+            .contains("Windows PowerShell 5.1")
+    );
+    assert!(
+        definition["parameters"]["properties"]["command"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("cmd /c")
+    );
     let text = requests
         .iter()
         .filter_map(|request| request["input"].as_array())
@@ -196,6 +216,11 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             "보고서.txt",
         ),
         (
+            "WIN-DIR",
+            r#"dir "$env:USERPROFILE\Downloads" -Name | Sort-Object"#,
+            "보고서.txt",
+        ),
+        (
             "WIN-DOWNLOADS",
             r#"Get-ChildItem -LiteralPath "$env:USERPROFILE\Downloads" | Sort-Object Name | Select-Object -ExpandProperty Name"#,
             "사진.png",
@@ -262,5 +287,46 @@ async fn windows_ledger_case_alias_is_still_protected() -> Result<(), HarnessErr
     )
     .await?;
     assert_eq!(output["error"], "protected_path", "{output}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn powershell_ledger_cmdlets_and_aliases_stay_protected() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows native shell"
+    );
+    for command in [
+        "Set-Content -LiteralPath '.PROJECT-LEDGER/records.json' -Value changed",
+        "sc .PROJECT-LEDGER/records.json changed",
+        "copy ordinary.txt .PROJECT-LEDGER/records.json",
+        "ren .PROJECT-LEDGER/records.json changed.json",
+    ] {
+        let output = run("PS-LEDGER-GUARD", command).await?;
+        assert_eq!(output["error"], "protected_path", "{output}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn powershell_file_aliases_preserve_unicode_contents() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows native shell"
+    );
+    let command = r"$ErrorActionPreference='Stop'; Set-Content -Encoding UTF8 -NoNewline -LiteralPath '새 파일.txt' -Value '안녕하세요'; copy '새 파일.txt' '복사.txt'; ren '복사.txt' '이름 바꾼 파일.txt'; type '이름 바꾼 파일.txt'; dir -Name '*.txt' | Sort-Object";
+    let output = run("PS-FILE-ALIASES", command).await?;
+    successful(&output, "안녕하세요");
+    assert_eq!(
+        output["stdout"]
+            .as_str()
+            .unwrap()
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>(),
+        vec!["안녕하세요", "새 파일.txt", "이름 바꾼 파일.txt"]
+    );
     Ok(())
 }
