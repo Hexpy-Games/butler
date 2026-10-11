@@ -23,6 +23,8 @@ use butler_platform::secure_fs::{self, FileMode};
 use serde_json::{Value, json};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
+mod drift;
+
 const FRAGMENT: &str = "void main(){fragColor=vec4(vec3(p_speed),1.);}";
 const IMPORT: &str = "/wallpaper-modules/import";
 
