@@ -48,7 +48,10 @@ async fn settings_rejects_the_removed_browser_toggle() -> Result<(), HarnessErro
     )
     .await?;
     assert_eq!(opened["reason"], "no_browser", "{opened}");
-    assert!(browser_processes(&s.sandbox.data.to_string_lossy()).is_empty());
+    assert_eq!(
+        browser_processes(&s.sandbox.data.to_string_lossy()),
+        Vec::<String>::new()
+    );
     s.finish().await
 }
 
@@ -59,6 +62,12 @@ async fn browser_config_and_environment_remain_operator_controls() -> Result<(),
         .env("BUTLER_BROWSER_HEADLESS", "")
         .env("BUTLER_BROWSER_APP", "off")
         .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/");
+    // Its own empty cache: a Chrome other scenarios installed must not serve.
+    let cache = setup.sandbox.root.join("chrome-cache");
+    let setup = setup.env(
+        "BUTLER_BROWSER_CACHE_DIR",
+        cache.to_string_lossy().into_owned(),
+    );
     let path = setup.sandbox.data.join("gateways/app.json");
     std::fs::create_dir_all(path.parent().unwrap())?;
     let settings = json!({"config":{"headlessBrowser":false}});

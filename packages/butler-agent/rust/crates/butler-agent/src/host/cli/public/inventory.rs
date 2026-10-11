@@ -103,7 +103,9 @@ pub(super) fn render(entries: &[Entry]) -> String {
     }
     if entries.iter().any(|entry| entry.id.starts_with("config.")) {
         lines.push("Chrome fallback (restart to apply):".into());
-        lines.push("  gateways/app.json: config.headlessBrowser = true|false (default true).".into());
+        lines.push(
+            "  gateways/app.json: config.headlessBrowser = true|false (default true).".into(),
+        );
         lines.push("  BUTLER_BROWSER_HEADLESS=on|off overrides the config, e.g. BUTLER_BROWSER_HEADLESS=off butler start.".into());
         lines.push("  App → windowless App Electron (always available) → Chrome for Testing; starts on demand.".into());
     }

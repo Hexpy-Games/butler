@@ -31,14 +31,14 @@ async fn render(
     url: &str,
     wait: Duration,
 ) -> Option<Result<Rendered, &'static str>> {
-    let headless = state.headless.clone().filter(|h| h.enabled());
-    if !attached(state) && headless.is_some() {
+    if !attached(state) {
         hidden::ensure(state, None).await;
     }
     if attached(state) {
         return Some(on_host(state, url, wait).await);
     }
-    Some(headless?.render(url, wait).await)
+    let headless = state.headless.clone().filter(|h| h.enabled())?;
+    Some(headless.render(url, wait).await)
 }
 
 /// One render on the attached host (the App or the hidden App host).
