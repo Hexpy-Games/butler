@@ -66,12 +66,14 @@ async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark")
   await page.locator("#first-run-language").selectOption(language);
 }
 
-async function reachProviders(page: Page, language: "ko" | "en") {
+async function reachProviders(page: Page, language: "ko" | "en", importStep = true) {
   const copy = firstRunCopy[language];
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await page.getByRole("button", { name: copy.agree, exact: true }).click();
-  await page.locator('[data-first-run-screen="import"]').waitFor();
-  await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
+  if (importStep) {
+    await page.locator('[data-first-run-screen="import"]').waitFor();
+    await page.getByRole("button", { name: getAppCopy(language === "ko" ? "ko-KR" : "en-US").settings.browserImport.skip, exact: true }).click();
+  } else assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "consent renewal adds no import step");
   await page.locator("#first-run-connect-title").waitFor();
 }
 
@@ -216,7 +218,7 @@ async function renewalAndRerun(page: Page) {
   assert.equal(await page.locator("ol").count(), 0, "consent renewal has no step header");
   await page.getByRole("button", { name: copy.decline, exact: true }).click();
   await page.locator("#first-run-start").waitFor();
-  await reachProviders(page, "ko");
+  await reachProviders(page, "ko", false);
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { completed_at: old } }) });
   await page.reload();
   await page.locator('[data-test-class="workspace"]').waitFor();

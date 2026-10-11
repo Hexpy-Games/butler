@@ -52,10 +52,11 @@ pub(super) fn undo_bookmark(db: &Connection, run: &str, id: &str) -> Result<Valu
 pub(super) fn bookmarks(db: &Connection, items: &[Value], run: &str) -> Result<Value> {
     let (mut imported, mut existing) = (0_u64, 0_u64);
     for item in items {
-        let saved = db.query_row(
-            "SELECT 1 FROM browser_library b LEFT JOIN browser_library_group g ON g.id=b.group_id WHERE b.kind='bookmark' AND b.url=?1 AND COALESCE(g.name,'')=?2 LIMIT 1",
-            params![item["url"].as_str().unwrap_or_default(),item["folder"].as_str().unwrap_or_default()], |_| Ok(())
-        ).optional().map_err(sql)?.is_some();
+        let saved = crate::gateway::application::library::bookmark_in_folder(
+            db,
+            item["url"].as_str().unwrap_or_default(),
+            item["folder"].as_str().unwrap_or_default(),
+        )?;
         if saved {
             existing += 1;
             continue;

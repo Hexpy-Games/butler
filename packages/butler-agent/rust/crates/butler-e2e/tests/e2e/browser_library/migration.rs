@@ -13,11 +13,14 @@ fn version_one(data: &std::path::Path) {
         "BEGIN;
         DROP INDEX browser_library_time; DROP INDEX browser_library_group_time;
         DROP INDEX browser_library_site_time; DROP INDEX browser_library_name;
+        DROP INDEX IF EXISTS browser_library_import_url;
+        DROP INDEX IF EXISTS browser_bookmark_folder_url;
+        CREATE UNIQUE INDEX IF NOT EXISTS browser_bookmark_url ON browser_library(url) WHERE kind='bookmark';
         ALTER TABLE browser_library DROP COLUMN group_id;
         ALTER TABLE browser_library DROP COLUMN site;
         ALTER TABLE browser_library DROP COLUMN title_key;
         DROP TABLE browser_library_group; DROP TABLE browser_library_tag; DROP TABLE browser_library_item_tag;
-        DELETE FROM browser_library_migration WHERE version=2;
+        DELETE FROM browser_library_migration WHERE version>=2;
         COMMIT;",
     )
     .unwrap();

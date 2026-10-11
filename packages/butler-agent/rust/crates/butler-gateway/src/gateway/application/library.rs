@@ -9,7 +9,7 @@ use super::{AppApplication, AppStorageError, app_error};
 use crate::gateway::ApplicationFuture;
 pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
-pub(super) use records::{create_folder_groups, document, output, save};
+pub(super) use records::{bookmark_in_folder, create_folder_groups, document, output, save};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 /// Explicit user (and agent tool) commands over App-owned Library records.

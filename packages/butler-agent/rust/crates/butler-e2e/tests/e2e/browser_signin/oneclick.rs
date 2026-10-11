@@ -47,7 +47,7 @@ async fn detected_chromium_brands_use_local_state_profiles() -> Result<(), Harne
 #[tokio::test]
 async fn oneclick_profiles_folder_dedupe_and_exact_undo() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("BROWSER-IMPORT-ONECLICK")?.start().await?;
+    let mut s = Setup::new("BROWSER-IMPORT-ONECLICK")?.start().await?;
     let admin = admin(&s);
     let roots = profile_roots(&s.sandbox.home);
     let root = &roots
@@ -76,9 +76,28 @@ async fn oneclick_profiles_folder_dedupe_and_exact_undo() -> Result<(), HarnessE
     let request = json!({"source":"chrome:Person One","bookmarks":true,"passwords":false});
     let first = post(&admin, "start", request.clone()).await?;
     assert_eq!(first["bookmarks"], 2, "same URL is retained in each folder");
+    s.restart().await?;
+    let admin = super::host::admin(&s);
     let again = post(&admin, "start", request).await?;
     assert_eq!(again["bookmarks"], 0);
     assert_eq!(again["existing"], 2);
+    let mut alternate = bookmarks.clone();
+    alternate["roots"]["bookmark_bar"]["name"] = json!(" work ");
+    std::fs::write(
+        root.join("Custom Two").join("Bookmarks"),
+        serde_json::to_vec(&alternate)?,
+    )?;
+    let from_other_profile = post(
+        &admin,
+        "start",
+        json!({"source":"chrome:Custom Two","bookmarks":true,"passwords":false}),
+    )
+    .await?;
+    assert_eq!(
+        from_other_profile["bookmarks"], 0,
+        "folder identity is shared with Library"
+    );
+    assert_eq!(from_other_profile["existing"], 2);
     let second = post(&admin, "undo", json!({"run_id":again["run_id"]})).await?;
     assert_eq!(second["bookmarks"], 0, "re-import owns no existing items");
     assert_eq!(

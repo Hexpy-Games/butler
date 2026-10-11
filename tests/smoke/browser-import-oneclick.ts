@@ -83,7 +83,7 @@ try {
     const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme,
       onboarding: { consent_version: null, accepted_at: null, completed_at: null }, wallpaper: { source: { kind: "none" }, motion: "paused", pauseOnBattery: false } }) });
-    await page.reload(); await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.setViewportSize({ width: 1440, height: 1000 }); await page.reload();
     await page.locator("#first-run-language").selectOption(locale);
     await capture("welcome");
     await page.getByRole("button", { name: copy.firstRun.start, exact: true }).click();
@@ -99,6 +99,9 @@ try {
     const current = await server.api<{ onboarding: Record<string, unknown> }>("/settings");
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding: { ...current.onboarding, completed_at: new Date().toISOString() } }) });
     await page.goto("app://butler/");
+    if (await page.locator('[data-test-class="mac-window"]').getAttribute("data-left-open") === "false") {
+      await page.getByRole("button", { name: copy.titlebar.showLeftPanel, exact: true }).click();
+    }
     await page.getByRole("button", { name: copy.library.title, exact: true }).click();
     const emptyBookmarks = page.locator('[data-library-kind="bookmark"]');
     await emptyBookmarks.getByText(copy.library.noItems, { exact: true }).waitFor();
@@ -152,6 +155,16 @@ try {
   assert.equal(server.stubModelCalls.length, 0);
   writeFileSync(join(output, stage, "functional-results.json"), JSON.stringify({ stage, captures, runs, modelCalls: 0 }, null, 2));
   console.log(JSON.stringify({ ok: true, stage, screenshots: captures.length, modelCalls: 0 }));
+} catch (error) {
+  if (app) {
+    await app.page.screenshot({ path: join(output, stage, `${cell}-failure.png`) }).catch(() => {});
+    const screen = await app.page.evaluate(() => ({ url: location.href, language: document.documentElement.lang,
+      wizard: document.querySelector("[data-first-run-screen]")?.getAttribute("data-first-run-screen"),
+      buttons: [...document.querySelectorAll("button")].map(button => button.getAttribute("aria-label") ?? button.textContent) }));
+    const settings = await server.api<{ language: string; onboarding: unknown }>("/settings");
+    writeFileSync(join(output, stage, "failure.json"), JSON.stringify({ error: String(error), screen, settings: { language: settings.language, onboarding: settings.onboarding } }, null, 2));
+  }
+  throw error;
 } finally {
   await app?.stop(); proxy.closeAllConnections(); proxy.close(); await server.stop();
   if (savedUi) { rmSync(uiDist, { recursive: true, force: true }); renameSync(join(savedUi, "dist"), uiDist); rmSync(savedUi, { recursive: true, force: true }); }
