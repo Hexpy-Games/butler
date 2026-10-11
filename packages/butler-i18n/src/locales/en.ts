@@ -6,6 +6,15 @@ import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from ".
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
 const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";
 
+const libraryGroupEn = (word: string, unit: string) => ({
+  word, ungrouped: word === "group" ? "Ungrouped" : "No folder", newGroup: `New ${word}`, createGroup: `Create ${word}`,
+  groupName: `${word[0]!.toUpperCase()}${word.slice(1)} name`, renameGroup: `Rename ${word}`, ungroup: word === "group" ? "Ungroup" : "Remove folder",
+  moveTo: `Move to ${word}`, removeFrom: `Remove from ${word}`, search: `Search ${word}s`,
+  count: (count: number) => `${count} ${unit}${count === 1 ? "" : "s"}`, more: (count: number) => `${count} more ${word}${count === 1 ? "" : "s"}`,
+  ungroupTitle: (name: string) => word === "group" ? `Ungroup “${name}”?` : `Remove folder “${name}”?`,
+  ungroupBody: (count: number) => `Its ${count} ${unit}${count === 1 ? "" : "s"} stay.`,
+});
+
 const generalFallback: BriefingFallbackCopy = {
     title: "What should we open today?",
     description: "A few simple starting points are ready.",
@@ -311,6 +320,26 @@ export const enUsCopy: AppCopy = {
       planned: "Planned", active: "In progress", review: "In review", blocked: "Blocked", other: "Other / unconfirmed",
       delivered: "Reply completed", failed: "Failed", cancelled: "Stopped", under30s: "Under 30 sec", under2m: "30 sec–2 min",
       under10m: "2–10 min", over10m: "10 min or more", recent: "0–7 days", older: "8–30 days", oldest: "31+ days", unknown: "Date unknown" },
+  },
+  library: {
+    title: "Library", search: "Search the library", kinds: { all: "All", scrap: "Scraps", document: "Documents", bookmark: "Bookmarks", output: "Outputs" },
+    kindLabel: "Kind", viewAll: "View all", groups: { scrap: libraryGroupEn("group", "scrap"), bookmark: libraryGroupEn("folder", "bookmark") },
+    empty: "Empty", noItems: "No items", noMatches: "No matches", clearFilters: "Clear filters", clearAll: "Clear all",
+    loadMore: "Load more", failed: "Could not load the library", open: "Open", rename: "Rename", editTags: "Edit tags…", name: "Name", tags: "Tags",
+    addTag: "Add tag", createTag: (name) => `Create tag “${name}”`, removeTag: (name) => `Remove ${name}`, manageTags: "Manage tags…",
+    manageTagsBody: "Rename, merge or delete. Items stay.", noTags: "No tags", merge: "Merge",
+    mergeNote: (from, fromCount, to, toCount) => `Merges “${from}” (${fromCount}) into “${to}” (${toCount}).`, deleteTag: "Delete tag",
+    tagExists: "That tag exists.", groupExists: "That name is taken.", sites: "Sites", date: "Date", anyDate: "Any time",
+    dates: { today: "Today", week: "Last 7 days", month: "Last 30 days", year: "This year" }, sort: "Sort",
+    sorts: { new: "Newest", old: "Oldest", name: "Name", site: "Site" }, filterChip: (label, value) => `${label}: ${value}`,
+    selected: (count) => `${count} selected`, select: "Select", clearSelection: "Clear selection", added: (count, group) => `Added ${count} to “${group}”`,
+    undo: "Undo", dropAdd: (group) => `Add to “${group}”`, dropScrap: (group) => `Scrap to “${group}”`, savedScraps: (count) => `Saved ${count} scrap${count === 1 ? "" : "s"}`,
+    addToGroup: "Add to group", leaveUngrouped: "Leave ungrouped", back: (title) => `Back to ${title}`,
+    mixedKinds: "Items of different kinds can't move together.", tagsOnAll: (count) => `all ${count}`, tagsOnSome: (count, total) => `${count} of ${total}`,
+    addToAll: "Add to all", removeFromAll: "Remove from all", bulkTagsTitle: (count) => `Tags · ${count} items`, source: "Source", saved: "Saved",
+    size: "Size", none: "None", cancel: "Cancel", create: "Create", save: "Save", move: "Move", close: "Close", deleteItem: "Delete",
+    tileLabel: (name, meta) => `${name}, ${meta}`,
+    deleteSelected: (count) => `Delete ${count} item${count === 1 ? "" : "s"}?`, deleteSelectedBody: "Deleted items can't be restored.", selectionActions: "Selected items",
   },
   projectSignpost: {
     evidenceCount: (count) => `View ${count} source records`,

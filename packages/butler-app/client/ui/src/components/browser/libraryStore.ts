@@ -7,8 +7,10 @@ import { useButlerStore } from "@/app/store";
 import type { ElementFileRef } from "../../../../shared/browser-element";
 import { messageFileUrl } from "../conversation/messageMedia";
 import { attachElements, attachLibraryReference, type PickedElement, type ScrapSnapshot } from "./browserElements";
-export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
-export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot };
+import type { LibraryKind } from "@/app/types";
+export type { LibraryKind } from "@/app/types";
+/** A saved item. `group` is its scrap group or bookmark folder id; `tags` are shared across kinds; `autoTitle` is the name it had before a rename. */
+export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot; group?: string | null; tags?: string[]; autoTitle?: string };
 type Page = { items: LibraryItem[]; next_cursor?: string | null };
 export async function saveLibrary(item: LibraryItem) {
   const saved = await api<LibraryItem>("/library", { method: "POST", body: JSON.stringify(item) }); libraryChanged(); return saved;

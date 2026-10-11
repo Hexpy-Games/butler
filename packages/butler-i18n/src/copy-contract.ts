@@ -255,12 +255,38 @@ export interface BrowserCopy {
   scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
 }
 
+/** Grouped words of the Library's per-kind groups: scraps have groups, bookmarks have folders. */
+export interface LibraryGroupWords {
+  word: string; ungrouped: string; newGroup: string; createGroup: string; groupName: string; renameGroup: string; ungroup: string;
+  moveTo: string; removeFrom: string; search: string; count: (count: number) => string; more: (count: number) => string;
+  ungroupTitle: (name: string) => string; ungroupBody: (count: number) => string;
+}
+
+/** Library (`library.*`): the 서랍 main screen, kind views, groups, tags, filters, the scrap detail and drops. */
+export interface LibraryCopy {
+  title: string; search: string; kinds: { all: string; scrap: string; document: string; bookmark: string; output: string };
+  kindLabel: string; viewAll: string; groups: { scrap: LibraryGroupWords; bookmark: LibraryGroupWords }; empty: string; noItems: string;
+  noMatches: string; clearFilters: string; clearAll: string; loadMore: string; failed: string; open: string; rename: string; editTags: string;
+  name: string; tags: string; addTag: string; createTag: (name: string) => string; removeTag: (name: string) => string; manageTags: string;
+  manageTagsBody: string; noTags: string; merge: string; mergeNote: (from: string, fromCount: number, to: string, toCount: number) => string;
+  deleteTag: string; tagExists: string; groupExists: string; sites: string; date: string; anyDate: string;
+  dates: { today: string; week: string; month: string; year: string }; sort: string; sorts: { new: string; old: string; name: string; site: string };
+  filterChip: (label: string, value: string) => string; selected: (count: number) => string; select: string; clearSelection: string;
+  added: (count: number, group: string) => string; undo: string; dropAdd: (group: string) => string; dropScrap: (group: string) => string;
+  savedScraps: (count: number) => string; addToGroup: string; leaveUngrouped: string; back: (title: string) => string; mixedKinds: string;
+  tagsOnAll: (count: number) => string; tagsOnSome: (count: number, total: number) => string; addToAll: string; removeFromAll: string;
+  bulkTagsTitle: (count: number) => string; source: string; saved: string; size: string; none: string; cancel: string; create: string;
+  save: string; move: string; close: string; deleteItem: string; tileLabel: (name: string, meta: string) => string;
+  deleteSelected: (count: number) => string; deleteSelectedBody: string; selectionActions: string;
+}
+
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
+  library: LibraryCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;

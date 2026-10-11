@@ -6,6 +6,21 @@ import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from ".
 /** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
 const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";
 
+/** ‘…’(으)로: 받침이 없거나 ㄹ이면 “로”, 있으면 “으로”; 한글이 아니면 둘 다 보입니다. */
+const ro = (word: string) => {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return "(으)로";
+  const final = code % 28;
+  return final === 0 || final === 8 ? "로" : "으로";
+};
+const libraryGroupKo = (word: string, unit: string) => ({
+  word, ungrouped: `${word} 없음`, newGroup: `새 ${word}`, createGroup: `${word} 만들기`, groupName: `${word} 이름`,
+  renameGroup: `${word} 이름 변경`, ungroup: `${word} 해제`, moveTo: `${word}${ro(word)} 이동`, removeFrom: `${word}에서 빼기`,
+  search: `${word} 검색`, count: (count: number) => `${unit} ${count}개`, more: (count: number) => `${word} ${count}개 더`,
+  ungroupTitle: (name: string) => `‘${name}’ ${word}${word === "그룹" ? "을" : "를"} 해제할까요?`,
+  ungroupBody: (count: number) => `${unit} ${count}개는 그대로 남습니다.`,
+});
+
 const generalFallback: BriefingFallbackCopy = {
     title: "오늘의 일을 같이 펼쳐볼까요",
     description: "짧게 열어볼 만한 시작점 몇 가지가 있습니다.",
@@ -305,6 +320,26 @@ export const koKrCopy: AppCopy = {
       planned: "예정", active: "진행", review: "검토", blocked: "막힘", other: "기타·확인 불가",
       delivered: "답변 완료", failed: "실패", cancelled: "중단", under30s: "30초 미만", under2m: "30초~2분",
       under10m: "2~10분", over10m: "10분 이상", recent: "0~7일", older: "8~30일", oldest: "31일 이상", unknown: "시각 확인 불가" },
+  },
+  library: {
+    title: "서랍", search: "서랍 검색", kinds: { all: "전체", scrap: "스크랩", document: "문서", bookmark: "북마크", output: "결과물" },
+    kindLabel: "종류", viewAll: "모두 보기", groups: { scrap: libraryGroupKo("그룹", "스크랩"), bookmark: libraryGroupKo("폴더", "북마크") },
+    empty: "비어 있음", noItems: "항목 없음", noMatches: "일치하는 항목 없음", clearFilters: "필터 지우기", clearAll: "모두 지우기",
+    loadMore: "더 보기", failed: "서랍을 불러오지 못함", open: "열기", rename: "이름 변경", editTags: "태그 편집…", name: "이름", tags: "태그",
+    addTag: "태그 추가", createTag: (name) => `‘${name}’ 태그 만들기`, removeTag: (name) => `${name} 빼기`, manageTags: "태그 관리…",
+    manageTagsBody: "이름을 바꾸거나 합치거나 지웁니다. 항목은 그대로 남습니다.", noTags: "태그 없음", merge: "합치기",
+    mergeNote: (from, fromCount, to, toCount) => `‘${from}’ ${fromCount}개와 ‘${to}’ ${toCount}개를 합칩니다.`, deleteTag: "태그 삭제",
+    tagExists: "같은 태그가 있습니다.", groupExists: "같은 이름이 있습니다.", sites: "사이트", date: "기간", anyDate: "전체 기간",
+    dates: { today: "오늘", week: "지난 7일", month: "지난 30일", year: "올해" }, sort: "정렬",
+    sorts: { new: "최근 저장순", old: "오래된 순", name: "이름순", site: "사이트순" }, filterChip: (label, value) => `${label}: ${value}`,
+    selected: (count) => `${count}개 선택됨`, select: "선택", clearSelection: "선택 해제", added: (count, group) => `${count}개를 ‘${group}’에 넣음`,
+    undo: "실행 취소", dropAdd: (group) => `‘${group}’에 넣기`, dropScrap: (group) => `‘${group}’에 스크랩`, savedScraps: (count) => `스크랩 ${count}개 저장함`,
+    addToGroup: "그룹에 넣기", leaveUngrouped: "그룹 없이 두기", back: (title) => `${title}${ro(title)} 돌아가기`,
+    mixedKinds: "종류가 다른 항목은 함께 옮길 수 없습니다.", tagsOnAll: (count) => `${count}개 모두`, tagsOnSome: (count, total) => `${total}개 중 ${count}`,
+    addToAll: "모두에 붙이기", removeFromAll: "모두에서 빼기", bulkTagsTitle: (count) => `태그 · ${count}개`, source: "원본", saved: "저장",
+    size: "크기", none: "없음", cancel: "취소", create: "만들기", save: "저장", move: "이동", close: "닫기", deleteItem: "삭제",
+    tileLabel: (name, meta) => `${name}, ${meta}`,
+    deleteSelected: (count) => `${count}개를 삭제할까요?`, deleteSelectedBody: "삭제한 항목은 되돌릴 수 없습니다.", selectionActions: "선택한 항목",
   },
   projectSignpost: {
     evidenceCount: (count) => `근거 기록 ${count}개 보기`,

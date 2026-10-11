@@ -7,14 +7,15 @@ import { projectSpace } from "@/app/space/projection";
 import { notifyStatus } from "@/app/notifications";
 import { browserCall } from "./browserBridge";
 import { attachElements, scrapElements, type PickedElement } from "./browserElements";
+import { groupAt, type GroupTarget } from "../library/libraryDrop";
+import { afterScrap, endDwell } from "../library/libraryDrop";
 
 export interface ElementDragEvent { phase: string; tab: string; x: number; y: number; elements?: PickedElement[] }
-type Target = { kind: "conversation"; session: string; instance?: string; title: string } | { kind: "library" };
+type Target = { kind: "conversation"; session: string; instance?: string; title: string } | { kind: "library" } | GroupTarget;
 export const useElementDrag = create<{ tab?: string; elements: PickedElement[]; target?: Target; x?: number; y?: number }>(() => ({ elements: [] }));
 let connected = false;
-function targetAt(x: number, y: number): Target | undefined {
-  const hit = document.elementFromPoint(x, y);
-  if (hit?.closest('[data-test-class="library-entry"]')) return { kind: "library" };
+/** A conversation under the pointer: a sidebar conversation row or the open conversation's composer. */
+export function conversationAt(hit: Element | null): Extract<Target, { kind: "conversation" }> | undefined {
   const row = hit?.closest<HTMLElement>('[data-slot="nav-drop-target"][data-tree-item]');
   const record = row && projectSpace(useButlerStore.getState().navigation).get(row.dataset.treeItem!);
   if (record?.session && record.node.kind === "session") return { kind: "conversation", session: record.session.id, title: record.title, instance: row!.dataset.dragInstance };
@@ -23,14 +24,21 @@ function targetAt(x: number, y: number): Target | undefined {
     return { kind: "conversation", session: store.activeChatId, title: "" };
   }
 }
+function targetAt(x: number, y: number): Target | undefined {
+  const hit = document.elementFromPoint(x, y);
+  if (hit?.closest('[data-test-class="library-entry"]')) return { kind: "library" };
+  return groupAt(hit, "scrap") ?? conversationAt(hit);
+}
 function move(x: number, y: number) { useElementDrag.setState({ target: targetAt(x, y), x, y }); }
 async function drop() {
   const { tab, elements, target } = useElementDrag.getState();
   useElementDrag.setState({ tab: undefined, elements: [], target: undefined });
+  endDwell();
   void browserCall("selection-command", { id: tab, op: "cancel-drag" });
   if (!target) return;
   try {
-    if (target.kind === "library") { await scrapElements(elements); notifyStatus(appCopy.browser.scrapsSaved(elements.length)); }
+    if (target.kind === "library") afterScrap(await scrapElements(elements));
+    else if (target.kind === "group") { await scrapElements(elements, target.group); notifyStatus(appCopy.library.added(elements.length, target.name)); }
     else { await attachElements(target.session, elements); notifyStatus(target.title ? appCopy.browser.attachedTo(target.title) : appCopy.browser.attachToChat); }
   } catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); }
 }
@@ -40,7 +48,7 @@ export function connectElementDrag() {
   window.butlerBrowser.onElementDrag(event => {
     if (event.phase === "start") useElementDrag.setState({ tab: event.tab, elements: event.elements ?? [] });
     if (event.phase === "cancel") {
-      useElementDrag.setState({ tab: undefined, elements: [], target: undefined }); return;
+      useElementDrag.setState({ tab: undefined, elements: [], target: undefined }); endDwell(); return;
     }
     move(event.x, event.y);
     if (event.phase === "end") void drop();
@@ -54,6 +62,7 @@ export function connectElementDrag() {
     if (event.key !== "Escape" || !useElementDrag.getState().tab) return;
     const tab = useElementDrag.getState().tab;
     useElementDrag.setState({ tab: undefined, elements: [], target: undefined });
+    endDwell();
     void browserCall("selection-command", { id: tab, op: "cancel-drag" });
   }, true);
   window.butlerBrowser.onSelectionAction(async event => {
@@ -61,7 +70,7 @@ export function connectElementDrag() {
       if (event.op === "failed") { notifyStatus(appCopy.browser.failed, { tone: "error" }); return; }
       if (event.op === "copy-text") { notifyStatus(appCopy.conversation.messageActions.copied); return; }
       if (event.op === "save-image") { notifyStatus(appCopy.browser.imagesSaved(event.elements.length)); return; }
-      if (event.op === "scrap") { await scrapElements(event.elements); notifyStatus(appCopy.browser.scrapsSaved(event.elements.length)); }
+      if (event.op === "scrap") afterScrap(await scrapElements(event.elements));
       else await attachElements(useButlerStore.getState().activeChatId, event.elements);
     } catch { notifyStatus(appCopy.browser.failed, { tone: "error" }); }
   });

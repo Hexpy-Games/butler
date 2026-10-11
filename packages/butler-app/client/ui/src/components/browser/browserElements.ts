@@ -75,12 +75,17 @@ async function snapshotOf(element: PickedElement): Promise<ScrapSnapshot | null>
     return copy?.html ? { html: copy.html, width: copy.width, height: copy.height } : null;
   } catch { return null; }
 }
-export async function scrapElements(elements: PickedElement[]) {
+/** Saves picks as scraps (into `group` when given) and returns their ids. */
+export async function scrapElements(elements: PickedElement[], group?: string) {
+  const ids: string[] = [];
   for (const element of elements) {
     const snapshot = await snapshotOf(element);
-    await api("/library", { method: "POST", body: JSON.stringify({ ...element, kind: "scrap", ...(snapshot ? { snapshot } : {}) }) });
+    const saved = await api<{ id: string }>("/library", { method: "POST", body: JSON.stringify({ ...element, kind: "scrap", ...(snapshot ? { snapshot } : {}) }) });
+    ids.push(saved?.id ?? element.id);
   }
+  if (group && ids.length) await api("/library/items", { method: "PATCH", body: JSON.stringify({ ids, group }) });
   libraryChanged();
+  return ids;
 }
 
 export function attachLibraryReference(session: string, item: ElementAttachment) {

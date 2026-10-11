@@ -1,0 +1,46 @@
+import { appCopy } from "@/app/copy";
+import { notifyStatus } from "@/app/notifications";
+import type { LibraryItem } from "../browser/libraryStore";
+import { errorCode, patchItems } from "./libraryApi";
+import { useLibraryNames } from "./libraryNav";
+
+const failed = (error?: unknown) => notifyStatus(errorCode(error) === "library_group_kind_mismatch" ? appCopy.library.mixedKinds : appCopy.library.failed, { tone: "error" });
+
+/** Puts items into a group (null: out of their group) with an undo that restores each item's own group. */
+export async function fileItems(items: LibraryItem[], group: string | null) {
+  const moving = items.filter((item) => (item.group ?? null) !== group);
+  if (!moving.length) return;
+  const name = group ? useLibraryNames.getState().groups[group]?.name ?? "" : "";
+  const target = group ? useLibraryNames.getState().groups[group] : undefined;
+  if (target && moving.some((item) => item.kind !== target.kind)) { failed({ code: "library_group_kind_mismatch" }); return; }
+  try {
+    await patchItems({ ids: moving.map((item) => item.id), group });
+    if (!group) return;
+    notifyStatus(appCopy.library.added(moving.length, name), {
+      action: { label: appCopy.library.undo, onClick: () => void undo(moving) },
+    });
+  } catch (error) { failed(error); }
+}
+
+async function undo(items: LibraryItem[]) {
+  const byGroup = new Map<string | null, string[]>();
+  for (const item of items) byGroup.set(item.group ?? null, [...(byGroup.get(item.group ?? null) ?? []), item.id]);
+  try { for (const [group, ids] of byGroup) await patchItems({ ids, group }); } catch (error) { failed(error); }
+}
+
+export async function renameItem(item: LibraryItem, title: string) {
+  if (title === item.title) return;
+  try { await patchItems({ ids: [item.id], title }); } catch (error) { failed(error); }
+}
+
+export async function tagItems(items: LibraryItem[], addTags: string[], removeTags: string[]) {
+  if (!addTags.length && !removeTags.length) return;
+  try { await patchItems({ ids: items.map((item) => item.id), addTags, removeTags }); } catch (error) { failed(error); }
+}
+
+/** One line of meta: source and saved date. */
+export function itemMeta(item: LibraryItem) {
+  const host = item.site ?? (item.kind === "bookmark" ? safeHost(item.url) : undefined);
+  return [host, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
+}
+export function safeHost(url: string) { try { return new URL(url).host; } catch { return url; } }
