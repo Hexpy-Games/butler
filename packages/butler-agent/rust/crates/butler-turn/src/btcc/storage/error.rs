@@ -126,6 +126,7 @@ wire_codes! {
         LegacyTurnCutoverCasConflict = "legacy_turn_cutover_cas_conflict",
         LegacyTurnQuarantineCasConflict = "legacy_turn_quarantine_cas_conflict",
         ModelAcceptanceClaim = "model_acceptance_claim",
+        ModelAcceptanceDeltaInvalid = "model_acceptance_delta_invalid",
         ModelAcceptanceFormatUnknown = "model_acceptance_format_unknown",
         ModelAcceptanceJson = "model_acceptance_json",
         ModelAcceptanceReclaimed = "model_acceptance_reclaimed",

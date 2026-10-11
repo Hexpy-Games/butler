@@ -1,5 +1,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Capture links before nested message menus; non-web schemes keep their handlers.
+for (const type of ["click", "contextmenu"]) window.addEventListener(type, event => {
+  const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+  const value = link?.href ?? (type === "contextmenu" ? event.composedPath()
+    .find(node => node instanceof HTMLElement && node.hasAttribute("data-butler-link"))?.getAttribute("data-butler-link") : null);
+  if (!value || !/^https?:/iu.test(value)) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  ipcRenderer.send("butler-app:link", type === "click" ? "open" : "menu", value, { x: event.clientX, y: event.clientY });
+}, true);
+
 const port = Number(process.env.BUTLER_APP_SERVER_PORT ?? "18765");
 let cachedServerUrl = normalizeLocalServerUrl(
   process.env.BUTLER_APP_SERVER_URL ??

@@ -1,3 +1,4 @@
+import { openLink } from "./links.mjs";
 import { requestClose } from "./dialogs.mjs";
 import { answerUserDialog } from "./user-dialogs.mjs";
 import { ipcMain, session } from "electron";
@@ -24,6 +25,7 @@ export function installUserBrowser(app, getWindow) {
       case "pick": return browser.selection.mode(input.id, input.value);
       case "selection-command": return browser.selection.command(input.op, input.id);
       case "selection-snapshot": return browser.selection.snapshot(input.id, input.item);
+      case "open-link": return openLink(browser, input.url);
       case "state": return browser.snapshot();
       case "focus-app": return win.webContents.focus();
       case "open": return browser.open();
