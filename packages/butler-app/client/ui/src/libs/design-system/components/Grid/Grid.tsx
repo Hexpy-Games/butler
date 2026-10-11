@@ -9,9 +9,11 @@ type GapToken = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 export type GridColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill" | "main-aside" | "label-value";
 /**
  * Responsive columns keyed to the enclosing PageContainer: `base` always
- * applies, `wide` from `@container page (min-width: 48rem)`.
+ * applies, `wide` from `@container page (min-width: 48rem)`, and `compact`
+ * below `@container page (max-width: 36rem)` (a phone: two card columns).
  */
 export interface GridResponsiveColumns {
+  compact?: GridColumnPreset;
   base: GridColumnPreset;
   wide?: GridColumnPreset;
 }
@@ -51,6 +53,7 @@ function GridRoot({
       className={classes}
       data-columns={base}
       data-columns-wide={responsive ? columns.wide : undefined}
+      data-columns-compact={responsive ? columns.compact : undefined}
       {...props}
       // One ref type for every element the grid can render as.
       ref={ref as Ref<HTMLDivElement & HTMLUListElement & HTMLOListElement & HTMLLIElement>}

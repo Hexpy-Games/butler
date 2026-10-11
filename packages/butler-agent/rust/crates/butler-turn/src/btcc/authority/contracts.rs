@@ -486,6 +486,8 @@ pub(crate) trait AuthorityRepository {
 #[derive(Clone)]
 pub struct PrincipalAuthority {
     pub(super) storage: BtccStorage,
+    pub(super) permission_targets:
+        Arc<std::sync::Mutex<super::permission_management::PermissionCache>>,
     pub(super) collation: Arc<LocaleCollation>,
     pub(super) clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub(super) uuid: Arc<dyn Fn() -> String + Send + Sync>,

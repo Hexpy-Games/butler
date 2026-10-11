@@ -52,6 +52,14 @@ export function demoGroups(locale: AppLocale, { crashed = false }: { crashed?: b
 }
 
 /** Many tabs, to show shrink-to-fit and the sideways scroll with edge fades. */
+/** One conversation's own tabs, as its browser pane shows them. */
+export function conversationGroup(locale: AppLocale): TabStripGroup[] {
+  const copy = COPY[locale];
+  return [{ id: "shoes", kind: "conversation", label: copy.shoes, state: "working", tabs: [
+    { id: "s1", title: copy.shop[0], faviconSrc: ICONS.shop, state: "working" }, { id: "s2", title: copy.shop[1], faviconSrc: ICONS.shop },
+  ] }];
+}
+
 export function crowdedGroups(locale: AppLocale): TabStripGroup[] {
   const copy = COPY[locale];
   const titles = [...copy.mine, ...copy.shop, ...copy.tripTabs, copy.syncTab];
@@ -66,7 +74,7 @@ export function TabStripDemo({ locale, initial, activeTabId = "m2", ...props }: 
   locale: AppLocale;
   initial: TabStripGroup[];
   activeTabId?: string;
-} & Partial<Pick<TabStripProps, "panelId">>) {
+} & Partial<Pick<TabStripProps, "panelId" | "hideChip" | "trailing">>) {
   const [groups, setGroups] = useState(initial);
   const [active, setActive] = useState<string | null>(activeTabId);
   const [created, setCreated] = useState(0);
@@ -80,7 +88,9 @@ export function TabStripDemo({ locale, initial, activeTabId = "m2", ...props }: 
   const newTab = () => {
     const id = `new-${created}`;
     setCreated(created + 1);
-    setGroups((current) => current.map((group) => (group.kind === "mine" ? { ...group, tabs: [...group.tabs, { id, title: "" }] } : group)));
+    // New tabs join "my tabs", or the only group shown (a conversation's own pane).
+    const target = groups.find((group) => group.kind === "mine")?.id ?? groups[0]?.id;
+    setGroups((current) => current.map((group) => (group.id === target ? { ...group, tabs: [...group.tabs, { id, title: "" }] } : group)));
     setActive(id);
   };
   return (

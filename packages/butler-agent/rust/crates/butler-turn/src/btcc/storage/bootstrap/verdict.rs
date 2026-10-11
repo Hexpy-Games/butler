@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
-const VERIFIED_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const VERIFIED_INTERVAL: Duration = Duration::from_hours(24);
 
 fn sidecar(path: &Path, suffix: &str) -> PathBuf {
     path.with_extension(format!("sqlite.{suffix}"))

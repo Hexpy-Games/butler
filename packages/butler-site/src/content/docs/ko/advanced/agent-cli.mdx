@@ -233,6 +233,8 @@ butler config set update.previews true
 butler status
 ```
 
+백그라운드 브라우저는 앱이 연결되지 않았을 때 실행됩니다. 설치된 앱의 Electron을 먼저 쓰고, 앱이 없거나 실행할 수 없으면 Chrome for Testing을 씁니다. `gateways/app.json`의 `config.headlessBrowser`는 Chrome 대체 사용만 제어합니다(기본 `true`). `BUTLER_BROWSER_HEADLESS=on|off`가 이 설정에 우선하며, 변경 후 에이전트를 재시작합니다.
+
 ## 데이터와 업데이트
 
 데이터는 `BUTLER_DATA`(기본값 `~/.butler`)에 저장합니다. 다른 폴더를 쓰려면 `--data PATH`를 붙입니다. 설치 폴더와 데이터 폴더는 겹칠 수 없습니다.

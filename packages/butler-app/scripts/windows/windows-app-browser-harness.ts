@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawnElectron, stopElectronChild } from "../../../../tests/support/electron-child";
+import { type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { join } from "node:path";
 
@@ -33,7 +34,7 @@ export async function launchWindowsAppBrowser(input: {
   const debugPort = await freePort();
   const profile = join(input.dataRoot, "electron-product-profile");
   const output: string[] = [];
-  const child = spawn(electron, [
+  const child = spawnElectron(electron, [
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profile}`,
     electronRoot,
@@ -47,14 +48,15 @@ export async function launchWindowsAppBrowser(input: {
       BUTLER_DATA: input.dataRoot,
     },
     shell: false,
-    stdio: ["ignore", "pipe", "pipe"],
+    onOutput: bytes => output.push(String(bytes)),
     windowsHide: true,
   });
-  child.stdout?.on("data", (chunk) => output.push(String(chunk)));
-  child.stderr?.on("data", (chunk) => output.push(String(chunk)));
-  const cdp = await connectToPage(debugPort, input.serverUrl, child, output);
-  await seedFirstRun(cdp);
-  await waitFor(cdp, visible(TEXTAREA), "composer");
+  const cdp = await connectToPage(debugPort, input.serverUrl, child, output)
+    .catch(async error => { await stopElectronChild(child); throw error; });
+  try {
+    await seedFirstRun(cdp);
+    await waitFor(cdp, visible(TEXTAREA), "composer");
+  } catch (error) { cdp.close(); await stopElectronChild(child); throw error; }
   return {
     async send(text: string) {
       await requireBoolean(cdp, `(() => {
@@ -99,8 +101,7 @@ export async function launchWindowsAppBrowser(input: {
     },
     async close() {
       cdp.close();
-      if (child.exitCode === null && child.signalCode === null) child.kill();
-      await waitForExit(child);
+      await stopElectronChild(child);
     },
   };
 }
@@ -254,17 +255,6 @@ async function freePort(): Promise<number> {
   const port = typeof address === "object" && address ? address.port : 0;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   return port;
-}
-
-async function waitForExit(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, 5_000);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
 }
 
 function safeOutput(output: string[]): string {

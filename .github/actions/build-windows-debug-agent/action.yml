@@ -1,0 +1,23 @@
+name: Build owner Windows debug agent
+description: Build the existing stub agent and retain successful Cargo fingerprints
+runs:
+  using: composite
+  steps:
+    - name: Build and preserve debug target
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      working-directory: packages/butler-agent/rust
+      env:
+        TARGET_SNAPSHOT_PROFILE: debug
+        TARGET_SNAPSHOT_FEATURES: workspace-no-defaults,butler-agent/static-ort
+        CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+      run: |
+        $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+        $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $ErrorActionPreference = 'Continue'
+        cargo build --timings -j 8 --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
+          Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort dev
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

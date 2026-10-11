@@ -11,11 +11,12 @@ use std::{
 };
 use tokio::sync::Notify;
 
-pub(super) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
+pub(crate) const OWNER: &str = "Delegate reading and comparing a.txt and b.txt.";
 pub(super) const DIRECTION: &str = "Use approach B and read b.txt next.";
 
 #[derive(Default)]
-pub(super) struct Script {
+pub(crate) struct Script {
+    pub(crate) browser: AtomicBool,
     pub open_disposition: AtomicBool,
     pub blocked_disposition: AtomicBool,
     steps: Mutex<(usize, usize)>,
@@ -26,7 +27,7 @@ pub(super) struct Script {
     pub release: Notify,
 }
 
-pub(super) async fn start()
+pub(crate) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = format!("http://{}/codex", listener.local_addr()?);
@@ -62,7 +63,7 @@ async fn reply(
         *step += 1;
         current
     };
-    if child && step == 4 {
+    if child && step == 4 && !script.browser.load(Ordering::SeqCst) {
         script.held.notify_one();
         script.release.notified().await;
     }
@@ -105,6 +106,59 @@ fn parent_item(step: usize) -> Value {
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
+    if script.browser.load(Ordering::SeqCst) {
+        return match step {
+            0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
+            1 => call("browser-review", "record_work_review", &review()),
+            2 => call(
+                "describe-browser",
+                "tool_describe",
+                &json!({"ids":["native:browser_open","native:browser_tabs","native:browser_observe","native:browser_screenshot"]}),
+            ),
+            3 => call(
+                "open-browser",
+                "tool_call",
+                &json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
+            ),
+            4 => call(
+                "list-browser",
+                "tool_call",
+                &json!({"id":"native:browser_tabs","arguments":{}}),
+            ),
+            5 => call(
+                "observe-browser",
+                "tool_call",
+                &json!({"id":"native:browser_observe","arguments":{"tab":"parent-tab"}}),
+            ),
+            6 => call(
+                "capture-browser",
+                "tool_call",
+                &json!({"id":"native:browser_screenshot","arguments":{"tab":"parent-tab","observation":"parent-observation"}}),
+            ),
+            7 => {
+                let mut wrong = work_id(body);
+                wrong.pop();
+                call(
+                    "wrong-browser-work",
+                    "record_work_disposition",
+                    &json!({"work_id":wrong,"disposition":"completed","summary":"Browser verified"}),
+                )
+            }
+            8 => call(
+                "wrong-browser-continuation",
+                "continue_work",
+                &json!({"work_id":format!("{}-wrong",work_id(body))}),
+            ),
+            9 => call(
+                "close-browser-work",
+                "record_work_disposition",
+                &json!({"work_id":work_id(body),"disposition":"completed","summary":"Browser verified",
+                    "action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],
+                    "remaining_actions":[],"followups":[]}),
+            ),
+            _ => message("Browser verified."),
+        };
+    }
     let path = |name: &str| format!("{}/{}", script.workspace.lock().unwrap(), name);
     match step {
         0 => call("child-plan", "replace_work_plan", &plan(false, "direct")),

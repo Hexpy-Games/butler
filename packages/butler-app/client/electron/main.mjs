@@ -3,6 +3,7 @@ import { isLifecycleWindow } from "./lifecycle-window.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
+import { startPowerStateMonitor } from "./butler-platform/power.mjs";
 import {
   app,
   BrowserWindow,
@@ -17,7 +18,6 @@ import {
   protocol,
   shell,
 } from "electron";
-import { readProductFeatures } from "./product-features.mjs";
 import { installUserBrowser } from "./browser/ipc.mjs";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { unsupportedLegacyData } from "./app-legacy-data.mjs";
@@ -270,6 +270,10 @@ const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let nativeSettingsCache = null;
 let mainWindow = null;
+let powerStateMonitor = null;
+let powerStateMonitorStart = null;
+const sentPowerStateByWebContents = new WeakMap();
+const readyPowerStateWebContents = new WeakSet();
 let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
@@ -287,6 +291,39 @@ let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
   trayEnabled: !legacyDataBlocked,
 };
+
+function sendPowerState(state, window = mainWindow) {
+  const webContents = window?.webContents;
+  if (!window || window.isDestroyed() || !webContents || webContents.isDestroyed() ||
+      !readyPowerStateWebContents.has(webContents)) return;
+  const previous = sentPowerStateByWebContents.get(webContents);
+  if (previous?.onBattery === state.onBattery && previous?.constrained === state.constrained) return;
+  webContents.send("butler:power-state", state);
+  sentPowerStateByWebContents.set(webContents, state);
+}
+
+async function ensurePowerStateMonitor() {
+  if (!powerStateMonitorStart) {
+    powerStateMonitorStart = startPowerStateMonitor((state) => sendPowerState(state))
+      .then((monitor) => {
+        powerStateMonitor = monitor;
+        return monitor;
+      })
+      .catch(() => {
+        powerStateMonitorStart = null;
+        return null;
+      });
+  }
+  return await powerStateMonitorStart;
+}
+
+async function syncPowerStateToWindow(window) {
+  const monitor = await ensurePowerStateMonitor();
+  if (!monitor || powerStateMonitor !== monitor || window.isDestroyed() || window.webContents.isDestroyed()) return;
+  readyPowerStateWebContents.add(window.webContents);
+  sendPowerState(monitor.getState(), window);
+}
+
 const nativeNotificationState = {
   lastError: null,
   lastAttemptedAt: null,
@@ -2093,11 +2130,14 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-const browserEnabled = readProductFeatures(app.isPackaged ? __dirname : process.env.BUTLER_APP_RENDERER_DIST).browser;
-const browserHost = browserEnabled ? createBrowserHost({
+const browserHost = createBrowserHost({
   fetch: (path, init) => appServerFetch(path, init),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
-}) : null;
+  executeBrowser: frame => userBrowser?.execute(frame),
+  resetBrowser: () => userBrowser?.resetUse(),
+  snapshot: () => userBrowser?.snapshot(),
+  enabled: () => userBrowser?.enabled() ?? false,
+});
 
 let userBrowser;
 async function createWindow() {
@@ -2117,7 +2157,20 @@ async function createWindow() {
   }
   if (!legacyDataBlocked) {
     void loadInitialNativeShellPreferences().catch(() => undefined);
-    browserHost?.start();
+    userBrowser ??= installUserBrowser(app, () => mainWindow);
+    userBrowser.onState = () => browserHost.changed();
+    userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
+    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+      ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
+      adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
+    });
+    userBrowser.downloadRequest = async input => {
+      const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
+        headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
+      if (!response.ok) throw new Error("download_request_failed");
+      return response.json();
+    };
+    browserHost.start();
   }
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
@@ -2154,20 +2207,24 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument, ...(!browserEnabled ? ["--butler-browser-disabled"] : []), ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
+      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
     },
   });
   mainWindow = win;
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => {
+    if (!isMainFrame) return;
+    readyPowerStateWebContents.delete(win.webContents);
+    sentPowerStateByWebContents.delete(win.webContents);
+  });
+  win.webContents.on("did-finish-load", () => { void syncPowerStateToWindow(win); });
   const firstDataPaint = waitForStartupRenderer(win);
-  if (browserEnabled) {
-    userBrowser ??= installUserBrowser(app, () => mainWindow);
-    win.on("hide", () => userBrowser.syncAll());
-    win.on("show", () => userBrowser.syncAll());
-    win.on("closed", () => userBrowser.hide());
-    win.webContents.on("before-input-event", (event, input) => {
-      if (userBrowser.shortcut(input)) event.preventDefault();
-    });
-  }
+  userBrowser ??= installUserBrowser(app, () => mainWindow);
+  win.on("hide", () => userBrowser.syncAll());
+  win.on("show", () => userBrowser.syncAll());
+  win.on("closed", () => userBrowser.hide());
+  win.webContents.on("before-input-event", (event, input) => {
+    if (userBrowser.shortcut(input)) event.preventDefault();
+  });
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
@@ -2530,6 +2587,16 @@ ipcMain.handle("butler:security-request", async (event, input) => {
   });
 });
 
+// Browser import: the native dialog picks the export file; its contents are
+// read only by the Agent and never reach the renderer.
+ipcMain.handle("butler:pick-import-file", async (event, kind) => {
+  if (!isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null })) return null;
+  const filters = kind === "bookmarks" ? [{ name: "HTML", extensions: ["html", "htm"] }] : [{ name: "CSV", extensions: ["csv"] }];
+  const result = await dialog.showOpenDialog(mainWindow ?? undefined, { properties: ["openFile"], filters });
+  const path = result.canceled ? null : result.filePaths[0];
+  return path ? { path, name: basename(path) } : null;
+});
+
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
   await startOpenAIOAuthLogin(),
 );
@@ -2750,6 +2817,7 @@ if (appSingleInstanceLock) {
         return;
       }
       void installDevtools().catch(() => undefined);
+      await ensurePowerStateMonitor();
       await createWindow();
       if (!app.isPackaged && process.env.BUTLER_TEST_BROWSER_P0 === "1") {
         const { installBrowserP0Harness } = await import("../../../../tests/smoke/browser-p0-harness.mjs");
@@ -2771,6 +2839,7 @@ app.on("before-quit", (event) => {
   storageCorrectionWatch?.close(); storageCorrectionWatch = null;
   if (finalQuitAllowed) {
     mainWindow?.setProgressBar(-1);
+    powerStateMonitor?.stop();
     quitFeedback?.destroy();
     if (tray) {
       tray.destroy();
@@ -2790,7 +2859,7 @@ app.on("before-quit", (event) => {
   }
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
   void Promise.resolve(feedbackReady).then(() => {
-    browserHost?.stop();
+    browserHost.stop();
     return stopServerProcess({ reason: "app_quit" });
   }).then(() => {
     finalQuitAllowed = true;

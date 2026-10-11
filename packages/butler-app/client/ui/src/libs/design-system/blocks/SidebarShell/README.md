@@ -53,6 +53,11 @@ Pass titlebar, fixed header, scroll content, and footer slots. Keep direct
 navigation in the fixed header. Put project/session and chat sections in the
 scroll content so only session-related navigation scrolls.
 
+## Peek
+Inside an AdaptiveShell peek (`leftPeek`), a `collapsed` SidebarShell still
+shows its content: the peek card is the sidebar shown, whatever `collapsed`
+the product passes for the docked state.
+
 ## Header row
 
 The `titlebar` slot is the sidebar header row: `--titlebar-height` tall, its

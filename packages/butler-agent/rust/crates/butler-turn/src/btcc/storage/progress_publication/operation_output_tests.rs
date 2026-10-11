@@ -92,15 +92,15 @@ fn child_output_read_is_relation_bound_public_and_exact_result_scoped() {
         "cHVibGljIG91dHB1dA=="
     );
 
-    assert!(
+    assert_eq!(
         read_child_operation_output_events(
             &connection,
             "child-turn",
             "request-1",
             "private-result",
         )
-        .unwrap()
-        .is_empty()
+        .unwrap(),
+        [] as [serde_json::Value; 0]
     );
     assert_eq!(
         read_child_operation_output_events(&connection, "child-turn", "request-1", "other-result")
@@ -108,10 +108,10 @@ fn child_output_read_is_relation_bound_public_and_exact_result_scoped() {
             .len(),
         1
     );
-    assert!(
+    assert_eq!(
         read_child_operation_output_events(&connection, "unrelated-turn", "request-1", "result-1",)
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        [] as [serde_json::Value; 0]
     );
 }
 

@@ -70,6 +70,7 @@ async fn existing_folder(javascript: bool) -> Result<(), HarnessError> {
         std::fs::write(retired.join(path), bytes)?;
     }
     let mut s = setup.start().await?;
+    s.provider()?.set_chat_responder(judge_response);
     s.restart().await?;
     let (_, turn) = s
         .turn("general", &remember.replace("{{NONCE}}", &code))
@@ -238,4 +239,25 @@ fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
             })
             .collect(),
     }
+}
+
+/// Calibrated relevance can admit the optional judge; replay a complete stable order.
+fn judge_response(request: &Value) -> Option<butler_e2e::e2e::cassette::ResponseRecord> {
+    if !request.to_string().contains("recall_ranking") {
+        return None;
+    }
+    let text = request["input"]
+        .as_str()
+        .or_else(|| request["input"][0]["content"][0]["text"].as_str())
+        .unwrap();
+    let prompt: Value = serde_json::from_str(text).unwrap();
+    let candidates = prompt["candidates"].as_array().unwrap();
+    let order = candidates
+        .iter()
+        .map(|candidate| candidate["candidate"].clone())
+        .collect::<Vec<_>>();
+    Some(memory_response(
+        &json!({"type":"message","id":"msg_existing_judge","role":"assistant","status":"completed",
+        "content":[{"type":"output_text","text":json!({"ranked":order}).to_string(),"annotations":[]}]}),
+    ))
 }

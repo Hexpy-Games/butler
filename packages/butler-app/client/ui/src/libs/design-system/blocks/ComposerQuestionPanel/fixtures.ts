@@ -16,7 +16,7 @@ export function questionFixtures(ko: boolean) {
   ];
   const onboarding: ComposerQuestion[] = [
     { ...text, header: ko ? "호칭" : "Name", text: ko ? "어떻게 불러 드릴까요?" : "What should I call you?", placeholder: ko ? "이름이나 별명" : "Name or nickname" },
-    { ...single, id: "purpose", header: ko ? "주 용도" : "Purpose", text: ko ? "Butler를 어디에 쓰실 건가요?" : "How will you use Butler?", options: (ko ? ["업무", "개발", "개인"] : ["Work", "Development", "Personal"]).map((label, i) => ({ label, description: ko ? "문서·일정·작업" : "Documents, schedules and tasks", recommended: i === 0 })) },
+    { ...single, id: "purpose", header: ko ? "주 용도" : "Purpose", text: ko ? "버틀러를 어디에 쓰실 건가요?" : "How will you use Butler?", options: (ko ? ["업무", "개발", "개인"] : ["Work", "Development", "Personal"]).map((label, i) => ({ label, description: ko ? "문서·일정·작업" : "Documents, schedules and tasks", recommended: i === 0 })) },
     { ...single, id: "language", header: ko ? "언어·말투" : "Language", text: ko ? "어떤 말투가 편하세요?" : "Which tone do you prefer?", options: [{ label: ko ? "한국어 · 존댓말" : "Korean · polite", recommended: true }, { label: ko ? "한국어 · 반말" : "Korean · casual" }, { label: "English" }] },
   ];
   return { single: [single], multi: [multi], text: [text], schedule, onboarding, four: [...schedule, text] };

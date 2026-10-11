@@ -1,5 +1,6 @@
 //! BTCC-owned semantic model/tool loop.
 
+mod browser_context;
 mod completion;
 mod continuation;
 /// Model-round, tool and continuation contracts of the loop.

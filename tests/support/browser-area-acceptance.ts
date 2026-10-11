@@ -10,7 +10,8 @@ type Io = { pid: number; write_bytes: number | null; status: string; process_sta
 export async function alignment(page: ElectronPage, main: Main, win: string, evidence: string) {
   const samples: unknown[] = [];
   const rightOpen = await page.expression("Boolean(document.querySelector('button[aria-label=\"Hide right panel\"]'))");
-  const right = rightOpen ? ["Hide right panel", "Show right panel"] : ["Show right panel", "Hide right panel"];
+  const available = await page.expression("Boolean(document.querySelector('button[aria-label=\"Show right panel\"],button[aria-label=\"Hide right panel\"]'))");
+  const right = !available ? [] : rightOpen ? ["Hide right panel", "Show right panel"] : ["Show right panel", "Hide right panel"];
   for (const name of ["Hide sidebar", "Show sidebar", ...right]) {
     const button = `Array.from(document.querySelectorAll('button')).find(e=>e.getAttribute('aria-label')===${JSON.stringify(name)})`;
     assert.ok(await page.expression(`Boolean(${button})`), name);

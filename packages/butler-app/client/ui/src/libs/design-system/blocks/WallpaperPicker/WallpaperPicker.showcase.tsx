@@ -1,9 +1,12 @@
+import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Stack } from "../../components/Stack";
 import { Wallpaper, WallpaperImageLoaderProvider } from "../Wallpaper";
 import { showcaseImageLoader } from "../Wallpaper/Wallpaper.demo";
 import styles from "../Wallpaper/Wallpaper.showcase.module.css";
-import { INHERIT_LABEL, PICKER_LABELS, USER_DEMO_MODULES, USER_DEMO_REGISTRY, usePickerDemo } from "./WallpaperPicker.demo";
+import {
+  CONVERSATION_COPY, INHERIT_LABEL, OverlayDemoControl, PICKER_LABELS, USER_DEMO_MODULES, USER_DEMO_REGISTRY, usePickerDemo,
+} from "./WallpaperPicker.demo";
 import { WallpaperPicker } from "./WallpaperPicker";
 
 export const meta: ShowcaseMeta = {
@@ -46,6 +49,22 @@ function ImageOptions({ locale }: ShowcaseRenderContext) {
   );
 }
 
+/**
+ * The conversation background: the caller's overlay slider after the tile's
+ * own options (live modules and images only), and photos picked with no dim.
+ */
+function ConversationBackground({ locale }: ShowcaseRenderContext) {
+  const demo = usePickerDemo({ kind: "live", module: "butler.bloom", params: { colors: "aurora" } });
+  const [overlay, setOverlay] = useState(70);
+  const copy = CONVERSATION_COPY[locale];
+  const overlaid = demo.value !== "inherit" && demo.value.kind !== "none";
+  return (
+    <WallpaperPicker imageDefaults={{ dim: 0 }} imageLoader={showcaseImageLoader} images={demo.images} labels={{ ...PICKER_LABELS[locale], none: copy.none }}
+      locale={locale} uploading={demo.uploading} value={demo.value} onChange={demo.setValue} onDeleteImage={demo.onDeleteImage} onUpload={demo.onUpload}
+      extraControls={overlaid ? <OverlayDemoControl label={copy.overlay} value={overlay} onChange={setOverlay} /> : undefined} />
+  );
+}
+
 /** The user's own modules after the built-ins, marked; one that fails to compile is disabled and names why on hover. Import installs another; delete removes one. */
 function UserModules({ locale }: ShowcaseRenderContext) {
   const demo = usePickerDemo({ kind: "live", module: "me.dusk" }, USER_DEMO_MODULES);
@@ -60,6 +79,7 @@ export const stories: ShowcaseStory[] = [
   { name: "Home screen with preview", render: (context) => <HomeScreen {...context} /> },
   { name: "Image with a filter", render: (context) => <ImageOptions {...context} /> },
   { name: "Project scope with inherit", render: (context) => <ProjectScope {...context} /> },
+  { name: "Conversation background with an extra control", widths: ["375", "app", "wide"], render: (context) => <ConversationBackground {...context} /> },
 ];
 
 const IMPORT_ERROR = { "en-US": "Not a wallpaper module.", "ko-KR": "배경 모듈이 아닙니다." } as const;

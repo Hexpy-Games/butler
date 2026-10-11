@@ -1,5 +1,7 @@
+import { spawnElectron } from "../support/electron-child";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { freeGatewayPort } from "../support/native-app-server.ts";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer } from "node:net";
@@ -437,7 +439,7 @@ async function main(): Promise<void> {
   );
 
   await startStubModelServer();
-  const serverPort = await freePort();
+  const serverPort = await freeGatewayPort();
   appServerPort = serverPort;
   const debugPort = await freePort();
   assertPortAvailable(serverPort);
@@ -479,7 +481,7 @@ async function main(): Promise<void> {
   delete env.BUTLER_APP_BUTLER_HOME;
   delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
 
-  electronProcess = spawn(
+  electronProcess = spawnElectron(
     electronBin,
     [
       `--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(),
@@ -490,11 +492,9 @@ async function main(): Promise<void> {
     {
       cwd: root,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      onOutput: bytes => output.push(String(bytes)),
     },
   );
-  electronProcess.stdout?.on("data", (chunk) => output.push(String(chunk)));
-  electronProcess.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
   cdp = await connectToElectronPage(debugPort, `http://127.0.0.1:${serverPort}/`);
   ownedListenerPids = new Set(listenerPids(serverPort));
@@ -526,7 +526,7 @@ async function main(): Promise<void> {
     "document.querySelector('#first-run-language')?.value ?? ''",
   );
   assert(selectedLanguage === "ko", "system language did not preselect Korean");
-  for (const retired of ["언어 선택", "안전고지", "Butler Agent를 준비합니다", "모델 설정"]) {
+  for (const retired of ["언어 선택", "안전고지", "버틀러 Agent를 준비합니다", "모델 설정"]) {
     assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(retired)})`)), `retired first-run screen visible: ${retired}`);
   }
 
@@ -555,7 +555,7 @@ async function main(): Promise<void> {
   await waitForHeading(cdp, "반갑습니다");
   assert(await evaluateBoolean(cdp, "document.activeElement?.id === 'first-run-start'"), "Decline focuses Start");
   await clickButton(cdp, "시작하기");
-  await clickButton(cdp, "동의하고 시작");
+  await clickButton(cdp, "동의하고 계속");
   await waitForHeading(cdp, "어떤 AI와 일할까요?");
   await expectNoForbiddenCopy(cdp);
   const topCards = await evaluateString(
@@ -579,9 +579,9 @@ async function main(): Promise<void> {
   await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
-  await clickButton(cdp, "이 모델로 시작");
+  await clickButton(cdp, "연결");
   await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
-  await clickButton(cdp, "시작");
+  await clickButton(cdp, "대화 시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,

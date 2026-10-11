@@ -68,12 +68,30 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   };
 }
 
+type BrowserStep = NonNullable<NonNullable<ApprovalSummary["operation"]>["browser_steps"]>[number];
+function normalizeBrowserSteps(value: unknown): BrowserStep[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((step): BrowserStep[] => {
+    if (!isRecord(step) || typeof step.action !== "string" || typeof step.role !== "string"
+      || typeof step.name !== "string" || typeof step.frame !== "string" || !Array.isArray(step.addons)
+      || !step.addons.every((addon): addon is string => typeof addon === "string")) return [];
+    return [{action: step.action, role: step.role, name: step.name, frame: step.frame,
+      ...(typeof step.value_preview === "string" ? {value_preview: step.value_preview} : {}), addons: step.addons}];
+  });
+}
+
 function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   if (!isRecord(value) || typeof value.tool !== "string" || !value.tool.trim()
     || (value.access !== "read_only" && value.access !== "change")) return undefined;
   const targets = (Array.isArray(value.targets) ? value.targets : [])
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
+  const browser_steps = normalizeBrowserSteps(value.browser_steps);
   return { tool: value.tool, access: value.access, targets,
+    ...(browser_steps ? { browser_steps } : {}),
+    ...(typeof value.sign_in_step === "string" ? { sign_in_step: value.sign_in_step } : {}),
+    ...(typeof value.wait_reason === "string" ? { wait_reason: value.wait_reason } : {}),
+    ...((value.browser_mode === "signed_out" || value.browser_mode === "signed_in") ? { browser_mode: value.browser_mode } : {}),
+    ...(typeof value.allow_conversation === "boolean" ? { allow_conversation: value.allow_conversation } : {}),
     ...(typeof value.command === "string" && value.command.trim() ? { command: value.command } : {}) };
 }
 
@@ -105,7 +123,9 @@ export function approvalRequestView(
   return {
     title: operation ? copy.operation(toolLabels[operation.tool] ?? operation.tool.replaceAll("_", " "), operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
-    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets]
+    details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+      ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
+      ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
       : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
@@ -175,4 +195,25 @@ function details(
   if (lines.length || kind !== "other") return lines;
   const fallback = (card.scope?.description ?? card.reason).trim();
   return fallback ? [fallback] : [];
+}
+
+/** A step only the user can do in a tab (a sign-in step, a secure field, ...):
+ * a hand-off, not a permission. The tab id never reaches the card. */
+export interface BrowserHandoffView { title: string; details: string[]; signIn: boolean }
+
+export function browserHandoffView(
+  card: Pick<AuthorityApprovalCard, "approval">,
+  copy: ApprovalRequestCopy,
+  canOpenTab: boolean,
+): BrowserHandoffView | undefined {
+  const operation = card.approval?.operation;
+  const where = canOpenTab ? copy.signInHandoff.inTab : copy.signInHandoff.onDesktop;
+  const site = operation?.targets.find(Boolean);
+  if (operation?.tool === "browser_sign_in_wait") {
+    const step = copy.signInStep(operation.sign_in_step ?? "unknown_form");
+    return { title: copy.signInHandoff.title, details: [site ? `${site} · ${step}` : step, where], signIn: true };
+  }
+  if (operation?.tool !== "browser_wait_for_user") return undefined;
+  const reason = operation.wait_reason ?? "other";
+  return { title: copy.waitHandoff(reason), details: site ? [site, where] : [where], signIn: ["sign_in", "secure_field", "secure_keypad"].includes(reason) };
 }

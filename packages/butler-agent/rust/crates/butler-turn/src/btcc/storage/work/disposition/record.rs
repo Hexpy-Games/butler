@@ -38,12 +38,7 @@ pub(in crate::btcc::storage::work) fn record(
         relation::BoundState::Open
     };
     let work = relation::require_bound(db, &input.scope, accepted)?;
-    if work.id != input.work_id {
-        return Err(common::error(
-            StorageCode::DurableWorkDispositionNotBound,
-            "Durable Work disposition target is not bound to this Turn",
-        ));
-    }
+    validate_bound_target(&work.id, &input.work_id)?;
     // The material the caller read, before this command's own attachment.
     let observed = material_fingerprint(&read::view(db, &work.id)?)?;
     attach_current_turn(db, &work.id, command, clock)?;
@@ -93,6 +88,18 @@ pub(in crate::btcc::storage::work) fn record(
     let fingerprint = material_fingerprint(&persisted)?;
     db.execute("UPDATE btcc_guided_work_disposition_revisions SET material_fingerprint = ?1 WHERE disposition_revision_id = ?2", params![fingerprint, disposition_id]).map_err(StorageError::sqlite)?;
     read::view(db, &work.id)
+}
+
+fn validate_bound_target(bound: &str, requested: &str) -> StorageResult<()> {
+    if bound != requested {
+        return Err(common::error(
+            StorageCode::DurableWorkDispositionNotBound,
+            format!(
+                "Durable Work disposition target is not bound to this Turn. Retry with the exact bound work_id: {bound}"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// The disposition's normalized remaining actions, next condition, evidence

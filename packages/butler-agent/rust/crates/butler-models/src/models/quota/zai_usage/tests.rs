@@ -127,7 +127,10 @@ pub(crate) fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
     .unwrap();
     assert_eq!(ids(&tools), ["mcp-month"]);
     let level = parse(&json!({"data": {"level": "pro", "limits": []}})).unwrap();
-    assert!(level.windows.is_empty());
+    assert_eq!(
+        level.windows,
+        [] as [crate::models::quota::ProviderQuotaWindow; 0]
+    );
     assert_eq!(level.plan_name.as_deref(), Some("pro"));
 }
 

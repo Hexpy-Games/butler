@@ -16,9 +16,10 @@ import {
   wallpaperPickerDefault,
   wallpaperPickerKey,
   wallpaperPickerOptions,
+  withWallpaperImageDefaults,
   type WallpaperPickerOption,
 } from "./pickerModel";
-import type { WallpaperPickerImage, WallpaperPickerInherit, WallpaperPickerLabels, WallpaperPickerValue } from "./types";
+import type { WallpaperPickerImage, WallpaperPickerImageDefaults, WallpaperPickerInherit, WallpaperPickerLabels, WallpaperPickerValue } from "./types";
 import { WallpaperImageControls } from "./WallpaperImageControls";
 import { WallpaperPickerOptions } from "./WallpaperPickerOptions";
 import styles from "./WallpaperPicker.module.css";
@@ -59,6 +60,10 @@ export interface WallpaperPickerProps {
   imageLoader?: WallpaperImageLoader;
   /** Tone of the stills and of param edits; omit to follow the nearest theme scope. */
   tone?: WallpaperTone;
+  /** What an image starts with when first picked (no earlier value this session), over the defaults; e.g. `{ dim: 0 }` where the caller dims on its own. */
+  imageDefaults?: WallpaperPickerImageDefaults;
+  /** The caller's own controls, after the selected tile's options (e.g. an overlay slider); the caller decides for which values. */
+  extraControls?: ReactNode;
   /** File chooser `accept`; defaults to JPEG, PNG and WebP. */
   accept?: string;
   dataTestClass?: string;
@@ -79,13 +84,14 @@ function Params({ value, registry, labels, locale, tone, onChange }: Required<Pi
  * Chooses a wallpaper: a grid of still thumbnails (none, every live module
  * with the user's own last, uploaded images, an upload tile; optionally
  * `inherit`) and, below it, the selected choice's controls generated from its
- * manifest (images: fit, dim, blur, filter). Controlled and storage-agnostic:
+ * manifest (images: fit, dim, blur, filter), then the caller's
+ * `extraControls`. Controlled and storage-agnostic:
  * uploads and deletes go to the caller. Re-picking a tile restores what it
  * had in this session.
  */
 export function WallpaperPicker({
   value, onChange, labels, locale, images = [], onUpload, onDeleteImage, uploading = false, inherit,
-  onImportModule, importingModule = false, onDeleteModule, importError,
+  onImportModule, importingModule = false, onDeleteModule, importError, imageDefaults, extraControls,
   registry: explicitRegistry, userModules: explicitUserModules, imageLoader, tone: explicitTone, accept = WALLPAPER_PICKER_ACCEPT, dataTestClass,
 }: WallpaperPickerProps) {
   const registry = useWallpaperRegistry(explicitRegistry);
@@ -101,7 +107,8 @@ export function WallpaperPicker({
     remembered.current.set(selectedKey, value);
   }, [selectedKey, value]);
 
-  const choose = (option: WallpaperPickerOption) => onChange(remembered.current.get(option.key) ?? wallpaperPickerDefault(option));
+  const choose = (option: WallpaperPickerOption) =>
+    onChange(remembered.current.get(option.key) ?? withWallpaperImageDefaults(wallpaperPickerDefault(option), imageDefaults));
   return (
     <div className={styles.root} data-slot="wallpaper-picker" data-test-class={dataTestClass ? `wallpaper-picker ${dataTestClass}` : "wallpaper-picker"} ref={rootRef}>
       <WallpaperPickerOptions importError={importError} accept={accept} importingModule={importingModule} labels={labels} loader={loader} locale={locale} registry={registry} selectedKey={selectedKey}
@@ -109,6 +116,7 @@ export function WallpaperPicker({
         uploading={uploading} value={value} onChoose={choose} onDeleteImage={onDeleteImage} onDeleteModule={onDeleteModule}
         onImportModule={onImportModule} onUpload={onUpload} />
       <Params labels={labels} locale={locale} registry={registry} tone={tone} value={value} onChange={onChange} />
+      {extraControls}
     </div>
   );
 }

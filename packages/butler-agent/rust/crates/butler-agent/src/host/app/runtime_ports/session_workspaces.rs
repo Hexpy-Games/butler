@@ -148,6 +148,34 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
         })
     }
 
+    fn download_workspace(
+        &self,
+        query: butler_gateway::gateway::AppSessionBranchQuery,
+    ) -> ApplicationFuture<Option<String>> {
+        let recovery = self.recovery.clone();
+        Box::pin(async move {
+            let recovered = recovery
+                .recover(
+                    &query.runtime_session_id,
+                    query.project_workspace_path.as_deref(),
+                    tokio_util::sync::CancellationToken::new(),
+                )
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            match recovered.authority {
+                SessionWorkspaceAuthority::Project { workspace_path } => Ok(workspace_path),
+                SessionWorkspaceAuthority::SessionWorktree { workspace_path, .. }
+                    if matches!(
+                        recovered.validation,
+                        SessionWorkspaceValidation::Valid { .. }
+                    ) =>
+                {
+                    Ok(Some(workspace_path))
+                }
+                _ => Err(provisioning_error()),
+            }
+        })
+    }
     fn branch_info(
         &self,
         query: butler_gateway::gateway::AppSessionBranchQuery,

@@ -13,6 +13,7 @@ export const SHOWCASE_COMPONENT_CATEGORIES = [
 
 export const SHOWCASE_BLOCK_CATEGORIES = [
   "Shell",
+  "Browser",
   "Navigation",
   "Composer",
   "Conversation & Activity",

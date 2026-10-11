@@ -60,7 +60,7 @@ pub(super) fn select(
             node_id: hit.owner_id.clone(),
             channel: Channel::Vector,
             rank: hit.rank,
-            score: 1.0 / (1.0 + hit.distance.max(0.0)),
+            score: crate::cognition::recall::cosine_relevance(hit.distance),
         })
         .collect())
 }

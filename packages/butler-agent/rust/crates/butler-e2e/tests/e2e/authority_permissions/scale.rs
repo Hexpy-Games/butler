@@ -32,11 +32,6 @@ pub(super) async fn measure_current(
     {
         eprintln!("{line}");
     }
-    butler_e2e::assert_wall_clock_budget!(
-        Duration::from_micros(samples[98]),
-        Duration::from_millis(50),
-        "all approvals p99: 3000 grants / 600 owners"
-    );
     let db = butler_platform::sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     db.execute(
         "UPDATE chats SET title='Renamed latest' WHERE id='chat-0'",
@@ -65,6 +60,15 @@ pub(super) async fn measure_current(
         current.data()["permissions"].as_array().unwrap(),
         &remaining
     );
+    eprintln!(
+        "approvals latest state: grants={} renamed_owner=chat-0 revoked=1",
+        remaining.len()
+    );
+    butler_e2e::assert_wall_clock_budget!(
+        Duration::from_micros(samples[98]),
+        Duration::from_millis(50),
+        "all approvals p99: 3000 grants / 600 owners"
+    );
     Ok(())
 }
 
@@ -79,7 +83,7 @@ async fn approvals_indexes_upgrade_existing_store() -> Result<(), HarnessError> 
     assert_eq!(before.status, 200);
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = butler_platform::sqlite::open(&path)?;
-    db.execute_batch("DROP INDEX IF EXISTS idx_btcc_permission_sources; DROP INDEX IF EXISTS idx_btcc_permissions_active;")?;
+    db.execute_batch("DROP INDEX IF EXISTS idx_btcc_permission_sources; DROP INDEX IF EXISTS idx_btcc_permissions_active; CREATE INDEX idx_btcc_permissions_active ON btcc_conversation_permissions(created_at DESC,grant_ref,owner_session_id,workspace_path,revoked_at) WHERE revoked_at IS NULL;")?;
     drop(db);
     let app_path = s.sandbox.data.join("app-server/butler-client.sqlite");
     let app = butler_platform::sqlite::open(&app_path)?;
@@ -96,7 +100,7 @@ async fn approvals_indexes_upgrade_existing_store() -> Result<(), HarnessError> 
             "idx_btcc_permission_sources",
         ),
         (
-            "SELECT grant_ref,owner_session_id,workspace_path,created_at FROM btcc_conversation_permissions WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref",
+            "SELECT grant_ref,owner_session_id,workspace_path,created_at,scope_key FROM btcc_conversation_permissions WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref",
             "idx_btcc_permissions_active",
         ),
     ] {

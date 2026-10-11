@@ -137,6 +137,34 @@ impl Command {
     }
 }
 
+/// Starts the bounded async runtime and enters the host. This synchronous,
+/// non-generic boundary keeps host futures out of the executable's codegen.
+pub fn run(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(butler_platform::cpu::performance_cores().min(8))
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("async_runtime_unavailable: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(async move {
+        let recovery = tokio::task::spawn_blocking(|| {
+            let executable =
+                butler_platform::process_names::current_exe().map_err(|e| e.to_string())?;
+            butler_platform::app_update::recover(&executable)
+        })
+        .await;
+        if !matches!(recovery, Ok(Ok(()))) {
+            eprintln!("app_update_recovery_failed: {recovery:?}");
+            return std::process::ExitCode::FAILURE;
+        }
+        main(args, build_info).await
+    })
+}
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.
 pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode {

@@ -78,7 +78,10 @@ fn correction_rewrites_only_selected_span_and_records_supersedes() {
         &input,
     )
     .unwrap();
-    assert!(warnings.is_empty());
+    assert_eq!(
+        warnings,
+        [] as [crate::cognition::extraction::binding::apply::BindingWarning; 0]
+    );
     assert_eq!(output.claims[0].statement, "deadline 2027");
     assert_eq!(output.corrections[0].previous_claim_ref, "past-claim");
     assert_eq!(output.claims[0].evidence.len(), 2);
@@ -103,5 +106,8 @@ fn correction_rejects_cross_candidate_evidence_and_unresolved_is_explicit() {
         serde_json::to_value(&warning).unwrap(),
         json!([{"code":"correction_unresolved","target_ref":"f0"}])
     );
-    assert!(output.corrections.is_empty());
+    assert_eq!(
+        output.corrections,
+        [] as [crate::cognition::extraction::contracts::ExtractCorrection; 0]
+    );
 }

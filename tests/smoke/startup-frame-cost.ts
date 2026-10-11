@@ -35,7 +35,7 @@ for (let round = 0; round < 5; round++) {
       }));
       assert.equal(result.images, 0);
       assert.ok(result.font && result.mark > 0 && !result.overflow);
-      assert.equal(result.title, kind === "startup" ? "Butler 시작 중…" : "Butler 종료 중…");
+      assert.equal(result.title, kind === "startup" ? "버틀러 시작 중…" : "버틀러 종료 중…");
       assert.equal(result.line, kind === "startup" ? "준비하는 중…" : "작업을 저장하는 중…");
       assert.ok(requests.every((url) => url.startsWith("data:") || url.startsWith("file:") && ["lifecycle.html", "mark.js", "state.js"].includes(new URL(url).pathname.split("/").pop()!)));
       (samples[`${kind}/${theme}`] ??= []).push(result.marks.first_frame!);

@@ -104,7 +104,7 @@ async fn registered_refresh_writes_prompt_capsule_and_releases_project_lock() {
         .unwrap();
     assert_eq!(report.considered, 1);
     assert_eq!(report.refreshed, 1);
-    assert!(report.failed.is_empty());
+    assert_eq!(report.failed, [] as [(); 0]);
 
     let path = service
         .refresh("alpha", None, &cancellation, deadline)

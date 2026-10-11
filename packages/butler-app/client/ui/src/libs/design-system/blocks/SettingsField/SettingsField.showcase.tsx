@@ -27,7 +27,7 @@ const labels = {
   },
   "ko-KR": {
     name: "표시 이름",
-    nameDescription: "Butler 메시지에 표시됩니다.",
+    nameDescription: "버틀러 메시지에 표시됩니다.",
     meta: "로컬에 저장됨",
     smartGroups: "스마트 그룹",
     smartGroupsDescription: "새 대화를 주제별로 자동 정리합니다. 직접 옮긴 대화는 옮긴 자리에 그대로 둡니다.",
@@ -49,7 +49,7 @@ export const stories: ShowcaseStory[] = [
     render: (context) => (
       <SettingsFieldScopeProvider>
         <SettingsField id="field-name" label={text(context).name} description={text(context).nameDescription}
-          control={<Input id="field-name" defaultValue="Butler" />} meta={text(context).meta} />
+          control={<Input id="field-name" defaultValue={context.locale === "ko-KR" ? "버틀러" : "Butler"} />} meta={text(context).meta} />
       </SettingsFieldScopeProvider>
     ),
   },
@@ -80,7 +80,7 @@ export const stories: ShowcaseStory[] = [
         <SettingsField id="ramp-groups" label={text(context).smartGroups} description={text(context).smartGroupsDescription}
           control={<Switch id="ramp-groups" />} />
         <SettingsField id="ramp-name" label={text(context).name} description={text(context).nameDescription}
-          control={<Input id="ramp-name" defaultValue="Butler" />} />
+          control={<Input id="ramp-name" defaultValue={context.locale === "ko-KR" ? "버틀러" : "Butler"} />} />
         <SettingsField id="ramp-timezone" label={text(context).timezone} control={<Input id="ramp-timezone" defaultValue="Asia/Seoul" />} />
       </FormSection>
     ),

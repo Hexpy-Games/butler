@@ -27,7 +27,7 @@ use super::event_outbox;
 
 const OPERATION_QUEUE_CAPACITY: usize = 64;
 /// Planner statistics are refreshed this often while the process runs.
-const OPTIMIZE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const OPTIMIZE_INTERVAL: Duration = Duration::from_hours(6);
 /// A refresh waits this long for the lane to go idle.
 const OPTIMIZE_RETRY: Duration = Duration::from_secs(60);
 

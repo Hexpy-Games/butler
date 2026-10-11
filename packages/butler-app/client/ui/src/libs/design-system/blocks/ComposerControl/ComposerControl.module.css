@@ -90,7 +90,7 @@
  * to --control-hit-target); a transparent ::after extends only the hit area.
  */
 @media (width <= 640px) {
-  .control[data-slot="button"][data-compact]:not(
+  .control.control[data-compact]:not(
       [data-viewport="desktop"],
       [data-viewport="desktop"] *
     ) {
@@ -107,7 +107,7 @@
   }
 }
 @media (pointer: coarse) {
-  .control[data-slot="button"][data-compact] {
+  .control.control[data-compact] {
     position: relative;
     min-height: var(--control-height-md);
     overflow: visible;
@@ -127,8 +127,12 @@
     padding-inline: var(--space-sm);
   }
 
-  .control[data-compact="icon"][data-slot="button"] {
+  /* Icon-only: a true circle. The doubled class (not [data-slot="button"],
+     which a Popover/Menu trigger renames) outranks Button's icon+text
+     padding, so the pill keeps no leftover space beside the icon. */
+  .control.control[data-compact="icon"] {
     width: var(--control-height-md);
+    min-width: var(--control-height-md);
     padding-inline: 0;
   }
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { AlertCircle, GitBranch, Monitor, Search, ShieldCheck, SlidersHorizontal } from "../../components/Icons";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/Popover";
 import { Select, SelectContent, SelectItem, SelectValue } from "../../components/Select";
 import { Stack } from "../../components/Stack";
 import { ComposerControl } from "./ComposerControl";
@@ -71,6 +72,22 @@ export const stories: ShowcaseStory[] = [
           <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="ask" />
           <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="read" />
         </Stack>
+      </div>
+    ),
+  },
+  {
+    // AccessModeMenu: compact="icon" as a Popover trigger (asChild renames data-slot). Narrow composers
+    // (≤520px) show a true circle; wide ones the label. The fixture is the composer container.
+    name: "Icon-only access as a popover trigger",
+    widths: ["375", "app"],
+    render: ({ locale }) => (
+      <div className={styles.fixture}>
+        <Popover>
+          <PopoverTrigger asChild>
+            <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="full" compact="icon" />
+          </PopoverTrigger>
+          <PopoverContent side="top">{copy[locale].access}</PopoverContent>
+        </Popover>
       </div>
     ),
   },

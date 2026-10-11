@@ -69,6 +69,15 @@ impl WebAccess {
                 "page-reader-disabled",
             ));
         }
+        if !self.page_permitted(&url) {
+            return Ok(PageRead::unavailable(
+                requested_url,
+                requested_url,
+                "butler-lightweight",
+                "Only public pages are read: private, loopback and local addresses are refused.",
+                "page-read-denied",
+            ));
+        }
         let mut page =
             match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
                 Ok(page) => page,
@@ -92,9 +101,14 @@ impl WebAccess {
                     Ok(Some(rendered)) => {
                         add_warning(&mut page, &fallback_warning(&rendered));
                     }
-                    Ok(None) => {
-                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight");
-                    }
+                    Ok(None) => match super::headless::render(&url, requested_url).await? {
+                        Some(rendered) if should_use_rendered(&page, &rendered) => page = rendered,
+                        Some(_) => add_warning(&mut page, "headless-render-fallback-rejected"),
+                        None => add_warning(
+                            &mut page,
+                            "lightpanda-unavailable-fell-back-to-lightweight",
+                        ),
+                    },
                     Err(error) if error.code() == "cancelled" => return Err(error),
                     Err(_) => add_warning(&mut page, "lightpanda-render-fallback-rejected"),
                 }

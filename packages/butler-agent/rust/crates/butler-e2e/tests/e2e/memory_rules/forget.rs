@@ -378,7 +378,10 @@ async fn older_rules_keep_complete_text_and_global_handles_until_forget() -> Res
     let output = support::tool(&s, "general", FORGET, "forget_explicit_memory").await?;
     assert_eq!(output["ok"], true, "{output}");
     assert_eq!(output["rule"], handle);
-    assert!(support::active_rules(&s.sandbox.data).is_empty());
+    assert_eq!(
+        support::active_rules(&s.sandbox.data),
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(std::fs::read_to_string(rules.join("older-rule.md"))?, text);
     let binding = support::read_json(&rules.join("older-rule.source.json")).unwrap();
     assert!(binding["project_id"].is_null());

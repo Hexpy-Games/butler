@@ -23,7 +23,7 @@ pub(super) fn load(root: &Path, host: &str) -> Option<Icon> {
         };
         if !meta.is_file()
             || meta.len() > ICON_LIMIT as u64
-            || meta.modified().ok()?.elapsed().ok()? > Duration::from_secs(30 * 86400)
+            || meta.modified().ok()?.elapsed().ok()? > Duration::from_hours(720)
         {
             continue;
         }

@@ -83,6 +83,13 @@ pub(super) async fn route(
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
     let client = local_client(request.extensions().get::<Client>())?.clone();
+    let path = request.uri().path();
+    if path == "/security/signins" || path.starts_with("/security/signins/") {
+        return super::signins::route(state, request).await;
+    }
+    if path.starts_with("/security/browser-import/") {
+        return super::browser_import::route(state, request).await;
+    }
     match (request.method().clone(), request.uri().path()) {
         (Method::GET, "/security") => ok(view(&state)?),
         (Method::POST, "/security/pairing") => {
@@ -253,6 +260,12 @@ pub(super) fn parse_patch(value: Value) -> Result<SecurityPatch, HttpError> {
 /// Persists the patched exposure, then binds or unbinds and answers the
 /// new names, with no restart.
 pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Result<(), HttpError> {
+    if patch.remote_access_enabled.is_none()
+        && patch.allowed_hosts.is_none()
+        && patch.content_hosts.is_none()
+    {
+        return Ok(());
+    }
     let _change = state.remote.changes.lock().await;
     let mut exposure = state.remote.snapshot().exposure;
     if let Some(enabled) = patch.remote_access_enabled {

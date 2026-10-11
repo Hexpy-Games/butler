@@ -1,3 +1,4 @@
+import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { launchSmokeBrowser, smokeElectronArgs } from "../support/smoke-browser.ts";
 // Bundled fonts render in the served UI (DS spec Typeface Contract).
 //
@@ -10,7 +11,6 @@ import { launchSmokeBrowser, smokeElectronArgs } from "../support/smoke-browser.
 // report lists the font bytes an initial app load fetches per locale. No
 // model calls; skip Electron with BUTLER_FONT_SMOKE_ELECTRON=0.
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -45,7 +45,7 @@ const LOAD_PROBE = `(async () => {
     pretendardLoaded: [...document.fonts].filter((face) => face.family.includes("Pretendard Variable") && face.status === "loaded").length,
     // One Pretendard file covers Latin and Hangul; the probes below verify
     // Hangul rendering for both locales.
-    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "Butler 설정" : "Butler"),
+    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "버틀러 설정" : "Butler"),
   };
 })()`;
 
@@ -58,11 +58,11 @@ const PROBE_NODES = `(async () => {
     node.textContent = text;
     document.body.append(node);
   };
-  make("font-probe-text", "var(--font-body)", "Butler settings Butler 설정");
+  make("font-probe-text", "var(--font-body)", "Butler settings 버틀러 설정");
   make("font-probe-code", "var(--font-family-code)", "const value = 1;");
   make("font-probe-code-hangul", "var(--font-family-code)", "한글");
   await Promise.all([
-    document.fonts.load('14px "Pretendard Variable"', "Butler 설정 설정 한글"),
+    document.fonts.load('14px "Pretendard Variable"', "버틀러 설정 설정 한글"),
     document.fonts.load('13px "IBM Plex Mono"', "const value = 1;"),
   ]);
   await document.fonts.ready;
@@ -146,7 +146,7 @@ async function electronMode(): Promise<void> {
   });
   const electronPath = createRequire(resolve(root, "packages/butler-app/client/electron/package.json"))("electron") as unknown as string;
   const debugPort = await freePort();
-  const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
+  const electron = spawnElectron(electronPath, [`--remote-debugging-port=${debugPort}`, ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
     cwd: dir,
     stdio: "ignore",
     env: {
@@ -202,9 +202,7 @@ async function electronMode(): Promise<void> {
     report.electron = { initialFontFiles: load.files, initialFontBytes: load.bytes, rendered };
   } finally {
     socket?.close();
-    electron.kill("SIGTERM");
-    await Promise.race([new Promise((done) => electron.once("exit", done)), wait(5000)]);
-    if (electron.exitCode === null && electron.signalCode === null) electron.kill("SIGKILL");
+    await stopElectronChild(electron);
     proxy.stop(true);
   }
 }

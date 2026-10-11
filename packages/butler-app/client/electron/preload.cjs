@@ -9,6 +9,9 @@ const messageCacheSchema = "butler.message-cache.v1";
 const messageCachePrefix = "butler:message-cache:v1:";
 const appUiStateSchema = "butler.app-ui-state.v1";
 const appUiStateKey = "butler:app-ui-state:v1";
+const powerStateChannel = "butler:power-state";
+const powerStateSubscribers = new Set();
+let latestPowerState = null;
 // Sandboxed preloads cannot load arbitrary Node modules or JSON files. The
 // main process validates the shared JSON artifact and passes this typed,
 // bounded value through BrowserWindow.additionalArguments instead.
@@ -25,6 +28,20 @@ const disabledCacheBudget = Object.freeze({
 });
 const bridgeErrorSchema = "butler.app.bridge-error.v1";
 const safeBridgeCodePattern = /^[a-z][a-z0-9_]{1,63}$/u;
+
+function normalizePowerState(value) {
+  if (!value || typeof value !== "object" ||
+      typeof value.onBattery !== "boolean" || typeof value.constrained !== "boolean") return null;
+  return { onBattery: value.onBattery, constrained: value.constrained };
+}
+
+ipcRenderer.on(powerStateChannel, (_event, value) => {
+  const state = normalizePowerState(value);
+  if (!state || (latestPowerState && latestPowerState.onBattery === state.onBattery &&
+      latestPowerState.constrained === state.constrained)) return;
+  latestPowerState = state;
+  for (const handler of powerStateSubscribers) handler(state);
+});
 
 function safeBridgeCode(value) {
   return typeof value === "string" && safeBridgeCodePattern.test(value)
@@ -588,6 +605,16 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  organizeLibrary: ({ path, method, body }) => {
+    const route = new URL(path, "http://butler.invalid");
+    const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
+    if (!allowed || !["GET", "POST", "PATCH", "DELETE"].includes(method)) throw new Error("Invalid Library request.");
+    return requestJson(route.pathname + route.search, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  },
+  listLibrary: (input = {}) => requestJson(`/library?${new URLSearchParams(input)}`),
+  saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
+  deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   get serverUrl() {
@@ -700,6 +727,12 @@ const butlerApp = Object.freeze({
     const listener = (_event, state) => handler(state);
     ipcRenderer.on("butler:app-update-state", listener);
     return () => ipcRenderer.removeListener("butler:app-update-state", listener);
+  },
+  onPowerState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    powerStateSubscribers.add(handler);
+    if (latestPowerState) handler(latestPowerState);
+    return () => { powerStateSubscribers.delete(handler); };
   },
   getUpdates: () => requestJson("/updates"),
   checkUpdates: (request = {}) => requestJson("/updates/check", {
@@ -1178,6 +1211,18 @@ const butlerApp = Object.freeze({
   listPairedDevices: () => requestSecurity("listPairedDevices"),
   revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),
   revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
+  // Sign-ins and browser import (host only). A password typed here goes to main,
+  // then to the Agent's keychain store; no route ever answers one.
+  listSignIns: () => requestSecurity("listSignIns"),
+  addSignIn: (payload) => requestSecurity("addSignIn", { payload }),
+  updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),
+  deleteSignIn: ({ id } = {}) => requestSecurity("deleteSignIn", { id }),
+  updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
+  listImportSources: () => requestSecurity("listImportSources"),
+  previewImport: (payload) => requestSecurity("previewImport", { payload }),
+  runImport: (payload) => requestSecurity("runImport", { payload }),
+  // The file path is chosen in a native dialog and stays in main and the Agent.
+  pickImportFile: (kind) => ipcRenderer.invoke("butler:pick-import-file", kind === "bookmarks" ? "bookmarks" : "passwords"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {
@@ -1373,13 +1418,33 @@ function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {
   return requestJson(`/${scope}/${encodeURIComponent(id)}/${tail}${suffix}`);
 }
 const browserCall = (op, input) => ipcRenderer.invoke("butler-browser:call", op, input);
-if (!process.argv.includes("--butler-browser-disabled")) contextBridge.exposeInMainWorld("butlerBrowser", {
+contextBridge.exposeInMainWorld("butlerBrowser", {
+  onDownload(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:download", listener);
+    return () => ipcRenderer.removeListener("butler-browser:download", listener);
+  },
+  onElementDrag(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:element-drag", listener);
+    return () => ipcRenderer.removeListener("butler-browser:element-drag", listener);
+  },
+  onSelectionAction(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:selection-action", listener);
+    return () => ipcRenderer.removeListener("butler-browser:selection-action", listener);
+  },
   call: browserCall,
   subscribe: (handler) => {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on("butler-browser:state", listener);
     browserCall("state").then(handler);
     return () => ipcRenderer.removeListener("butler-browser:state", listener);
+  },
+  onPointer: (handler) => {
+    const listener = (_event, point) => handler(point);
+    ipcRenderer.on("butler-browser:pointer", listener);
+    return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
   },
   onAddress: (handler) => {
     const listener = () => handler();

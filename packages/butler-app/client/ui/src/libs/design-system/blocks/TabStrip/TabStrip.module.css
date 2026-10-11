@@ -235,3 +235,12 @@
 .newTab {
   flex: none;
 }
+
+/* Row-end controls (bring in a tab): pinned to the end, never scrolled away. */
+.trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}

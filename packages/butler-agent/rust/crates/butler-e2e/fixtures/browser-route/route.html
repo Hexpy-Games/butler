@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>Local directions</title>
+<style>body{margin:0;font:18px system-ui;color:#172033}aside{left:40px!important;width:340px;padding:20px;box-sizing:border-box;position:absolute;inset:0 auto 0 0;background:white}button,input{font:inherit;margin:5px;padding:8px;max-width:280px}canvas{position:absolute;left:380px;top:0}ul{padding:0;list-style:none}li{margin:0}#add{font-size:1px;color:transparent}#choices{background:#eff6ff;position:absolute;left:20px;width:300px;z-index:3;margin:0}h1{font-size:22px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<header style="position:absolute;inset:0 auto 0 0;width:40px;background:#182840;color:white"><nav aria-label="사이트 메뉴">홈</nav></header><canvas width="940" height="800"></canvas><aside>
+<h1>길찾기</h1><button id="car" aria-pressed="false">자동차</button>
+<div id="fields"><input placeholder="출발지" aria-label="출발지"><input placeholder="도착지" aria-label="도착지"></div>
+<ul id="choices" role="listbox"></ul><button id="add"><svg aria-hidden="true" width="20" height="20"><path d="M10 0v20M0 10h20" stroke="black"/></svg><span class="sr">경유지 추가</span></button><button id="search">길찾기</button>
+<p id="summary">장소를 선택하세요</p></aside>
+<script>
+const stops=['중앙탑','떡버무리','충주댐','수주팔봉'],canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+let chosen=new WeakMap(),focused,car=false,count=0,fieldId=0;
+function wire(input){input.setAttribute('aria-autocomplete','list');const label=document.createElement('span');label.id='field-'+(++fieldId);label.className='sr';label.textContent=input.ariaLabel;document.body.append(label);input.setAttribute('aria-labelledby',label.id);input.removeAttribute('aria-label');input.addEventListener('input',()=>{
+ chosen.delete(input);focused=input;document.querySelector('#choices').replaceChildren();document.querySelector('#choices').style.top=input.getBoundingClientRect().bottom+'px';
+ setTimeout(()=>{if(focused!==input)return;for(const name of stops.filter(s=>s.includes(input.value))){
+ const li=document.createElement('li'),button=document.createElement('button');button.textContent=name;button.setAttribute('role','option');
+ button.onclick=()=>{input.value=name;input.removeAttribute('placeholder');chosen.set(input,name);document.querySelector('#choices').replaceChildren()};
+ li.append(button);document.querySelector('#choices').append(li);
+ }},60);
+})}
+document.querySelectorAll('input').forEach(wire);
+document.querySelector('#add').onclick=()=>{const input=document.createElement('input');input.placeholder=input.ariaLabel='경유지 '+(++count);const fields=document.querySelector('#fields');fields.insertBefore(input,fields.children[1]);wire(input);[...fields.querySelectorAll('input')].slice(1,-1).forEach((e,i)=>{e.placeholder='경유지 '+(i+1);document.getElementById(e.getAttribute('aria-labelledby')).textContent='경유지 '+(i+1)})};
+document.querySelector('#car').onclick=()=>{car=true;document.querySelector('#car').setAttribute('aria-pressed','true')};
+function draw(route=false){ctx.fillStyle='#edf4ec';ctx.fillRect(0,0,940,800);ctx.strokeStyle='#d4ded1';ctx.lineWidth=20;for(let i=0;i<8;i++){ctx.beginPath();ctx.moveTo(0,i*110);ctx.lineTo(940,i*80);ctx.stroke()}
+ if(route){ctx.strokeStyle='#2563eb';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(160,170);ctx.lineTo(320,340);ctx.lineTo(660,230);ctx.lineTo(560,600);ctx.stroke();ctx.font='22px sans-serif';for(const [i,p] of [[160,170],[320,340],[660,230],[560,600]].entries()){ctx.fillStyle='#2563eb';ctx.beginPath();ctx.arc(...p,16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#172033';ctx.fillText(stops[i],p[0]+24,p[1])}}
+}
+document.querySelector('#search').onclick=()=>{const picks=[...document.querySelectorAll('input')].map(e=>chosen.get(e));const ok=car&&JSON.stringify(picks)===JSON.stringify(stops);document.querySelector('#summary').textContent=ok?'중앙탑 → 떡버무리 → 충주댐 → 수주팔봉 · 자동차 · 54km · 1시간 20분':'장소를 선택하세요';draw(ok)};
+draw();
+</script>

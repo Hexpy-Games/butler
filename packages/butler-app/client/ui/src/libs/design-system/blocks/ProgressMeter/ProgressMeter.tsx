@@ -16,6 +16,8 @@ interface ProgressMeterBaseProps extends DsPrivateStyleProps {
   tone?: "default" | "success" | "warning" | "danger";
   /** Track only (4px), no label row; name it with `ariaLabel`. */
   bare?: boolean;
+  /** A 2px track on a clear rail (a page's load line on the card edge); implies `bare`. */
+  thin?: boolean;
 }
 
 /**
@@ -33,7 +35,8 @@ export type ProgressMeterProps = ProgressMeterBaseProps & (
 );
 
 export function ProgressMeter(props: ProgressMeterProps) {
-  const { label, meta, ariaLabel, tone = "default", className, bare = false } = props;
+  const { label, meta, ariaLabel, tone = "default", className, thin = false } = props;
+  const bare = props.bare === true || thin;
   if (props.indeterminate) {
     return (
       <Stack align="row" cross="start" gap="xs" role="status" aria-label={ariaLabel}
@@ -61,7 +64,7 @@ export function ProgressMeter(props: ProgressMeterProps) {
     </div>
   );
   if (bare) {
-    return <div className={cn(styles.root, className)} data-bare="true">{track}</div>;
+    return <div className={cn(styles.root, className)} data-bare="true" data-thin={thin || undefined}>{track}</div>;
   }
 
   return (

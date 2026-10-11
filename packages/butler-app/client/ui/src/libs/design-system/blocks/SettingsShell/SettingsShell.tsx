@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { PageContainer } from "../../components/PageContainer";
 import { ScrollArea } from "../ScrollArea";
+import { useShellFrame } from "../AdaptiveShell/shellFrame";
 import styles from "./SettingsShell.module.css";
 import { SettingsPageProvider } from "./settingsPage";
 import { dsClass } from "../../lib/internal";
@@ -58,6 +59,7 @@ export function SettingsShell({
         .join(" ")}
       data-test-class={`settings-view${active ? " settings-view-active" : ""}`}
       data-compact-pane={compactPane}
+      data-frame={useShellFrame()}
     >
       <aside
         className={[styles.sidebar, active && styles.sidebarActive]

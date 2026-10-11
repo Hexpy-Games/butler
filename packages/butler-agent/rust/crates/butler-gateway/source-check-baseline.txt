@@ -7,8 +7,8 @@ src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_sessio
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
 src/gateway/application/projection/final_candidate.rs	candidate	87
-src/gateway/application/projection/final_result.rs	apply	214
-src/gateway/application/projection/non_final.rs	apply	182
+src/gateway/application/projection/final_result.rs	apply	213
+src/gateway/application/projection/non_final.rs	apply	179
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projects/dashboard/board.rs	board_cards	95
 src/gateway/application/projects/dashboard/board.rs	get	119
@@ -23,7 +23,6 @@ src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
 src/gateway/application/projects/dashboard/statistics/ledger.rs	apply_history	135
 src/gateway/application/retry.rs	AppApplication::retry_turn_owned	100
 src/gateway/application/retry/source.rs	retry_snapshot	112
-src/gateway/application/send.rs	AppApplication::send_with_attachment_source	158
 src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	126
 src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	119
 src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214

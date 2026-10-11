@@ -7,7 +7,7 @@
 )]
 mod files;
 #[path = "steward_presentation/stub.rs"]
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};

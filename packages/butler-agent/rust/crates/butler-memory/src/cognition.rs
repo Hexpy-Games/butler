@@ -47,7 +47,6 @@ pub use crate::cognition::legacy::memory_import::{
     LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
 };
 pub use crate::cognition::legacy::metadata::{LegacyMetadataIntegrityService, MissingFeedbackRef};
-pub use crate::cognition::legacy::recall::{LegacyRecallRequest, recall_legacy};
 pub use crate::cognition::legacy::session_sync::{
     LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
     legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
@@ -153,3 +152,12 @@ pub(crate) use generation::reset::{
     begin as begin_conversation_reset, receipt as reset_receipt, run as reset_conversations,
     save_leased as save_reset_receipt,
 };
+
+/// Script15 analysis for an indexed text field, shared with App search.
+pub fn analyze_search_field(text: &str) -> String {
+    graph::episode_fts::tokenize::field(text)
+}
+/// Escaped Script15 FTS query using the same language rules as its fields.
+pub fn analyze_search_query(text: &str) -> String {
+    graph::episode_fts::tokenize::query(text)
+}

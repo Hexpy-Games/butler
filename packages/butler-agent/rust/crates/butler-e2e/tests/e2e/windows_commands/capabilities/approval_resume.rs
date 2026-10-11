@@ -25,7 +25,10 @@ async fn command_approval_resumes_the_exact_operation() -> Result<(), HarnessErr
         std::fs::read_to_string(s.sandbox.home.join("Downloads/approved-command.txt"))?,
         "approved"
     );
-    assert!(s.gw.approval_requests(&chat).await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests(&chat).await?,
+        [] as [serde_json::Value; 0]
+    );
     s.finish().await?;
     server.abort();
     Ok(())

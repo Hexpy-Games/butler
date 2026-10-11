@@ -128,7 +128,10 @@ fn pool(tokens: &[f32], encoded: &Encoding, checked: bool) -> Result<Vec<f32>, E
         if count == 0 {
             return Err(EmbeddingFailure::new("embed_output_invalid"));
         }
-        for (active, row) in mask.iter().zip(tokens.chunks_exact(EXPECTED_DIMENSION)) {
+        for (active, row) in mask
+            .iter()
+            .zip(tokens.as_chunks::<EXPECTED_DIMENSION>().0.iter())
+        {
             if *active == 0 {
                 continue;
             }

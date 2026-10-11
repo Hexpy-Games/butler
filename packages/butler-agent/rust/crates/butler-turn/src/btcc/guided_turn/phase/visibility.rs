@@ -1,3 +1,4 @@
+mod browser;
 use std::collections::HashSet;
 
 use crate::btcc::{AccessMode, ApprovalExemptAction};
@@ -61,6 +62,8 @@ const NON_FULL: &[&str] = &[
     "list_wallpapers",
     "set_wallpaper",
     "save_wallpaper_module",
+    "library_search",
+    "library_organize",
     "read_mcp_resource",
     "list_skills",
     "load_skill",
@@ -77,6 +80,7 @@ const SCHEDULE_WRITES: &[&str] = &[
 ];
 const ASK_FIRST_WRITES: &[&str] = &[
     "output_publish",
+    "library_organize",
     "run_command",
     "set_wallpaper",
     "save_wallpaper_module",
@@ -133,6 +137,7 @@ pub(super) fn legacy_authorized<'a>(
     names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
+    browser::authorize(&mut names, catalog, policy, scope.worker);
     apply_role(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
@@ -408,6 +413,12 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     }
     if tool.durable {
         return false;
+    }
+    if matches!(
+        tool.name.as_str(),
+        "browser_act" | "browser_wait_for_user" | "browser_sign_in"
+    ) {
+        return true;
     }
     if tool.effect_boundary.as_deref() != Some("none") {
         return false;

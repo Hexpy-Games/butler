@@ -153,6 +153,7 @@ pub(in crate::cognition::graph::recall) fn fixture() -> Connection {
 
 #[test]
 fn scoped_semantic_selection_matches_source_bun() {
+    assert_time_seed_cap();
     let db = fixture();
     let golden: Value = serde_json::from_str(include_str!("fixtures/source-bun.json")).unwrap();
     for case in [
@@ -196,5 +197,34 @@ fn scoped_semantic_selection_matches_source_bun() {
             golden[case]["coverageCodes"],
             "{case}"
         );
+    }
+}
+
+/// Exercise the expansion boundary, including the old zero/one temporal-seed overwrite.
+fn assert_time_seed_cap() {
+    use crate::cognition::recall::{Channel, RankedCandidate, SeedOptions, select_semantic_seeds};
+    for temporal_count in [0, 1, 8] {
+        let mut selected = select_semantic_seeds(
+            (0..20).map(|index| RankedCandidate {
+                node_id: format!("semantic-{index:02}"),
+                channel: Channel::Vector,
+                rank: index + 1,
+                score: 1.0,
+            }),
+            SeedOptions {
+                max_seeds: 16,
+                context_only: false,
+                lexical_partial: false,
+            },
+        );
+        let temporal = (0..temporal_count)
+            .map(|index| format!("temporal-{index}"))
+            .collect::<Vec<_>>();
+        selected.bound_with_temporal(true, &temporal);
+        assert_eq!(selected.seeds.len(), 8 + temporal_count);
+        assert_eq!(&selected.seeds[..8], &selected.all_seeds[..8]);
+        assert_eq!(&selected.seeds[8..], temporal);
+        selected.bound_with_temporal(false, &[]);
+        assert_eq!(selected.seeds, selected.all_seeds);
     }
 }

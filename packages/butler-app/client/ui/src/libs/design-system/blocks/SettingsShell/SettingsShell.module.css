@@ -60,6 +60,28 @@
   app-region: drag;
 }
 
+/* AdaptiveShell frame="cards": the navigation sits on the shell; the detail
+   pane is a card under the title row, inset from the window. The title-row
+   drag lane above the card is unchanged. */
+[data-panel-layout="docked"] .shell[data-frame="cards"] {
+  background: transparent;
+}
+
+[data-panel-layout="docked"] .shell[data-frame="cards"] .sidebar {
+  border-right: 0;
+  background: transparent;
+}
+
+[data-panel-layout="docked"] .shell[data-frame="cards"] .detailActive {
+  margin: var(--titlebar-height) var(--shell-card-inset) var(--shell-card-inset)
+    0;
+  padding-top: var(--space-2xl);
+  border: var(--border-hairline) solid var(--shell-card-edge);
+  border-radius: var(--shell-card-radius);
+  background: var(--shell-card-bg);
+  box-shadow: var(--shell-card-shadow);
+}
+
 /* Header and content are start-aligned narrow PageContainers (760px reading
    width, no gutter: .detail pads the pane). */
 .detailContent {

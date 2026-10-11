@@ -39,10 +39,9 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/product-features
     - name: Look for an exact-commit release Agent
       id: reuse
-      if: inputs.reuse-pr-agent == 'true' && env.BUTLER_FEATURE_BROWSER != 'false'
+      if: inputs.reuse-pr-agent == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}

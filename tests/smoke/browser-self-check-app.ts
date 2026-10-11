@@ -1,3 +1,4 @@
+import { spawnElectron } from "../support/electron-child";
 /** P1b acceptance through the real App-owned native Agent, using only a local stub. */
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -100,14 +101,13 @@ async function delivered(id: string) {
 }
 async function launch() {
   const debug = await freePort();
-  child = spawn(executable!, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), join(root, "packages/butler-app/client/electron")], {
-    stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: home, BUTLER_HOME: home, BUTLER_DATA: data,
+  child = spawnElectron(executable!, [`--inspect=${inspector}`, `--remote-debugging-port=${debug}`, ...smokeElectronArgs(), join(root, "packages/butler-app/client/electron")], {
+    onOutput: bytes => logs.push(String(bytes)), env: { ...process.env, HOME: home, BUTLER_HOME: home, BUTLER_DATA: data,
       CODEX_HOME: join(home, ".codex"), BUTLER_NATIVE_AGENT_EXECUTABLE: join(installation, "bin/butler-agent"),
       BUTLER_APP_ELECTRON_USER_DATA_DIR: profile, BUTLER_APP_SERVER_URL: undefined, BUTLER_APP_UI_URL: undefined,
       BUTLER_APP_SERVER_PORT: String(port), BUTLER_APP_RENDERER_DIST: join(root, "packages/butler-app/client/ui/dist"),
       BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
       BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9", BUTLER_PROVIDER_QUOTA_POLLING: "0" } });
-  for (const stream of [child.stdout, child.stderr]) stream!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(JSON.stringify({ event: "electron_exit", code, signal })));
   page = await electronPage(debug);
   await waitUntil(async () => (await page!.expression<{ ok: boolean }>("window.butlerApp.health()")).ok, "App-owned Agent ready");

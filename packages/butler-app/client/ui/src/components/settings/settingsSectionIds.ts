@@ -9,6 +9,7 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "models",
   "updates",
   "usage",
+  "browser",
   "security",
   "system",
   "archives",

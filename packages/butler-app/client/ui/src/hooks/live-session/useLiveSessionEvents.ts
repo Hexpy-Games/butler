@@ -3,6 +3,7 @@ import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
 import { receiveTaskGraphEvent, refreshVisibleTaskGraphs } from "@/app/taskGraphState.ts";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
+import { publishLibraryEvent } from "@/app/libraryEvents";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
 import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
@@ -75,6 +76,7 @@ export function useLiveSessionEvents(): void {
       }
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
+      publishLibraryEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
@@ -161,7 +163,7 @@ export function useLiveSessionEvents(): void {
       );
       refreshSessionViewSubscriptions(event);
       if (refreshesCanonicalParent) {
-        reconciliation.requestRefresh(event.type === "subsession.changed");
+        reconciliation.requestRefresh(event.type === "subsession.changed", event.type === "outputs.changed");
         if (eventSessionId(event) !== activeSessionId) {
           navigationReconciliation.requestRefresh();
         }

@@ -1,23 +1,54 @@
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
+import { closeReaderRenders, renderReader } from "./reader-render.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
-export function createBrowserHost({ fetch, adminCredential }) {
+// `onClosed` (the hidden host): a lost channel ends the host instead of reconnecting.
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed }) {
   let controller = null;
   let reconnect = null;
   let running = false;
+  let stateTimer = null;
+  let stateFlush = Promise.resolve();
+  let revision=0,published=-1;
+  const flushState = () => {
+    stateFlush = stateFlush.catch(() => {}).then(async () => {
+      if (running && controller && !controller.signal.aborted && snapshot && revision!==published) {
+        const current=revision;
+        const response=await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs }) });
+        if(response.ok) published=current;
+      }
+    });
+    return stateFlush;
+  };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
   async function execute(frame) {
-    const result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease) : { status: "unknown", reason: "unsupported_op" };
-    await request(`/internal/browser-host/results/${encodeURIComponent(frame.id)}`, {
+    await flushState();
+    let result;
+    try {
+      result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
+        : frame.op === "reader.render" ? await renderReader(frame.args)
+          : await executeBrowser?.(frame) ?? { status: "unknown", reason: "unsupported_op" };
+    }
+    catch (error) {
+      // Keep the cause: an executor error is otherwise invisible to diagnosis.
+      console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
+      result = { status: "unknown", reason: "executor_error" };
+    }
+    await flushState();
+    // Rendered pages exceed the result size; they have their own route.
+    const results = frame.op === "reader.render" ? "renders" : "results";
+    await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
     });
   }
   async function connect() {
-    controller = new AbortController();
+    resetBrowser?.();
+    controller = new AbortController();published=-1;
     try {
       const response = await request("/internal/browser-host");
       if (!response.ok) throw new Error("host_unavailable");
+      await flushState();
       let pending = "";
       const decoder = new TextDecoder();
       for await (const chunk of response.body) {
@@ -27,15 +58,36 @@ export function createBrowserHost({ fetch, adminCredential }) {
           const event = pending.slice(0, boundary);
           pending = pending.slice(boundary + 2);
           const data = event.split("\n").find(line => line.startsWith("data:"));
-          if (data) void execute(JSON.parse(data.slice(5))).catch(() => {});
+          if (data) {
+            const frame = JSON.parse(data.slice(5));
+            if (frame.op?.startsWith("use.")) { await executeBrowser?.(frame); await flushState(); }
+            else void execute(frame).catch(() => {});
+          }
         }
       }
     } catch { /* Disconnect is an unknown result, never replay a call. */ }
-    finally { controller.abort(); closeOutputChecks(); }
-    if (running) reconnect = setTimeout(connect, 1000);
+    finally { controller.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); }
+    if (running && onClosed) { running = false; onClosed(); }
+    else if (running) reconnect = setTimeout(connect, 1000);
+  }
+  /** The fill password, once per token; never logged, never returned to Rust. */
+  async function credential(token, origin) {
+    const unavailable = { error: "credential_unavailable" };
+    if (!running || !controller || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string") return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/credentials/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      const value = await response.json();
+      return typeof value?.password === "string" ? { password: value.password } : unavailable;
+    } catch { return unavailable; }
   }
   return {
-    start() { if (!running) { running = true; void connect(); } },
-    stop() { running = false; clearTimeout(reconnect); controller?.abort(); closeOutputChecks(); },
+    credential,
+    start() { if (!running && enabled()) { running = true; void connect(); } },
+    changed() {
+      revision++;
+      if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
+    },
+    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
   };
 }

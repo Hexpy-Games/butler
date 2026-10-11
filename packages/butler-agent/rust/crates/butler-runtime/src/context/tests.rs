@@ -190,8 +190,14 @@ fn compiler_preserves_required_turns_optional_stop_and_canonical_atoms() {
             .collect::<Vec<_>>(),
         ["t2", "t1"]
     );
-    assert!(plan.selected_optional_turns.is_empty());
-    assert!(plan.selected_summaries.is_empty());
+    assert_eq!(
+        plan.selected_optional_turns,
+        [] as [std::sync::Arc<crate::context::conversation::ConversationSemanticTurnAtom>; 0]
+    );
+    assert_eq!(
+        plan.selected_summaries,
+        [] as [crate::context::conversation::ConversationSummaryAtom; 0]
+    );
     assert_eq!(
         plan.selected_atom_ids.first().unwrap(),
         "current_request:request"

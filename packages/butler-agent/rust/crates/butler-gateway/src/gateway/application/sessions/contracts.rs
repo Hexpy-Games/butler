@@ -69,6 +69,12 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
         snapshot: AppSessionWorkspaceSnapshot,
         server_shutdown: CancellationToken,
     ) -> ApplicationFuture<()>;
+    fn download_workspace(
+        &self,
+        _query: AppSessionBranchQuery,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn branch_info(
         &self,
         _query: AppSessionBranchQuery,

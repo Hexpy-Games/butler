@@ -149,7 +149,10 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         "owner files and metadata unchanged"
     );
     if access == Access::FullAccess {
-        assert!(s.gw.approval_requests("general").await?.is_empty());
+        assert_eq!(
+            s.gw.approval_requests("general").await?,
+            [] as [serde_json::Value; 0]
+        );
     }
     eprintln!(
         "OWNER-DOWNLOADS list_files {access:?}: files={}, directories={}, max={maximum_ms:.1}ms; unchanged",

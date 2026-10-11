@@ -2,6 +2,22 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn preview_session_open(&self, id: String) -> ApplicationFuture<bool> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            this.storage
+                .read(move |db| {
+                    db.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND archived=0)",
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .map_err(storage::AppStorageError::sqlite)
+                })
+                .await
+                .map_err(app_error)
+        })
+    }
     fn update_project(
         &self,
         id: String,

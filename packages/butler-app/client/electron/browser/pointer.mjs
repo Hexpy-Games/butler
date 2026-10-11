@@ -1,0 +1,181 @@
+import { ipcMain, WebContentsView } from "electron";
+import { fileURLToPath } from "node:url";
+import { tabInUse } from "./usage.mjs";
+import { mouseInput } from "./pointer-input.mjs";
+
+const MODES = new Set(["observe", "click", "type", "scroll", "batch", "parked"]);
+
+/** One transparent presenter above the page; capturePage on tab.view never captures it. */
+export class BrowserPointer {
+  constructor(browser, takeOver) {
+    this.browser = browser; this.takeOver = takeOver;
+    // Page preloads can start a native drag before any overlay has been created.
+    this.pageDragListener = (event, phase) => {
+      let accepted = false;
+      this.guard(() => { accepted = this.pageDrag(event, phase) === true; });
+      // Unblock native dragstart only after the overlay has been removed.
+      event.returnValue = accepted;
+    };
+    ipcMain.on("butler-browser:page-drag", this.pageDragListener);
+  }
+  pageDrag(event, phase) {
+    const tab = this.tab();
+    if (!tab || event.sender !== tab.view?.webContents) return;
+    if (phase === "start" && this.captureTab === tab.id && tab.holder === "user" && !tab.picking && !tab.busy) {
+      this.nativeDrag = tab.id; this.captureTab = null;
+      if (this.attached && !this.attached.isDestroyed()) this.attached.contentView.removeChildView(this.view);
+      this.attached = null; return true;
+    } else if (phase === "end" && this.nativeDrag === tab.id) {
+      this.nativeDrag = null; this.browser.sync(tab);
+    }
+  }
+  action(tab, event) {
+    if (!tab || !MODES.has(event?.mode)) return;
+    const target = event.mode === "observe" ? { x: 0, y: 0, width: tab.agent ? 1280 : tab.bounds?.width ?? 1280, height: tab.agent ? 800 : tab.bounds?.height ?? 800 } : undefined;
+    tab.pointer = { mode: event.mode, at: tab.pointer?.at ?? { x: 64, y: 64 }, target, steps: [] };
+    this.sync(tab);
+  }
+  step(tab, step, target) {
+    if (!tab.pointer || ![target.x, target.y].every(Number.isFinite)) return;
+    const at = { x: target.x, y: target.y };
+    const previous = tab.pointer;
+    const mode = previous.mode === "batch" ? "batch" : step.action === "fill" ? "type" : step.action === "scroll" ? "scroll" : step.action === "hover" ? "observe" : "click";
+    // Refined geometry comes only from the dispatch hit-test; values never enter the overlay.
+    tab.pointer = { mode, at, from: previous.at, steps: [...previous.steps, at], value: step.action === "fill" ? "••••" : undefined, target: target.rect };
+    this.sync(tab);
+  }
+  captures(id) { return id && (this.captureTab === id || this.browser.selection.dragTab === id); }
+  hide() {
+    this.nativeDrag = null;
+    this.captureTab = null;
+    this.browser.selection.cancelDrag();
+    if (this.attached && !this.attached.isDestroyed()) this.attached.contentView.removeChildView(this.view);
+    this.attached = null;
+  }
+  create() {
+    if (this.view) return;
+    this.view = new WebContentsView({ webPreferences: {
+      preload: fileURLToPath(new URL("./overlay-preload.cjs", import.meta.url)),
+      sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: true,
+    } });
+    this.view.setBackgroundColor("#00000000");
+    const contents = this.view.webContents;
+    contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    contents.on("will-navigate", (event) => event.preventDefault());
+    // Native input-event loses wheel geometry and mouse modifiers in Electron 44.
+    // The isolated overlay preload supplies complete DOM mouse/wheel events.
+    this.inputListener = (event, input) => {
+      this.guard(() => {
+        if (event.sender !== contents || event.senderFrame !== contents.mainFrame) return;
+        this.mouse(input);
+      });
+    };
+    ipcMain.on("butler-browser:pointer-input", this.inputListener);
+    contents.on("before-input-event", (event, input) => this.guard(() => {
+      event.preventDefault();
+      const tab = this.tab();
+      if (this.browser.shortcut(input, true) || tab?.picking || !this.acceptInput(tab, input.type === "keyDown")) return;
+      const modifiers = ["shift", "control", "alt", "meta"].filter((key) => input[key]);
+      tab.view.webContents.sendInputEvent({ type: input.type, keyCode: input.key, modifiers });
+    }));
+    contents.on("did-finish-load", () => { this.ready = true; this.lastFrame = null; this.sync(this.tab()); });
+    const host = this.browser.getWindow()?.webContents.getURL();
+    const entry = new URL(host || "app://butler/index.html");
+    entry.pathname = "/browser-overlay.html"; entry.search = ""; entry.hash = "";
+    void contents.loadURL(entry.href).catch(() => { this.ready = false; });
+  }
+  tab() { return this.browser.tabs.get(this.browser.activeId); }
+  acceptInput(tab, takeOver = false) {
+    if (!tab?.view || tab.view.webContents.isDestroyed()) return false;
+    if (tab.holder === "agent" && (tab.busy || tabInUse(this.browser, tab))) return false;
+    if (takeOver && tab.holder === "agent") this.takeOver(this.browser, tab, "user");
+    return true;
+  }
+  guard(action) {
+    try {
+      const pending = action();
+      if (pending?.catch) void pending.catch(() => this.inputFailed());
+    } catch { this.inputFailed(); }
+  }
+  inputFailed() {
+    this.captureTab = null;
+    try { this.browser.selection.cancelDrag(); } catch { /* The native view may already be gone. */ }
+    if (this.inputWarning) return;
+    this.inputWarning = true;
+    console.warn("[browser-pointer] Dropped input after dispatch failure");
+  }
+  mouse(raw) {
+    if (this.nativeDrag) return;
+    const input = mouseInput(raw);
+    if (!input) return;
+    const tab = this.tab();
+    // Control chrome can change layout on takeover. Keep the native capture and
+    // its coordinate origin until the physical release, including direct drags.
+    if (input.type === "mouseDown") {
+      if (!this.acceptInput(tab)) return;
+      this.captureTab = tab.id;
+    }
+    try { this.dispatchMouse(tab, input); }
+    finally {
+      if (input.type === "mouseUp") {
+        this.captureTab = null;
+        if (tab) this.browser.sync(tab);
+      }
+    }
+  }
+  dispatchMouse(tab, input) {
+    if (this.browser.selection.dragTab) {
+      if (["mouseMove", "mouseUp"].includes(input.type)) this.browser.selection.drag(this.browser.tabs.get(this.browser.selection.dragTab), input, input.type === "mouseUp" ? "end" : "move");
+      return;
+    }
+    if (input.type === "mouseLeave" && tab) {
+      this.browser.selection.clearHover(tab); this.sync(tab);
+    }
+    // SelectionBar owns the bottom chrome. Its buttons use the trusted overlay IPC.
+    const chrome = this.browser.selection.chrome;
+    if (chrome && input.x >= chrome.x && input.x <= chrome.x + chrome.width && input.y >= chrome.y && input.y <= chrome.y + chrome.height) {
+      this.browser.selection.clearHover(tab); this.sync(tab); return;
+    }
+    if (this.browser.selection.mouse(tab, input)) return;
+    if (this.acceptInput(tab, input.type === "mouseDown")) {
+      if (input.type === "mouseDown") tab.view.webContents.focus();
+      tab.view.webContents.sendInputEvent(input);
+    }
+  }
+  sync(tab) {
+    const win = this.browser.getWindow();
+    if (this.nativeDrag === tab?.id && tab?.holder === "user" && !tab.picking) return;
+    if (this.captures(tab?.id) && this.attached === win && !this.browser.nativeCovers) return;
+    const visible = (tab?.picking || tab?.selections?.length || tab?.pointer && tab.owner !== "mine") && tab.attached === win && this.browser.areaVisible &&
+      tab.bounds?.visible && !tab.covered && !this.browser.nativeCovers && tab.status !== "crashed";
+    if (!visible) { this.hide(); return; }
+    this.create();
+    // The native input guard must exist even before the presenter has loaded.
+    if (this.attached !== win) { this.hide(); win.contentView.addChildView(this.view); this.attached = win; }
+    const bounds = tab.view.getBounds(); this.view.setBounds(bounds); this.view.setBorderRadius(tab.bounds.radius ?? 0);
+    if (!this.ready) return;
+    const scale = tab.bounds.scale ?? 1, point = (p) => ({ x: p.x * scale, y: p.y * scale });
+    const parked = tab.holder === "user" || tab.waiting;
+    const pointer = tab.pointer ?? { mode: "parked", at: { x: 20, y: 20 }, steps: [] };
+    const frame = { ...pointer, pointerVisible: Boolean(tab.pointer && !tab.picking), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, tab: tab.id, mode: parked ? "parked" : pointer.mode, tone: tab.waiting ? "waiting" : "default",
+      at: tab.holder === "user" && !tab.waiting ? { x: 20, y: bounds.height - 44 } : point(pointer.at),
+      from: !parked && pointer.mode !== "type" && pointer.from ? point(pointer.from) : undefined,
+      steps: !parked ? pointer.steps.map(point) : [],
+      target: pointer.target ? { ...point(pointer.target), width: pointer.target.width * scale, height: pointer.target.height * scale } : undefined,
+      width: bounds.width, height: bounds.height,
+      hover: tab.picking && tab.pickHover ? { ...point(tab.pickHover.rect), width: tab.pickHover.rect.width * scale, height: tab.pickHover.rect.height * scale } : undefined,
+      hoverLabel: tab.picking ? tab.pickHover?.label : undefined,
+      picks: (tab.selections ?? []).map(item => ({ id: item.id, hidden: item.offscreen === true || undefined, rect: { ...point(item.rect), width: item.rect.width * scale, height: item.rect.height * scale } })), ...this.presentation };
+    const serialized = JSON.stringify(frame);
+    if (serialized !== this.lastFrame) { this.lastFrame = serialized; this.view.webContents.send("butler-browser:overlay", frame); }
+  }
+  present(input) {
+    this.presentation = { locale: input.locale === "ko-KR" ? "ko-KR" : "en-US", reducedMotion: input.reducedMotion === true };
+    this.sync(this.tab());
+  }
+  dispose() {
+    if (this.inputListener) ipcMain.removeListener("butler-browser:pointer-input", this.inputListener);
+    if (this.pageDragListener) ipcMain.removeListener("butler-browser:page-drag", this.pageDragListener);
+    this.hide(); this.view?.webContents.close({ waitForBeforeUnload: false }); this.view = null;
+  }
+}

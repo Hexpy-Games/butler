@@ -62,6 +62,7 @@ export async function assertFirstRunContrast(page: Page) {
 }
 
 export async function assertFirstRunLayout(page: Page) {
+  await settleFirstRun(page);
   const card = page.locator('[data-surface="raised-opaque"]');
   if (await card.count() !== 1) throw new Error("Expected one solid content card");
   const valid = await card.evaluate((node) => {

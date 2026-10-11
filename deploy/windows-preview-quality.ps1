@@ -20,6 +20,8 @@ New-Item -ItemType Directory -Force "$root/logs" | Out-Null
 "RUSTUP_HOME=$env:USERPROFILE/.rustup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 $ErrorActionPreference = 'Continue'
+$env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort dev
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore windows-x64 static-ort dev
 $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

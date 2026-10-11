@@ -10,7 +10,7 @@ use std::{
     time::SystemTime,
 };
 
-pub(super) struct Watch {
+pub(crate) struct Watch {
     databases: Vec<(butler_platform::sqlite::Connection, u64)>,
     data: PathBuf,
     before: BTreeMap<PathBuf, (u64, SystemTime)>,
@@ -18,7 +18,7 @@ pub(super) struct Watch {
     _watcher: RecommendedWatcher,
 }
 impl Watch {
-    pub(super) fn open(data: &Path) -> Result<Self, HarnessError> {
+    pub(crate) fn open(data: &Path) -> Result<Self, HarnessError> {
         let mut databases = Vec::new();
         for name in [
             "app-server/butler-client.sqlite",
@@ -69,7 +69,7 @@ impl Watch {
             _watcher: watcher,
         })
     }
-    pub(super) fn assert_unchanged(&mut self) {
+    pub(crate) fn assert_unchanged(&mut self) {
         let changes = self.changes.lock().unwrap();
         eprintln!(
             "PERF-IDLE file_write_notifications={} paths={changes:?}",

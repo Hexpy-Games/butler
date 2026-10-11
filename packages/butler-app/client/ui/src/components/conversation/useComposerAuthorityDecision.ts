@@ -1,6 +1,7 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
-import { approvalRequestView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
+import { approvalRequestView, browserHandoffView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
+import { canOpenHandoffTab, openHandoffTab } from "@/components/browser/browserHandoff.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import type { AuthorityApprovalCard } from "@/app/types.ts";
 
@@ -13,6 +14,8 @@ export interface ComposerAuthorityDecision {
   onAllow: () => void; onAllowConversation: () => void; onDeny: () => void;
   onShowDecision: () => void; onOpenSource: () => void;
   onComposeMessage: () => void;
+  /** A step only the user can do in a tab: open the tab or stop; the hand-back resolves it. */
+  handoff?: { canOpenTab: boolean; signIn: boolean; onOpenTab: () => void; onStop: () => void };
 }
 
 export function useComposerAuthorityDecision(): ComposerAuthorityDecision | undefined {
@@ -36,9 +39,14 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     if (!applied) setFailed(key);
   };
   const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
+  const canOpenTab = canOpenHandoffTab();
+  const handoff = browserHandoffView(request, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return {
-    title: view.title, details: view.details, risk: view.risk, actionKind: view.actionKind,
-    conversationScope: view.conversationScope, scope: request.scope, pending: pending.has(key),
+    ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
+      onOpenTab: () => void openHandoffTab(sessionId),
+      onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
+    title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
+    conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
     onAllow: () => void decide("allow"),

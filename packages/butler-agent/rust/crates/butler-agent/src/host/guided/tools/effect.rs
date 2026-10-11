@@ -7,7 +7,7 @@ mod ledger_input;
 mod mcp;
 mod observation;
 mod restart;
-mod runtime_work;
+pub(super) mod runtime_work;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;

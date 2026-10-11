@@ -1,4 +1,3 @@
-import { browserFeatureEnabled } from "@/app/productFeatures";
 import { useCallback, useEffect, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { openBrowser, useBrowserState } from "../browser/browserBridge";
@@ -9,7 +8,7 @@ import { ArtifactPreviewFrame, Button, ButtonContainer, NativeSelect, NativeSele
 interface OutputView { url: string; revision: number; revisions: number[] }
 
 /** Resolve a fresh capability on every open, reload and revision selection. */
-export function OutputFrame({ outputId, title }: { outputId: string; title: string }) {
+export function OutputFrame({ outputId, title, preview = false }: { outputId: string; title: string; preview?: boolean }) {
   useAppLocale();
   const [view, setView] = useState<OutputView | null>(null);
   const [revision, setRevision] = useState<number>();
@@ -21,7 +20,7 @@ export function OutputFrame({ outputId, title }: { outputId: string; title: stri
   const load = useCallback(async () => {
     setFailure(undefined);
     try {
-      const next = await api<OutputView>(`/outputs/${encodeURIComponent(outputId)}/view${revision ? `?revision=${revision}` : ""}`);
+      const next = await api<OutputView>(`/${preview ? "previews" : "outputs"}/${encodeURIComponent(outputId)}/view${revision ? `?revision=${revision}` : ""}`);
       const url = new URL(next.url);
       if (!["http:", "https:"].includes(url.protocol) || url.origin === location.origin) throw new Error("output_origin_refused");
       setView(next);
@@ -29,19 +28,18 @@ export function OutputFrame({ outputId, title }: { outputId: string; title: stri
       setView(null);
       setFailure(apiErrorCode(error) === "content_host_required" ? copy.contentHostRequired : copy.loadFailed);
     }
-  }, [outputId, revision, copy.contentHostRequired, copy.loadFailed]);
-  useEffect(() => { if (browserFeatureEnabled) void load(); }, [load]);
-  if (!browserFeatureEnabled) return <Typo.Caption>{copy.unsupported}</Typo.Caption>;
+  }, [outputId, preview, revision, copy.contentHostRequired, copy.loadFailed]);
+  useEffect(() => { void load(); }, [load]);
   return (
     <Stack gap="sm">
       <Stack align="row" gap="sm" cross="center" wrap>
         <ButtonContainer size="xs">
           <Button size="xs" variant="outline" disabled={!view} title={failure} onClick={() => view && window.open(view.url, "_blank", "noopener,noreferrer")}>{copy.open}</Button>
           {window.butlerBrowser && <Button size="xs" variant="outline" disabled={!view || !browserEnabled} title={!browserEnabled ? appCopy.browser.updateRequired : undefined}
-            onClick={() => view && void openBrowser({ url: view.url, sessionId })}>{appCopy.browser.openOutput}</Button>}
+            onClick={() => view && void openBrowser({ url: view.url, sessionId, previewId: preview ? outputId : undefined })}>{appCopy.browser.openOutput}</Button>}
           <Button size="xs" variant="outline" onClick={() => { setGeneration((value) => value + 1); void load(); }}>{copy.reload}</Button>
         </ButtonContainer>
-        {view && <NativeSelect aria-label={copy.revision} value={String(view.revision)} onChange={(event) => setRevision(Number(event.target.value))}>
+        {view && !preview && <NativeSelect aria-label={copy.revision} value={String(view.revision)} onChange={(event) => setRevision(Number(event.target.value))}>
           {view.revisions.map((value) => <NativeSelectOption key={value} value={String(value)}>{`${copy.revision} ${value}`}</NativeSelectOption>)}
         </NativeSelect>}
       </Stack>

@@ -32,7 +32,7 @@ async fn fresh_korean_defaults_and_user_edits_survive_restart() -> Result<(), Ha
     let mut s = setup.start().await?;
     let view = s.gw.get("/personalization").await?;
     assert_eq!(view.data()["eol"], template);
-    assert!(!template.trim().is_empty());
+    assert_ne!(template.trim(), "");
     assert!(
         view.data()["persona"]
             .as_str()

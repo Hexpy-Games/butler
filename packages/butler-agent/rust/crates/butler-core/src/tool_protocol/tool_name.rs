@@ -126,8 +126,21 @@ tool_names! {
     WebRead = "web_read",
     WebSearch = "web_search",
     WriteFile = "write_file",
+    BrowserOpen = "browser_open",
+    BrowserObserve = "browser_observe",
+    BrowserAct = "browser_act",
+    BrowserTabs = "browser_tabs",
+    BrowserSelection = "browser_selection",
+    BrowserScreenshot = "browser_screenshot",
+    BrowserClose = "browser_close",
+    BrowserWaitForUser = "browser_wait_for_user",
+    BrowserSignIn = "browser_sign_in",
     OutputCheck = "output_check",
+    PreviewStart = "preview_start",
+    PreviewStop = "preview_stop",
     OutputPublish = "output_publish",
+    LibrarySearch = "library_search",
+    LibraryOrganize = "library_organize",
 }
 
 impl std::fmt::Display for ToolName {

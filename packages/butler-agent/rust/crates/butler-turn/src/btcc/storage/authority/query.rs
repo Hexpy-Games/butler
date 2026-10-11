@@ -349,7 +349,7 @@ fn permission_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationPermi
 pub(super) fn list_all_permissions(
     db: &Connection,
 ) -> AuthorityResult<Vec<ConversationPermission>> {
-    let mut statement = db.prepare_cached("SELECT grant_ref,owner_session_id,workspace_path,created_at FROM btcc_conversation_permissions INDEXED BY idx_btcc_permissions_active WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref").map_err(sql)?;
+    let mut statement = db.prepare_cached("SELECT grant_ref,owner_session_id,workspace_path,created_at,scope_key FROM btcc_conversation_permissions INDEXED BY idx_btcc_permissions_active WHERE revoked_at IS NULL ORDER BY created_at DESC,grant_ref").map_err(sql)?;
     statement
         .query_map([], |row| {
             Ok(ConversationPermission {
@@ -360,7 +360,7 @@ pub(super) fn list_all_permissions(
                 capability: String::new(),
                 target: String::new(),
                 cwd: None,
-                scope_key: String::new(),
+                scope_key: row.get(4)?,
                 title: String::new(),
                 description: String::new(),
             })

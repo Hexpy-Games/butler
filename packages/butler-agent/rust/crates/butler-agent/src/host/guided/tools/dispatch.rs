@@ -26,6 +26,9 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if super::browser::supports(&call.name) {
+        return super::browser::execute(owner, &invocation, call, call_id).await;
+    }
     if super::image::supports(&call.name) {
         return Box::pin(super::image::execute(owner, invocation, call)).await;
     }
@@ -166,48 +169,7 @@ pub(super) async fn execute(
         ToolName::parse(call.name.as_str()),
         Some(ToolName::SteerSteward | ToolName::SteerWorker)
     ) {
-        let instruction = call
-            .arguments
-            .get("instruction")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::relayed(
-                    "steward_direction_instruction_required",
-                    "instruction is required",
-                ))
-            })?;
-        let result = owner
-            .subsessions
-            .steer(butler_turn::btcc::SubsessionDirectionRequest {
-                parent_session_id: owner.binding.source_session_id.clone(),
-                parent_turn_id: owner.binding.turn_id.clone(),
-                source_message_id: invocation.turn.original_message_id.clone(),
-                relation_id: call
-                    .arguments
-                    .get("relation_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                work_id: call
-                    .arguments
-                    .get("work_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                safe_title: call
-                    .arguments
-                    .get("safe_title")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                instruction: instruction.into(),
-                child_role: if call.name == ToolName::SteerWorker {
-                    butler_turn::workspace::SessionRole::Worker
-                } else {
-                    butler_turn::workspace::SessionRole::Steward
-                },
-                access_mode: access_mode(owner),
-            })
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-        return encoded(&result);
+        return steward::steer(owner, invocation, call).await;
     }
     if call.name == ToolName::CancelSteward {
         let result = owner
@@ -297,16 +259,10 @@ pub(super) async fn execute(
         ToolName::parse(call.name.as_str()),
         Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) {
-        let result = if call.name == ToolName::ReadToolOutputArtifact {
-            owner.tool_artifacts.read_output(args).await
-        } else {
-            owner.tool_artifacts.read_evidence(args).await
-        };
-        return result.map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
-        });
+        return read_tool_artifact(owner, &call.name, args).await;
     }
     let result = match call.name.as_str() {
+        "library_search" | "library_organize" => return super::library::execute(owner, call).await,
         "list_conversation_sessions" => owner
             .conversation_tools
             .list(owner.binding.memory.clone(), args)
@@ -348,6 +304,21 @@ pub(super) async fn execute(
         }
     };
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
+}
+
+async fn read_tool_artifact(
+    owner: &GuidedTools,
+    name: &str,
+    args: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = if name == ToolName::ReadToolOutputArtifact {
+        owner.tool_artifacts.read_output(args).await
+    } else {
+        owner.tool_artifacts.read_evidence(args).await
+    };
+    result.map_err(|error| {
+        ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
+    })
 }
 
 async fn file_capability(
@@ -420,9 +391,6 @@ async fn workspace_tool(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
-    if !butler_core::product_features::tool_enabled(&call.name) {
-        return None;
-    }
     match call.name.as_str() {
         "output_check" => Some(super::outputs::inspect(owner, invocation, call).await),
         "output_publish" => Some(super::outputs::publish(owner, invocation, call).await),

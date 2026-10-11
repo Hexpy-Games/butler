@@ -174,7 +174,10 @@ mod tests {
             "assert!(started.elapsed() >= Duration::from_secs(5));",
         ] {
             let source = format!("fn helper() {{ {body} }}");
-            assert!(raw_budget_assertions(&source).unwrap().is_empty());
+            assert_eq!(
+                raw_budget_assertions(&source).unwrap(),
+                [] as [(usize, std::string::String); 0]
+            );
         }
         for body in [
             "assert!(started.elapsed() <= Duration::from_secs(1));",
@@ -192,6 +195,9 @@ mod tests {
         );
         let diagnostic_only =
             "#[tokio::test]\nasync fn scenario() { let _elapsed = started.elapsed(); }";
-        assert!(raw_budget_assertions(diagnostic_only).unwrap().is_empty());
+        assert_eq!(
+            raw_budget_assertions(diagnostic_only).unwrap(),
+            [] as [(usize, std::string::String); 0]
+        );
     }
 }

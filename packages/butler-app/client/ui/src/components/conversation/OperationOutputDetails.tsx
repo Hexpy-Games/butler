@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { OperationOutputView } from "@/app/types.ts";
 import { Button, Stack, Typo, WorkActivityOutput } from "@/butler-ds";
+import { BrowserStepStill } from "../browser/BrowserStepStill";
 import { presentOperationOutput } from "./operationOutputPresentation";
 
 export function OperationOutputDetails({
@@ -73,6 +74,7 @@ export function OperationOutputDetails({
   const execution = output.kind === "command" ? output.command ?? command : command;
   return (
     <Stack gap="xs">
+      {toolName === "browser_act" && latest?.complete && <BrowserStepStill turnId={turnId} callId={requestId} resultId={resultId} content={pages.map(page => page.content).join("")} />}
       {execution ? <Typo.Caption wrap="pre">{appCopy.interfaceStatus.execution}: {execution}</Typo.Caption> : null}
       {execution ? <Typo.Caption>{appCopy.interfaceStatus.result}:</Typo.Caption> : null}
       {output.kind === "summary" ? (

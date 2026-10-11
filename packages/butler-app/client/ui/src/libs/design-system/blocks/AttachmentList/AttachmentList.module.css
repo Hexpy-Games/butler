@@ -33,6 +33,18 @@
   line-height: var(--line-height-compact);
 }
 
+/* Element chips (ElementChip kind) wrap in their own row before the files. */
+.elements {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.chips .elements {
+  flex: 1 0 100%;
+}
+
 .icon {
   display: inline-grid;
   place-items: center;

@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { prefersReducedMotion, subscribeReducedMotion } from "../../lib/motion";
 import { AspectFrame } from "../AspectFrame";
 import type { IconSize } from "../Icons";
-import type { ButlerMarkTheme, ButlerMarkThemeColors } from "./butlerMarkTheme";
+import { risoInksFor, type ButlerMarkTheme, type ButlerMarkThemeColors } from "./butlerMarkTheme";
 import styles from "./ButlerThinkingMark.module.css";
 import { startMarkLoop, type MarkLoop } from "./markLoop";
+import { resolveMarkTheme } from "./markRenderer";
 import { holdMorph } from "./morphContinuity";
 import type { MorphSim } from "./thinking-mark/motion";
 
@@ -88,6 +89,8 @@ export function ButlerThinkingMark({
     const loop = startMarkLoop(canvas, {
       theme,
       themeColors,
+      // The riso inks are the --butler-ink-* tokens on the canvas (the same values as RISO_INKS).
+      inks: (next) => risoInksFor(canvas, next, resolveMarkTheme(canvas)),
       isWorking: () => stateRef.current === "working",
       isReduced: () => reducedRef.current,
       sim: simRef,

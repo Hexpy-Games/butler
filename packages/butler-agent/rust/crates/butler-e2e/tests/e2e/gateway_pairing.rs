@@ -104,11 +104,17 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
             .status,
         200
     );
-    assert!(devices(&app).await?.as_array().unwrap().is_empty());
+    assert_eq!(
+        devices(&app).await?.as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     assert_eq!(read(&s.gw, &browser, &other_cookie).await?, 401);
     s.restart().await?;
     assert_eq!(read(&s.gw, &browser, &cookie).await?, 401);
-    assert!(devices(&admin(&s)).await?.as_array().unwrap().is_empty());
+    assert_eq!(
+        devices(&admin(&s)).await?.as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     assert_no_secrets(
         &s,
         &[

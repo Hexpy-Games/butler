@@ -123,31 +123,19 @@ async fn run_dump(
     if cancellation.is_cancelled() {
         return Err(WebAccessError::cancelled());
     }
-    let mut child = Command::new(binary)
-        .args([
-            "fetch",
-            "--dump",
-            "html",
-            "--log-format",
-            "pretty",
-            "--log-level",
-            "warn",
-        ])
-        .arg("--wait-ms")
-        .arg(wait_ms.to_string())
-        .arg(url.as_str())
-        .env("LIGHTPANDA_DISABLE_TELEMETRY", "true")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
+    // Every request Lightpanda makes (redirects, subresources, scripts' own
+    // fetches) goes through the browser egress guard: it resolves names
+    // itself and connects only to public addresses.
+    let proxy = crate::browser::EgressProxy::start(None)
+        .await
         .map_err(|source| {
             WebAccessError::new(
                 WebAccessCode::WebAccessReaderUnavailable,
-                "Lightpanda is unavailable.",
+                "Lightpanda egress guard is unavailable.",
             )
             .with_source(source)
         })?;
+    let mut child = spawn(binary, url, wait_ms, &proxy.url())?;
     let Some(mut stdout) = child.stdout.take() else {
         stop_child(&mut child).await;
         return Err(WebAccessError::new(
@@ -213,6 +201,41 @@ async fn run_dump(
         content_type: Some("text/html; charset=utf-8".into()),
         spool,
     })
+}
+
+fn spawn(
+    binary: &Path,
+    url: &Url,
+    wait_ms: u64,
+    proxy: &str,
+) -> Result<tokio::process::Child, WebAccessError> {
+    Command::new(binary)
+        .args([
+            "fetch",
+            "--dump",
+            "html",
+            "--log-format",
+            "pretty",
+            "--log-level",
+            "warn",
+        ])
+        .arg("--wait-ms")
+        .arg(wait_ms.to_string())
+        .arg("--http-proxy")
+        .arg(proxy)
+        .arg(url.as_str())
+        .env("LIGHTPANDA_DISABLE_TELEMETRY", "true")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::WebAccessReaderUnavailable,
+                "Lightpanda is unavailable.",
+            )
+            .with_source(source)
+        })
 }
 
 async fn stop_child(child: &mut tokio::process::Child) {

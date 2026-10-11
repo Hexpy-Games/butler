@@ -17,8 +17,13 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite file synchronization consumes the durable filesystem facade.
         "sqlite" | "fs_space" => &["secure_fs"],
         "process_control" => &["process_table"],
+        // The headless browser's DevTools pipe runs in a contained process tree.
+        "browser_process" => &["process_control"],
+        // The installed App is found under the user's home; its windowless
+        // browser host runs in a contained process tree.
+        "app_browser" => &["process_control", "user_dirs"],
         // Hook processes compose shell selection and tree containment.
-        "hook_process" => &["command_sandbox", "process_control"],
+        "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],
@@ -27,6 +32,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "app_update" => &["process_control", "process_names", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
+        // Other browsers' profile folders are found under the user's home.
+        "browser_profiles" => &["user_dirs"],
         // The `butler` command launcher is a runnable file under the user's
         // command directory; the Agent home's pointers are replaced atomically
         // with secure_fs; login-start definitions live under the user's home.
@@ -37,8 +44,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Timestamp formatting and the operational diagnostic macro are a leaf.
         "diagnostics" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
-        "configuration" | "js_date" | "json_lines" | "locale" | "product_features"
-        | "public_text" | "segmentation" | "tool_protocol" => &[],
+        "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
+        | "tool_protocol" => &[],
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
@@ -50,9 +57,11 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-runtime: capability adapters consume the skills facade; catalog
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
-        "context" | "skills" | "outputs" => &[],
+        "context" | "skills" | "outputs" | "browser" | "previews" => &[],
+        // Imported sign-ins key on the browser policy's registrable site.
+        "browser_import" => &["browser"],
         "operations" => &["context"],
-        "web_access" => &["context", "operations"],
+        "web_access" => &["browser", "context", "operations"],
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
         "project_ledger" => &[],
         // butler-memory: Cognition coordinates writers, reads the profile and

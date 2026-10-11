@@ -7,7 +7,7 @@ import { px, useComputed } from "./measure";
 import type { SampleLocale } from "./typeRoles";
 import f from "./Foundations.module.css";
 
-const KO_PARAGRAPH = "Butler는 설정 페이지의 섹션 머리글을 카드 바깥에 두고, 카드 안쪽 필드 간격을 하나의 리듬으로 맞춥니다.";
+const KO_PARAGRAPH = "버틀러는 설정 페이지의 섹션 머리글을 카드 바깥에 두고, 카드 안쪽 필드 간격을 하나의 리듬으로 맞춥니다.";
 const EN_PARAGRAPH = "Butler keeps a settings section's header outside its card and spaces every field inside the card on one rhythm, so long pages scan as a column of calm, even blocks rather than a wall of controls.";
 
 /** Korean: keep words whole, keep Hangul untracked, attach units and particles. */
@@ -27,8 +27,8 @@ export function KoreanRules() {
       <DoDont lang="ko"
         doCaption="Latin, numbers and units share the stack; particles attach"
         dontCaption="Spaces before particles and units, forced Latin font"
-        doRender={<Typo.Body>Butler가 PR 3개를 12분 만에 검토했어요.</Typo.Body>}
-        dontRender={<Typo.Body><span className={f.foreignLatin}>Butler</span> 가 PR 3 개를 12 분 만에 검토 했어요.</Typo.Body>} />
+        doRender={<Typo.Body>버틀러가 PR 3개를 12분 만에 검토했어요.</Typo.Body>}
+        dontRender={<Typo.Body><span className={f.foreignLatin}>버틀러</span> 가 PR 3 개를 12 분 만에 검토 했어요.</Typo.Body>} />
     </Stack>
   );
 }

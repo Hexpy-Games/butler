@@ -1,19 +1,15 @@
 import { useState } from "react";
 import {
-  Button,
+  SetupWizardStepAction,
   ChoiceCard,
   ChoiceCardList,
-  IconTile,
-  Inline,
   ProviderLogo,
   Server,
-  SetupWizardContent,
-  Stack,
   Typo,
 } from "@/butler-ds";
 import type { FirstRunProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
 import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Detected models on this computer (or on a typed server): pick one and start. */
@@ -30,17 +26,13 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
   const selected = options.find((option) => option.key === selectedKey) ?? options[0];
   const busy = Boolean(flow.commit.pending);
   return (
-    <SetupWizardContent width="wide">
-      <Inline>
-        <FirstRunBack label={copy.backToList} onClick={flow.backToList} />
-      </Inline>
-      <Inline cross="start" gap="md" wrap={false}>
-        <IconTile size="md"><CardGlyph cardId={cardId} /></IconTile>
-        <Stack gap="none">
-          <Typo.H4 as="h1" id="first-run-models-title">{title}</Typo.H4>
-          {body ? <Typo.Caption tone="secondary">{body}</Typo.Caption> : null}
-        </Stack>
-      </Inline>
+    <FirstRunStepCard flow={flow} contentKey={`models:${cardId}`} icon={<CardGlyph cardId={cardId} />} title={title}
+      titleId="first-run-models-title" description={body} onBack={flow.backToList}
+      footerStart={<Typo.Caption tone="tertiary">{copy.localNote}</Typo.Caption>}
+      actions={<SetupWizardStepAction forward disabled={!selected || busy} onClick={() => selected && flow.connectLocal(cardId, selected, apiKey)}>
+        {busy ? copy.connecting : copy.customConnect}
+      </SetupWizardStepAction>}
+    >
       {options.length === 0 ? <Typo.Body tone="secondary">{copy.noModels}</Typo.Body> : (
         <ChoiceCardList aria-labelledby="first-run-models-title" role="radiogroup">
           {options.map((option) => (
@@ -60,19 +52,7 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
           ))}
         </ChoiceCardList>
       )}
-      <Stack gap="sm">
-        {!flow.commit.connected ? <Button
-          disabled={!selected || busy}
-          size="lg"
-          stretch
-          type="button"
-          onClick={() => selected && flow.connectLocal(cardId, selected, apiKey)}
-        >
-          {busy ? copy.connecting : copy.localStart}
-        </Button> : null}
-        <Typo.Caption align="center" tone="tertiary">{copy.localNote}</Typo.Caption>
-      </Stack>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }
 

@@ -5,7 +5,10 @@ No self-hosted job may register protocols, services, login items, shortcuts,
 credentials or firewall rules. A temporary profile does not isolate the registry.
 
 Cargo targets, ORT, Bun, npm and NuGet caches live under
-`github.workspace/target/windows-owner`, inside each runner's own `_work` tree.
+`butler-windows-owner` beside `github.workspace`, inside each runner's own `_work` tree.
+Targets are separated by workflow, ref and compiler/build identity; checkout
+cleanup cannot remove them. Matching targets restore validated source mtimes
+without downloading or replacing compiled outputs. Only job profiles are temporary.
 Both `yw-pc` and `yw-pc-2` can build concurrently. Cargo's shared download cache
 uses its own locks; installed Rust toolchains are read without updating them.
 The pinned ORT recipe verifies archive and output hashes before reuse.

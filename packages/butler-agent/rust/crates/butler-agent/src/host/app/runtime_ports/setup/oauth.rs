@@ -26,7 +26,7 @@ use butler_models::models::{
 
 use crate::host::oauth_callback::{Callback, CallbackEndpoint, read_callback, respond};
 
-const FLOW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const FLOW_TIMEOUT: Duration = Duration::from_mins(5);
 /// Finished flows kept readable by `GET /setup/oauth/{flow_id}`.
 const KEPT_FLOWS: usize = 8;
 /// How long cancel waits for the flow task to release its listener, or

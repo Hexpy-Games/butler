@@ -6,7 +6,7 @@ use std::{collections::HashMap, path::Path};
 use arrow_array::{Float32Array, Float64Array, RecordBatch};
 use futures_util::TryStreamExt;
 use lancedb::{
-    Table,
+    DistanceType, Table,
     query::{ExecutableQuery, QueryBase, Select},
 };
 
@@ -119,6 +119,7 @@ impl VectorTable {
         self.table
             .vector_search(vector)
             .map_err(unavailable)?
+            .distance_type(DistanceType::Cosine)
             .only_if(predicate)
             .select(Select::columns(&self.layout.columns()))
             .limit(limit)
@@ -429,3 +430,6 @@ fn distance(batch: &arrow_array::RecordBatch, column: usize, row: usize) -> Cogn
     }
     Err(error(CognitionCode::VectorUnavailable))
 }
+
+#[cfg(test)]
+pub(super) mod tests;

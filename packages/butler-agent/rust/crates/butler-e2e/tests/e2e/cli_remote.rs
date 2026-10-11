@@ -11,7 +11,7 @@ use serde_json::Value;
 fn data(agent: &butler_e2e::e2e::agent::Agent, args: &[&str]) -> Result<Value, HarnessError> {
     let output = agent.cli(args)?;
     assert_eq!(output.code, Some(0), "remote command failed");
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, "");
     Ok(output.json()?["data"].clone())
 }
 
@@ -33,7 +33,10 @@ async fn remote_cli_manages_live_security() -> Result<(), HarnessError> {
     assert_eq!(status, admin.view().await?);
     assert_eq!(status["remote_access_enabled"], true);
     assert!(status["bind_addresses"].as_array().unwrap().len() > 1);
-    assert!(!status["lan_urls"].as_array().unwrap().is_empty());
+    assert_ne!(
+        status["lan_urls"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     for url in status["lan_urls"].as_array().unwrap() {
         assert!(enabled.stdout.contains(url.as_str().unwrap()));
     }

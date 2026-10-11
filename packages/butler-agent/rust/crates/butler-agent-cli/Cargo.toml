@@ -18,7 +18,6 @@ static-ort = ["butler_agent/static-ort"]
 [dependencies]
 butler_agent = { package = "butler-host", path = "../butler-agent", default-features = false }
 butler-platform = { path = "../butler-platform" }
-tokio.workspace = true
 
 [build-dependencies]
 semver.workspace = true

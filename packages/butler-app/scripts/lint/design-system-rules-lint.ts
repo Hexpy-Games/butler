@@ -135,6 +135,8 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   "libs/design-system/blocks/NavRow/NavRow.module.css": ["spacing:17"],
   "libs/design-system/blocks/SettingsShell/SettingsShell.module.css": ["spacing:18", "spacing:28", "spacing:32", "spacing:60"],
   "libs/design-system/blocks/SidebarShell/SidebarShell.module.css": ["spacing:10", "spacing:14", "spacing:18"],
+  // The setup card's top edge stops at 240px (20% of a 1200px window), intro spec rev 4.
+  "libs/design-system/blocks/SetupWizardShell/SetupWizardShell.module.css": ["spacing:240"],
   "libs/design-system/blocks/TitlebarShell/TitlebarShell.module.css": ["spacing:18", "spacing:54"],
   // Reading rhythm and glass card radii of conversation and dashboard content.
   "components/management/ProjectInformation.module.css": ["spacing:30"],

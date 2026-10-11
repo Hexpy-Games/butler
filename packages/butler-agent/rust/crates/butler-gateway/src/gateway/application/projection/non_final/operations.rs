@@ -18,13 +18,13 @@ use crate::gateway::application::{
 };
 
 #[derive(Clone, Copy)]
-pub(super) struct FailedProjection<'a> {
+pub(in crate::gateway::application) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,
     pub message: &'a Map<String, Value>,
     pub retryable: bool,
 }
 
-pub(super) fn project_failed(
+pub(in crate::gateway::application) fn project_failed(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,

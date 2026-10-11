@@ -33,6 +33,7 @@ impl SqliteSubsessionRepository {
             tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,?10,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now,code]).map_err(StorageError::sqlite)?;
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
+            text.push_str(&delivery_artifacts(&tx, &child_turn, &status)?);
             if let Some(code) = failure_code.as_deref().or(code) { text.push_str(&format!("\ncode: {code}")); }
             if let Some(handoff) = handoff {
                 let encoded = serde_json::to_string(&handoff).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
@@ -60,6 +61,37 @@ impl SqliteSubsessionRepository {
             Ok(())
         }).await
     }
+}
+
+fn delivery_artifacts(
+    tx: &rusqlite::Transaction<'_>,
+    turn: &str,
+    status: &str,
+) -> Result<String, StorageError> {
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT final_payload_json FROM btcc_turns WHERE turn_id=?1",
+            [turn],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .flatten();
+    let Some(payload) = raw.and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+    else {
+        return Ok(String::new());
+    };
+    let mut result = serde_json::json!({"child_turn_id":turn,"status":status});
+    super::super::subsession_result::project_delivery(&mut result, &payload);
+    let Some(artifacts) = result
+        .get("artifacts")
+        .filter(|value| value.as_array().is_some_and(|items| !items.is_empty()))
+    else {
+        return Ok(String::new());
+    };
+    Ok(format!(
+        "\nartifacts: {artifacts}\nThese captured files accompany this result and are attached to your reply automatically. For image artifacts, display them inline with Markdown ![caption](exact safePathLabel). Use each exact safePathLabel when linking other artifacts."
+    ))
 }
 
 fn delegation_feedback(

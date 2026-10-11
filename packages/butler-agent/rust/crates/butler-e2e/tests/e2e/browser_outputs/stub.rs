@@ -10,7 +10,7 @@ pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
     c.exchanges.clear();
     for history in 0..=12 {
         for (prompt, path) in [
-            ("Feature gate", "site"),
+            ("Tools", "site"),
             ("Publish", "site"),
             ("Again", "site"),
             ("Fix", "site"),
@@ -23,7 +23,7 @@ pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
             ("Spaced", "site/space +%.html"),
         ] {
             let mut steps = Vec::new();
-            if prompt == "Feature gate" {
+            if prompt == "Tools" {
                 steps.push(("tool_search", json!({"query":"output_","limit":50})));
                 steps.push((
                     "tool_describe",
@@ -48,7 +48,7 @@ pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
                         json!({"id":"native:output_check","arguments":{"output_id":id,"include_image":prompt == "Images"}}),
                     ));
                 }
-            } else if prompt != "Feature gate" {
+            } else if prompt != "Tools" {
                 steps.push(("output_publish", json!({"path":path,"title":if prompt == "Spaced" { "출".repeat(200) } else { "Output".into() }})));
             }
             let mut round = vec!["user".to_owned(); history];

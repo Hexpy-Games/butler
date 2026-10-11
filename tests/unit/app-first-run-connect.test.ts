@@ -90,7 +90,7 @@ test("bug-report info is localized by the renderer, not the desktop bridge", () 
     checks: [{ id: "agent_service", status: "failed" }, { id: "unknown_step", status: "pending" }],
     errors: [{ code: "agent_service_failed" }, { code: "setup_failed" }],
   }, getAppCopy("ko-KR").firstRun);
-  expect(localized.checks.map((check) => check.label)).toEqual(["Butler Agent 서비스", "unknown_step"]);
+  expect(localized.checks.map((check) => check.label)).toEqual(["버틀러 에이전트 서비스", "unknown_step"]);
   expect(localized.errors.map((error) => error.message)).toEqual(["백그라운드 서비스가 멈췄습니다.", "백그라운드 서비스가 응답하지 않습니다."]);
 });
 

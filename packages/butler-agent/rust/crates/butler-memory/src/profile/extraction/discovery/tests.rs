@@ -90,7 +90,10 @@ fn missing_precoverage_schema_falls_back_to_empty_retained_set() {
     rusqlite::Connection::open(path).unwrap();
 
     let source = read(&root.0, &EmptyFactory, &Default::default()).unwrap();
-    assert!(source.windows.is_empty());
+    assert_eq!(
+        source.windows,
+        [] as [crate::profile::extraction::types::SourceWindow; 0]
+    );
     assert_eq!(source.current_obligation_count, 0);
     assert!(!source.discovery_incomplete);
 }

@@ -62,8 +62,10 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
             ),
         }
     }
-    let outside = std::env::temp_dir()
-        .join("outside.txt")
+    let outside_path = std::env::temp_dir().join("outside.txt");
+    let outside = outside_path
+        .components()
+        .collect::<std::path::PathBuf>()
         .to_string_lossy()
         .replace('\\', "/");
     assert_eq!(

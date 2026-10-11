@@ -9,7 +9,7 @@ import {
   Inline,
   Notice,
   RefreshCcw,
-  SetupWizardContent,
+  Sparkles,
   Spinner,
   Stack,
   Button,
@@ -20,7 +20,7 @@ import {
 import { providerCardLayout, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
 import { providerCardView } from "./firstRunCardView";
 import { CardGlyph } from "./CardGlyph";
-import { FirstRunBack } from "./FirstRunBack";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** "Pick an AI": the well-known services on top, the rest behind "more". */
@@ -30,11 +30,15 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   // Run setup again opens "more" when the AI in use is there.
   const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
-    <SetupWizardContent width="wide">
-      <Stack gap="xs">
-        <Typo.H3 as="h1" id="first-run-connect-title">{copy.connectTitle}</Typo.H3>
-        <Typo.Body tone="secondary">{copy.connectLede}</Typo.Body>
-      </Stack>
+    <FirstRunStepCard flow={flow} contentKey="providers" icon={<Sparkles size="lg" />} title={copy.connectTitle}
+      titleId="first-run-connect-title" description={copy.connectLede} onBack={flow.backToConsent}
+      footerStart={<Button
+        aria-controls="first-run-more-providers" aria-expanded={expanded}
+        iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}
+        size="sm" text={expanded ? copy.showLess : copy.moreProviders(layout.more.length - (layout.localPlaceholder ? 1 : 0))}
+        type="button" variant="link" onClick={() => setExpanded((value) => !value)}
+      />}
+    >
       {flow.online ? null : <Notice tone="warning" icon={<Globe2 size="md" />} message={copy.offline} />}
       {flow.readiness.status === "preparing" ? (
         <Inline role="status">
@@ -46,26 +50,13 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
         {layout.top.map((cardId) => <TopCard cardId={cardId} flow={flow} key={cardId} />)}
       </ChoiceCardList>
       <Stack cross="start" gap="sm">
-        <Button
-          aria-controls="first-run-more-providers"
-          aria-expanded={expanded}
-          iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}
-          size="sm"
-          text={expanded ? copy.showLess : copy.moreProviders(layout.more.length - (layout.localPlaceholder ? 1 : 0))}
-          type="button"
-          variant="link"
-          onClick={() => setExpanded((value) => !value)}
-        />
         {expanded ? (
           <ChoiceTileGrid data-test-class="first-run-more-providers" id="first-run-more-providers">
             {layout.more.map((cardId) => <MoreTile cardId={cardId} flow={flow} key={cardId} />)}
           </ChoiceTileGrid>
         ) : null}
       </Stack>
-      <Inline>
-        <FirstRunBack label={copy.back} onClick={flow.backToConsent} />
-      </Inline>
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }
 

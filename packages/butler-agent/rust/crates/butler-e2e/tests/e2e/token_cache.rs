@@ -110,7 +110,10 @@ async fn final_guard(mode: Mode, blocked_count: usize) -> Result<(), HarnessErro
             .all(|row| row["prefixDiagnostics"]["providerReportedCachedTokens"].is_null())
     );
     assert!(!s.sandbox.data.join("final-mutation.txt").exists());
-    assert!(s.gw.approval_requests("general").await?.is_empty());
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        [] as [serde_json::Value; 0]
+    );
     let messages = s.gw.messages("general").await?;
     let rows = tool_rows(&messages, &id);
     let blocked: Vec<_> = rows

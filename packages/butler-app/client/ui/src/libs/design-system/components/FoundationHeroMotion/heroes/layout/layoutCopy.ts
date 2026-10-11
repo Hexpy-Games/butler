@@ -46,7 +46,7 @@ export const LAYOUT_COPY = {
     answer2: "완료했습니다. 서랍은 그대로이고, 컴포저가 키보드를 따라갑니다:",
     steps: [["키보드 오프셋을 ", "visualViewport", "에서 읽기"], ["리사이즈 리스너 하나 추가, 화면이 사라지면 제거", "", ""]] as Array<[string, string, string]>,
     code: "const vv = visualViewport;\nconst gap = innerHeight - vv.height;\ncomposer.style.bottom = `${gap}px`;",
-    worked: "9초 동안 작업", time: "오전 9:41", done: "답변 완료", placeholder: "Butler에게 무엇이든 물어보세요",
+    worked: "9초 동안 작업", time: "오전 9:41", done: "답변 완료", placeholder: "버틀러에게 무엇이든 물어보세요",
     copy: "메시지 복사", more: "추가 기능", sidebar: "사이드바 보기", hide: "사이드바 숨기기", panel: "오른쪽 패널 보기",
   },
 } satisfies Record<FoundationHeroLang, unknown>;

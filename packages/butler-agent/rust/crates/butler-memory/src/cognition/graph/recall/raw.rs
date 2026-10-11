@@ -146,7 +146,9 @@ fn term_weights<'a>(
         .collect())
 }
 
-/// The 64 best sources matching enough weighted terms.
+/// The 64 best sources matching enough weighted terms. Divide the BM25-style
+/// score by its upper bound 2.2/1.3: matched query mass is at most one and
+/// length is nonnegative. This preserves ordering on a shared 0..1 scale.
 fn ranked_sources(
     db: &Connection,
     predicate: scope::Predicate,
@@ -163,7 +165,7 @@ fn ranked_sources(
             FROM json_each(?)
         )
         SELECT s.source_id, s.episode_id,
-               SUM(q.weight)/? * 2.2/(1 + 1.2 * (0.25 + 0.75 * length(raw.text)/?)) score,
+               SUM(q.weight)/? * 1.3/(1 + 1.2 * (0.25 + 0.75 * length(raw.text)/?)) score,
                CASE WHEN instr(raw.text,?)>0 THEN 1 ELSE 0 END exact_match
         FROM query q
         JOIN memory_source_terms p ON p.term=q.term

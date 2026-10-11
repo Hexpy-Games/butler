@@ -6,6 +6,12 @@
   line-height: var(--typo-body-line-height);
 }
 
+.tone-neutral {
+  background: var(--muted);
+  border-color: var(--line);
+  color: var(--text-secondary);
+}
+
 .tone-info {
   background: var(--color-info-bg);
   border-color: var(--color-info-border);

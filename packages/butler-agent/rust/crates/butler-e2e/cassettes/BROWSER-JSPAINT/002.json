@@ -1,0 +1,113 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/codex/responses",
+    "key": {
+      "path": "/codex/responses",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "user_request": "https://jspaint.app/#local:b4cea4b918ade 에서 마우스로 집 한 채와 해를 그려줘. 다 그리면 그림을 캡처해서 보여줘.",
+      "round": [
+        "function_call",
+        "function_call_output",
+        "function_call",
+        "function_call_output"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_00fc9aaf5e5efee2016ac981df8b648191827b5f73b53345cc\",\"object\":\"response\",\"created_at\":1791590879,\"completed_at\":null,\"status\":\"in_progress\",\"background\":false,\"frequency_penalty\":0.0,\"presence_penalty\":0.0,\"moderation\":null,\"model\":\"gpt-6-luna\",\"access_programs\":null,\"previous_response_id\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"output\":[],\"error\":null,\"incomplete_details\":null,\"tools\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":true,\"prompt_cache_key\":\"butler:b15a9b6ca0d3:btcc-guided:butler-app-general\",\"prompt_cache_retention\":\"24h\",\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"top_p\":0.98,\"top_logprobs\":0,\"temperature\":1.0,\"reasoning\":{\"effort\":\"medium\",\"context\":\"all_turns\",\"summary\":null,\"mode\":\"standard\"},\"user\":null,\"usage\":null,\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0,\"input_tokens_details\":{\"text_tokens\":0,\"image_tokens\":0},\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0}},\"web_search\":{\"num_requests\":0}},\"safety_identifier\":\"{{ACCOUNT}}\",\"store\":false,\"metadata\":{},\"max_output_tokens\":null,\"max_tool_calls\":null,\"service_tier\":\"auto\",\"truncation\":\"disabled\"}}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_00fc9aaf5e5efee2016ac981df8b648191827b5f73b53345cc\",\"object\":\"response\",\"created_at\":1791590879,\"completed_at\":null,\"status\":\"in_progress\",\"background\":false,\"frequency_penalty\":0.0,\"presence_penalty\":0.0,\"moderation\":null,\"model\":\"gpt-6-luna\",\"access_programs\":null,\"previous_response_id\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"output\":[],\"error\":null,\"incomplete_details\":null,\"tools\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":true,\"prompt_cache_key\":\"butler:b15a9b6ca0d3:btcc-guided:butler-app-general\",\"prompt_cache_retention\":\"24h\",\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"top_p\":0.98,\"top_logprobs\":0,\"temperature\":1.0,\"reasoning\":{\"effort\":\"medium\",\"context\":\"all_turns\",\"summary\":null,\"mode\":\"standard\"},\"user\":null,\"usage\":null,\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0,\"input_tokens_details\":{\"text_tokens\":0,\"image_tokens\":0},\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0}},\"web_search\":{\"num_requests\":0}},\"safety_identifier\":\"{{ACCOUNT}}\",\"store\":false,\"metadata\":{},\"max_output_tokens\":null,\"max_tool_calls\":null,\"service_tier\":\"auto\",\"truncation\":\"disabled\"}}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"call_id\":\"call_3268a26a75c4457c90d81be25bc8d34e\",\"name\":\"tool_search\",\"arguments\":\"\",\"status\":\"in_progress\"}}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":3,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"{\\\"query\\\":\\\"browser computer use playwright screenshot click type\\\",\\\"limit\\\":50}\",\"obfuscation\":\"BNcF7ilH6Wqc4p\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":4,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"NoBCIQXOeOM\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":5,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"D3mLhG0HsjbJH\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":6,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"imJcO2T9g\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":7,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"hR5f7in\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":8,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"YHhAjxk2RW8d\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":9,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"renBT\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":10,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"fn0gQ\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":11,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"UoLPaQfo2F\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":12,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"qwHN0a7ewck\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":13,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"A9REJU4FIyDkp\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":14,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"JUfLcasT3IQ\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":15,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"SzxHKuG5NDA25j\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":16,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"Nei5cPUe0T5XQa\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.delta\",\"sequence_number\":17,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"delta\":\"\",\"obfuscation\":\"gPrAtR9v98l4m96\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.function_call_arguments.done\",\"sequence_number\":18,\"item_id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"output_index\":0,\"arguments\":\"{\\\"query\\\":\\\"browser computer use playwright screenshot click type\\\",\\\"limit\\\":50}\"}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.output_item.done\",\"sequence_number\":19,\"output_index\":0,\"item\":{\"type\":\"function_call\",\"id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"call_id\":\"call_3268a26a75c4457c90d81be25bc8d34e\",\"name\":\"tool_search\",\"arguments\":\"{\\\"query\\\":\\\"browser computer use playwright screenshot click type\\\",\\\"limit\\\":50}\",\"status\":\"completed\"}}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "data: {\"type\":\"response.completed\",\"sequence_number\":20,\"response\":{\"id\":\"resp_00fc9aaf5e5efee2016ac981df8b648191827b5f73b53345cc\",\"object\":\"response\",\"created_at\":1791590879,\"completed_at\":1791590880,\"status\":\"completed\",\"background\":false,\"frequency_penalty\":0.0,\"presence_penalty\":0.0,\"moderation\":null,\"model\":\"gpt-6-luna\",\"access_programs\":null,\"previous_response_id\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"output\":[{\"type\":\"function_call\",\"id\":\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\",\"call_id\":\"call_3268a26a75c4457c90d81be25bc8d34e\",\"name\":\"tool_search\",\"arguments\":\"{\\\"query\\\":\\\"browser computer use playwright screenshot click type\\\",\\\"limit\\\":50}\",\"status\":\"completed\"}],\"error\":null,\"incomplete_details\":null,\"tools\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":true,\"prompt_cache_key\":\"butler:b15a9b6ca0d3:btcc-guided:butler-app-general\",\"prompt_cache_retention\":\"24h\",\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"top_p\":0.98,\"top_logprobs\":0,\"temperature\":1.0,\"reasoning\":{\"effort\":\"medium\",\"context\":\"all_turns\",\"summary\":null,\"mode\":\"standard\"},\"user\":null,\"usage\":{\"input_tokens\":10996,\"input_tokens_details\":{\"cached_tokens\":9728,\"cache_write_tokens\":0},\"output_tokens\":28,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":11024,\"attribution\":{\"items\":{\"fc_00fc9aaf5e5efee2016ac981df8c7081918d4748a719546911\":{\"input_tokens\":853,\"cached_tokens\":291,\"cache_write_tokens\":0,\"output_tokens\":0,\"content\":[{\"input_tokens\":853,\"cached_tokens\":291,\"cache_write_tokens\":0,\"output_tokens\":0}]},\"fc_00fc9aaf5e5efee2016ac981df8c70819194da07edf0781256\":{\"input_tokens\":17,\"cached_tokens\":17,\"cache_write_tokens\":0,\"output_tokens\":0},\"fc_00fc9aaf5e5efee2016ac981df8c708191a8746b6c95222954\":{\"input_tokens\":37,\"cached_tokens\":0,\"cache_write_tokens\":0,\"output_tokens\":0},\"fc_00fc9aaf5e5efee2016ac981df8c708191bbf92334693fb2e9\":{\"input_tokens\":667,\"cached_tokens\":0,\"cache_write_tokens\":0,\"output_tokens\":0,\"content\":[{\"input_tokens\":667,\"cached_tokens\":0,\"cache_write_tokens\":0,\"output_tokens\":0}]},\"fc_00fc9aaf5e5efee2016ac981e018688191a15201a99ed0d4cf\":{\"input_tokens\":2,\"cached_tokens\":0,\"cache_write_tokens\":0,\"output_tokens\":28},\"msg_00fc9aaf5e5efee2016ac981df8c7081918e090428c0470548\":{\"input_tokens\":267,\"cached_tokens\":267,\"cache_write_tokens\":0,\"output_tokens\":0,\"content\":[{\"input_tokens\":267,\"cached_tokens\":267,\"cache_write_tokens\":0,\"output_tokens\":0}]}},\"request_fields\":{\"instructions\":{\"input_tokens\":2373,\"cached_tokens\":2373,\"cache_write_tokens\":0,\"output_tokens\":0},\"tools\":{\"input_tokens\":6780,\"cached_tokens\":6780,\"cache_write_tokens\":0,\"output_tokens\":0}}}},\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0,\"input_tokens_details\":{\"text_tokens\":0,\"image_tokens\":0},\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0}},\"web_search\":{\"num_requests\":0}},\"safety_identifier\":\"{{ACCOUNT}}\",\"store\":false,\"metadata\":{},\"max_output_tokens\":null,\"max_tool_calls\":null,\"service_tier\":\"default\",\"truncation\":\"disabled\"}}\n\n"
+      }
+    ]
+  }
+}

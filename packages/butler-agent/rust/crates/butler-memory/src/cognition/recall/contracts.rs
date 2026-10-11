@@ -87,7 +87,7 @@ pub(crate) struct EpisodeRankInput {
     pub lexical_rank: Option<f64>,
     pub vector_rank: Option<f64>,
     pub context_rank: Option<f64>,
-    pub query_relevance: Option<f64>,
+    pub query_relevance: f64,
     pub explicit_priority: Option<bool>,
     pub salience: Option<Salience>,
     pub support_count: Option<f64>,

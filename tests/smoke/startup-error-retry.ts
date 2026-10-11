@@ -1,6 +1,7 @@
+import { spawnElectron } from "../support/electron-child";
 /** Native failure, Open log and real Retry relaunch; no inspector injection or live models. */
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -30,6 +31,9 @@ let original: ChildProcess | undefined;
 let browser: Browser | undefined;
 let successorPid: number | undefined;
 let phase = "launch";
+process.once("exit", () => {
+  if (successorPid) { try { process.kill(successorPid, "SIGKILL"); } catch { /* already exited */ } }
+});
 async function waitFor<T>(read: () => T | Promise<T>, label: string): Promise<NonNullable<T>> {
   const deadline = performance.now() + 30_000;
   while (performance.now() < deadline) {
@@ -45,15 +49,13 @@ async function connect() {
   }, "Native debugging endpoint unavailable");
   return chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
 }
+let pending = "";
+const onOutput = (chunk: Buffer) => {
+  const lines = (pending + String(chunk)).split("\n"); pending = lines.pop() ?? "";
+  for (const line of lines) { try { const event = JSON.parse(line).startup; if (event?.stage?.startsWith("retry_")) console.log(JSON.stringify({ startup: event })); } catch { /* selected timings only */ } }
+};
 try {
-  original = spawn(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, stdio: ["ignore", "pipe", "pipe"] });
-  for (const stream of [original.stdout, original.stderr]) {
-    let pending = "";
-    stream?.on("data", (chunk) => {
-      const lines = (pending + String(chunk)).split("\n"); pending = lines.pop() ?? "";
-      for (const line of lines) { try { const event = JSON.parse(line).startup; if (event?.stage?.startsWith("retry_")) console.log(JSON.stringify({ startup: event })); } catch { /* selected timings only */ } }
-    });
-  }
+  original = spawnElectron(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, onOutput });
   browser = await connect();
   const splash = await waitFor(() => browser!.contexts()[0]!.pages().find((page) => page.url().includes("lifecycle.html")), "Error surface unavailable");
   await splash.getByRole("alert").waitFor();
@@ -126,12 +128,13 @@ try {
 } finally {
   await browser?.close().catch(() => undefined);
   if (successorPid) {
-    const quit = spawn(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore" });
+    const quit = spawnElectron(executable, [...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory]), "--butler-quit-main-ui"], { env, stdio: "ignore" });
     const force = setTimeout(() => { try { process.kill(successorPid!, "SIGKILL"); } catch { /* already exited */ } }, 10_000);
     try {
       await once(quit, "exit");
       await waitFor(() => { try { process.kill(successorPid!, 0); return false; } catch { return true; } }, "Retry cleanup did not exit the successor");
     } finally { clearTimeout(force); }
+    successorPid = undefined;
   }
   if (original?.exitCode === null && original.signalCode === null) {
     const exited = once(original, "exit");

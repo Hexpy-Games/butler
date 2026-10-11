@@ -54,6 +54,16 @@ const PAINT_LOOP_KEYFRAMES: Record<string, readonly string[]> = {
   "libs/design-system/blocks/MessageRow/MessageRow.module.css": ["background-position"],
   "libs/design-system/components/Spinner/Spinner.module.css": ["stroke-dasharray"],
 };
+/**
+ * File-exact geometry transitions. The setup card morph (intro spec rev 5)
+ * moves the real edges of one empty, absolutely positioned card surface and
+ * clips the larger card to it for --motion-deliberate, so the hairline border,
+ * the corners and the text never scale (a transform would stretch them).
+ * Owner-approved; no other file may transition layout or clip geometry.
+ */
+const GEOMETRY_MORPH: Record<string, readonly string[]> = {
+  "libs/design-system/blocks/SetupWizardShell/SetupWizardMorph.module.css": ["left", "width", "height", "clip-path"],
+};
 /** Registered paint-only custom properties (the shared scroll-fade mask). */
 const ALLOWED_CUSTOM_PROPERTY = /^--scroll-fade-/u;
 
@@ -151,6 +161,7 @@ function transitionItemProperty(item: string): string | null {
 function propertyAllowed(path: string, property: string, declaration: string, source: string): boolean {
   if (ALLOWED_PROPERTIES.has(property)) return true;
   if (ALLOWED_CUSTOM_PROPERTY.test(property)) return true;
+  if (GEOMETRY_MORPH[path]?.includes(property)) return true;
   if (DISCRETE_PROPERTIES.has(property)) return /allow-discrete/u.test(declaration) || /transition-behavior\s*:\s*allow-discrete/u.test(source);
   if (property === "height" || property === "block-size") {
     return REVEAL_COMPONENTS.some((prefix) => path.startsWith(prefix)) &&

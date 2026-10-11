@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 mod fetch;
+mod headless;
 pub(super) mod lightpanda;
 
 impl super::service::WebAccess {

@@ -110,7 +110,7 @@ async fn setup_06_verify_checks_the_key_and_stores_nothing() -> Result<(), Harne
     assert_eq!(malformed.status, 400, "{}", malformed.text);
     assert_eq!(malformed.error_code(), Some("invalid_request"));
 
-    assert!(saved_credentials(&s).await?.is_empty());
+    assert_eq!(saved_credentials(&s).await?, [] as [serde_json::Value; 0]);
     assert!(
         !s.sandbox
             .data

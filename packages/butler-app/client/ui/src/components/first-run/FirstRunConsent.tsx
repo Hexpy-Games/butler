@@ -1,11 +1,12 @@
 import { faviconSrc } from "@/app/favicons.ts";
-import { Fragment, useEffect } from "react";
+import { Fragment } from "react";
 import {
-  AlertCircle, Button, ButtonContainer, GitBranch, IconSlot, Monitor, Notice,
-  SendHorizontal, Separator, SetupWizardContent, Stack, Terminal, InlineReference, Typo,
+  AlertCircle, GitBranch, IconSlot, Monitor, Notice, ShieldCheck, SetupWizardStepAction,
+  SendHorizontal, Separator, Stack, Terminal, InlineReference, Typo,
 } from "@/butler-ds";
 import { FIRST_RUN_GUIDE_URL } from "./FirstRunWelcome";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
+import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 const ITEM_ICONS = [GitBranch, Terminal, SendHorizontal, Monitor];
@@ -14,12 +15,15 @@ const ITEM_ICONS = [GitBranch, Terminal, SendHorizontal, Monitor];
 export function FirstRunConsent({ flow }: { flow: FirstRunFlow }) {
   const { copy, savingConsent } = flow;
   const blocked = flow.readiness.status === "failed";
-  useEffect(() => {
-    document.getElementById("first-run-consent-title")?.focus();
-  }, []);
   return (
-    <SetupWizardContent width="wide" surface="solid">
-      <Typo.H3 as="h1" id="first-run-consent-title" tabIndex={-1}>{copy.consentTitle}</Typo.H3>
+    <FirstRunStepCard flow={flow} icon={<ShieldCheck size="lg" />} title={copy.consentTitle} titleId="first-run-consent-title"
+      onBack={flow.mode === "consent" ? undefined : flow.backToWelcome}
+      footerStart={<FirstRunPrepStatus flow={flow} />}
+      actions={<>
+        <SetupWizardStepAction disabled={savingConsent} onClick={flow.decline}>{copy.decline}</SetupWizardStepAction>
+        <SetupWizardStepAction forward disabled={blocked || savingConsent} title={blocked ? copy.agreeBlocked : undefined} onClick={flow.agree}>{copy.agree}</SetupWizardStepAction>
+      </>}
+    >
       <Stack aria-labelledby="first-run-consent-title" gap="sm" role="list">
         {copy.consentItems.map((item, index) => {
           const Icon = ITEM_ICONS[index];
@@ -41,11 +45,6 @@ export function FirstRunConsent({ flow }: { flow: FirstRunFlow }) {
         })}
       </Stack>
       <Notice icon={<AlertCircle size="md" />} message={copy.consentClause} tone="warning" />
-      <ButtonContainer justify="end" size="lg">
-        <Button disabled={savingConsent} size="lg" type="button" variant="outline" onClick={flow.decline}>{copy.decline}</Button>
-        <Button disabled={blocked || savingConsent} size="lg" title={blocked ? copy.agreeBlocked : undefined} type="button" onClick={flow.agree}>{copy.agree}</Button>
-      </ButtonContainer>
-      {blocked ? <FirstRunPrepStatus flow={flow} /> : null}
-    </SetupWizardContent>
+    </FirstRunStepCard>
   );
 }

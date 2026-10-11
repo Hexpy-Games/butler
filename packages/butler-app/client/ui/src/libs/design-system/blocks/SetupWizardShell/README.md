@@ -26,6 +26,35 @@ Use `SetupWizardContent surface="solid"` for an opaque raised card over wallpape
 Page content stays opaque (Tinted glass pattern); wallpaper appears only around the card. The first run (welcome, then "Pick an AI")
 uses it. `title` still names the region for assistive tech.
 
+### Focus options
+- `anchor="top"` puts the column at one top edge instead of the middle of the
+  window: `clamp(titlebar + --space-lg, 20% of the window, 240px)` (phone floor
+  header + 16px = 72px). An intro card and taller or shorter step cards share
+  that edge, and the card's centre sits slightly above the window's centre.
+- `stepKey` replaces the card when the key changes. When the card width
+  changes (`SetupWizardContent` 420px and a 520px `SetupWizardStepCard`), the
+  card **morphs**: one surface with the card paint moves its real edges over
+  `--motion-deliberate` on `--motion-ease-emphasized` with the top edge fixed,
+  and nothing is scaled, so the border, corners and text stay crisp. The old
+  content leaves (`--motion-exit-base` forward, `--motion-exit-fast` back), the
+  larger card's content is clipped to the moving edge, and the new card's rows
+  rise in from `--motion-morph-rows` (150ms) every `--motion-stagger-row`
+  (30ms) over `--motion-base` and `--motion-distance-sm`; forward ends at
+  430ms, back at 370ms. While it runs the cards take no clicks (a second press
+  is ignored); a resize or new copy (language change) jumps to the end; a
+  hidden window pauses it. Focus is the new card's job: the step title going
+  forward, the start action going back. At rest no surface, clip or animation
+  remains. Cards of the same width keep the plain swap (the old copy fades out,
+  the new card rises in). Under reduced motion the card swaps at once. Keep
+  one key for all steps that share a card; the step card's `contentKey` fades
+  its body between steps.
+- `intro="rerun"` is the short re-run variant ("설정 다시 실행"): the first card
+  appears with opacity and a 4px rise over `--motion-slow`, decelerating; under
+  reduced motion it is there at once. The first-install ink intro joins this
+  prop as `full`, drawn on the shell's wallpaper layer.
+- `SetupWizardProgress` (the wizard stepper) is exported for step headers;
+  `SetupWizardStepCard` renders it from its `steps`.
+
 ## Who can use this component
 Any setup workflow that follows a short linear sequence.
 

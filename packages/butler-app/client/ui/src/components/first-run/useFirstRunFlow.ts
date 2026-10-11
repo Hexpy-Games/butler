@@ -11,6 +11,7 @@ import { useLocalModelServers } from "./useLocalModelServers";
 import { useOnlineStatus } from "./useOnlineStatus";
 import { useSetupReadiness } from "./useSetupReadiness";
 import { useSignIn } from "./useSignIn";
+import type { FirstRunStep } from "./FirstRunSteps";
 
 /** `first-run`: welcome, consent, then pick an AI. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
@@ -45,6 +46,7 @@ function useConsentScreen(mode: FirstRunMode) {
   return {
     screen, setScreen, focusStart,
     start: () => setScreen("consent"),
+    backToWelcome: () => { setFocusStart(true); setScreen("welcome"); },
     backToConsent: () => setScreen("consent"),
     decline: (clearAcceptance: () => void) => {
       clearAcceptance();
@@ -77,6 +79,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     resume: mode === "first-run",
   });
   const reply = useReplyLanguage({ connected: commit.connected, language, onComplete });
+  const step: FirstRunStep = commit.connected || commit.waitingForReady ? "ready" : screen;
   useEffect(() => {
     if (commit.connected) {
       setLanguage(commit.connected.settings.language);
@@ -93,26 +96,17 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     setAppCopyLanguage(language);
   }, [language]);
 
-  function pick(cardId: FirstRunProviderCardId): void {
-    const kind = PROVIDER_CARDS[cardId].kind;
-    commit.clear();
-    if (kind === "signin") {
-      setView({ kind: "signin" });
-      void signIn.start();
-    } else if (kind === "key") setView({ kind: "key", cardId });
-    else setView({ kind: kind === "local" ? "local" : "custom" });
-  }
-
   return {
-    mode, copy, language, setLanguage, online, screen, focusStart, view, savingConsent, local, signIn, commit, reply,
+    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
     repairPreparation: setup.repair,
     agree,
     start: navigation.start,
+    backToWelcome: navigation.backToWelcome,
     decline: () => navigation.decline(clearAcceptance),
-    pick,
+    pick: (cardId: FirstRunProviderCardId) => pickProvider(cardId, commit, signIn, setView),
     cancel: () => {
       signIn.leave();
       onCancel?.();
@@ -136,3 +130,19 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
 }
 
 export type FirstRunFlow = ReturnType<typeof useFirstRunFlow>;
+
+/** Preserve the existing option kinds and start sign-in only after an explicit pick. */
+function pickProvider(
+  cardId: FirstRunProviderCardId,
+  commit: ReturnType<typeof useConnectionCommit>,
+  signIn: ReturnType<typeof useSignIn>,
+  setView: (view: ConnectView) => void,
+): void {
+  const kind = PROVIDER_CARDS[cardId].kind;
+  commit.clear();
+  if (kind === "signin") {
+    setView({ kind: "signin" });
+    void signIn.start();
+  } else if (kind === "key") setView({ kind: "key", cardId });
+  else setView({ kind: kind === "local" ? "local" : "custom" });
+}

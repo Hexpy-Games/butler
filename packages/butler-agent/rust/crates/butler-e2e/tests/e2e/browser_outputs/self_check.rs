@@ -26,7 +26,7 @@ async fn output_self_check_host_is_private_and_correlated() -> Result<(), Harnes
             s.gw.send_with(
                 method.clone(),
                 path,
-                Some("{}".into()).filter(|_| method == Method::POST),
+                (method == Method::POST).then_some("{}".into()),
                 Some(&s.gw.token),
                 &[],
             )

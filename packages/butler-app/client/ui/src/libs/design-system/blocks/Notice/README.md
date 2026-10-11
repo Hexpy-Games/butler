@@ -2,7 +2,12 @@
 
 ## What is this block
 
-Notice is a Butler design-system block for alert/notice banners with info, warning, error, or success tones.
+Notice is a Butler design-system block for alert/notice banners with neutral, info, warning, error, or success tones.
+
+`tone="neutral"` is a quiet status with no color meaning: a muted fill, a hairline
+border and secondary text. Use it for a waiting state ("Waiting for your browser")
+or a plain fact ("Signed in as …"); use the colored tones when the status is good,
+risky or broken.
 
 ## When to use this block
 

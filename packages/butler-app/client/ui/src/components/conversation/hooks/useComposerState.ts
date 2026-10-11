@@ -1,3 +1,4 @@
+import { useElementDraft } from "../../browser/browserElements";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useMemo } from "react";
 import {
@@ -32,7 +33,8 @@ export function useComposerState(
   isSending: boolean,
   uploadingCount: number,
 ) {
-  const hasSendableDraft = text.trim().length > 0 || attachments.length > 0;
+  const elementCount = useElementDraft(s => s.items.length);
+  const hasSendableDraft = text.trim().length > 0 || attachments.length > 0 || elementCount > 0;
 
   const workers = useMemo(() => (summary?.worker_activity ?? []).filter(
     (worker): worker is WorkerActivitySummary =>

@@ -126,6 +126,17 @@
     visibility 0s var(--motion-ease-linear) var(--motion-fast);
 }
 
+/* An AdaptiveShell peek (`leftPeek`) shows the collapsed sidebar as a card:
+   its content shows with it, whatever `collapsed` the product passes. */
+[data-left-peek="true"]
+  > [data-slot="adaptive-shell-sidebar"]
+  .contentCollapsed {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+
 .header {
   width: 100%;
   max-width: 100%;

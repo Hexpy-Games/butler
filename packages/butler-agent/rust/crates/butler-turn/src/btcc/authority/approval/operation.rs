@@ -11,10 +11,43 @@ pub struct ApprovalOperation {
     pub targets: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_conversation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub browser_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub browser_steps: Vec<BrowserApprovalStep>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sign_in_step: Option<String>,
+    /// Why `browser_wait_for_user` hands the tab to the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserApprovalStep {
+    pub action: String,
+    pub role: String,
+    pub name: String,
+    pub frame: String,
+    pub value_preview: Option<String>,
+    pub addons: Vec<String>,
 }
 
 pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
     let input = facts.input;
+    if let Some(operation) = signed_in_operation(&facts) {
+        return operation;
+    }
+    if facts.capability == "browser_act"
+        || matches!(facts.capability, "browser_close" | "browser_observe")
+            && facts.input.get("dialog").is_some()
+    {
+        return browser_operation(facts);
+    }
+    if facts.capability == "browser_wait_for_user" {
+        return wait_operation(&facts);
+    }
     let command = input["command"].as_str().map(str::to_owned);
     let paths = match facts.capability {
         "read_file" => paths(input, "requests"),
@@ -26,7 +59,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             }
         }
         "list_files" | "grep_files" => vec![input["root"].as_str().unwrap_or(".")],
-        "run_command" | "run_command_remote_observation" => {
+        "run_command" | "run_command_remote_observation" | "preview_start" => {
             vec![input["cwd"].as_str().unwrap_or(".")]
         }
         _ => Vec::new(),
@@ -60,6 +93,11 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         access: if read_only { "read_only" } else { "change" }.into(),
         targets,
         command,
+        allow_conversation: None,
+        browser_mode: None,
+        browser_steps: Vec::new(),
+        sign_in_step: None,
+        wait_reason: None,
     }
 }
 
@@ -70,4 +108,120 @@ fn paths<'a>(input: &'a Value, key: &str) -> Vec<&'a str> {
         .flatten()
         .filter_map(|entry| entry["path"].as_str())
         .collect()
+}
+
+fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
+    let mut targets = vec![
+        facts
+            .target
+            .strip_prefix("browser:signed_out:")
+            .or_else(|| facts.target.strip_prefix("browser:signed_in:"))
+            .unwrap_or(facts.target)
+            .to_owned(),
+    ];
+    let browser_steps = facts.input["resolved_steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|step| {
+            let hit = &step["hit"];
+            BrowserApprovalStep {
+                action: step["action"].as_str().unwrap_or("").into(),
+                role: hit["role"].as_str().unwrap_or("").into(),
+                name: hit["name"].as_str().unwrap_or("").into(),
+                frame: hit["frame"].as_str().unwrap_or("").into(),
+                value_preview: step["value_preview"].as_str().map(str::to_owned),
+                addons: step["addons"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
+            }
+        })
+        .collect();
+    if let Some(dialog) = facts.input.get("dialog") {
+        targets.push(format!(
+            "{} · \"{}\"",
+            dialog["type"].as_str().unwrap_or("dialog"),
+            dialog["message"].as_str().unwrap_or("")
+        ));
+        if dialog["type"] == "prompt" {
+            targets.push(format!(
+                "→ \"{}\"",
+                dialog["defaultPrompt"].as_str().unwrap_or("")
+            ));
+        }
+    }
+    ApprovalOperation {
+        tool: facts.capability.into(),
+        access: "change".into(),
+        targets,
+        command: None,
+        allow_conversation: Some(facts.input["always_confirm"] != true),
+        browser_mode: facts.input["mode"].as_str().map(str::to_owned),
+        browser_steps,
+        sign_in_step: None,
+        wait_reason: None,
+    }
+}
+
+/// Signed-in site grants, sign-in fills and the sign-in hand-back wait: one
+/// exact card each, never a standing conversation permission.
+fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
+    let input = facts.input;
+    let text = |value: &Value| value.as_str().unwrap_or("").to_owned();
+    let (tool, access, targets) = if let Some(grant) = input.get("grant") {
+        ("browser_site_access", "change", vec![text(&grant["site"])])
+    } else if let Some(sign_in) = input.get("sign_in") {
+        let target = format!(
+            "{} · {}",
+            text(&sign_in["site"]),
+            text(&sign_in["username"])
+        );
+        ("browser_sign_in", "change", vec![target])
+    } else if facts.capability == "browser_sign_in" && input.get("wait").is_some() {
+        let targets = vec![text(input.pointer("/wait/site").unwrap_or(&Value::Null))];
+        ("browser_sign_in_wait", "read_only", targets)
+    } else {
+        return None;
+    };
+    Some(ApprovalOperation {
+        tool: tool.into(),
+        access: access.into(),
+        targets,
+        command: None,
+        allow_conversation: Some(false),
+        browser_mode: (access == "change").then(|| "signed_in".into()),
+        sign_in_step: (tool == "browser_sign_in_wait")
+            .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
+        wait_reason: None,
+        browser_steps: Vec::new(),
+    })
+}
+
+/// `browser_wait_for_user`: the site and why, never the tab id; the
+/// hand-back matches the request's stored target.
+fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
+    let input = facts.input;
+    let site = input.pointer("/wait/site").and_then(Value::as_str);
+    ApprovalOperation {
+        tool: facts.capability.into(),
+        access: "read_only".into(),
+        targets: site
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .into_iter()
+            .collect(),
+        command: None,
+        allow_conversation: Some(false),
+        browser_mode: None,
+        browser_steps: Vec::new(),
+        sign_in_step: None,
+        wait_reason: input
+            .pointer("/wait/reason")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    }
 }

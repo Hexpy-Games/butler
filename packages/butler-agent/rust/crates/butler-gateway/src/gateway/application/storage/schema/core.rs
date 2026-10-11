@@ -295,6 +295,14 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS chats_project_artifacts_idx
     ON chats(project_id,id);
 
+    CREATE TABLE IF NOT EXISTS browser_stills (
+      file_id TEXT PRIMARY KEY REFERENCES message_files(id) ON DELETE CASCADE,
+      owner_session_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+      tab_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS browser_stills_owner_idx
+    ON browser_stills(owner_session_id, created_at, tab_id);
     CREATE INDEX IF NOT EXISTS message_files_owner_idx
     ON message_files(owner_session_id, message_id);
 

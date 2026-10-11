@@ -271,6 +271,6 @@ mod tests {
         assert_eq!(model_ids(Some(&openai)), ["gpt-6-sol", "gpt-6-luna"]);
         let gemini = json!({"models":[{"name":"models/gemini-3.8-flash"}]});
         assert_eq!(model_ids(Some(&gemini)), ["gemini-3.8-flash"]);
-        assert!(model_ids(None).is_empty());
+        assert_eq!(model_ids(None), [] as [std::string::String; 0]);
     }
 }

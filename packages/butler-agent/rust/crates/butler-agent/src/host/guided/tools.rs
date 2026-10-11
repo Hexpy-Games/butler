@@ -9,8 +9,10 @@ mod execute;
 mod feedback;
 mod hooks;
 mod image;
+mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
+mod browser;
 mod message;
 mod monitoring;
 mod occurrence;
@@ -329,8 +331,11 @@ impl GuidedTools {
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
+                    | ToolName::LibrarySearch
+                    | ToolName::LibraryOrganize
             )
-        ) || GuidedWorkTools::is_work_tool(name)
+        ) || browser::supports(name)
+            || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }
 
@@ -342,7 +347,7 @@ impl GuidedTools {
                     .list_signatures(self.binding.turn_id.clone())
                     .await
                     .map_err(BtccError::from)?;
-                outputs::restore_budget(self, &signatures);
+                outputs::restore_output_checks(self, &signatures);
                 Ok(Mutex::new(ResumePool::new(signatures)?))
             })
             .await

@@ -30,7 +30,10 @@ fn config_update_keeps_unrelated_values_and_validation_checks_whole_object() {
     );
     assert_eq!(value["unknown"]["retained"], true);
     assert_eq!(value["system"]["defaultModel"], "openai/gpt-6-astra");
-    assert!(config::validate(&value).errors.is_empty());
+    assert_eq!(
+        config::validate(&value).errors,
+        [] as [std::string::String; 0]
+    );
     value["webSearch"]["provider"] = json!("unsupported");
     assert_eq!(
         config::validate(&value).errors,

@@ -15,6 +15,12 @@ function ConversationTitlebar() {
 }
 // #endregion
 
+// #region recipe: Nested screen with back
+function NestedTitlebar() {
+  return <TitlebarShell title="Travel" back={{ label: "Back to Scraps", onBack: () => undefined }} />;
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "The window titlebar: leading toggle, title and subtitle, trailing actions and window controls, draggable.",
   whenToUse: ["The top bar of the app window"],
@@ -22,14 +28,20 @@ export const guidance: ShowcaseGuidance = {
     { when: "A panel header", use: "PanelHeader" },
     { when: "A page title", use: "DashboardHeader" },
   ],
-  recipes: [{ name: "Conversation titlebar", description: "The leading control aligns with the title line; the bar is a drag region.", render: () => <ConversationTitlebar /> }],
+  recipes: [
+    { name: "Conversation titlebar", description: "The leading control aligns with the title line; the bar is a drag region.", render: () => <ConversationTitlebar /> },
+    { name: "Nested screen with back", description: "Nested screens pass back; it goes up one level (⌘[ / Alt+←). Top-level screens pass nothing.", render: () => <NestedTitlebar /> },
+  ],
   doDont: [
     {
       do: { caption: "Title and workspace subtitle stay on one line.", render: () => <ConversationTitlebar /> },
       dont: { caption: "A panel header in the window chrome has no drag region or window controls.", render: () => <PanelHeader title="Token page review" /> },
     },
   ],
-  content: ["The title is the conversation title; the subtitle is project · branch."],
-  accessibility: ["dragRegion makes the bar a window drag region; controls inside it stay clickable (no-drag); window controls have labels."],
+  content: [
+    "The title is the conversation title; the subtitle is project · branch.",
+    "leadingSize=\"auto\" lets the leading slot hold a control at its own size (the standalone Browser's conversation button); the collapsed-sidebar inset is unchanged.",
+  ],
+  accessibility: ["dragRegion makes the bar a window drag region; controls inside it stay clickable (no-drag); window controls have labels.", "The back button is named by its label (“Back to Scraps”) and has the same action as ⌘[ / Alt+←."],
   tokens: ["--titlebar-height", "--titlebar-bg", "--chrome-floating-toggle-size"],
 };

@@ -164,6 +164,48 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
         .find(|model| model.model_ref == "openai/gpt-6-sol")
         .unwrap();
     assert_eq!(previous_sol.status, "previous");
+
+    let sonnet = catalog
+        .models
+        .iter()
+        .find(|model| model.model_ref == "anthropic/claude-sonnet-5-5")
+        .unwrap();
+    assert_eq!(sonnet.display_name, "Claude Sonnet 5.5");
+    assert_eq!(sonnet.status, "latest");
+    assert_eq!(sonnet.context_window_tokens, Some(1_000_000.0));
+    assert_eq!(sonnet.max_output_tokens, Some(128_000.0));
+    assert_eq!(sonnet.default_reasoning_effort, ReasoningEffort::High);
+    assert_eq!(
+        sonnet.reasoning_efforts,
+        [
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+            ReasoningEffort::Xhigh,
+            ReasoningEffort::Max,
+        ]
+    );
+
+    let haiku = catalog
+        .models
+        .iter()
+        .find(|model| model.model_ref == "anthropic/claude-haiku-5-5")
+        .unwrap();
+    assert_eq!(haiku.display_name, "Claude Haiku 5.5");
+    assert_eq!(haiku.status, "latest");
+    assert_eq!(haiku.context_window_tokens, Some(1_000_000.0));
+    assert_eq!(haiku.max_output_tokens, Some(128_000.0));
+    assert_eq!(haiku.default_reasoning_effort, ReasoningEffort::Medium);
+    assert_eq!(
+        haiku.reasoning_efforts,
+        [
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+            ReasoningEffort::Xhigh,
+            ReasoningEffort::Max,
+        ]
+    );
 }
 
 #[test]
@@ -213,12 +255,9 @@ fn supported_image_models_carry_sourced_known_capability_limits() {
         if model.image_carrier_protocol.as_deref() == Some("zai_mcp_vision") {
             continue;
         }
-        assert!(
-            !model
-                .image_accepted_mime_types
-                .clone()
-                .unwrap_or_default()
-                .is_empty()
+        assert_ne!(
+            model.image_accepted_mime_types.clone().unwrap_or_default(),
+            [] as [std::string::String; 0]
         );
         let sources = model.image_limit_sources.clone().unwrap_or_default();
         for (field, value) in [
@@ -294,6 +333,19 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
         output: 20,
     };
     assert!((sonnet.estimate_usd(&mixed).unwrap() - 0.001_565).abs() < 1e-12);
+    let haiku = catalog.pricing("anthropic/claude-haiku-5-5").unwrap();
+    let base = haiku.prices_at(100_000, "2026-10-11").unwrap();
+    let long = haiku.prices_at(100_001, "2026-10-11").unwrap();
+    assert_eq!(base.input_per_mtok_usd, 0.1);
+    assert_eq!(base.cached_input_per_mtok_usd, Some(0.01));
+    assert_eq!(base.cache_write_per_mtok_usd, Some(0.125));
+    assert_eq!(base.cache_write_1h_per_mtok_usd, Some(0.2));
+    assert_eq!(base.output_per_mtok_usd, 0.5);
+    assert_eq!(long.input_per_mtok_usd, 0.5);
+    assert_eq!(long.cached_input_per_mtok_usd, Some(0.05));
+    assert_eq!(long.cache_write_per_mtok_usd, Some(0.625));
+    assert_eq!(long.cache_write_1h_per_mtok_usd, Some(1.0));
+    assert_eq!(long.output_per_mtok_usd, 2.5);
     // Cache writes on a model with no published cache-write price.
     let mini = catalog.pricing("openai/gpt-5.4-mini").unwrap();
     assert!(

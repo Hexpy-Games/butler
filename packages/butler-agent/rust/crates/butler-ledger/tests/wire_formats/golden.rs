@@ -250,10 +250,7 @@ pub(crate) fn assert_golden(name: &str, actual: &str) {
             .lines()
             .zip(actual.lines())
             .position(|(left, right)| left != right)
-            .map_or_else(
-                || expected.lines().count().min(actual.lines().count()),
-                |index| index,
-            );
+            .unwrap_or_else(|| expected.lines().count().min(actual.lines().count()));
         panic!(
             "{name} differs from the golden at line {}; actual written to {}",
             line + 1,

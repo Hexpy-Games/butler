@@ -120,8 +120,8 @@ impl CapabilityKind {
     pub fn of_call(name: &str, arguments: &Map<String, Value>, ledger_effect: bool) -> Self {
         use ToolName::{
             BindSessionGitWorktree, CallMcpTool, CreateAutomation, DeleteAutomation, EditFile,
-            ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, ReadFile,
-            RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
+            ForgetExplicitMemory, GrepFiles, ListFiles, OutputPublish, PreviewStart, PreviewStop,
+            ReadFile, RequestServiceRestart, RunCommand, RunDueAutomations, SaveWallpaperModule,
             SetWallpaper, StartTopicConversation, UpdateAutomation, WriteFile,
         };
         let Some(tool) = ToolName::parse(name) else {
@@ -147,6 +147,9 @@ impl CapabilityKind {
                     sandbox: CommandSandbox::None,
                 },
                 _ => Self::OtherEffect,
+            },
+            PreviewStart | PreviewStop => Self::CommandMutation {
+                sandbox: CommandSandbox::None,
             },
             CallMcpTool => Self::Connector,
             WriteFile | EditFile => Self::FileEdit,

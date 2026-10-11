@@ -26,10 +26,23 @@
   border-radius: var(--radius-control);
 }
 
+.image[data-openable="true"] {
+  cursor: zoom-in;
+}
+
 .frame {
   width: 100%;
   min-height: 520px;
   border: 0;
   border-radius: var(--radius-control);
   background: var(--surface);
+}
+
+/* A frame at its content's own size (intrinsicSize): no stretch, no minimum. */
+.frame[data-intrinsic] {
+  display: block;
+  flex: none;
+  min-height: 0;
+  max-width: none;
+  border-radius: 0;
 }

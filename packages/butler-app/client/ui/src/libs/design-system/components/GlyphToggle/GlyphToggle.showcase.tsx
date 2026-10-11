@@ -14,7 +14,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { title: "Butler site", pin: "Pin", unpin: "Unpin" },
-  "ko-KR": { title: "Butler 사이트", pin: "고정", unpin: "고정 해제" },
+  "ko-KR": { title: "버틀러 사이트", pin: "고정", unpin: "고정 해제" },
 } as const;
 
 function Row({ context, initial }: { context: ShowcaseRenderContext; initial: boolean }) {

@@ -11,6 +11,7 @@ interface FirstRunCopy {
   welcomeTitle: string;
   welcomeLede: string;
   start: string;
+  steps: { welcome: string; consent: string; connect: string; ready: string };
   consentTitle: string;
   consentItems: Array<{ body: string; caption?: string }>;
   consentProviderLink: string;
@@ -69,15 +70,17 @@ interface FirstRunCopy {
   noModels: string;
   noUsable: string;
   back: string;
-  backToList: string;
-  signInTitle: string;
+  signInTitle: (name: string) => string;
   signInBody: string;
+  signInWaiting: string;
+  signInReopen: string;
   signInCopyLink: string;
   linkCopied: string;
   signInCancelled: string;
   signInCancelledBody: string;
   signInFailed: string;
-  chooseOther: string;
+  signInTimedOut: string;
+  signInTimedOutBody: string;
   keyTitle: (name: string) => string;
   keyLabel: string;
   keyHint: string;
@@ -90,12 +93,16 @@ interface FirstRunCopy {
   getKey: string;
   keyStored: string;
   finishing: string;
+  readyTitle: (name: string) => string;
+  readyBody: string;
+  replyLanguage: string;
+  finish: string;
   finishFailed: string;
   localTitle: string;
   localBody: string;
-  localStart: string;
   localNote: string;
   customTitle: string;
+  customBody: string;
   customUrl: string;
   customKey: string;
   customConnect: string;
@@ -122,6 +129,13 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  browserMode: { signed_out: string; signed_in: string };
+  signInStep: (reason: string) => string;
+  /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
+  signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string };
+  /** The wait-for-user hand-off card title, by why the user must act. */
+  waitHandoff: (reason: string) => string;
+  browserStep: (action: string, role: string, name: string, frame: string) => string;
   operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
@@ -214,11 +228,65 @@ interface ConversationCopy {
   };
 }
 
+export interface BrowserCopy {
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
+  title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
+  openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
+  newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
+  bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
+  zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
+  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
+  butlerTab: string; agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
+  stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string;
+  typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
+  pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
+  pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
+  pickHint: string; pickKeys: (mac: boolean) => string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;
+  dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
+  attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
+  viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
+  element: string; viewKind: string; document: string; attach: string; openSource: string; openSourcePage: string; remove: string; archivedClosed: (count: number) => string;
+  pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
+  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
+  enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
+  ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
+  usedTimes: (count: number) => string; filled: string; askedApproved: string;
+  scraps: string; documents: string; outputs: string; loadMore: string; emptyLibrary: string; bookmarkFolder: string;
+}
+
+/** Grouped words of the Library's per-kind groups: scraps have groups, bookmarks have folders. */
+export interface LibraryGroupWords {
+  word: string; ungrouped: string; newGroup: string; createGroup: string; groupName: string; renameGroup: string; ungroup: string;
+  moveTo: string; removeFrom: string; search: string; count: (count: number) => string; more: (count: number) => string;
+  ungroupTitle: (name: string) => string; ungroupBody: (count: number) => string;
+}
+
+/** Library (`library.*`): the 서랍 main screen, kind views, groups, tags, filters, the scrap detail and drops. */
+export interface LibraryCopy {
+  title: string; search: string; kinds: { all: string; scrap: string; document: string; bookmark: string; output: string };
+  kindLabel: string; viewAll: string; groups: { scrap: LibraryGroupWords; bookmark: LibraryGroupWords }; empty: string; noItems: string;
+  noMatches: string; clearFilters: string; clearAll: string; loadMore: string; failed: string; open: string; rename: string; editTags: string;
+  name: string; tags: string; addTag: string; createTag: (name: string) => string; removeTag: (name: string) => string; manageTags: string;
+  manageTagsBody: string; noTags: string; merge: string; mergeNote: (from: string, fromCount: number, to: string, toCount: number) => string;
+  deleteTag: string; tagExists: string; groupExists: string; sites: string; date: string; anyDate: string;
+  dates: { today: string; week: string; month: string; year: string }; since: string; until: string; sort: string; sorts: { new: string; old: string; name: string; site: string };
+  filterChip: (label: string, value: string) => string; selected: (count: number) => string; select: string; clearSelection: string;
+  added: (count: number, group: string) => string; undo: string; dropAdd: (group: string) => string; dropScrap: (group: string) => string;
+  savedScraps: (count: number) => string; addToGroup: string; leaveUngrouped: string; back: (title: string) => string; mixedKinds: string;
+  tagsOnAll: (count: number) => string; tagsOnSome: (count: number, total: number) => string; addToAll: string; removeFromAll: string;
+  bulkTagsTitle: (count: number) => string; source: string; saved: string; size: string; none: string; cancel: string; create: string;
+  save: string; move: string; close: string; deleteItem: string; tileLabel: (name: string, meta: string) => string;
+  deleteSelected: (count: number) => string; deleteSelectedBody: string; selectionActions: string;
+}
+
+/** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
-  browser: { title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string; reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string; openOutput: string; output: string; };
+  browser: BrowserCopy;
+  library: LibraryCopy;
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
@@ -538,6 +606,9 @@ export interface AppCopy {
     allFavorites: string;
     working: string;
     attention: string;
+    /** What a waiting browser hand-off needs, in place of `attention`. */
+    signInAttention: string;
+    tabAttention: string;
     newGroup: string;
     saveFailed: string;
     views: string;
@@ -604,6 +675,8 @@ export interface AppCopy {
     generating: string;
     modelWaiting: string;
     approvalWaiting: string;
+    signInWaiting: string;
+    tabWaiting: string;
     answerWaiting: string;
     workerCall: string;
     work: string;
@@ -1025,6 +1098,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      browser: string;
       security: string;
       system: string;
       archives: string;
@@ -1044,6 +1118,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      browser: string;
       security: string;
       system: string;
       archives: string;
@@ -1063,6 +1138,7 @@ export interface AppCopy {
       personalization: string[];
       memory: string[];
       privacy: string[];
+      browser: string[];
       security: string[];
       system: string[];
       archives: string[];
@@ -1077,7 +1153,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1682,12 +1758,62 @@ export interface AppCopy {
       deletedStatus: (name: string) => string;
       errors: { delete: string };
     };
+    /** Settings → Browser → Sign-ins. Passwords are never shown. */
+    signIns: {
+      empty: string;
+      /** Tooltip when only the owner-only file store exists. */
+      unavailable: string;
+      add: string;
+      site: string;
+      sitePlaceholder: string;
+      username: string;
+      password: string;
+      save: string;
+      cancel: string;
+      saved: string;
+      failed: string;
+      policyLabel: string;
+      policy: { always: string; ask: string; never: string };
+      noPassword: string;
+      conversations: (count: number) => string;
+      lastUsed: (when: string) => string;
+      notUsed: string;
+      allConversations: string;
+      deletePassword: string;
+      deleteConfirm: (site: string) => string;
+      signOut: string;
+      signedOut: string;
+      revoke: string;
+      revokeConfirm: (site: string) => string;
+      revoked: string;
+    };
+    /** Settings → Security → import from another browser (counts only). */
+    browserImport: {
+      source: string;
+      noSources: string;
+      bookmarks: string;
+      passwords: string;
+      htmlFile: string;
+      csvFile: string;
+      chooseFile: string;
+      preview: string;
+      bookmarkCount: (count: number, folders: number) => string;
+      passwordCount: (count: number, sites: number) => string;
+      run: string;
+      imported: (count: number, skipped: number) => string;
+      deleteCsv: string;
+      fullDiskAccess: string;
+      failed: string;
+      needsKeychain: string;
+    };
   };
   titlebar: {
     hideLeftPanel: string;
     showLeftPanel: string;
     resizeLeftPanel: string;
     resizeRightPanel: string;
+    /** Second line of a resize handle's hover hint, under its label. */
+    dragToResize: string;
     commandPalette: string;
     sessionWorktree: (branch?: string) => string;
     localWorkspace: (branch?: string) => string;

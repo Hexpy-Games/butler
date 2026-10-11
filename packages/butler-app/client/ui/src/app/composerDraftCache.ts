@@ -9,6 +9,7 @@ export interface ComposerDraftSnapshot {
   session_id: string;
   text: string;
   content_parts?: MessageContent;
+  element_attachments?: import("../../../shared/browser-element").ElementAttachment[];
   updated_at: string;
 }
 
@@ -47,7 +48,8 @@ export function normalizeComposerDraft(
     (draft.content_parts !== undefined && !isMessageContent(draft.content_parts)) ||
     typeof draft.updated_at !== "string" ||
     !Number.isFinite(Date.parse(draft.updated_at)) ||
-    !draftTextWithinBudget(draft.content_parts ? JSON.stringify(draft.content_parts) : draft.text)
+    (draft.element_attachments !== undefined && (!Array.isArray(draft.element_attachments) || !draft.element_attachments.every(item => item && typeof item.id === "string" && typeof item.title === "string" && typeof item.site === "string" && item.file?.file_id && (item.crop === undefined || item.crop?.file_id)))) ||
+    !draftTextWithinBudget(JSON.stringify(draft))
   ) return null;
   return draft as ComposerDraftSnapshot;
 }
@@ -110,7 +112,7 @@ export function writeCachedComposerDraft(
   text: string,
   contentParts?: MessageContent,
 ): ComposerDraftSnapshot | null {
-  const snapshot = composerDraftSnapshot(sessionId, text, undefined, contentParts);
+  const snapshot = { ...composerDraftSnapshot(sessionId, text, undefined, contentParts), element_attachments: readLocalComposerDraft(sessionId)?.element_attachments };
   if (!normalizeComposerDraft(snapshot, sessionId)) return null;
   writeLocalComposerDraft(snapshot);
   void composerDraftBridge()?.writeCachedComposerDraft?.({ snapshot }).catch(

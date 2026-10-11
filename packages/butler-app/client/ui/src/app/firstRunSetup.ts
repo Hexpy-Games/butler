@@ -3,6 +3,12 @@ import { api } from "./api.ts";
 
 export type FirstRunLanguage = "en" | "ko";
 
+/** Language names stay in their own language in both first-run fields. */
+export const SUPPORTED_UI_LANGUAGES: Array<{ value: FirstRunLanguage; label: string }> = [
+  { value: "ko", label: "한국어" },
+  { value: "en", label: "English" },
+];
+
 /** Result of the desktop app's local agent preparation (`POST /setup/start`). */
 export interface FirstRunSetupStatusView {
   phase: "idle" | "checking" | "ready" | "failed" | "cancelled";

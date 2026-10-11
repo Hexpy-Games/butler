@@ -50,7 +50,15 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Every setting on one screen overwhelms a first run.", render: () => <Typo.Body>Language, safety, model, keys and theme on one page</Typo.Body> },
     },
   ],
-  content: ["Titles are questions or instructions; buttons are the answers."],
-  accessibility: ["The step progress is labelled (progressLabel) and announces the current step."],
-  tokens: ["--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
+  content: [
+    "Titles are questions or instructions; buttons are the answers.",
+    "A multi-screen focus flow uses anchor=\"top\" so every card shares one top edge (20% of the window, clamped), and stepKey so the 420px intro card morphs into the 520px step card.",
+    "\"설정 다시 실행\" passes intro=\"rerun\": only the card appears (220ms fade and 4px rise).",
+  ],
+  accessibility: [
+    "The step progress is labelled (progressLabel) and announces the current step.",
+    "After a card morph the new card owns focus: the step title going forward, the start action going back. Clicks during the morph are ignored.",
+    "Reduced motion swaps the cards and shows the re-run card at once.",
+  ],
+  tokens: ["--titlebar-height", "--motion-deliberate", "--motion-ease-emphasized", "--motion-morph-rows", "--motion-stagger-row", "--motion-slow", "--motion-base", "--motion-exit-base", "--motion-exit-fast", "--motion-distance-sm", "--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
 };

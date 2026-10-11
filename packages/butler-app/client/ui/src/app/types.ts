@@ -20,6 +20,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "memory"
+  | "browser"
   | "security"
   | "system"
   | "archives"
@@ -644,6 +645,7 @@ export interface SecurityView {
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
   content_hosts?: string[];
+
 }
 
 export interface ModelFallbackSettingsView {
@@ -1713,8 +1715,17 @@ export interface WorkStatusView {
   counts: Record<WorkStatusState, number>;
 }
 
+/** A Library (서랍) kind; scraps and bookmarks have groups (bookmark groups are its folders). */
+export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
+/**
+ * The Library: the main screen, a kind's full view (`section`), a group in it (`group`: an id or "none"
+ * for ungrouped) and a scrap's detail (`item`). Each level is one step up from the next (titlebar back).
+ */
+export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string };
+
 export type AppView =
   | { kind: "browser" }
+  | LibraryView
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
@@ -1825,7 +1836,7 @@ export type ApprovalRisk = "low" | "medium" | "high";
  */
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
-  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string };
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */

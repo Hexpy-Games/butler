@@ -66,9 +66,7 @@ pub(super) fn rank(
     mut seeds: SeedGraph,
     raw: RawSourceSelection,
     coverage: ProjectionCoverage,
-    _overall_deadline: i64,
     now_iso: &str,
-    _now_millis: &dyn Fn() -> i64,
     parse_date: &dyn Fn(&str) -> f64,
 ) -> CognitionResult<Selection> {
     let admitted = input.admitted_channels.clone().unwrap_or_default();
@@ -105,7 +103,6 @@ pub(super) fn rank(
         ),
         128,
     );
-    super::fallback::provenance(&mut ranked, &seeds.fts_episodes);
     ranked.sort_by_key(|episode| !raw.exact.contains(&episode.input.episode_id));
     let metrics = candidate_metrics(&ranked, &ranks, &scores, &seeds);
     Ok(Selection {
@@ -147,14 +144,14 @@ fn executed_channels(
 ) -> ExecutedEpisodeChannels {
     ExecutedEpisodeChannels {
         graph: admitted.graph,
-        vector: (admitted.vector && input.include_vector && seeds.vector_searched)
-            || (admitted.lexical && seeds.fts_searched),
+        vector: admitted.vector && input.include_vector && seeds.vector_searched,
         lexical: admitted.lexical
-            && !seeds
-                .selected
-                .coverage_codes
-                .iter()
-                .any(|code| code == "lexical_partial"),
+            && (seeds.fts_searched
+                || !seeds
+                    .selected
+                    .coverage_codes
+                    .iter()
+                    .any(|code| code == "lexical_partial")),
         context: admitted.context,
     }
 }
@@ -281,7 +278,9 @@ impl ChannelLists {
         seeds: &SeedGraph,
     ) -> Self {
         let when = |on: bool, ids: Vec<String>| if on { ids } else { Vec::new() };
-        let lexical_candidates = ranked_ids(&scores.lexical);
+        let lexical_candidates =
+            fuse_episode_candidates(&[], &[], &ranked_ids(&scores.lexical), &seeds.fts_episodes)
+                .episode_ids;
         let lexical = when(admitted.lexical, lexical_candidates.clone());
         let lexical_fusion = if admitted.explicit && !admitted.lexical {
             lexical_candidates
@@ -294,20 +293,12 @@ impl ChannelLists {
             lexical_fusion,
             context: when(admitted.context, ranked_ids(&scores.context)),
             vector: when(
-                if seeds.fts_searched {
-                    admitted.lexical
-                } else {
-                    admitted.vector
-                },
-                if seeds.fts_searched {
-                    seeds.fts_episodes.clone()
-                } else {
-                    seeds
-                        .vector_episodes
-                        .iter()
-                        .map(|hit| hit.owner_id.clone())
-                        .collect()
-                },
+                admitted.vector,
+                seeds
+                    .vector_episodes
+                    .iter()
+                    .map(|hit| hit.owner_id.clone())
+                    .collect(),
             ),
         }
     }
@@ -359,25 +350,16 @@ fn rank_input(
         graph_rank: rank(admitted.graph, &ranks.graph),
         lexical_rank: rank(admitted.lexical, &ranks.lexical),
         context_rank: rank(admitted.context, &ranks.context),
-        vector_rank: rank(
-            if seeds.fts_searched {
-                admitted.lexical
-            } else {
-                admitted.vector
-            },
-            &ranks.vector,
-        ),
-        query_relevance: Some(
-            seeds
-                .vector_episodes
-                .iter()
-                .filter(|hit| admitted.vector && hit.owner_id == row.episode_id)
-                .map(|hit| 1.0 - hit.distance)
-                .fold(
-                    *raw.relevance.get(&row.episode_id).unwrap_or(&0.0),
-                    f64::max,
-                ),
-        ),
+        vector_rank: rank(admitted.vector, &ranks.vector),
+        query_relevance: seeds
+            .vector_episodes
+            .iter()
+            .filter(|hit| admitted.vector && hit.owner_id == row.episode_id)
+            .map(|hit| crate::cognition::recall::cosine_relevance(hit.distance))
+            .fold(
+                *raw.relevance.get(&row.episode_id).unwrap_or(&0.0),
+                f64::max,
+            ),
         explicit_priority: Some(admitted.explicit && row.explicit_priority),
         salience: Some(Salience::from_stored(&row.salience)),
         support_count: Some(row.support_count),

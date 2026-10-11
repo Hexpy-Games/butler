@@ -293,12 +293,20 @@ async fn read_operation_results(
             "operation_result_exact_read_unavailable",
         ))
     })?;
-    let value = if call.name == ToolName::ListOperationResults {
+    let result = if call.name == ToolName::ListOperationResults {
         runtime.list_tool(&call.arguments).await
     } else {
         runtime.read_tool(&call.arguments).await
-    }
-    .map_err(ToolExecutionError::Integrity)?;
+    };
+    let value = match result {
+        Ok(value) => value,
+        // A fabricated/out-of-scope ref is a refused tool request, not corrupt runtime state.
+        Err(error) if error.code() == "operation_result_missing_or_scope_mismatch" => {
+            serde_json::json!({"ok":false,"error":error.code(),
+                "next":"Use list_operation_results to obtain a reference in the current scope."})
+        }
+        Err(error) => return Err(ToolExecutionError::Integrity(error)),
+    };
     butler_core::json::JsonDocument::from_value(&value).map_err(|error| {
         ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
             BtccCode::GuidedToolResultJson,

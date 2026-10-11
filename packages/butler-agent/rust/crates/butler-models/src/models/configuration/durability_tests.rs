@@ -112,7 +112,10 @@ async fn environment_failure_preserves_every_key_and_success_is_private() {
         .upsert_private_environment_value("OPENAI_API_KEY", "new", &fixture.0)
         .await
         .unwrap();
-    assert!(fs::read(&path).unwrap() == b"# retained\nOTHER=fixture\nOPENAI_API_KEY=\"new\"\n");
+    assert_eq!(
+        fs::read(&path).unwrap(),
+        b"# retained\nOTHER=fixture\nOPENAI_API_KEY=\"new\"\n"
+    );
     assert_ne!(
         butler_platform::secure_fs::is_owner_only(&fs::metadata(&path).unwrap()),
         Some(false)

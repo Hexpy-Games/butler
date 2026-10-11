@@ -123,6 +123,7 @@ type SessionAction = "rename" | "archive";
 
 export interface SessionViewRefreshOptions {
   isCurrent?: () => boolean;
+  snapshot?: boolean;
 }
 
 export interface NavigationSetOptions {
@@ -1356,7 +1357,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           ? get().sessionView?.message_window.next_cursor_token
           : undefined;
       const query = new URLSearchParams({ session_id: chatId });
-      if (currentCursorToken) {
+      if (currentCursorToken && !options?.snapshot) {
         query.set("cursor_token", currentCursorToken);
       }
       const data = await api<SessionView>(
@@ -2505,7 +2506,7 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  (selectActiveSessionView(state) || state.view.kind === "browser") && isServerBackedSessionId(state.activeChatId);
+  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

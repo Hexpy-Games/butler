@@ -13,6 +13,7 @@ mod values;
 
 use crate::gateway::application::storage::CachedSql;
 use operations::*;
+pub(in crate::gateway::application) use operations::{FailedProjection, project_failed};
 use progress::*;
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
 use runtime_values::*;
@@ -39,7 +40,23 @@ use crate::gateway::application::{
     storage::AppStorageError,
 };
 
-pub(super) struct ProjectionIds {
+fn terminal_update_is_stale(
+    db: &Connection,
+    kind: &str,
+    turn: &str,
+) -> Result<bool, AppStorageError> {
+    Ok(matches!(
+        kind,
+        "tool_progress"
+            | "todo_progress"
+            | "intermediate"
+            | "turn_failed"
+            | "turn_cancelled"
+            | "turn_suspended"
+    ) && terminal_turn(db, turn)?)
+}
+
+pub(in crate::gateway::application) struct ProjectionIds {
     pub event_id: String,
     pub message_id: String,
 }
@@ -125,6 +142,16 @@ pub(super) fn apply(
             return skip(tx, action_id, cursor, now);
         }
     }
+    // A resumed final result can arrive before the earlier suspension outbound.
+    if terminal_update_is_stale(&tx, &kind, &turn_id)? {
+        finish(&tx, action_id, outbound, chat_id, cursor, now)?;
+        tx.commit().map_err(AppStorageError::sqlite)?;
+        return Ok(ProjectionOutcome {
+            handled: true,
+            wake_queue: false,
+            terminal_turn: None,
+        });
+    }
     if kind == "turn_suspended" {
         let (terminal, wake_queue) = project_suspended(
             &tx,
@@ -146,19 +173,6 @@ pub(super) fn apply(
             handled: true,
             wake_queue,
             terminal_turn: terminal.then_some(turn_id),
-        });
-    }
-    if matches!(
-        kind.as_str(),
-        "tool_progress" | "todo_progress" | "intermediate" | "turn_failed" | "turn_cancelled"
-    ) && terminal_turn(&tx, &turn_id)?
-    {
-        finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
         });
     }
     if kind == "turn_failed" && btcc_retains_authority(&tx, &turn_id)? {

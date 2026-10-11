@@ -236,6 +236,6 @@ async fn actual_native_provider_loopback_reaches_profile_commit() {
     assert_eq!(result.captured_candidate_count, 1);
     assert_eq!(result.coverage_complete_count, Some(1));
     assert_eq!(requests.load(Ordering::SeqCst), 1);
-    assert!(!server.await.unwrap().is_empty());
+    assert_ne!(server.await.unwrap(), [] as [u8; 0]);
     service.close().await;
 }

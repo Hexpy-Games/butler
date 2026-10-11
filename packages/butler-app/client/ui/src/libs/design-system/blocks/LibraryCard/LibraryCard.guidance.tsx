@@ -1,0 +1,44 @@
+import type { ShowcaseGuidance } from "../../showcase";
+import { Card } from "../../components/Card";
+import { Grid } from "../../components/Grid";
+import { Trash2 } from "../../components/Icons";
+import { Typo } from "../../components/Typo";
+import { OverflowActionMenu } from "../OverflowActionMenu";
+import { LibraryCard } from "./LibraryCard";
+
+// #region recipe: Library grid
+function LibraryGrid() {
+  const menu = <OverflowActionMenu label="More" items={[{ icon: <Trash2 size="sm" />, label: "Delete", onSelect: () => undefined, variant: "destructive" }]} />;
+  return (
+    <Grid columns="3" gap="md">
+      <LibraryCard media={{ kind: "quote", text: "“Adjust the lumbar height before the backrest angle.”" }} title="Lumbar height comes first"
+        meta="desk.example.kr · Today" tag="Element" menu={menu} onOpen={() => undefined} />
+      <LibraryCard media={{ kind: "document" }} title="Q3 report" meta="Files · 10/2" tag="Document" menu={menu} onOpen={() => undefined} />
+      <LibraryCard media={{ kind: "document" }} title="Weekly summary" meta="Butler output · 10/5" tag="View" menu={menu} onOpen={() => undefined} />
+    </Grid>
+  );
+}
+// #endregion
+
+export const guidance: ShowcaseGuidance = {
+  purpose: "One library (서랍) item on a Card with a media slot: an image, quote or document preview, a kind tag, title, source and a ⋯ menu.",
+  whenToUse: ["The library page and the new-tab page's recent scraps", "Any grid of saved page pieces (elements, views, outputs)"],
+  whenNotToUse: [
+    { when: "A file or output in the inspector", use: "ArtifactList" },
+    { when: "A document with status and dates", use: "DocumentTile" },
+  ],
+  recipes: [{ name: "Library grid", description: "3 or 4 columns (Grid); the menu stays its own button.", render: () => <LibraryGrid /> }],
+  doDont: [
+    {
+      do: { caption: "A text scrap previews its words.", render: () => <LibraryGrid /> },
+      dont: { caption: "Do not nest the menu inside a clickable card.", render: () => <Card interactive onClick={() => undefined}><Typo.Text>Scrap ⋯</Typo.Text></Card> },
+    },
+  ],
+  content: [
+    "Kind tags are one word: Element / 요소, View / 화면, Document / 문서. Meta is “source · date”.",
+    "Pass crops as they are: every picture is whole; typical shapes span the slot, extreme strips and columns sit inset on the matte. Never pre-crop or pad them.",
+    "Tags: at most two then “+N”. Select label: “Select” / “선택”. Rename field label: “Name” / “이름”.",
+  ],
+  accessibility: ["The media and title are one button named by the title; the ⋯ menu is a separate button.", "Images are decorative (the title names the item).", "The selection circle is a checkbox (aria-checked) named by selectLabel; the rename field is named by editing.label."],
+  tokens: ["--radius-control", "--muted", "--line-height-body", "--text-tertiary", "--browser-card-shadow"],
+};
