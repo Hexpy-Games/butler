@@ -13,6 +13,8 @@
 //!   signed URLs, browser sessions and live streams stop working at once.
 //! - the `security` object of `GET`/`PATCH /settings`.
 
+pub(super) mod vault;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -86,6 +88,9 @@ pub(super) async fn route(
     let path = request.uri().path();
     if path == "/security/signins" || path.starts_with("/security/signins/") {
         return super::signins::route(state, request).await;
+    }
+    if path == "/security/vault" || path.starts_with("/security/vault/") {
+        return vault::route(state, request).await;
     }
     if path.starts_with("/security/browser-import/") {
         return super::browser_import::route(state, request).await;

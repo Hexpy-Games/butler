@@ -56,8 +56,8 @@ export function AgentControl({ tab }: { tab?: BrowserTab }) {
     const human = tab.holder === "user";
     return <PageBand data-test-class="browser-agent-control" tone={tab.waiting ? "waiting" : human ? "user" : "agent"}
       icon={<ButlerThinkingMark size="sm" state={!human && !tab.waiting ? "working" : "idle"} />}
-      label={tab.signinStep ? copy.signinRequired : tab.waiting && human && !tab.dialog ? copy.butlerWaits : tab.waiting ? copy.waiting : human ? copy.userControl : copy.agentUsing}
-      detail={popupText ?? (tab.signinStep ? signinStepLabel(tab.signinStep) : undefined)}
+      label={tab.signinStep ? copy.signinRequired : tab.payStep ? copy.paymentRequired : tab.waiting && human && !tab.dialog ? copy.butlerWaits : tab.waiting ? copy.waiting : human ? copy.userControl : copy.agentUsing}
+      detail={popupText ?? (tab.signinStep ? signinStepLabel(tab.signinStep) : tab.payStep ? appCopy.interfaceTemplates.approvalRequest.payStep(tab.payStep) : undefined)}
       hint={human && !tab.sticky ? copy.autoGiveBack : undefined}
       actions={<ButtonContainer size="xs">
         {popup?.action}

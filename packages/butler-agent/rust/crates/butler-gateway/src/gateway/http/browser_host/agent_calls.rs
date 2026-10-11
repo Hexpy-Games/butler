@@ -32,7 +32,8 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let deadline = match op.as_str() {
         "tab.open" => 20000,
         "tab.act" => 30000,
-        "signin.fill" => 25000,
+        "signin.fill" | "pay.fill" | "traveler.fill" => 25000,
+        "pay.inspect" => 8000,
         // A post-batch observation first waits up to 2 s for the page to settle.
         "tab.observe" if frame["args"]["settle"] == true => 8000,
         _ => 5000,
@@ -40,7 +41,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
-    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
+    let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
         return Ok(refused);
     }
@@ -79,9 +80,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     if op == "tab.wait" {
         result["site"] = json!(super::hand_back::tab_site(&state, &sent["tab"]));
     }
-    if op == "signin.fill" {
-        result = super::fill::finish(&state, &sent, &session, &result).await?;
-    }
+    super::pay::finish_call(&state, &op, &sent, &session, &mut result).await?;
     store_still(&state, &session, &mut result).await?;
     response(count, result)
 }
@@ -101,7 +100,7 @@ async fn signed_in_call(
     if let Some(refused) = super::signed_in::admit(state, frame, op, session).await? {
         return Ok(Some(refused));
     }
-    if !op.starts_with("signin.") {
+    if !op.starts_with("signin.") && !super::pay::VAULT_OPS.contains(&op) {
         return Ok(None);
     }
     let tab = {
@@ -116,6 +115,9 @@ async fn signed_in_call(
     };
     if op == "signin.lookup" {
         return super::fill::lookup(state, &tab).await.map(Some);
+    }
+    if op != "signin.fill" {
+        return super::pay::admit(state, frame, op, &tab).await;
     }
     super::fill::prepare(state, frame, &tab).await
 }
@@ -145,16 +147,7 @@ fn dispatch(
             }
             return response(count, refused).map(Some);
         }
-        if matches!(
-            op.as_str(),
-            "tab.observe"
-                | "tab.zoom"
-                | "tab.screenshot"
-                | "tab.prepare"
-                | "tab.act"
-                | "tab.dialog"
-                | "signin.fill"
-        ) {
+        if page_op(&op) {
             let tab = hub
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
@@ -198,6 +191,22 @@ fn dispatch(
         super::usage::dispatch(&mut hub, frame, sender)?;
     }
     Ok(None)
+}
+/// Ops that act on a tab's page: its URL must be permitted and its policy is sent.
+fn page_op(op: &str) -> bool {
+    matches!(
+        op,
+        "tab.observe"
+            | "tab.zoom"
+            | "tab.screenshot"
+            | "tab.prepare"
+            | "tab.act"
+            | "tab.dialog"
+            | "signin.fill"
+            | "pay.inspect"
+            | "pay.fill"
+            | "traveler.fill"
+    )
 }
 pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError> {
     super::super::json(
@@ -291,6 +300,10 @@ fn validate(
             | "signin.lookup"
             | "signin.fill"
             | "signin.grant"
+            | "pay.inspect"
+            | "pay.lookup"
+            | "pay.fill"
+            | "traveler.fill"
     ) {
         return Err(error(400, "invalid_browser_op"));
     }

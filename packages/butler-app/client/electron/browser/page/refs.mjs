@@ -26,7 +26,7 @@ export function resolveRef({ ref, obs, epoch, scroll = false, offset }) {
     if (hit !== element && !element.contains(hit)) return { reason: "blocked_by" };
   }
   return { x: point.x, y: point.y, rect: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, hit: { role: meaning.role, name: meaning.name, frame: location.hostname, ref },
-    payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
+    payment: paymentForm(element),
     addons: currentAddons(),
     upload: element.localName === "input" && element.type === "file",
     submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name) };

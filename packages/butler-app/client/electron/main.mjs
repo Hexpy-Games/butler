@@ -2161,6 +2161,7 @@ async function createWindow() {
     userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
+    userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
     userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),

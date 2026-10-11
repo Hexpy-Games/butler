@@ -365,6 +365,10 @@ impl Headless {
             "tab.close" => return dialogs::request_close(&browser, &page).await,
             // No signed-in headless: nothing here can fill or grant a sign-in.
             _ if op.starts_with("signin.") => return refused("signed_in_unavailable"),
+            // Saved cards and traveler details fill only in the App browser.
+            _ if op.starts_with("pay.") || op == "traveler.fill" => {
+                return refused("vault_needs_app");
+            }
             "tab.dialog" => return dialogs::answer(&browser, &page, args).await,
             _ => {}
         }

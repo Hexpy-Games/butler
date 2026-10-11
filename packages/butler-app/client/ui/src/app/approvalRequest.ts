@@ -125,6 +125,7 @@ export function approvalRequestView(
       : sentence(actionKind, approval, workspace, copy),
     details: operation ? [...(operation.command ? [operation.command] : []), ...operation.targets.map((target,index)=>index===0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
       ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
+      ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
       ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
       : details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
@@ -212,6 +213,10 @@ export function browserHandoffView(
   if (operation?.tool === "browser_sign_in_wait") {
     const step = copy.signInStep(operation.sign_in_step ?? "unknown_form");
     return { title: copy.signInHandoff.title, details: [site ? `${site} · ${step}` : step, where], signIn: true };
+  }
+  if (operation?.tool === "browser_pay_wait") {
+    const step = copy.payStep(operation.wait_reason ?? "unknown_form");
+    return { title: copy.payHandoff, details: [site ? `${site} · ${step}` : step, where], signIn: true };
   }
   if (operation?.tool !== "browser_wait_for_user") return undefined;
   const reason = operation.wait_reason ?? "other";

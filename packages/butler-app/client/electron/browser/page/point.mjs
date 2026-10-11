@@ -22,7 +22,7 @@ export function pointHit({ x, y, expect }) {
   const rect = rectangle(element);
   return { x, y, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hit,
     verification: meaning.role === "canvas" ? "unverified" : "verified",
-    payment: Boolean(element.closest("form")?.querySelector('[autocomplete="cc-number"],[autocomplete="cc-csc"]')),
+    payment: paymentForm(element),
     upload: element.localName === "input" && element.type === "file",
     submit: element.type === "submit" || /결제|구매|pay|purchase|checkout/iu.test(meaning.name), addons: currentAddons() };
 }
