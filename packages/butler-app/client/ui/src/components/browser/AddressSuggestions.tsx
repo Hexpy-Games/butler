@@ -38,7 +38,7 @@ export function AddressSuggestions({ editing, onChoose, children }: { editing: b
     input.setAttribute("aria-expanded", String(items.length > 0)); input.setAttribute("aria-controls", "address-suggestions");
     if (index >= 0) input.setAttribute("aria-activedescendant", `address-suggestion-${index}`); else input.removeAttribute("aria-activedescendant");
   }, [editing, items, index]);
-  return <Popover open={editing && items.length > 0}><PopoverAnchor asChild><div ref={anchor} onKeyDownCapture={keys}
+  return <Stack grow><Popover open={editing && items.length > 0}><PopoverAnchor asChild><div ref={anchor} onKeyDownCapture={keys}
     onInputCapture={event => { if (event.target instanceof HTMLInputElement) setQuery(event.target.value); }}>{children}</div></PopoverAnchor>
     <PopoverContent align="start" width="default" onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}
       onInteractOutside={event => { if (anchor.current?.contains(event.target as Node)) event.preventDefault(); }}
@@ -48,5 +48,5 @@ export function AddressSuggestions({ editing, onChoose, children }: { editing: b
           <NavRow active={n === index} label={item.title || item.url} meta={<Typo.Caption truncate tone="secondary">{item.url}</Typo.Caption>} onClick={() => onChoose(item.url)} />
         </Stack>)}
       </Stack>
-    </PopoverContent></Popover>;
+    </PopoverContent></Popover></Stack>;
 }

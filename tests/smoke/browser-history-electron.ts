@@ -27,6 +27,7 @@ try {
   assert.equal((await rows()).items[0]!.favicon, new URL("favicon.svg", fixture.url).href);
   await a.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("history.pushState({},'', '/SPA')")`);
   await waitBrowser(async () => (await rows()).items.length === 2, "same-document navigation recorded");
+  assert.equal((await rows()).items[0]!.transition, "same_document");
   await a.call("navigate", { id: tab, value: new URL("Beta", fixture.url).href }); await ready("History Beta");
   await waitBrowser(async () => (await rows()).items.length === 3, "typed navigation recorded");
   assert.equal((await rows()).items[0]!.transition, "typed");
@@ -51,8 +52,12 @@ try {
   await a.page.clickSelector('[role=switch][aria-label="Visited by Butler"]');
   await waitBrowser(() => a.page.expression("document.querySelectorAll('[data-history-id]').length===5"), "all visits restored");
   await a.page.clickSelector('[data-history-id] button[aria-label^="Select:"]');
-  await a.page.clickText("Delete · 1", "button");
-  await waitBrowser(async () => (await rows()).items.length === 4, "selected deletion committed");
+  const lastId = (await rows()).items.at(-1)!.id;
+  await a.page.clickSelector(`[data-history-id="${lastId}"] button[aria-label^="Select:"]`);
+  await a.page.clickText("Delete · 2", "button");
+  await waitBrowser(async () => (await rows()).items.length === 3, "multi-selected deletion committed");
+  await a.call("navigate", { id: tab, value: fixture.url.href }); await ready("History Alpha");
+  await waitBrowser(async () => (await rows()).items.length === 4, "a new visit to a deleted URL is recorded");
   await a.gateway.api("/library", { method: "POST", body: JSON.stringify({ id: "bookmark", kind: "bookmark", title: "History bookmarked", url: "https://example.com/bookmark", capturedAt: new Date().toISOString() }) });
   for (const language of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const ko = language === "ko";
@@ -111,7 +116,7 @@ try {
   await a.page.expression("(()=>{const s=document.querySelector('[role=dialog] select');s.value='all';s.dispatchEvent(new Event('change',{bubbles:true}));})()");
   await a.page.clickText("Delete", "[role=dialog] button");
   await waitBrowser(async () => !(await rows()).items.length, "clear dialog removes all visits");
-  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, visits: 5, excludedIframe: true, privateMode: true, selectedDelete: true, keyboardEnter: true, singleDelete: true, openInTab: true, clearDialog: true, screenshots: 16 }, null, 2));
+  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, visits: 6, excludedIframe: true, privateMode: true, selectedDelete: true, keyboardEnter: true, singleDelete: true, openInTab: true, clearDialog: true, screenshots: 16 }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app?.lastMain(), diagnostics: await app?.page.diagnostics().catch(() => null) }));
   await app?.shot("failure").catch(() => {}); throw error;

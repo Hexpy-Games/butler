@@ -42,7 +42,7 @@ export function wireHistory(browser, tab) {
     if (!["http:", "https:"].includes(parsed.protocol) || ["/__p/", "/__o/"].some(prefix => parsed.pathname.startsWith(prefix))) return;
     if (state.background && !tab.owner.startsWith("conversation:")) return;
     const visit = { url: parsed.href, title: parsed.href, favicon: "", visitedAt: new Date().toISOString(),
-      transition: state.transition, tabKind: tab.owner === "mine" ? "mine" : "conversation", conversationId: tab.owner.startsWith("conversation:") ? tab.owner.slice(13) : undefined,
+      transition: inPage && state.transition === "link" ? "same_document" : state.transition, tabKind: tab.owner === "mine" ? "mine" : "conversation", conversationId: tab.owner.startsWith("conversation:") ? tab.owner.slice(13) : undefined,
       butlerDriven: state.butlerDriven, background: state.background, source: "butler" };
     browser.history?.add(visit);
     pending.push(visit);
