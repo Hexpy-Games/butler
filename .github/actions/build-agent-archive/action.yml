@@ -123,6 +123,7 @@ runs:
       shell: bash
       run: |
         chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+        if [ "$RUNNER_OS" = Linux ]; then chmod +x "$RUNNER_TEMP/shared-agent/butler-sandbox"; fi
         echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
     - name: Package and smoke the archive
