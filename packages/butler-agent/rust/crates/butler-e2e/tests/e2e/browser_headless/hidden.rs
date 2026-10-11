@@ -91,6 +91,12 @@ async fn hidden_app_host_serves_and_hands_over_to_the_app() -> Result<(), Harnes
     )
     .await?;
     assert_eq!(wait["reason"], "app_required", "{wait}");
+    assert!(
+        wait["recovery"]
+            .as_str()
+            .unwrap()
+            .starts_with("Background browser")
+    );
     let signed = call(
         &admin,
         "general",

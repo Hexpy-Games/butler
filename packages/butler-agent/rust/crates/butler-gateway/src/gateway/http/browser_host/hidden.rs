@@ -100,7 +100,7 @@ pub(super) fn refusal(state: &HttpState, frame: &Value, op: &str) -> Option<Valu
     }
     if op == "tab.wait" {
         return Some(json!({"status":"unavailable","reason":"app_required",
-            "recovery":"Handing a tab to the user needs the Butler App, which is closed. Ask the user to open the Butler App, then open the page again and call browser_wait_for_user."}));
+            "recovery":"Background browser cannot hand a tab to the user. Ask the user to open the Butler App, then reopen the page and call browser_wait_for_user."}));
     }
     let signed_in = frame["args"]["signed_in"] == true || frame["args"]["profile"] == "signed_in";
     if op == "tab.open" && signed_in || op.starts_with("signin.") && op != "signin.grant" {

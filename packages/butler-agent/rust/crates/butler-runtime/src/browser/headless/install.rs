@@ -157,17 +157,17 @@ impl Installer {
         *state = Some(receiver.clone());
         let installer = self.clone();
         eprintln!(
-            "INFO [browser] installing Chrome for Testing headless shell {VERSION} ({}, {} bytes) for headless browsing",
+            "INFO [browser] installing Chrome for Testing {VERSION} ({}, {} bytes) for Background browser",
             artifact.platform, artifact.size
         );
         tokio::spawn(async move {
             let result = installer.install(artifact, &sender).await;
             match &result {
                 Progress::Ready(_) => {
-                    eprintln!("INFO [browser] headless shell {VERSION} installed");
+                    eprintln!("INFO [browser] Background browser Chrome {VERSION} installed");
                 }
                 Progress::Failed(reason) => {
-                    eprintln!("WARN [browser] headless shell install failed: {reason}");
+                    eprintln!("WARN [browser] Background browser Chrome install failed: {reason}");
                 }
                 Progress::Running { .. } => {}
             }
