@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
-import { identityFixture } from "../support/browser-identity-fixture";
+import { assertChromeIdentity, identityFixture } from "../support/browser-identity-fixture";
 
 const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE; assert.ok(executable);
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
@@ -35,14 +35,16 @@ console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready"
  const {renderReader}=await import(${JSON.stringify(moduleUrl("reader-render"))});
  out.reader=await renderReader({url:${JSON.stringify(fixture.url + "?no-frame")},policy:{content_origin:${JSON.stringify(fixture.server.url.origin.replace("0.0.0.0", "127.0.0.1"))}}});
  ${process.env.BUTLER_UA_GOOGLE_CHECK === "1" ? `shell.show();const gid=b.create({url:'https://accounts.google.com/signin',profile:'signed_out'});const gt=b.tabs.get(gid);shell.contentView.addChildView(gt.view);gt.view.setBounds({x:0,y:0,width:1280,height:800});await gt.identityReady;
- for(let i=0;i<200;i++){if(!gt.view.webContents.isLoading()&&await gt.view.webContents.executeJavaScript("Boolean(document.querySelector('input[type=email]'))"))break;await new Promise(r=>setTimeout(r,100))}
- out.google=await gt.view.webContents.executeJavaScript("({url:location.href,email:Boolean(document.querySelector('input[type=email]')),insecure:document.body.innerText.includes('This browser or app may not be secure')})");
+ for(let i=0;i<200;i++){if(!gt.view.webContents.isLoading()&&await gt.view.webContents.executeJavaScript("Boolean(document.querySelector('#identifierId,input[name=identifier],input[type=email]'))"))break;await new Promise(r=>setTimeout(r,100))}
+ out.google=await gt.view.webContents.executeJavaScript("({url:location.href,email:Boolean(document.querySelector('#identifierId,input[name=identifier],input[type=email]')),insecure:document.body.innerText.includes('This browser or app may not be secure')})");
  writeFileSync(${JSON.stringify(join(evidence, "google-signin.png"))},(await gt.view.webContents.capturePage()).toPNG());b.close(gid);` : ""}
  writeFileSync(${JSON.stringify(results)},JSON.stringify(out));shell.destroy();app.exit(0);
 }catch(error){writeFileSync(${JSON.stringify(results)},JSON.stringify({error:String(error.stack)}));app.exit(1)}});`);
 let logs = "";
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-const child = spawnElectron(executable, [dir], { env, onOutput: bytes => { logs += String(bytes); } });
+// As the windowless browser host runs: hidden and occluded test windows must
+// not have their renderers deprioritized by the OS (see browser-host.mjs).
+const child = spawnElectron(executable, ["--disable-renderer-backgrounding", dir], { env, onOutput: bytes => { logs += String(bytes); } });
 try {
   // The harness owns process termination after the functional result is ready.
   await new Promise<void>((done, fail) => {
@@ -56,17 +58,7 @@ try {
   const out = JSON.parse(readFileSync(results, "utf8"));
   writeFileSync(join(evidence, "electron-identity.json"), JSON.stringify({ ...out, requests: fixture.requests }, null, 2));
   assert.ok(!out.error, out.error); assert.equal(out.internal, out.internalAfter); assert.match(out.internal, /Electron\//u);
-  for (const backend of ["app", "hidden", "popup"]) for (const context of ["page", "worker", "iframe"]) {
-    const { js, headers } = out[backend][context];
-    assert.doesNotMatch(js.ua, /Butler\/|Electron\/|HeadlessChrome/u); assert.equal(headers["user-agent"], js.ua); assert.equal(headers["accept-language"]?.split(",")[0].split(";")[0], js.language);
-    assert.match(js.ua, new RegExp(`Chrome/${out.versions.chrome.replaceAll(".", "\\.")}`));
-    assert.equal(headers["sec-ch-ua-mobile"], "?0"); assert.equal(headers["sec-ch-ua-platform"], JSON.stringify(js.data.platform));
-    const brands = js.data.brands.map((b: { brand: string; version: string }) => `"${b.brand}";v="${b.version}"`).join(", ");
-    assert.equal(headers["sec-ch-ua"], brands);
-    assert.equal(headers["sec-ch-ua-arch"], JSON.stringify(js.data.architecture));
-    assert.equal(headers["sec-ch-ua-bitness"], JSON.stringify(js.data.bitness));
-    assert.equal(headers["sec-ch-ua-platform-version"], JSON.stringify(js.data.platformVersion));
-  }
+  for (const backend of ["app", "hidden", "popup"]) assertChromeIdentity(out[backend], out.versions.chrome, fixture.requests);
   assert.equal(out.reader.status, "ok");
   const reader = Buffer.from(out.reader.html_base64, "base64").toString("utf8"); assert.ok(reader.includes('"worker"'));
   if (out.google) { assert.equal(out.google.email, true); assert.equal(out.google.insecure, false); }
