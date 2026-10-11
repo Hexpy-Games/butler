@@ -1,3 +1,4 @@
+import { openLink } from "@/components/browser/browserBridge";
 import { api } from "./api.ts";
 import { isMissingRoute } from "./setupConnection.ts";
 import {
@@ -47,7 +48,7 @@ export async function cancelSignIn(session: SignInSession): Promise<OpenAIOAuthL
   return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
 }
 
-/** Opens the sign-in page in the system browser (Electron routes window.open there). */
+/** Opens the sign-in page through the App link handler. */
 export function openSignInPage(url: string): void {
-  window.open(url, "_blank", "noopener,noreferrer");
+  void openLink(url);
 }
