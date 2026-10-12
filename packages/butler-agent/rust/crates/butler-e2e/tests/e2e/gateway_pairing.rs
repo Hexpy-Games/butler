@@ -23,6 +23,12 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     let pin = issue(&app).await?;
     let response = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
     assert_eq!(response.status().as_u16(), 303);
+    assert!(
+        !response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Secure")
+    );
     let cookie = cookie_pair(&response);
     assert!(cookie.contains("=v2."));
     assert!(
@@ -240,6 +246,12 @@ async fn lan_pairing_code_connect_and_list_device() -> Result<(), HarnessError> 
     let pin = issue(&app).await?;
     let response = connect(&remote, &browser, pin["code"].as_str().unwrap()).await?;
     assert_eq!(response.status().as_u16(), 303);
+    assert!(
+        !response.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Secure")
+    );
     let cookie = cookie_pair(&response);
     assert_eq!(read(&remote, &browser, &cookie).await?, 200);
     let listed = devices(&app).await?;
