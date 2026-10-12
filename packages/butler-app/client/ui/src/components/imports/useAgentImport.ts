@@ -53,7 +53,7 @@ export function useAgentImport(enabled = true) {
         needs_secret: prior.needs_secret - receipt.needs_secret,
       }));
     }
-    if (mounted.current) setUndone(true);
+    if (mounted.current) { setResult(result); setUndone(true); }
   });
   const more = () => { receipts.current = []; setResult(null); setError(null); setUndone(false); };
   return { sources, busy, error, result, undone, selected, run, undo, more };
