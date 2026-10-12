@@ -25,6 +25,17 @@ async fn web_search_profiles_planning_and_preserves_parallel_results_and_followu
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
     fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
+    let catalog = s.gw.get("/model-catalog").await?;
+    let provider = catalog.data()["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|provider| provider["provider_id"] == "openai")
+        .unwrap();
+    let preset = &provider["presets"]["planning"];
+    let selected = butler_models::models::parse_model_ref(preset["model"].as_str().unwrap());
+    *fixture.planning_preset.lock().unwrap() =
+        json!({"model": selected.model_id, "effort": preset["effort"]});
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"brave","readerBackend":"disabled","model":"openai/gpt-6-astra","braveApiBase":format!("{}/search",fixture.base)});
@@ -57,8 +68,8 @@ async fn web_search_profiles_planning_and_preserves_parallel_results_and_followu
         assert_eq!(result["snippet"], fixture::snippet(query, i / 3).trim());
     }
     let planner = &first["timings"]["planner_calls"][0];
-    assert_eq!(planner["model"], "gpt-6-luna");
-    assert_eq!(planner["reasoning_effort"], "low");
+    assert_eq!(planner["model"], selected.model_id);
+    assert_eq!(planner["reasoning_effort"], preset["effort"]);
     assert!(planner["prompt_bytes"].as_u64().unwrap() > 1000);
     assert!(planner["output_bytes"].as_u64().unwrap() > 100);
     assert!(planner["ttft_ms"].is_number());
