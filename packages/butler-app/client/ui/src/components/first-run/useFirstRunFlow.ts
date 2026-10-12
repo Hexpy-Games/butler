@@ -93,8 +93,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   // A live or saved connection is always on the AI step, also for the render before the effect below moves `screen`.
   const settled = Boolean(commit.connected) || commit.waitingForReady;
   const step: FirstRunStep = !replyDone ? settled ? "connect" : screen : mode === "first-run" && !importDone ? "import" : "ready";
-  // A saved connection (resume) or a confirmed ② opens ③.
-  const aiStage: AiStage = authDone || ((commit.connected || commit.savedCardId) && view.kind === "list") ? "reply" : view.kind === "list" ? "pick" : "auth";
+  // A saved connection (resume), a confirmed ② or a model pick that just connected opens ③ (no connected ② frame first).
+  const advanced = authDone || (advanceOnConnect && Boolean(commit.connected));
+  const aiStage: AiStage = advanced || ((commit.connected || commit.savedCardId) && view.kind === "list") ? "reply" : view.kind === "list" ? "pick" : "auth";
   useEffect(() => {
     if (advanceOnConnect && commit.connected) { setAdvanceOnConnect(false); setAuthDone(true); }
   }, [advanceOnConnect, commit.connected]);
