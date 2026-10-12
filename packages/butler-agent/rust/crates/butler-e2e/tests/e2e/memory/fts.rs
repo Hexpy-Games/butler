@@ -10,7 +10,7 @@ use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::path::Path;
 
-const ASK: &str = "Recall my lock word.";
+pub(super) const ASK: &str = "Recall my lock word.";
 
 pub(super) fn count(path: &Path, sql: &str) -> i64 {
     butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -34,6 +34,11 @@ pub(super) async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathB
 }
 
 pub(super) async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
+    recall_asking(s, ASK).await
+}
+
+/// One recall turn in a fresh chat; the tool output payload.
+pub(super) async fn recall_asking(s: &Scenario, ask: &str) -> Result<Value, HarnessError> {
     let chat =
         s.gw.post(
             "/sessions",
@@ -43,7 +48,7 @@ pub(super) async fn recall(s: &Scenario) -> Result<Value, HarnessError> {
     let id = chat.data()["session"]["id"].as_str().unwrap();
     let start = s.provider()?.requests().len();
     let started = std::time::Instant::now();
-    let (_, turn) = s.turn(id, ASK).await?;
+    let (_, turn) = s.turn(id, ask).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
     let output = requests[start..]
@@ -80,26 +85,45 @@ pub(super) async fn start_with(
     include_vector: Value,
     model_source: (&str, &str),
 ) -> Result<(Scenario, String), HarnessError> {
-    let mut arguments = json!({"cue":cue,"session_ids":["{{SOURCE_SESSION}}"]});
-    if !include_vector.is_null() {
-        arguments["include_vector"] = include_vector;
-    }
+    start_corpus(word, &[], &[(ASK, cue)], include_vector, model_source).await
+}
+
+/// The remember turn, `facts` said in turns of their own (each answered with a
+/// short confirmation), and one recall turn per `(ask, cue)`.
+pub(super) async fn start_corpus(
+    word: &str,
+    facts: &[&str],
+    asks: &[(&str, &str)],
+    include_vector: Value,
+    model_source: (&str, &str),
+) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();
     // Chat learning is the reset subject; do not create a durable explicit record.
     cassette.exchanges[0].response = cassette.exchanges[1].response.clone();
-    let mut call = cassette.exchanges[0].clone();
-    call.request.key.user_request = ASK.into();
-    call.response = memory_response(
-        &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":arguments.to_string()}),
-    );
-    let mut answer = cassette.exchanges[1].clone();
-    answer.request.key.user_request = ASK.into();
-    cassette.exchanges.extend([call, answer]);
-    memory_stubs::extraction(&mut cassette, ASK)?;
-    let mut semantic = cassette.exchanges.last().unwrap().clone();
-    semantic.request.key.user_request = json!({"speaker":"user","observed_at":"{{TIME}}","parts":[{"id":0,"text":ASK}],"context":[]}).to_string();
-    cassette.exchanges.push(semantic);
+    for fact in facts {
+        let mut said = cassette.exchanges[0].clone();
+        said.request.key.user_request = (*fact).into();
+        cassette.exchanges.push(said);
+    }
+    for (ask, cue) in asks {
+        let mut arguments = json!({"cue":cue,"session_ids":["{{SOURCE_SESSION}}"]});
+        if !include_vector.is_null() {
+            arguments["include_vector"] = include_vector.clone();
+        }
+        let mut call = cassette.exchanges[0].clone();
+        call.request.key.user_request = (*ask).into();
+        call.response = memory_response(
+            &json!({"type":"function_call","id":"fc_fts","call_id":"call_fts","name":"recall_memory","status":"completed","arguments":arguments.to_string()}),
+        );
+        let mut answer = cassette.exchanges[1].clone();
+        answer.request.key.user_request = (*ask).into();
+        cassette.exchanges.extend([call, answer]);
+        memory_stubs::extraction(&mut cassette, ask)?;
+        let mut semantic = cassette.exchanges.last().unwrap().clone();
+        semantic.request.key.user_request = json!({"speaker":"user","observed_at":"{{TIME}}","parts":[{"id":0,"text":ask}],"context":[]}).to_string();
+        cassette.exchanges.push(semantic);
+    }
     for exchange in &mut cassette.exchanges {
         exchange.request.key.user_request = exchange.request.key.user_request.replace(
             "Saved your bike lock code to explicit memory for future conversations.",

@@ -212,6 +212,7 @@ interface ConversationWorkCopy {
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
   viewAllLabel: CountFormatter;
   collapseLabel: string;
+  showDetailsLabel: string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;

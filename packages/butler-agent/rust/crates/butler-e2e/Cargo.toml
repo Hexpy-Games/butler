@@ -7,10 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# The harness never imports product crates. Only the dev-only round-store
-# companion executable links the actual provider serializer and TurnStore.
+# Product crates are linked by dev-only companion executables; scenarios drive
+# these companions through their process boundary.
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
+butler-runtime = { path = "../butler-runtime" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }

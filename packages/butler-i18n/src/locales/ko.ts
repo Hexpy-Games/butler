@@ -962,6 +962,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
           : `${primaryLabel} 외 ${count - 1}개 진행 내역 닫기`,
       viewAllLabel: (count) => `전체 보기 (${count})`,
       collapseLabel: "접기",
+      showDetailsLabel: "자세히 보기",
       toolchainRegionLabel: (label) => `${label} 도구 실행 내역`,
       detailsRegionLabel: (label) => `${label} 세부 내역`,
       webSearchSummary: (count) => `웹 검색 ${count}회`,

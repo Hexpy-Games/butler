@@ -12,8 +12,14 @@ export function SessionObserverTimeline({
   latestTurn,
   children,
   delegatedGoal,
+  expandActivities,
+  showReplies = true,
 }: {
   messages: MessageRecord[];
+  /** List every activity open, for a view that is itself a disclosure (the inline work block). */
+  expandActivities?: boolean;
+  /** Render the sub-session's own replies; off where the parent reply restates them (inline work block). */
+  showReplies?: boolean;
   delegatedGoal?: string;
   activityHistory?: SessionView["activity_history"];
   activeTurn?: SessionView["active_turn"];
@@ -27,7 +33,8 @@ export function SessionObserverTimeline({
         kind: "activity" as const, created_at: activity.createdAt ?? source.created_at,
         activity: { ...activity, turnId: source.turn_id },
       }))),
-    ...messages.map((message) => ({ kind: "message" as const,
+    // Replies still feed activity sources above; only their own rows are hidden.
+    ...messages.filter((message) => showReplies || message.role !== "assistant").map((message) => ({ kind: "message" as const,
       created_at: message.created_at, message })),
   ].sort((left, right) =>
     left.created_at && right.created_at
@@ -69,7 +76,7 @@ export function SessionObserverTimeline({
           >
             {entry.kind === "message"
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
-              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active}
+              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active} expandAll={expandActivities}
                   state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
           </MessageRow>
         </Fragment>

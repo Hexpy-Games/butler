@@ -20,7 +20,7 @@ impl GraphRepository {
     pub(in crate::cognition) fn cache_index_ready(&self) -> CognitionResult<bool> {
         self.connection()?
             .query_row(
-                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_trigger_version' AND value='2')",
+                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_trigger_version' AND value='2') AND EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='memory_source_text_stats_insert')",
                 [],
                 |_| Ok(()),
             )
@@ -51,6 +51,7 @@ impl GraphRepository {
             let tx = db.unchecked_transaction().map_err(db_error)?;
             tx.execute_batch(INDEX_SQL).map_err(db_error)?;
             super::episode_fts::install(&tx)?;
+            super::source_stats::install(&tx)?;
             tx.commit().map_err(db_error)
         })();
         if let Some(watcher) = watcher {

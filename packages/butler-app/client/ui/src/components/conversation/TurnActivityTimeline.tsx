@@ -7,14 +7,11 @@ import {
   ListChecks,
   RollingSwap,
   Stack,
-  Typo,
-  WorkActivityBlock,
 } from "@/butler-ds";
 import type { PhaseActivity } from "@/app/conversation-progress";
-import { delegatedRequestGoal } from "./delegatedRequestGoal";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
-import { workActivityToolsFromRows } from "./toolchainUtils";
+import { ActivityBlock } from "./TurnActivityBlock";
 import { BrowserTimelineStill } from "../browser/BrowserTimelineStill";
 
 export function TurnActivityTimeline({
@@ -23,15 +20,19 @@ export function TurnActivityTimeline({
   live = false,
   turnId,
   delegatedGoal,
+  expandAll = false,
 }: {
   delegatedGoal?: string;
+  /** Always list every activity, without this timeline's own disclosure (its owner already opened it). */
+  expandAll?: boolean;
   activities: Array<PhaseActivity & { turnId?: string }>;
   currentState?: string;
   live?: boolean;
   turnId?: string;
 }) {
   useAppLocale();
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = expandAll || expandedState;
   useEffect(() => {
     if (!live && ["delivered", "completed", "failed", "cancelled"].includes(currentState ?? "")) setExpanded(false);
   }, [live, currentState]);
@@ -49,7 +50,7 @@ export function TurnActivityTimeline({
       data-turn-ids={[...new Set(activities.map((activity) => activity.turnId ?? turnId).filter(Boolean))].join(" ")}
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
-        <Stack cross="start">
+        {expandAll ? null : <Stack cross="start">
           <Button
             aria-expanded={expanded}
             data-test-class="toggle-turn-activity-disclosure"
@@ -59,7 +60,7 @@ export function TurnActivityTimeline({
             type="button"
             variant="inline"
           />
-        </Stack>
+        </Stack>}
         <Stack gap="sm">
           {!expanded && <BrowserTimelineStill activities={activities} turnId={turnId} live={live} />}
           {expanded ? (
@@ -80,7 +81,7 @@ export function TurnActivityTimeline({
               <ActivityBlock activity={latest} delegatedGoal={activities.length === 1 ? delegatedGoal : undefined} turnId={latest.turnId ?? turnId} />
             </RollingSwap>
           ) : null}
-          {expanded ? (
+          {expanded && !expandAll ? (
             <Stack as="footer" cross="start">
               <Button
                 data-test-class="collapse-turn-activity-history"
@@ -97,60 +98,4 @@ export function TurnActivityTimeline({
       </Stack>
     </section>
   );
-}
-
-function ActivityBlock({
-  activity,
-  connected = false,
-  delegatedGoal,
-  turnId,
-}: {
-  activity: PhaseActivity;
-  delegatedGoal?: string;
-  connected?: boolean;
-  turnId?: string;
-}) {
-  useAppLocale();
-  const meta = activity.createdAt
-    ? `${phaseLabel(activity.phase)} · ${formatActivityTime(activity.createdAt)}`
-    : phaseLabel(activity.phase);
-  const summary = delegatedRequestGoal(activity, delegatedGoal);
-  return (
-    <WorkActivityBlock
-      density="compact"
-      connected={connected}
-      data-work-stage={activity.phase}
-      title={/(?:사용자 요청|User request):/iu.test(activity.title) ? appCopy.guided.tools.start_work : activity.title}
-      description={
-        <Stack as="span" gap="xs">
-          <Typo.Caption as="span">{meta}</Typo.Caption>
-          {sameActivityText(activity.title, summary) ? null : (
-            <Typo.Caption as="span" truncate={summary !== activity.summary}>{appCopy.interfaceDetails.contentLabel} {summary}</Typo.Caption>
-          )}
-          {activity.rationale ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel} {activity.rationale}</Typo.Caption>
-          ) : null}
-          {activity.nextStep ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel} {activity.nextStep}</Typo.Caption>
-          ) : null}
-        </Stack>
-      }
-      tools={workActivityToolsFromRows(activity.operations, turnId)}
-    />
-  );
-}
-
-function sameActivityText(left: string, right: string): boolean {
-  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
-  return normalize(left) === normalize(right);
-}
-
-function formatActivityTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
 }

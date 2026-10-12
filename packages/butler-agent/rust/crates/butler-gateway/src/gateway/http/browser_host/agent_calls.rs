@@ -14,6 +14,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     } else {
         0
     };
+    let _slot = state.browser.3.page_work(&op).await?;
     let mut frame = match super::backend::route(&state, frame, &op, &session, count).await? {
         Ok(response) => return Ok(response),
         Err(frame) => frame,
@@ -179,9 +180,6 @@ fn dispatch(
             return response(count, json!({"status":"unavailable","reason":"no_browser"}))
                 .map(Some);
         }
-        if hub.pending.len() >= 8 {
-            return Err(error(429, "browser_busy"));
-        }
         // Ephemeral presenter events share the authenticated tool frame; never model output.
         if let Some(pointer) = pointer_event(&op, &frame["args"]) {
             frame["pointer"] = pointer;
@@ -233,6 +231,7 @@ pub(super) fn enforce_result_policy(
     op: &str,
     result: &mut Value,
 ) {
+    super::backend::full_recovery(state, session, result);
     let denied = result
         .get("url")
         .and_then(Value::as_str)

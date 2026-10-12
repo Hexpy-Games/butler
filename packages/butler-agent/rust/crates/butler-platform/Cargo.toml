@@ -32,7 +32,7 @@ tokio = { workspace = true, features = ["io-std"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user"] }
-rustix.workspace = true
+rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "=0.4.7"

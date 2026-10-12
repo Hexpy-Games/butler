@@ -1,10 +1,13 @@
 import { useSessionViewSubscription } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
+  Button,
   ButtonContainer,
+  ChevronDown,
+  ChevronRight,
   Eye,
   IconButton,
   Play,
@@ -12,14 +15,16 @@ import {
   SurfacePanel,
   Typo,
 } from "@/butler-ds";
-import { workActivityToolsFromRows } from "./toolchainUtils.tsx";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 import {
+  effectiveStewardStatus,
   stewardProgressStatus,
   stewardCurrentActivityTitle,
-  stewardToolRows,
 } from "./stewardProgressPresentation.ts";
 import { workerActivityTitle } from "./workerActivityTitle.ts";
+import { WorkBlockDetails } from "./WorkBlockDetails.tsx";
+import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
+import { workBlockLatestStatus } from "./workBlockLatestStatus.ts";
 
 export function StewardParentProgress({
   progress,
@@ -35,6 +40,8 @@ export function StewardParentProgress({
     approved_plan_completed: view.approved_plan_completed ?? progress.child.approved_plan_completed, waiting_for_children: view.waiting_for_children } : progress.child;
   const rows = (child.active_turn ?? child.latest_turn)?.progress?.safe_progress_rows ?? progress.rows;
   const [resuming, setResuming] = useState(false);
+  const [detailsOpen, toggleDetails] = useWorkBlockExpanded(child.session_id);
+  const detailsId = useId();
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,
   );
@@ -42,13 +49,12 @@ export function StewardParentProgress({
     (state) => state.resumeObservedSteward,
   );
   const turn = child.active_turn ?? child.latest_turn;
-  const toolRows = stewardToolRows(rows);
-  const tools = workActivityToolsFromRows(toolRows, turn?.id);
-  const toolSummary = summarizeTools(tools);
+  const live = Boolean(child.active_turn || child.waiting_for_children);
   const activityLabel = workerActivityTitle(
     stewardCurrentActivityTitle(child),
     child.title,
   );
+  const latestStatus = workBlockLatestStatus(rows, turn?.id, live, effectiveStewardStatus(child)) ?? activityLabel;
   return (
     <SurfacePanel
       aria-label={child.title}
@@ -89,34 +95,33 @@ export function StewardParentProgress({
         </Stack>
         <Typo.Caption data-test-class="steward-progress-status">
           {stewardProgressStatus(child)}
-          {child.active_turn ? ` · ${activityLabel}` : ""}
         </Typo.Caption>
-        <Stack
-          align="row"
-          aria-label={activityLabel}
-          data-test-class="steward-tool-summary"
-          gap="xs"
-          wrap
-        >
-          <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
-          <Typo.Caption tone="secondary">
-            {toolSummary || appCopy.interfaceDetails.noHistory}
+        <Stack align="row" cross="center" gap="sm" justify="between">
+          <Typo.Caption
+            aria-label={latestStatus}
+            data-test-class="steward-tool-summary"
+            grow
+            minWidth="0"
+            title={latestStatus}
+            tone="secondary"
+            truncate
+          >
+            {latestStatus}
           </Typo.Caption>
+          <Button
+            aria-controls={detailsOpen ? detailsId : undefined}
+            aria-expanded={detailsOpen}
+            data-test-class="work-block-details-toggle"
+            iconEnd={detailsOpen ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
+            onClick={toggleDetails}
+            text={appCopy.conversation.work.showDetailsLabel}
+            type="button"
+            variant="inline"
+          />
         </Stack>
+        <WorkBlockDetails id={detailsId} live={live}
+          open={detailsOpen} sessionId={child.session_id} title={child.title} view={view} />
       </Stack>
     </SurfacePanel>
   );
-}
-
-function summarizeTools(
-  tools: ReturnType<typeof workActivityToolsFromRows>,
-): string {
-  const counts = new Map<string, number>();
-  for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || appCopy.interfaceDetails.tool;
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([label, count]) => `${count} ${label}`)
-    .join(", ");
 }

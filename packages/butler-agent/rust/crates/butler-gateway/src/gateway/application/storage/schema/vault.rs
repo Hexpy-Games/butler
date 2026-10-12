@@ -69,15 +69,40 @@ fn migrate(db: &Connection) -> Result<(), AppStorageError> {
     if !old {
         return Ok(());
     }
-    db.execute_batch("SAVEPOINT autofill_upgrade;
-        ALTER TABLE browser_traveler_profiles RENAME TO browser_autofill_profiles;
-        ALTER TABLE browser_vault_sites RENAME TO browser_vault_sites_legacy;
-        CREATE TABLE browser_vault_sites (
-          kind TEXT NOT NULL CHECK(kind IN ('card','profile')), item_id TEXT NOT NULL,
-          site TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(kind,item_id,site));
-        INSERT INTO browser_vault_sites SELECT CASE kind WHEN 'traveler' THEN 'profile' ELSE kind END,
-          item_id,site,created_at FROM browser_vault_sites_legacy;
-        DROP TABLE browser_vault_sites_legacy;
-        UPDATE browser_vault_audit SET kind='profile' WHERE kind='traveler';
-        RELEASE autofill_upgrade;").map_err(AppStorageError::sqlite)
+    let new: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='browser_autofill_profiles')",
+        [], |row| row.get(0),
+    ).map_err(AppStorageError::sqlite)?;
+    db.execute_batch("SAVEPOINT autofill_upgrade;")
+        .map_err(AppStorageError::sqlite)?;
+    let result = (|| {
+        db.execute_batch(if new {
+            "INSERT INTO browser_autofill_profiles
+              (id,nickname,details_json,extras_json,created_at,last_used_at)
+             SELECT id,nickname,details_json,extras_json,created_at,last_used_at
+             FROM browser_traveler_profiles WHERE id NOT IN
+              (SELECT id FROM browser_autofill_profiles);
+             DROP TABLE browser_traveler_profiles;"
+        } else {
+            "ALTER TABLE browser_traveler_profiles RENAME TO browser_autofill_profiles;"
+        })?;
+        db.execute_batch(
+            "ALTER TABLE browser_vault_sites RENAME TO browser_vault_sites_legacy;
+            CREATE TABLE browser_vault_sites (
+              kind TEXT NOT NULL CHECK(kind IN ('card','profile')), item_id TEXT NOT NULL,
+              site TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(kind,item_id,site));
+            INSERT OR IGNORE INTO browser_vault_sites
+              SELECT CASE kind WHEN 'traveler' THEN 'profile' ELSE kind END,
+              item_id,site,created_at FROM browser_vault_sites_legacy ORDER BY kind;
+            DROP TABLE browser_vault_sites_legacy;
+            UPDATE browser_vault_audit SET kind='profile' WHERE kind='traveler';
+            RELEASE autofill_upgrade;",
+        )
+    })();
+    if result.is_err() {
+        let rollback = db.execute_batch("ROLLBACK TO autofill_upgrade;");
+        let release = db.execute_batch("RELEASE autofill_upgrade;");
+        rollback.and(release).map_err(AppStorageError::sqlite)?;
+    }
+    result.map_err(AppStorageError::sqlite)
 }

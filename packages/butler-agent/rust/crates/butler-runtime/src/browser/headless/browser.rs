@@ -26,6 +26,9 @@ pub(crate) struct Browser {
     pub changed: Notify,
     pub history: Arc<super::history::History>,
     pub downloads: Arc<super::downloads::Downloads>,
+    /// Held while a conversation's browser context is created, so tabs
+    /// opened at once by one conversation share its one context.
+    pub contexts_created: tokio::sync::Mutex<()>,
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
     _preview_proxy: Option<EgressProxy>,
@@ -135,6 +138,7 @@ impl Browser {
             changed: Notify::new(),
             downloads: downloads.clone(),
             history,
+            contexts_created: tokio::sync::Mutex::new(()),
             process: Mutex::new(Some(process)),
             _proxy: proxy,
             _preview_proxy: preview_proxy,
