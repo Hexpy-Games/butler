@@ -373,6 +373,7 @@ export type WebSearchProviderSetting =
   | "disabled";
 
 export type WebSearchReaderBackendSetting =
+  | "browser"
   | "lightweight"
   | "auto"
   | "lightpanda"

@@ -33,7 +33,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         "tab.open" => 20000,
         "tab.act" => 30000,
         "signin.fill" | "pay.fill" | "autofill.fill" => 25000,
-        "pay.inspect" => 8000,
+        "pay.inspect" | "tab.read" => 8000,
         // A post-batch observation first waits up to 2 s for the page to settle.
         "tab.observe" if frame["args"]["settle"] == true => 8000,
         _ => 5000,
@@ -82,6 +82,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     }
     super::pay::finish_call(&state, &op, &sent, &session, &mut result).await?;
     store_still(&state, &session, &mut result).await?;
+    super::shots::store(&state, &session, &mut result).await?;
     response(count, result)
 }
 
@@ -197,6 +198,7 @@ fn page_op(op: &str) -> bool {
     matches!(
         op,
         "tab.observe"
+            | "tab.read"
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.prepare"
@@ -285,6 +287,7 @@ fn validate(
         op,
         "tab.open"
             | "tab.observe"
+            | "tab.read"
             | "tab.selection"
             | "tab.zoom"
             | "tab.screenshot"

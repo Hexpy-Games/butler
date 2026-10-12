@@ -15,6 +15,7 @@ fn executes(op: &str) -> bool {
         op,
         "tab.open"
             | "tab.observe"
+            | "tab.read"
             | "tab.zoom"
             | "tab.screenshot"
             | "tab.prepare"

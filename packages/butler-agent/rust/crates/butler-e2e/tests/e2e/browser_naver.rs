@@ -181,6 +181,7 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
     );
     let mut buffer = String::new();
     let mut active = std::collections::HashSet::new();
+    let mut last_act = None;
     for recorded in &calls {
         let frame = loop {
             let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
@@ -201,7 +202,11 @@ async fn serve_host(mut stream: reqwest::Response, admin: AdminClient) -> Result
         assert_eq!(frame["session"], "general");
         assert_eq!(frame["op"], recorded["frame"]["op"]);
         if frame["op"] == "tab.observe" {
-            assert_eq!(frame["args"]["include_image"], true);
+            let expected = super::browser_delegation::expected_pixels(&frame, last_act.as_ref());
+            assert_eq!(frame["args"]["include_image"], expected);
+        }
+        if frame["op"] == "tab.act" {
+            last_act = Some((frame["args"].clone(), recorded["result"].clone()));
         }
         for key in [
             "url",

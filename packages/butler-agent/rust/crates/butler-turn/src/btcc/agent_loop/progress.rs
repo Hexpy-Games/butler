@@ -68,7 +68,10 @@ pub(super) async fn operation(
     if let Some(target) = operation_target(call) {
         payload.insert("inputLabel".into(), Value::String(target));
     }
-    let encoded = output.map(butler_core::json::JsonDocument::as_str);
+    let transcript = output.and_then(|output| transcript_body(tool_name, output.as_str()));
+    let encoded = transcript
+        .as_deref()
+        .or_else(|| output.map(butler_core::json::JsonDocument::as_str));
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
         let pending = output
@@ -95,6 +98,19 @@ pub(super) async fn operation(
     {
         emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await;
     }
+}
+
+/// A browser result whose screenshot was kept as a message file reaches the
+/// transcript naming that file (`image.file`) instead of repeating its base64.
+fn transcript_body(tool_name: &str, body: &str) -> Option<String> {
+    if !tool_name.starts_with("browser_") || !body.contains("\"file\"") {
+        return None;
+    }
+    let mut value: Value = serde_json::from_str(body).ok()?;
+    let image = value.get_mut("image")?.as_object_mut()?;
+    image.get("file")?;
+    image.remove("data")?;
+    Some(value.to_string())
 }
 
 async fn emit_output_chunks(

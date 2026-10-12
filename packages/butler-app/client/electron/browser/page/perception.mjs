@@ -369,3 +369,22 @@ export function postsForm(element, key) {
   const method = submitter && element.getAttribute("formmethod") || form.getAttribute("method") || "get";
   return method.toLowerCase() === "post";
 }
+
+/** Whether the viewport says more in pixels than in text, from structure only:
+ * a large visible canvas or video, or images filling most of it around little
+ * text. An "auto" observation attaches its screenshot only then. */
+export function visualPage(elements, textLength) {
+  const viewport = innerWidth * innerHeight;
+  if (!viewport) return false;
+  let drawn = 0, pictured = 0;
+  for (const element of elements) {
+    const tag = element.localName;
+    if (!/^(canvas|video|img|svg)$/u.test(tag) || tag === "svg" && element.ownerSVGElement) continue;
+    const box = element.getBoundingClientRect();
+    const area = Math.max(0, Math.min(box.right, innerWidth) - Math.max(box.left, 0)) * Math.max(0, Math.min(box.bottom, innerHeight) - Math.max(box.top, 0));
+    if (area < 1024 || paintState(element).invisible || paintState(element).opacity < .1) continue;
+    if (tag === "canvas" || tag === "video") drawn += area; else pictured += area;
+  }
+  const media = Math.min(1, (drawn + pictured) / viewport);
+  return drawn / viewport >= .25 || media >= .5 && textLength < 600 || media >= .1 && textLength < 80;
+}

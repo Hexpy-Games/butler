@@ -9,6 +9,7 @@ mod pay;
 mod previews;
 pub(super) mod reader;
 mod report;
+mod shots;
 pub(super) mod signed_in;
 mod usage;
 use super::{Client, HttpError, HttpState};

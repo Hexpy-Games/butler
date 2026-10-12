@@ -204,3 +204,28 @@ pub(super) async fn next_frame(
         }
     }
 }
+
+/// The `include_image` an observation frame must carry: the model's `look`;
+/// after a batch whose effect only pixels show (points, drags, a canvas hit)
+/// a screenshot; otherwise `auto`, where the host decides from the page.
+pub(super) fn expected_pixels(frame: &Value, last_act: Option<&(Value, Value)>) -> Value {
+    let args = &frame["args"];
+    match args["look"].as_str() {
+        Some("always") => return json!(true),
+        Some("never") => return json!(false),
+        _ => {}
+    }
+    let visual = args["settle"] == true
+        && last_act.is_some_and(|(act, result)| {
+            let steps = act["steps"].as_array().into_iter().flatten();
+            let canvas = result["steps"].as_array().into_iter().flatten();
+            steps.into_iter().any(|step| {
+                step.get("point").is_some()
+                    || step.get("target_point").is_some()
+                    || step["action"] == "drag"
+            }) || canvas
+                .into_iter()
+                .any(|step| step["hit"]["role"] == "canvas")
+        });
+    if visual { json!(true) } else { json!("auto") }
+}

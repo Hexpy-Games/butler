@@ -1626,6 +1626,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchProviderAuto: "Auto",
       searchProviderCodex: "Codex subscription search",
       searchProviderDisabled: "Disabled",
+      searchReaderBrowser: "Butler browser",
       searchReaderLightweight: "Lightweight reader",
       searchReaderAuto: "Auto",
       searchReaderDisabled: "Disabled",

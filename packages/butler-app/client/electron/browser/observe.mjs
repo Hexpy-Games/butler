@@ -84,7 +84,7 @@ const busy = tab => tab.view.webContents.isLoading()
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 /** After an action, wait for loading, the page's own requests and DOM updates
  * (suggestions, recalculated results) to settle. Quiet pages return at once. */
-async function settle(tab, maxMs = 5000) {
+export async function settle(tab, maxMs = 5000) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   for (let round = 0; round < 3 && Date.now() < deadline; round++) {
     while (busy(tab) && Date.now() < deadline) await pause(100);
@@ -111,7 +111,7 @@ async function observeOnce(tab, args) {
   if(!selected.length) return { status:"refused", reason:"frame_unavailable" };
   const text = [], nodes = [], fields = [], regions = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const bindings = new Map(), paymentFrames = new Set(), classes = new Map();
-  let scriptMs = 0, gridSampleMs = 0, below = 0, interactive = 0, payment = false;
+  let scriptMs = 0, gridSampleMs = 0, below = 0, interactive = 0, payment = false, visual = false;
   const addons = [];
   for (const { index, frame } of selected) {
     const cls = signedInClass(tab, frame);
@@ -132,16 +132,18 @@ async function observeOnce(tab, args) {
     text.push([fieldText(inputs), result.text].filter(Boolean).join("\n"));
     for (const key of Object.keys(hidden)) hidden[key] += result.hidden[key];
     scriptMs += result.scriptMs; gridSampleMs += result.gridSampleMs; below += result.totals.below_fold; interactive += result.totals.interactive;
-    payment ||= result.payment; addons.push(...result.addons);
+    payment ||= result.payment; visual ||= result.visual === true; addons.push(...result.addons);
   }
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\nNode rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
   const maxChars = args.scope === "text" ? 32000 : 16000;
   if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
-  const image = args.include_image ? await observationImage(tab) : {};
+  // "auto" attaches pixels only to a page that is mostly visual (see visualPage).
+  const pixels = args.include_image === true || args.include_image === "auto" && visual;
+  const image = pixels ? await observationImage(tab) : {};
   // This observation is already the newest one, so name it: earlier ids are stale.
-  if (args.include_image && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
+  if (pixels && !image.image) return { status: "refused", reason: image.image_status ?? "image_unavailable", obs,
     recovery: `The page was observed as ${obs}, which replaced every earlier observation id, but no screenshot could be made. Observe again; look "never" returns a text-only observation.` };
   const progress = noteProgress(tab, { obs, url: tab.url, nodes, fields, thumb: tab.observation.thumb, view: [tab.url, ...text].join("\n") });
   const pointText = await graphicalPoints(tab.observation);

@@ -40,7 +40,8 @@
   },
   "webSearch": {
     "provider": "duckduckgo-html",
-    "readerBackend": "lightweight",
+    "readerBackend": "browser",
+    "readerBackendRevision": 2,
     "model": "gpt-5",
     "apiBase": "",
     "braveApiBase": "",

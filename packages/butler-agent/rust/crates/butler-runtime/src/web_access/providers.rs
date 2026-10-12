@@ -150,7 +150,7 @@ pub(super) fn status(access: &WebAccess) -> Result<Value, WebAccessError> {
     };
     let reader_backend = access
         .configured_reader(None)
-        .unwrap_or_else(|_| "lightweight".into());
+        .unwrap_or_else(|_| "browser".into());
     Ok(json!({
         "provider": provider,
         "providerEffective": provider_effective,

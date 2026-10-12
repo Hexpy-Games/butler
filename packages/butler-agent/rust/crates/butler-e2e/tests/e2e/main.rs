@@ -116,6 +116,7 @@ mod schedule_calendar;
 mod schedule_chat;
 mod schedule_store;
 mod schedules;
+mod search_browser;
 mod security_review;
 mod service_diagnostics;
 mod service_stop;
