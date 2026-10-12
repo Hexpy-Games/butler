@@ -241,7 +241,7 @@ pub(super) async fn finish(
         .filter(|r| HUMAN_STEPS.contains(r));
     let (filled, missing) = (kinds(result, "filled"), kinds(result, "missing"));
     let tab = &sent["tab"];
-    let shaped = match status {
+    let mut shaped = match status {
         Some("user_required") => {
             json!({"status":"user_required","reason":reason.unwrap_or("unknown_form"),
             "tab":tab,"filled":filled,"missing":missing,
@@ -255,6 +255,11 @@ pub(super) async fn finish(
             "reason":result["reason"].as_str().filter(|r| r.len() <= 48).unwrap_or("fill_failed"),"tab":tab})
         }
     };
+    if shaped["reason"] == "incompatible_target" {
+        shaped["recovery"] = json!(
+            "Observe and choose targets whose accessible label, autocomplete, name, input type and inputmode match each sensitive field kind."
+        );
+    }
     let outcome = match (shaped["status"].as_str(), shaped["reason"].as_str()) {
         (Some(status), Some(reason)) => format!("{status}:{reason}"),
         (Some(status), None) => status.to_owned(),
