@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy } from "@/app/copy";
 import {
   Button, ButtonContainer, CheckCircle2, ChoiceCard, ChoiceCardList, Download, EmptyLine, FileText, Globe2, Inline, Notice,
-  SetupWizardStepAction, Spinner, Typo,
+  SetupWizardStepAction, Spinner, Stack, Typo,
 } from "@/butler-ds";
 import { BrowserImportItems } from "../settings/BrowserImportSources";
 import { type ImportSource } from "../settings/signInsApi";
@@ -53,14 +53,16 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
           disabled={imp.busy || (!imp.bookmarks && !imp.passwords)} onClick={() => void imp.run("file")}>{copy.fromFile}</Button></ButtonContainer>
       </>}
       {imp.result && !imp.error ? (
-        <Notice tone="neutral" icon={<CheckCircle2 size="md" />}
-          message={imp.undone ? copy.undone : copy.result(imp.result.bookmarks, imp.result.passwords, imp.result.updated, imp.result.history ?? 0, imp.result.invalid ?? 0)}
-          action={imp.undone ? undefined : <ButtonContainer size="sm">
+        <Stack gap="sm">
+          <Notice tone="neutral" icon={<CheckCircle2 size="md" />}
+            message={imp.undone ? copy.undone : copy.result(imp.result.bookmarks, imp.result.passwords, imp.result.updated, imp.result.history ?? 0, imp.result.invalid ?? 0)} />
+          {imp.undone ? null : <ButtonContainer size="sm">
             <Button size="sm" variant="outline" disabled={imp.busy} onClick={() => void imp.undo()}>{copy.undo}</Button>
             <Button size="sm" variant="ghost" disabled={imp.busy} onClick={() => void imp.more()}>{copy.more}</Button>
             {imp.result.needs_csv && !imp.exportId && !imp.result.export_id ? <Button size="sm" variant="outline" disabled={imp.busy} onClick={() => void imp.resumeExport()}>{copy.exportPasswords}</Button> : null}
             {imp.result.export_id ? <Button size="sm" variant="outline" disabled={imp.busy} onClick={() => void imp.removeCsv()}>{copy.deleteCsv}</Button> : null}
-          </ButtonContainer>} />
+          </ButtonContainer>}
+        </Stack>
       ) : null}
       <BrowserImportFeedback flow={imp} />
     </FirstRunStepCard>
