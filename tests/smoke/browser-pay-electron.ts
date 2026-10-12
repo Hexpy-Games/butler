@@ -220,9 +220,10 @@ async function maskedPixels(observed: Record<string, any>, name: string, count =
 
 async function browserSettings(locale: string) {
   const settings = locale === "ko" ? "설정" : "Settings";
+  await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('[aria-label=${JSON.stringify(settings)}]'))`), "settings navigation loaded");
   const visible = () => app.page.expression<boolean>(`(()=>{const button=document.querySelector('[aria-label=${JSON.stringify(settings)}]');const rect=button?.getBoundingClientRect();return Boolean(rect && rect.x>=0 && rect.right<=innerWidth && rect.width>0)})()`);
   if (!await visible()) {
-    await app.page.clickText(locale === "ko" ? "사이드바 보기" : "Show sidebar", 'button,[role="button"]');
+    await app.click(locale === "ko" ? "사이드바 보기" : "Show sidebar");
     await waitBrowser(visible, "settings button visible");
   }
   await app.click(settings);
