@@ -6,7 +6,7 @@ import { FirstRunSignIn } from "./FirstRunSignIn";
 import { FirstRunReplyLanguage } from "./FirstRunReplyLanguage";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
-/** Existing connection options; every settled connection moves to the ready step. */
+/** Existing connection options, followed by the explicit reply-language choice. */
 export function FirstRunConnect({ flow }: { flow: FirstRunFlow }) {
   const { copy, view } = flow;
   if (flow.aiStage === "reply") return <FirstRunReplyLanguage flow={flow} />;

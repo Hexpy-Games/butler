@@ -22,13 +22,12 @@ export function useReplyLanguage({ connected, language, onComplete, onSaved }: {
   const inFlight = useRef(false);
   const done = useRef(onComplete);
   done.current = onComplete;
-  const finish = useCallback(async (choice?: "ko" | "en") => {
+  const finish = useCallback(async () => {
     if (!connected || inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
     setFailed(false);
     try {
-      if (choice) await api("/personalization", { method: "PATCH", body: JSON.stringify({ response_language: choice }) });
       const current = await api<SettingsView>("/settings");
       const now = new Date().toISOString();
       const patch = { language, ...onboardingCompletedPatch(current.onboarding, current.onboarding?.accepted_at ?? now, now) };

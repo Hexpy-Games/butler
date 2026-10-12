@@ -1,10 +1,11 @@
+// test-category: race
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 type FirstRunCopy = ReturnType<typeof getAppCopy>["firstRun"];
 
 /** Exercise the real wizard; persisted connection and completion remain separate. */
-export async function substepBackPaths(page: Page, language: string, copy: FirstRunCopy, state: { oauthStatus: string; importRuns: number; importUndos: number }) {
+export async function substepBackPaths(page: Page, language: string, copy: FirstRunCopy, state: { oauthStatus: string; importRuns: number; importUndos: number }, capture: (page: Page, name: string) => Promise<void>) {
   const languageCopy = () => getAppCopy(language === "ko" ? "ko-KR" : "en-US");
   const next = () => page.getByRole("button", { name: copy.next, exact: true }).click();
   const back = () => page.getByRole("button", { name: copy.back, exact: true }).click();
@@ -29,13 +30,16 @@ export async function substepBackPaths(page: Page, language: string, copy: First
   await page.getByRole("button", { name: copy.import.importAction, exact: true }).click();
   await page.getByRole("button", { name: copy.next, exact: true }).waitFor();
   assert.equal(state.importRuns, start + 1);
+  await capture(page, `after-${language}-agents-result`);
   await next();
   await page.locator("#first-run-browsers-title").waitFor();
   await page.locator('[data-import-source="safari"]').click();
   assert.equal(await page.getByRole("button", { name: languageCopy().settings.browserImport.pickFolder, exact: true }).isEnabled(), true);
+  await capture(page, `after-${language}-browsers-denied`);
   await page.locator('[data-import-source="chrome:default"]').click();
   await page.getByRole("button", { name: copy.import.importAction, exact: true }).click();
   await page.getByRole("button", { name: copy.next, exact: true }).waitFor();
+  await capture(page, `after-${language}-browsers-result`);
   await back();
   await page.locator("#first-run-agents-title").waitFor();
   assert.equal(await page.getByRole("button", { name: copy.next, exact: true }).count(), 1, "result survives back navigation");
@@ -49,6 +53,7 @@ export async function substepBackPaths(page: Page, language: string, copy: First
   await page.getByRole("heading", { name: copy.doneTitle, exact: true }).waitFor();
   await page.getByText(copy.summary.agentCounts(1, 2), { exact: true }).waitFor();
   await page.getByText(copy.summary.browserCounts(128, 37), { exact: true }).waitFor();
+  await capture(page, `after-${language}-summary-counts`);
   await back();
   await page.locator("#first-run-browsers-title").waitFor();
   const undoBefore = state.importUndos;

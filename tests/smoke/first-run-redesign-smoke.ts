@@ -208,7 +208,7 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   await page.getByRole("heading", { name: copy.readyTitle("ChatGPT"), exact: true }).waitFor();
   await page.getByText(stub.state.label, { exact: true }).waitFor();
   await capture(page, `${prefix}-signin-connected`);
-  await substepBackPaths(page, language, copy, stub.state);
+  await substepBackPaths(page, language, copy, stub.state, capture);
   await confirmReady(page, language, "ChatGPT");
 }
 

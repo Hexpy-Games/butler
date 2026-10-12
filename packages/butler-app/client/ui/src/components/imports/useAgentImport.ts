@@ -11,7 +11,7 @@ export function useAgentImport(enabled = true) {
   const [undone, setUndone] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const mounted = useRef(true);
-  const receipts = useRef<string[]>([]);
+  const receipts = useRef<AgentImportCounts[]>([]);
   useEffect(() => {
     mounted.current = true;
     if (!enabled) return () => { mounted.current = false; };
@@ -33,7 +33,7 @@ export function useAgentImport(enabled = true) {
     if (result && !undone) Object.assign(total, result, { error: undefined });
     for (const key of sources) {
       const counts = await startAgentImport(key);
-      receipts.current.push(counts.run_id);
+      receipts.current.push(counts);
       total.run_id = counts.run_id;
       total.instructions += counts.instructions; total.servers += counts.servers; total.needs_secret += counts.needs_secret;
       total.instructions_existing += counts.instructions_existing; total.servers_existing += counts.servers_existing; total.skipped += counts.skipped;
@@ -45,12 +45,16 @@ export function useAgentImport(enabled = true) {
   });
   const undo = () => work(async () => {
     while (receipts.current.length) {
-      await undoAgentImport(receipts.current[0]!);
+      const receipt = receipts.current[0]!;
+      await undoAgentImport(receipt.run_id);
       receipts.current.shift();
+      if (mounted.current) setResult(prior => prior && ({ ...prior,
+        instructions: prior.instructions - receipt.instructions, servers: prior.servers - receipt.servers,
+        needs_secret: prior.needs_secret - receipt.needs_secret,
+      }));
     }
     if (mounted.current) setUndone(true);
   });
   const more = () => { receipts.current = []; setResult(null); setError(null); setUndone(false); };
   return { sources, busy, error, result, undone, selected, run, undo, more };
 }
-

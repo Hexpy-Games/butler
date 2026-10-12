@@ -28,7 +28,7 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
   const denied = current?.permission === "denied";
   const nothing = !imp.bookmarks && !imp.passwords && !imp.history;
   const done = Boolean(imp.result) && !imp.error;
-  const empty = sources !== null && sources.length === 0;
+  const empty = sources !== null && !imp.error && sources.length === 0;
   const primary = denied ? copy.pickFolder : imp.busy ? proposal.importing : proposal.importAction;
   return (
     <FirstRunStepCard flow={flow} contentKey="browsers" icon={<Download size="lg" />} title={proposal.browsersTitle}
@@ -54,7 +54,7 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
       </>}
       {imp.result && !imp.error ? (
         <Notice tone="neutral" icon={<CheckCircle2 size="md" />}
-          message={imp.undone ? copy.undone : copy.result(imp.result.bookmarks, imp.result.passwords, imp.result.updated, imp.result.history ?? 0)}
+          message={imp.undone ? copy.undone : copy.result(imp.result.bookmarks, imp.result.passwords, imp.result.updated, imp.result.history ?? 0, imp.result.invalid ?? 0)}
           action={imp.undone ? undefined : <ButtonContainer size="sm">
             <Button size="sm" variant="outline" disabled={imp.busy} onClick={() => void imp.undo()}>{copy.undo}</Button>
             <Button size="sm" variant="ghost" disabled={imp.busy} onClick={() => void imp.more()}>{copy.more}</Button>

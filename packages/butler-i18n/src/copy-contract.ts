@@ -1940,7 +1940,6 @@ export interface AppCopy {
     agentImport: {
       /** One-line purpose under the section title. */
       purpose: string;
-      /** First-run import step: one line covering AI tools and browsers. */
       /** What a detected tool holds (instructions, MCP server count). */
       found: (instructions: boolean, servers: number) => string;
       run: string;

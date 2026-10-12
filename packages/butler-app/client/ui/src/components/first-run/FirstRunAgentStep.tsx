@@ -20,13 +20,13 @@ export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
   useEffect(() => { setPicked(pick.sources?.filter(importable).map(source => source.key) ?? []); }, [pick.sources]);
   const toggle = (key: string) => setPicked(prior => prior.includes(key) ? prior.filter(entry => entry !== key) : [...prior, key]);
   const done = Boolean(pick.result) && !pick.error;
-  const empty = pick.sources !== null && !pick.sources.some(importable);
+  const empty = pick.sources !== null && !pick.error && !pick.sources.some(importable);
   const forward = done || empty || pick.undone;
   return (
     <FirstRunStepCard flow={flow} contentKey="agents" icon={<Bot size="lg" />} title={proposal.agentsTitle}
       titleId="first-run-agents-title" description={proposal.agentsBody} onBack={flow.backFromImport}
       actions={forward
-        ? <SetupWizardStepAction forward onClick={flow.toBrowsers}>{proposal.next}</SetupWizardStepAction>
+        ? <SetupWizardStepAction forward disabled={pick.busy} onClick={flow.toBrowsers}>{proposal.next}</SetupWizardStepAction>
         : <>
           <SetupWizardStepAction disabled={pick.busy} onClick={flow.toBrowsers}>{proposal.skip}</SetupWizardStepAction>
           <SetupWizardStepAction variant="default" disabled={pick.busy || picked.length === 0}
@@ -50,7 +50,7 @@ export function FirstRunAgentStep({ flow }: { flow: FirstRunFlow }) {
           })}
         </ChoiceCardList>
       )}
-      {pick.result && !pick.error ? (
+      {pick.result ? (
         <Notice tone="neutral" icon={<CheckCircle2 size="md" />}
           message={pick.undone ? copy.undone : copy.result(pick.result.instructions, pick.result.servers, pick.result.needs_secret)}
           action={pick.undone ? undefined : <ButtonContainer size="sm"><Button size="sm" variant="outline" disabled={pick.busy} onClick={() => void pick.undo()}>{copy.undo}</Button></ButtonContainer>} />
