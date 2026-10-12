@@ -322,7 +322,7 @@ export function layoutRegions(elements) {
  * field (number, expiry, CVC, holder name, the PIN's first numbers, the owner
  * birth date) or a autofill field. Self-contained: it also runs in the fill
  * world. Context-dependent kinds stay generic (`birth`, `pin_short`). */
-export function vaultKind(element) {
+export function vaultKind(element, sensitive = false) {
   if (!element || !/^(input|select)$/u.test(element.localName ?? "")) return null;
   const type = (element.getAttribute("type") ?? "text").toLowerCase();
   if (/^(hidden|submit|button|checkbox|radio|file|image|reset|range|color|search)$/u.test(type)) return null;
@@ -330,8 +330,13 @@ export function vaultKind(element) {
   const byAuto = { "cc-number": "number", "cc-csc": "cvc", "cc-exp": "expiry", "cc-exp-month": "exp_month", "cc-exp-year": "exp_year",
     "cc-name": "name", "cc-given-name": "name", "cc-family-name": "name", bday: "birth", "bday-year": "birth", "bday-month": "birth", "bday-day": "birth",
     "given-name": "given_name", "family-name": "surname", name: "full_name", sex: "gender", tel: "phone", email: "email", country: "nationality", "country-name": "nationality" };
-  if (byAuto[auto]) return byAuto[auto];
-  const label = `${element.id} ${element.getAttribute("name") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("aria-label") ?? ""} ${element.labels?.[0]?.textContent ?? ""}`.toLowerCase();
+  if (Object.hasOwn(byAuto, auto)) return byAuto[auto];
+  if (sensitive && auto && !["on", "off"].includes(auto)) return "other";
+  if (sensitive && type === "email") return "email";
+  if (sensitive && type === "tel") return "phone";
+  const labelled = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/u)
+    .map(id => element.getRootNode().getElementById?.(id)?.textContent ?? "").join(" ");
+  const label = `${sensitive ? "" : element.id} ${element.getAttribute("name") ?? ""} ${sensitive ? "" : element.getAttribute("placeholder") ?? ""} ${element.getAttribute("aria-label") ?? ""} ${[...(element.labels ?? [])].map(label => label.textContent).join(" ")} ${labelled}`.toLowerCase();
   const max = element.maxLength > 0 ? element.maxLength : 0;
   if (/card.?(number|num|no)|cardno|ccnum|cc.?number|카드.?번호/u.test(label)) return "number";
   if (/(^|[^a-z])(cvc|cvv|csc|cvn)\d?([^a-z]|$)|security.?code|card.?code|보안.?코드/u.test(label)) return "cvc";

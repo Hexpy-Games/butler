@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use super::Capabilities;
 
+pub mod answer_blocks;
 mod bridge;
 mod validation;
 pub use bridge::{BridgeCatalogTool, describe_native, search_native};

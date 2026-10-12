@@ -1,3 +1,4 @@
+import { releaseTurnEvents } from "./events.mjs";
 // Calls fence dispatched input; holds span the owning turn/run. Neither is persisted.
 export function startUse(browser, frame) {
   const use = { id: frame.id, session: frame.session, turn: frame.turn_id, tab: frame.tab };
@@ -8,6 +9,8 @@ export function startUse(browser, frame) {
 function holdUse(browser, use) {
   const tab = browser.tabs.get(use.tab);
   if (!tab || tab.holder !== "agent" || tab.owner !== `conversation:${use.session}` || typeof use.turn !== "string") return;
+  // The turn now driving the tab receives its page events (events.mjs).
+  tab.turn = use.turn;
   const holds = browser.holds.get(tab.id) ?? new Map();
   holds.set(use.turn, use.session);
   browser.holds.set(tab.id, holds);
@@ -51,6 +54,7 @@ export function endUse(browser, id, abort = false) {
   browser.publish();
 }
 export function finishUse(browser, session, turn) {
+  releaseTurnEvents(browser, session, turn);
   const affected = new Set();
   for (const [id, holds] of browser.holds) {
     if (holds.get(turn) === session) { holds.delete(turn); affected.add(id); }

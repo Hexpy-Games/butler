@@ -7,11 +7,11 @@
  * filled fields; the canary card number appears nowhere. The fill needs the
  * system keychain (opt-in `BUTLER_E2E_KEYCHAINS`, test-only service, deleted). */
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
-import { PROFILE, SIGNUP_FIELDS, ID_FIELDS } from "../support/autofill-fixtures";
+import { browserStub, bridgeBrowser } from "../support/browser-agent-stub";
+import { PROFILE, SIGNUP_FIELDS, ID_FIELDS, ID_LABELS } from "../support/autofill-fixtures";
 import { hostResolverRules, publicResolverPatch, startPayFixtures } from "../support/pay-fixtures";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
@@ -23,11 +23,12 @@ const fixtures = startPayFixtures(CARD);
 process.env.BUTLER_SMOKE_ELECTRON_ARGS = JSON.stringify([...JSON.parse(process.env.BUTLER_SMOKE_ELECTRON_ARGS ?? "[]"), hostResolverRules()]);
 let agentHome: string | undefined;
 if (keychains) {
-  agentHome = mkdtempSync(join(tmpdir(), "pay-agent-home-"));
-  mkdirSync(join(agentHome, "Library"), { recursive: true }); mkdirSync(join(agentHome, ".codex"));
-  symlinkSync(keychains, join(agentHome, "Library/Keychains"));
+  agentHome = process.env.HOME; assert.ok(agentHome);
+  assert.equal(keychains, join(agentHome, "Library/Keychains"), "use the provisioned isolated keychain HOME");
+  mkdirSync(join(agentHome, ".codex"), { recursive: true });
 }
-const app = await browserAgentApp(evidence, () => null, undefined,
+const stub = browserStub();
+const app = await browserAgentApp(evidence, stub.handler, undefined,
   keychains ? { env: { HOME: agentHome!, BUTLER_USER_AUTH: "deny" }, config: { secrets: { store: "system" } } } : {}).catch(error => { fixtures.stop(); if (agentHome) rmSync(agentHome, { recursive: true, force: true }); throw error; });
 type Tab = { id: string; owner: string; holder: string; url: string; opener?: string; payStep?: string };
 const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})`;
@@ -217,12 +218,33 @@ async function maskedPixels(observed: Record<string, any>, name: string, count =
   assert.ok(dark.every(Boolean), `masked: ${JSON.stringify(dark)}`);
 }
 
+async function browserSettings(locale: string) {
+  const settings = locale === "ko" ? "설정" : "Settings";
+  const navigation = () => app.page.expression<boolean>("Boolean(document.querySelector('[data-test-class=\"settings-navigation-scroll\"]'))");
+  await waitBrowser(async () => await navigation() || await app.page.expression(`Boolean(document.querySelector('[aria-label=${JSON.stringify(settings)}]'))`), "settings navigation loaded");
+  const visible = () => app.page.expression<boolean>(`(()=>{const button=document.querySelector('[aria-label=${JSON.stringify(settings)}]');const rect=button?.getBoundingClientRect();return Boolean(rect && rect.x>=0 && rect.right<=innerWidth && rect.width>0)})()`);
+  if (!await navigation() && !await visible()) {
+    await app.click(locale === "ko" ? "사이드바 보기" : "Show sidebar");
+    await waitBrowser(visible, "settings button visible");
+  }
+  if (!await navigation()) await app.click(settings);
+  const label = locale === "ko" ? "브라우저" : "Browser";
+  const scope = '[data-test-class="settings-navigation-scroll"] :is(button,[role="button"])';
+  try {
+    await waitBrowser(() => app.page.expression(`Array.from(document.querySelectorAll(${JSON.stringify(scope)})).some(node=>(node.getAttribute('aria-label') || node.textContent)?.trim()===${JSON.stringify(label)})`), "settings browser navigation");
+  } catch (error) {
+    writeFileSync(join(evidence!, "settings-navigation-failure.png"), await app.page.screenshot());
+    writeFileSync(join(evidence!, "settings-navigation-failure.json"), JSON.stringify(await app.page.expression("({width:innerWidth,height:innerHeight,tests:Array.from(document.querySelectorAll('[data-test-class]')).map(node=>node.getAttribute('data-test-class')),buttons:Array.from(document.querySelectorAll('button,[role=button]')).map(node=>node.getAttribute('aria-label') || node.textContent)})")));
+    throw error;
+  }
+  await app.page.clickText(label, scope);
+}
+
 async function settingsShots() {
   for (const [locale, theme] of [["ko", "light"], ["ko", "dark"], ["en", "light"], ["en", "dark"]]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
     await app.page.reload();
-    await app.click(locale === "ko" ? "설정" : "Settings");
-    await app.click(locale === "ko" ? "브라우저" : "Browser");
+    await browserSettings(locale!);
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('#payment-methods,[data-test-class=vault-card-add]'))"), "payment methods");
     await app.page.expression("(document.querySelector('[data-test-class=vault-card-row]') ?? document.querySelector('[data-test-class=vault-card-add]')).scrollIntoView({block:'center'})");
     writeFileSync(join(evidence!, `settings-payment-${locale}-${theme}.png`), await app.page.screenshot());
@@ -247,17 +269,20 @@ async function profileFlows() {
     assert.equal(second.status, 200); family = second.body.data.id;
     const listed = await security("GET", "/security/vault");
     assert.equal(listed.body.data.profiles.length, 2, "multiple profiles");
+    await profileApproval(id);
     for (const [path, fields] of [["/signup", SIGNUP_FIELDS], ["/identity", ID_FIELDS]] as const) {
       const tab = await open(path);
       const looked = await internal("pay.lookup", tab);
       assert.ok(!JSON.stringify(looked).includes(PROFILE.email), "lookup never returns profile values");
       const observed = await internal("tab.observe", tab, { include_image: false });
       const targets = fields.map(field => {
-        const node = observed.nodes.find((item: { name: string }) => item.name === field);
+        const node = observed.nodes.find((item: { name: string }) => item.name === (ID_LABELS[field] ?? field));
         assert.ok(node, `ref for ${field}`); return { ref: node.ref, field };
       });
       const inspected = await internal("pay.inspect", tab, { kind: "profile", targets });
       assert.equal(inspected.status, "ok", JSON.stringify(inspected));
+      if (path === "/signup") await incompatibleProfileTargets(tab, id, targets, inspected);
+      if (path === "/identity") await changedProfileTarget(tab, id, targets, inspected);
       const filled = await internal("autofill.fill", tab, { item_id: id, targets, top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
       assert.equal(filled.status, "filled", JSON.stringify(filled));
       assert.deepEqual([...filled.filled].sort(), [...fields].sort());
@@ -284,7 +309,7 @@ async function profileShots() {
   await app.main(`${winExpression()}.setContentSize(1440,1440)`);
   for (const theme of ["light", "dark"]) {
     await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
-    await app.page.reload(); await app.click("설정"); await app.click("브라우저");
+    await app.page.reload(); await browserSettings("ko");
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=vault-profile-row]'))"), "profile section");
     const summary = await app.page.expression<string>("document.querySelector('[data-test-class=vault-profile-row]').textContent");
     assert.ok(summary.includes("Sample Person · 입력할 때마다 확인") && summary.includes("여권 ••••") && !summary.includes("저장됨:"), "separate profile name, policy and masked passport");
@@ -309,3 +334,85 @@ async function profileShots() {
   }
 }
 function winExpression() { return `${module}('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'))`; }
+
+async function profileApproval(id: string) {
+  const tab = await open("/identity");
+  const observed = await internal("tab.observe", tab, { include_image: false });
+  const fields = ["birth_date", "passport_number"];
+  const targets = fields.map(field => ({ ref: observed.nodes.find((node: { name: string }) => node.name === ID_LABELS[field]).ref, field }));
+  stub.set([
+    () => ({ name: "tool_describe", arguments: { ids: ["native:browser_autofill_fill"] } }),
+    () => bridgeBrowser("browser_autofill_fill", { tab, profile_id: id, targets }),
+  ]);
+  await app.gateway.api("/messages", { method: "POST", body: JSON.stringify({ chat_id: "general", text: "Fill saved identity fields", client_message_id: crypto.randomUUID() }) });
+  let request: Record<string, any> = {};
+  await waitBrowser(async () => {
+    const view = await app.gateway.api<{ requests: Record<string, any>[] }>("/authority-requests?session_id=general");
+    request = view.requests.find(item => item.approval?.operation?.tool === "browser_autofill_fill") ?? {};
+    return Boolean(request.request_ref);
+  }, "profile approval");
+  assert.ok(request.approval.operation.targets.includes(fields.join(", ")));
+  await app.click("일반");
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-authority-decision]'))"), "approval card visible");
+  const card = await app.page.expression<string>("document.querySelector('[data-test-class=composer-authority-decision]').textContent");
+  for (const field of fields) assert.ok(card.includes(field), "approval lists each sensitive field kind");
+  await profileApprovalShots(fields);
+  await app.gateway.api(`/authority-requests/${request.request_ref}/allow?session_id=general`, { method: "POST", body: JSON.stringify({ scope: "once" }) });
+  await waitBrowser(async () => (await app.gateway.api<{ latest_turn?: { state: string } }>("/session-view?session_id=general")).latest_turn?.state === "delivered", "approved fill delivered");
+  await close(tab);
+}
+
+async function profileApprovalShots(fields: string[]) {
+  const sizes = await app.main<{ minimum: number[]; content: number[] }>(`({ minimum: ${winExpression()}.getMinimumSize(), content: ${winExpression()}.getContentSize() })`);
+  try {
+    await app.main(`${winExpression()}.setMinimumSize(320,320)`);
+    for (const theme of ["light", "dark"]) {
+      await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme }) });
+      await app.page.reload();
+      await app.click("일반");
+      await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-authority-decision]'))"), "approval card visible");
+      await app.main(`${winExpression()}.setContentSize(1440,900)`);
+      await app.shot(`autofill-approval-${theme}`);
+      await app.main(`${winExpression()}.setContentSize(390,844)`);
+      await waitBrowser(() => app.page.expression("innerWidth === 390"), "mobile viewport");
+      await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=composer-authority-decision]').getAnimations({subtree:true}).every(a=>a.playState!=='running' || a.effect?.getComputedTiming().iterations===Infinity)"), "approval layout settled");
+      const card = await app.page.expression<string>("document.querySelector('[data-test-class=composer-authority-decision]').textContent");
+      for (const field of fields) assert.ok(card.includes(field));
+      assert.equal(await app.page.expression("document.documentElement.scrollWidth <= innerWidth"), true);
+      await app.shot(`autofill-approval-phone-${theme}`);
+    }
+  } finally {
+    await app.main(`${winExpression()}.setMinimumSize(...${JSON.stringify(sizes.minimum)});${winExpression()}.setContentSize(...${JSON.stringify(sizes.content)})`);
+  }
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: "light" }) });
+}
+
+async function incompatibleProfileTargets(tab: string, id: string, targets: { ref: string; field: string }[], inspected: Record<string, any>) {
+  for (const target of targets.filter(target => ["email", "organization"].includes(target.field))) {
+    for (const field of ["passport_number", "birth_date", "rrn"]) {
+      for (const op of ["pay.inspect", "autofill.fill"]) {
+        const denied = await internal(op, tab, { kind: "profile", item_id: id, targets: [{ ref: target.ref, field }],
+          top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+        assert.equal(denied.reason, "incompatible_target", JSON.stringify(denied));
+        if (op === "pay.inspect") assert.deepEqual(denied.targets, [{ ref: target.ref, field, detected: target.field === "email" ? "email" : null }]);
+        assert.ok(denied.recovery.includes("Observe"));
+      }
+    }
+  }
+  assert.equal(await app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).every(input=>!input.value)")`), true);
+}
+
+async function changedProfileTarget(tab: string, id: string, targets: { ref: string; field: string }[], inspected: Record<string, any>) {
+  for (const [attribute, value] of [["autocomplete", "email"], ["autocomplete", "street-address"], ["type", "email"], ["inputmode", "email"], ["autocomplete", PROFILE.passport_number]]) {
+    const change = (value: string | null) => app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript(${JSON.stringify(`document.querySelector('[name=document]').${value === null ? `removeAttribute('${attribute}')` : `setAttribute('${attribute}','${value}')`}`)})`);
+    await change(value!);
+    for (const op of ["pay.inspect", "autofill.fill"]) {
+      const denied = await internal(op, tab, { kind: "profile", item_id: id, targets,
+        top_origin: inspected.top_origin, frame_origins: inspected.frame_origins });
+      assert.equal(denied.reason, "incompatible_target", "recheck compatibility after approval");
+      assert.ok(!JSON.stringify(denied).toLowerCase().includes(PROFILE.passport_number.toLowerCase()), "classification never returns raw autocomplete text");
+    }
+    assert.equal(await app.main(`${subject}.tabs.get(${JSON.stringify(tab)}).view.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).every(input=>!input.value)")`), true);
+    await change(null);
+  }
+}

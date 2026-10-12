@@ -197,7 +197,7 @@ fn approval_input(inspected: &Value, item: &Value, kind: &str, tab: &Value) -> V
     };
     json!({"pay": {"kind": kind, "item": item["id"], "label": label,
         "merchant": inspected["merchant_origin"], "top": inspected["top_origin"],
-        "frames": inspected["frame_origins"], "amount": inspected["amount"]},
+        "fields": if kind == "profile" { inspected["fields"].clone() } else { Value::Null }, "frames": inspected["frame_origins"], "amount": inspected["amount"]},
         "tab": tab, "always_confirm": true})
 }
 

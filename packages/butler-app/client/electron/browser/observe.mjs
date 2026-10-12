@@ -51,11 +51,12 @@ async function graphicalPoints(observation) {
   }).join("\n")}` : "";
 }
 
-function observationBudget(args, interactive, below) {
+// The most observation text one result carries (bytes), for either scope: a
+// default observation that fits is returned rather than refused into a second read.
+const OBSERVATION_BYTES = 32000;
+function observationBudget(interactive, below) {
   return { status: "refused", reason: "observation_budget_exceeded", totals: { interactive, below_fold: below },
-    recovery: args.scope === "text"
-      ? "Observe one returned frame at a time. No complete observation was returned; do not act or capture with an older observation."
-      : "Observe again with scope=\"text\" to retain the complete controls and screenshot within the existing text budget. Inspect any open dialog and close it by its fresh ref before drawing or capturing. Do not reuse the older observation." };
+    recovery: "Observe one returned frame at a time (frame). No complete observation was returned; do not act or capture with an older observation." };
 }
 
 // A navigation during observation is page state, not a user takeover.
@@ -136,8 +137,7 @@ async function observeOnce(tab, args) {
   }
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
   const full = `tab ${tab.id} epoch ${epoch} obs ${obs}\nNode rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.\n${text.join("\n")}\ninteractive ${interactive}/${interactive} · below fold ${below} · hidden ${JSON.stringify(hidden)}`;
-  const maxChars = args.scope === "text" ? 32000 : 16000;
-  if (Buffer.byteLength(full) > maxChars) return observationBudget(args, interactive, below);
+  if (Buffer.byteLength(full) > OBSERVATION_BYTES) return observationBudget(interactive, below);
   tab.observation = { obs, epoch, main:frames[0], frames, bindings, nodes, fields, payment, paymentFrames, addons, complete: selected.length === frames.length };
   // "auto" attaches pixels only to a page that is mostly visual (see visualPage).
   const pixels = args.include_image === true || args.include_image === "auto" && visual;
@@ -149,7 +149,7 @@ async function observeOnce(tab, args) {
   const pointText = await graphicalPoints(tab.observation);
   const observedText = [full, pointText].filter(Boolean).join("\n");
   if (epoch !== tab.epoch || tab.holder !== "agent") return changed(tab);
-  if (Buffer.byteLength(observedText) > maxChars) return observationBudget(args, interactive, below);
+  if (Buffer.byteLength(observedText) > OBSERVATION_BYTES) return observationBudget(interactive, below);
   tab.observation.captureRegions = contentRegions(regions, tab.observation.imageGeometry);
   // Progress notes lead the result so they are read before the page data.
   return { ...(progress ? { progress } : {}), status: "ok", tab: tab.id, obs, epoch, url: tab.url, frames: selected.map(({ frame, index })=>({ id:`f${index}`, url:frame.url, ...(classes.get(frame) ? { class: classes.get(frame) } : {}) })), text: observedText, nodes, fields, layout_regions: regions, capture_regions: tab.observation.captureRegions, image_geometry: tab.observation.imageGeometry, hidden, totals: { interactive, below_fold: below }, cursor: null, scriptMs, gridSampleMs, payment, addons, ...image };

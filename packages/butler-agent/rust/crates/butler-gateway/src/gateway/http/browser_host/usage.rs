@@ -10,7 +10,7 @@ pub(super) struct Use {
     pub call: Option<String>,
     tab: Value,
 }
-fn executes(op: &str) -> bool {
+pub(super) fn executes(op: &str) -> bool {
     matches!(
         op,
         "tab.open"

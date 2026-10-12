@@ -31,8 +31,10 @@ BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 Use `scripts/isolated-run.sh` for every local test/check command. It preserves Cargo
 caches, creates private HOME and BUTLER_DATA under TMPDIR, and removes both on exit.
 
-The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
-`BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
+The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
+`BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`. Prebuilt agents used
+for browser import scenarios also need this feature to inject isolated profile
+and key sources. Never enable it in shipped agents.
 `BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
 fixtures and cassettes when running a compiled harness on a different machine.
 

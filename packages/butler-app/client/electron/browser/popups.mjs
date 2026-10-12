@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { popupWindowOptions, popupPlatform } from "../butler-platform/popup-window.mjs";
 import { agentPopupAllowed } from "./popup-policy.mjs";
 import { webUrl } from "./policy.mjs";
+import { MAX_TABS, USER_TABS, makeAgentRoom } from "./capacity.mjs";
 import { browserEvent } from "./events.mjs";
 import { connectDebugger, backgroundTab } from "./agent.mjs";
 import { publicDialog } from "./dialogs.mjs";
@@ -102,7 +103,7 @@ export function popupHandler(browser, source, details) {
   const once = source.popupAllowance === site;
   const allowed = valid && (agent ? agentPopupAllowed(source.policy, source.url, details.url) : gesture || once);
   const peers = [...browser.tabs.values()].filter(tab => tab.owner === source.owner);
-  const budget = browser.tabs.size < 36 && (agent ? peers.filter(tab => tab.agent || tab.driven).length < 3 && [...browser.tabs.values()].filter(tab => tab.agent || tab.driven).length < 6 : peers.length < 30);
+  const budget = browser.tabs.size < MAX_TABS && (agent ? makeAgentRoom(browser, source) : peers.length < USER_TABS);
   if (!allowed || !budget) {
     source.blockedPopup = { url: details.url, site, reason: budget ? agent ? "popup_policy" : "no_gesture" : "tab_budget_exhausted" };
     browserEvent(browser, source, "popup_blocked", source.blockedPopup); browser.publish(); return { action: "deny" };

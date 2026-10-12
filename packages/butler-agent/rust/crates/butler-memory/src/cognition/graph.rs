@@ -24,6 +24,7 @@ mod recall;
 mod recall_index;
 mod registration;
 mod schema;
+mod source_stats;
 mod stage_state;
 mod stages;
 mod typed_lifecycle;
@@ -62,7 +63,7 @@ pub(in crate::cognition) use recall::{
 pub(super) use registration::{GraphRegistration, RegistrationInput};
 pub(in crate::cognition) use stages::ExtractionStageResult;
 pub(super) use typed_registration::TypedRegistrationInput;
-pub(in crate::cognition) use vector_quantum::ClaimedVectorUnit;
+pub(in crate::cognition) use vector_quantum::{ClaimLimit, ClaimedVectorUnit};
 pub(in crate::cognition) use vector_registration::{
     EpisodeProjectionSource, VectorRegistrationFailure, VectorRegistrationStage,
 };

@@ -139,6 +139,19 @@ pub(super) fn read_registered_projects(path: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The user switched the memory model off (`memory.embeddings` is `"off"`).
+pub(super) fn memory_model_off(path: &Path) -> bool {
+    fs::read(path)
+        .ok()
+        .and_then(|config| serde_json::from_slice::<serde_json::Value>(&config).ok())
+        .is_some_and(|config| {
+            config
+                .pointer("/memory/embeddings")
+                .and_then(|v| v.as_str())
+                == Some("off")
+        })
+}
+
 pub(super) fn sanitize_project_memory_id(project_id: &str) -> String {
     project_id.replace(['/', '\\', '\0'], "_")
 }

@@ -38,13 +38,12 @@ fn changed() -> Value {
     json!({"status":"not_dispatched","reason":"page_changed","recovery":"The page navigated while it was observed. Observe again; no action was taken."})
 }
 
-fn budget(args: &Value, interactive: u64, below: u64) -> Value {
-    let recovery = if args["scope"] == "text" {
-        "Observe one returned frame at a time. No complete observation was returned; do not act or capture with an older observation."
-    } else {
-        "Observe again with scope=\"text\" to retain the complete controls and screenshot within the existing text budget. Inspect any open dialog and close it by its fresh ref before drawing or capturing. Do not reuse the older observation."
-    };
-    json!({"status":"refused","reason":"observation_budget_exceeded","totals":{"interactive":interactive,"below_fold":below},"recovery":recovery})
+/// The most observation text one result carries (bytes).
+const OBSERVATION_BYTES: usize = 32000;
+
+fn budget(interactive: u64, below: u64) -> Value {
+    json!({"status":"refused","reason":"observation_budget_exceeded","totals":{"interactive":interactive,"below_fold":below},
+        "recovery":"Observe one returned frame at a time (frame). No complete observation was returned; do not act or capture with an older observation."})
 }
 
 fn editable(nodes: &[Value]) -> Vec<Value> {
@@ -238,13 +237,11 @@ async fn collect(page: &Page, args: &Value) -> Result<Result<Collected, Value>, 
         g.below,
         hidden
     );
-    let max = if args["scope"] == "text" {
-        32000
-    } else {
-        16000
-    };
+    // One size for either scope: a default observation that fits the text
+    // budget is returned rather than refused into a second, larger read.
+    let max = OBSERVATION_BYTES;
     if full.len() > max {
-        return Ok(Err(budget(args, g.interactive, g.below)));
+        return Ok(Err(budget(g.interactive, g.below)));
     }
     Ok(Ok(Collected {
         id,
@@ -322,7 +319,7 @@ async fn observe_once(page: &Page, args: &Value) -> Result<Value, String> {
         return Ok(changed());
     }
     if observed.len() > max {
-        return Ok(budget(args, g.interactive, g.below));
+        return Ok(budget(g.interactive, g.below));
     }
     observation.capture_regions = content_regions(&g.regions, observation.geometry);
     let geometry = observation.geometry.map(Geometry::to_value);

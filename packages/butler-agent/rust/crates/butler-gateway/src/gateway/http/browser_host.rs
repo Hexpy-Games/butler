@@ -30,10 +30,48 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 
-/// The attached host's state, the still-upload lock, and a signal on
-/// changes of the attached host's tabs and calls (the hidden host's reap).
+/// The attached host's state, the still-upload lock, a signal on changes of
+/// the attached host's tabs and calls (the hidden host's reap), and the call
+/// slots.
 #[derive(Default)]
-pub(super) struct Hub(Mutex<Inner>, tokio::sync::Mutex<()>, tokio::sync::Notify);
+pub(super) struct Hub(
+    Mutex<Inner>,
+    tokio::sync::Mutex<()>,
+    tokio::sync::Notify,
+    Slots,
+);
+/// Browser calls executing at once, sized to the machine; a call beyond them
+/// waits for a slot instead of being refused, on whichever browser serves it.
+pub(super) struct Slots(tokio::sync::Semaphore);
+impl Default for Slots {
+    fn default() -> Self {
+        Self(tokio::sync::Semaphore::new(
+            butler_runtime::browser::call_slots(),
+        ))
+    }
+}
+impl Slots {
+    /// Waits for a slot; held until the call's answer.
+    pub(super) async fn acquire(&self) -> Result<tokio::sync::SemaphorePermit<'_>, HttpError> {
+        self.0.acquire().await.map_err(|_| HttpError::Internal)
+    }
+    /// A slot for an op that works on a page; control ops (cancel, waits,
+    /// lists) never wait behind page work.
+    pub(super) async fn page_work(
+        &self,
+        op: &str,
+    ) -> Result<Option<tokio::sync::SemaphorePermit<'_>>, HttpError> {
+        if usage::executes(op) {
+            return self.acquire().await.map(Some);
+        }
+        Ok(None)
+    }
+}
+/// Frames the host channel holds: each call in a slot sends at most three
+/// (`use.started`, the call, `use.ended`), plus control frames.
+fn channel_frames() -> usize {
+    butler_runtime::browser::call_slots() * 3 + 16
+}
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
@@ -162,7 +200,7 @@ fn attach(
     rotated: tokio_util::sync::CancellationToken,
     launch: Option<&str>,
 ) -> Result<Response, HttpError> {
-    let (sender, receiver) = mpsc::channel(8);
+    let (sender, receiver) = mpsc::channel(channel_frames());
     let generation = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hidden::admit(&state, &mut hub, launch)?;
@@ -264,6 +302,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     }
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
+    let _slot = state.browser.3.acquire().await?;
     {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         let Some(host) = hub.host.as_ref() else {
@@ -272,9 +311,6 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
                 json!({"status":"unavailable","reason":"no_browser"}),
             );
         };
-        if hub.pending.len() >= 8 {
-            return Err(error(429, "browser_busy"));
-        }
         host.try_send(json!({"id":id,"lease":{"id":id,"kind":"output_check","content_origin":url::Url::parse(args["url"].as_str().unwrap_or("")).map_err(|_| error(400,"invalid_request"))?.origin().ascii_serialization()},"op":"output.check","args":args,"deadline_ms":7500}))
             .map_err(|_| error(429, "browser_busy"))?;
         hub.pending.insert(id.clone(), sender);

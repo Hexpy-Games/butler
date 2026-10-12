@@ -187,6 +187,27 @@ pub(super) async fn headless_call(
     response(count, result)
 }
 
+/// A browser holding all the tabs memory allows: the conversation's own tabs
+/// and how to free one, on either backend.
+pub(super) fn full_recovery(state: &HttpState, session: &str, result: &mut Value) {
+    if result["reason"] != "tab_budget_exhausted" {
+        return;
+    }
+    let mut tabs = state
+        .browser
+        .0
+        .lock()
+        .map(|hub| hub.tabs.owned(session))
+        .unwrap_or_default();
+    if let Some(headless) = &state.headless {
+        tabs.extend(headless.owned(session));
+    }
+    result["your_tabs"] = json!(tabs);
+    result["recovery"] = json!(
+        "The browser holds as many tabs as this machine allows. Close tabs in your_tabs you have finished with (browser_close), then open again."
+    );
+}
+
 /// Whether `session` may see `tab` on either backend.
 pub(super) fn owns(state: &HttpState, hub: &Inner, session: &str, tab: &str) -> bool {
     hub.tabs.check(session, tab, "tab.observe").is_ok()

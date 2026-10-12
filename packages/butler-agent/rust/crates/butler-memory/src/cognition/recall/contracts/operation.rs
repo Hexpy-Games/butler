@@ -130,6 +130,8 @@ pub(crate) enum RecallCoverageState {
     Partial,
     Unavailable,
     DisabledByRequest,
+    /// Switched off by the user's choice (the memory model is off).
+    Disabled,
 }
 
 #[derive(Clone, Debug, Serialize)]

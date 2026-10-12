@@ -137,6 +137,12 @@ impl Operation {
             });
             return Ok(vector);
         };
+        // The memory model is off by choice: the lane is switched off, not failing.
+        if !port.enabled() {
+            vector.disabled = true;
+            vector.code = Some(EMBEDDING_DISABLED.into());
+            return Ok(vector);
+        }
         // A fresh generation also warms through the adapter. Cold initialization
         // outlives this lane's deadline; the first answer still uses text lanes.
         let clock = &self.clock;
@@ -161,7 +167,12 @@ impl Operation {
                 vector.diagnostics = matches.diagnostics.clone();
                 vector.matches = Some(matches);
             }
-            Ok(Err(error)) => vector.code = Some(vector_error_code(&error)),
+            Ok(Err(error)) => {
+                let code = vector_error_code(&error);
+                // The choice switched off while this recall was starting.
+                vector.disabled = code == EMBEDDING_DISABLED;
+                vector.code = Some(code);
+            }
             Err(_) => vector.code = Some("vector_unavailable".into()),
         }
         Ok(vector)
@@ -205,6 +216,8 @@ impl Operation {
         }
     }
 }
+
+const EMBEDDING_DISABLED: &str = "embedding_disabled";
 
 /// A vector port error's message when it is a snake_case code.
 fn vector_error_code(error: &CognitionError) -> String {
