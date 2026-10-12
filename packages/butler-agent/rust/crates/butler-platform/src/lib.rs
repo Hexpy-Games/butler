@@ -15,6 +15,7 @@
 //!   pipe.
 //! - [`app_browser`]: the installed App's Electron, found and run without a
 //!   window as a browser host.
+//! - [`process_priority`]: background scheduling priority for long CPU work.
 //! - [`process_control`]: process groups, group signals, exit signals,
 //!   liveness, detached processes and the stop requests a service receives.
 //! - [`instance`]: the instance lock, host facts, process identity and
@@ -72,6 +73,7 @@ pub mod launcher;
 pub mod network;
 pub mod process_control;
 pub mod process_names;
+pub mod process_priority;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;

@@ -16,9 +16,15 @@ const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TEXTS: usize = 32;
 // Retain one minute for follow-up recalls, then release the resident model.
 const IDLE_EXIT: Duration = Duration::from_secs(60);
+/// `background` when the owner starts this worker for maintenance batches.
+pub(super) const PRIORITY_ENV: &str = "BUTLER_EMBED_WORKER_PRIORITY";
 
 /// Called only by main's hidden private entrypoint, before normal installation.
 pub(crate) async fn run() -> std::process::ExitCode {
+    // Hours of backlog embedding yield the CPU to what the user is doing.
+    if std::env::var_os(PRIORITY_ENV).is_some_and(|value| value == "background") {
+        let _ = butler_platform::process_priority::lower_current();
+    }
     let data_root = std::env::var_os("BUTLER_DATA")
         .map(PathBuf::from)
         .or_else(|| butler_platform::user_dirs::home_dir().map(|home| home.join(".butler")));

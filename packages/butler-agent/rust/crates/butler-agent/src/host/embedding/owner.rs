@@ -52,6 +52,8 @@ struct Inner {
     enabled: AtomicBool,
     /// A switch to off asks the actor to reap a live child.
     release: AtomicBool,
+    /// Wakes a model load waiting on `release`.
+    release_signal: Notify,
     /// True while no worker child is alive.
     released: watch::Sender<bool>,
     state: Mutex<QueueState>,
@@ -76,6 +78,7 @@ impl EmbeddingOwner {
             warm: AtomicBool::new(false),
             enabled: AtomicBool::new(false),
             release: AtomicBool::new(false),
+            release_signal: Notify::new(),
             released: watch::channel(true).0,
             state: Mutex::new(QueueState::default()),
             notify: Notify::new(),
@@ -127,19 +130,26 @@ impl EmbeddingOwner {
     }
 
     /// Turning the model off fails queued work as cold (units stay pending without
-    /// an attempt) and waits until a live worker has been reaped.
+    /// an attempt), cancels the active request, model load included, and waits
+    /// until the worker has actually been reaped, so its files can be deleted
+    /// (Windows refuses to delete files a live process holds).
     pub(crate) async fn disable(&self) {
         self.inner.enabled.store(false, Ordering::Release);
         self.inner.warm.store(false, Ordering::Release);
         self.inner.release.store(true, Ordering::Release);
+        self.inner.release_signal.notify_waiters();
         self.inner.released.send_replace(false);
         if let Some(active) = self.inner.state.lock().active_cancel.as_ref() {
             active.cancel();
         }
         self.inner.notify.notify_one();
         let mut released = self.inner.released.subscribe();
-        let _ =
-            tokio::time::timeout(Duration::from_secs(10), released.wait_for(|free| *free)).await;
+        let mut completion = self.completion.clone();
+        // A finished actor has reaped its child; it cannot report release again.
+        tokio::select! {
+            _ = released.wait_for(|free| *free) => {}
+            _ = completion.wait_for(Option::is_some) => {}
+        }
     }
 
     async fn embed_request(
@@ -192,6 +202,7 @@ impl EmbeddingOwner {
                 request.request_class,
                 EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
             ),
+            background: request.request_class == EmbeddingRequestClass::Background,
             cancellation: admitted_cancel.clone(),
             deadline,
             response: sender,
@@ -378,7 +389,7 @@ async fn initialize_for_ownership_test(inner: &Inner, child: &mut Option<WorkerC
     {
         return;
     }
-    let Ok(process) = spawn_worker(&inner.executable, &inner.data_root).await else {
+    let Ok(process) = spawn_worker(&inner.executable, &inner.data_root, false).await else {
         return;
     };
     *child = Some(process);
@@ -414,14 +425,16 @@ async fn run_item(
         if !item.cold_start_allowed {
             return Err(error(CognitionCode::EmbedWorkerCold));
         }
-        *child = Some(spawn_worker(&inner.executable, &inner.data_root).await?);
+        *child = Some(spawn_worker(&inner.executable, &inner.data_root, item.background).await?);
         inner.released.send_replace(false);
     }
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let load_started = Instant::now();
+        // A load outlives a caller that gave up, but not a switch to off.
         let initialized = tokio::select! {
             biased;
             () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
+            () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
             result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
                 result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
         };
@@ -463,6 +476,19 @@ async fn run_item(
             kill_and_reap(child).await;
             Err(failure)
         }
+    }
+}
+
+/// Resolves once a switch to off asks for the worker's release.
+async fn release_requested(inner: &Inner) {
+    loop {
+        let notified = inner.release_signal.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if inner.release.load(Ordering::Acquire) {
+            return;
+        }
+        notified.await;
     }
 }
 
