@@ -117,6 +117,8 @@ interface FirstRunCopy {
     agentsTitle: string; agentsBody: string; agentsEmpty: string;
     browsersTitle: string; browsersBody: string; browsersEmpty: string;
     importAction: string; importing: string; searching: string; skip: string;
+    /** Tooltip on a disabled Next or Import while nothing is picked. */
+    pickOne: string;
   };
   summary: {
     rowAi: string; rowReply: string; rowAgents: string; rowBrowsers: string;

@@ -43,7 +43,7 @@ export function FirstRunBrowserStep({ flow }: { flow: FirstRunFlow }) {
         ? <SetupWizardStepAction forward disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{text.next}</SetupWizardStepAction>
         : <>
           <SetupWizardStepAction disabled={imp.busy || !!imp.exportId} onClick={flow.finishImport}>{text.skip}</SetupWizardStepAction>
-          <Tooltip label={keychainBlocked ? copy.needsKeychain : undefined}>
+          <Tooltip label={imp.busy || denied ? undefined : nothing ? text.pickOne : keychainBlocked ? copy.needsKeychain : undefined}>
             <SetupWizardStepAction variant="default" disabled={imp.busy || !!imp.exportId || !current || (!denied && (nothing || keychainBlocked))}
               onClick={() => current && void (denied ? imp.folder(current.key) : imp.run(current.key))}>{primary}</SetupWizardStepAction>
           </Tooltip>

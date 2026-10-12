@@ -227,6 +227,7 @@ const firstRun = {
       importing: "Importing…",
       searching: "Looking…",
       skip: "Skip",
+      pickOne: "Pick at least one",
     },
     summary: {
       rowAi: "AI",

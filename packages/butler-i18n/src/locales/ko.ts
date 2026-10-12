@@ -233,6 +233,7 @@ const firstRun = {
       importing: "가져오는 중…",
       searching: "찾는 중…",
       skip: "건너뛰기",
+      pickOne: "하나 이상 고르세요",
     },
     summary: {
       rowAi: "AI",
