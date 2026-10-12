@@ -7,7 +7,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
     oauthStatus: "pending", label: "yeonwoo@example.com", started: 0, cancelled: 0,
     holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0, localModels: 1,
-    importEmpty: false, importRuns: 0, importUndos: 0, agentSources: [] as string[],
+    importEmpty: false, importRuns: 0, importUndos: 0, agentSources: [] as string[], agentRequests: [] as Record<string, unknown>[], agentPassthrough: false,
     memoryModel: "unset" as "unset" | "off" | "ready",
   };
   const catalog = await gateway.api<ModelCatalogView>("/model-catalog");
@@ -19,12 +19,10 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
     if (path === "/security/signins") { json(response, { available: true, sites: [] }); return true; }
     const agent = "/security/agent-import/", browser = "/security/browser-import/";
     if (!path.startsWith(agent) && !path.startsWith(browser)) return false;
+    // Real-gateway walk-throughs import from a fixture home (BUTLER_AGENT_IMPORT_HOME) instead.
+    if (state.agentPassthrough && path.startsWith(agent)) return false;
     if (path.endsWith("/sources")) {
-      const sources = path.startsWith(agent) ? [
-        { key: "claude-code", name: "Claude Code", instructions: true, servers: 3, needs_secret: 1, skipped: 0, unreadable: false, instructions_file: null },
-        { key: "codex", name: "Codex", instructions: true, servers: 2, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
-        { key: "opencode", name: "OpenCode", instructions: false, servers: 0, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
-      ] : [
+      const sources = path.startsWith(agent) ? AGENT_SOURCES : [
         { key: "chrome:default", browser: "chrome", name: "Default", permission: "ready" },
         { key: "safari", browser: "safari", name: "Safari", permission: "denied" },
       ];
@@ -33,9 +31,9 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
     if (path.endsWith("/start")) {
       const body = await requestBody(request); state.importRuns++;
       if (path.startsWith(agent)) state.agentSources.push(String(body.source));
-      const claude = body.source === "claude-code";
+      if (path.startsWith(agent)) state.agentRequests.push(body);
       json(response, path.startsWith(agent)
-        ? { run_id: `agent-${state.importRuns}`, instructions: 1, servers: claude ? 3 : 2, instructions_existing: 0, servers_existing: 0, needs_secret: claude ? 1 : 0, skipped: 0 }
+        ? { run_id: `agent-${state.importRuns}`, ...agentCounts(body) }
         : { run_id: `browser-${state.importRuns}`, bookmarks: 128, passwords: 37, history: 9, updated: 0, existing: 0, invalid: 3 });
       return true;
     }
@@ -117,4 +115,22 @@ async function requestBody(request: IncomingMessage): Promise<Record<string, unk
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+/** Two tools with items (Codex's instruction file is unreadable) and one with nothing to import. */
+const AGENT_SOURCES = [
+  { key: "claude-code", name: "Claude Code", instructions: true, servers: 3, needs_secret: 1, skipped: 0, unreadable: false, instructions_file: "~/.claude/CLAUDE.md",
+    items: { instructions: ["~/.claude/CLAUDE.md"], servers: [{ name: "github", needs_secret: true }, { name: "files", needs_secret: false }, { name: "search", needs_secret: false }] } },
+  { key: "codex", name: "Codex", instructions: false, servers: 2, needs_secret: 1, skipped: 0, unreadable: false, instructions_file: "~/.codex/AGENTS.md", instructions_error: "unreadable",
+    items: { instructions: [], servers: [{ name: "linear", needs_secret: false }, { name: "sentry", needs_secret: true }] } },
+  { key: "opencode", name: "OpenCode", instructions: false, servers: 0, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null, items: { instructions: [], servers: [] } },
+];
+
+/** Counts the stub import answers with: only what the request selected (omitted means all). */
+function agentCounts(body: Record<string, unknown>) {
+  const source = AGENT_SOURCES.find((entry) => entry.key === body.source)!;
+  const servers = Array.isArray(body.servers) ? source.items.servers.filter((server) => (body.servers as string[]).includes(server.name)) : source.items.servers;
+  const instructions = body.instructions !== false && source.items.instructions.length > 0 ? 1 : 0;
+  return { instructions, servers: servers.length, needs_secret: servers.filter((server) => server.needs_secret).length,
+    instructions_existing: 0, servers_existing: 0, skipped: 0 };
 }

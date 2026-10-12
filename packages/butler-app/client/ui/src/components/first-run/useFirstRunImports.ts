@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useAgentImport } from "../imports/useAgentImport";
 import { listSignIns, type BrowserImportCounts } from "../settings/signInsApi";
 import { useBrowserImport } from "../imports/useBrowserImport";
+import { useAgentPicks } from "./useAgentPicks";
 
 export function useFirstRunImports(enabled: boolean) {
   const started = useRef(false);
   if (enabled) started.current = true;
   const active = started.current;
   const agentImport = useAgentImport(active);
+  const agentPicks = useAgentPicks(agentImport);
   const browserImport = useBrowserImport(() => {}, active);
   const [keychain, setKeychain] = useState(false);
   const [runs, setRuns] = useState<Record<string, BrowserImportCounts>>({});
@@ -32,5 +34,5 @@ export function useFirstRunImports(enabled: boolean) {
     bookmarks: total.bookmarks + run.bookmarks, passwords: total.passwords + run.passwords,
     history: total.history + (run.history ?? 0),
   }), { bookmarks: 0, passwords: 0, history: 0 });
-  return { agentImport, browserImport, keychain, imported: { agents, browsers } };
+  return { agentImport, agentPicks, browserImport, keychain, imported: { agents, browsers } };
 }

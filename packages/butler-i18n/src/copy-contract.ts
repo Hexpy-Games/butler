@@ -123,6 +123,15 @@ interface FirstRunCopy {
     agentsAdded: (instructions: number, servers: number) => string;
     agentsNothing: string;
     agentsNeedsKey: (count: number) => string;
+    /** Import ①, one page per chosen tool: its instruction file and servers, each a switch. */
+    agentItemsTitle: (name: string) => string;
+    agentItemsProgress: (name: string, index: number, total: number) => string;
+    itemInstructions: string;
+    itemServer: string;
+    itemNeedsKey: string;
+    itemFileEmpty: string;
+    itemFileUnreadable: string;
+    itemFileTooLarge: string;
     /** Import ② after the run: what came over from the browser. */
     browsersDoneTitle: string;
   };
