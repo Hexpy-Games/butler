@@ -8,17 +8,21 @@ import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
  * One sub-session's messages and activity rows. The observer dialog and a
  * work block's inline details render this same list.
  */
-export function SessionObserverBody({ view, expandActivities = false }: {
+export function SessionObserverBody({ view, inline = false }: {
   view?: SessionView;
-  /** Open every activity (the owner is itself a disclosure). */
-  expandActivities?: boolean;
+  /**
+   * A work block's inline details: every activity open (the block is itself
+   * a disclosure) and no sub-session replies (the parent reply restates them).
+   */
+  inline?: boolean;
 }) {
   useAppLocale();
   return (
     <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
       <SessionObserverTimeline
         delegatedGoal={view?.relation?.safe_title}
-        expandActivities={expandActivities}
+        expandActivities={inline}
+        showReplies={!inline}
         messages={view?.messages ?? []}
         activityHistory={view?.activity_history}
         activeTurn={view?.active_turn}

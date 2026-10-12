@@ -29,7 +29,7 @@ export function WorkBlockDetails({ id, sessionId, title, view, open, live }: {
     >
       <ScrollArea maxHeight="sm" scrollRef={followLatest} dataTestClass="work-block-details-scroll">
         <ObservedSessionContext.Provider value={sessionId}>
-          <SessionObserverBody view={view} expandActivities />
+          <SessionObserverBody view={view} inline />
         </ObservedSessionContext.Provider>
       </ScrollArea>
     </Collapsible>
