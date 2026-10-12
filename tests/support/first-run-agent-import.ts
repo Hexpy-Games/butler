@@ -15,6 +15,11 @@ export async function agentImport(page: Page, copy: FirstRunCopy, state: ImportS
   const tool = (key: string) => page.locator(`[data-agent-import-source="${key}"] [role="switch"]`);
   const item = (name: string) => page.locator(`[data-agent-import-item="${name}"] [role="switch"]`);
   const next = () => page.getByRole("button", { name: copy.next, exact: true }).click();
+  /** The card morph briefly shows the leaving and arriving pages; wait for one page with this progress. */
+  const onPage = async (name: string, index: number) => {
+    await page.getByText(text.agentItemsProgress(name, index, 2), { exact: true }).waitFor();
+    await settleFirstRun(page);
+  };
   const back = () => page.getByRole("button", { name: copy.back, exact: true }).click();
   await page.locator("#first-run-agents-title").waitFor();
   const [runs, requests] = [state.importRuns, state.agentRequests.length];
@@ -35,24 +40,25 @@ export async function agentImport(page: Page, copy: FirstRunCopy, state: ImportS
   await page.locator("#first-run-agents-title").waitFor();
   await next();
   await page.getByRole("heading", { name: text.agentItemsTitle("Claude Code"), exact: true }).waitFor();
-  await page.getByText(text.agentItemsProgress("Claude Code", 1, 2), { exact: true }).waitFor();
+  await onPage("Claude Code", 1);
   for (const name of ["instructions", "github", "files", "search"]) assert.equal(await item(name).getAttribute("aria-checked"), "true", `${name} starts on`);
   await page.getByText(`${text.itemServer} · ${text.itemNeedsKey}`, { exact: true }).first().waitFor();
   await item("search").click();
   await capture(page, `${prefix}-agent-items-claude`);
   await next();
-  await page.getByText(text.agentItemsProgress("Codex", 2, 2), { exact: true }).waitFor();
+  await onPage("Codex", 2);
   assert.equal(await item("instructions").getAttribute("aria-disabled"), "true", "unreadable instruction file: blocked with its reason");
   await item("linear").click();
   await back();
-  await page.getByText(text.agentItemsProgress("Claude Code", 1, 2), { exact: true }).waitFor();
+  await onPage("Claude Code", 1);
   assert.equal(await item("search").getAttribute("aria-checked"), "false", "choices survive Back");
   await back();
   await page.locator("#first-run-agents-title").waitFor();
   assert.equal(state.importRuns, runs, "Back imports nothing");
   await next();
+  await onPage("Claude Code", 1);
   await next();
-  await page.getByText(text.agentItemsProgress("Codex", 2, 2), { exact: true }).waitFor();
+  await onPage("Codex", 2);
   assert.equal(await item("linear").getAttribute("aria-checked"), "false");
   await capture(page, `${prefix}-agent-items-codex`);
   await page.getByRole("button", { name: text.importAction, exact: true }).click();
