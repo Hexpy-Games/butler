@@ -402,11 +402,13 @@ fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation,
             ShellAccess::ReadOnly
         }
     };
+    // Data-folder reads follow ordinary file access; only credential roots
+    // and project secrets belong in the private-read exclusions.
     let shell = if input.access == GuidedAccess::ContainedObservation {
         command_sandbox::login_shell_contained(
             &input.command,
             &input.host_environment,
-            &[input.butler_data.as_path()],
+            &[],
             &[input.workspace_root.as_path()],
         )
     } else {
