@@ -18,6 +18,7 @@ mod capture;
 mod cdp;
 mod check;
 mod collect;
+mod collect_crop;
 mod dialogs;
 pub mod downloads;
 mod events;

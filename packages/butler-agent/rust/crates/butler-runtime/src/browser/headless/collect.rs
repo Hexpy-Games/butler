@@ -1,5 +1,5 @@
 //! Source image bytes fetched through the observed tab's network session.
-use super::{capture, page::Page, scripts::scripts};
+use super::{capture, collect_crop, page::Page, scripts::scripts};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 const SOURCE: &str =
@@ -20,8 +20,7 @@ pub(crate) async fn collect(page: &Page, args: &Value) -> Result<Value, String> 
         return Ok(json!({"status":"refused","reason":"stale_ref"}));
     }
     if args["region"].is_array() {
-        convert_region(&mut args, &observation)?;
-        return capture::screenshot(page, &args).await;
+        return collect_crop::capture(page, &args, epoch).await;
     }
     let frame = if let Some(reference) = args["ref"].as_str() {
         observation.frame_of(reference).ok_or("stale_ref")?
@@ -126,29 +125,6 @@ async fn read_stream(
             return Ok(bytes);
         }
     }
-}
-
-fn convert_region(args: &mut Value, observation: &super::state::Observation) -> Result<(), String> {
-    let region = args["region"].as_array().ok_or("invalid_region")?;
-    let Some(g) = observation.geometry else {
-        return Err("image_unavailable".into());
-    };
-    if region.len() != 4 {
-        return Err("invalid_region".into());
-    }
-    let mut coords = Vec::new();
-    for (i, v) in region.iter().enumerate() {
-        let n = v.as_f64().ok_or("invalid_region")?;
-        coords.push(
-            n * if i % 2 == 0 {
-                g.width / g.css_width
-            } else {
-                g.height / g.css_height
-            },
-        );
-    }
-    args["region"] = json!(coords);
-    Ok(())
 }
 
 async fn check_ref(
