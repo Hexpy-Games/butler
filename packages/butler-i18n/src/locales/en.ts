@@ -275,7 +275,7 @@ export const enUsCopy: AppCopy = {
     manageBookmarks: "Manage bookmarks", downloads: "Downloads", downloading: "Downloading", showInFolder: "Show in folder", more: "More",
     findInPage: "Find in page", zoom: "Zoom", print: "Print", openExternal: "Open in default browser", settings: "Browser settings",
     secure: "Secure connection", notSecure: "Not secure", butlerOutput: "Butler output", preview: "Preview", signedIn: "Signed in", signinRequired: "Sign-in needs you", captcha: "CAPTCHA", signinForm: "Sign-in page", saveSignIn: "Save sign-in", signinSaved: "Sign-in saved", later: "Not now",
-    butlerTab: "Butler's tab", agentUsing: "Butler is browsing", takeOver: "Take over", userControl: "You're in control", butlerWaits: "Butler is waiting",
+    agentUsing: "Butler is browsing", takeOver: "Take over", userControl: "You're in control", butlerWaits: "Butler is waiting",
     giveBack: "Give back to Butler", autoGiveBack: "Returns to Butler when you leave", stopTask: "Stop task", stopped: "Task stopped",
     waiting: "Waiting for approval", review: "Review", needYou: "Your input needed", keypad: "Security keypad", mfa: "Two-step verification",
     passkey: "Passkey", paymentRequired: "Payment needs you", typeYourself: "Type it yourself", chooseFile: "Choose file", printer: "Printer", noPrinters: "No printers", popupBlocked: "Pop-up blocked", allow: "Allow", popupOpened: "Pop-up open",

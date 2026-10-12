@@ -3,9 +3,9 @@
 ## What is this block
 `PageBand` is one 40px line on a `PageCard`'s top edge for page-scoped state:
 who holds the tab (agent, user), an approval (waiting), a request for your
-input (warning), picking (pick), page events such as a blocked pop-up (info) and, on a tab Butler can
-hold but holds nothing, a calm idle line (idle). Label, detail, hint and up to
-three actions.
+input (warning), picking (pick) and page events such as a blocked pop-up
+(info). Label, detail, hint and up to three actions. There is no idle tone:
+when nothing on the page needs saying, there is no band.
 
 ## When to use this block
 Use it for state that belongs to one page and the verbs that act on it:
@@ -16,8 +16,9 @@ The App maps the tab state to a tone and copy (butler-i18n `browser.*`) and
 passes `size="xs"` buttons in a `ButtonContainer size="xs"`. It composes one
 band per tab: when two states meet (Butler holds the tab and a pop-up is
 blocked), the second becomes the detail and its action joins the first's.
-On a `PageCard` with `reserveBand`, the band only changes tone and text in a
-row that never moves; `idle` fills the row when nothing else does.
+On a `PageCard` with `reserveBand`, the band comes, changes tone and leaves
+in a row that never moves; with no band the row is empty and the card's
+surface starts below it, so nothing reads as a band.
 
 ## Usage
 
@@ -38,7 +39,9 @@ truncates. Below 560px the hint drops; below 360px the detail drops.
 - Do not exceed three actions.
 - Do not stack two bands; merge the second state into the detail.
 - Do not mount and unmount the band on a bare card; use `PageCard reserveBand`
-  so the page never moves (`idle` on Butler's tabs, an empty row elsewhere).
+  so the page never moves.
+- Do not fill the row with a status nobody can act on (Butler's tab, idle);
+  leave it empty.
 
 ## Tags
 browser, band, page state, agent, approval, picking
