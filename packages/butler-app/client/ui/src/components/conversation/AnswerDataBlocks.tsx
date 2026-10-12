@@ -4,6 +4,7 @@ import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
 import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
 import { Button, ButtonContainer, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, CHART_COLORS, chartColor,
   Clickable, Collapsible, CopyButton, IconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Stack, Typo } from "@/butler-ds";
+import { gatewayImageSource } from "@/app/messageFileUrls";
 import { openLink } from "../browser/browserBridge";
 import { answerSource, runAnswerAction, saveAnswerItem } from "./answerBlockActions";
 import { appCopy, useAppLocale } from "@/app/copy";
@@ -40,7 +41,7 @@ export function AnswerGallery({ block }: { block: AnswerGalleryView }) {
     {block.items.map((item, index) => <Stack key={index} basis="sm" shrink={false} gap="xs">
       <Clickable stretch variant="text" disabled={!item.source} aria-label={item.caption ?? copy.openImage}
         onClick={() => runAnswerAction(() => openLink(item.source!))}>
-        <Stack grow gap="none"><MediaFrame src={item.image_url} aspect={block.media ?? "4:5"} alt={item.caption} /></Stack>
+        <Stack grow gap="none"><MediaFrame src={gatewayImageSource(item.image_url)} aspect={block.media ?? "4:5"} alt={item.caption} /></Stack>
       </Clickable>
       {item.caption ? <Typo.Caption>{item.caption}</Typo.Caption> : null}
       <ButtonContainer size="icon-sm">
