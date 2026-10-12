@@ -68,28 +68,36 @@
 }
 
 .card[data-state="disabled"] > *,
+.card[data-state="disabled"] .text > *,
 .tile[data-state="disabled"] > * {
   opacity: 0.5;
 }
 
+/* First-line rule: the logo tile and the trailing mark center on the title
+   line (row 1); the description runs below the title. */
 .card {
   display: grid;
   min-height: 64px;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  align-content: center;
   align-items: center;
-  gap: var(--space-md);
+  column-gap: var(--space-md);
   padding: var(--space-md);
 }
 
+.card > :first-child {
+  grid-row: 1;
+}
+
 .text {
-  display: grid;
-  min-width: 0;
-  gap: var(--border-hairline);
+  display: contents;
 }
 
 .titleRow {
   display: flex;
   min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
   align-items: center;
   gap: var(--space-sm);
 }
@@ -103,7 +111,15 @@
   min-width: 0;
 }
 
+/* Row 1 is as tall as the 36px tile; pull the description up to the title's
+   line box so title and description keep their hairline gap. */
 .description {
+  grid-column: 2;
+  grid-row: 2;
+  margin-block-start: calc(
+    (var(--typo-label-size) * var(--typo-label-line-height) - 36px) / 2 +
+      var(--border-hairline)
+  );
   color: var(--text-secondary);
 }
 
@@ -113,6 +129,8 @@
 
 .end {
   display: flex;
+  grid-column: 3;
+  grid-row: 1;
   align-items: center;
   color: var(--text-tertiary);
 }
