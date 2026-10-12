@@ -18,7 +18,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
             "/settings",
             Some(json!({"security": {
                 "remote_access_enabled": true,
-                "allowed_hosts": ["butler.example.com", format!("butler.example.com:{}", s.agent.launch.port), "workstation.local", "192.168.1.10"]
+                "allowed_hosts": ["butler.example.com", format!("butler.example.com:{}", s.agent.launch.port), "workstation.local", "192.0.2.10"]
             }})),
             &[],
         )
@@ -31,10 +31,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
         "http://workstation.local:{}",
         s.agent.launch.port
     ))));
-    assert!(urls.contains(&json!(format!(
-        "http://192.168.1.10:{}",
-        s.agent.launch.port
-    ))));
+    assert!(urls.contains(&json!(format!("http://192.0.2.10:{}", s.agent.launch.port))));
     for address in view["bind_addresses"].as_array().unwrap().iter().skip(1) {
         assert!(urls.contains(&json!(format!("http://{}", address.as_str().unwrap()))));
     }
