@@ -5,7 +5,7 @@ import { resolveAppearanceTheme } from "@/app/utils.ts";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 import { FirstRunBrowserImport } from "./FirstRunBrowserImport";
-import { useSetupSceneReady } from "./useSetupSceneReady";
+import { useSetupScene } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
 import { FirstRunWelcome } from "./FirstRunWelcome";
@@ -31,8 +31,8 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
   const appearance = useButlerStore((state) => state.settings.appearance_theme);
   const tone = resolveAppearanceTheme(appearance, useSystemThemePreference());
   const completedAt = useButlerStore((state) => state.settings.onboarding?.completed_at);
-  const sceneReady = useSetupSceneReady();
-  if (!sceneReady) return null;
+  // The card renders at once; the intro waits for a visible window, or settles still when the window stays unseen.
+  const scene = useSetupScene();
   return (
     <SetupWizardShell
       data-first-run-screen={flow.step}
@@ -41,7 +41,8 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       tone={tone}
       variant="focus"
       anchor="top"
-      intro={mode === "first-run" && !completedAt ? "full" : "rerun"}
+      intro={mode === "first-run" && !completedAt && scene !== "still" ? "full" : "rerun"}
+      introHeld={scene === "hold"}
       stepKey={flow.step === "welcome" ? "welcome" : "steps"}
       onScroll={(event) => { event.currentTarget.scrollLeft = 0; }}
       windowControls={<WindowControls />}
