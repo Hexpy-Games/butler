@@ -1,7 +1,6 @@
 import {
   AlertCircle, Button, CheckCircle2, ButtonContainer, Copy, Globe2, Notice, SetupWizardStepAction, Spinner, Stack, Tooltip, Typo,
 } from "@/butler-ds";
-import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import { signInScreenState, type SignInScreenState } from "./signInScreenState";
 import type { FirstRunFlow } from "./useFirstRunFlow";
@@ -16,7 +15,7 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
   const description = stopped ? state === "timedout" ? copy.signInTimedOutBody : copy.signInCancelledBody : copy.signInBody;
   const connected = Boolean(flow.commit.connected);
   if (connected) return (
-    <FirstRunStepCard flow={flow} contentKey="signin:connected" icon={<CardGlyph cardId="chatgpt" />}
+    <FirstRunStepCard flow={flow} contentKey="signin:connected"
       title={copy.readyTitle(copy.providerNames.chatgpt)} onBack={flow.backToList}
       actions={<SetupWizardStepAction forward onClick={flow.toReply}>{copy.next}</SetupWizardStepAction>}
     >
@@ -24,7 +23,7 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
     </FirstRunStepCard>
   );
   return (
-    <FirstRunStepCard flow={flow} contentKey={`signin:${state}`} icon={<CardGlyph cardId="chatgpt" />}
+    <FirstRunStepCard flow={flow} contentKey={`signin:${state}`}
       title={title} description={description} onBack={flow.backToList}
       actions={stopped
         ? <SetupWizardStepAction variant="default" onClick={() => void signIn.start()}>{copy.retry}</SetupWizardStepAction>

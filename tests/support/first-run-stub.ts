@@ -7,7 +7,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
     oauthStatus: "pending", label: "yeonwoo@example.com", started: 0, cancelled: 0,
     holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0, localModels: 1,
-    importEmpty: false, importRuns: 0, importUndos: 0,
+    importEmpty: false, importRuns: 0, importUndos: 0, agentSources: [] as string[],
     memoryModel: "unset" as "unset" | "off" | "ready",
   };
   const catalog = await gateway.api<ModelCatalogView>("/model-catalog");
@@ -21,6 +21,7 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
     if (!path.startsWith(agent) && !path.startsWith(browser)) return false;
     if (path.endsWith("/sources")) {
       const sources = path.startsWith(agent) ? [
+        { key: "claude-code", name: "Claude Code", instructions: true, servers: 3, needs_secret: 1, skipped: 0, unreadable: false, instructions_file: null },
         { key: "codex", name: "Codex", instructions: true, servers: 2, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
         { key: "opencode", name: "OpenCode", instructions: false, servers: 0, needs_secret: 0, skipped: 0, unreadable: false, instructions_file: null },
       ] : [
@@ -30,9 +31,11 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
       json(response, { sources: state.importEmpty ? [] : sources }); return true;
     }
     if (path.endsWith("/start")) {
-      await requestBody(request); state.importRuns++;
+      const body = await requestBody(request); state.importRuns++;
+      if (path.startsWith(agent)) state.agentSources.push(String(body.source));
+      const claude = body.source === "claude-code";
       json(response, path.startsWith(agent)
-        ? { run_id: `agent-${state.importRuns}`, instructions: 1, servers: 2, instructions_existing: 0, servers_existing: 0, needs_secret: 0, skipped: 0 }
+        ? { run_id: `agent-${state.importRuns}`, instructions: 1, servers: claude ? 3 : 2, instructions_existing: 0, servers_existing: 0, needs_secret: claude ? 1 : 0, skipped: 0 }
         : { run_id: `browser-${state.importRuns}`, bookmarks: 128, passwords: 37, history: 9, updated: 0, existing: 0, invalid: 3 });
       return true;
     }

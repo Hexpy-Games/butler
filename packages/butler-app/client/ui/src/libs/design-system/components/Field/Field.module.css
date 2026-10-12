@@ -34,6 +34,27 @@
   align-items: center;
 }
 
+/* Control, then label and description: the control centers on the label's
+   line, never on the whole label + description block. */
+.field[data-orientation="horizontal"]:has(> .content) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  row-gap: 2px;
+}
+
+.field[data-orientation="horizontal"] > .content {
+  display: contents;
+}
+
+.field[data-orientation="horizontal"] > .content > * {
+  grid-column: 2;
+}
+
+.field[data-orientation="horizontal"] > :not(.content) {
+  grid-row: 1;
+}
+
 .field[data-orientation="responsive"] {
   flex-direction: column;
 }
