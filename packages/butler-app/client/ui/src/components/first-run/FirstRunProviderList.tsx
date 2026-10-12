@@ -31,7 +31,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
     <FirstRunStepCard flow={flow} contentKey="providers" icon={<Sparkles size="lg" />} title={copy.connectTitle}
-      titleId="first-run-connect-title" description={copy.connectLede} onBack={flow.backToConsent}
+      titleId="first-run-connect-title" description={copy.connectLede} onBack={flow.backFromConnect}
       footerStart={<Button
         aria-controls="first-run-more-providers" aria-expanded={expanded}
         iconEnd={expanded ? <ChevronUpIcon size="sm" /> : <ChevronDown size="sm" />}

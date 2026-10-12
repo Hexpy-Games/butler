@@ -48,6 +48,12 @@ struct Inner {
     executable: PathBuf,
     next_id: AtomicU64,
     warm: AtomicBool,
+    /// The user's memory-model choice with the model present; off starts no child.
+    enabled: AtomicBool,
+    /// A switch to off asks the actor to reap a live child.
+    release: AtomicBool,
+    /// True while no worker child is alive.
+    released: watch::Sender<bool>,
     state: Mutex<QueueState>,
     notify: Notify,
     shutdown: CancellationToken,
@@ -68,6 +74,9 @@ impl EmbeddingOwner {
             executable,
             next_id: AtomicU64::new(1),
             warm: AtomicBool::new(false),
+            enabled: AtomicBool::new(false),
+            release: AtomicBool::new(false),
+            released: watch::channel(true).0,
             state: Mutex::new(QueueState::default()),
             notify: Notify::new(),
             shutdown: CancellationToken::new(),
@@ -112,11 +121,35 @@ impl EmbeddingOwner {
         }
     }
 
+    /// The model is chosen and present: requests may start the worker.
+    pub(crate) fn enable(&self) {
+        self.inner.enabled.store(true, Ordering::Release);
+    }
+
+    /// Turning the model off fails queued work as cold (units stay pending without
+    /// an attempt) and waits until a live worker has been reaped.
+    pub(crate) async fn disable(&self) {
+        self.inner.enabled.store(false, Ordering::Release);
+        self.inner.warm.store(false, Ordering::Release);
+        self.inner.release.store(true, Ordering::Release);
+        self.inner.released.send_replace(false);
+        if let Some(active) = self.inner.state.lock().active_cancel.as_ref() {
+            active.cancel();
+        }
+        self.inner.notify.notify_one();
+        let mut released = self.inner.released.subscribe();
+        let _ =
+            tokio::time::timeout(Duration::from_secs(10), released.wait_for(|free| *free)).await;
+    }
+
     async fn embed_request(
         &self,
         request: EmbeddingRequest,
         cancellation: CancellationToken,
     ) -> CognitionResult<EmbeddingResult> {
+        if !self.inner.enabled.load(Ordering::Acquire) {
+            return Err(error(CognitionCode::EmbedWorkerCold));
+        }
         validate_request(&request)?;
         // The source socket uses 300 seconds when its caller supplies no
         // deadline; checked projection supplies its own 30-second deadline.
@@ -191,7 +224,11 @@ impl Drop for EmbeddingOwner {
 
 impl CognitionEmbeddingPort for EmbeddingOwner {
     fn is_warm(&self) -> bool {
-        self.inner.warm.load(Ordering::Acquire)
+        self.enabled() && self.inner.warm.load(Ordering::Acquire)
+    }
+
+    fn enabled(&self) -> bool {
+        self.inner.enabled.load(Ordering::Acquire)
     }
 
     fn embed(
@@ -286,6 +323,11 @@ async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     initialize_for_ownership_test(&inner, &mut child).await;
     loop {
+        if inner.release.swap(false, Ordering::AcqRel) {
+            kill_and_reap(&mut child).await;
+            inner.warm.store(false, Ordering::Release);
+        }
+        inner.released.send_replace(child.is_none());
         let next = {
             let mut state = inner.state.lock();
             if state.closed {
@@ -325,6 +367,7 @@ async fn run_actor(inner: Arc<Inner>) {
     }
     kill_and_reap(&mut child).await;
     inner.warm.store(false, Ordering::Release);
+    inner.released.send_replace(true);
 }
 
 // Exercise the normal native owner/worker protocol during a held CPU load.
@@ -352,6 +395,9 @@ async fn run_item(
     child: &mut Option<WorkerChild>,
     item: &Pending,
 ) -> CognitionResult<EmbeddingResult> {
+    if !inner.enabled.load(Ordering::Acquire) {
+        return Err(error(CognitionCode::EmbedWorkerCold));
+    }
     if item.cancellation.is_cancelled() {
         return Err(error(CognitionCode::EmbedRequestCancelled));
     }
@@ -369,6 +415,7 @@ async fn run_item(
             return Err(error(CognitionCode::EmbedWorkerCold));
         }
         *child = Some(spawn_worker(&inner.executable, &inner.data_root).await?);
+        inner.released.send_replace(false);
     }
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let load_started = Instant::now();

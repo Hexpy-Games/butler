@@ -1,6 +1,7 @@
 //! First-run setup routes (#230):
 //!
 //! - `GET /setup/readiness`, `POST /setup/readiness/retry`
+//! - `POST /setup/memory-model` (`{enabled}`: the persisted memory-model choice)
 //! - `GET /setup/local-model-servers`
 //! - `POST /setup/credentials/verify` (checks a key, stores nothing)
 //! - `POST /credentials` (stores a key under a generated name)
@@ -51,6 +52,13 @@ pub(super) async fn route(
             };
             envelope(StatusCode::ACCEPTED, view)
         }
+        (&Method::POST, "/setup/memory-model") => {
+            let input: MemoryModelChoice = body(request).await?;
+            envelope(
+                StatusCode::OK,
+                setup.choose_memory_model(input.enabled).await?,
+            )
+        }
         (&Method::GET, "/setup/local-model-servers") => {
             envelope(StatusCode::OK, setup.local_model_servers().await?)
         }
@@ -78,6 +86,12 @@ pub(super) async fn route(
         }
         _ => oauth_flow_route(&setup, &method, uri.path()).await,
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemoryModelChoice {
+    enabled: bool,
 }
 
 #[derive(Default, serde::Deserialize)]

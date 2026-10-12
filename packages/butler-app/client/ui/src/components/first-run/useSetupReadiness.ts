@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiErrorCode, subscribeLiveEvents } from "@/app/api.ts";
 import { startFirstRunSetup } from "@/app/firstRunSetup.ts";
-import { fetchSetupReadiness, isMissingRoute, retrySetupReadiness } from "@/app/setupConnection.ts";
+import { chooseMemoryModel, fetchSetupReadiness, isMissingRoute, retrySetupReadiness } from "@/app/setupConnection.ts";
 import {
   combineReadiness,
+  memoryModelSettled,
   readinessFromEvent,
   type LocalPreparation,
   type SetupReadinessView,
@@ -16,6 +17,8 @@ export interface SetupReadinessController {
   readiness: SetupReadinessView;
   retry: () => void;
   repair: () => void;
+  /** Saves the memory-model choice; on starts its background download. */
+  chooseModel: (enabled: boolean) => Promise<void>;
 }
 
 /**
@@ -47,7 +50,7 @@ export function useSetupReadiness(): SetupReadinessController {
     };
   }, [attempt]);
 
-  const settled = agent === "unsupported" || ((agent?.status === "ready" || agent?.status === "failed") && (!agent.memory_model || agent.memory_model.state === "ready" || agent.memory_model.state === "failed"));
+  const settled = agent === "unsupported" || ((agent?.status === "ready" || agent?.status === "failed") && memoryModelSettled(agent.memory_model));
   useEffect(() => {
     if (local.phase !== "ready" || settled) return undefined;
     let cancelled = false;
@@ -90,5 +93,6 @@ export function useSetupReadiness(): SetupReadinessController {
     readiness: combineReadiness(local, agent),
     retry,
     repair: () => setAttempt({ mode: "repair" }),
+    chooseModel: async (enabled) => { setAgent(await chooseMemoryModel(enabled)); },
   };
 }

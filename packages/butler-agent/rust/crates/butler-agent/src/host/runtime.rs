@@ -93,7 +93,7 @@ impl AgentRuntime {
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         startup.phase("configuration_and_models");
-        let (coordinator, embedding, vectors, fresh_memory) =
+        let (coordinator, embedding, vectors, fresh_memory, memory_management) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         startup.phase("memory_preflight");
         let files = WorkspaceFiles::new(4);
@@ -130,6 +130,8 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
+        let memory_acquisition =
+            memory_bootstrap::acquisition(&paths.data_root, &embedding, &memory_sync).await;
         startup.phase("defaults_observer_and_memory_consumer");
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
@@ -414,8 +416,6 @@ impl AgentRuntime {
             developer_log_capture,
             host: owner,
         });
-        let (memory_management, memory_acquisition) =
-            Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
             hooks,
@@ -457,28 +457,6 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
-}
-
-impl AgentRuntime {
-    fn memory_owners(
-        data_root: &std::path::Path,
-        environment: &butler_memory::cognition::CognitionPathEnvironment,
-        coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
-    ) -> (
-        Arc<butler_memory::management::MemoryManagement>,
-        Arc<crate::host::embedding::worker::assets::Acquisition>,
-    ) {
-        (
-            Arc::new(butler_memory::management::MemoryManagement::new(
-                data_root.to_path_buf(),
-                environment.clone(),
-                coordinator,
-            )),
-            Arc::new(crate::host::embedding::worker::assets::Acquisition::start(
-                data_root.to_path_buf(),
-            )),
-        )
-    }
 }
 
 impl AgentRuntime {
