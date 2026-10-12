@@ -12,8 +12,11 @@ export function SessionObserverTimeline({
   latestTurn,
   children,
   delegatedGoal,
+  expandActivities,
 }: {
   messages: MessageRecord[];
+  /** List every activity open, for a view that is itself a disclosure (the inline work block). */
+  expandActivities?: boolean;
   delegatedGoal?: string;
   activityHistory?: SessionView["activity_history"];
   activeTurn?: SessionView["active_turn"];
@@ -69,7 +72,7 @@ export function SessionObserverTimeline({
           >
             {entry.kind === "message"
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
-              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active}
+              : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active} expandAll={expandActivities}
                   state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
           </MessageRow>
         </Fragment>

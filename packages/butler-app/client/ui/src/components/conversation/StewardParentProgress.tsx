@@ -1,10 +1,13 @@
 import { useSessionViewSubscription } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
+  Button,
   ButtonContainer,
+  ChevronDown,
+  ChevronRight,
   Eye,
   IconButton,
   Play,
@@ -20,6 +23,8 @@ import {
   stewardToolRows,
 } from "./stewardProgressPresentation.ts";
 import { workerActivityTitle } from "./workerActivityTitle.ts";
+import { WorkBlockDetails } from "./WorkBlockDetails.tsx";
+import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
 
 export function StewardParentProgress({
   progress,
@@ -35,6 +40,8 @@ export function StewardParentProgress({
     approved_plan_completed: view.approved_plan_completed ?? progress.child.approved_plan_completed, waiting_for_children: view.waiting_for_children } : progress.child;
   const rows = (child.active_turn ?? child.latest_turn)?.progress?.safe_progress_rows ?? progress.rows;
   const [resuming, setResuming] = useState(false);
+  const [detailsOpen, toggleDetails] = useWorkBlockExpanded(child.session_id);
+  const detailsId = useId();
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,
   );
@@ -91,18 +98,33 @@ export function StewardParentProgress({
           {stewardProgressStatus(child)}
           {child.active_turn ? ` · ${activityLabel}` : ""}
         </Typo.Caption>
-        <Stack
-          align="row"
-          aria-label={activityLabel}
-          data-test-class="steward-tool-summary"
-          gap="xs"
-          wrap
-        >
-          <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
-          <Typo.Caption tone="secondary">
-            {toolSummary || appCopy.interfaceDetails.noHistory}
-          </Typo.Caption>
+        <Stack align="row" cross="start" gap="sm" justify="between">
+          <Stack
+            align="row"
+            aria-label={activityLabel}
+            data-test-class="steward-tool-summary"
+            gap="xs"
+            minWidth="0"
+            wrap
+          >
+            <Typo.Caption tone="tertiary">{activityLabel}</Typo.Caption>
+            <Typo.Caption tone="secondary">
+              {toolSummary || appCopy.interfaceDetails.noHistory}
+            </Typo.Caption>
+          </Stack>
+          <Button
+            aria-controls={detailsOpen ? detailsId : undefined}
+            aria-expanded={detailsOpen}
+            data-test-class="work-block-details-toggle"
+            iconEnd={detailsOpen ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
+            onClick={toggleDetails}
+            text={appCopy.conversation.work.showDetailsLabel}
+            type="button"
+            variant="inline"
+          />
         </Stack>
+        <WorkBlockDetails id={detailsId} live={Boolean(child.active_turn || child.waiting_for_children)}
+          open={detailsOpen} sessionId={child.session_id} title={child.title} view={view} />
       </Stack>
     </SurfacePanel>
   );
