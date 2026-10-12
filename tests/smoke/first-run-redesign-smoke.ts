@@ -1,6 +1,7 @@
 // test-category: race
 import { strict as assert } from "node:assert";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
@@ -263,6 +264,56 @@ async function preparationStates(page: Page) {
   await finish(page, "ko");
 }
 
+/** Relaunch with durable consent/connection, then trace every renderer frame from startup. */
+async function resumeImport(page: Page) {
+  await reset(page, "ko", "light");
+  stub.state.local = true;
+  await reachProviders(page, "ko");
+  await page.locator('[data-card-id="local"]').click();
+  await page.locator('[role="radio"]').waitFor();
+  await page.getByRole("button", { name: firstRunCopy.ko.customConnect, exact: true }).click();
+  await page.locator('[data-first-run-screen="import"]').waitFor();
+  await capture(page, "before-resume-import");
+  await app!.stop();
+  stub.state.readiness = "preparing";
+  const renderer = mkdtempSync(join(tmpdir(), "first-run-render-probe-"));
+  const dist = resolve("packages/butler-app/client/ui/dist");
+  cpSync(dist, renderer, { recursive: true });
+  writeFileSync(join(renderer, "index.html"), readFileSync(join(dist, "index.html"), "utf8")
+    .replace("<head>", '<head><script src="./first-render-probe.js"></script>'));
+  writeFileSync(join(renderer, "first-render-probe.js"), `
+    window.firstRunFrames = [];
+    const sample = () => {
+      const step = document.querySelector('[data-first-run-screen]')?.getAttribute('data-first-run-screen');
+      if (step && window.firstRunFrames.at(-1) !== step) window.firstRunFrames.push(step);
+    };
+    new MutationObserver(sample).observe(document, {subtree:true, childList:true, attributes:true, attributeFilter:['data-first-run-screen']});
+    const paint = () => { sample(); requestAnimationFrame(paint); };
+    requestAnimationFrame(paint);
+  `);
+  try {
+    app = await firstRunElectron(server, stub.url, "[data-first-run-screen]", {
+      env: { BUTLER_APP_RENDERER_DIST: renderer },
+    });
+    page = app.page;
+    await page.locator('[data-first-run-screen="import"]').waitFor();
+    await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor();
+    await capture(page, "after-resume-import-preparing");
+    stub.state.readiness = "ready";
+    await page.locator('[data-settings-section-id="browser-import"] [data-slot="settings-section-skeleton"]').waitFor({ state: "hidden" });
+    await capture(page, "after-resume-import-ready");
+    const frames = await page.evaluate(() => (window as unknown as { firstRunFrames: string[] }).firstRunFrames);
+    assert.deepEqual(frames, ["import"], "saved import is the first rendered step, including readiness wait");
+    measurements.push({ name: "resume-first-render", frames });
+    assert.equal((await server.api<{ onboarding: { completed_at: string | null } }>("/settings")).onboarding.completed_at, null);
+  } finally {
+    await app?.stop();
+    rmSync(renderer, { recursive: true, force: true });
+  }
+  app = await firstRunElectron(server, stub.url);
+  return app.page;
+}
+
 /** Settings → Memory carries the first-run switch; the smoke chose off. Light and dark captures. */
 async function memorySettings(page: Page) {
   const original = (await server.api<{ appearance_theme: string }>("/settings")).appearance_theme;
@@ -307,7 +358,7 @@ async function renewalAndRerun(page: Page) {
 
 try {
   app = await firstRunElectron(server, stub.url);
-  const page = app.page;
+  let page = app.page;
   await installIntroProbe(page);
   const module = `process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})`;
   await app.main(`(()=>{globalThis.signInOpens=[];${module}('electron').shell.openExternal=async url=>{globalThis.signInOpens.push(url)}})()`);
@@ -317,6 +368,7 @@ try {
   for (const language of ["ko", "en"] as const) for (const theme of ["light", "dark"] as const)
     for (const kind of ["key", "local", "custom"] as const) await otherConnection(page, language, theme, kind);
   await preparationStates(page);
+  page = await resumeImport(page);
   await renewalAndRerun(page);
   for (const width of [320, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 710 });
