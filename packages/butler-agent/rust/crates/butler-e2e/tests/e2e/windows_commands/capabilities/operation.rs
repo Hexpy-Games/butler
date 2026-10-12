@@ -99,7 +99,7 @@ pub(super) async fn operation(
             let label = s.sandbox.root.file_name().unwrap().to_string_lossy();
             assert_eq!(
                 operation["targets"],
-                json!([cwd.map_or_else(|| label.to_string(), |path| format!("{label}/{path}"))])
+                json!([cwd.map_or_else(|| label.to_string(), str::to_owned)])
             );
         }
         if case.tool == "write_file" {

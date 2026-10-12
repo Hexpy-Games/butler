@@ -115,11 +115,15 @@ pub(super) async fn approve(
     } else if matches!(case.tool, "list_files" | "grep_files") {
         json!([case.args["root"]])
     } else {
-        let path = case.args["path"].as_str().unwrap();
-        json!([if Path::new(path).is_absolute() {
-            path.replace('\\', "/")
+        let path = case.args["path"].as_str().unwrap().replace('\\', "/");
+        json!([if Path::new(&path).is_absolute() {
+            path
         } else {
-            s.sandbox.data.join(path).to_string_lossy().into_owned()
+            s.sandbox
+                .data
+                .join(path)
+                .to_string_lossy()
+                .replace('\\', "/")
         }])
     };
     assert_eq!(
