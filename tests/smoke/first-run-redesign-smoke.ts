@@ -65,7 +65,8 @@ async function capture(page: Page, name: string) {
   measurements.push({ name, ...geometry });
   writeFileSync(join(output, "measurements.json"), JSON.stringify(measurements, null, 2));
   await page.screenshot({ path: join(output, `${name}.png`) });
-  const viewport = page.viewportSize()!;
+  // A relaunched window has no emulated viewport yet; restore its natural size then.
+  const viewport = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await settleFirstRun(page);
@@ -137,12 +138,14 @@ async function passImport(page: Page, language: "ko" | "en") {
   }
 }
 
+/** ② Next unlocks only once the connection is live; ③ opens only from this click. */
+async function nextFromAuth(page: Page, language: "ko" | "en") {
+  await page.getByRole("button", { name: firstRunCopy[language].next, exact: true, disabled: false }).click();
+}
+
+/** From ③ (already open): pick a reply language, pass the import substeps, land on the finish. */
 async function confirmReady(page: Page, language: "ko" | "en", name: string, viaImport = true) {
   const copy = firstRunCopy[language];
-  if (!await page.locator("#first-run-reply-language").count()) {
-    await page.getByRole("button", { name: copy.next, exact: true }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: copy.next, exact: true }).click();
-  }
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   assert.equal(await page.getByRole("heading", { name: copy.signInTitle("ChatGPT"), exact: true }).count(), 0);
   await capture(page, `after-${language}-reply-${name}`);
@@ -215,8 +218,9 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
 async function matrixCase(page: Page, language: "ko" | "en", theme: "light" | "dark") {
   const copy = firstRunCopy[language], prefix = `after-${language}-${theme}`;
   await reset(page, language, theme);
-  await capture(page, `${prefix}-welcome`);
+  // Idle first: capture() resizes the window for its phone/desktop shots, and every resize redraws the intro once.
   measurements.push({ name: `${prefix}-intro-idle`, ...await assertIntroIdle(page) });
+  await capture(page, `${prefix}-welcome`);
   await page.getByRole("button", { name: copy.start, exact: true }).click();
   await capture(page, `${prefix}-consent`);
   await page.getByRole("button", { name: copy.back, exact: true }).click();
@@ -240,6 +244,7 @@ async function otherConnection(page: Page, language: "ko" | "en", theme: "light"
     await page.locator('[data-card-id="claude"]').click();
     await capture(page, `${prefix}-key`);
     await page.locator("#first-run-api-key").fill("stub-api-key-for-smoke");
+    await nextFromAuth(page, language);
   } else if (kind === "local") {
     await page.locator('[data-card-id="local"]').click();
     await page.locator('[data-model-key]').first().waitFor();
@@ -284,6 +289,7 @@ async function preparationStates(page: Page) {
   assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "import waits for saved reply language");
   await capture(page, "after-finishing");
   stub.state.readiness = "ready";
+  await nextFromAuth(page, "ko");
   await confirmReady(page, "ko", "ChatGPT");
   assert.equal(await page.getByText("Smoke profile", { exact: true }).count(), 0, "non-email profile labels are not accounts");
   await capture(page, "after-ready-no-account");
