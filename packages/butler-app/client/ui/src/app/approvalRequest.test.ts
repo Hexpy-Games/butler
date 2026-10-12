@@ -133,24 +133,21 @@ test("the badge shows the risk the agent sent: the App never classifies commands
 });
 
 // test-category: security
-test("#277 folder labels and relative paths read as sent; a stray absolute path never reaches the card", () => {
-  const examples = ["shots/a.png", "/Users/mina/Desktop/shots/b.png", "/private/tmp/elsewhere/c.png"];
-  const absolute = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium", examples,
-    targets: [{ kind: "folder", path: "/Users/mina/Desktop/" }, { kind: "file", path: "/Users/mina/Desktop/shots/a.png" },
-      { kind: "file", path: "/private/tmp/elsewhere/c.png" }] });
-  const labelled = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium",
-    examples: ["shots/a.png", "shots/b.png", "c.png"],
-    targets: [{ kind: "folder", path: "Desktop" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }] });
-  for (const approval of [labelled, absolute]) {
-    expect(approval!.targets.map(({ kind, path }) => ({ kind, path }))).toEqual([
-      { kind: "folder", path: "" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }]);
-    for (const copy of [en, ko]) {
-      const view = approvalRequestView(card(approval), copy);
-      expect(view.details.slice(0, 3)).toEqual(["shots/a.png", "shots/b.png", "c.png"]);
-      expect(JSON.stringify(view)).not.toMatch(/\/Users\/|\/private\/|\/tmp\//u);
-    }
-    expect(approvalRequestView(card(approval), en).title).toBe("Edit 24 files in 'Desktop'?");
-    expect(approvalRequestView(card(approval), ko).title).toBe("'Desktop'의 파일 24개를 수정할까요?");
+test("outside paths stay absolute and inside paths remain project-relative", () => {
+  const approval = summary("edit_files", {
+    targets: [folder("/home/mina/.butler"), { kind: "outside", path: "/tmp/reports/a.txt" }],
+    examples: ["/tmp/reports/a.txt"],
+  });
+  expect(approval.targets[0].label).toBe("/home/mina/.butler");
+  expect(approval.targets[1].path).toBe("/tmp/reports/a.txt");
+  for (const copy of [en, ko]) expect(approvalRequestView(card(approval), copy).details).toEqual(["/tmp/reports/a.txt"]);
+  for (const [root, inside, outside] of [
+    ["/work/garden", "/work/garden/src/a.txt", "/work/garden-other/a.txt"],
+    ["C:\\Users\\mina\\garden", "C:\\Users\\mina\\garden\\src\\a.txt", "D:\\reports\\a.txt"],
+  ]) {
+    const paths = summary("edit_files", { targets: [folder(root)], examples: [inside, outside] });
+    expect(paths.examples).toEqual([inside.slice(root.length + 1), outside]);
+    expect(paths.targets[0].label).toBe(root);
   }
   for (const kind of ["edit_files", "run_command", "network_command"]) {
     const outside = summary(kind, { targets: [folder("garden"), { kind: "outside", path: "hosts" }], risk: "high" });
@@ -162,13 +159,6 @@ test("#277 folder labels and relative paths read as sent; a stray absolute path 
       expect(view.conversationScope).toBe(copy.covers.other);
     }
   }
-  const windows = normalizeApprovalSummary({ action_kind: "edit_files", examples: ["C:\\Users\\mina\\Downloads\\a.txt"],
-    targets: [{ kind: "folder", path: "C:\\Users\\mina\\Downloads" }] });
-  const windowsView = approvalRequestView(card(windows), en);
-  expect(windowsView).toMatchObject({ title: "Edit 1 file in 'Downloads'?", details: ["a.txt"] });
-  // An absolute folder shows only its last part.
-  const pathLabel = normalizeApprovalSummary({ action_kind: "run_command", targets: [{ kind: "folder", path: "/Users/mina/My Notes/" }] });
-  expect(approvalRequestView(card(pathLabel), en).title).toBe("Run a command in 'My Notes'?");
 });
 
 // test-category: pure-logic

@@ -20,6 +20,8 @@ export interface ApprovalRequestView {
   title: string;
   /** Up to three examples, then a "+N more" line; else the targets, else the reason. Never cut. */
   details: string[];
+  /** Path lines eligible for visual abbreviation; commands remain verbatim. */
+  pathDetails?: string[];
   /** As the agent sent it; unknown or missing reads as high. */
   risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
@@ -30,7 +32,7 @@ export interface ApprovalRequestView {
 
 const MAX_EXAMPLES = 3;
 /** Target kinds that say what a request without examples acts on. */
-const DETAIL_TARGET_KINDS: ReadonlySet<string> = new Set(["connector", "schedule", "other"]);
+const DETAIL_TARGET_KINDS: ReadonlySet<string> = new Set(["connector", "schedule", "other", "outside", "file"]);
 const RISKS: readonly string[] = ["low", "medium", "high"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,7 +43,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Narrows a request's transport `approval`. Malformed targets and examples are
  * dropped; a missing kind or an invalid count drops the whole summary, so the
  * card falls back to the legacy text. Target and example paths come out
- * relative (see `approvalTargetsFromTransport`); command lines stay as sent.
+ * project-relative inside the root and absolute outside; command lines stay as sent.
  */
 export function normalizeApprovalSummary(value: unknown): ApprovalSummary | undefined {
   if (!isRecord(value)) return undefined;
@@ -128,6 +130,8 @@ export function approvalRequestView(
       ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
       ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))]
       : details(approval, actionKind, card, copy),
+    pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
+      ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
@@ -184,9 +188,10 @@ function details(
   const notice = approval.commandAccess === "read_only_unisolated" ? [copy.readOnlyUnisolated] : [];
   const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example, index) =>
     approval.examplesTruncated?.[index] ? `${example}…` : example);
+  const outside = approval.targets.filter(target => target.kind === "outside").map(target => target.path);
   if (shown.length) {
     const rest = approval.count - shown.length;
-    return rest > 0 ? [...notice, ...shown, copy.more(rest)] : [...notice, ...shown];
+    return [...notice, ...outside.filter(path => !shown.includes(path)), ...shown, ...(rest > 0 ? [copy.more(rest)] : [])];
   }
   // Without examples, say what the request acts on: its targets, else the reason.
   const targets = kind === "manage_schedule"
