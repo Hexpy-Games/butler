@@ -39,6 +39,7 @@
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
+//! - [`agent_homes`]: other AI agents' instruction and configuration files, for import.
 //! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
 //!   Hello or the account password) before a secret is shown.
 //!
@@ -54,6 +55,7 @@
 #![deny(missing_docs)]
 
 pub mod account_dirs;
+pub mod agent_homes;
 pub mod app_browser;
 pub mod app_update;
 pub mod browser_process;

@@ -11,6 +11,7 @@ import {
   personaPresetOptionsFrom,
   profileFieldOptions,
 } from "./PersonalizationSettingsOptions";
+import { AgentImportSection } from "./AgentImportSection";
 import { PersonalizationActions } from "./PersonalizationActions";
 import { PersonalizationProfileFields } from "./PersonalizationProfileFields";
 import { PersonalizationProfileMigration } from "./PersonalizationProfileMigration";
@@ -132,9 +133,9 @@ export function PersonalizationSettings() {
           setPersonalizationDraft={setPersonalizationDraft}
         />
       </SettingsSection>
-      <SettingsSection id="import" kind="form" title={sections.import}>
+      <AgentImportSection>
         <PersonalizationProfileMigration />
-      </SettingsSection>
+      </AgentImportSection>
     </SettingsPage>
   );
 }

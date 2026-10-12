@@ -1202,7 +1202,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     hooks: { add: "Add hook", edit: "Edit", test: "Test", remove: "Delete", recent: "Recent runs", empty: "No hooks", name: "Name", event: "Event", tools: "Tools", command: "Command", args: "Args (JSON)", timeout: "Timeout (ms)", failClosed: "Block on error", async: "Background", enabled: "Enabled", refresh: "Refresh", blocked: "Blocked by hook", editTitle: "Edit hook", disabled: "Disabled", emptyRuns: "No runs yet", testSuccess: "Run succeeded", testFailure: "Run failed", exitCode: "Exit code", commandDisabled: "Using arguments.", commandRequired: "Enter a command or arguments.", deleteConfirm: name => `Delete hook "${name}".` },
     deleteSchedule: name => `Delete schedule "${name}".`,
     deleteMcpServer: name => `Delete MCP server "${name}" and its saved credentials.`,
-    mcpEnabled: "Enabled", mcpDisabled: "Disabled",
+    mcpEnabled: "Enabled", mcpDisabled: "Disabled", mcpNeedsSecret: "Needs a key",
     mcpIdRequired: "Enter a server ID.",
     mcpIdInvalid: "Use letters, numbers, dots, underscores or hyphens (1–80).",
     mcpIdPreview: id => `Saved ID: ${id}`,
@@ -1343,6 +1343,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       allowedHosts: "Allowed hosts",
       signIns: "Sign-ins",
       browserImport: "Import from another browser",
+      agentImport: "Import from other AI tools",
       paymentMethods: "Payment methods",
       profiles: "My info",
       purchaseSites: "Pay without asking",
@@ -1568,7 +1569,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       responseLanguage: "Response language",
       profilingMode: "Level",
       profilingExtractorModel: "Profile-building model",
-      profileMigrationImport: "Import external AI memory",
+      profileMigrationImport: "Import memory",
       profileMigrationPrompt: "Import prompt",
       profileMigrationDump: "Imported profile content",
       personaPreset: "Persona preset",
@@ -1668,9 +1669,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         "The model used to extract information needed for personalization.",
       profilingExtractorDefault:
         "Use the current Butler default model setting.",
-      profileMigration: "Import memories from another AI service.",
-      profileMigrationImmediate:
-        "Import runs on this screen immediately and shows the result when it finishes.",
+      profileMigration: "Bring memory from another AI service",
       profileMigrationImporting:
         "Reading imported memories and applying them to the profile.",
       profileMigrationApplied: (count) =>
@@ -2192,6 +2191,18 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       fullDiskAccess: "Allow access to the browser folder",
       failed: "Couldn't import",
       needsKeychain: "Needs the system password store",
+    },
+    agentImport: {
+      purpose: "Bring instructions and MCP servers into Butler",
+      stepPurpose: "Bring your AI tools and browser setup into Butler",
+      found: (instructions, servers) => [instructions ? "Instructions" : "", servers ? `${servers} MCP server${servers === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "Nothing to import",
+      run: "Import",
+      importing: "Importing…",
+      result: (instructions, servers, needsSecret) => `Added ${instructions} instruction${instructions === 1 ? "" : "s"} · ${servers} MCP server${servers === 1 ? "" : "s"}${needsSecret ? ` · ${needsSecret} need${needsSecret === 1 ? "s" : ""} a key (Settings › MCP)` : ""}`,
+      nothingNew: "Nothing new to add",
+      undo: "Undo", more: "Import more", undone: "Added items removed",
+      noSources: "No AI tools found",
+      failed: "Couldn't import", retry: "Retry",
     },
   },
   titlebar: {

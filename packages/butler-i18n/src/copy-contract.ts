@@ -1073,6 +1073,8 @@ export interface AppCopy {
     deleteMcpServer: (name: string) => string;
     mcpEnabled: string;
     mcpDisabled: string;
+    /** An imported server still waiting for a key in its settings. */
+    mcpNeedsSecret: string;
     mcpIdRequired: string;
     mcpIdInvalid: string;
     mcpIdPreview: (id: string) => string;
@@ -1162,7 +1164,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1430,7 +1432,6 @@ export interface AppCopy {
       profilingExtractorModel: string;
       profilingExtractorDefault: string;
       profileMigration: string;
-      profileMigrationImmediate: string;
       profileMigrationImporting: string;
       profileMigrationApplied: CountFormatter;
       profileMigrationStored: string;
@@ -1905,6 +1906,25 @@ export interface AppCopy {
       fullDiskAccess: string;
       failed: string;
       needsKeychain: string;
+    };
+    /** Import from other AI tools: instructions and MCP servers, never secrets. */
+    agentImport: {
+      /** One-line purpose under the section title. */
+      purpose: string;
+      /** First-run import step: one line covering AI tools and browsers. */
+      stepPurpose: string;
+      /** What a detected tool holds (instructions, MCP server count). */
+      found: (instructions: boolean, servers: number) => string;
+      run: string;
+      importing: string;
+      result: (instructions: number, servers: number, needsSecret: number) => string;
+      nothingNew: string;
+      undo: string;
+      more: string;
+      undone: string;
+      noSources: string;
+      failed: string;
+      retry: string;
     };
   };
   titlebar: {

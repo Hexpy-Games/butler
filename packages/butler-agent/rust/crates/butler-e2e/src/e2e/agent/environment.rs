@@ -16,6 +16,8 @@ pub(super) fn isolated_command(program: &Path, home: &Path) -> Command {
             butler_platform::browser_profiles::PROFILES_HOME_FIXTURE,
             home,
         )
+        // Other AI agents' setup files come from the same fixture home.
+        .env(butler_platform::agent_homes::HOME_FIXTURE, home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("XDG_CACHE_HOME", home.join(".cache"))

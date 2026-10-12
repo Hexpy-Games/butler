@@ -64,28 +64,68 @@ impl AppMemoryManagement {
         Ok(view)
     }
 
-    pub(super) async fn delete_instruction(
+    /// Settings-side instruction changes: an imported addition or a deletion.
+    pub(super) async fn change_instruction(
         &self,
-        handle: String,
-        expected_revision: String,
-        project_id: Option<String>,
+        command: AppMemoryCommand,
+        sink: MemoryEventSink,
+        cancellation: CancellationToken,
+    ) -> Result<Value, GatewayApplicationError> {
+        match command {
+            AppMemoryCommand::RememberInstruction { text, operation_id } => {
+                self.remember_instruction(text, operation_id, sink, cancellation)
+                    .await
+            }
+            AppMemoryCommand::DeleteInstruction {
+                handle,
+                expected_revision,
+                project_id,
+                operation_id,
+            } => {
+                let target = RememberedRuleTarget {
+                    handle,
+                    expected_revision,
+                    project_id,
+                };
+                self.delete_instruction(target, operation_id, sink, cancellation)
+                    .await
+            }
+            _ => Err(GatewayApplicationError::internal()),
+        }
+    }
+
+    async fn remember_instruction(
+        &self,
+        text: String,
+        operation_id: String,
+        sink: MemoryEventSink,
+        cancellation: CancellationToken,
+    ) -> Result<Value, GatewayApplicationError> {
+        let input = butler_memory::cognition::ExplicitMemoryUpdateInput {
+            duration: Some("always".into()),
+            text,
+            operation_id: Some(operation_id),
+            ..Default::default()
+        };
+        let receipt = self
+            .instructions
+            .remember(input, cancellation)
+            .await
+            .map_err(instruction_error)?;
+        sink(json!({"kind":"instructions"})).await?;
+        encode(receipt)
+    }
+
+    async fn delete_instruction(
+        &self,
+        target: RememberedRuleTarget,
         operation_id: String,
         sink: MemoryEventSink,
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
         let receipt = self
             .instructions
-            .forget(
-                RememberedRuleTarget {
-                    handle,
-                    expected_revision,
-                    project_id,
-                },
-                operation_id,
-                None,
-                None,
-                cancellation,
-            )
+            .forget(target, operation_id, None, None, cancellation)
             .await
             .map_err(instruction_error)?;
         sink(json!({"kind":"instructions"})).await?;
