@@ -131,7 +131,7 @@ async function passMemory(page: Page, language: "ko" | "en", name?: string) {
 async function passImport(page: Page, language: "ko" | "en") {
   const copy = firstRunCopy[language];
   // Agents show their picker, or their result when this run already imported; Skip leaves both substeps untouched.
-  for (const [id, title] of [["agents", "#first-run-agents-title, #first-run-agents-done-title"], ["browsers", "#first-run-browsers-title"]]) {
+  for (const [id, title] of [["agents", "#first-run-agents-title, #first-run-agents-done-title"], ["browsers", "#first-run-browsers-title, #first-run-browsers-done-title"]]) {
     await page.locator(title).first().waitFor();
     await capture(page, `after-${language}-import-${id}`);
     const skip = page.getByRole("button", { name: copy.import.skip, exact: true });
